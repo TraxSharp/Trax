@@ -1,7 +1,7 @@
 // Runs the scripted scenarios against a running Board host.
 //
 //   npm run scenario                         every scenario, a line per event
-//   npm run scenario -- shipping-boundary    one
+//   npm run scenario -- every-lane           one
 //   npm run scenario -- --suffix -2          again on a database that has them (ticket ids T-12-2, ...)
 //   npm run scenario -- --out run.json       also write every scenario's events, for the recorder
 //
@@ -29,10 +29,12 @@ for (const scenario of chosen) {
   console.log(`# ${scenario.key}: ${scenario.title}`);
   recorded.push(
     await record(scenario, suffix, (e) => {
+      if (e.caption) console.log(`\n${String(e.move).padStart(9)} ${e.caption}`);
       const what =
         e.say ??
         (e.claim?.problem && `${e.claim.problem.code}: ${e.claim.problem.message}`) ??
         (e.answer?.problem && `${e.answer.problem.code}: ${e.answer.problem.message}`) ??
+        (e.claim && `claim: ${e.claim.lane}`) ??
         (e.answer && `-> ${e.answer.state}`) ??
         (e.check && `${e.check.train} ${e.check.status}${e.check.message ? `: ${e.check.message}` : ""}`) ??
         (e.ticket && `${e.ticket.id} ${e.ticket.state}${e.ticket.note ? `: ${e.ticket.note}` : ""}`) ??

@@ -65,7 +65,7 @@ public class RunReproCase(InvokedRun run, TicketBoard board)
             if (noted is not AdvanceOutcome.Advanced)
                 return CheckResult.Refuse(TicketBoard.Why(noted));
             return CheckResult.Refuse(
-                $"the rules charge {Money(charged)} at {Money(check.Subtotal)}, which is right: not reproduced",
+                $"{Money(check.Subtotal)} pays {Money(charged)}, which matches the policy: not reproduced",
                 failed
             );
         }
@@ -85,7 +85,7 @@ public class RunReproCase(InvokedRun run, TicketBoard board)
         );
         return moved is AdvanceOutcome.Advanced
             ? CheckResult.Accept(
-                $"the rules charge {Money(charged)} at {Money(check.Subtotal)}; the policy says {Money(policy)}",
+                $"{Money(check.Subtotal)} pays {Money(charged)}; the policy says {Money(policy)}: reproduced",
                 failed
             )
             : CheckResult.Refuse(TicketBoard.Why(moved), failed);

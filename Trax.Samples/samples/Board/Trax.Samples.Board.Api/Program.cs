@@ -10,7 +10,7 @@
 // Prerequisites (from the Trax.Samples folder):
 //   docker compose up -d database
 //   dotnet run --project samples/Board/Trax.Samples.Board.Api
-//   cd samples/Board/Trax.Samples.Board.Agents && npm ci && npm run scenario -- boundary
+//   cd samples/Board/Trax.Samples.Board.Agents && npm ci && npm run scenario -- every-lane
 //   cd samples/Board/Trax.Samples.Board.Client && npm ci && npm run dev
 // Then open http://localhost:5173. The operations console is at http://localhost:5290/trax/dashboard
 // (Development only; paste the operator key).

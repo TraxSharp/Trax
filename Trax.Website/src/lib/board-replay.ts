@@ -17,6 +17,10 @@ export interface BoardEvent {
   agent?: string;
   ticketId?: string;
   say?: string;
+  /** What the move means, written by the scenario's script on the move's first event. */
+  caption?: string;
+  /** A move the script points at: a mistake or a finding, and the code that caught it. */
+  mark?: { intent: Intent; label: string; rule: string };
   claim?: { lane: string; problem: Problem | null };
   package?: { ticket: string; lane: string; instructions?: string; tools?: string[]; deadline?: string };
   send?: { operation: string; input?: Record<string, unknown> };
@@ -38,12 +42,22 @@ export interface BoardRecordings {
   recordedAt: string;
   sources: Record<string, { file: string; code: string }>;
   lines: Record<string, number>;
+  /** The code each mark points at, as a span of lines of one of the sources. */
+  rules?: Record<string, { source: string; from: number; to: number }>;
   lanes: { key: string; name: string; states: string[]; worker: string | null }[];
   agents: { name: string; role: string; kind: "agent" | "person" }[];
   scenarios: Scenario[];
 }
 
 export type Tone = "ok" | "bad" | "warn" | "info" | "idle";
+
+/**
+ * What a marked move was. `not-allowed`: a move the server refuses outright. `bad-evidence`: an allowed move whose
+ * evidence the server's check found wrong. `finding`: a negative result that is the right answer.
+ */
+export type Intent = "not-allowed" | "bad-evidence" | "finding";
+
+export const INTENT_TONE: Record<Intent, Tone> = { "not-allowed": "bad", "bad-evidence": "warn", finding: "info" };
 
 // One colour per client, in the order the recording lists them: the board, the pods and the panel all use it.
 const CLIENT_COLORS = ["#7a9ec2", "#c4a468", "#a093c6", "#5fb3a6", "#6fa86f", "#c68f68"];
@@ -69,6 +83,8 @@ export interface TicketView {
   moved: boolean;
   /** Whether this move touched the ticket. */
   live: boolean;
+  /** A worker's mistake on this ticket in this move: who, and what it tried. */
+  attempt: { by: string; label: string; intent: Intent } | null;
 }
 
 export interface PodView {
@@ -83,6 +99,8 @@ export interface PodView {
   badge: string | null;
   tone: Tone;
   current: boolean;
+  /** What this pod's move was, when it is the current move and the script marked it. */
+  mark: Intent | null;
 }
 
 export interface View {
@@ -92,6 +110,16 @@ export interface View {
   pods: PodView[];
   /** The line the move's last decision was made on: which source and which line, and how it went. */
   lit: { source: string; line: number; tone: Tone } | null;
+  /** The code a marked move points at, with what the server said. */
+  rule: RuleView | null;
+}
+
+export interface RuleView {
+  intent: Intent;
+  file: string;
+  from: number;
+  lines: string[];
+  message: string;
 }
 
 export function eventsOf(scenario: Scenario | undefined): BoardEvent[] {
@@ -139,6 +167,7 @@ const isClaim = (e: BoardEvent) => e.kind === "ticket" && e.line === "ticket:eve
 
 interface MoveSummary {
   agent: string | null;
+  mark: BoardEvent["mark"] | null;
   say: string | null;
   verdict: string | null;
   badge: string | null;
@@ -146,9 +175,23 @@ interface MoveSummary {
   caption: string;
 }
 
-// What one move came to, from its own events: its last refusal, check or ticket move decides how it is told.
-// `before` is each ticket's state before the move, so a ticket sent back to an earlier lane is told as that.
+// What one move came to, from its own events: its last refusal, check or ticket move decides how it is told. The
+// script's caption, when the move has one, is what the page shows; the one worked out here stands in for a recording
+// without them. `before` is each ticket's state before the move, so a ticket sent back to an earlier lane is told as
+// that.
 function summarize(recordings: BoardRecordings, events: BoardEvent[], before: Map<string, string>): MoveSummary {
+  const summary = told(recordings, events, before);
+  const caption = events.find((e) => e.caption)?.caption;
+  const mark = events.find((e) => e.mark)?.mark ?? null;
+  return {
+    ...summary,
+    mark,
+    ...(caption ? { caption } : {}),
+    ...(mark ? { badge: mark.label, tone: INTENT_TONE[mark.intent] } : {}),
+  };
+}
+
+function told(recordings: BoardRecordings, events: BoardEvent[], before: Map<string, string>): Omit<MoveSummary, "mark"> {
   const agent = events.find((e) => e.agent)?.agent ?? null;
   const say = events.find((e) => e.say)?.say ?? null;
   const refusal =
@@ -227,6 +270,7 @@ export function viewAt(recordings: BoardRecordings, scenario: Scenario | undefin
       holder: null,
       moved: false,
       live: false,
+      attempt: null,
     });
   }
 
@@ -248,6 +292,7 @@ export function viewAt(recordings: BoardRecordings, scenario: Scenario | undefin
       badge: null,
       tone: "idle",
       current: false,
+      mark: null,
     });
   }
 
@@ -299,12 +344,18 @@ export function viewAt(recordings: BoardRecordings, scenario: Scenario | undefin
   const current = events.filter((e) => e.move === move);
   if (summary?.agent) {
     const pod = pods.get(summary.agent);
-    if (pod) pod.current = true;
+    if (pod) {
+      pod.current = true;
+      pod.mark = summary.mark?.intent ?? null;
+    }
   }
   for (const e of current) {
     const touched = e.ticketId ?? e.ticket?.id;
     const t = touched ? tickets.get(touched) : undefined;
-    if (t) t.live = true;
+    if (!t) continue;
+    t.live = true;
+    if (summary?.mark && summary.agent && summary.mark.intent !== "finding")
+      t.attempt = { by: summary.agent, label: summary.mark.label, intent: summary.mark.intent };
   }
 
   const litKey = [...current].reverse().find((e) => e.line)?.line;
@@ -317,6 +368,23 @@ export function viewAt(recordings: BoardRecordings, scenario: Scenario | undefin
     tickets: [...tickets.values()],
     pods: [...pods.values()],
     lit: source && typeof line === "number" && recordings.sources[source] ? { source, line, tone: summary?.tone ?? "ok" } : null,
+    rule: ruleOf(recordings, summary?.mark ?? null, current),
+  };
+}
+
+// The span a marked move points at, and what the server said about the move: its refusal, or its check's verdict.
+function ruleOf(recordings: BoardRecordings, mark: BoardEvent["mark"] | null, events: BoardEvent[]): RuleView | null {
+  const span = mark ? recordings.rules?.[mark.rule] : undefined;
+  const source = span ? recordings.sources[span.source] : undefined;
+  if (!mark || !span || !source) return null;
+  const refusal = events.find((e) => e.claim?.problem)?.claim?.problem ?? events.find((e) => e.answer?.problem)?.answer?.problem;
+  const verdict = events.filter((e) => e.kind === "check" && e.check && e.check.status !== "running").pop()?.check?.message;
+  return {
+    intent: mark.intent,
+    file: source.file,
+    from: span.from,
+    lines: source.code.split("\n").slice(span.from - 1, span.to),
+    message: refusal ? problemText(refusal) : verdict ?? "",
   };
 }
 

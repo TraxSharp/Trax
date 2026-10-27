@@ -55,6 +55,15 @@ public static class Reports
             EarlierCases: [20m, 49.99m, 75m, 120m]
         ),
         new Report(
+            "forty",
+            "Orders of exactly $40 still pay shipping",
+            "Policy: orders of $40.00 or more ship free; below that, shipping is $3.99.",
+            "shipping",
+            Current: new ShippingRules(40m, Inclusive: false, 3.99m),
+            Policy: new ShippingRules(40m, Inclusive: true, 3.99m),
+            EarlierCases: [15m, 39.99m, 60m]
+        ),
+        new Report(
             "threshold",
             "Free shipping starts at $75, the policy says $60",
             "Policy: orders of $60.00 or more ship free; below that, shipping is $4.99.",
@@ -74,7 +83,7 @@ public static class Reports
         ),
         new Report(
             "fixed-already",
-            "Free shipping missing on $50.00 orders",
+            "A $75 order was charged shipping",
             "Policy: orders of $50.00 or more ship free; below that, shipping is $5.99.",
             "shipping",
             Current: new ShippingRules(50m, Inclusive: true, 5.99m),

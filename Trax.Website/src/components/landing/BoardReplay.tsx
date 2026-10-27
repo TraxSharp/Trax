@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ASSIGNMENT_STATES,
+  INTENT_TONE,
   clientColor,
   movesOf,
   viewAt,
   type BoardRecordings,
+  type Intent,
   type PodView,
+  type RuleView,
   type TicketView,
   type Tone,
 } from "@/lib/board-replay";
@@ -17,6 +20,14 @@ import {
 const TONE: Record<Tone, string> = { ok: "#5cb85c", bad: "#d97a7a", warn: "#d4a24c", info: "#7a9ec2", idle: "#8f8b84" };
 const STRIP_TONE: Record<(typeof ASSIGNMENT_STATES)[number], Tone> = { Working: "info", Checking: "info", Accepted: "ok", Rejected: "warn" };
 const PACE_MS = 2600;
+// How a marked move is named: on the ticket it touched, in the rule panel, and in the key under the board.
+const INTENT_TEXT: Record<Intent, { ticket: string; rule: string; key: string }> = {
+  "not-allowed": { ticket: "refused", rule: "Refused by", key: "not allowed: the server refuses the move" },
+  "bad-evidence": { ticket: "rejected", rule: "Rejected by", key: "wrong evidence: the server's check fails it" },
+  finding: { ticket: "found", rule: "Found by", key: "a finding: a negative result that is right" },
+};
+// The rule panel's fixed height, in pixels: room for the longest span (six lines) and the server's message.
+const RULE_HEIGHT = 196;
 // A card's and a lane's fixed heights, in pixels: each text block on a card has room for a set number of lines and is
 // clamped to it, so a longer note can never run into the line below.
 const CARD_HEIGHT = 160;
@@ -158,6 +169,17 @@ export default function BoardReplay({ recordings }: { recordings: BoardRecording
       </div>
 
 
+      <RulePanel rule={view.rule} />
+
+      <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 font-mono text-xs text-text-muted">
+        {(Object.keys(INTENT_TEXT) as Intent[]).map((intent) => (
+          <span key={intent} className="flex items-center gap-2">
+            <Dot color={TONE[INTENT_TONE[intent]]} />
+            {INTENT_TEXT[intent].key}
+          </span>
+        ))}
+      </div>
+
       <div className="flex flex-wrap justify-center gap-x-10 gap-y-2 font-mono text-xs text-text-muted">
         <span className="flex items-center gap-2">
           <Arrow down color="#7a9ec2" />
@@ -194,9 +216,14 @@ function Arrow({ down, color }: { down?: boolean; color: string }) {
 
 function TicketCard({ ticket, holderColor }: { ticket: TicketView; holderColor: string }) {
   const chip = ticket.state === "Done" ? "#6fa86f" : ticket.live ? "#5cb85c" : "#8f8b84";
+  // A move a worker got wrong lights the card in its tone instead of the usual green.
+  const wrong = ticket.attempt ? TONE[INTENT_TONE[ticket.attempt.intent]] : null;
   return (
     <div
-      style={{ height: CARD_HEIGHT }}
+      style={{
+        height: CARD_HEIGHT,
+        ...(wrong ? { borderColor: wrong, boxShadow: `0 0 0 3px ${wrong}33` } : {}),
+      }}
       className={`flex flex-none flex-col gap-1.5 overflow-hidden rounded-md border bg-bg-primary px-2.5 py-2 transition-colors ${
         ticket.live ? "border-accent shadow-[0_0_0_3px_rgba(61,139,55,0.15)]" : "border-border"
       }`}
@@ -216,20 +243,31 @@ function TicketCard({ ticket, holderColor }: { ticket: TicketView; holderColor: 
       >
         {ticket.note}
       </div>
-      <div className="mt-auto flex h-[15px] flex-none items-center gap-1.5 text-[10.5px] text-text-muted">
-        <Dot color={ticket.holder ? holderColor : ticket.moved ? "#5cb85c" : "#3a3a37"} />
-        <span className="truncate">{ticket.holder ? `held by ${ticket.holder}` : ticket.moved ? "moved by the server" : "unclaimed"}</span>
-      </div>
+      {ticket.attempt && wrong ? (
+        <div className="mt-auto flex h-[15px] flex-none items-center gap-1.5 text-[10.5px] font-medium" style={{ color: wrong }}>
+          <Dot color={wrong} />
+          <span className="truncate" title={`${ticket.attempt.by} ${ticket.attempt.label}`}>
+            {INTENT_TEXT[ticket.attempt.intent].ticket}: {ticket.attempt.by} {ticket.attempt.label}
+          </span>
+        </div>
+      ) : (
+        <div className="mt-auto flex h-[15px] flex-none items-center gap-1.5 text-[10.5px] text-text-muted">
+          <Dot color={ticket.holder ? holderColor : ticket.moved ? "#5cb85c" : "#3a3a37"} />
+          <span className="truncate">{ticket.holder ? `held by ${ticket.holder}` : ticket.moved ? "moved by the server" : "unclaimed"}</span>
+        </div>
+      )}
     </div>
   );
 }
 
 function Pod({ pod, color, laneName }: { pod: PodView; color: string; laneName: string | undefined }) {
   const tone = TONE[pod.tone];
+  // The current pod is outlined in its own colour, or in the tone of a mistake when its move was one.
+  const ring = pod.mark && pod.mark !== "finding" ? TONE[INTENT_TONE[pod.mark]] : color;
   return (
     <div
       className="flex h-[208px] flex-col gap-2 overflow-hidden rounded-lg border border-border bg-bg-secondary px-3 py-2.5 transition-colors"
-      style={{ borderColor: pod.current ? color : undefined, boxShadow: pod.current ? `0 0 0 3px ${color}26` : undefined }}
+      style={{ borderColor: pod.current ? ring : undefined, boxShadow: pod.current ? `0 0 0 3px ${ring}26` : undefined }}
     >
       <div className="flex min-w-0 flex-nowrap items-center gap-2">
         <Dot color={color} />
@@ -272,4 +310,49 @@ function Pod({ pod, color, laneName }: { pod: PodView; color: string; laneName: 
       </div>
     </div>
   );
+}
+
+// The code that refused, rejected or found the current move, with what the server said. It keeps its height on moves
+// with nothing to show, so the pods below never move.
+function RulePanel({ rule }: { rule: RuleView | null }) {
+  const tone = rule ? TONE[INTENT_TONE[rule.intent]] : "#3a3a37";
+  return (
+    <div
+      style={{ height: RULE_HEIGHT, borderColor: rule ? `${tone}88` : undefined }}
+      className="flex flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-bg-secondary px-3 py-2.5"
+    >
+      {rule ? (
+        <>
+          <div className="flex min-w-0 items-baseline gap-2 text-xs">
+            <span className="flex-none font-semibold uppercase tracking-wide" style={{ color: tone }}>
+              {INTENT_TEXT[rule.intent].rule}
+            </span>
+            <span className="min-w-0 truncate font-mono text-text-muted">
+              {rule.file}:{rule.from}
+            </span>
+          </div>
+          <pre className="min-h-0 flex-auto overflow-x-auto font-mono text-[11.5px] leading-[1.55] text-[#c9c6c0]">
+            {dedent(rule.lines).map((line, i) => (
+              <div key={i} className="flex gap-3">
+                <span className="w-7 flex-none select-none text-right text-text-muted">{rule.from + i}</span>
+                <span className="whitespace-pre">{line}</span>
+              </div>
+            ))}
+          </pre>
+          <div title={rule.message} className="line-clamp-2 flex-none border-t border-border pt-1.5 font-mono text-[11.5px] leading-normal [overflow-wrap:anywhere]" style={{ color: tone }}>
+            {rule.message}
+          </div>
+        </>
+      ) : (
+        <div className="flex h-full items-center justify-center text-xs text-text-muted">
+          Nothing was refused, rejected or found on this move.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function dedent(lines: string[]): string[] {
+  const indent = Math.min(...lines.filter((l) => l.trim()).map((l) => l.length - l.trimStart().length));
+  return lines.map((l) => l.slice(Number.isFinite(indent) ? indent : 0));
 }

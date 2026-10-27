@@ -3,37 +3,18 @@ using Trax.Samples.Board.E2E.Fixtures;
 namespace Trax.Samples.Board.E2E.BoardTests;
 
 /// <summary>
-/// The four scenarios the agents' scripts run (Trax.Samples.Board.Agents/src/scenarios.ts), sent as the agents send
+/// The five scenarios the agents' scripts run (Trax.Samples.Board.Agents/src/scenarios.ts), sent as the agents send
 /// them, with every refusal and every check the server ran asserted along the way.
 /// </summary>
 public class ScenarioTests : BoardTestFixture
 {
     [Test]
-    public async Task ShippingBoundary_GoesThroughEveryLane_AndRefusesASkipAndASelfApproval()
+    public async Task ATicket_GoesThroughEveryLane()
     {
         var t = await TriagedAsync("boundary");
         (await StateOf(t)).Should().Be("Reproducing");
 
-        // fix-bot tries to skip ahead: nothing in Fix to claim.
-        var early = await Fix.ClaimAsync("fix", t);
-        early
-            .GetProperty("problem")
-            .GetProperty("code")
-            .GetString()
-            .Should()
-            .Be("NOTHING_TO_CLAIM");
-
         await Repro.ClaimAndStartAsync("reproduce", t);
-        var below = await Repro.SubmitAsync(
-            t,
-            "submitRepro",
-            "ReproCaseInput",
-            new { subtotal = 49.99m, expectedShipping = 5.99m }
-        );
-        below.State.Should().Be("Rejected");
-        below.Verdict.Should().Contain("not reproduced");
-        (await StateOf(t)).Should().Be("Reproducing");
-
         var at = await Repro.SubmitAsync(
             t,
             "submitRepro",
@@ -41,6 +22,7 @@ public class ScenarioTests : BoardTestFixture
             new { subtotal = 50m, expectedShipping = 0m }
         );
         at.State.Should().Be("Accepted");
+        at.Verdict.Should().Be("$50.00 pays $5.99; the policy says $0.00: reproduced");
         (await StateOf(t)).Should().Be("ReadyToFix");
 
         await Fix.ClaimAndStartAsync("fix", t);
@@ -51,6 +33,9 @@ public class ScenarioTests : BoardTestFixture
             new { freeFrom = 50m, inclusive = true }
         );
         fixedIt.State.Should().Be("Accepted");
+        fixedIt
+            .Verdict.Should()
+            .Be("free from $50.00: the repro case and 4 cases from earlier fixes pass");
         (await StateOf(t)).Should().Be("InQA");
 
         await Qa.ClaimAndStartAsync("qa", t);
@@ -63,6 +48,64 @@ public class ScenarioTests : BoardTestFixture
         swept.Verdict.Should().Contain("3 of 3 pass");
         (await StateOf(t)).Should().Be("InReview");
 
+        await Sam.ClaimAndStartAsync("review", t);
+        (await Sam.SubmitAsync(t, "approve")).State.Should().Be("Accepted");
+        var done = await Sam.TicketAsync(t);
+        done.GetProperty("state").GetString().Should().Be("Done");
+        done.GetProperty("note").GetString().Should().Be("approved by sam");
+    }
+
+    [Test]
+    public async Task AnAgentThatSkipsAhead_IsRefusedTheClaimAndTheSelfApproval()
+    {
+        var t = await TriagedAsync("forty");
+
+        // fix-bot tries to skip ahead: nothing in Fix to claim.
+        var early = await Fix.ClaimAsync("fix", t);
+        early
+            .GetProperty("problem")
+            .GetProperty("code")
+            .GetString()
+            .Should()
+            .Be("NOTHING_TO_CLAIM");
+
+        await Repro.ClaimAndStartAsync("reproduce", t);
+        (
+            await Repro.SubmitAsync(
+                t,
+                "submitRepro",
+                "ReproCaseInput",
+                new { subtotal = 40m, expectedShipping = 0m }
+            )
+        )
+            .State.Should()
+            .Be("Accepted");
+
+        await Fix.ClaimAndStartAsync("fix", t);
+        (
+            await Fix.SubmitAsync(
+                t,
+                "submitFix",
+                "RulesPatchInput",
+                new { freeFrom = 40m, inclusive = true }
+            )
+        )
+            .State.Should()
+            .Be("Accepted");
+
+        await Qa.ClaimAndStartAsync("qa", t);
+        (
+            await Qa.SubmitAsync(
+                t,
+                "submitChecks",
+                "QaCasesInput",
+                new { subtotals = new[] { 39.99m, 40m, 40.01m } }
+            )
+        )
+            .Verdict.Should()
+            .Contain("3 of 3 pass");
+        (await StateOf(t)).Should().Be("InReview");
+
         // fix-bot starts an assignment of its own and tries to approve: the event's caller rule refuses it.
         (await Fix.StartAsync(t))
             .Problem.Should()
@@ -72,9 +115,7 @@ public class ScenarioTests : BoardTestFixture
 
         await Sam.ClaimAndStartAsync("review", t);
         (await Sam.SubmitAsync(t, "approve")).State.Should().Be("Accepted");
-        var done = await Sam.TicketAsync(t);
-        done.GetProperty("state").GetString().Should().Be("Done");
-        done.GetProperty("note").GetString().Should().Be("approved by sam");
+        (await StateOf(t)).Should().Be("Done");
     }
 
     [Test]
@@ -186,9 +227,10 @@ public class ScenarioTests : BoardTestFixture
             t,
             "submitRepro",
             "ReproCaseInput",
-            new { subtotal = 50m, expectedShipping = 0m }
+            new { subtotal = 75m, expectedShipping = 0m }
         );
         first.State.Should().Be("Rejected");
+        first.Verdict.Should().Be("$75.00 pays $0.00, which matches the policy: not reproduced");
         first.Answer.GetProperty("context").GetProperty("failedCases").GetInt32().Should().Be(1);
 
         (await Repro.SendAsync(t, "close")).Problem.Should().Be("GUARD_FAILED");
@@ -197,7 +239,7 @@ public class ScenarioTests : BoardTestFixture
             t,
             "submitRepro",
             "ReproCaseInput",
-            new { subtotal = 50.01m, expectedShipping = 0m }
+            new { subtotal = 50m, expectedShipping = 0m }
         );
         (await Repro.SubmitAsync(t, "close")).State.Should().Be("Closed");
         (await StateOf(t)).Should().Be("Closed");
