@@ -233,6 +233,11 @@ public static class JobRunnerExtensions
     )
     {
         var runnerOptions = RequirePosture(endpoints, route);
+        TraxRequestHandler.WarnIfExecutionServiceReplaced(
+            endpoints.ServiceProvider,
+            endpoints.ServiceProvider.GetRequiredService<ILogger<TraxRequestHandler>>(),
+            route
+        );
 
         var builder = endpoints
             .MapPost(

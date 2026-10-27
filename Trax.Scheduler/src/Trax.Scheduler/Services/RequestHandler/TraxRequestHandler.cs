@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
@@ -112,7 +113,8 @@ internal class TraxRequestHandler(
     /// authorization runs inside the trusted scope; the run itself is outside it, and whatever
     /// the train queues, runs or prepares is checked as it would be on the scheduler's own host.
     /// An <see cref="ITrainExecutionService"/> that replaces the mediator's cannot be split that
-    /// way, so it runs the train with no trusted scope at all.
+    /// way, so it runs the train with no trusted scope at all, which
+    /// <see cref="WarnIfExecutionServiceReplaced"/> says when the entry point starts.
     /// </summary>
     private async Task<RunTrainResult> RunAsync(RemoteRunRequest request, CancellationToken ct)
     {
@@ -124,6 +126,51 @@ internal class TraxRequestHandler(
             prepared = await mediator.PrepareAsync(request.TrainName, request.InputJson, ct);
 
         return await mediator.RunPreparedAsync(prepared, new RunTrainOptions(), ct);
+    }
+
+    /// <summary>
+    /// Logs a warning when the host's <see cref="ITrainExecutionService"/> is not the mediator's.
+    /// The run path then runs a train with no trusted scope (see <see cref="RunAsync"/>), so every
+    /// remote run of a train gated with <c>[TraxAuthorize]</c> is refused. Called once by each
+    /// entry point that serves runs, when it starts.
+    /// </summary>
+    /// <param name="services">The runner's root services.</param>
+    /// <param name="logger">Where the warning goes.</param>
+    /// <param name="entryPoint">The entry point, for the message.</param>
+    internal static void WarnIfExecutionServiceReplaced(
+        IServiceProvider services,
+        ILogger logger,
+        string entryPoint
+    )
+    {
+        ITrainExecutionService? executionService;
+        try
+        {
+            using var scope = services.CreateScope();
+            executionService = scope.ServiceProvider.GetService<ITrainExecutionService>();
+        }
+        catch (Exception ex)
+        {
+            // Resolving it fails the first run anyway, with its own error; this is only a warning.
+            logger.LogDebug(
+                ex,
+                "Could not resolve ITrainExecutionService to check the runner {EntryPoint}.",
+                entryPoint
+            );
+            return;
+        }
+
+        if (executionService is null or TrainExecutionService)
+            return;
+
+        logger.LogWarning(
+            "The runner {EntryPoint} runs trains through {ExecutionService}, which replaces the "
+                + "mediator's ITrainExecutionService. A remote run then has no trusted scope, so "
+                + "every run of a train gated with [TraxAuthorize] will be refused. Register the "
+                + "mediator's execution service on the runner, or gate those trains elsewhere.",
+            entryPoint,
+            executionService.GetType().FullName
+        );
     }
 
     /// <summary>

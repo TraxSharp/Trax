@@ -198,7 +198,9 @@ request as stale.
   `Pending`; `TraxRequestHandlerTests` checks a host train sharing a short name still runs.
 - `RemoteRunTrustTests` runs a gated train through the run path, and a train whose junction queues
   a gated train, and asserts the first runs, the second is refused with nothing queued, and a
-  junction sees no trusted scope.
+  junction sees no trusted scope. It and `JobRunnerEndpointTests` also check that a runner whose
+  `ITrainExecutionService` replaces the mediator's, and so runs with no trusted scope, warns when
+  its run entry point starts.
 - `StoredInputTypeResolutionTests` gives the dispatcher and the local worker a stored input type
   that no train takes and asserts nothing is constructed from it; `RegisteredInputTypesTests`
   covers the name matching itself.
@@ -220,6 +222,8 @@ of its own. Sharing nonces across runner instances is
 
 ## Changelog
 
+- **2026-10-27**: A runner whose `ITrainExecutionService` is not the mediator's logs a warning
+  when its run entry point starts, since every gated remote run is then refused.
 - **2026-10-27**: The response signature is documented as covering a success body only.
   `UseRemoteRun` and `UseRemoteWorkers` refuse plain `http://` off loopback without
   `AllowInsecureTransport`, and a run's answer is read only up to `MaxResponseBodyBytes`.

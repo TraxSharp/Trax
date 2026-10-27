@@ -78,6 +78,60 @@ public class RemoteRunTrustTests : TestSetup
     }
 
     [Test]
+    public void A_runner_on_the_mediators_execution_service_does_not_warn()
+    {
+        var logger = new WarningLogger();
+
+        TraxRequestHandler.WarnIfExecutionServiceReplaced(
+            Scope.ServiceProvider,
+            logger,
+            "/trax/run"
+        );
+
+        logger.Warnings.Should().BeEmpty();
+    }
+
+    [Test]
+    public void A_runner_on_a_replaced_execution_service_warns_that_gated_runs_are_refused()
+    {
+        var services = new ServiceCollection()
+            .AddScoped(_ => NSubstitute.Substitute.For<ITrainExecutionService>())
+            .BuildServiceProvider();
+        var logger = new WarningLogger();
+
+        TraxRequestHandler.WarnIfExecutionServiceReplaced(services, logger, "/trax/run");
+
+        logger
+            .Warnings.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("[TraxAuthorize]")
+            .And.Contain("/trax/run");
+    }
+
+    private sealed class WarningLogger : Microsoft.Extensions.Logging.ILogger
+    {
+        public List<string> Warnings { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            Microsoft.Extensions.Logging.LogLevel logLevel,
+            Microsoft.Extensions.Logging.EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        )
+        {
+            if (logLevel == Microsoft.Extensions.Logging.LogLevel.Warning)
+                Warnings.Add(formatter(state, exception));
+        }
+    }
+
+    [Test]
     public async Task A_remote_runs_junctions_do_not_see_a_trusted_scope()
     {
         var key = Guid.NewGuid().ToString("N");

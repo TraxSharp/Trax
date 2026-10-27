@@ -102,7 +102,17 @@ public abstract class TraxLambdaFunction
     /// </summary>
     protected TraxLambdaFunction()
     {
-        _serviceProvider = new Lazy<IServiceProvider>(BuildServiceProvider);
+        _serviceProvider = new Lazy<IServiceProvider>(() =>
+        {
+            var services = BuildServiceProvider();
+            if (services.GetService<ILogger<TraxRequestHandler>>() is { } logger)
+                TraxRequestHandler.WarnIfExecutionServiceReplaced(
+                    services,
+                    logger,
+                    nameof(TraxLambdaFunction)
+                );
+            return services;
+        });
     }
 
     /// <summary>

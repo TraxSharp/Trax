@@ -32,7 +32,8 @@ public class JobRunnerEndpointTests
         ITraxRequestHandler handler,
         Action<TraxJobRunnerOptions>? runner = null,
         bool registerRunner = true,
-        ILoggerProvider? logs = null
+        ILoggerProvider? logs = null,
+        Action<IServiceCollection>? configureServices = null
     )
     {
         var hostBuilder = new HostBuilder().ConfigureWebHost(web =>
@@ -57,6 +58,7 @@ public class JobRunnerEndpointTests
                         services.AddSingleton<INonceStore, InMemoryNonceStore>();
                         services.AddSingleton<RunnerRequestVerifier>();
                     }
+                    configureServices?.Invoke(services);
                 })
                 .Configure(app =>
                 {
@@ -623,6 +625,40 @@ public class JobRunnerEndpointTests
         logs.Entries.Count(e => e.Level == LogLevel.Warning && e.Message.Contains("Refused"))
             .Should()
             .Be(1, "refusals are summarised rather than logged one warning each");
+    }
+
+    [Test]
+    public void Mapping_the_run_endpoint_over_a_replaced_execution_service_warns_once()
+    {
+        var logs = new CapturingLoggerProvider();
+
+        using var host = BuildHost(
+            Substitute.For<ITraxRequestHandler>(),
+            logs: logs,
+            configureServices: s =>
+                s.AddScoped(_ =>
+                    Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
+                )
+        );
+
+        logs.Entries.Count(e =>
+                e.Level == LogLevel.Warning
+                && e.Message.Contains("/trax/run")
+                && e.Message.Contains("[TraxAuthorize]")
+            )
+            .Should()
+            .Be(1, "a runner whose execution service has no trusted scope says so when it starts");
+    }
+
+    [Test]
+    public void Mapping_the_run_endpoint_with_no_execution_service_registered_does_not_warn()
+    {
+        var logs = new CapturingLoggerProvider();
+
+        using var host = BuildHost(Substitute.For<ITraxRequestHandler>(), logs: logs);
+
+        logs.Entries.Should()
+            .NotContain(e => e.Level == LogLevel.Warning && e.Message.Contains("[TraxAuthorize]"));
     }
 
     private sealed class UnreadableStream : Stream
