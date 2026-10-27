@@ -42,9 +42,19 @@ internal static class LoadedTypeResolver
             var element = Resolve(name.GetElementType());
             if (element is null)
                 return null;
-            return name.IsSZArray
-                ? element.MakeArrayType()
-                : element.MakeArrayType(name.GetArrayRank());
+            try
+            {
+                return name.IsSZArray
+                    ? element.MakeArrayType()
+                    : element.MakeArrayType(name.GetArrayRank());
+            }
+            catch (Exception ex)
+                when (ex is TypeLoadException or ArgumentException or IndexOutOfRangeException)
+            {
+                // No array of the element can exist (System.Void, a ref struct such as Span<T>, an
+                // open generic), or the rank is outside 1 to 32.
+                return null;
+            }
         }
 
         if (name.IsPointer || name.IsByRef)
@@ -69,9 +79,10 @@ internal static class LoadedTypeResolver
             {
                 return definition.MakeGenericType([.. arguments]);
             }
-            catch (ArgumentException)
+            catch (Exception ex) when (ex is ArgumentException or TypeLoadException)
             {
-                // The arguments break the definition's constraints, or their count is wrong.
+                // The arguments break the definition's constraints, their count is wrong, or one
+                // of them cannot be a generic argument at all.
                 return null;
             }
         }
