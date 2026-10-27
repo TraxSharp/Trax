@@ -10,8 +10,8 @@ namespace Trax.Api.StateMachine.E2E;
 /// <summary>
 /// The generic <c>stateMachine</c> save, advance, load and send mutations, driven over real HTTP through the full Trax GraphQL
 /// stack against a real Postgres. This is the acceptance proof for the mutation layer: the trains register
-/// in a live schema, auth is enforced at the edge (anonymous fails at HTTP 200, not a crash), an advance →
-/// load flow persists server-side, the irreversible effect fires exactly once, and rejections
+/// in a live schema, auth is enforced at the edge (anonymous fails at HTTP 200, not a crash), a save → advance →
+/// load flow and an advance → load flow persist server-side, the irreversible effect fires exactly once, and rejections
 /// come back as typed data rather than transport errors.
 /// </summary>
 [TestFixture]
@@ -94,6 +94,54 @@ public class StateMachineGraphQLE2ETests
             .GetString()
             .Should()
             .Be("TRAX_AUTHORIZATION");
+    }
+
+    [Test]
+    public async Task Save_advance_and_load_flow_persists_server_side_over_http()
+    {
+        var id = Guid.NewGuid().ToString();
+
+        // The plain hatch has nothing the server does, so the generic save serves it.
+        using var save = await _host.PostAsync(
+            SaveMutation,
+            new
+            {
+                input = new
+                {
+                    machine = PlainHatchMachine.MachineId,
+                    id,
+                    snapshot = PlainHatchMachine.Json(HatchState.Shut),
+                },
+            },
+            E2EHost.AdminApiKey
+        );
+        NoErrors(save);
+        ProblemCode(Output(save, "saveSnapshot")).Should().BeNull(save.RootElement.GetRawText());
+        Snapshot(Output(save, "saveSnapshot")).Should().Contain("\"state\":\"Shut\"");
+
+        using var advance = await _host.PostAsync(
+            AdvanceMutation,
+            new
+            {
+                input = new
+                {
+                    machine = PlainHatchMachine.MachineId,
+                    id,
+                    trigger = "Open",
+                },
+            },
+            E2EHost.AdminApiKey
+        );
+        NoErrors(advance);
+        Snapshot(Output(advance, "advanceSnapshot")).Should().Contain("\"state\":\"Open\"");
+
+        using var load = await _host.PostAsync(
+            LoadMutation,
+            new { input = new { machine = PlainHatchMachine.MachineId, id } },
+            E2EHost.AdminApiKey
+        );
+        NoErrors(load);
+        Snapshot(Output(load, "loadSnapshot")).Should().Contain("\"state\":\"Open\"");
     }
 
     [Test]
