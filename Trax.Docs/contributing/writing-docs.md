@@ -143,6 +143,29 @@ with a full GitHub URL only when `source:` cannot carry it.
 | `CodeLinksToDocsResolveTests` | a `https://traxsharp.net/docs/...` link in a `*.cs` file under a `Trax.*/src/` or `Trax.*/dotnet/src/` folder, `Trax.Samples/samples/` or `Trax.Samples/templates/` that does not resolve to a published page (or a `redirect_from` of one), or whose anchor names no heading on it |
 | `SourceLinksBackTests` | an SDK reference page whose `source:` lists C# files, none of which links to the page |
 
+## Figures
+
+A figure is an SVG file in `Trax.Docs/images/`, shown with a markdown image whose alt text says
+what the picture shows, in full, since a screen reader and the markdown an agent reads get nothing
+else:
+
+```markdown
+![The checkout machine: Cart, Address, Payment and Placing in a row, ...](/docs-images/checkout-machine.svg)
+```
+
+`sync-docs.sh` copies the folder to the site's `/docs-images/`, and the site loads images from its
+own origin only. The figures are drawn by `Trax.Docs/tools/figures/draw.py`: change a figure there
+and run `python3 Trax.Docs/tools/figures/draw.py Trax.Docs/images`, rather than editing the SVG.
+Every figure is 768 pixels wide (the width of the text column) on the site's dark background, with
+text no smaller than 12px in the system font stacks, since an SVG shown as an image cannot load the
+site's fonts, and a `<title>` for anyone who opens the file on its own. One colour means one idea
+in every figure: teal states, lavender moves, amber guards, blue trains, pink junctions, orange
+failures. Keep a figure as simple as the idea it shows.
+
+| Test | Fails on |
+|---|---|
+| `ImagesResolveTests` | an image on a published page that is not under `/docs-images/`, names a file not in `images/`, or has no alt text; or a file in `images/` that no page shows |
+
 ## SDK reference pages
 
 A page under `sdk-reference/<folder>/` documents one member or type and is `type: reference`.

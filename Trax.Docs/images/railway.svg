@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 302" width="768" height="302" role="img" aria-labelledby="title">
+  <title id="title">The railway picture. Stations Cart, Address, Payment, Placing and Placed sit on a track. A signal stands before Placing. The PlaceOrder train has left Placing and passes junctions on its way to Placed. Stations are states, tracks are moves, signals are guards, trains are the work, junctions are its steps.</title>
+  <rect width="768" height="302" fill="#151515"/>
+  <path d="M0,92 L768,92" fill="none" stroke="#262626" stroke-width="18" stroke-dasharray="4 9"/>
+  <path d="M0,92 L768,92" fill="none" stroke="#b4a7f5" stroke-width="3"/>
+  <line x1="420" y1="48" x2="420" y2="68" stroke="#a09d96" stroke-width="2.5"/>
+  <rect x="412" y="22" width="16" height="28" rx="5" fill="#101010" stroke="#a09d96" stroke-width="1.2"/>
+  <circle cx="420" cy="30" r="4" fill="#f2c94c"/>
+  <circle cx="420" cy="41" r="4" fill="#333"/>
+  <text x="406" y="38" text-anchor="end" style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:12px;font-weight:400;fill:#f2c94c">signal = guard</text>
+  <line x1="610" y1="80" x2="610" y2="104" stroke="#f2a7c3" stroke-width="4"/>
+  <line x1="650" y1="80" x2="650" y2="104" stroke="#f2a7c3" stroke-width="4"/>
+  <line x1="690" y1="80" x2="690" y2="104" stroke="#f2a7c3" stroke-width="4"/>
+  <rect x="500" y="81" width="80" height="22" rx="6" fill="#7fb0e0" stroke="#7fb0e0" stroke-width="1"/>
+  <rect x="508" y="87" width="15" height="8" rx="2" fill="#151515" stroke="#151515" stroke-width="0"/>
+  <rect x="529" y="87" width="15" height="8" rx="2" fill="#151515" stroke="#151515" stroke-width="0"/>
+  <rect x="550" y="87" width="15" height="8" rx="2" fill="#151515" stroke="#151515" stroke-width="0"/>
+  <text x="540" y="70" text-anchor="middle" style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:12px;font-weight:400;fill:#7fb0e0">PlaceOrder train</text>
+  <text x="650" y="124" text-anchor="middle" style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:12px;font-weight:400;fill:#f2a7c3">junctions</text>
+  <text x="105" y="74" text-anchor="middle" style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:12px;font-weight:400;fill:#b4a7f5">track = move</text>
+  <circle cx="40" cy="92" r="9" fill="#151515" stroke="#5fc9b5" stroke-width="3"/>
+  <text x="40" y="124" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#5fc9b5">Cart</text>
+  <circle cx="170" cy="92" r="9" fill="#151515" stroke="#5fc9b5" stroke-width="3"/>
+  <text x="170" y="124" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#5fc9b5">Address</text>
+  <circle cx="300" cy="92" r="9" fill="#151515" stroke="#5fc9b5" stroke-width="3"/>
+  <text x="300" y="124" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#5fc9b5">Payment</text>
+  <circle cx="450" cy="92" r="9" fill="#151515" stroke="#5fc9b5" stroke-width="3"/>
+  <text x="450" y="124" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#5fc9b5">Placing</text>
+  <circle cx="724" cy="92" r="9" fill="#5fc9b5" stroke="#5fc9b5" stroke-width="3"/>
+  <text x="724" y="124" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:600;fill:#e4e2de">Placed</text>
+  <rect x="16" y="168" width="144" height="118" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <rect x="16" y="168" width="144" height="5" rx="2" fill="#5fc9b5"/>
+  <text x="28" y="194" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#5fc9b5;letter-spacing:1px">STATIONS</text>
+  <text x="28" y="218" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">= States</text>
+  <text x="28" y="242" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96">Where the process</text>
+  <text x="28" y="258" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96">waits for someone.</text>
+  <rect x="164" y="168" width="144" height="118" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <rect x="164" y="168" width="144" height="5" rx="2" fill="#b4a7f5"/>
+  <text x="176" y="194" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#b4a7f5;letter-spacing:1px">TRACKS</text>
+  <text x="176" y="218" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">= Moves</text>
+  <text x="176" y="242" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96">The only ways from</text>
+  <text x="176" y="258" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96">station to station.</text>
+  <rect x="312" y="168" width="144" height="118" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <rect x="312" y="168" width="144" height="5" rx="2" fill="#f2c94c"/>
+  <text x="324" y="194" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#f2c94c;letter-spacing:1px">SIGNALS</text>
+  <text x="324" y="218" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">= Guards</text>
+  <text x="324" y="242" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96">Checks a move must</text>
+  <text x="324" y="258" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96">pass first.</text>
+  <rect x="460" y="168" width="144" height="118" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <rect x="460" y="168" width="144" height="5" rx="2" fill="#7fb0e0"/>
+  <text x="472" y="194" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#7fb0e0;letter-spacing:1px">TRAINS</text>
+  <text x="472" y="218" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">= The work</text>
+  <text x="472" y="242" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96">Runs without</text>
+  <text x="472" y="258" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96">stopping to the</text>
+  <text x="472" y="274" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96">next station.</text>
+  <rect x="608" y="168" width="144" height="118" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <rect x="608" y="168" width="144" height="5" rx="2" fill="#f2a7c3"/>
+  <text x="620" y="194" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#f2a7c3;letter-spacing:1px">JUNCTIONS</text>
+  <text x="620" y="218" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">= Steps</text>
+  <text x="620" y="242" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96">The points a train</text>
+  <text x="620" y="258" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96">passes on its way.</text>
+</svg>

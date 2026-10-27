@@ -36,6 +36,9 @@ yarn-error.log*
 # the dashboard demo (built from dashboard/ by scripts/build-dashboard-demo.sh)
 /public/dashboard/demo/
 
+# the docs figures (copied from Trax.Docs/images by scripts/sync-docs.sh)
+/public/docs-images/
+
 # docs (synced at build time from local workspace or GitHub)
 .docs-cache/
 .docs-clone/

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 296" width="768" height="296" role="img" aria-labelledby="title">
+  <title id="title">A browser, a script and an AI agent each send a move. The server reads the stored state and checks three things: is the move allowed from here, may this caller make it, do the data and evidence hold up. All three pass and the new state is saved; any one fails and the client gets a typed error such as GUARD_FAILED, and nothing changes.</title>
+  <defs><marker id="ab4a7f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b4a7f5"/></marker><marker id="a5fc9b5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5fc9b5"/></marker><marker id="ae8853d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e8853d"/></marker></defs>
+<rect width="768" height="296" fill="#151515"/>
+  <text x="16" y="34" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96;letter-spacing:1px">ANY CLIENT</text>
+  <rect x="16" y="50" width="160" height="48" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="32" y="79" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:400;fill:#e4e2de">A browser</text>
+  <rect x="16" y="118" width="160" height="48" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="32" y="147" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:400;fill:#e4e2de">A script or service</text>
+  <rect x="16" y="186" width="160" height="48" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="32" y="215" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:400;fill:#e4e2de">An AI agent</text>
+  <path d="M176,74 C210,74 214,142 248,142" fill="none" stroke="#b4a7f5" stroke-width="1.5"/>
+  <path d="M176,142 L254,142" fill="none" stroke="#b4a7f5" stroke-width="1.5" marker-end="url(#ab4a7f5)"/>
+  <path d="M176,210 C210,210 214,142 248,142" fill="none" stroke="#b4a7f5" stroke-width="1.5"/>
+  <text x="16" y="266" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#b4a7f5">Each sends only a move,</text>
+  <text x="16" y="284" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#b4a7f5">never the new state.</text>
+  <rect x="256" y="34" width="290" height="216" rx="10" fill="#2f2810" stroke="#f2c94c" stroke-width="1.5"/>
+  <text x="276" y="62" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:16px;font-weight:600;fill:#e4e2de">The server's guards</text>
+  <text x="276" y="84" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">read the stored state, not the client's</text>
+  <circle cx="288" cy="117" r="11" fill="#f2c94c"/>
+  <text x="288" y="122" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:600;fill:#151515">1</text>
+  <text x="308" y="122" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:400;fill:#e4e2de">Is this move allowed from here?</text>
+  <circle cx="288" cy="159" r="11" fill="#f2c94c"/>
+  <text x="288" y="164" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:600;fill:#151515">2</text>
+  <text x="308" y="164" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:400;fill:#e4e2de">May this caller make it?</text>
+  <circle cx="288" cy="201" r="11" fill="#f2c94c"/>
+  <text x="288" y="206" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:600;fill:#151515">3</text>
+  <text x="308" y="206" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:400;fill:#e4e2de">Do the data and evidence hold?</text>
+  <path d="M546,100 L576,84" fill="none" stroke="#5fc9b5" stroke-width="1.5" marker-end="url(#a5fc9b5)"/>
+  <path d="M546,190 L576,206" fill="none" stroke="#e8853d" stroke-width="1.5" marker-end="url(#ae8853d)"/>
+  <rect x="580" y="40" width="176" height="80" rx="8" fill="#12302b" stroke="#5fc9b5" stroke-width="1.5"/>
+  <text x="596" y="68" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:16px;font-weight:600;fill:#5fc9b5">Accepted</text>
+  <text x="596" y="92" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">All three pass.</text>
+  <text x="596" y="108" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">The new state is saved.</text>
+  <rect x="580" y="146" width="176" height="132" rx="8" fill="#33200f" stroke="#e8853d" stroke-width="1.5"/>
+  <text x="596" y="176" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:16px;font-weight:600;fill:#e8853d">Refused</text>
+  <text x="596" y="198" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">Any one fails.</text>
+  <text x="596" y="222" style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:13px;font-weight:400;fill:#e4e2de">GUARD_FAILED</text>
+  <text x="596" y="246" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">A typed error says why.</text>
+  <text x="596" y="264" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">Nothing changes.</text>
+</svg>

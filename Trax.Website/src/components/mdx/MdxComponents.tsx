@@ -134,8 +134,19 @@ export const mdxComponents: MDXComponents = {
   strong: (props: ComponentPropsWithoutRef<"strong">) => (
     <strong className="font-semibold text-text-primary" {...props} />
   ),
-  img: (props: ComponentPropsWithoutRef<"img">) => (
+  img: (props: ComponentPropsWithoutRef<"img">) => {
+    // A figure from Trax.Docs/images is drawn 768px wide with text that is
+    // unreadable much below 640px, so on a phone it keeps that width and
+    // scrolls sideways in its own box rather than shrinking.
+    if (typeof props.src === "string" && props.src.startsWith("/docs-images/")) {
+      return (
+        <span className="my-4 block overflow-x-auto rounded-lg border border-border">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="block w-full min-w-[640px] max-w-none" alt="" {...props} />
+        </span>
+      );
+    }
     // eslint-disable-next-line @next/next/no-img-element
-    <img className="my-4 rounded-lg border border-border" alt="" {...props} />
-  ),
+    return <img className="my-4 rounded-lg border border-border" alt="" {...props} />;
+  },
 };
