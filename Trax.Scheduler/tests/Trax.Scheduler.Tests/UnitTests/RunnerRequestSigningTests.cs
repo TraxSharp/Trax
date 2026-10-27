@@ -503,6 +503,49 @@ public class RunnerRequestSigningTests
     }
 
     [Test]
+    public void RequestAndResponseMacs_AreDomainSeparated_EvenInEachOthersHeaderFormat()
+    {
+        const long timestamp = 1_700_000_000;
+        const string nonce = "0123456789ABCDEF0123456789ABCDEF";
+        var request = RunnerRequestSignature.Create(
+            Key,
+            RunnerRequestPurpose.Run,
+            Body,
+            timestamp,
+            nonce
+        );
+        var response = RunnerRequestSignature.CreateResponse(
+            Key,
+            RunnerRequestPurpose.Run,
+            request,
+            Body
+        )!;
+        var requestMac = request[(request.IndexOf(",s=", StringComparison.Ordinal) + 3)..];
+        var responseMac = response[(response.IndexOf(",s=", StringComparison.Ordinal) + 3)..];
+
+        // Over the same key, nonce and body, each MAC moved into the other's header format.
+        var requestMacAsAResponse = $"v1,s={requestMac}";
+        var responseMacAsARequest = $"v1,t={timestamp},n={nonce},s={responseMac}";
+
+        RunnerRequestSignature
+            .VerifyResponse(Key, RunnerRequestPurpose.Run, request, response, Body)
+            .Should()
+            .BeTrue("the response's own MAC verifies");
+        RunnerRequestSignature
+            .VerifyResponse(Key, RunnerRequestPurpose.Run, request, requestMacAsAResponse, Body)
+            .Should()
+            .BeFalse("a request MAC is computed under another prefix than a response MAC");
+        RunnerRequestSignature
+            .TryVerifyMac(Key, RunnerRequestPurpose.Run, Body, request, out _, out _)
+            .Should()
+            .BeTrue("the request's own MAC verifies");
+        RunnerRequestSignature
+            .TryVerifyMac(Key, RunnerRequestPurpose.Run, Body, responseMacAsARequest, out _, out _)
+            .Should()
+            .BeFalse("a response MAC is computed under another prefix than a request MAC");
+    }
+
+    [Test]
     public async Task PostWithRetry_EachAttemptCarriesItsOwnNonce()
     {
         var handler = new CapturingHandler(HttpStatusCode.ServiceUnavailable, "", okAfter: 1);
