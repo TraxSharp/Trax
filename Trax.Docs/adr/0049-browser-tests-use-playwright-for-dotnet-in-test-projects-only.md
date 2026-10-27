@@ -26,7 +26,8 @@ run against a fake server. Trax adds [Playwright for .NET](https://github.com/mi
   with Playwright for Node at 1.63.0. The NuGet package is pinned in the root `Directory.Packages.props` at the same
   version, so both download the same browser build and one upgrade moves both.
 - **CI installs chromium only**, after the build, with the script the package ships (`playwright.ps1 install
-  --with-deps chromium`). The browser is downloaded from Playwright's own CDN at the revision the pinned package
+  chromium`, through `.github/scripts/install-chromium.sh`), and Playwright's system packages only when the runner
+  image lacks a library chromium links against. The browser is downloaded from Playwright's own CDN at the revision the pinned package
   names; it is not a NuGet package and is not in a lockfile, so the package version is the pin.
 - **The database is one CI provisions** (samples/0001), named in the folder's `databases` list.
 - **No sleeps** ([0006](./0006-tests-synchronise-on-a-signal.md)): a browser test waits on a locator, a request or a
@@ -63,3 +64,5 @@ test.
 ## Changelog
 
 - **2026-10-09**: Recorded.
+- **2026-10-27**: CI installs the browser without `--with-deps`, whose fonts took six minutes from the runner's apt
+  mirror; the system packages are installed only when `ldd` finds a library missing.
