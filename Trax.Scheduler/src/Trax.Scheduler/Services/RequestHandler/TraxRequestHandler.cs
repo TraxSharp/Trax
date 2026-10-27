@@ -183,8 +183,9 @@ internal class TraxRequestHandler(
     /// trace leaves the runner: the train's metadata row and this process's log hold it.
     /// </summary>
     /// <remarks>
-    /// Only a <see cref="TrainException"/> is rebuilt from a recorded failure, so only its message
-    /// is read as one; any other exception's message is its own text. A failure class outside
+    /// Only a <see cref="TrainException"/> is rebuilt from a recorded failure, so only the message
+    /// of that exact type is read as one; any other exception's message, a derived type's
+    /// included, is its own text. A failure class outside
     /// <see cref="FailureClass"/> is carried as <see cref="FailureClass.Unclassified"/>, as
     /// <see cref="RunExecutor.RemoteRunJson"/> reads one on the wire.
     /// </remarks>
@@ -210,8 +211,9 @@ internal class TraxRequestHandler(
         }
 
         // Priority 2: JSON-serialized data in a TrainException's message (already crossed a
-        // boundary). No other exception type is rebuilt from a recorded failure.
-        if (ex is TrainException && ex.Message.StartsWith('{'))
+        // boundary). No other exception type is rebuilt from a recorded failure, a type derived
+        // from TrainException included: its message is its own text.
+        if (ex.GetType() == typeof(TrainException) && ex.Message.StartsWith('{'))
         {
             try
             {

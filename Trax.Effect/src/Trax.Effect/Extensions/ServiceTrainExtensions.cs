@@ -392,9 +392,15 @@ internal static class ServiceTrainExtensions
             data.TrainName = serviceTrain.TrainName;
     }
 
+    /// <summary>
+    /// Whether the failure is a recorded failure rebuilt as a <see cref="TrainException"/>: the
+    /// type exactly, as <see cref="Metadata.AddException"/> and Trax.Core's junction read it. A
+    /// type derived from it carries its own text, so it goes to the host's classifier like any
+    /// other exception.
+    /// </summary>
     private static bool IsRebuiltFailure(Exception failure)
     {
-        if (failure is not TrainException || !failure.Message.StartsWith('{'))
+        if (failure.GetType() != typeof(TrainException) || !failure.Message.StartsWith('{'))
             return false;
 
         try
