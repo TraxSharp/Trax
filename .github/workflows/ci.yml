@@ -188,11 +188,11 @@ jobs:
         run: dotnet build "$SOLUTION" --configuration Release --no-restore -warnaserror
       - name: Install chromium for the browser tests
         # Playwright for .NET drives a browser it does not carry: the package names a chromium
-        # revision and its own script downloads that build from Playwright's CDN, with the system
-        # libraries it needs. The build put the script beside the test assembly. Only chromium,
-        # the one browser the tests launch (Trax.Docs/adr/0049).
+        # revision and its own script downloads that build from Playwright's CDN. The build put the
+        # script beside the test assembly. Only chromium, the one browser the tests launch
+        # (Trax.Docs/adr/0049); system packages only if the image lacks a library it needs.
         if: matrix.package.playwright
-        run: pwsh Trax.Samples/tests/Trax.Samples.Recovery.Browser/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+        run: .github/scripts/install-chromium.sh Trax.Samples/tests/Trax.Samples.Recovery.Browser/bin/Release/net10.0/playwright.ps1
       - name: Pack (package validation)
         # Package validation runs on pack, not build. Packing here compares every package with
         # its baseline release before a merge, instead of at release time, after
@@ -410,7 +410,7 @@ jobs:
       - name: Install chromium
         # The playwright.ps1 the build put beside the test assembly, as in the dotnet job.
         if: matrix.suite.chromium
-        run: pwsh "$FOLDER/$PROJECT/bin/Release/net10.0/playwright.ps1" install --with-deps chromium
+        run: .github/scripts/install-chromium.sh "$FOLDER/$PROJECT/bin/Release/net10.0/playwright.ps1"
       - name: Create test databases
         if: matrix.suite.databases[0] != null
         env:
@@ -596,8 +596,6 @@ jobs:
             release-assets.githubusercontent.com:443
             objects.githubusercontent.com:443
             registry.npmjs.org:443
-            fonts.googleapis.com:443
-            fonts.gstatic.com:443
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -676,11 +674,12 @@ jobs:
           node-version: '24'
       - name: The committed client matches the documents
         # The console sends only what trax client generated from src/graphql and operations.graphql;
-        # a document changed without regenerating would send text the host never registered.
+        # a document changed without regenerating would send text the host never registered. The same
+        # documents are written in C# for trax-console (Trax.Api.Console.Terminal/Operations).
         run: |
           dotnet restore ../../../../Trax.Cli/src/Trax.Cli --locked-mode
           npm run client:check \
-            || { echo "::error::The console's generated client is out of date. Run 'npm run client' in Trax.Api/src/Trax.Api.Dashboard/ClientApp and commit the result."; exit 1; }
+            || { echo "::error::The console's generated clients (TypeScript, and C# for trax-console) are out of date. Run 'npm run client' in Trax.Api/src/Trax.Api.Dashboard/ClientApp and commit the result."; exit 1; }
       - name: Install (locked, no install scripts)
         # esbuild and rolldown ship their binaries as platform optional packages, so nothing
         # here needs an install script.

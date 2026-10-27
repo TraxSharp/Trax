@@ -117,16 +117,21 @@ public class CodeRendererTests
     }
 
     [Test]
-    public void RenderTrainImplementation_DeclaresAnExposurePostureMarker()
+    public void RenderTrainImplementation_RequiresTheUserRole()
     {
         // An exposed train must declare [TraxAuthorize] or [TraxAllowAnonymous] or the
-        // scaffolded host fails at startup. The generator emits [TraxAllowAnonymous] so
-        // the project runs out of the box; the user swaps it when they add auth.
-        var op = MakeOperation("GetPlayer", OperationKind.Query);
+        // scaffolded host fails at startup. A generated train requires the User role, as the
+        // hub's own trains do, and the hub's Development demo key carries it.
+        foreach (var kind in new[] { OperationKind.Query, OperationKind.Mutation })
+        {
+            var result = _renderer.RenderTrainImplementation(
+                MakeOperation("GetPlayer", kind),
+                "MyApi"
+            );
 
-        var result = _renderer.RenderTrainImplementation(op, "MyApi");
-
-        result.Should().Contain("[TraxAllowAnonymous]");
+            result.Should().Contain("[TraxAuthorize(Roles = \"User\")]");
+            result.Should().NotContain("[TraxAllowAnonymous]");
+        }
     }
 
     #endregion

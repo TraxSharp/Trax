@@ -121,8 +121,10 @@ app.MapTraxTrainEventHub(hub => hub.RequireRoles(OperatorRole));
 ```
 
 `UseSignalRHub` is a sink, not a transport: with no RabbitMQ it serves the trains this process runs.
-Add `UseRabbitMq(...)` beside it and events from workers in other processes reach the same hub (see
-[Broadcaster Sinks](/docs/effect/broadcaster-sinks)).
+Add `UseRabbitMq(...)` beside it, with the `SigningKey` every process on the exchange shares, and
+events from workers in other processes reach the same hub (see
+[Broadcaster Sinks](/docs/effect/broadcaster-sinks) and
+[UseRabbitMq: Signing and transport](/docs/sdk-reference/configuration/use-rabbit-mq#signing-and-transport)).
 
 The hub sends every matching event to every client it admits, so `MapTraxTrainEventHub` will not
 start without a posture. `RequireRoles("Operator")` admits authenticated callers in that role; the

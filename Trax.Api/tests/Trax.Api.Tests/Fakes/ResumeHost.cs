@@ -40,10 +40,10 @@ namespace Trax.Api.Tests.Fakes;
 internal sealed class ResumeHost : IAsyncDisposable
 {
     /// <summary>Past the operations gate, but not in the guarded train's <c>Resumer</c> role.</summary>
-    public const string OperatorKey = "resume-operator-key";
+    public const string OperatorKey = "resume-operator-key-0123456789abcdefghij";
 
     /// <summary>Past the gate and in the <c>Resumer</c> role.</summary>
-    public const string ResumerKey = "resume-resumer-key";
+    public const string ResumerKey = "resume-resumer-key-0123456789abcdefghijk";
 
     private readonly IHost _host;
 

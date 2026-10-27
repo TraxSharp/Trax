@@ -22,9 +22,9 @@ namespace Trax.Samples.ChatService.Hooks;
 /// A lifecycle hook runs for every train, so the hook filters by the train's
 /// canonical name (its service interface's FullName). It does not depend on
 /// [TraxBroadcast], and the chat trains deliberately do not carry it: a broadcast
-/// train's onTrainCompleted delivers every run's output to every caller the train
-/// admits, so any user would read every room's messages. The room-scoped topic
-/// here is the only way a chat event leaves the server.
+/// train's onTrainCompleted reaches every caller the train admits, and with its output
+/// opted in (AllowOutputForBroadcastSubscribers) any user would read every room's
+/// messages. The room-scoped topic here is the only way a chat event leaves the server.
 /// </summary>
 public class ChatLifecycleHook(ITopicEventSender eventSender) : ITrainLifecycleHook
 {

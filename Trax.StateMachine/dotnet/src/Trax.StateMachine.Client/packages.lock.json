@@ -47,6 +47,9 @@
         "resolved": "10.0.12",
         "contentHash": "dYfCLR52UA+3DL7C4I/pvSaRPkNqxrUAQmbFL2u0zvYKKzqgrFCJl08Df+F1aYc8leu9JvpC9bsURUdpExcBXQ=="
       },
+      "trax.client": {
+        "type": "Project"
+      },
       "trax.core": {
         "type": "Project",
         "dependencies": {

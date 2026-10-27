@@ -73,15 +73,18 @@ jobs:
             api.github.com:443
             release-assets.githubusercontent.com:443
             objects.githubusercontent.com:443
-            pkg-containers.githubusercontent.com:443
+            pypi.org:443
+            files.pythonhosted.org:443
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
+      # Since v0.7 the action installs zizmor's wheel from PyPI, checked against the hashes
+      # the action pins, instead of pulling its container image.
       - name: Audit workflows
-        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482  # v0.6.4
+        uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e  # v0.7.1
         with:
           # Report in the log and fail the job, rather than upload to code scanning,
           # which would need security-events: write.

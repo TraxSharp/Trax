@@ -50,7 +50,9 @@ public class TypeExtensionExposureTests
                 // RequireAuthorization() gates on the combined Trax policy, which only exists once
                 // a scheme has contributed to it.
                 if (gateEndpoint)
-                    services.AddTraxApiKeyAuth(keys => keys.Add("census-key", id: "census"));
+                    services.AddTraxApiKeyAuth(keys =>
+                        keys.Add("census-key-0123456789abcdefghijklmnopqrs", id: "census")
+                    );
 
                 services.AddSingleton<TraxMarker>();
                 var discovery = Substitute.For<ITrainDiscoveryService>();

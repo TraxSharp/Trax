@@ -30,6 +30,55 @@ public class TraxProjectGeneratorInternalsTests
     }
 
     [Test]
+    public void Dotnet_is_looked_up_on_PATH_by_name_never_run_bare()
+    {
+        var asked = new List<string>();
+
+        var found = TraxProjectGenerator.Dotnet(
+            _ => null,
+            name =>
+            {
+                asked.Add(name);
+                return "/usr/share/dotnet/dotnet";
+            }
+        );
+
+        found.Should().Be("/usr/share/dotnet/dotnet");
+        asked.Should().Equal("dotnet");
+    }
+
+    [Test]
+    public void Dotnet_is_DOTNET_HOST_PATH_when_it_is_an_absolute_file()
+    {
+        var host = Path.Combine(_tempDir, "dotnet");
+        File.WriteAllText(host, "");
+
+        TraxProjectGenerator
+            .Dotnet(n => n == "DOTNET_HOST_PATH" ? host : null, _ => "/elsewhere/dotnet")
+            .Should()
+            .Be(host);
+    }
+
+    [TestCase("dotnet")]
+    [TestCase("./dotnet")]
+    [TestCase("bin/dotnet")]
+    public void A_relative_DOTNET_HOST_PATH_is_not_run(string relative) =>
+        TraxProjectGenerator
+            .Dotnet(n => n == "DOTNET_HOST_PATH" ? relative : null, _ => null, _ => true)
+            .Should()
+            .BeNull();
+
+    [Test]
+    public void A_DOTNET_HOST_PATH_that_is_not_a_file_falls_back_to_PATH() =>
+        TraxProjectGenerator
+            .Dotnet(
+                n => n == "DOTNET_HOST_PATH" ? Path.Combine(_tempDir, "missing") : null,
+                _ => "/usr/bin/dotnet"
+            )
+            .Should()
+            .Be("/usr/bin/dotnet");
+
+    [Test]
     public void AddProjectReference_AppendsItemGroupBeforeProjectClose()
     {
         var apiDir = Path.Combine(_tempDir, "MyApi.Hub");

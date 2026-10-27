@@ -14,6 +14,7 @@ namespace Trax.Api.Auth.ApiKey
     public sealed class ApiKeyBuilder
     {
         public const string DemoKeyMarker = "do-not-use-in-production";
+        public const int MinimumKeyLength = 32;
         public ApiKeyBuilder() { }
         public Trax.Api.Auth.ApiKey.ApiKeyBuilder Add(string key, System.Func<Trax.Api.Auth.TraxPrincipal> principalFactory) { }
         public Trax.Api.Auth.ApiKey.ApiKeyBuilder Add(string key, string id, params string[] roles) { }

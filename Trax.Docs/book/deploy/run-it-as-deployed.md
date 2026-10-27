@@ -24,6 +24,11 @@ follows: book/deploy/containers
 x-shopfront: &shopfront
   ConnectionStrings__Shopfront: Host=database;Database=shopfront;Username=shopfront;Password=${POSTGRES_PASSWORD}
   ConnectionStrings__RabbitMq: amqp://shopfront:${RABBITMQ_PASSWORD}@rabbitmq:5672
+  # The key every process signs its events with: 32 random bytes, base64, the same in each.
+  Broadcast__SigningKey: ${BROADCAST_SIGNING_KEY:?set BROADCAST_SIGNING_KEY}
+  # The broker is reached without TLS, by its service name, on the network compose creates for
+  # these containers alone. A broker anywhere else is reached over amqps://.
+  Broadcast__AllowInsecureTransport: "true"
 
 services:
   database:
@@ -84,6 +89,8 @@ volumes:
 A published build runs in Production unless its environment says otherwise, and nothing here says
 otherwise. So:
 
+- **The broadcast key comes from `BROADCAST_SIGNING_KEY`.** The Development key is not read, and a
+  process without the key does not start.
 - **The hub accepts only tokens from your identity provider**, `Auth:Authority` and
   `Auth:Audience`. The Development key is refused outside Development, and `/dev/token` is not
   mapped.
@@ -96,6 +103,7 @@ Set the secrets, and start it:
 
 ```bash
 export POSTGRES_PASSWORD=... RABBITMQ_PASSWORD=...
+export BROADCAST_SIGNING_KEY=$(openssl rand -base64 32)
 export AUTH_AUTHORITY=https://login.example.com/ AUTH_AUDIENCE=shopfront
 export STOREFRONT_ORIGIN=https://shop.example.com
 docker compose up -d --build
@@ -124,6 +132,9 @@ info: Trax.Scheduler.Services.SchedulerStartupService.SchedulerStartupService[0]
 info: Trax.Api.GraphQL.PersistedOperations[0]
       Persisted-operation enforcement is ON. ...
 ```
+
+Each process also warns that it reaches RabbitMQ without TLS, which is what
+`Broadcast__AllowInsecureTransport` allows for the broker on compose's network.
 
 EF Core logs one `fail:` before that, the first time: it looks for the history table before it
 creates it. On a fresh database that is expected, and later starts log none.

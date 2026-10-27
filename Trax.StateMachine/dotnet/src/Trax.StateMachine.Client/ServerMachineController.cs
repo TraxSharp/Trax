@@ -35,8 +35,14 @@ public enum MachineProblemKind
 /// <param name="Message">What to tell a person. It is not part of the contract.</param>
 public sealed record MachineProblem(MachineProblemKind Kind, string Code, string Message);
 
-/// <summary>Why a controller stopped for good: the instance is gone, or this client is out of date and must reload.</summary>
-/// <param name="Code"><see cref="ClientProblemCodes.Gone"/> or <c>CLIENT_OUTDATED</c>.</param>
+/// <summary>
+/// Why a controller stopped for good: the instance is gone, this client is out of date and must reload, or the host
+/// refused the socket.
+/// </summary>
+/// <param name="Code">
+/// <see cref="ClientProblemCodes.Gone"/>, <c>CLIENT_OUTDATED</c>, or <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c> for a
+/// socket the host refused (<see cref="StreamMessage.Refused"/>).
+/// </param>
 /// <param name="Message">What to tell a person.</param>
 /// <param name="Deleted">
 /// With <see cref="ClientProblemCodes.Gone"/>: true when the instance was deleted or expired, false when the server
@@ -550,6 +556,9 @@ public sealed class ServerMachineController : IDisposable
                         "The server no longer serves this version of the machine. Reload."
                     )
                 );
+                return;
+            case StreamMessage.Refused refused:
+                Stop(new MachineError(refused.Code, refused.Message));
                 return;
             default:
                 // A reload, or a message this version does not know: read the instance again.

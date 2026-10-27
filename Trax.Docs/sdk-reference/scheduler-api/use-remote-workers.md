@@ -41,7 +41,8 @@ public SchedulerConfigurationBuilder UseRemoteWorkers(
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `BaseUrl` | `string` | required | The URL that receives job requests, for example `https://my-workers.example.com/trax/execute` |
+| `BaseUrl` | `string` | required | The URL that receives job requests, for example `https://my-workers.example.com/trax/execute`. Must be `https://` unless the host is loopback or `AllowInsecureTransport` is set |
+| `AllowInsecureTransport` | `bool` | `false` | Accept an `http://` `BaseUrl` to a host that is not loopback. Without it such a URL throws `InvalidOperationException` from `UseRemoteWorkers`, since the runner's answers are not signed. Set it only when the network to the runner is trusted, such as a container network on one machine |
 | `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Configures the `HttpClient`: headers such as `Authorization`, and anything else the runner expects |
 | `Timeout` | `TimeSpan` | 30 seconds | The timeout of each dispatch request. A job the runner has already started when it expires keeps running there and is not dispatched again |
 | `Retry` | `HttpRetryOptions` | see below | Retries for transient HTTP failures |

@@ -56,7 +56,15 @@ public class SignalRBroadcasterCompositionTests
 
                     traxBuilder.AddEffects(effects =>
                         effects.UseBroadcaster(b =>
-                            b.UseRabbitMq("amqp://stub-not-used").UseSignalRHub()
+                            b.UseRabbitMq(
+                                    "amqp://stub-not-used",
+                                    o =>
+                                    {
+                                        o.AllowUnsignedMessages();
+                                        o.AllowInsecureTransport = true;
+                                    }
+                                )
+                                .UseSignalRHub()
                         )
                     );
 

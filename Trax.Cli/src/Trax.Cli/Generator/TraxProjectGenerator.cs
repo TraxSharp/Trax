@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Trax.Cli.Machines;
 using Trax.Cli.Models;
 
 namespace Trax.Cli.Generator;
@@ -433,7 +434,11 @@ public partial class TraxProjectGenerator
         var (exitCode, _, stderr) = ChildProcess.Run(
             new ProcessStartInfo
             {
-                FileName = "dotnet",
+                FileName =
+                    Dotnet()
+                    ?? throw new InvalidOperationException(
+                        "'dotnet' was not found on PATH. Install the .NET SDK."
+                    ),
                 ArgumentList = { "new", "trax-hub", "-n", name, "-o", outputDir },
             }
         );
@@ -448,13 +453,39 @@ public partial class TraxProjectGenerator
             ? "The 'trax-hub' template is not installed. Run: dotnet new install Trax.Samples.Templates"
             : $"dotnet new failed (exit code {exitCode}): {stderr}";
 
+    /// <summary>
+    /// The full path of the <c>dotnet</c> to run, or null when there is none. <c>DOTNET_HOST_PATH</c>, which
+    /// the .NET host sets for a tool it runs, wins when it is an absolute path to a file; otherwise <c>dotnet</c>
+    /// is looked up in the absolute <c>PATH</c> entries by <see cref="ExecutableLookup"/>. A bare name is never
+    /// handed to <see cref="Process"/>, which would look in the current directory first, and <c>trax generate</c>
+    /// runs from whatever directory the operator is in.
+    /// </summary>
+    internal static string? Dotnet(
+        Func<string, string?>? environment = null,
+        Func<string, string?>? resolve = null,
+        Func<string, bool>? isFile = null
+    )
+    {
+        environment ??= Environment.GetEnvironmentVariable;
+        isFile ??= File.Exists;
+        if (
+            environment("DOTNET_HOST_PATH") is { Length: > 0 } host
+            && Path.IsPathFullyQualified(host)
+            && isFile(host)
+        )
+            return host;
+        return (resolve ?? ExecutableLookup.Resolve)("dotnet");
+    }
+
     public static bool IsDotnetAvailable()
     {
         try
         {
+            if (Dotnet() is not { } dotnet)
+                return false;
             var psi = new ProcessStartInfo
             {
-                FileName = "dotnet",
+                FileName = dotnet,
                 ArgumentList = { "--version" },
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

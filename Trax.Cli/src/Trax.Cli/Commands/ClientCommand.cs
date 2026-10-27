@@ -60,6 +60,17 @@ internal static class ClientCommand
                 + "host names in ClientDocuments(path).",
             AllowMultipleArgumentsPerToken = false,
         };
+        var lang = new Option<string?>("--lang")
+        {
+            Description =
+                "With --operations, the language of the client: typescript (default) or csharp, a client over "
+                + "Trax.Client for a .NET operator frontend.",
+        };
+        var @namespace = new Option<string?>("--namespace")
+        {
+            Description =
+                $"With --operations --lang csharp, the namespace of the client (default {ClientGenerator.DefaultOperationsNamespace}).",
+        };
         var node = new Option<string?>("--node")
         {
             Description =
@@ -79,6 +90,8 @@ internal static class ClientCommand
             specifier,
             toolsDir,
             documents,
+            lang,
+            @namespace,
             node,
         };
         command.SetAction(parseResult =>
@@ -88,18 +101,24 @@ internal static class ClientCommand
                     schema.FullName,
                     parseResult.GetRequiredValue(output).FullName,
                     parseResult.GetValue(check),
-                    parseResult.GetValue(documents) ?? []
+                    parseResult.GetValue(documents) ?? [],
+                    parseResult.GetValue(lang),
+                    parseResult.GetValue(@namespace)
                 )
-                : Run(
-                    parseResult.GetValue(target) ?? "react",
-                    parseResult.GetValue(manifest)?.FullName,
-                    parseResult.GetRequiredValue(output).FullName,
-                    parseResult.GetValue(check),
-                    parseResult.GetValue(specifier),
-                    parseResult.GetValue(toolsDir)?.FullName,
-                    new NodeRunner(parseResult.GetValue(node) ?? "node"),
-                    parseResult.GetValue(documents) ?? []
+            : parseResult.GetValue(lang) is not null || parseResult.GetValue(@namespace) is not null
+                ? Refuse(
+                    "--lang and --namespace choose the operations client's language; give them with --operations."
                 )
+            : Run(
+                parseResult.GetValue(target) ?? "react",
+                parseResult.GetValue(manifest)?.FullName,
+                parseResult.GetRequiredValue(output).FullName,
+                parseResult.GetValue(check),
+                parseResult.GetValue(specifier),
+                parseResult.GetValue(toolsDir)?.FullName,
+                new NodeRunner(parseResult.GetValue(node) ?? "node"),
+                parseResult.GetValue(documents) ?? []
+            )
         );
         return command;
     }
@@ -189,11 +208,26 @@ internal static class ClientCommand
         string schemaPath,
         string outDir,
         bool check,
-        IReadOnlyList<string> documentGlobs
+        IReadOnlyList<string> documentGlobs,
+        string? lang = null,
+        string? @namespace = null
     )
     {
         try
         {
+            var language = lang switch
+            {
+                null or "typescript" => OperationsLanguage.TypeScript,
+                "csharp" => OperationsLanguage.CSharp,
+                _ => throw new InvalidOperationException(
+                    $"--lang '{lang}' is not one trax client writes. Use typescript or csharp."
+                ),
+            };
+            if (@namespace is not null && language != OperationsLanguage.CSharp)
+                throw new InvalidOperationException(
+                    "--namespace names the C# client's namespace; give it with --lang csharp."
+                );
+            var ns = @namespace ?? ClientGenerator.DefaultOperationsNamespace;
             if (manifestPath is not null)
                 throw new InvalidOperationException(
                     "--operations generates the operations client, which reads no manifest; leave out --manifest."
@@ -211,7 +245,10 @@ internal static class ClientCommand
 
             if (check)
             {
-                var drift = ClientGenerator.Check(options, outDir);
+                var drift =
+                    language == OperationsLanguage.CSharp
+                        ? ClientGenerator.CheckCSharp(options, ns, outDir)
+                        : ClientGenerator.Check(options, outDir);
                 foreach (var file in drift)
                     Console.WriteLine(
                         $"  {(file.Status == DriftStatus.Missing ? "MISSING" : "DRIFT"), -8}{file.Path}"
@@ -227,7 +264,10 @@ internal static class ClientCommand
                 return 1;
             }
 
-            var written = ClientGenerator.Write(options, outDir);
+            var written =
+                language == OperationsLanguage.CSharp
+                    ? ClientGenerator.WriteCSharp(options, ns, outDir)
+                    : ClientGenerator.Write(options, outDir);
             foreach (var file in written)
                 Console.WriteLine($"  {file.Path}");
             Console.WriteLine($"Generated {written.Count} file(s) in {outDir}.");
@@ -267,5 +307,11 @@ internal static class ClientCommand
                 File.ReadAllText(path)
             ))
             .ToList();
+    }
+
+    private static int Refuse(string message)
+    {
+        Console.Error.WriteLine(message);
+        return 1;
     }
 }

@@ -80,7 +80,10 @@ and failed otherwise, with the reason its row gives ("It had already ended (comp
 longer exists.").
 
 One bulk operation runs per node at a time. While one runs, `startBulkOperation` returns
-`success: false` with that one as `operation`.
+`success: false` with that one as `operation`. A start holds that place from before it reads its
+snapshot, so of two starts that arrive together only one runs; the other is refused the same way,
+with `operation: null` when the first has not finished reading. A start that is refused or fails
+gives the place back.
 
 The caller is recorded as `actor`. When the host audits the API (`AddAudit`), the request that
 started the operation is audited as usual, and its outcome is written as a second entry with

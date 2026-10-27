@@ -26,6 +26,11 @@ namespace Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 /// the client's recovery does not cover: the receiver empties its caches, subscribes again on a
 /// new channel (retrying with a growing delay), and empties them once more when it has.
 /// </para>
+/// <para>
+/// A message whose signature is missing, does not match the host's
+/// <see cref="RabbitMqInvalidationOptions.SigningKey"/>, or is stale is dropped before its body is
+/// read, and empties nothing.
+/// </para>
 /// </remarks>
 internal sealed class PersistedOperationReceiverService : IHostedService, IAsyncDisposable
 {
@@ -35,6 +40,7 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
     private readonly ILogger<PersistedOperationReceiverService> _logger;
 
     private readonly CancellationTokenSource _stopping = new();
+    private readonly InvalidationMessageVerifier _verifier;
     private IConnection? _connection;
     private IChannel? _channel;
     private string? _queueName;
@@ -46,7 +52,8 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
         PersistedOperationsOptions options,
         IPersistedOperationCache cache,
         HotChocolateOperationCacheInvalidator hcInvalidator,
-        ILogger<PersistedOperationReceiverService> logger
+        ILogger<PersistedOperationReceiverService> logger,
+        TimeProvider? time = null
     )
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -57,7 +64,16 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
         _cache = cache;
         _hcInvalidator = hcInvalidator;
         _logger = logger;
+        _verifier = new InvalidationMessageVerifier(
+            options.RabbitMqExchange,
+            options.RabbitMqInvalidation,
+            logger,
+            time
+        );
     }
+
+    /// <summary>Messages dropped for a missing, wrong or stale signature. For tests.</summary>
+    internal long RefusedMessages => _verifier.Refused;
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -67,6 +83,10 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
             // configured. Skip silently rather than crash the host.
             return;
         }
+
+        var invalidation = _options.RabbitMqInvalidation;
+        if (invalidation.Problem(_options.RabbitMqConnectionString) is { } problem)
+            throw new InvalidOperationException(problem);
 
         var factory = new ConnectionFactory { Uri = new Uri(_options.RabbitMqConnectionString) };
         _connection = await factory.CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -82,6 +102,21 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
             "Persisted-operation invalidation receiver started on queue {Queue}.",
             _queueName
         );
+
+        if (invalidation.SigningKey is null)
+            _logger.LogWarning(
+                "Persisted-operation invalidation receiver on exchange {Exchange} accepts unsigned "
+                    + "messages (AllowUnsignedMessages): anyone who can publish to the exchange can "
+                    + "empty this node's caches.",
+                _options.RabbitMqExchange
+            );
+
+        if (invalidation.InsecureTransportInUse(_options.RabbitMqConnectionString))
+            _logger.LogWarning(
+                "Persisted-operation invalidation receiver reaches its broker without TLS "
+                    + "(AllowInsecureTransport): the broker credentials and every invalidation cross "
+                    + "the network in cleartext."
+            );
     }
 
     /// <summary>
@@ -202,6 +237,20 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
     {
         try
         {
+            var signature = InvalidationMessageSignature.Read(ea.BasicProperties.Headers);
+            if (!_verifier.Accept(ea.Exchange, ea.Body.Span, signature))
+            {
+                await channel
+                    .BasicNackAsync(
+                        ea.DeliveryTag,
+                        multiple: false,
+                        requeue: false,
+                        cancellationToken: CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
+                return;
+            }
+
             var message = JsonSerializer.Deserialize<PersistedOperationChangedMessage>(
                 ea.Body.Span
             );

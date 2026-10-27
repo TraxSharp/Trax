@@ -385,12 +385,16 @@ public class OperationsExposureTests
 
         act.Should()
             .Throw<InvalidOperationException>()
-            .WithMessage("*RequireAuthorization*")
+            .WithMessage("*GateOperationsToAuthenticatedUsers*")
             .WithMessage("*AllowAnonymousOperations*");
     }
 
+    /// <summary>
+    /// The endpoint gate admits the application's users, not its operators, so it does not answer
+    /// for the namespace: the host still says who may operate.
+    /// </summary>
     [Test]
-    public void ExposeOperationMutations_WithRequireAuthorization_DoesNotThrow()
+    public void ExposeOperationMutations_WithOnlyRequireAuthorization_ThrowsAtBuild()
     {
         var services = BuildBaseServices(_emptyDiscovery);
 
@@ -398,6 +402,47 @@ public class OperationsExposureTests
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
                 services,
                 g => g.ExposeOperationQueries().ExposeOperationMutations().RequireAuthorization()
+            );
+
+        act.Should()
+            .Throw<InvalidOperationException>(
+                "the endpoint gate is not an operations gate, per "
+                    + "docs/adr/0004-the-operations-namespace-gates-independently-of-the-endpoint.md"
+            )
+            .WithMessage("*RequireAuthorization()*")
+            .WithMessage("*GateOperations(policy, roles)*")
+            .WithMessage("*GateOperationsToAuthenticatedUsers()*");
+    }
+
+    [Test]
+    public void ExposeOperationQueriesOnly_WithOnlyRequireAuthorization_ThrowsAtBuild()
+    {
+        var services = BuildBaseServices(_emptyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g => g.ExposeOperationQueries().RequireAuthorization("SomePolicy")
+            );
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*GateOperationsToAuthenticatedUsers()*");
+    }
+
+    [Test]
+    public void ExposeOperationMutations_WithGateOperationsToAuthenticatedUsers_DoesNotThrow()
+    {
+        var services = BuildBaseServices(_emptyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g =>
+                    g.ExposeOperationQueries()
+                        .ExposeOperationMutations()
+                        .RequireAuthorization()
+                        .GateOperationsToAuthenticatedUsers()
             );
 
         act.Should().NotThrow();

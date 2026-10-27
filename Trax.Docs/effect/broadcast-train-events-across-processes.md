@@ -24,10 +24,14 @@ builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
         effects
             .UsePostgres(connectionString)
-            .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString))));
+            .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString, opts =>
+                opts.SigningKey = Convert.FromBase64String(configuration["Trax:BroadcastSigningKey"]!)))));
 ```
 
-A worker has no UI and registers no sink beyond the broadcaster's own publish hook.
+A worker has no UI and registers no sink beyond the broadcaster's own publish hook. The signing key is the one every
+process on the exchange shares, at least 32 random bytes; a receiver drops a message signed with any other, so only
+the workers can put events in front of the hub
+([UseRabbitMq: Signing and transport](/docs/sdk-reference/configuration/use-rabbit-mq#signing-and-transport)).
 
 ## 2. Receive and rebroadcast on the hub host
 
@@ -44,7 +48,8 @@ builder.Services.AddTrax(trax =>
         effects
             .UsePostgres(connectionString)
             .UseBroadcaster(b => b
-                .UseRabbitMq(rabbitMqConnectionString)
+                .UseRabbitMq(rabbitMqConnectionString, opts =>
+                    opts.SigningKey = Convert.FromBase64String(configuration["Trax:BroadcastSigningKey"]!))
                 .UseSignalRHub(opts => opts.OnlyForEvents("Completed", "Failed")))));
 
 var app = builder.Build();

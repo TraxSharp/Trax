@@ -1,4 +1,4 @@
-namespace Trax.StateMachine.Client;
+namespace Trax.Client;
 
 // What the client checks of an endpoint before it sends anything to it: a token in a header or in connection_init
 // travels in cleartext over http:// or ws://, so neither is accepted unless the host is this machine or the caller says

@@ -101,7 +101,10 @@ node that made the change. Another node hears of it only if it is broadcast.
 
 `UseRabbitMqInvalidation` broadcasts each change as a `PersistedOperationChangedMessage` over the
 RabbitMQ fanout exchange `trax.persisted_operations.invalidation`, in publisher-confirm mode, and
-every node empties its caches when it hears one. A node that loses its broker connection empties every cache, and again when the connection recovers, because a change
+every node empties its caches when it hears one. Each message is signed with a key every node and
+uploader shares, and a node drops one that is unsigned, signed with another key, or more than five
+minutes from its clock, so a process that can reach the broker but does not hold the key cannot make
+the nodes empty their caches. A node that loses its broker connection empties every cache, and again when the connection recovers, because a change
 broadcast in between never reached it. A publish the broker does not confirm within ten seconds
 leaves the change saved and in force on the node that made it, and the mutation reports
 `CHANGE_NOT_BROADCAST` rather than success; repeating the change sends it again.

@@ -35,8 +35,8 @@ namespace Trax.Api.StateMachine.E2E;
 public class OperatorMachineInstancesE2ETests
 {
     private const string Database = "trax_statemachine_operator_e2e";
-    private const string OperatorKey = "sm-operator-key";
-    private const string ShopperKey = "sm-shopper-key";
+    private const string OperatorKey = "sm-operator-key-0123456789abcdefghijklmn";
+    private const string ShopperKey = "sm-shopper-key-0123456789abcdefghijklmno";
 
     private IHost _host = null!;
     private Guid _draftId;
@@ -57,28 +57,10 @@ public class OperatorMachineInstancesE2ETests
         await E2EHost.RecreateDatabaseAsync(Database);
         _host = await StartAsync(E2EHost.ConnectionString(Database));
 
-        // The shopper's own draft, advanced into a state whose context holds what it paid with.
+        // The shopper's own draft, advanced into a state whose context holds what it paid with. The
+        // turnstile guards its coin, so the generic save does not serve it: the host writes the draft.
         _draftId = Guid.NewGuid();
-        using var save = await _host.PostAsync(
-            """
-            mutation Save($input: SaveSnapshotInput!) {
-              dispatch { stateMachine { saveSnapshot(input: $input) { output { snapshot } } } }
-            }
-            """,
-            new
-            {
-                input = new
-                {
-                    machine = "turnstile",
-                    id = _draftId.ToString(),
-                    snapshot = TurnstileMachine.InitialJson,
-                },
-            },
-            ShopperKey
-        );
-        save.RootElement.TryGetProperty("errors", out _)
-            .Should()
-            .BeFalse(save.RootElement.GetRawText());
+        await _host.SeedDraftAsync("TraxApiKey:shopper", _draftId, TurnstileMachine.InitialJson);
         using var advance = await _host.PostAsync(
             """
             mutation Advance($input: AdvanceSnapshotInput!) {

@@ -166,6 +166,62 @@ export interface HttpExecutorOptions {
    * each request would travel in cleartext. A relative endpoint is the page's own origin and is always accepted.
    */
   allowInsecureTransport?: boolean;
+  /**
+   * The largest response body the host may answer with, in bytes; 16 MiB by default. A larger one fails the request,
+   * which the session reports as a transport error, and is not read past the limit.
+   */
+  maxResponseSize?: number;
+}
+
+/** The response body limit when none is set: 16 MiB. */
+export const DEFAULT_MAX_RESPONSE_SIZE = 16 * 1024 * 1024;
+
+/**
+ * Throws unless `response` is the endpoint's own answer: a redirect is never followed (the request is sent with
+ * `redirect: 'error'`), and a `fetch` that followed one anyway, or handed back the redirect itself, fails the request
+ * rather than reading an answer from another host.
+ */
+export function requireNoRedirect(response: Response): void {
+  if (response.redirected || response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400))
+    throw new Error(`The server answered with a redirect (${response.status}), which is not followed.`);
+}
+
+/**
+ * The response body as text, read no further than `max` bytes. Throws once it passes the limit, whether or not the
+ * host said its length up front, and stops reading the body.
+ */
+export async function readBounded(response: Response, max: number): Promise<string> {
+  const tooLarge = () => new Error(`The server answered with a body larger than ${max} bytes.`);
+  const declared = Number(response.headers?.get('content-length') ?? NaN);
+  if (Number.isFinite(declared) && declared > max) {
+    await response.body?.cancel().catch(() => undefined);
+    throw tooLarge();
+  }
+  if (!response.body) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).length > max) throw tooLarge();
+    return text;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel().catch(() => undefined);
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 /**

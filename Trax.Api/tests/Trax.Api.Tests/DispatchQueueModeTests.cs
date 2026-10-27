@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using AwesomeAssertions;
 using HotChocolate;
@@ -99,6 +100,112 @@ public class DispatchQueueModeTests
             );
     }
 
+    [Test]
+    public async Task Priority_FromACallerWhoDoesNotSatisfyTheOperationsGate_IsRefused()
+    {
+        var executor = await BuildAsync(
+            GraphQLOperation.Queue,
+            g => g.ExposeOperationQueries().GateOperations(roles: "Admin")
+        );
+
+        var body = await ExecuteAsync(
+            executor,
+            """mutation { dispatch { report(input: { name: "q3" }, priority: 31) { workQueueId } } }""",
+            User("Player")
+        );
+
+        body.Should().Contain("TRAX_AUTHORIZATION");
+        await _execution
+            .DidNotReceiveWithAnyArgs()
+            .QueueAsync(default!, default, default!, default);
+    }
+
+    [Test]
+    public async Task Priority_FromAnOperator_IsQueued()
+    {
+        _execution
+            .QueueAsync(
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<QueueTrainOptions>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new QueueTrainResult(9, "ext-9"));
+        var executor = await BuildAsync(
+            GraphQLOperation.Queue,
+            g => g.ExposeOperationQueries().GateOperations(roles: "Admin")
+        );
+
+        var body = await ExecuteAsync(
+            executor,
+            """mutation { dispatch { report(input: { name: "q3" }, priority: 31) { workQueueId } } }""",
+            User("Admin")
+        );
+
+        body.Should().NotContain("errors");
+        await _execution
+            .Received(1)
+            .QueueAsync(
+                typeof(IReportTrain).FullName!,
+                Arg.Any<string?>(),
+                Arg.Is<QueueTrainOptions>(o => o.Priority == 31),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Test]
+    public async Task NoPriority_FromACallerWhoDoesNotSatisfyTheOperationsGate_IsQueuedAtTheDefault()
+    {
+        _execution
+            .QueueAsync(
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<QueueTrainOptions>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new QueueTrainResult(3, "ext-3"));
+        var executor = await BuildAsync(
+            GraphQLOperation.Queue,
+            g => g.ExposeOperationQueries().GateOperations(roles: "Admin")
+        );
+
+        var body = await ExecuteAsync(
+            executor,
+            """mutation { dispatch { report(input: { name: "q3" }, priority: 0) { workQueueId } } }""",
+            User("Player")
+        );
+
+        body.Should().NotContain("errors");
+        await _execution
+            .Received(1)
+            .QueueAsync(
+                typeof(IReportTrain).FullName!,
+                Arg.Any<string?>(),
+                Arg.Is<QueueTrainOptions>(o => o.Priority == 0),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    private static ClaimsPrincipal User(string role) =>
+        new(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "Test"));
+
+    private static async Task<string> ExecuteAsync(
+        IRequestExecutor executor,
+        string mutation,
+        ClaimsPrincipal user
+    ) =>
+        (
+            await executor.ExecuteAsync(
+                OperationRequestBuilder
+                    .New()
+                    .SetDocument(mutation)
+                    .SetGlobalState("ClaimsPrincipal", user)
+                    .Build()
+            )
+        )
+            .ExpectOperationResult()
+            .ToJson();
+
     private static async Task<JsonElement> RunAsync(IRequestExecutor executor, string mutation)
     {
         var body = (await executor.ExecuteAsync(mutation)).ExpectOperationResult().ToJson();
@@ -111,7 +218,13 @@ public class DispatchQueueModeTests
             .Clone();
     }
 
-    private async Task<IRequestExecutor> BuildAsync(GraphQLOperation operations)
+    private async Task<IRequestExecutor> BuildAsync(
+        GraphQLOperation operations,
+        Func<
+            Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder,
+            Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder
+        >? configure = null
+    )
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -121,7 +234,9 @@ public class DispatchQueueModeTests
         services.AddSingleton(discovery);
         services.AddSingleton(Substitute.For<IEffectRegistry>());
         services.AddTraxGraphQL(graphql =>
-            graphql.ExposeOperationQueries().AllowAnonymousOperations()
+            configure is null
+                ? graphql.ExposeOperationQueries().AllowAnonymousOperations()
+                : configure(graphql)
         );
         services.AddScoped(_ => Substitute.For<ITraxHealthService>());
         services.AddScoped(_ => Substitute.For<IOperationsService>());

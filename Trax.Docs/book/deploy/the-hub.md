@@ -56,6 +56,13 @@ var rabbitMq =
     ?? throw new InvalidOperationException("ConnectionStrings:RabbitMq is not set.");
 var development = builder.Environment.IsDevelopment();
 
+// The key the hub and the workers sign their events with. A process drops any event not signed
+// with it. appsettings.Development.json holds a key printed in the book, for Development only.
+var broadcastKey = Convert.FromBase64String(
+    builder.Configuration["Broadcast:SigningKey"]
+        ?? throw new InvalidOperationException("Broadcast:SigningKey is not set.")
+);
+
 builder.Services.AddShopfront(connectionString);
 
 if (development)
@@ -90,7 +97,21 @@ builder.Services.AddTrax(trax =>
             effects
                 .UsePostgres(connectionString)
                 // What the worker runs reaches the hub's subscriptions, and the other way round.
-                .UseBroadcaster(broadcaster => broadcaster.UseRabbitMq(rabbitMq))
+                .UseBroadcaster(broadcaster =>
+                    broadcaster.UseRabbitMq(
+                        rabbitMq,
+                        rabbit =>
+                        {
+                            rabbit.SigningKey = broadcastKey;
+                            // Set by compose.yaml, whose broker is reached by name on its own
+                            // network. A broker anywhere else is reached over amqps://.
+                            rabbit.AllowInsecureTransport = builder.Configuration.GetValue(
+                                "Broadcast:AllowInsecureTransport",
+                                false
+                            );
+                        }
+                    )
+                )
                 .SaveTrainParameters()
                 .AddJunctionLogger(serializeJunctionData: true)
                 .AddJunctionProgress()
@@ -232,6 +253,16 @@ What changed:
   of the worker's runs, need the worker to tell the hub, and RabbitMQ carries it. A machine's
   changes do not need it: they travel through Postgres. A hub that cannot reach the broker still
   starts, and tries again until it can.
+- **A signing key, `Broadcast:SigningKey`.** Every process on the exchange signs the events it
+  publishes with it and drops any event not signed with it, so a process that can reach the broker
+  but does not hold the key cannot put events in front of the hub's subscribers. `UseRabbitMq`
+  refuses to start without one. `appsettings.Development.json` holds a key printed here, which is
+  no secret and is read in Development only; anywhere else the hub stops at start until the key is
+  configured.
+- **`AllowInsecureTransport`, from configuration.** `UseRabbitMq` refuses a plain `amqp://` broker
+  that is not on this machine, since its credentials and every event would cross the network in
+  cleartext. `localhost` passes. Compose sets `Broadcast:AllowInsecureTransport` for the broker on
+  its own network (18.7); a broker anywhere else is reached over `amqps://`.
 - **Two health checks.** `AddTraxSchedulerLiveness` fails when the scheduler has stopped
   dispatching, which is what a restart fixes: that is liveness. `AddTraxHealthCheck` reads the
   database and reports `Degraded` when dead letters wait for someone or runs keep failing: that is
@@ -300,6 +331,16 @@ What changed:
     "Origin": "http://localhost:5173"
   },
   "AllowedHosts": "*"
+}
+```
+
+`Shopfront.Hub/appsettings.Development.json`:
+
+```json file=Shopfront.Hub/appsettings.Development.json
+{
+  "Broadcast": {
+    "SigningKey": "c2hvcGZyb250LWRldmVsb3BtZW50LWJyb2FkY2FzdC1rZXktcHJpbnRlZC1pbi10aGUtYm9vaw=="
+  }
 }
 ```
 

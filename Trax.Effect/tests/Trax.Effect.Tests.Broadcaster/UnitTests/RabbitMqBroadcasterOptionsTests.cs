@@ -48,6 +48,7 @@ public class RabbitMqBroadcasterOptionsTests
             {
                 ConnectionString = "amqp://trax:trax123@127.0.0.1:1/",
                 PrefetchCount = 0,
+                SigningKey = TestBroadcastKey.Value,
             }
         );
 
@@ -76,7 +77,14 @@ public class RabbitMqBroadcasterOptionsTests
         var act = () =>
             new TraxBuilder(new ServiceCollection(), new EffectRegistry()).AddEffects(effects =>
                 effects.UseBroadcaster(b =>
-                    b.UseRabbitMq("amqp://localhost", o => o.JunctionExchangeName = o.ExchangeName)
+                    b.UseRabbitMq(
+                        "amqp://localhost",
+                        o =>
+                        {
+                            o.JunctionExchangeName = o.ExchangeName;
+                            o.AllowUnsignedMessages();
+                        }
+                    )
                 )
             );
 
@@ -95,7 +103,9 @@ public class RabbitMqBroadcasterOptionsTests
                 NSubstitute.Substitute.For<Trax.Effect.Services.TrainEventBroadcaster.IJunctionEventHandler>()
             );
         new TraxBuilder(services, new EffectRegistry()).AddEffects(effects =>
-            effects.UseBroadcaster(b => b.UseRabbitMq("amqp://localhost"))
+            effects.UseBroadcaster(b =>
+                b.UseRabbitMq("amqp://localhost", o => o.AllowUnsignedMessages())
+            )
         );
         await using var provider = services.BuildServiceProvider();
 

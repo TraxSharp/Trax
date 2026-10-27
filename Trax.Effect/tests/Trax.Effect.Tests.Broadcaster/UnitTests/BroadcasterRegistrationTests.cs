@@ -22,7 +22,9 @@ public class BroadcasterRegistrationTests
         var builder = new TraxBuilder(services, registry);
 
         builder.AddEffects(effects =>
-            effects.UseBroadcaster(b => b.UseRabbitMq("amqp://localhost"))
+            effects.UseBroadcaster(b =>
+                b.UseRabbitMq("amqp://localhost", o => o.AllowUnsignedMessages())
+            )
         );
 
         var hookFactories = services
@@ -40,7 +42,9 @@ public class BroadcasterRegistrationTests
         var builder = new TraxBuilder(services, registry);
 
         builder.AddEffects(effects =>
-            effects.UseBroadcaster(b => b.UseRabbitMq("amqp://localhost"))
+            effects.UseBroadcaster(b =>
+                b.UseRabbitMq("amqp://localhost", o => o.AllowUnsignedMessages())
+            )
         );
 
         var hostedServices = services
@@ -60,7 +64,9 @@ public class BroadcasterRegistrationTests
         var builder = new TraxBuilder(services, registry);
 
         builder.AddEffects(effects =>
-            effects.UseBroadcaster(b => b.UseRabbitMq("amqp://localhost"))
+            effects.UseBroadcaster(b =>
+                b.UseRabbitMq("amqp://localhost", o => o.AllowUnsignedMessages())
+            )
         );
 
         services.Should().Contain(sd => sd.ServiceType == typeof(ITrainEventBroadcaster));
@@ -75,7 +81,9 @@ public class BroadcasterRegistrationTests
         var builder = new TraxBuilder(services, registry);
 
         builder.AddEffects(effects =>
-            effects.UseBroadcaster(b => b.UseRabbitMq("amqp://trax:trax123@localhost:5672"))
+            effects.UseBroadcaster(b =>
+                b.UseRabbitMq("amqp://trax:trax123@localhost:5672", o => o.AllowUnsignedMessages())
+            )
         );
 
         services.Should().Contain(sd => sd.ServiceType == typeof(RabbitMqBroadcasterOptions));
@@ -107,7 +115,14 @@ public class BroadcasterRegistrationTests
 
         builder.AddEffects(effects =>
             effects.UseBroadcaster(b =>
-                b.UseRabbitMq("amqp://localhost", opts => opts.ExchangeName = "custom.exchange")
+                b.UseRabbitMq(
+                    "amqp://localhost",
+                    opts =>
+                    {
+                        opts.ExchangeName = "custom.exchange";
+                        opts.AllowUnsignedMessages();
+                    }
+                )
             )
         );
 
@@ -128,7 +143,9 @@ public class BroadcasterRegistrationTests
         var builder = new TraxBuilder(services, registry);
 
         builder.AddEffects(effects =>
-            effects.UseBroadcaster(b => b.UseRabbitMq("amqp://localhost"))
+            effects.UseBroadcaster(b =>
+                b.UseRabbitMq("amqp://localhost", o => o.AllowUnsignedMessages())
+            )
         );
 
         // The broadcast hook should be registered and enabled (non-toggleable)
@@ -146,7 +163,9 @@ public class BroadcasterRegistrationTests
         var act = () =>
             builder.AddEffects(effects =>
                 effects
-                    .UseBroadcaster(b => b.UseRabbitMq("amqp://localhost"))
+                    .UseBroadcaster(b =>
+                        b.UseRabbitMq("amqp://localhost", o => o.AllowUnsignedMessages())
+                    )
                     .SetEffectLogLevel(Microsoft.Extensions.Logging.LogLevel.Trace)
             );
 

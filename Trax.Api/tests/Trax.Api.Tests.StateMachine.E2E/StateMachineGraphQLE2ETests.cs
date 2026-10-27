@@ -10,8 +10,8 @@ namespace Trax.Api.StateMachine.E2E;
 /// <summary>
 /// The generic <c>stateMachine</c> save, advance, load and send mutations, driven over real HTTP through the full Trax GraphQL
 /// stack against a real Postgres. This is the acceptance proof for the mutation layer: the trains register
-/// in a live schema, auth is enforced at the edge (anonymous fails at HTTP 200, not a crash), a save →
-/// advance → load flow persists server-side, the irreversible effect fires exactly once, and rejections
+/// in a live schema, auth is enforced at the edge (anonymous fails at HTTP 200, not a crash), a save → advance →
+/// load flow and an advance → load flow persist server-side, the irreversible effect fires exactly once, and rejections
 /// come back as typed data rather than transport errors.
 /// </summary>
 [TestFixture]
@@ -101,21 +101,60 @@ public class StateMachineGraphQLE2ETests
     {
         var id = Guid.NewGuid().ToString();
 
+        // The plain hatch has nothing the server does, so the generic save serves it.
         using var save = await _host.PostAsync(
             SaveMutation,
             new
             {
                 input = new
                 {
-                    machine = "turnstile",
+                    machine = PlainHatchMachine.MachineId,
                     id,
-                    snapshot = TurnstileMachine.InitialJson,
+                    snapshot = PlainHatchMachine.Json(HatchState.Shut),
                 },
             },
             E2EHost.AdminApiKey
         );
         NoErrors(save);
-        Snapshot(Output(save, "saveSnapshot")).Should().Contain("\"state\":\"Locked\"");
+        ProblemCode(Output(save, "saveSnapshot")).Should().BeNull(save.RootElement.GetRawText());
+        Snapshot(Output(save, "saveSnapshot")).Should().Contain("\"state\":\"Shut\"");
+
+        using var advance = await _host.PostAsync(
+            AdvanceMutation,
+            new
+            {
+                input = new
+                {
+                    machine = PlainHatchMachine.MachineId,
+                    id,
+                    trigger = "Open",
+                },
+            },
+            E2EHost.AdminApiKey
+        );
+        NoErrors(advance);
+        Snapshot(Output(advance, "advanceSnapshot")).Should().Contain("\"state\":\"Open\"");
+
+        using var load = await _host.PostAsync(
+            LoadMutation,
+            new { input = new { machine = PlainHatchMachine.MachineId, id } },
+            E2EHost.AdminApiKey
+        );
+        NoErrors(load);
+        Snapshot(Output(load, "loadSnapshot")).Should().Contain("\"state\":\"Open\"");
+    }
+
+    [Test]
+    public async Task Advance_and_load_flow_persists_server_side_over_http()
+    {
+        var id = Guid.NewGuid().ToString();
+
+        // The turnstile guards its coin, so the generic save does not serve it: the host writes the draft.
+        await _host.SeedDraftAsync(
+            "TraxApiKey:admin",
+            Guid.Parse(id),
+            TurnstileMachine.InitialJson
+        );
 
         using var advance = await _host.PostAsync(
             AdvanceMutation,
@@ -217,6 +256,36 @@ public class StateMachineGraphQLE2ETests
     }
 
     [Test]
+    public async Task A_save_of_a_machine_with_a_guard_is_a_typed_SAVE_NOT_ALLOWED_and_stores_nothing()
+    {
+        var id = Guid.NewGuid().ToString();
+
+        // Unlocked is reached only past the coin guard; the generic save would step around it.
+        using var save = await _host.PostAsync(
+            SaveMutation,
+            new
+            {
+                input = new
+                {
+                    machine = "turnstile",
+                    id,
+                    snapshot = """{"machine":"turnstile","version":1,"state":"Unlocked","context":{"paidWith":"quarter"}}""",
+                },
+            },
+            E2EHost.AdminApiKey
+        );
+
+        NoErrors(save);
+        ProblemCode(Output(save, "saveSnapshot")).Should().Be("SAVE_NOT_ALLOWED");
+        using var load = await _host.PostAsync(
+            LoadMutation,
+            new { input = new { machine = "turnstile", id } },
+            E2EHost.AdminApiKey
+        );
+        ProblemCode(Output(load, "loadSnapshot")).Should().Be("NOT_FOUND");
+    }
+
+    [Test]
     public async Task An_unknown_machine_comes_back_as_a_typed_problem_not_an_error()
     {
         using var doc = await _host.PostAsync(
@@ -241,18 +310,10 @@ public class StateMachineGraphQLE2ETests
     public async Task Send_to_a_machine_with_no_effect_is_a_typed_problem()
     {
         var id = Guid.NewGuid().ToString();
-        await _host.PostAsync(
-            SaveMutation,
-            new
-            {
-                input = new
-                {
-                    machine = "turnstile",
-                    id,
-                    snapshot = TurnstileMachine.InitialJson,
-                },
-            },
-            E2EHost.AdminApiKey
+        await _host.SeedDraftAsync(
+            "TraxApiKey:admin",
+            Guid.Parse(id),
+            TurnstileMachine.InitialJson
         );
 
         using var doc = await _host.PostAsync(

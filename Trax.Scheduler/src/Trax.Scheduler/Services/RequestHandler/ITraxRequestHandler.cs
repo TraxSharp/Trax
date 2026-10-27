@@ -12,8 +12,10 @@ namespace Trax.Scheduler.Services.RequestHandler;
 /// <para>
 /// The entry points Trax ships (<c>UseTraxJobRunner()</c>, <c>UseTraxRunEndpoint()</c>,
 /// <c>SqsJobRunnerHandler</c>, <c>TraxLambdaFunction</c>) verify each request against the
-/// runner's posture before they call it, and it runs what it is given inside a trusted execution
-/// scope, so a train's <c>[TraxAuthorize]</c> requirements do not apply (scheduler/0006).
+/// runner's posture before they call it, and it trusts what it is given: the train a run names is
+/// authorized inside a trusted execution scope, so its <c>[TraxAuthorize]</c> requirements do not
+/// apply (scheduler/0006). The train then runs outside that scope, so a gated train it queues or
+/// runs in turn is checked as it would be anywhere else.
 /// </para>
 /// <para>
 /// Call it only from an entry point that has already verified the request: its

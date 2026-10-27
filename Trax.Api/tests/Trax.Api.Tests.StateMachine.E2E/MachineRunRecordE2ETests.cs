@@ -107,7 +107,69 @@ public class MachineRunRecordE2ETests
     }
 
     [Test]
-    public async Task The_generic_save_stores_its_snapshot_masked_and_no_output()
+    public async Task A_successful_generic_save_stores_its_snapshot_masked_and_no_output()
+    {
+        const string marker = "saved-context-marker";
+        var id = Guid.NewGuid();
+
+        using var saved = await _host.PostAsync(
+            """
+            mutation Save($input: SaveSnapshotInput!) {
+              dispatch { stateMachine { saveSnapshot(input: $input) { output { snapshot problem { code } } } } }
+            }
+            """,
+            new
+            {
+                input = new
+                {
+                    machine = PlainHatchMachine.MachineId,
+                    id = id.ToString(),
+                    snapshot = PlainHatchMachine.Json(
+                        HatchState.Open,
+                        new System.Text.Json.Nodes.JsonObject { ["note"] = marker }
+                    ),
+                },
+            },
+            E2EHost.AliceKey
+        );
+        var output = saved
+            .RootElement.GetProperty("data")
+            .GetProperty("dispatch")
+            .GetProperty("stateMachine")
+            .GetProperty("saveSnapshot")
+            .GetProperty("output");
+        output
+            .GetProperty("problem")
+            .ValueKind.Should()
+            .Be(JsonValueKind.Null, saved.RootElement.GetRawText());
+        output
+            .GetProperty("snapshot")
+            .GetString()
+            .Should()
+            .Contain(marker, "the save produced output that carries the context");
+
+        (
+            await E2ESql.ScalarAsync<long>(
+                Database,
+                "SELECT count(*) FROM trax.metadata WHERE name = @name AND input::text LIKE @id",
+                ("name", typeof(ISaveSnapshot).FullName!),
+                ("id", $"%{id}%")
+            )
+        )
+            .Should()
+            .Be(1, "the save ran once and its row is kept for audit");
+        (await MachineRunsMentioning(marker))
+            .Should()
+            .Be(
+                0,
+                "the caller got the context back, and neither the save's input nor its output on the run row "
+                    + "keeps it, per "
+                    + Adr
+            );
+    }
+
+    [Test]
+    public async Task The_generic_save_stores_its_snapshot_masked_and_no_output_when_refused()
     {
         const string marker = "save-context-marker";
         var id = Guid.NewGuid();
@@ -140,15 +202,13 @@ public class MachineRunRecordE2ETests
             .GetProperty("stateMachine")
             .GetProperty("saveSnapshot")
             .GetProperty("output");
+        // The turnstile guards its coin, so the save is refused; its run is recorded all the same.
         output
             .GetProperty("problem")
-            .ValueKind.Should()
-            .Be(JsonValueKind.Null, saved.RootElement.GetRawText());
-        output
-            .GetProperty("snapshot")
+            .GetProperty("code")
             .GetString()
             .Should()
-            .Contain(marker, "the caller still gets the stored snapshot back");
+            .Be("SAVE_NOT_ALLOWED", saved.RootElement.GetRawText());
 
         var input = await E2ESql.ScalarAsync<string>(
             Database,

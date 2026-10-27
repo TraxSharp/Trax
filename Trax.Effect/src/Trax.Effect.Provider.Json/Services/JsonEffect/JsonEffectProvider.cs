@@ -98,7 +98,9 @@ public class JsonEffectProvider(
                 if (!_previousStates.TryGetValue(model, out var state))
                     break;
 
-                logger.Log(configuration.LogLevel, "{@Metadata}", model);
+                // The masked string, never the model: a structured sink that destructures an
+                // argument walks its public properties and would skip the masking.
+                logger.Log(configuration.LogLevel, "{Metadata}", state);
             }
         }
     }

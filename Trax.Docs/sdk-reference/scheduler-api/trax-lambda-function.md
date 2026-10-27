@@ -30,6 +30,7 @@ public abstract class TraxLambdaFunction
     protected virtual void ConfigureLogging(ILoggingBuilder logging);
     protected virtual IServiceProvider BuildServiceProvider();
     protected virtual TimeSpan TerminalWriteMargin { get; }
+    protected virtual bool AllowUnsignedLocalDevelopmentRequests { get; }
 
     public Task<object?> FunctionHandler(LambdaEnvelope envelope, ILambdaContext context);
 
@@ -46,6 +47,7 @@ public abstract class TraxLambdaFunction
 | `ConfigureRunner(TraxJobRunnerOptions, IConfiguration)` | Sets the runner's posture: `runner.SigningKey` (shared with `UseLambdaWorkers` / `UseLambdaRun`), or `runner.AllowUnsignedRequests()`. The default sets nothing, so every invocation is refused |
 | `ConfigureLogging(ILoggingBuilder)` | Configures logging. Default: console at `Information` |
 | `TerminalWriteMargin` | How much of `ILambdaContext.RemainingTime` is held back so a run cancelled by the function's timeout can still record its outcome. Default 5 seconds; at most half the time left is held back |
+| `AllowUnsignedLocalDevelopmentRequests` | Lets the local routes accept unsigned loopback requests outside the `Development` environment, on a runner with `AllowUnsignedRequests()`. Default `false`. It does not lift the loopback check and has no effect on `FunctionHandler`. New in the next Trax.Runner.Lambda release |
 | `BuildServiceProvider()` | Builds the whole service graph. The default builds `IConfiguration`, registers it and logging, calls `ConfigureLogging` and `ConfigureServices`, and finishes with `AddTraxJobRunner(runner => ConfigureRunner(runner, configuration))`. An override registers `AddTraxJobRunner` itself |
 | `FunctionHandler(LambdaEnvelope, ILambdaContext)` | The Lambda entry point. Dispatches the envelope by its `Type` and returns the handler's response |
 | `RunLocalAsync(string[])` | Serves the function as a local Kestrel server until it stops on Ctrl+C or process exit |
@@ -114,15 +116,16 @@ may carry error fields, from which the Lambda run executor rebuilds a `TrainExce
 
 `RunLocalAsync` builds a `WebApplication` from `args`, maps `POST /trax/execute` and
 `POST /trax/run`, wraps each request body in a `LambdaEnvelope`, and runs it through the same
-handler as `FunctionHandler`. The server reads `appsettings.json`, its Kestrel endpoints included,
+handler as `FunctionHandler`. The local routes are for development only; a deployed function is
+invoked through `FunctionHandler`. The server reads `appsettings.json`, its Kestrel endpoints included,
 from its content root: from the next Trax.Runner.Lambda release `AppContext.BaseDirectory`, and in
 released versions the current directory. A `--contentRoot` argument, or `DOTNET_CONTENTROOT` /
 `ASPNETCORE_CONTENTROOT`, sets it.
 
 | Runner posture | What the local routes accept |
 |----------------|------------------------------|
-| `SigningKey` | Requests with a valid, fresh `Trax-Signature` header, from any address. The header is checked before the body is read (`401`), and a body over `MaxRequestBodyBytes` gets `413` |
-| `AllowUnsignedRequests()` | Unsigned requests from this machine's loopback address only, whatever address the server listens on; any other caller gets `401` |
+| `SigningKey` | Requests with a valid, fresh `Trax-Signature` header, from any address. The header is checked before the body is read (`401`), and a body over `MaxRequestBodyBytes` gets `413`. A `/trax/run` answer carries a `Trax-Response-Signature` bound to the request, as `UseTraxRunEndpoint`'s does |
+| `AllowUnsignedRequests()` | Unsigned requests from this machine's loopback address only, whatever address the server listens on, and only when the host's environment is `Development` or the function overrides `AllowUnsignedLocalDevelopmentRequests` to return `true`; any other request gets `401`. New in the next Trax.Runner.Lambda release: before it, the environment was not checked |
 
 The routes are mapped by an internal `ConfigureRoutes(IEndpointRouteBuilder)`, visible to the Trax
 test assemblies only.

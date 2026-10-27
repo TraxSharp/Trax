@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -101,7 +102,17 @@ public abstract class TraxLambdaFunction
     /// </summary>
     protected TraxLambdaFunction()
     {
-        _serviceProvider = new Lazy<IServiceProvider>(BuildServiceProvider);
+        _serviceProvider = new Lazy<IServiceProvider>(() =>
+        {
+            var services = BuildServiceProvider();
+            if (services.GetService<ILogger<TraxRequestHandler>>() is { } logger)
+                TraxRequestHandler.WarnIfExecutionServiceReplaced(
+                    services,
+                    logger,
+                    nameof(TraxLambdaFunction)
+                );
+            return services;
+        });
     }
 
     /// <summary>
@@ -161,6 +172,22 @@ public abstract class TraxLambdaFunction
     protected virtual TimeSpan TerminalWriteMargin => TimeSpan.FromSeconds(5);
 
     private int _warnedMarginCut;
+
+    /// <summary>
+    /// Lets the local routes <see cref="RunLocalAsync(string[])"/> serves accept unsigned requests
+    /// from this machine's loopback address when the host's environment is not
+    /// <c>Development</c>. Off by default. Without a signing key the local routes refuse every
+    /// request outside <c>Development</c> unless this is on, and a request from any other address
+    /// whatever it is. It has no effect on <see cref="FunctionHandler"/>, the Lambda invocation
+    /// entry point.
+    /// </summary>
+    /// <remarks>
+    /// The local routes are for development. Turn this on only for a machine whose loopback
+    /// address nothing else can reach, such as a developer's own workstation running under another
+    /// environment name; anything that can open a connection to loopback there can run any
+    /// registered train.
+    /// </remarks>
+    protected virtual bool AllowUnsignedLocalDevelopmentRequests => false;
 
     /// <summary>
     /// Lambda entry point for direct SDK invocation.
@@ -253,9 +280,12 @@ public abstract class TraxLambdaFunction
     /// The routes take their own posture. With a signing key, every request must carry a valid
     /// <c>Trax-Signature</c> header, checked before its body is read, from wherever it comes.
     /// Without one (<c>AllowUnsignedRequests()</c>, a posture meant for the Lambda invocation entry
-    /// point, which only the scheduler's IAM role can reach), the routes serve only requests from
-    /// this machine's loopback address and refuse any other with 401, whatever address the server
-    /// listens on. A body larger than <c>MaxRequestBodyBytes</c> is refused with 413.
+    /// point, which only the scheduler's IAM role can reach), the routes serve only the
+    /// <c>Development</c> environment, or a function that turns on
+    /// <see cref="AllowUnsignedLocalDevelopmentRequests"/>, and there only requests from this
+    /// machine's loopback address; they refuse any other with 401, whatever address the server
+    /// listens on. A body larger than <c>MaxRequestBodyBytes</c> is refused with 413. The routes are
+    /// for development; a deployed function is invoked through <see cref="FunctionHandler"/>.
     /// </remarks>
     /// <example>
     /// <code>
@@ -346,16 +376,31 @@ public abstract class TraxLambdaFunction
                 var verifier = RequireVerifier(scope.ServiceProvider);
 
                 // Unsigned is a posture for the Lambda invocation entry point. Over HTTP it is
-                // honoured only for a caller on this machine.
-                if (!verifier.RequiresSignature && !IsFromThisMachine(ctx))
+                // honoured only in development, and only for a caller on this machine.
+                if (!verifier.RequiresSignature)
                 {
-                    verifier.ReportRefusal(
-                        ctx.Request.Path,
-                        "unsigned request from another machine; the local routes accept unsigned "
-                            + "requests only from loopback"
-                    );
-                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    return;
+                    if (!IsLocalDevelopment(ctx))
+                    {
+                        verifier.ReportRefusal(
+                            ctx.Request.Path,
+                            "unsigned request outside Development; the local routes accept "
+                                + "unsigned requests only in the Development environment or with "
+                                + "AllowUnsignedLocalDevelopmentRequests"
+                        );
+                        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        return;
+                    }
+
+                    if (!IsFromThisMachine(ctx))
+                    {
+                        verifier.ReportRefusal(
+                            ctx.Request.Path,
+                            "unsigned request from another machine; the local routes accept "
+                                + "unsigned requests only from loopback"
+                        );
+                        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        return;
+                    }
                 }
 
                 var (body, refusedStatus) = await verifier.ReadVerifiedBodyAsync(
@@ -379,12 +424,34 @@ public abstract class TraxLambdaFunction
                     ctx.RequestAborted
                 );
 
-                ctx.Response.ContentType = "application/json";
-                await ctx.Response.WriteAsync(
-                    JsonSerializer.Serialize(result, result.GetType(), RemoteRunJson.Write)
+                // A run's answer is signed over these exact bytes, bound to the request it
+                // answers, when the runner has a signing key, as UseTraxRunEndpoint signs it.
+                var responseBody = JsonSerializer.SerializeToUtf8Bytes(
+                    result,
+                    result.GetType(),
+                    RemoteRunJson.Write
                 );
+                if (
+                    purpose == RunnerRequestPurpose.Run
+                    && verifier.SignResponse(
+                        purpose,
+                        ctx.Request.Headers[RunnerRequestSignature.HeaderName].ToString(),
+                        responseBody
+                    )
+                        is { } responseSignature
+                )
+                    ctx.Response.Headers[RunnerRequestSignature.ResponseHeaderName] =
+                        responseSignature;
+
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.Body.WriteAsync(responseBody);
             }
         );
+
+    // A host with no environment registered is not taken for Development.
+    private bool IsLocalDevelopment(HttpContext ctx) =>
+        AllowUnsignedLocalDevelopmentRequests
+        || ctx.RequestServices.GetService<IHostEnvironment>()?.IsDevelopment() == true;
 
     private static bool IsFromThisMachine(HttpContext ctx) =>
         ctx.Connection.RemoteIpAddress is { } caller

@@ -15,7 +15,9 @@ frontend's (central `docs/0053`), and tells the page their ids, which the page s
 
 - The console's documents are a file written from its source and embedded by the package: since 2026-10-22,
   `ClientApp/src/trax/console-documents.json`, which `trax client --operations` writes with the console's client
-  (central `docs/0057`), checked in CI. `UseTraxApiDashboard` hands them to the GraphQL host.
+  (central `docs/0057`), checked in CI. `UseTraxApiDashboard` hands them to the GraphQL host, and so does
+  `UseTraxOperatorConsoleDocuments`, for a host an operator reaches only from a terminal (`trax-console`), which
+  serves no page. Both register the same documents; neither changes who may run them.
 - Each is stored under `trax_console_<name>_<hash>`, content-addressed as a client document is, so any version runs on
   any node while the store holds it active, and a collected one answers `CLIENT_OUTDATED`.
 - A console document reaches only `operations` (a query or a mutation) or one of the operator's streams (a
@@ -29,6 +31,9 @@ frontend's (central `docs/0053`), and tells the page their ids, which the page s
   after its hosted services started (a Startup's `Configure`) registers the documents once it has started.
 
 ## Considered options
+
+- **Register the console's documents only with the page.** It was so until 2026-10-22. Rejected then: a terminal
+  console sends the same documents, and a host that wants it should not have to serve a browser app it does not use.
 
 - **Widen `trax_client_` to reach `operations`.** Rejected: `docs/0053` keeps client documents to trains and query
   models so requiring persisted operations still bounds what a frontend runs. The console is a different client with a
@@ -48,12 +53,14 @@ frontend's (central `docs/0053`), and tells the page their ids, which the page s
 
 - `ConsoleDocumentsTests` pins the id scheme, the reach and leaving out a document the host cannot serve.
 - `ConsoleDocumentsE2ETests` runs a console document by its id with persisted operations required, refuses its text,
-  keeps the operations gate, and checks the page is told the ids only on a persisted host.
+  keeps the operations gate, checks the page is told the ids only on a persisted host, and runs one by its id on a
+  host that registers them with no page.
 
 Not covered: no browser test loads every console page against a host that requires persisted operations; the end-to-end
 tests call documents directly.
 
 ## Changelog
 
+- **2026-10-22**: `UseTraxOperatorConsoleDocuments` registers the documents without the page, for `trax-console`.
 - **2026-10-22**: The file is written by `trax client --operations` with the console's generated client, under `ClientApp/src/trax/` (central `docs/0057`); what a host registers and how is unchanged.
 - **2026-10-18**: Recorded.

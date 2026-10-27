@@ -11,7 +11,7 @@ namespace Trax.Api.Auth;
 ///
 /// <list type="bullet">
 /// <item><see cref="IsAuthenticated"/> — an authenticated Trax principal exists on the current HTTP request.</item>
-/// <item><see cref="IsTrusted"/> — execution is inside an <see cref="ITrustedExecutionScope.BeginTrusted"/> block, opened by framework infrastructure (scheduler dispatch, remote worker job runner).</item>
+/// <item><see cref="IsTrusted"/> — execution is inside an <see cref="ITrustedExecutionScope.BeginTrusted"/> block. Trax opens one only around the authorization of a remote run's named train and of a system-owned state machine's invoked train, so a train's own code sees <c>false</c>.</item>
 /// <item><see cref="Principal"/> — the resolved <see cref="TraxPrincipal"/>, or <c>null</c> when <see cref="IsAuthenticated"/> is false.</item>
 /// </list>
 ///
@@ -25,18 +25,18 @@ namespace Trax.Api.Auth;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>Security: <see cref="IsTrusted"/> is true for whatever a remote runner is sent.</strong>
+/// <strong>Security: <see cref="IsTrusted"/> is true only where a host opens a trusted scope.</strong>
 /// The flag reflects <see cref="ITrustedExecutionScope.IsTrusted"/>, an in-process
 /// <c>AsyncLocal</c> opened only by C# code calling
 /// <see cref="ITrustedExecutionScope.BeginTrusted"/>. No HTTP header, cookie, query
-/// parameter, body field, JWT claim, or GraphQL input maps to it on the API's own
-/// endpoints. A scheduler runner's endpoints are the exception: <c>UseTraxRunEndpoint</c>
-/// (and the Lambda runner's run path) runs each request inside a trusted scope, because
-/// the scheduler already authorized it. Whoever the runner's authorization posture
-/// admits (a request signed with its key, a caller its policy accepts, or anyone when
-/// the host allowed unsigned requests) therefore runs with this flag true, and
-/// row-level filters keyed on it treat that caller as the scheduler. Give the runner a
-/// posture that admits only the scheduler.
+/// parameter, body field, JWT claim, or GraphQL input maps to it. A scheduler runner's
+/// endpoints (<c>UseTraxRunEndpoint</c>, the Lambda runner's run path) open one only while
+/// they authorize the train a request names, because the scheduler already authorized
+/// it; the train then runs outside it, so its junctions, and any train it queues or runs,
+/// see <c>false</c> and are checked as they would be on the scheduler's own host. Whoever
+/// the runner's authorization posture admits (a request signed with its key, a caller its
+/// policy accepts, or anyone when the host allowed unsigned requests) can still run any
+/// train the runner hosts, so give the runner a posture that admits only the scheduler.
 /// </para>
 /// <para>
 /// In-process developer mistakes (a junction or resolver that opens a trusted scope
@@ -79,11 +79,10 @@ public sealed class TraxCaller
     /// <summary>
     /// True when execution is inside an active
     /// <see cref="ITrustedExecutionScope.BeginTrusted"/> block. Reflects in-process
-    /// <c>AsyncLocal</c> state opened by framework infrastructure
-    /// (<c>TraxRequestHandler</c> in the scheduler, remote-worker runners).
+    /// <c>AsyncLocal</c> state opened by framework infrastructure: a runner while it
+    /// authorizes the train a request names, not while the train runs.
     /// <para>
-    /// Not settable from the API's own HTTP surface; a scheduler runner sets it for the
-    /// requests its posture admits. See the class-level remarks.
+    /// Not settable from any HTTP surface. See the class-level remarks.
     /// </para>
     /// </summary>
     public bool IsTrusted => _trustedScope.IsTrusted;

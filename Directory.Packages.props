@@ -99,5 +99,8 @@
          (Analyzer.Testing -> NuGet.Packaging, at 9.0.6), for the same reason as the SQLite floor
          above. Floor for CVE-2026-70162 and CVE-2026-84008. -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <!-- trax-console. Its minors still break its API (v2 "still accepts planned API breaks"), so Dependabot proposes them
+         on their own (.github/dependabot.yml, terminal-gui). -->
+    <PackageVersion Include="Terminal.Gui" Version="2.5.0" />
   </ItemGroup>
 </Project>

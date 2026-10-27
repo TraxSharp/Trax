@@ -496,6 +496,10 @@ public partial class SchedulerConfigurationBuilder
     ///
     /// Set up the remote side with <c>AddTraxJobRunner(runner => ...)</c> and <c>UseTraxJobRunner()</c>.
     ///
+    /// Throws <see cref="InvalidOperationException"/> for an <c>http://</c>
+    /// <see cref="RemoteWorkerOptions.BaseUrl"/> to a host that is not loopback without
+    /// <see cref="RemoteWorkerOptions.AllowInsecureTransport"/>.
+    ///
     /// Call it once per endpoint to route different trains to different runners. Each call keeps
     /// its own options and its own HTTP client, so a train is sent only to the endpoint it is
     /// routed to, signed with that endpoint's key and carrying only the headers its
@@ -514,6 +518,11 @@ public partial class SchedulerConfigurationBuilder
     {
         var options = new RemoteWorkerOptions();
         configure(options);
+        Services.Http.RemoteEndpointTransport.Ensure(
+            options.BaseUrl,
+            options.AllowInsecureTransport,
+            nameof(RemoteWorkerOptions)
+        );
         if (options.SigningKey is not null)
             Services.RequestSigning.RunnerRequestSignature.EnsureKey(
                 options.SigningKey,
@@ -570,6 +579,11 @@ public partial class SchedulerConfigurationBuilder
     /// Set up the remote side with <c>AddTraxJobRunner(runner => ...)</c> and
     /// <c>UseTraxRunEndpoint()</c> in the runner process, and set
     /// <see cref="RemoteRunOptions.SigningKey"/> to the key it verifies.
+    ///
+    /// Throws <see cref="InvalidOperationException"/> when the services are built for an
+    /// <c>http://</c> <see cref="RemoteRunOptions.BaseUrl"/> to a host that is not loopback without
+    /// <see cref="RemoteRunOptions.AllowInsecureTransport"/>, or a
+    /// <see cref="RemoteRunOptions.MaxResponseBodyBytes"/> that is not positive.
     /// </remarks>
     /// <param name="configure">Action to configure the remote endpoint URL and HTTP client</param>
     /// <returns>The builder for method chaining</returns>
@@ -579,6 +593,15 @@ public partial class SchedulerConfigurationBuilder
         {
             var options = new RemoteRunOptions();
             configure(options);
+            Services.Http.RemoteEndpointTransport.Ensure(
+                options.BaseUrl,
+                options.AllowInsecureTransport,
+                nameof(RemoteRunOptions)
+            );
+            if (options.MaxResponseBodyBytes <= 0)
+                throw new InvalidOperationException(
+                    "RemoteRunOptions.MaxResponseBodyBytes must be positive."
+                );
             if (options.SigningKey is not null)
                 Services.RequestSigning.RunnerRequestSignature.EnsureKey(
                     options.SigningKey,

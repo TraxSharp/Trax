@@ -43,6 +43,12 @@ public sealed partial class PersistedOperationsBuilder
                     + "or SingleNode() when exactly one does."
             );
 
+        if (
+            _rabbitMqConnectionString is not null
+            && _rabbitMqInvalidation.Problem(_rabbitMqConnectionString) is { } problem
+        )
+            throw new InvalidOperationException(problem);
+
         if (_cacheTtl is { } ttl && ttl > _cacheMaxAge)
             throw new InvalidOperationException(
                 $"WithInMemoryCache's TTL ({ttl}) is longer than the cache's maximum age ({_cacheMaxAge}). "
@@ -61,6 +67,7 @@ public sealed partial class PersistedOperationsBuilder
             CacheTtl = _cacheTtl ?? _cacheMaxAge,
             CacheMaxAge = _cacheMaxAge,
             RabbitMqConnectionString = _rabbitMqConnectionString,
+            RabbitMqInvalidation = _rabbitMqInvalidation,
             SingleNode = _singleNode,
             ManagementGate = _managementGate.ToList(),
             MachineDocumentGracePeriod = _machineDocumentGracePeriod,

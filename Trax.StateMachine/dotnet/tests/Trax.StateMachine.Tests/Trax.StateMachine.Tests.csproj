@@ -13,6 +13,7 @@
     <PackageReference Include="CsCheck" />
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit.Analyzers" />
     <PackageReference Include="NUnit3TestAdapter" />
@@ -28,5 +29,6 @@
     <ProjectReference Include="../../src/Trax.StateMachine/Trax.StateMachine.csproj" />
     <ProjectReference Include="../../src/Trax.StateMachine.Testing/Trax.StateMachine.Testing.csproj" />
     <ProjectReference Include="../../src/Trax.StateMachine.Client/Trax.StateMachine.Client.csproj" />
+    <ProjectReference Include="../../src/Trax.Client/Trax.Client.csproj" />
   </ItemGroup>
 </Project>

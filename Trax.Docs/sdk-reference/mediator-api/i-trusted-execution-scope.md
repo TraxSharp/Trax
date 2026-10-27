@@ -75,10 +75,15 @@ train.
 
 ### Who opens one
 
-| Caller | Reason | Why it is trusted |
-|--------|--------|-------------------|
-| A runner's remote-run endpoint, serving `UseRemoteRun` requests | `scheduler.remote-run` | The work was authorized when it was submitted, and the runner's own posture (a signing key or a policy) guards the endpoint |
-| The dashboard's queue, run and re-queue actions | `dashboard` | The host gates the whole dashboard |
+| Caller | Reason | What runs inside it | Why it is trusted |
+|--------|--------|---------------------|-------------------|
+| A runner's remote-run endpoint, serving `UseRemoteRun` requests | `scheduler.remote-run` | The authorization of the train the request names, and nothing else | The run was authorized when it was submitted, and the runner's own posture (a signing key or a policy) guards the endpoint |
+| A system-owned state machine instance entering a state that invokes a train | `state machine` | The authorization of the invoked train, which may declare no `[TraxAuthorize]` | The host's own code drives the instance; no user is present |
+
+In both, the train itself runs after the scope has closed. A train a remote run names, and
+whatever it queues, runs or prepares from its junctions, is checked as it would be on any other
+flow, and `TraxCaller.IsTrusted` is false inside it. A runner whose `ITrainExecutionService`
+replaces the mediator's cannot split the check from the run, so it opens no scope at all.
 
 The scheduler's own dispatch does not open one: it runs queued work through `ITrainBus`, which
 checks no authorization.

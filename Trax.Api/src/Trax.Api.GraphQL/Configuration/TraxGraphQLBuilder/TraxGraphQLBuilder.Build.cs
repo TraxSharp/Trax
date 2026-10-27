@@ -87,9 +87,11 @@ public partial class TraxGraphQLBuilder
             OperationsAuthorizeAttributes
         )
         {
+            AnonymousOperationsAllowed = AnonymousOperationsAllowed,
             GetRequestsAllowed = GetRequestsAllowed,
             FeatureRootFields = FeatureRootFields.ToHashSet(StringComparer.Ordinal),
             JunctionAnswersForBroadcastAllowed = JunctionAnswersForBroadcastAllowed,
+            BroadcastOutputTrainTypes = BroadcastOutputTrains.ToArray(),
             SocketAllowedOrigins = SocketAllowedOrigins,
             MachineSpelledEnums = MachineSpelledEnums,
             MaxOperationsPerConnection = MaxOperationsPerConnectionValue,
@@ -102,19 +104,20 @@ public partial class TraxGraphQLBuilder
     }
 
     /// <summary>
-    /// Fails at build when the operations namespace is exposed without a gate. Its mutations drive
-    /// the scheduler directly (trigger/enable/disable/cancel, dead-letter requeue/acknowledge,
-    /// config changes) and its queries report internal hostnames, execution volumes and scheduler
-    /// configuration, so anonymous access to either must be a deliberate choice, never a forgotten
-    /// one. Extends the "anonymous access is always deliberate" stance of
+    /// Fails at build when the operations namespace is exposed without a gate of its own. Its
+    /// mutations drive the scheduler directly (trigger/enable/disable/cancel, dead-letter
+    /// requeue/acknowledge, config changes) and its queries report internal hostnames, execution
+    /// volumes and scheduler configuration, so who may reach either must be a deliberate choice,
+    /// never a forgotten one. Extends the "anonymous access is always deliberate" stance of
     /// <see cref="ExposureAuthorizationRule"/> to the built-in admin namespace, which is otherwise
     /// exempt from the per-surface rule.
     /// </summary>
     /// <remarks>
-    /// There are three ways to answer, and the third is usually the right one for a host with
-    /// pre-login surfaces: <c>RequireAuthorization()</c> gates the whole endpoint,
-    /// <c>GateOperations(...)</c> gates only this namespace, and
-    /// <c>AllowAnonymousOperations()</c> opts into a public control plane.
+    /// There are three answers: <c>GateOperations(...)</c> names the policy or roles an operator
+    /// holds, <c>GateOperationsToAuthenticatedUsers()</c> admits any signed-in caller, and
+    /// <c>AllowAnonymousOperations()</c> opts into a public control plane. <c>RequireAuthorization()</c>
+    /// is not one of them: it decides who may call the endpoint at all, which on most hosts is every
+    /// user of the application, not who may operate it.
     /// </remarks>
     private void ValidateOperationsAuthorization()
     {
@@ -142,19 +145,25 @@ public partial class TraxGraphQLBuilder
 
         if (
             (OperationMutationsExposed || OperationQueriesExposed)
-            && !AuthorizationRequired
             && !OperationsGated
             && !AnonymousOperationsAllowed
         )
             throw new InvalidOperationException(
-                Exposed()
-                    + " but the GraphQL endpoint is not gated and the namespace carries no gate of "
-                    + "its own, so an unauthenticated caller can reach it. Pick one: "
-                    + "GateOperations(policy, roles) to gate just this namespace and leave the rest "
-                    + "of the endpoint open, RequireAuthorization(...) to gate the whole endpoint, "
-                    + "or, if the surface is protected another way (a private network, a sidecar, "
-                    + "ASP.NET endpoint authorization) or is intentionally public, "
-                    + "AllowAnonymousOperations() to acknowledge that."
+                AuthorizationRequired
+                    ? Exposed()
+                        + " and the namespace carries no gate of its own. RequireAuthorization() "
+                        + "decides who may call the endpoint, which is every user of the "
+                        + "application, not who may operate it, so it does not answer for this "
+                        + "namespace. Declare who may: GateOperations(policy, roles) for the "
+                        + "operators' policy or roles, or GateOperationsToAuthenticatedUsers() if "
+                        + "every caller the endpoint admits really is an operator."
+                    : Exposed()
+                        + " but the namespace carries no gate of its own, so an unauthenticated "
+                        + "caller can reach it. Pick one: GateOperations(policy, roles) to gate it to "
+                        + "the operators' policy or roles, GateOperationsToAuthenticatedUsers() to "
+                        + "admit any signed-in caller, or, if the surface is protected another way (a "
+                        + "private network, a sidecar, ASP.NET endpoint authorization) or is "
+                        + "intentionally public, AllowAnonymousOperations() to acknowledge that."
             );
 
         string Exposed() =>

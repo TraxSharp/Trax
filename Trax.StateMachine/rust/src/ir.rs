@@ -221,6 +221,19 @@ fn js_text(value: &Value, what: &str) -> Result<JsString, IrError> {
     }
 }
 
+// Names an engine that keeps a context as a plain object cannot hold as a field: assigning one would reach the
+// object's prototype rather than a member. Every engine refuses them, in any segment of a path, so the three agree.
+const PROTOTYPE_NAMES: [&str; 3] = ["__proto__", "constructor", "prototype"];
+
+fn field_name(value: &Value, what: &str) -> Result<JsString, IrError> {
+    let name = js_text(value, what)?;
+    let text = name.to_string_lossy();
+    if text.split('.').any(|segment| PROTOTYPE_NAMES.contains(&segment)) {
+        return fail(format!("{what} names the field '{text}', which no engine holds."));
+    }
+    Ok(name)
+}
+
 fn required_text(map: &Map, key: &str, what: &str) -> Result<String, IrError> {
     text(required(map, key, what)?, &format!("{what}'s '{key}'"))
 }
@@ -331,7 +344,7 @@ pub(crate) fn rule(value: &Value, what: &str) -> Result<Rule, IrError> {
         "input" => Source::Input,
         other => return fail(format!("{what} reads an unknown source '{other}'.")),
     };
-    let field = js_text(required(map, "field", what)?, what)?;
+    let field = field_name(required(map, "field", what)?, what)?;
     let op = || compare_op(required(map, "op", what)?, what);
     let target = || number(required(map, "value", what)?, what);
     let test = match kind.as_str() {
@@ -362,11 +375,11 @@ fn reduction(value: &Value, what: &str) -> Result<Reduction, IrError> {
                 .iter()
                 .map(|step| {
                     let step = object(step, what)?;
-                    let field = js_text(required(step, "field", what)?, what)?;
+                    let field = field_name(required(step, "field", what)?, what)?;
                     let source = object(required(step, "value", what)?, what)?;
                     // As resolveSource: an `input` source wins, and a missing constant is null.
                     let value = match source.get(&JsString::from("input")) {
-                        Some(input) => ValueSource::Input(js_text(input, what)?),
+                        Some(input) => ValueSource::Input(field_name(input, what)?),
                         None => {
                             ValueSource::Const(source.get(&JsString::from("const")).cloned().unwrap_or(Value::Null))
                         }
@@ -407,7 +420,7 @@ fn fields(value: &Value, what: &str) -> Result<Vec<FieldSchema>, IrError> {
         .iter()
         .map(|field| {
             let map = object(field, what)?;
-            let name = js_text(required(map, "name", what)?, what)?;
+            let name = field_name(required(map, "name", what)?, what)?;
             let what = format!("{what}.{}", name.to_string_lossy());
             Ok(FieldSchema {
                 value: value_schema(map, &what)?,

@@ -82,7 +82,7 @@ it is exposed.
 
 **Fix:** Call `ExposeOperationQueries()`, and `ExposeOperationMutations()` for the console's
 actions, on the GraphQL builder, with the gate it then asks for (`GateOperations(...)` or
-`RequireAuthorization(...)`). See
+`GateOperationsToAuthenticatedUsers()`). See
 [Add the console to a host](/docs/dashboard/add-the-console-to-a-host).
 
 ## "Call AddEffects(...) before AddMediator(...)."

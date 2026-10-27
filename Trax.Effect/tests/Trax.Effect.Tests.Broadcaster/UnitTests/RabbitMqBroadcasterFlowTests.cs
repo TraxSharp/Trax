@@ -23,7 +23,11 @@ public class RabbitMqBroadcasterFlowTests
 
         Ambient.Value = "the creating run";
         await using var broadcaster = new RabbitMqTrainEventBroadcaster(
-            new RabbitMqBroadcasterOptions { ConnectionString = "amqp://unused/" },
+            new RabbitMqBroadcasterOptions
+            {
+                ConnectionString = "amqp://localhost/unused",
+                SigningKey = TestBroadcastKey.Value,
+            },
             logger: null,
             RabbitMqTrainEventBroadcaster.DefaultQueueCapacity,
             connect: _ =>

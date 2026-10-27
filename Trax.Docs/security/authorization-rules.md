@@ -31,7 +31,7 @@ every refusal they produce is in [Startup refusals](/docs/security/startup-refus
 | Gate | Declared with | Checked |
 |---|---|---|
 | The whole endpoint | `RequireAuthorization(policy?)` on the GraphQL builder | In the request pipeline, for every operation on HTTP and on a subscription socket |
-| The `operations` namespace | `GateOperations(policy, roles)`, `GateOperationsToAuthenticatedUsers()`, or `AllowAnonymousOperations()` | `@authorize` on the `operations` field of both root types |
+| The `operations` namespace | `GateOperations(policy, roles)`, `GateOperationsToAuthenticatedUsers()`, or `AllowAnonymousOperations()` | `@authorize` on the `operations` field of both root types. One is required whenever the namespace is exposed; the endpoint gate does not stand in for it |
 | A train | `[TraxAuthorize]` on the train class, a base class or an interface | By `ITrainAuthorizationService` when the train is run or queued, before its input is read |
 | A query model, or an entity one reaches | `[TraxAuthorize]` on the entity class | `@authorize` on the object type and on the model's `discover` entry field |
 | A field a type extension adds | `[TraxAuthorize]` on the resolver method or the extension class | `@authorize` on the field |
@@ -179,9 +179,10 @@ the same way. The train does not run.
 
 ### The scheduler and remote workers are trusted
 
-Work the scheduler dispatches and a remote worker runs goes through `ITrainBus` or a trusted scope
-and is not checked again, and so is a train a system-owned state machine instance starts. A train a
-user-owned instance starts is checked against that user. See
+Work the scheduler dispatches and a remote worker runs goes through `ITrainBus` or, for the train a
+remote run names, a trusted scope, and is not checked again, and so is a train a system-owned state
+machine instance starts. What those trains queue or run in turn is checked as on any other flow. A
+train a user-owned instance starts is checked against that user. See
 [Where Trax checks authorization](/docs/security/where-authorization-is-checked#checked-once-at-submission).
 
 ### Opting out for scheduler-only hosts
@@ -374,7 +375,7 @@ parent type when the parent has one, and declares its own when it does not:
 | Carries `[TraxAllowAnonymous]` | Yes |
 | A root type (`RootQuery`, `RootMutation`, `LifecycleSubscriptions`) | Yes |
 | A namespace reached from a root through an ungated field (`DiscoverQueries`, `DispatchMutations`, the per-namespace types under them) | Yes |
-| A type under `operations`, gated by `GateOperations(...)` or `RequireAuthorization()` | No: it inherits the namespace's gate |
+| A type under `operations`, gated by `GateOperations(...)` or `GateOperationsToAuthenticatedUsers()` | No: it inherits the namespace's gate |
 | A type under `operations`, with `AllowAnonymousOperations()` | Yes |
 | A query model's navigation target | As the target's own posture: no under `[TraxAuthorize]`, yes under `[TraxAllowAnonymous]` |
 | A type with neither marker | No: it reaches the schema only inside a train's output, whose posture governs |

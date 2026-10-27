@@ -131,13 +131,21 @@ internal static partial class TypeScript
 
     /// <summary>
     /// A doc comment holding <paramref name="text"/>, or nothing when it is empty. A <c>*/</c> in the text is broken,
-    /// so the text cannot end the comment and become code.
+    /// so the text cannot end the comment and become code. Each line terminator (CR, LF, U+0085, U+2028, U+2029)
+    /// ends a line, and every other control or format character, the bidirectional controls among them, is a space,
+    /// so the comment cannot make the code around it display in another order than the compiler reads it.
     /// </summary>
     public static string Doc(string? text, string indent = "")
     {
         if (string.IsNullOrWhiteSpace(text))
             return "";
-        var lines = text.Replace("\r\n", "\n").Replace("*/", "*\\/").Trim().Split('\n');
+        var lines = Unprintable()
+            .Replace(LineTerminators().Replace(text, "\n"), " ")
+            .Replace("*/", "*\\/")
+            .Trim()
+            .Split('\n');
+        if (lines.All(string.IsNullOrWhiteSpace))
+            return "";
         if (lines.Length == 1)
             return $"{indent}/** {lines[0].Trim()} */\n";
         var sb = new StringBuilder().Append(indent).Append("/**\n");
@@ -145,6 +153,13 @@ internal static partial class TypeScript
             sb.Append(indent).Append(" * ").Append(line.TrimEnd()).Append('\n');
         return sb.Append(indent).Append(" */\n").ToString();
     }
+
+    /// <summary>
+    /// <paramref name="text"/> for the inside of a one-line comment: a <c>*/</c> is broken, and every run of control
+    /// or format characters and line or paragraph separators is one space.
+    /// </summary>
+    public static string CommentText(string text) =>
+        SingleLineBreaks().Replace(text, " ").Replace("*/", "*\\/");
 
     /// <summary>A kebab-case machine id in PascalCase: <c>topic-map</c> is <c>TopicMap</c>.</summary>
     public static string Pascal(string kebab) =>
@@ -167,4 +182,13 @@ internal static partial class TypeScript
 
     [GeneratedRegex(@"^[A-Za-z_$][A-Za-z0-9_$]*\z")]
     private static partial Regex IdentifierPattern();
+
+    [GeneratedRegex(@"\r\n|[\r\u0085\u2028\u2029]")]
+    private static partial Regex LineTerminators();
+
+    [GeneratedRegex(@"[\p{Cc}\p{Cf}-[\n]]")]
+    private static partial Regex Unprintable();
+
+    [GeneratedRegex(@"[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+")]
+    private static partial Regex SingleLineBreaks();
 }

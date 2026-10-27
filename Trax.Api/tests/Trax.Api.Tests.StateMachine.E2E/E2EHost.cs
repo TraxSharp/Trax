@@ -42,19 +42,19 @@ namespace Trax.Api.StateMachine.E2E;
 /// </summary>
 public static class E2EHost
 {
-    public const string AdminApiKey = "sm-e2e-admin-key";
+    public const string AdminApiKey = "sm-e2e-admin-key-0123456789abcdefghijklm";
 
     /// <summary>A user who holds both roles the wizard's rules name.</summary>
-    public const string AliceKey = "sm-e2e-alice-key";
+    public const string AliceKey = "sm-e2e-alice-key-0123456789abcdefghijklm";
 
     /// <summary>A user with no roles.</summary>
-    public const string BobKey = "sm-e2e-bob-key";
+    public const string BobKey = "sm-e2e-bob-key-0123456789abcdefghijklmno";
 
     /// <summary>A user who may pay but not approve.</summary>
-    public const string CarolKey = "sm-e2e-carol-key";
+    public const string CarolKey = "sm-e2e-carol-key-0123456789abcdefghijklm";
 
     /// <summary>An operator (with Admin as well), who reaches the operations surface and no user's draft.</summary>
-    public const string OperatorKey = "sm-e2e-operator-key";
+    public const string OperatorKey = "sm-e2e-operator-key-0123456789abcdefghij";
 
     /// <summary>The role the operations surface is gated to when a host exposes it.</summary>
     public const string OperatorRole = "Operator";
@@ -214,6 +214,37 @@ public static class E2EHost
             throw;
         }
         return host;
+    }
+
+    /// <summary>
+    /// Writes a draft straight to the store under <paramref name="ownerKey"/>, as host code does. The generic save
+    /// serves only machines with no server-side behaviour, so a test that needs a draft of a guarded machine at a
+    /// given state seeds it this way. An API key's owner key is <c>TraxApiKey:{id}</c>.
+    /// </summary>
+    public static async Task SeedDraftAsync(
+        this IHost host,
+        string ownerKey,
+        Guid id,
+        string snapshotJson
+    )
+    {
+        var wire = System.Text.Json.Nodes.JsonNode.Parse(snapshotJson)!.AsObject();
+        using var scope = host.Services.CreateScope();
+        var stored = await scope
+            .ServiceProvider.GetRequiredService<ISnapshotStore>()
+            .Upsert(
+                ownerKey,
+                id,
+                new Trax.StateMachine.Snapshot
+                {
+                    Machine = wire["machine"]!.GetValue<string>(),
+                    Version = wire["version"]!.GetValue<int>(),
+                    State = wire["state"]!.GetValue<string>(),
+                    Context = wire["context"]!.AsObject().DeepClone().AsObject(),
+                }
+            );
+        if (!stored)
+            throw new InvalidOperationException($"The draft {id} could not be seeded.");
     }
 
     /// <summary>

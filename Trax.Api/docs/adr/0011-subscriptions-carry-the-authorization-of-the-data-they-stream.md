@@ -12,15 +12,18 @@ the schema already guard, and they are authorized by the same rules, decided per
 it subscribes.
 
 - **Operations view.** When the operations surface is exposed, a subscriber that satisfies the
-  operations authorization (the `GateOperations(...)` gate; none when the host chose
-  `AllowAnonymousOperations()` or gated the whole endpoint) receives every train, with the detail
-  `operations.executions` shows, and the data-change signals.
+  operations gate the host declared (`GateOperations(...)` or
+  `GateOperationsToAuthenticatedUsers()`; anyone when the host chose `AllowAnonymousOperations()`)
+  receives every train, with the detail `operations.executions` shows, and the data-change
+  signals. The endpoint gate is not an operations gate, so with none declared nobody does.
 - **Broadcast view.** Anyone else receives only `[TraxBroadcast]` trains whose own posture admits
   them: `[TraxAllowAnonymous]` admits every subscriber, `[TraxAuthorize]` an authenticated one
   meeting its policies and roles. Each event reaches a subscriber only if its train does. A
   failure reason is shown only when the train raised it as a `TrainException`, whose message is
   written for clients; any other is replaced with the message the error filter uses, and host
-  detail is withheld.
+  detail is withheld. So is a run's `output`, unless the host named the train with
+  `AllowOutputForBroadcastSubscribers<TTrain>()`: the posture admits a subscriber to every run,
+  not only its own, so an output is withheld until the host says it is meant for all of them.
 - A subscriber who could receive nothing is refused when subscribing.
 - `onDataChanged` needs the operations authorization when the surface is exposed, and an
   authenticated caller when it is not.
@@ -74,7 +77,8 @@ every build.
   train with full detail; a broadcast train gated by role is not delivered to a Player but is to
   an Admin; an anonymous subscriber is refused when only gated broadcast trains exist, and on a
   public one sees events with the failure reason masked unless it came from a `TrainException`
-  and without host detail; an object output arrives as JSON; `onDataChanged` without operations
+  and without host detail or output; an object output arrives as JSON for a train the host
+  opted in, and the operations view receives it without the opt-in; `onDataChanged` without operations
   needs an authenticated subscriber; a broadcast train without a posture fails at startup; every
   field on the subscription root declares its authorization; and the census accepts Trax's own
   fields.
@@ -86,5 +90,8 @@ its key's roles changing, and every socket at its maximum lifetime
 
 ## Changelog
 
+- **2026-10-23**: The broadcast view withholds `output` unless the host opts the train in.
+- **2026-10-23**: The operations view follows only a declared operations gate, never the endpoint
+  gate (api/0004).
 - **2026-10-01**: Not covered now names the bound 0033 puts on a revoked role.
 - **2026-09-27**: Recorded.

@@ -55,6 +55,11 @@ jobs:
           # only ever offered to GitHub.
           GITHUB_HOST_KEY: github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
         run: |
+          # Dispatched from main only: the workflow file that runs is the reviewed one.
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            echo "::error::Dispatch this workflow from main, not $GITHUB_REF."
+            exit 1
+          fi
           # Only a release tag or main may be published.
           if ! [[ "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || "$REF" == main ]]; then
             echo "::error::'$REF' is neither a release tag (vX.Y.Z) nor main."
@@ -71,10 +76,19 @@ jobs:
           export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts"
           remote="git@github.com:$GITHUB_REPOSITORY.git"
 
+          # Named in full, so a branch called like a tag is never what is published, and only a commit
+          # main already holds may be: a tag can be created anywhere, main only through review.
+          if [[ "$REF" == main ]]; then ref=refs/heads/main; else ref="refs/tags/$REF"; fi
           git init -q "$RUNNER_TEMP/site"
           cd "$RUNNER_TEMP/site"
-          git fetch -q --depth=1 "$remote" "$REF"
-          sha=$(git rev-parse 'FETCH_HEAD^{commit}')
+          git remote add origin "$remote"
+          git fetch -q --filter=blob:none --no-tags origin \
+            "+refs/heads/main:refs/remotes/origin/main" "+$ref:refs/trax/publish"
+          sha=$(git rev-parse 'refs/trax/publish^{commit}')
+          if ! git merge-base --is-ancestor "$sha" refs/remotes/origin/main; then
+            echo "::error::$REF ($sha) is not on main."
+            exit 1
+          fi
           echo "Publishing $REF ($sha)"
           git push --force "$remote" "$sha:refs/heads/website"
           rm -f "$RUNNER_TEMP/deploy_key"

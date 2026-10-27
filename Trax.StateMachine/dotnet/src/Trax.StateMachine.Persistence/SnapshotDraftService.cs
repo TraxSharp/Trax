@@ -583,8 +583,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
     /// <summary>
     /// Whether the machine has server-side behaviour (an event or start gated by a role or a policy, an invoked train,
-    /// an effect or a timer),
-    /// so the soft save does not serve it and every change goes through a declared event.
+    /// an effect, a timer, a guard, a reducer that changes the context, a custom guard or reducer, or a start that
+    /// reduces its input), so the soft save does not serve it and every change goes through a declared event.
     /// </summary>
     internal bool SaveNotAllowed { get; init; }
 
@@ -1382,7 +1382,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         SnapshotOwner.Require(userKey);
 
         // A machine whose server does anything a client cannot (an event or start gated by a role or a policy, an
-        // invoked train, an effect, a timer) is moved by its declared events only.
+        // invoked train, an effect, a timer, a guard or a reducer) is moved by its declared events only.
         if (SaveNotAllowed)
             return SaveRefused();
 

@@ -25,7 +25,7 @@ trusted is in [Choosing where trains run](/docs/scheduler/remote-execution#autho
 |---------|-----------|----------------------|
 | `runner.SigningKey = key` | every entry point | Verifies a `Trax-Signature` over the exact request body before reading it |
 | `runner.AuthorizationPolicy = "name"` | `UseTraxJobRunner`, `UseTraxRunEndpoint` | Applies the named ASP.NET Core authorization policy. The policy must admit only the scheduler: one that admits end users lets them run any registered train, gated or not |
-| `runner.AllowUnsignedRequests()` | every entry point | Accepts every request, and logs a warning naming the entry point at startup. `TraxLambdaFunction.RunLocalAsync`'s local routes honour it only for callers on the loopback address |
+| `runner.AllowUnsignedRequests()` | every entry point | Accepts every request, and logs a warning naming the entry point at startup. `TraxLambdaFunction.RunLocalAsync`'s local routes, which are for development, honour it only in the `Development` environment and only for callers on the loopback address |
 
 A signing key and a policy can be combined; the runner then requires both. With neither and no
 `AllowUnsignedRequests()`, mapping an endpoint throws
@@ -70,6 +70,22 @@ random nonce and the body. It travels in the `Trax-Signature` HTTP header, in th
 `LambdaEnvelope`'s `Signature`, or in an SQS message attribute of the same name. A request signed
 for one purpose does not verify for the other. The scheduler signs each retry afresh, so a retry is
 never refused as a replay.
+
+A signing runner signs its answer to a run too, on `/trax/run` and `RunLocalAsync`'s `/trax/run`:
+a `Trax-Response-Signature` header with an HMAC-SHA256, under the same key, over the purpose, the
+nonce of the request it answers and the exact body. `UseRemoteRun` with a `SigningKey` reads only
+an answer that verifies for the attempt it sent, and fails the run with `RemoteRunException`
+otherwise, so an answer made for another request is refused as well. A runner with
+`AllowUnsignedRequests()` answers unsigned, and a scheduler without a key reads unsigned answers.
+Upgrade a signing runner before its scheduler: a scheduler on this release refuses an older
+runner's unsigned answers.
+
+The response signature authenticates a success body for the request it answers, and only that. A
+status code, the other headers and the body of a non-success answer are not authenticated: the
+scheduler treats any non-success status as a failed run, after retrying 429, 502 and 503. Over
+cleartext anyone on the path could fail or delay runs that way, so `UseRemoteRun` and
+`UseRemoteWorkers` refuse an `http://` `BaseUrl` to a host that is not loopback unless the options
+set `AllowInsecureTransport`.
 
 ### What each transport checks
 

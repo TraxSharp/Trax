@@ -142,6 +142,7 @@ public static class GraphQLServiceExtensions
         // Fail fast (before any HotChocolate wiring) when an exposed train has not declared
         // its authorization posture. Runs against the same rule as the query-model side.
         ValidateTrainExposureAuthorization(trainRegistrations, config.AuthorizationRequired);
+        config.ResolveBroadcastOutputTrains(trainRegistrations);
         var trainNames = TrainTypeModule.AssignTrainNames(trainRegistrations);
 
         // Every field Trax places on its root and namespace types, and every type it generates,

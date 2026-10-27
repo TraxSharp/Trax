@@ -49,9 +49,9 @@ public class PersistedOperationsManagementGateTests
     private const string Adr =
         "docs/adr/0004-the-operations-namespace-gates-independently-of-the-endpoint.md";
 
-    private const string OperatorKey = "management-gate-operator";
-    private const string DeployerKey = "management-gate-deployer";
-    private const string ReaderKey = "management-gate-reader";
+    private const string OperatorKey = "management-gate-operator-0123456789abcde";
+    private const string DeployerKey = "management-gate-deployer-0123456789abcde";
+    private const string ReaderKey = "management-gate-reader-0123456789abcdefg";
 
     private const string Upload = """
         mutation Upload($input: UploadPersistedOperationInput!) {

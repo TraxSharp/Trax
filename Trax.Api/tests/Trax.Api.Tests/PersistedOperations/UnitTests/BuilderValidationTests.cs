@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
+using Trax.Api.Tests.PersistedOperations.Fixtures;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 
@@ -69,7 +70,7 @@ public class BuilderValidationTests
     {
         var b = new PersistedOperationsBuilder()
             .SingleNode()
-            .UseRabbitMqInvalidation("amqp://localhost");
+            .UseRabbitMqInvalidation("amqp://localhost", TestInvalidationKey.Sign);
 
         Action act = () => b.Build();
         act.Should().Throw<InvalidOperationException>().WithMessage("*contradict*");
@@ -81,7 +82,7 @@ public class BuilderValidationTests
         // The broadcast empties HotChocolate's caches too, which exist whether or not the Trax
         // lookup cache is on, so it is not tied to WithInMemoryCache.
         var opts = new PersistedOperationsBuilder()
-            .UseRabbitMqInvalidation("amqp://localhost")
+            .UseRabbitMqInvalidation("amqp://localhost", TestInvalidationKey.Sign)
             .Build();
 
         opts.CacheEnabled.Should().BeFalse();
@@ -94,7 +95,7 @@ public class BuilderValidationTests
     {
         var opts = new PersistedOperationsBuilder()
             .WithInMemoryCache()
-            .UseRabbitMqInvalidation("amqp://localhost")
+            .UseRabbitMqInvalidation("amqp://localhost", TestInvalidationKey.Sign)
             .Build();
 
         opts.CacheEnabled.Should().BeTrue();

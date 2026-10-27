@@ -77,7 +77,7 @@ internal sealed partial class ClientGenerator
 
         var index = new StringBuilder(Header).Append("import \"./format.g\";\n");
         index.Append(
-            "export { configureTrax, TraxOperationError, type TraxConnection } from \"./client.g\";\n"
+            "export { configureTrax, requireSecureSocket, TraxOperationError, type TraxConnection } from \"./client.g\";\n"
         );
 
         // Every name is claimed before anything runs, so a manifest that cannot be generated is refused before node is.
@@ -234,12 +234,17 @@ internal sealed partial class ClientGenerator
     /// before anything is written.
     /// </summary>
     public IReadOnlyList<ClientFile> Write(ClientGenerateOptions options, string outDir) =>
-        Write(Render(options), outDir);
+        Write(Render(options), outDir, Writer.Manifest);
 
-    private static IReadOnlyList<ClientFile> Write(IReadOnlyList<ClientFile> files, string outDir)
+    private static IReadOnlyList<ClientFile> Write(
+        IReadOnlyList<ClientFile> files,
+        string outDir,
+        Writer writer
+    )
     {
         RefuseLinks(files, outDir);
-        foreach (var stale in Stale(files, outDir))
+        RefuseOverlap(files, outDir, writer);
+        foreach (var stale in Stale(files, outDir, writer))
         {
             var path = Path.Combine(outDir, stale);
             File.Delete(path);
@@ -307,11 +312,16 @@ internal sealed partial class ClientGenerator
     /// difference, so a checkout that writes CRLF passes.
     /// </summary>
     public IReadOnlyList<ClientDrift> Check(ClientGenerateOptions options, string outDir) =>
-        Check(Render(options), outDir);
+        Check(Render(options), outDir, Writer.Manifest);
 
-    private static IReadOnlyList<ClientDrift> Check(IReadOnlyList<ClientFile> files, string outDir)
+    private static IReadOnlyList<ClientDrift> Check(
+        IReadOnlyList<ClientFile> files,
+        string outDir,
+        Writer writer
+    )
     {
         RefuseLinks(files, outDir);
+        RefuseOverlap(files, outDir, writer);
         var drift = new List<ClientDrift>();
         foreach (var file in files)
         {
@@ -325,36 +335,133 @@ internal sealed partial class ClientGenerator
             )
                 drift.Add(new(file.Path, DriftStatus.Drifted));
         }
-        foreach (var stale in Stale(files, outDir))
+        foreach (var stale in Stale(files, outDir, writer))
             drift.Add(new(stale, DriftStatus.Drifted));
         return drift;
     }
 
-    // The files under outDir this generator wrote and the client no longer holds, by their path under it. A client
-    // module is this generator's when its first line is the client's header. A twin is when it sits where this
-    // generator puts one, <id>/<id>.machine.g.ts or <id>/<id>.contexts.g.ts, starts with the header the twin generator
-    // writes for that id, and <id> is a machine the previous run served: trax machine generate writes the same header,
-    // so the header alone does not say which tool wrote it. Anything else, an app's own *.g.ts or another generator's,
-    // is left alone. A linked folder is not entered, so nothing outside outDir is read or deleted through it.
-    private static IReadOnlyList<string> Stale(IReadOnlyList<ClientFile> files, string outDir)
+    // Which of trax client's clients is written: each removes only the files it would write, so two can share --out
+    // or sit one inside the other. Two of the same writer may sit one inside the other too: neither enters the
+    // other's folder (see Stale), and one whose folder holds files the other writes is refused (see RefuseOverlap).
+    private enum Writer
+    {
+        // The client of a host's manifest: *.g.ts, and the twins of the machines it served.
+        Manifest,
+
+        // The TypeScript operations client: *.g.ts.
+        OperationsTypeScript,
+
+        // The C# operations client: *.g.cs.
+        OperationsCSharp,
+    }
+
+    // The files under outDir this writer wrote and the client no longer holds, by their path under it: only files of
+    // the extension it writes. A client module is this writer's when its first line is the header it writes. A twin
+    // is the manifest client's when it sits where that client puts one, <id>/<id>.machine.g.ts or
+    // <id>/<id>.contexts.g.ts, starts with the header the twin generator writes for that id, and <id> is a machine the
+    // previous run served: trax machine generate writes the same header, so the header alone does not say which tool
+    // wrote it. Anything else, an app's own *.g.ts or *.g.cs or another writer's, is left alone. A folder below outDir
+    // that is the root of another client of this writer (IsRoot) is not entered, since its files carry the same
+    // header. A linked folder is not entered either, so nothing outside outDir is read or deleted through it.
+    private static IReadOnlyList<string> Stale(
+        IReadOnlyList<ClientFile> files,
+        string outDir,
+        Writer writer
+    )
     {
         if (!Directory.Exists(outDir))
             return [];
         var expected = files.Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
-        var served = Served(outDir);
-        var enumeration = new EnumerationOptions
+        var served = writer == Writer.Manifest ? Served(outDir) : [];
+        var header = writer == Writer.Manifest ? ClientHeaderLine : OperationsHeaderLine;
+        var pattern = writer == Writer.OperationsCSharp ? "*.g.cs" : "*.g.ts";
+        var stale = new List<string>();
+        var folders = new Stack<string>([outDir]);
+        while (folders.TryPop(out var folder))
         {
-            RecurseSubdirectories = true,
-            AttributesToSkip = FileAttributes.ReparsePoint,
-            MatchCasing = MatchCasing.CaseSensitive,
+            foreach (var file in Directory.EnumerateFiles(folder, pattern, Entries))
+            {
+                var path = Path.GetRelativePath(outDir, file).Replace('\\', '/');
+                if (!expected.Contains(path) && Generated(path, file, header, served))
+                    stale.Add(path);
+            }
+            foreach (var sub in Directory.EnumerateDirectories(folder, "*", Entries))
+                if (!IsRoot(sub, writer))
+                    folders.Push(sub);
+        }
+        return stale.Order(StringComparer.Ordinal).ToList();
+    }
+
+    // One folder's entries, in the case they are written, without following a link.
+    private static readonly EnumerationOptions Entries = new()
+    {
+        AttributesToSkip = FileAttributes.ReparsePoint,
+        MatchCasing = MatchCasing.CaseSensitive,
+    };
+
+    // Whether a folder is the root of a client this writer wrote: it holds the file the writer always writes at its
+    // root, starting with the writer's header. index.g.ts for the TypeScript clients, Types.g.cs for the C# one; no
+    // writer puts either in a folder below its root.
+    private static bool IsRoot(string folder, Writer writer) =>
+        writer switch
+        {
+            Writer.Manifest => FirstLine(Path.Combine(folder, "index.g.ts")) == ClientHeaderLine,
+            Writer.OperationsTypeScript => FirstLine(Path.Combine(folder, "index.g.ts"))
+                == OperationsHeaderLine,
+            _ => FirstLine(Path.Combine(folder, "Types.g.cs")) == OperationsHeaderLine,
         };
-        return Directory
-            .EnumerateFiles(outDir, "*.g.ts", enumeration)
-            .Select(p => (Full: p, Path: Path.GetRelativePath(outDir, p).Replace('\\', '/')))
-            .Where(f => !expected.Contains(f.Path) && Generated(f.Path, f.Full, served))
-            .Select(f => f.Path)
-            .Order(StringComparer.Ordinal)
-            .ToList();
+
+    // Refuses a client whose files would land in another client of the same writer, or that sits in a folder another
+    // one writes into: both carry the same header, so each run would take the other's files for its own stale ones.
+    // Nesting is fine as long as neither folder holds the other's files, so outDir inside another client's root is
+    // refused only when it is (or is inside) a folder that client writes: documents/ (Documents/ in C#), or a
+    // machine's folder.
+    private static void RefuseOverlap(IReadOnlyList<ClientFile> files, string outDir, Writer writer)
+    {
+        foreach (
+            var folder in files
+                .SelectMany(f => Folders(f.Path))
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+        )
+        {
+            var path = Path.Combine(outDir, folder);
+            if (IsRoot(path, writer))
+                throw new InvalidOperationException(
+                    $"{path} holds another client trax client wrote, and this one writes into it. Clients may sit "
+                        + "one inside the other, but not in a folder the other writes: move one of them."
+                );
+        }
+        var full = Path.GetFullPath(outDir).TrimEnd(Path.DirectorySeparatorChar);
+        for (
+            var parent = Path.GetDirectoryName(full);
+            !string.IsNullOrEmpty(parent);
+            parent = Path.GetDirectoryName(parent)
+        )
+        {
+            if (!IsRoot(parent, writer))
+                continue;
+            var first = Path.GetRelativePath(parent, full).Split(Path.DirectorySeparatorChar)[0];
+            var writes = writer switch
+            {
+                Writer.OperationsCSharp => first == "Documents",
+                Writer.OperationsTypeScript => first == "documents",
+                _ => first == "documents" || Served(parent).Contains(first),
+            };
+            if (writes)
+                throw new InvalidOperationException(
+                    $"{outDir} is inside {Path.Combine(parent, first)}, a folder the client at {parent} writes "
+                        + "into. Clients may sit one inside the other, but not in a folder the other writes: move "
+                        + "one of them."
+                );
+        }
+    }
+
+    // The folders on the way to a generated file, by their path under outDir: a/b/c.g.ts gives a and a/b.
+    private static IEnumerable<string> Folders(string file)
+    {
+        for (var end = file.IndexOf('/'); end >= 0; end = file.IndexOf('/', end + 1))
+            yield return file[..end];
     }
 
     // The machines the previous run served: the ids in the manifest.json it wrote under outDir, and each <id>/ that
@@ -408,12 +515,17 @@ internal sealed partial class ClientGenerator
         ("contexts", "generateContextTypes"),
     ];
 
-    private static bool Generated(string relative, string path, IReadOnlySet<string> served)
+    private static bool Generated(
+        string relative,
+        string path,
+        string header,
+        IReadOnlySet<string> served
+    )
     {
         var first = FirstLine(path);
         if (first is null)
             return false;
-        if (first == ClientHeaderLine || first == OperationsHeaderLine)
+        if (first == header)
             return true;
         return relative.Split('/') is [var id, var name]
             && served.Contains(id)
@@ -497,6 +609,7 @@ internal sealed partial class ClientGenerator
     private static readonly string[] RuntimeNames =
     [
         "configureTrax",
+        "requireSecureSocket",
         "TraxOperationError",
         "TraxConnection",
     ];
@@ -649,6 +762,84 @@ internal sealed partial class ClientGenerator
                 + "into its twin. Rename it on the host."
         );
 
+    // What both TypeScript clients check before they talk to a host: the socket's URL, and how much of an answer they
+    // read. The machine client takes requireSecureEndpoint from the engine's client; the operations client, which does
+    // not depend on the engine, carries its own (OperationsEndpointGuard).
+    private const string TransportGuards = """
+
+        /** The most bytes of an answer the client reads, unless the app names another limit: 16 MiB. */
+        const defaultMaxResponseBytes = 16 * 1024 * 1024;
+
+        /**
+         * Refuses a socket URL whose traffic would be in cleartext: `wss:` is accepted, `ws:` only to a loopback host
+         * (`localhost`, `127.0.0.0/8`, `::1`) or to the origin of a page that was itself served over `http:`, and anything
+         * that is not an absolute `ws:` or `wss:` URL is refused. `allowInsecure` lifts the refusal, for a network you
+         * trust. A page that builds its own graphql-ws client calls it on the URL first.
+         */
+        export function requireSecureSocket(socketUrl: string, allowInsecure: boolean | undefined): void {
+          let url: URL;
+          try {
+            url = new URL(socketUrl);
+          } catch {
+            throw new Error(`The socket URL ${socketUrl} is not an absolute ws:// or wss:// URL.`);
+          }
+          if (url.protocol !== "ws:" && url.protocol !== "wss:")
+            throw new Error(`The socket URL ${url.protocol}//${url.host} is not a ws:// or wss:// URL.`);
+          if (allowInsecure || url.protocol === "wss:" || isLoopbackHost(url.hostname)) return;
+          // A page's own origin is trusted as a relative url is; outside a browser there is no page.
+          const page = (globalThis as { location?: { protocol: string; host: string } }).location;
+          if (page?.protocol === "http:" && page.host === url.host) return;
+          throw new Error(
+            `The socket ${url.protocol}//${url.host} is not over TLS, so whatever authenticates the client would travel in cleartext. Use wss://, a loopback host, or set allowInsecureTransport when the network is trusted.`,
+          );
+        }
+
+        function isLoopbackHost(hostname: string): boolean {
+          return hostname === "localhost" || hostname === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+        }
+
+        /**
+         * The answer's body as JSON, read to at most `maxBytes`: a longer one is cancelled and refused with a RangeError
+         * rather than held in memory.
+         */
+        async function readJson(response: Response, maxBytes: number = defaultMaxResponseBytes): Promise<unknown> {
+          if (!(maxBytes > 0) || !Number.isFinite(maxBytes)) throw new RangeError(`maxResponseBytes must be a positive number, got ${maxBytes}.`);
+          const tooLarge = () => new RangeError(`The host answered with more than ${maxBytes} bytes, the most this client reads.`);
+          const declared = Number(response.headers?.get("Content-Length") ?? Number.NaN);
+          if (declared > maxBytes) {
+            await response.body?.cancel().catch(() => undefined);
+            throw tooLarge();
+          }
+          const reader = response.body?.getReader();
+          if (!reader) {
+            // A response with no body stream (an empty one, or a stand-in for fetch): its text, held to the same limit.
+            const text = await response.text();
+            if (new TextEncoder().encode(text).byteLength > maxBytes) throw tooLarge();
+            return JSON.parse(text);
+          }
+          const chunks: Uint8Array[] = [];
+          let size = 0;
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > maxBytes) {
+              await reader.cancel().catch(() => undefined);
+              throw tooLarge();
+            }
+            chunks.push(value);
+          }
+          const bytes = new Uint8Array(size);
+          let offset = 0;
+          for (const chunk of chunks) {
+            bytes.set(chunk, offset);
+            offset += chunk.byteLength;
+          }
+          return JSON.parse(new TextDecoder().decode(bytes));
+        }
+
+        """;
+
     private static string Format(string spec) =>
         Header
         + "// Every generated module imports this first, so a runtime that does not serve this client's format refuses\n"
@@ -681,11 +872,13 @@ internal sealed partial class ClientGenerator
                */
               user?: string;
               /**
-               * Lets the client send to an absolute `http:` url on a host that is not loopback. Only for a trusted network:
-               * the headers would travel in cleartext. Off by default, and every train function and machine server refuses
-               * such a url.
+               * Lets the client send to an absolute `http:` url, or open a `ws:` socketUrl, on a host that is not loopback.
+               * Only for a trusted network: the headers and connectionParams would travel in cleartext. Off by default, and
+               * every train function, machine server and socket refuses such a url.
                */
               allowInsecureTransport?: boolean;
+              /** The most bytes of an answer a train function reads before it refuses it. 16 MiB when not given. */
+              maxResponseBytes?: number;
             }
 
             let connection: TraxConnection | null = null;
@@ -729,8 +922,10 @@ internal sealed partial class ClientGenerator
 
             /** The one socket every push shares, opened with the first subscription. */
             export function traxSocket(): Client {
-              const { socketUrl, connectionParams } = traxConnection();
-              return (socket ??= createClient({
+              const { socketUrl, connectionParams, allowInsecureTransport } = traxConnection();
+              if (socket) return socket;
+              requireSecureSocket(socketUrl, allowInsecureTransport);
+              return (socket = createClient({
                 url: socketUrl,
                 connectionParams,
                 lazy: true,
@@ -752,14 +947,16 @@ internal sealed partial class ClientGenerator
 
             /** Sends a persisted document by its id, never its text, and returns the field at `path` of its answer. */
             export async function sendDocument<T>(id: string, variables: Record<string, unknown>, path: readonly string[]): Promise<T> {
-              const { url, headers, allowInsecureTransport } = traxConnection();
+              const { url, headers, allowInsecureTransport, maxResponseBytes } = traxConnection();
               requireSecureEndpoint(url, allowInsecureTransport);
               const response = await fetch(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...headers?.() },
                 body: JSON.stringify({ id, variables: withoutUndefined(variables) }),
+                // A redirect would carry the headers to wherever it points.
+                redirect: "error",
               });
-              const answer = (await response.json()) as {
+              const answer = (await readJson(response, maxResponseBytes)) as {
                 data?: Record<string, unknown> | null;
                 errors?: { message: string; extensions?: { code?: string } }[];
               };
@@ -774,7 +971,8 @@ internal sealed partial class ClientGenerator
               return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
             }
 
-            """;
+            """
+        + TransportGuards;
 
     private IEnumerable<ClientFile> Twin(
         ClientManifestMachine machine,
@@ -1326,10 +1524,14 @@ internal sealed partial class ClientGenerator
         return string.Join(", ", parts) + ". The host checks it either way.";
     }
 
-    private static string EscapeDocText(string text) => text.Replace("*/", "*\\/");
+    private static string EscapeDocText(string text) => TypeScript.CommentText(text);
 
-    // The identifiers the client's index exports, or the paths of its files, so two never collide.
-    private sealed class Names(StringComparer? comparer = null)
+    // The identifiers the client's index exports, or the paths of its files, so two never collide. rename is what a
+    // collision's message asks for.
+    private sealed class Names(
+        StringComparer? comparer = null,
+        string rename = "Rename one of them on the host."
+    )
     {
         private readonly Dictionary<string, string> _owners = new(
             comparer ?? StringComparer.Ordinal
@@ -1341,7 +1543,7 @@ internal sealed partial class ClientGenerator
                 throw new InvalidOperationException(
                     other == owner
                         ? $"'{owner}' is listed twice in the manifest. Export the manifest again from the host."
-                        : $"'{other}' and '{owner}' both generate the name '{name}'. Rename one of them on the host."
+                        : $"'{other}' and '{owner}' both generate the name '{name}'. {rename}"
                 );
             _owners[name] = owner;
             return name;

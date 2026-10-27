@@ -650,6 +650,72 @@ public class OperationsBatchMutationsTests
     }
 
     [Test]
+    public async Task StartBulkOperation_TwoStartsTogether_OnlyOneRuns()
+    {
+        await SeedRuns(3, TrainState.Pending);
+        await using var host = BulkHost(out _);
+        var jobs = host.GetRequiredService<BulkOperationJobs>();
+        var inSnapshot = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        jobs.BeforeSnapshot = async _ =>
+        {
+            jobs.BeforeSnapshot = null;
+            inSnapshot.SetResult();
+            await release.Task;
+        };
+
+        var first = Start(host, expectedCount: 3);
+        await inSnapshot.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        var second = await Start(host, expectedCount: 3);
+        release.SetResult();
+        var started = await first;
+        await jobs.Current;
+
+        second
+            .Success.Should()
+            .BeFalse("the first start holds the node's slot while it reads its snapshot");
+        second.Message.Should().Contain("already running");
+        started.Success.Should().BeTrue(started.Message);
+        jobs.List().Should().ContainSingle();
+    }
+
+    [Test]
+    public async Task StartBulkOperation_ARefusedOrFailedStart_GivesTheSlotBack()
+    {
+        await SeedRuns(2, TrainState.Pending);
+        await using var host = BulkHost(out _);
+        var jobs = host.GetRequiredService<BulkOperationJobs>();
+
+        (await Start(host, expectedCount: 5)).Success.Should().BeFalse();
+
+        jobs.BeforeSnapshot = _ => throw new InvalidOperationException("snapshot failed");
+        var failed = async () => await Start(host, expectedCount: 2);
+        await failed.Should().ThrowAsync<InvalidOperationException>();
+        jobs.BeforeSnapshot = null;
+
+        var started = await Start(host, expectedCount: 2);
+        started
+            .Success.Should()
+            .BeTrue("neither the refusal nor the failure may keep the slot: " + started.Message);
+        await jobs.Current;
+    }
+
+    private static Task<StartBulkOperationResponse> Start(
+        ServiceProvider host,
+        int expectedCount
+    ) =>
+        new OperationsMutations().StartBulkOperation(
+            BulkOperationKind.Cancel,
+            BulkRuns(),
+            expectedCount,
+            new TraxApplicationServices(host),
+            Operator(),
+            default
+        );
+
+    [Test]
     public async Task StartBulkOperation_AFilterForAnotherList_IsRefused()
     {
         await using var host = BulkHost(out _);

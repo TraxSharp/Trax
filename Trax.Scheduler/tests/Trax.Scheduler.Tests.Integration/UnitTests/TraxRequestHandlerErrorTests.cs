@@ -96,6 +96,34 @@ public class TraxRequestHandlerErrorTests
     }
 
     [Test]
+    public void BuildErrorResponse_RecordShapedMessageOnADerivedTrainException_IsNotReadAsARecord()
+    {
+        var ex = new DerivedTrainException(
+            JsonSerializer.Serialize(
+                new TrainExceptionData
+                {
+                    TrainName = "Trax.X.MyTrain",
+                    TrainExternalId = "ext",
+                    Type = "TrainException",
+                    Junction = "MyJunction",
+                    Message = "the inner reason",
+                    FailureClass = FailureClass.Transient,
+                }
+            )
+        );
+
+        var resp = TraxRequestHandler.BuildErrorResponse(ex);
+
+        resp.FailureClass.Should()
+            .BeNull("only the exact TrainException type is rebuilt from a recorded failure");
+        resp.ExceptionType.Should().Be(nameof(DerivedTrainException));
+        resp.FailureJunction.Should().BeNull();
+        resp.PublicMessage.Should().BeNull("a derived type's message is not an author's message");
+    }
+
+    private sealed class DerivedTrainException(string message) : TrainException(message);
+
+    [Test]
     public void BuildErrorResponse_TrainExceptionMessage_StillCarriesItsClass()
     {
         var ex = new TrainException(

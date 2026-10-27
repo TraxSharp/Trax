@@ -33,12 +33,13 @@ internal class SystemTypeConverter : JsonConverter<Type>
     /// <param name="typeToConvert">The type to convert to (always System.Type)</param>
     /// <param name="options">The serializer options</param>
     /// <returns>The deserialized Type object, or null if the input is null</returns>
-    /// <exception cref="JsonException">Thrown if the type cannot be found</exception>
+    /// <exception cref="JsonException">Thrown if no loaded assembly defines the type</exception>
     /// <remarks>
     /// This method:
     /// 1. Reads the assembly-qualified name string from the JSON
-    /// 2. Uses Type.GetType to resolve the type from the assembly-qualified name
-    /// 3. Throws an exception if the type cannot be found
+    /// 2. Resolves it among the assemblies already loaded (<see cref="LoadedTypeResolver"/>), the
+    ///    type, its generic arguments and an array's element alike; no assembly is loaded by name
+    /// 3. Throws an exception if the type cannot be found there
     ///
     /// The assembly-qualified name format includes the type's full name, assembly name,
     /// version, culture, and public key token, which uniquely identifies the type
@@ -57,7 +58,10 @@ internal class SystemTypeConverter : JsonConverter<Type>
         if (assemblyQualifiedName == null)
             return null;
 
-        var resultType = Type.GetType(assemblyQualifiedName);
+        var resultType = LoadedTypeResolver.Resolve(
+            assemblyQualifiedName,
+            allowAssemblyQualified: true
+        );
 
         if (resultType == null)
             throw new JsonException($"Unable to find type: {assemblyQualifiedName}");

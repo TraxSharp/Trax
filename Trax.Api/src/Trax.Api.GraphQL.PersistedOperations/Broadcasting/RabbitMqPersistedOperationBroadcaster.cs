@@ -13,7 +13,9 @@ namespace Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 /// <remarks>
 /// The channel runs in publisher-confirm mode, so a publish completes only once the broker has
 /// accepted the message, and throws when the broker refuses it or does not answer within
-/// <see cref="ConfirmTimeout"/>.
+/// <see cref="ConfirmTimeout"/>. Each message is signed with the key the host set
+/// (<see cref="RabbitMqInvalidationOptions.SigningKey"/>), in the
+/// <see cref="InvalidationMessageSignature.Header"/> header.
 /// </remarks>
 internal sealed class RabbitMqPersistedOperationBroadcaster
     : IPersistedOperationBroadcaster,
@@ -42,7 +44,8 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
 
     public RabbitMqPersistedOperationBroadcaster(
         PersistedOperationsOptions options,
-        ILogger<RabbitMqPersistedOperationBroadcaster> logger
+        ILogger<RabbitMqPersistedOperationBroadcaster> logger,
+        TimeProvider? time = null
     )
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -51,10 +54,15 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
             throw new InvalidOperationException(
                 "RabbitMqPersistedOperationBroadcaster requires a non-empty connection string."
             );
+        if (options.RabbitMqInvalidation.Problem(options.RabbitMqConnectionString) is { } problem)
+            throw new InvalidOperationException(problem);
 
         _options = options;
         _logger = logger;
+        _time = time ?? TimeProvider.System;
     }
+
+    private readonly TimeProvider _time;
 
     public async Task PublishAsync(PersistedOperationChangedMessage message, CancellationToken ct)
     {
@@ -70,6 +78,16 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
             ContentType = "application/json",
             DeliveryMode = DeliveryModes.Transient,
         };
+        if (_options.RabbitMqInvalidation.SigningKey is { } key)
+            properties.Headers = new Dictionary<string, object?>
+            {
+                [InvalidationMessageSignature.Header] = InvalidationMessageSignature.Create(
+                    key,
+                    _options.RabbitMqExchange,
+                    body,
+                    _time.GetUtcNow()
+                ),
+            };
 
         await channel
             .BasicPublishAsync(

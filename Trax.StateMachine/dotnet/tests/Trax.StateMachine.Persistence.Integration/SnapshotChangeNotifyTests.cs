@@ -68,13 +68,24 @@ public class SnapshotChangeNotifyTests
     private async Task<string> RowId(Guid id) =>
         (await _host.Rows(id)).Single().RowId.ToString(CultureInfo.InvariantCulture);
 
-    private async Task<Guid> SavedTurnstile()
+    private async Task<Guid> SavedHatch()
     {
         var id = Guid.NewGuid();
         using var scope = _host.Scope();
-        (await _host.Service(scope, "turnstile").Autosave(User, id, TestTurnstile.InitialJson))
+        (
+            await _host
+                .Service(scope, PlainHatchMachine.Id)
+                .Autosave(User, id, PlainHatchMachine.Json(HatchState.Shut))
+        )
             .Should()
             .BeOfType<AutosaveResult.Saved>();
+        return id;
+    }
+
+    private async Task<Guid> SeededTurnstile()
+    {
+        var id = Guid.NewGuid();
+        await _host.SeedDraft(User, id, TestTurnstile.InitialJson);
         return id;
     }
 
@@ -132,7 +143,7 @@ public class SnapshotChangeNotifyTests
     {
         await _notices.Drain();
 
-        var id = await SavedTurnstile();
+        var id = await SavedHatch();
 
         await ShouldNotifyOnce(id);
     }
@@ -140,7 +151,7 @@ public class SnapshotChangeNotifyTests
     [Test]
     public async Task Advance_notifies_once()
     {
-        var id = await SavedTurnstile();
+        var id = await SeededTurnstile();
         await _notices.Drain();
 
         using (var scope = _host.Scope())

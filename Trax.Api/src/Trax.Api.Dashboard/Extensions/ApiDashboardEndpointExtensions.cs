@@ -17,6 +17,7 @@ namespace Trax.Api.Dashboard.Extensions;
 /// Serves the Trax operations dashboard, the single-page app this package carries, from the host.
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/api-dashboard/use-trax-api-dashboard">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-dashboard/use-trax-operator-console-documents">SDK reference</seealso>
 public static class ApiDashboardEndpointExtensions
 {
     /// <summary>The path the dashboard is served at unless another is given.</summary>
@@ -24,6 +25,83 @@ public static class ApiDashboardEndpointExtensions
 
     /// <summary>The GraphQL path the app talks to when nothing else names one.</summary>
     private const string DefaultGraphQLPath = "/trax/graphql";
+
+    /// <summary>
+    /// Registers the operations console's documents, the ones every operator frontend sends (the dashboard and
+    /// <c>trax-console</c>), without serving the dashboard. For a host an operator reaches only from a terminal.
+    /// <see cref="UseTraxApiDashboard"/> registers them too, so a host that serves the dashboard needs no call to this.
+    /// </summary>
+    /// <remarks>
+    /// Registering a document changes which shapes may run, never who may run them: every request is still checked by
+    /// the operations gate (<c>GateOperations(...)</c> or <c>GateOperationsToAuthenticatedUsers()</c>), or, for a stream
+    /// (<c>onTrainStateChanged</c>, <c>onDataChanged</c>, <c>onJunctionEvent</c>, <c>onMachineInstanceChanged</c>), by
+    /// its per-subscriber authorization, which delivers each event only to a caller who may see it. The documents are
+    /// registered only on a host that runs persisted operations (<c>UsePersistedOperations()</c>); on one that does
+    /// not, a frontend sends their text.
+    /// </remarks>
+    /// <param name="endpoints">The host's endpoints, such as the built <c>WebApplication</c>.</param>
+    /// <returns><paramref name="endpoints"/>, for chaining.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// <c>AddTraxGraphQL()</c> was not called, or does not expose the operations namespace
+    /// (<c>ExposeOperationQueries()</c>), which every console document reads; or the host has already started and
+    /// registered its persisted documents.
+    /// </exception>
+    public static IEndpointRouteBuilder UseTraxOperatorConsoleDocuments(
+        this IEndpointRouteBuilder endpoints
+    )
+    {
+        ArgumentNullException.ThrowIfNull(endpoints);
+        var graphQL = OperationsGraphQL(
+            endpoints.ServiceProvider,
+            nameof(UseTraxOperatorConsoleDocuments),
+            "console"
+        );
+        HandOverConsoleDocuments(graphQL, nameof(UseTraxOperatorConsoleDocuments));
+        return endpoints;
+    }
+
+    // Hands the console's documents to the GraphQL configuration, for a host that runs persisted operations to
+    // register when it starts. Idempotent before the host has started; after, the registration has read them for the
+    // last time, so a call then would silently register nothing.
+    private static void HandOverConsoleDocuments(GraphQLConfiguration graphQL, string caller)
+    {
+        if (graphQL.ConsoleDocumentsClosed)
+            throw new InvalidOperationException(
+                $"{caller}() was called after the host started, when the operations console's documents have "
+                    + "already been registered, so they would never be. Call it while configuring the "
+                    + "app, before app.Run() or app.StartAsync()."
+            );
+        graphQL.ConsoleDocuments = ConsoleDocumentsResource.Documents;
+    }
+
+    // The GraphQL configuration an operator frontend's documents need: AddTraxGraphQL, exposing the operations
+    // namespace every one of them reads.
+    private static GraphQLConfiguration OperationsGraphQL(
+        IServiceProvider services,
+        string caller,
+        string what
+    )
+    {
+        var graphQL =
+            services.GetService<GraphQLConfiguration>()
+            ?? throw new InvalidOperationException(
+                $"{caller}() requires AddTraxGraphQL(): the {what} reads and changes "
+                    + "everything through the Trax GraphQL endpoint. Call "
+                    + "builder.Services.AddTraxGraphQL(...) before builder.Build(), and map it with "
+                    + "app.UseTraxGraphQL()."
+            );
+        if (!graphQL.OperationQueriesExposed)
+            throw new InvalidOperationException(
+                $"{caller}() requires the GraphQL operations namespace, which every page "
+                    + $"of the {what} reads, and AddTraxGraphQL() does not expose it. Call "
+                    + "ExposeOperationQueries() on the GraphQL builder, and "
+                    + $"ExposeOperationMutations() for the {what}'s actions, with the gate the "
+                    + "builder then asks for (GateOperations(...) or "
+                    + "GateOperationsToAuthenticatedUsers()). See "
+                    + "https://traxsharp.net/docs/cross-cutting/troubleshooting#usetraxapidashboard-requires-the-graphql-operations-namespace"
+            );
+        return graphQL;
+    }
 
     /// <summary>
     /// Serves the dashboard at <paramref name="path"/>, behind the authorization posture chosen in
@@ -60,8 +138,9 @@ public static class ApiDashboardEndpointExtensions
     /// No posture was chosen; the named policy is not registered; a policy or roles posture has
     /// no authentication scheme to challenge a caller with; <c>AddTraxGraphQL()</c> was not
     /// called, or does not expose the operations namespace (<c>ExposeOperationQueries()</c>); or
-    /// this build of the package carries no app; or <c>AllowAnonymous()</c> was added to a policy
-    /// or roles posture (thrown when the host starts).
+    /// this build of the package carries no app; the host has already started and registered its
+    /// persisted documents; or <c>AllowAnonymous()</c> was added to a policy or roles posture
+    /// (thrown when the host starts).
     /// </exception>
     public static IEndpointConventionBuilder UseTraxApiDashboard(
         this IEndpointRouteBuilder endpoints,
@@ -83,23 +162,7 @@ public static class ApiDashboardEndpointExtensions
                 nameof(configure)
             );
 
-        var graphQL =
-            services.GetService<GraphQLConfiguration>()
-            ?? throw new InvalidOperationException(
-                "UseTraxApiDashboard() requires AddTraxGraphQL(): the dashboard reads and changes "
-                    + "everything through the Trax GraphQL endpoint. Call "
-                    + "builder.Services.AddTraxGraphQL(...) before builder.Build(), and map it with "
-                    + "app.UseTraxGraphQL()."
-            );
-        if (!graphQL.OperationQueriesExposed)
-            throw new InvalidOperationException(
-                "UseTraxApiDashboard() requires the GraphQL operations namespace, which every page "
-                    + "of the dashboard reads, and AddTraxGraphQL() does not expose it. Call "
-                    + "ExposeOperationQueries() on the GraphQL builder, and "
-                    + "ExposeOperationMutations() for the dashboard's actions, with the gate the "
-                    + "builder then asks for (RequireAuthorization() or GateOperations(...)). See "
-                    + "https://traxsharp.net/docs/cross-cutting/troubleshooting#usetraxapidashboard-requires-the-graphql-operations-namespace"
-            );
+        var graphQL = OperationsGraphQL(services, nameof(UseTraxApiDashboard), "dashboard");
 
         var assets = services.GetService<DashboardAssets>() ?? DashboardAssets.Embedded;
         if (assets.IndexTemplate is null)
@@ -119,7 +182,7 @@ public static class ApiDashboardEndpointExtensions
 
         // The documents the app sends, for a host that runs persisted operations to register when it starts; it hands
         // back the id of each, which the app is told in its runtime config.
-        graphQL.ConsoleDocuments = ConsoleDocumentsResource.Documents;
+        HandOverConsoleDocuments(graphQL, nameof(UseTraxApiDashboard));
 
         VerifyAuthorizationPosture(services, options);
 

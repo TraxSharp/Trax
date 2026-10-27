@@ -33,8 +33,8 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class ParityOperationsOverHttpTests
 {
-    private const string AdminKey = "parity-admin-key";
-    private const string ReaderKey = "parity-reader-key";
+    private const string AdminKey = "parity-admin-key-0123456789abcdefghijklm";
+    private const string ReaderKey = "parity-reader-key-0123456789abcdefghijkl";
 
     private const string TriggerManifests =
         "mutation { operations { triggerManifests(ids: [1, 2], askAfresh: true) "

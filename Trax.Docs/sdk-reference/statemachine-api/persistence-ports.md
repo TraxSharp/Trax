@@ -300,8 +300,9 @@ policies exist (`IsPolicyRegistered(policy)`). Trax.Api registers one over the r
 `[TraxAuthorize]` is evaluated. Without one, a caller holds no role and satisfies no policy.
 
 **The generic save serves only machines with no server-side behaviour.** `Autosave` refuses a machine with a gated
-event or a gated `start` (a rule that names a role or a policy), a timer, an invoked train or an effect as
-`SAVE_NOT_ALLOWED`, and writes nothing; such a machine moves through its declared events.
+event or a gated `start` (a rule that names a role or a policy), a timer, an invoked train, an effect, a guard, a
+reducer other than `Keep`, a custom guard or reducer, or a start that reduces its input as `SAVE_NOT_ALLOWED`, and
+writes nothing; such a machine moves through its declared events.
 
 ### What each path may write
 
@@ -348,8 +349,9 @@ internal: a host neither implements nor calls them, and `AddStateMachines` and `
   commits nothing itself. It refuses a train whose output reaches a `[TraxSensitive]` member, and, for a user-owned
   instance, a `[TraxBroadcast]` train, as the startup check does. A user-owned instance's run is authorized against
   the current caller. A system-owned instance's run is authorized in Trax's trusted execution scope, including one that the previous run's outcome started (no user is
-  present). A user-owned instance never launches from an outcome: the startup check refuses such a machine, and the
-  launcher refuses such a launch with `UnauthorizedAccessException`. The launcher also tells the startup check what
+  present). A user-owned instance never launches from an outcome, and a system-owned instance never launches a train
+  that declares `[TraxAuthorize]`, since the trusted scope checks no user's requirements: the startup check refuses
+  such a machine, and the launcher refuses such a launch with `UnauthorizedAccessException`. The launcher also tells the startup check what
   about a train stops a machine from invoking it. It lives in the persistence package rather than the engine because
   it writes through `IDataContext`, and the engine depends on no data provider.
 - **The run cancellation** cancels a run by its invoke token, as described under

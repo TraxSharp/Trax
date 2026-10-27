@@ -29,7 +29,8 @@ public sealed class TraxJobRunnerOptions
 
     /// <summary>
     /// How far a signed request's timestamp may be from this process's clock, either way, before
-    /// it is refused as stale. Also how long a nonce is remembered. Default five minutes.
+    /// it is refused as stale. Also how long a nonce is remembered. Default five minutes. Must be
+    /// positive and at most an hour.
     /// </summary>
     /// <remarks>
     /// Accepted nonces go to the database by default, so every instance of the runner refuses a
@@ -37,6 +38,9 @@ public sealed class TraxJobRunnerOptions
     /// process instead, and a host can register its own <see cref="INonceStore"/>.
     /// </remarks>
     public TimeSpan MaxClockSkew { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>The longest <see cref="MaxClockSkew"/> accepted: one hour.</summary>
+    internal static readonly TimeSpan LongestClockSkew = TimeSpan.FromHours(1);
 
     /// <summary>
     /// The name of an ASP.NET authorization policy that <c>UseTraxJobRunner</c> and
@@ -104,6 +108,14 @@ public sealed class TraxJobRunnerOptions
                 nameof(MaxClockSkew),
                 MaxClockSkew,
                 "MaxClockSkew must be positive."
+            );
+
+        if (MaxClockSkew > LongestClockSkew)
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxClockSkew),
+                MaxClockSkew,
+                "MaxClockSkew must be at most one hour: a signed request is accepted for that long "
+                    + "either side of the runner's clock, and its nonce is kept that long."
             );
 
         if (MaxRequestBodyBytes <= 0)

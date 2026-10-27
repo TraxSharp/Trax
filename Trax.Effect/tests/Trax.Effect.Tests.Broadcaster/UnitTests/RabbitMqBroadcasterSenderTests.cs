@@ -56,7 +56,11 @@ public class RabbitMqBroadcasterSenderTests
     )
     {
         var broadcaster = new RabbitMqTrainEventBroadcaster(
-            new RabbitMqBroadcasterOptions { ConnectionString = "amqp://unused/" },
+            new RabbitMqBroadcasterOptions
+            {
+                ConnectionString = "amqp://localhost/unused",
+                SigningKey = TestBroadcastKey.Value,
+            },
             logger,
             queueCapacity,
             connect,

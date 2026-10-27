@@ -146,7 +146,8 @@ builder.Services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)
         .UseBroadcaster(b => b
-            .UseRabbitMq(rabbitMqConnectionString)
+            .UseRabbitMq(rabbitMqConnectionString, opts =>
+                opts.SigningKey = Convert.FromBase64String(configuration["Trax:BroadcastSigningKey"]!))
             .UseSignalRHub(opts => opts
                 .OnlyForEvents("Completed", "Failed")
                 .OnlyForTrains<IShipOrderTrain, IRunAuditTrain>()))

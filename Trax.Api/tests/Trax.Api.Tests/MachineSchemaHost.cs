@@ -36,8 +36,8 @@ namespace Trax.Api.Tests;
 /// </summary>
 internal static class MachineSchemaHost
 {
-    public const string UserKey = "machines-schema-user";
-    public const string ApproverKey = "machines-schema-approver";
+    public const string UserKey = "machines-schema-user-0123456789abcdefghi";
+    public const string ApproverKey = "machines-schema-approver-0123456789abcde";
 
     /// <summary>The schema's root type names.</summary>
     public const string RootQuery = "RootQuery";

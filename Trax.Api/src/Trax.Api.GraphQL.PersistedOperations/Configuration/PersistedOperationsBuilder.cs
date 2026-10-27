@@ -32,6 +32,7 @@ public sealed partial class PersistedOperationsBuilder
 
     // ----- broadcasting -----
     private string? _rabbitMqConnectionString;
+    private RabbitMqInvalidationOptions _rabbitMqInvalidation = new();
     private bool _singleNode;
 
     // ----- management -----

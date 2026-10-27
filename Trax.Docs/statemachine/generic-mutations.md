@@ -42,7 +42,7 @@ every event, its start and its reads, under the same startup check as a machine 
 | Mutation | Train | Does |
 | --- | --- | --- |
 | `startSnapshot` | `IStartSnapshot` | Creates an instance from the machine's declared `start`. The server mints the id and builds the first snapshot. |
-| `saveSnapshot` | `ISaveSnapshot` | Soft path: validates a whole client snapshot and stores it. Refused as `SAVE_NOT_ALLOWED` for a machine with server-side behaviour (a gated event or start, a timer, an invoked train, an effect). |
+| `saveSnapshot` | `ISaveSnapshot` | Soft path: validates a whole client snapshot and stores it. Refused as `SAVE_NOT_ALLOWED` for a machine with server-side behaviour (a gated event or start, a timer, an invoked train, an effect, a guard, a reducer other than `Keep`, a custom guard or reducer, a start that reduces its input). |
 | `advanceSnapshot` | `IAdvanceSnapshot` | Authoritative path: fires a trigger on the stored draft, server-side. |
 | `loadSnapshot` | `ILoadSnapshot` | Reads the caller's stored draft, held to the machine's `get` rule. A missing draft, and one the rule does not let the caller read, answer the same problem. |
 | `sendSnapshot` | `ISendSnapshot` | Runs the machine's one irreversible effect exactly once and advances with its receipt. |

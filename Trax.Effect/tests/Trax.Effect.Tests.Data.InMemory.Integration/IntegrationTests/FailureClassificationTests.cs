@@ -40,6 +40,7 @@ public class FailureClassificationTests : TestSetup
             .AddScopedTraxRoute<IRemoteUnclassifiedTrain, RemoteUnclassifiedTrain>()
             .AddScopedTraxRoute<IUndefinedClassInMessageTrain, UndefinedClassInMessageTrain>()
             .AddScopedTraxRoute<IClassInPlainMessageTrain, ClassInPlainMessageTrain>()
+            .AddScopedTraxRoute<IDerivedRecordShapedTrain, DerivedRecordShapedTrain>()
             .BuildServiceProvider();
 
     [SetUp]
@@ -273,6 +274,25 @@ public class FailureClassificationTests : TestSetup
     }
 
     [Test]
+    public async Task A_type_derived_from_TrainException_with_a_record_shaped_message_is_classified_by_the_host()
+    {
+        Classifier.Result = FailureClass.Permanent;
+        var train = (DerivedRecordShapedTrain)
+            Scope.ServiceProvider.GetRequiredService<IDerivedRecordShapedTrain>();
+
+        var act = async () => await train.Run(Unit.Default);
+        await act.Should().ThrowAsync<DerivedTrainException>();
+
+        Classifier
+            .Seen.Should()
+            .BeOfType<DerivedTrainException>(
+                "only the exact TrainException type is a rebuilt record; a derived type's message "
+                    + "is its own text, so the host's classifier decides"
+            );
+        train.SeenClass.Should().Be(FailureClass.Permanent);
+    }
+
+    [Test]
     public async Task A_failed_run_fires_OnFailed_once()
     {
         var train = Resolve();
@@ -494,6 +514,35 @@ public class FailureClassificationTests : TestSetup
 
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Chain<UndefinedClassInMessageJunction>().Resolve();
+
+        protected override Task OnFailed(
+            Metadata metadata,
+            Exception exception,
+            CancellationToken ct
+        )
+        {
+            SeenClass = metadata.FailureClass;
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>A consumer's own exception type, derived from <see cref="TrainException"/>.</summary>
+    public class DerivedTrainException(string message) : TrainException(message);
+
+    public class DerivedRecordShapedJunction : Junction<Unit, Unit>
+    {
+        public override Task<Unit> Run(Unit input) =>
+            throw new DerivedTrainException(RecordJson((int)FailureClass.Transient));
+    }
+
+    public interface IDerivedRecordShapedTrain : IServiceTrain<Unit, Unit>;
+
+    public class DerivedRecordShapedTrain : ServiceTrain<Unit, Unit>, IDerivedRecordShapedTrain
+    {
+        public FailureClass? SeenClass { get; private set; }
+
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Chain<DerivedRecordShapedJunction>().Resolve();
 
         protected override Task OnFailed(
             Metadata metadata,

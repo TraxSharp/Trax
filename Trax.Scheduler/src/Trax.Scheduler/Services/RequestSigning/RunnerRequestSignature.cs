@@ -44,6 +44,20 @@ public static class RunnerRequestSignature
     /// <summary>The shortest key accepted, in bytes: the HMAC-SHA256 block of entropy.</summary>
     public const int MinimumKeyLength = 32;
 
+    /// <summary>
+    /// The HTTP response header a runner with a signing key puts on a run's answer: a MAC over the
+    /// purpose, the nonce of the request it answers and the exact body, so the scheduler accepts
+    /// only an answer the runner made for that request.
+    /// </summary>
+    /// <remarks>
+    /// It authenticates a success body for that request, and nothing else: the status code, the
+    /// other headers and the body of a non-success answer are not covered. The scheduler treats
+    /// any non-success status as a failed run and retries only 429, 502 and 503, so the most an
+    /// unauthenticated answer can do is fail or delay a run; TLS is what keeps it from being
+    /// changed, which is why a runner's base URL must be <c>https://</c> off loopback.
+    /// </remarks>
+    public const string ResponseHeaderName = "Trax-Response-Signature";
+
     private const string Version = "v1";
 
     /// <summary>
@@ -113,6 +127,64 @@ public static class RunnerRequestSignature
             return false;
 
         var expected = ComputeMac(key, purpose, body, timestamp, nonce);
+        return CryptographicOperations.FixedTimeEquals(expected, presented);
+    }
+
+    /// <summary>
+    /// Signs a runner's answer to the request that carried <paramref name="requestSignature"/>:
+    /// <c>v1,s=&lt;base64 HMAC-SHA256&gt;</c> over the purpose, that request's nonce and the
+    /// exact <paramref name="body"/>. Null when the request signature does not parse, which a
+    /// request the runner verified always does.
+    /// </summary>
+    internal static string? CreateResponse(
+        byte[] key,
+        RunnerRequestPurpose purpose,
+        string? requestSignature,
+        ReadOnlySpan<byte> body
+    )
+    {
+        if (!TryParse(requestSignature, out _, out var nonce, out _))
+            return null;
+
+        var mac = ComputeResponseMac(key, purpose, nonce, body);
+        return $"{Version},s={Convert.ToBase64String(mac)}";
+    }
+
+    /// <summary>
+    /// Whether <paramref name="responseSignature"/> is the runner's signature over
+    /// <paramref name="body"/> as the answer to the request that carried
+    /// <paramref name="requestSignature"/>. A missing, malformed or mismatched one is false, as is
+    /// a signature made for another request.
+    /// </summary>
+    internal static bool VerifyResponse(
+        byte[] key,
+        RunnerRequestPurpose purpose,
+        string requestSignature,
+        string? responseSignature,
+        ReadOnlySpan<byte> body
+    )
+    {
+        if (!TryParse(requestSignature, out _, out var nonce, out _))
+            return false;
+
+        if (
+            string.IsNullOrEmpty(responseSignature)
+            || responseSignature.Length > 128
+            || !responseSignature.StartsWith($"{Version},s=", StringComparison.Ordinal)
+        )
+            return false;
+
+        byte[] presented;
+        try
+        {
+            presented = Convert.FromBase64String(responseSignature[(Version.Length + 3)..]);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        var expected = ComputeResponseMac(key, purpose, nonce, body);
         return CryptographicOperations.FixedTimeEquals(expected, presented);
     }
 
@@ -187,6 +259,25 @@ public static class RunnerRequestSignature
                 CultureInfo.InvariantCulture,
                 $"trax-runner-{Version}\n{PurposeName(purpose)}\n{timestamp}\n{nonce}\n"
             )
+        );
+
+        using var hmac = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA256, key);
+        hmac.AppendData(prefix);
+        hmac.AppendData(body);
+        return hmac.GetHashAndReset();
+    }
+
+    // A prefix of its own, so a response MAC can never be presented as a request MAC or the
+    // other way round.
+    private static byte[] ComputeResponseMac(
+        byte[] key,
+        RunnerRequestPurpose purpose,
+        string requestNonce,
+        ReadOnlySpan<byte> body
+    )
+    {
+        var prefix = Encoding.UTF8.GetBytes(
+            $"trax-runner-response-{Version}\n{PurposeName(purpose)}\n{requestNonce}\n"
         );
 
         using var hmac = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA256, key);

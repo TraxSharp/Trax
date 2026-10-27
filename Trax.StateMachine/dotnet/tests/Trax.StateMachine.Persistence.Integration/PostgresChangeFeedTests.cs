@@ -33,10 +33,7 @@ public class PostgresChangeFeedTests
     private static async Task<(Guid Id, long RowId)> Saved(InstanceHost host)
     {
         var id = Guid.NewGuid();
-        using (var scope = host.Scope())
-            (await host.Service(scope, "turnstile").Autosave(User, id, TestTurnstile.InitialJson))
-                .Should()
-                .BeOfType<AutosaveResult.Saved>();
+        await host.SeedDraft(User, id, TestTurnstile.InitialJson);
         return (id, await host.RowId(id));
     }
 

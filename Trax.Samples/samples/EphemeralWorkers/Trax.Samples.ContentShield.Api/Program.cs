@@ -121,7 +121,15 @@ builder.Services.AddTrax(trax =>
                 .UseBroadcaster(b =>
                     b.UseRabbitMq(
                         rabbitMqConnectionString,
-                        o => o.ExchangeName = LifecycleEvents.ExchangeName
+                        o =>
+                        {
+                            o.ExchangeName = LifecycleEvents.ExchangeName;
+                            // Signs each event, and drops one not signed with this key.
+                            o.SigningKey = BroadcastSigningKey.Resolve(
+                                builder.Configuration,
+                                builder.Environment.IsDevelopment()
+                            );
+                        }
                     )
                 )
         )
@@ -172,12 +180,14 @@ builder.Services.AddTrax(trax =>
 // it without a gate refuses to start the host; GateOperations puts the Operator role in front
 // of it alone, so the anonymous trains keep working. It is not the Moderator role: a subscriber
 // the operations gate admits receives every train's events, and a moderator's subscription
-// carries only the [TraxBroadcast] trains.
+// carries only the [TraxBroadcast] trains. Those events carry no output unless the train is opted
+// in: a notice's id is meant for every moderator, so the notice train is.
 builder.Services.AddTraxGraphQL(graphql =>
     graphql
         .ExposeOperationQueries()
         .ExposeOperationMutations()
         .GateOperations(roles: ContentShieldRoles.Operator)
+        .AllowOutputForBroadcastSubscribers<ISendViolationNoticeTrain>()
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 

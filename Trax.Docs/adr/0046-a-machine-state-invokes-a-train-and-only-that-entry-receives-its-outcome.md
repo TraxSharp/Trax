@@ -148,10 +148,10 @@ refused a train whose `[TraxAuthorize]` is stricter than any event that enters t
 would be a way around it; each entering event is compared, as [0048](./0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md)
 records), and any `[TraxBroadcast]` train, whose subscribers see every run's output. A system-owned machine's
 train runs under Trax's trusted execution scope, as a scheduled manifest run does, and may invoke only a train a
-scheduled manifest could run: no user-only requirements, checked at startup. Only a system-owned machine chains runs
-through outcomes: a run an outcome queues has no user present to authorize it, so a user-owned machine whose
-`OnDone`, `OnFailed` or `OnCancelled` enters an invoking state is refused at startup, and chains its stages through
-an event the user sends instead.
+scheduled manifest could run: no user-only requirements, checked at startup and again when the run is queued. Only
+a system-owned machine chains runs through outcomes: a run an outcome queues has no user present to authorize it, so
+a user-owned machine whose `OnDone`, `OnFailed` or `OnCancelled` enters an invoking state is refused at startup, and
+chains its stages through an event the user sends instead.
 
 **A user owner has at most 10 live invoked runs**, counted across every machine; entering an invoking state past the
 cap is refused with a typed reason. A run is live from the entry that queues it until it ends, so a dispatched run
@@ -259,6 +259,7 @@ In `Trax.StateMachine/dotnet/tests/Trax.StateMachine.Persistence.Integration`, o
 - `InvokesAuthorizationTests.System_owners_are_not_capped`
 - `InvokesAuthorizationTests.A_user_owned_machines_train_is_authorized_against_the_entering_user_at_entry`
 - `InvokesAuthorizationTests.A_system_owned_machines_train_runs_under_the_trusted_scope`
+- `InvokesAuthorizationTests.A_system_owned_launch_of_a_train_with_requirements_is_refused_and_queues_nothing`
 - `InvokesRuntimeRefusalTests.A_user_owned_instance_cannot_queue_a_broadcast_train`
 - `InvokesRuntimeRefusalTests.No_instance_can_queue_a_train_whose_output_is_sensitive`
 - `InvokesRuntimeRefusalTests.A_sensitive_output_is_not_applied_to_the_context`
@@ -291,6 +292,8 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-23**: The launcher refuses a system-owned instance's launch of a train that declares `[TraxAuthorize]`
+  with `UnauthorizedAccessException`, before the trusted scope is opened, as the startup check refuses the machine.
 - **2026-10-12**: The 2026-10-09 entry named two kinds of actor. `Client` is the only one (0048's Changelog,
   2026-10-12): host code on a user's instance is a client, and `IMachineInstances` is the trusted host API for
   system-owned instances.

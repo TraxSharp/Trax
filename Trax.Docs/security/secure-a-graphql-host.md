@@ -95,7 +95,10 @@ app.Run();
 What each part does, and where it can differ:
 
 - **Credentials.** A key or signing key containing `do-not-use-in-production` refuses the host
-  outside Development, so a copied demo credential cannot go live. In production, register API keys
+  outside Development, so a copied demo credential cannot go live, and so does an API key added
+  with `keys.Add` shorter than 32 characters. Put the endpoint behind
+  [ASP.NET Core rate limiting](https://learn.microsoft.com/aspnet/core/performance/rate-limit) so
+  keys cannot be tried at the rate the server answers. In production, register API keys
   as a salt and SHA-256 hash from a secret store with `AddHashed`, or resolve them yourself with
   `AddTraxApiKeyAuth<TResolver>()`; take JWTs from your identity provider with
   `AddTraxJwtAuth(authority, audience)`. For tokens from several issuers use
@@ -109,9 +112,9 @@ What each part does, and where it can differ:
   refuses every caller.
 - **Policies.** Register each policy a `[TraxAuthorize]`, `GateOperations` or `RequireAuthorization`
   names; an unregistered one refuses the host.
-- **The operations namespace.** Exposing it needs a gate. `GateOperations(roles: "Operator")` gates
-  it alone and leaves the rest of the endpoint open. `AddScheduler` registers the services it runs
-  on.
+- **The operations namespace.** Exposing it needs a gate of its own, on this host or on one that
+  gates the whole endpoint. `GateOperations(roles: "Operator")` gates it alone and leaves the rest
+  of the endpoint open. `AddScheduler` registers the services it runs on.
 - **Middleware.** `UseAuthentication()` and `UseAuthorization()` come before `UseTraxGraphQL()`.
 
 ## 2. Declare each surface's posture
@@ -223,7 +226,9 @@ services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
 ```
 
 The gate applies to every operation, over HTTP and over a subscription socket, and a refused
-request is audited. The IDE page and the schema download are not behind it; they follow
+request is audited. It decides who may call the endpoint, not who may operate it: a host that also
+exposes the `operations` namespace still gates it with `GateOperations(...)` or
+`GateOperationsToAuthenticatedUsers()`, and refuses to start without one. The IDE page and the schema download are not behind it; they follow
 `AllowIntrospection`, which is off outside Development. With no argument the gate is the combined
 Trax policy, so any registered scheme is enough; pass `ApiKeyDefaults.PolicyName` or another
 policy to require one. `[TraxAllowAnonymous]` on any exposed surface then refuses the host, since

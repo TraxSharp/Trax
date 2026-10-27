@@ -93,7 +93,8 @@ came to:
 whatever offset and precision the client holds it; the runner compares it as the instant it names, so
 `2026-10-22T12:10:00.000+02:00` and `2026-10-22T10:10:00Z` are one value, and one read without its offset is not. `state` and `context` are what to show (the prediction while one is
 pending), `confirmed` what the host last confirmed. `problem` is the code of the last refusal or transport failure,
-`error` the code that stopped the client (`GONE`, `CLIENT_OUTDATED`), and `deleted` whether a `GONE` came from a
+`error` the code that stopped the client (`GONE`, `CLIENT_OUTDATED`, or `UNAUTHENTICATED` and `FORBIDDEN` for a socket
+the host refused), and `deleted` whether a `GONE` came from a
 deletion (true) or a host that holds no such instance for the caller (false). A context holds no member whose value
 is null: a typed answer cannot tell a member stored as null from one the state does not hold.
 
@@ -105,7 +106,10 @@ true }`. **`end`** is the last request; the testee answers `{ "id" }` and exits.
 The host answers nothing by itself. A request for an id that is not one of the transcript's documents is answered
 with a GraphQL error and fails the transcript; so does a subscription that sends a document's text beside its id.
 It acknowledges a socket's `connection_init` unless the transcript refuses that connection, in which case it closes
-the socket with 4403 before acknowledging it.
+the socket with 4403 before acknowledging it. A socket the host closes with 4401 or 4403, before it is acknowledged or
+while subscribed, is the host turning the caller away, and the client stops for good: `UNAUTHENTICATED` for 4401,
+`FORBIDDEN` for 4403, and the same for an upgrade answered 401 or 403 where the client's socket can tell one. It
+subscribes again after any other close.
 
 An answer is wrapped the way a host serves it, `{ "data": { "machines": { "<machine>": { "<operation>": … } } } }`,
 and a push as `{ "data": { "<machine>Changed": … } }`, with the fields a host selects that the step does not give
@@ -137,7 +141,7 @@ documents from it. The steps run in order:
 | `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503` (with `"body": {...}`, the JSON it answers with, or none), or `"drop": true` (the connection is closed with no answer). |
 | `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. |
 | `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription. |
-| `{ "complete": true }`, `{ "dropSocket": true }` | Completes the last subscription, or closes its socket. |
+| `{ "complete": true }`, `{ "dropSocket": true }` | Completes the last subscription, or closes its socket (with 1011, or with the code given: `{ "dropSocket": 4401 }`). |
 | `{ "view": { ... } }` | Asks for the view until it holds every member given, for up to three seconds. |
 | `{ "quiet": 50 }` | Waits that many milliseconds; nothing may arrive meanwhile. |
 | `{ "wait": 50 }` | Waits that many milliseconds, so the client has taken every request sent before it; what arrives meanwhile waits for a later step. |

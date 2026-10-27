@@ -37,7 +37,7 @@ public sealed class TraxCaller
 |---|---|
 | `Principal` | The request's `TraxPrincipal`, read from `HttpContext.User`, or `null` when there is no `HttpContext`, no user, or a user whose claims carry no `trax:principal-id`. Its `Id` is qualified by the scheme, `TraxApiKey:alice`. |
 | `IsAuthenticated` | `Principal is not null`. |
-| `IsTrusted` | `ITrustedExecutionScope.IsTrusted`: true inside a trusted execution scope, such as the scheduler running queued work or a remote runner's run endpoint. Nothing on the API's own HTTP surface sets it. |
+| `IsTrusted` | `ITrustedExecutionScope.IsTrusted`: true inside a trusted execution scope. Trax opens one only around the authorization of a remote run's named train and of a system-owned state machine's invoked train, so a train's own code sees `false`. Nothing on the API's own HTTP surface sets it. |
 
 ## Behavior
 
@@ -45,7 +45,7 @@ public sealed class TraxCaller
 
 On a subscription the socket's principal is set on the connection's `HttpContext.User` at `connection_init`, so a `TraxCaller` injected into a subscribe resolver sees the subscriber.
 
-`IsTrusted` is true for whatever a scheduler runner's posture admits, so a filter that lets trusted execution see every row treats that caller as the scheduler. See [The scheduler and remote workers are trusted](/docs/security/authorization-rules#the-scheduler-and-remote-workers-are-trusted).
+`IsTrusted` is true only where a host opens a trusted scope itself, so a filter that lets trusted execution see every row treats that code as the host's. A remote run's train sees `false`, as a scheduled run does. See [The scheduler and remote workers are trusted](/docs/security/authorization-rules#the-scheduler-and-remote-workers-are-trusted).
 
 `TraxCaller` is registered scoped by [AddTraxPrincipalAccessor](/docs/sdk-reference/api-auth/add-trax-principal-accessor), which every `AddTrax*Auth` call runs. A host with no scheme registered in some environment calls `AddTraxPrincipalAccessor()` itself, or `TraxCaller` does not resolve there.
 

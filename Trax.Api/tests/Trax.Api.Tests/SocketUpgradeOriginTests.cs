@@ -366,7 +366,7 @@ public class SocketUpgradeOriginTests
             // RequireAuthorization() refuses, so the signed-in host serves the operations
             // namespace instead.
             if (cookieSignIn)
-                g.ExposeOperationQueries();
+                g.ExposeOperationQueries().GateOperationsToAuthenticatedUsers();
             else
                 g.AddDbContext<OrderTestDbContext>();
             graphql?.Invoke(g);

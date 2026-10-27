@@ -38,17 +38,11 @@ public class RequestIdScopeTests
     private static async Task<Guid> Saved(string machine, string state, string context)
     {
         var id = Guid.NewGuid();
-        (
-            await new SaveSnapshotJunction(NewRegistry(), User).Run(
-                new SaveSnapshotInput
-                {
-                    Machine = machine,
-                    Id = id,
-                    Snapshot =
-                        $"{{\"machine\":\"{machine}\",\"version\":1,\"state\":\"{state}\",\"context\":{context}}}",
-                }
-            )
-        ).Problem.Should().BeNull();
+        await TestDb.Seed(
+            "u",
+            id,
+            $"{{\"machine\":\"{machine}\",\"version\":1,\"state\":\"{state}\",\"context\":{context}}}"
+        );
         return id;
     }
 

@@ -35,6 +35,7 @@ Every public type and method a Trax package ships, one per page. Each page names
 |---------|--------|
 | [GraphQL API](/docs/sdk-reference/graphql-api) | `AddTraxGraphQL`, the queries, mutations and subscriptions, query models and error codes |
 | [GraphQL Client](/docs/sdk-reference/graphql-client) | The outbound client, with queries validated against the server's schema |
+| [Client API](/docs/sdk-reference/client-api) | `Trax.Client`: `TraxClient`, `TraxHttpTransport` and `GraphQLSubscriptionSocket`, which send a host's persisted documents from .NET |
 | [Persisted Operations](/docs/sdk-reference/persisted-operations) | Registering, enforcing and managing persisted GraphQL operations |
 | [API Auth](/docs/sdk-reference/api-auth) | The principal abstraction and the API-key, JWT, Cognito and OIDC schemes |
 | [API Audit](/docs/sdk-reference/api-audit) | The request-level audit pipeline: entries, sinks, redactors, options |

@@ -37,7 +37,7 @@ public class AuditRefusedRequestTests
 {
     private const string Adr = "docs/adr/0009-the-endpoint-policy-applies-to-every-transport.md";
 
-    private const string ApiKey = "audit-refusal-key";
+    private const string ApiKey = "audit-refusal-key-0123456789abcdefghijkl";
 
     [Test]
     public async Task ARequestTheEndpointGateRefuses_IsAudited()
@@ -271,7 +271,7 @@ public class AuditRefusedRequestTests
                                     o.FlushInterval = TimeSpan.FromMilliseconds(10)
                                 );
                             return gateOperationsToRole is null
-                                ? g
+                                ? g.GateOperationsToAuthenticatedUsers()
                                 : g.GateOperations(roles: gateOperationsToRole);
                         });
                     })

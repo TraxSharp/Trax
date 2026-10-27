@@ -59,15 +59,18 @@ authorizes or writes a row itself.
   once the shared operation ran. A requeue batches by manifest, because the shared requeue folds a
   manifest's dead letters into one queued run only within one call; a manifest with more than 500
   awaiting dead letters gets a batch of up to 1,000.
-- One runs per node at a time; a finished one is read for 24 hours, at most 100 are kept, and only
+- One runs per node at a time. A start takes the node's slot before it reads its snapshot and gives
+  it back if it is refused or fails, so two starts that arrive together cannot both run. A finished
+  one is read for 24 hours, at most 100 are kept, and only
   the first 10,000 failures keep their id (every failure is counted by reason).
 - The actor is the caller's principal id, else its sign-in name. The audit entry
   (`operationName: bulkOperation`) carries the counts and never the filter or the note (`0027`).
 
 ## Exemplars
 
-- `OperationsBatchMutationsTests` pins the snapshot refusal, the per-id failures and reasons of a
-  cancel whose runs end first, the actor and the audit entry, and the requeue batching by manifest.
+- `OperationsBatchMutationsTests` pins the snapshot refusal, two starts arriving together,
+  the slot given back after a refused or failed start, the per-id failures and reasons of a cancel
+  whose runs end first, the actor and the audit entry, and the requeue batching by manifest.
 - `BulkOperationStressTests.cs` measures a cancel over every run in progress and a requeue over every
   dead letter awaiting in the stress seed: the answer, the finish, the longest batch, and list reads
   served meanwhile. It is an explicit stress fixture, so CI does not run it; it is evidence, not a
@@ -77,4 +80,5 @@ Not covered: nothing checks that an operation started on one node is read on tha
 
 ## Changelog
 
+- **2026-10-23**: A start holds the node's slot from before its snapshot.
 - **2026-10-18**: Recorded.

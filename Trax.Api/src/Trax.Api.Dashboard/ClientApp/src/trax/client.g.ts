@@ -167,6 +167,14 @@ export interface HttpTransportOptions {
   socket?: Omit<ClientOptions, "url" | "connectionParams" | "jsonMessageReplacer">;
   /** The fetch to send with, looked up per request when not given. */
   fetch?: typeof fetch;
+  /**
+   * Lets the transport send to an absolute `http:` url, or open a `ws:` socketUrl, on a host that is not
+   * loopback. Only for a trusted network: the headers and connectionParams would travel in cleartext. Off by
+   * default, and httpTransport refuses such a url.
+   */
+  allowInsecureTransport?: boolean;
+  /** The most bytes of an answer the transport reads before it refuses it. 16 MiB when not given. */
+  maxResponseBytes?: number;
 }
 
 /** httpTransport's transport, and a way to drop its socket so the next stream opens a new one. */
@@ -179,9 +187,14 @@ export interface HttpTransport extends TraxTransport {
 
 /**
  * A transport over HTTP POST and one graphql-ws socket. A document goes by its id when `byId` says so: over HTTP
- * the body carries the id and no text, and over the socket the text is left out of the subscribe message.
+ * the body carries the id and no text, and over the socket the text is left out of the subscribe message. It
+ * refuses a url or socketUrl that would travel in cleartext to another host (see requireSecureEndpoint and
+ * requireSecureSocket) unless `allowInsecureTransport` is set, follows no redirect, and reads at most
+ * `maxResponseBytes` of an answer.
  */
 export function httpTransport(options: HttpTransportOptions): HttpTransport {
+  requireSecureEndpoint(options.url, options.allowInsecureTransport);
+  requireSecureSocket(options.socketUrl, options.allowInsecureTransport);
   let socket: Client | null = null;
   const byId = options.byId ?? ((document) => document.id !== null);
   const open = (): Client =>
@@ -208,14 +221,17 @@ export function httpTransport(options: HttpTransportOptions): HttpTransport {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/graphql-response+json, application/json", ...options.headers?.() },
           body: JSON.stringify(body.query === "" ? withoutQuery(body) : body),
+          // A redirect would carry the headers to wherever it points.
+          redirect: "error",
         });
       } catch (cause) {
         throw new TraxTransportError(`The host could not be reached: ${String(cause)}`, undefined, { cause });
       }
       let answer: unknown;
       try {
-        answer = await response.json();
+        answer = await readJson(response, options.maxResponseBytes);
       } catch (cause) {
+        if (cause instanceof RangeError) throw new TraxTransportError(cause.message, response.status, { cause });
         throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status, {
           cause,
         });
@@ -253,4 +269,94 @@ function withoutQuery(value: Record<string, unknown>): Record<string, unknown> {
 function withoutUndefined(values: unknown): Readonly<Record<string, unknown>> {
   if (!isRecord(values)) return {};
   return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
+}
+
+/**
+ * Refuses an absolute `http:` url whose host is not loopback (`localhost`, `127.0.0.0/8`, `::1`), since the
+ * headers would travel in cleartext; a relative url is the page's own origin and is accepted. `allowInsecure`
+ * lifts the refusal, for a network you trust.
+ */
+export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean | undefined): void {
+  if (allowInsecure) return;
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return;
+  }
+  if (url.protocol === "https:" || isLoopbackHost(url.hostname)) return;
+  throw new Error(
+    `The endpoint ${url.protocol}//${url.host} is not over TLS, so whatever authenticates the client would travel in cleartext. Use https://, a loopback host, or set allowInsecureTransport when the network is trusted.`,
+  );
+}
+
+/** The most bytes of an answer the client reads, unless the app names another limit: 16 MiB. */
+const defaultMaxResponseBytes = 16 * 1024 * 1024;
+
+/**
+ * Refuses a socket URL whose traffic would be in cleartext: `wss:` is accepted, `ws:` only to a loopback host
+ * (`localhost`, `127.0.0.0/8`, `::1`) or to the origin of a page that was itself served over `http:`, and anything
+ * that is not an absolute `ws:` or `wss:` URL is refused. `allowInsecure` lifts the refusal, for a network you
+ * trust. A page that builds its own graphql-ws client calls it on the URL first.
+ */
+export function requireSecureSocket(socketUrl: string, allowInsecure: boolean | undefined): void {
+  let url: URL;
+  try {
+    url = new URL(socketUrl);
+  } catch {
+    throw new Error(`The socket URL ${socketUrl} is not an absolute ws:// or wss:// URL.`);
+  }
+  if (url.protocol !== "ws:" && url.protocol !== "wss:")
+    throw new Error(`The socket URL ${url.protocol}//${url.host} is not a ws:// or wss:// URL.`);
+  if (allowInsecure || url.protocol === "wss:" || isLoopbackHost(url.hostname)) return;
+  // A page's own origin is trusted as a relative url is; outside a browser there is no page.
+  const page = (globalThis as { location?: { protocol: string; host: string } }).location;
+  if (page?.protocol === "http:" && page.host === url.host) return;
+  throw new Error(
+    `The socket ${url.protocol}//${url.host} is not over TLS, so whatever authenticates the client would travel in cleartext. Use wss://, a loopback host, or set allowInsecureTransport when the network is trusted.`,
+  );
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+}
+
+/**
+ * The answer's body as JSON, read to at most `maxBytes`: a longer one is cancelled and refused with a RangeError
+ * rather than held in memory.
+ */
+async function readJson(response: Response, maxBytes: number = defaultMaxResponseBytes): Promise<unknown> {
+  if (!(maxBytes > 0) || !Number.isFinite(maxBytes)) throw new RangeError(`maxResponseBytes must be a positive number, got ${maxBytes}.`);
+  const tooLarge = () => new RangeError(`The host answered with more than ${maxBytes} bytes, the most this client reads.`);
+  const declared = Number(response.headers?.get("Content-Length") ?? Number.NaN);
+  if (declared > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw tooLarge();
+  }
+  const reader = response.body?.getReader();
+  if (!reader) {
+    // A response with no body stream (an empty one, or a stand-in for fetch): its text, held to the same limit.
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > maxBytes) throw tooLarge();
+    return JSON.parse(text);
+  }
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
 }

@@ -41,8 +41,8 @@ public class RunProgressCrossNodeE2ETests
         "Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md";
 
     private const string Database = "trax_api_run_progress_cross_node";
-    private const string AliceKey = "cross-node-alice-key";
-    private const string BobKey = "cross-node-bob-key";
+    private const string AliceKey = "cross-node-alice-key-0123456789abcdefghi";
+    private const string BobKey = "cross-node-bob-key-0123456789abcdefghijk";
 
     private const string Fields = "runId state problem { code }";
     private const string EventFields =

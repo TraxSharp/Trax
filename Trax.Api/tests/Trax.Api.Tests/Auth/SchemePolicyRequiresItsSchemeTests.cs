@@ -41,7 +41,7 @@ namespace Trax.Api.Tests.Auth;
 public class SchemePolicyRequiresItsSchemeTests
 {
     private const string Adr = "docs/adr/0010-a-scheme-policy-requires-its-scheme.md";
-    private const string ApiKey = "scheme-policy-key";
+    private const string ApiKey = "scheme-policy-key-0123456789abcdefghijkl";
     private const string Issuer = "https://scheme-policy.example";
     private const string Audience = "scheme-policy";
     private static readonly byte[] JwtKey = Encoding.UTF8.GetBytes(new string('j', 32));
@@ -117,7 +117,9 @@ public class SchemePolicyRequiresItsSchemeTests
     [Test]
     public async Task EndpointGatedByTheCombinedPolicy_AdmitsAnApiKeyCaller()
     {
-        using var host = await StartAsync(g => g.RequireAuthorization());
+        using var host = await StartAsync(g =>
+            g.RequireAuthorization().GateOperationsToAuthenticatedUsers()
+        );
 
         var doc = await PostAsync(host, HealthQuery, apiKey: ApiKey);
 
@@ -132,7 +134,9 @@ public class SchemePolicyRequiresItsSchemeTests
     [Test]
     public async Task EndpointGatedByTheCombinedPolicy_AdmitsAJwtCaller()
     {
-        using var host = await StartAsync(g => g.RequireAuthorization());
+        using var host = await StartAsync(g =>
+            g.RequireAuthorization().GateOperationsToAuthenticatedUsers()
+        );
 
         var doc = await PostAsync(host, HealthQuery, bearer: SignJwt());
 
@@ -142,7 +146,9 @@ public class SchemePolicyRequiresItsSchemeTests
     [Test]
     public async Task EndpointGatedByTheCombinedPolicy_RefusesAnAnonymousCaller()
     {
-        using var host = await StartAsync(g => g.RequireAuthorization());
+        using var host = await StartAsync(g =>
+            g.RequireAuthorization().GateOperationsToAuthenticatedUsers()
+        );
 
         var doc = await PostAsync(host, HealthQuery);
 
@@ -152,7 +158,9 @@ public class SchemePolicyRequiresItsSchemeTests
     [Test]
     public async Task EndpointGatedByApiKeyPolicy_RefusesAJwtCaller()
     {
-        using var host = await StartAsync(g => g.RequireAuthorization(ApiKeyDefaults.PolicyName));
+        using var host = await StartAsync(g =>
+            g.RequireAuthorization(ApiKeyDefaults.PolicyName).GateOperationsToAuthenticatedUsers()
+        );
 
         var jwt = await PostAsync(host, HealthQuery, bearer: SignJwt());
         var key = await PostAsync(host, HealthQuery, apiKey: ApiKey);

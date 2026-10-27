@@ -27,6 +27,10 @@ dotnet new install Trax.Samples.Templates
 
 - `node` 22 or later on `PATH`, for `trax machine generate` and `trax client` (and `--check`), which generate twins
   with it. A CI image that runs them needs it too.
+- The .NET SDK, for `trax generate`, which runs `dotnet new trax-hub`. It runs the `dotnet` named by
+  `DOTNET_HOST_PATH` when that is an absolute path to a file (the .NET host sets it for a tool it runs), and
+  otherwise the first `dotnet` in an absolute `PATH` entry. The current directory is never searched, as with
+  `--node` below.
 
 ## Installation
 
@@ -132,7 +136,8 @@ with different values becomes `Status2` rather than reusing the first. An inline
 takes the name of a component schema.
 
 Descriptions and OpenAPI paths are copied as text, never refused. Each one is collapsed onto a
-single line, and escaped for where it lands: XML markup is escaped in `///` comments, and
+single line, with every control and format character (the bidirectional controls among them) made a
+space, and escaped for where it lands: XML markup is escaped in `///` comments, and
 backslashes and quotes are escaped in the `Description = "..."` string of the train attribute.
 
 [`trax machine new`](#trax-machine-new-name) holds its arguments to the same rule: the machine name must make a
@@ -220,6 +225,11 @@ MyProject/
   `Cannot read <path>: ...`.
   - **ManifestNames.cs**: centralized `const string` identifiers for each operation (kebab-case), matching the pattern used in the DistributedWorkers sample.
   - **Trains** are grouped into folders by noun (e.g., `createPlayer` and `getPlayer` both go under `Players/`).
+  - **Each train** carries `[TraxAuthorize(Roles = "User")]`, as the hub's own trains do, so a caller needs a
+    credential with the User role. In Development the hub registers a demo API key that holds it
+    (`X-Api-Key: demo-key-do-not-use-in-production`), so `dotnet run` works as generated; outside Development
+    every call is refused until you register real credentials. Change the roles, or set a `Policy`, per train;
+    use `[TraxAllowAnonymous]` only for a train anyone may call.
   - **Shared types** referenced by multiple operations are placed in `Models/`.
   - **Enums** are also placed in `Models/`.
   - **Junctions** contain a `throw new NotImplementedException()` with a TODO comment. This is where you add your business logic.
@@ -485,7 +495,8 @@ dotnet tool restore && dotnet tool run trax client --target react --manifest web
 | `--target` | The framework. `react`, the default, is the only one today. |
 | `--manifest` | The manifest the host wrote with `--trax-export-client`. Required, unless `--operations` is given. |
 | `--operations` | The operations schema, as SDL, in place of `--manifest`. Generates the client for documents that reach the operations surface, as the operations console's do. See [The operations console's client](#the-operations-consoles-client). |
-| `--out` | The directory the client is written to, inside the frontend's source. Required. A file `trax client` wrote under it that the manifest no longer generates is deleted, and a folder that leaves empty. A client module is its own when its first line is its header. A twin is when it is `<machine>/<machine>.machine.g.ts` or `.contexts.g.ts` with the twin generator's header for that machine, and the previous run served the machine: the `manifest.json` it left in `--out` names it, or `<machine>/<machine>.client.g.ts` is still there. With neither, a twin is kept, so one `trax machine generate` wrote is never deleted. Any other file is left alone, a linked folder is not entered, and a file that is not a regular one (a FIFO, a device) is not read. A link at a path it writes, or at a folder on the way there, is refused, and nothing is written. |
+| `--lang`, `--namespace` | With `--operations` only: the client's language, `typescript` (the default) or `csharp`, and the C# client's namespace (default `Trax.Operations`). See [The operations console's client](#the-operations-consoles-client). |
+| `--out` | The directory the client is written to, inside the frontend's source. Required. A file `trax client` wrote under it that the manifest (or with `--operations`, the documents) no longer generates is deleted, and a folder that leaves empty. Only files of the language being written are looked at: `*.g.ts`, or `*.g.cs` with `--lang csharp`, so the TypeScript and C# operations clients may share a folder or sit one inside the other. Two clients of the same kind may sit one inside the other as well: a folder below `--out` holding another one's root file (`index.g.ts`, or `Types.g.cs` for C#, with the same header) is not entered. A client whose files would land in another one's folder, or whose `--out` is inside a folder another one writes (`documents/`, `Documents/` in C#, a machine's folder), is refused before anything is written, since the two would take each other's files for stale ones. A client module is its own when its first line is its header. A twin is when it is `<machine>/<machine>.machine.g.ts` or `.contexts.g.ts` with the twin generator's header for that machine, and the previous run served the machine: the `manifest.json` it left in `--out` names it, or `<machine>/<machine>.client.g.ts` is still there. With neither, a twin is kept, so one `trax machine generate` wrote is never deleted. Any other file is left alone, a linked folder is not entered, and a file that is not a regular one (a FIFO, a device) is not read. A link at a path it writes, or at a folder on the way there, is refused, and nothing is written. |
 | `--check` | Writes nothing; exits 1 when the client in `--out` is not what the manifest generates, naming each file. A checkout that writes CRLF is not a difference. |
 | `--specifier` | The module the client imports the runtime from (default `@traxsharp/state-machine`). |
 | `--tools-dir`, `--node` | As for `trax machine generate`: the twins are generated by the engine's own generator, under node 22 or later. |
@@ -496,7 +507,7 @@ It writes, under `--out`:
 | File | What it holds |
 | --- | --- |
 | `format.g.ts` | The client format the code was generated for, checked against the installed runtime (`requireClientFormat`) before any other generated module runs. |
-| `client.g.ts` | `configureTrax({ url, socketUrl, headers?, connectionParams?, user?, allowInsecureTransport? })`, which the app calls at startup and again when another user signs in, the shared socket and `TraxOperationError`. `user` is the signed-in user's id, which the remembered machines are kept under. Calling it again closes the socket, a machine server made before refuses to send (`CONNECTION_CHANGED`: its requests reject with it, and a controller over it stops with it rather than subscribing again), and every mounted machine hook renders again onto a server over the new connection and the new user, showing nothing of the instance before until the new one answers. Headers are read per request. `socketUrl` is an absolute `ws://` or `wss://` URL: build it from `location` (`` `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/trax/graphql` ``) rather than passing a path. A credential such as an API key goes in both `headers`, for HTTP requests, and `connectionParams`, for the socket, since a browser's WebSocket carries no custom headers. Every train function and machine server refuses an absolute `http:` `url` whose host is not loopback (`localhost`, `127.0.0.0/8`, `::1`), since the headers would travel in cleartext; a relative `url` is the page's own origin and is accepted. `allowInsecureTransport: true` lifts the refusal, and is only for a network you trust. Nothing about the host is generated into it. |
+| `client.g.ts` | `configureTrax({ url, socketUrl, headers?, connectionParams?, user?, allowInsecureTransport?, maxResponseBytes? })`, which the app calls at startup and again when another user signs in, the shared socket and `TraxOperationError`. `user` is the signed-in user's id, which the remembered machines are kept under. Calling it again closes the socket, a machine server made before refuses to send (`CONNECTION_CHANGED`: its requests reject with it, and a controller over it stops with it rather than subscribing again), and every mounted machine hook renders again onto a server over the new connection and the new user, showing nothing of the instance before until the new one answers. Headers are read per request. `socketUrl` is an absolute `ws://` or `wss://` URL: build it from `location` (`` `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/trax/graphql` ``) rather than passing a path. A credential such as an API key goes in both `headers`, for HTTP requests, and `connectionParams`, for the socket, since a browser's WebSocket carries no custom headers. Every train function and machine server refuses an absolute `http:` `url` whose host is not loopback (`localhost`, `127.0.0.0/8`, `::1`), since the headers would travel in cleartext; a relative `url` is the page's own origin and is accepted. The socket is held to the same rule: `wss://` is accepted, and `ws://` only to a loopback host or to the origin of a page served over `http:`; anything that is not an absolute `ws://` or `wss://` URL is refused. `allowInsecureTransport: true` lifts both refusals, and is only for a network you trust. `requireSecureSocket(socketUrl, allowInsecureTransport)` is exported for a page that opens its own graphql-ws client. A train function follows no redirect and reads at most `maxResponseBytes` of an answer (16 MiB when not given), refusing a longer one. Nothing about the host is generated into it. |
 | `<machine>/<machine>.machine.g.ts`, `<machine>.contexts.g.ts` | The machine's twin. |
 | `<machine>/<machine>.client.g.ts` | The machine's documents by id, `<machine>Server()`, `use<Machine>(options)` over `useServerMachine`, which keeps a start in flight under `trax-start:<machine id>.<user>`, and `useRemembered<Machine>(options)` over `useRememberedMachine`, which keeps the instance of the `user` given to `configureTrax` across visits under `trax.<machine id>.<user>` (`rememberKey` replaces the `trax.<machine id>`). |
 | `types.g.ts` | With `--documents`, or when a train can be followed: the enums and inputs the trains and query models take, as TypeScript, but the filter and sort inputs, which a document writes in its text. An answer's object types are not declared here: each is typed where it is answered, so no type promises a field its document does not fetch. To name a part of an answer, index the result type (`PaymentsListChargesResult["charges"][number]`). |
@@ -547,11 +558,32 @@ under `--out`:
 
 | File | What it holds |
 | --- | --- |
-| `client.g.ts` | The runtime, which imports only `graphql-ws`. `configureTraxOperations(transport)`, `execute`, `send` and `subscribe`, which go through the transport the app gives it, and `httpTransport({ url, socketUrl, headers?, connectionParams?, byId?, socket?, fetch? })`: every request as POST, one socket for the streams. A document goes by its id when `byId` says so (by default, when it has one), with no text; otherwise as text. `TraxOperationError` holds the errors of an answer, `TraxTransportError` a request that got none. |
+| `client.g.ts` | The runtime, which imports only `graphql-ws`. `configureTraxOperations(transport)`, `execute`, `send` and `subscribe`, which go through the transport the app gives it, and `httpTransport({ url, socketUrl, headers?, connectionParams?, byId?, socket?, fetch?, allowInsecureTransport?, maxResponseBytes? })`: every request as POST, one socket for the streams. It refuses, when it is made, an absolute `http:` `url` and a `ws:` `socketUrl` whose host is not loopback (a `ws:` socket to the origin of a page served over `http:` is accepted, as a relative `url` is), unless `allowInsecureTransport: true` says the network is trusted; `requireSecureEndpoint` and `requireSecureSocket` are exported for a page that builds its own client. A request follows no redirect, and an answer longer than `maxResponseBytes` (16 MiB when not given) is a `TraxTransportError`. A document goes by its id when `byId` says so (by default, when it has one), with no text; otherwise as text. `TraxOperationError` holds the errors of an answer, `TraxTransportError` a request that got none. |
 | `types.g.ts` | The enums and inputs the schema declares. |
 | `documents/<operation>.g.ts` | `<operation>Document`, the operation's name, kind, id (`trax_console_<name>_<hash of its text>`, or `null` for persisted-operation management, which a host runs as text) and text; `<Operation>Variables` and `<Operation>Result`, typed from the schema; and `<operation>(variables)`, or for a subscription `<operation>(variables, sink)`, which returns the function that stops it. |
 | `console-documents.json` | Every document with an id, `{ "format": 1, "documents": [{ "name", "text" }] }` in name order: the file `Trax.Api.Dashboard` embeds and a host registers. |
 | `index.g.ts` | Everything above re-exported. |
+
+A .NET operator frontend, such as `trax-console`, gets the same client in C# from the same documents and the same
+checks, over [Trax.Client](/docs/sdk-reference/client-api/dotnet-client):
+
+```bash
+trax client --operations operations.graphql --documents 'src/graphql/*.graphql' --lang csharp --namespace My.Console.Operations --out Operations
+```
+
+| File | What it holds |
+| --- | --- |
+| `Types.g.cs` | The enums and inputs the schema declares. An enum value is named in PascalCase and sent as written (`LAST24_HOURS` is `Last24Hours`). A value a newer host sends that the enum lacks is read rather than failing the answer, written back as the host sent it, and told apart with `TraxEnum.IsUnknown`. |
+| `Documents/<Operation>.g.cs` | `<Operation>Variables`, a record whose required variables are `required` properties and whose others are `Optional<T>`, left out of the request unless set (set to `null`, they send null); `<Operation>Result` and a record per object it selects, named by the path to it (`ExecutionsResultOperationsExecutionsItems`); `TraxOperations.<Operation>`, the document with its name, kind, id and the text the id is computed from, byte for byte; and `client.<Operation>Async(variables)` on `TraxClient`, or for a subscription `client.<Operation>(variables, onEvent)`, which returns the handle that stops it. A document with no variables takes none, and a query or mutation whose variables may all be left out can be sent without them (`client.RunsAsync()`). |
+
+Every type is `internal`: the client belongs to the app it is written into. What it takes from Trax.Client and the BCL
+is written from `global::`, so a schema type named `Optional` or `TraxClient` gets its own record and changes nothing
+else. A property that would take its record's name, or a member every record has (`Equals`, `ToString`,
+`EqualityContract`, `GetType` and the like), gets `Value` after it (`ToStringValue`). Two names that would still
+collide are refused, naming both: a document named `TraxOperations`, a subscription named `TraxOperationsClient`, a
+schema type named like a document's `<Operation>Variables` or `<Operation>Result`. It writes no `console-documents.json`;
+the host registers the documents from the TypeScript client's. A union or interface selection is refused, since the
+C# client does not type one yet; the console selects none.
 
 ## SDK Reference
 

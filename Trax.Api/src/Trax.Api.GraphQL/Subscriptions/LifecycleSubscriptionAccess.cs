@@ -15,16 +15,17 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// <remarks>
 /// <para>
 /// <b>Operations view.</b> When the operations surface is exposed, a subscriber that satisfies the
-/// operations authorization (the <c>GateOperations(...)</c> gate, or none when the host chose
-/// <c>AllowAnonymousOperations()</c> or gated the whole endpoint) sees every train, with the same
-/// detail <c>operations.executions</c> shows.
+/// operations gate (<c>GateOperations(...)</c> or <c>GateOperationsToAuthenticatedUsers()</c>, or
+/// anyone when the host chose <c>AllowAnonymousOperations()</c>) sees every train, with the same
+/// detail <c>operations.executions</c> shows. With no gate declared, nobody does.
 /// </para>
 /// <para>
 /// <b>Broadcast view.</b> Anyone else sees only <c>[TraxBroadcast]</c> trains whose own posture
 /// they satisfy: <c>[TraxAllowAnonymous]</c> admits every subscriber, <c>[TraxAuthorize]</c> an
 /// authenticated one that meets its policies and roles, and a train that declares neither is
 /// admitted only behind an endpoint policy, which startup requires of it. A failure reason is shown only when the train raised it as a <c>TrainException</c>,
-/// whose message is written for clients; host detail is withheld.
+/// whose message is written for clients; host detail is withheld, and so is a run's output unless
+/// the host named the train with <c>AllowOutputForBroadcastSubscribers()</c>.
 /// </para>
 /// <para>
 /// A subscriber who could receive nothing is refused when subscribing.
@@ -62,6 +63,7 @@ internal sealed class LifecycleSubscriptionAccess(
         return new LifecycleVisibility(All: false, trains)
         {
             JunctionAnswers = streamOptions.IncludeJunctionAnswersForBroadcastSubscribers,
+            OutputTrains = configuration.BroadcastOutputTrains,
         };
     }
 
@@ -86,11 +88,11 @@ internal sealed class LifecycleSubscriptionAccess(
         if (!OperationsExposed)
             return false;
 
-        // No gate of its own: the host either published the namespace deliberately or gated the
-        // whole endpoint, which the request pipeline has already enforced for this subscriber.
+        // No gate of its own is a public namespace only when the host said so. The endpoint gate
+        // never stands in for it: it admits the application's users, not its operators.
         var gate = configuration.OperationsAuthorizeAttributes;
         if (gate.Count == 0)
-            return true;
+            return configuration.AnonymousOperationsAllowed;
 
         if (!IsAuthenticated(user))
             return false;
@@ -158,6 +160,14 @@ internal sealed record LifecycleVisibility(bool All, IReadOnlySet<string> Trains
     public bool JunctionAnswers { get; init; }
 
     /// <summary>
+    /// Outside the operations view, the trains whose events keep <c>output</c>: the ones the host
+    /// named with <c>AllowOutputForBroadcastSubscribers()</c>. Every other train's output is
+    /// withheld.
+    /// </summary>
+    public IReadOnlySet<string> OutputTrains { get; init; } =
+        new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>
     /// The event as this subscriber should see it, or <c>null</c> when it should not see it.
     /// </summary>
     public TrainLifecycleEvent? Present(TrainLifecycleEvent e)
@@ -175,6 +185,7 @@ internal sealed record LifecycleVisibility(bool All, IReadOnlySet<string> Trains
                 : string.Equals(e.FailureException, "TrainException", StringComparison.Ordinal)
                     ? e.FailureReason
                 : LifecycleSubscriptionAccess.MaskedFailureReason,
+            Output = OutputTrains.Contains(e.TrainName) ? e.Output : null,
             HostName = null,
             HostEnvironment = null,
         };

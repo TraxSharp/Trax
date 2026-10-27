@@ -68,7 +68,8 @@ Roles are never checked at startup: Trax has no list of the roles that can exist
 
 | Cause | Raised | Message begins | Answer |
 |---|---|---|---|
-| `ExposeOperationQueries()` or `ExposeOperationMutations()` with no gate: no `GateOperations(...)`, no `RequireAuthorization()`, no `AllowAnonymousOperations()` | `AddTraxGraphQL` | `ExposeOperationMutations() exposes scheduler-control mutations ... but the GraphQL endpoint is not gated ...` (`ExposeOperationQueries() exposes the scheduler control plane's read surface ...` when only the queries are exposed) | `GateOperations(policy, roles)`, `RequireAuthorization()`, or `AllowAnonymousOperations()` |
+| `ExposeOperationQueries()` or `ExposeOperationMutations()` with no gate: no `GateOperations(...)`, no `GateOperationsToAuthenticatedUsers()`, no `AllowAnonymousOperations()` | `AddTraxGraphQL` | `ExposeOperationMutations() exposes scheduler-control mutations ... but the namespace carries no gate of its own ...` (`ExposeOperationQueries() exposes the scheduler control plane's read surface ...` when only the queries are exposed) | `GateOperations(policy, roles)`, `GateOperationsToAuthenticatedUsers()`, or `AllowAnonymousOperations()` |
+| The same, on an endpoint gated with `RequireAuthorization()` | `AddTraxGraphQL` | `... and the namespace carries no gate of its own. RequireAuthorization() decides who may call the endpoint ...` | `GateOperations(policy, roles)` or `GateOperationsToAuthenticatedUsers()`; the endpoint gate admits the application's users, not its operators |
 | `GateOperations()` with neither a policy nor roles | The builder call | `GateOperations() needs a policy or roles: ...` | Name a policy or roles, or call `GateOperationsToAuthenticatedUsers()` |
 | `GateOperations(roles: ...)` with a list that names no role (`","`) | The builder call | `GateOperations(roles: "<list>") names no role: ...` | Name one or more roles |
 | `GateOperations(...)` with the namespace not exposed | `AddTraxGraphQL` | `GateOperations() was called but the operations namespace is not exposed ...` | Expose it, or remove the call |
@@ -90,6 +91,7 @@ Roles are never checked at startup: Trax has no list of the roles that can exist
 | Cause | Raised | Message begins | Answer |
 |---|---|---|---|
 | An API key containing `do-not-use-in-production` registered with `keys.Add(...)`, outside Development | Host start | `AddTraxApiKeyAuth() registered a key containing 'do-not-use-in-production', which marks a published demo key, ...` | Register demo keys only inside `IsDevelopment()`; elsewhere `AddHashed(...)` or a resolver |
+| An API key shorter than 32 characters registered with `keys.Add(...)`, outside Development | Host start | `AddTraxApiKeyAuth() registered a key shorter than 32 characters, and the environment is '<name>'. ...` | Keys of at least 32 random characters, from a secret store through `AddHashed(...)` or a resolver |
 | A JWT bearer scheme whose signing key contains `do-not-use-in-production`, outside Development, however the key was set | Host start | `The JWT bearer scheme '<scheme>' validates tokens with a signing key containing 'do-not-use-in-production', ...` | Load the key from a secret store, or `UseAuthority(...)` |
 
 A key fetched from an authority's JWKS, or produced by an `IssuerSigningKeyResolver`, does not exist

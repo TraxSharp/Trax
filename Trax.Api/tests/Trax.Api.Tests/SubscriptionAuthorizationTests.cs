@@ -279,9 +279,61 @@ public class SubscriptionAuthorizationTests
     }
 
     [Test]
-    public async Task ObjectOutput_IsDeliveredAsJson()
+    public async Task BroadcastSubscriber_DoesNotReceiveOutput_UnlessTheTrainIsOptedIn()
     {
         var executor = await BuildAsync(g => g, Broadcast<IPublicTrain>(anonymous: true));
+        await using var sub = await SubscribeAsync(executor, LifecycleQuery, Anonymous());
+
+        var received = await sub.NextAsync(() =>
+            Publish(Event(typeof(IPublicTrain).FullName!, output: """{"total":3}"""))
+        );
+
+        received["trainName"].Should().Be(typeof(IPublicTrain).FullName);
+        received["output"]
+            .Should()
+            .BeNull(
+                "a train's posture admits a subscriber to every run, so output is opt-in, per "
+                    + Adr
+            );
+    }
+
+    [Test]
+    public async Task OperationsSubscriber_ReceivesOutput_WithoutTheOptIn()
+    {
+        var executor = await BuildAsync(
+            g => g.ExposeOperationQueries().GateOperations(roles: "Admin"),
+            Broadcast<IPublicTrain>(anonymous: true)
+        );
+        await using var sub = await SubscribeAsync(executor, LifecycleQuery, User("Admin"));
+
+        var received = await sub.NextAsync(() =>
+            Publish(Event(typeof(IPublicTrain).FullName!, output: """{"total":3}"""))
+        );
+
+        received["output"].Should().NotBeNull("the operations view sees every run's detail");
+    }
+
+    [Test]
+    public async Task OutputOptIn_ForATrainThatIsNotRegistered_FailsAtStartup()
+    {
+        var act = async () =>
+            await BuildAsync(
+                g => g.AllowOutputForBroadcastSubscribers<IPublicTrain>(),
+                Broadcast<IAdminOnlyTrain>(roles: "Admin")
+            );
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*AllowOutputForBroadcastSubscribers*not a registered train*");
+    }
+
+    [Test]
+    public async Task ObjectOutput_IsDeliveredAsJson()
+    {
+        var executor = await BuildAsync(
+            g => g.AllowOutputForBroadcastSubscribers<IPublicTrain>(),
+            Broadcast<IPublicTrain>(anonymous: true)
+        );
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, Anonymous());
 
         var received = await sub.NextAsync(() =>

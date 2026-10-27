@@ -43,7 +43,8 @@ public static TBuilder AddJunctionLogger<TBuilder>(
 Registers the logger's factory with `AddJunctionEffect`, as a toggleable junction effect, and sets the builder's
 `SerializeJunctionData`. Entries are written at the [effect log level](/docs/sdk-reference/configuration/set-effect-log-level)
 under the category `Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider.JunctionLoggerProvider`.
-Only `EffectJunction`s are logged.
+Only `EffectJunction`s are logged. Each entry carries the junction's metadata as a masked JSON string (the
+argument `{JunctionMetadata}` before the junction runs, `{Metadata}` after), never the record itself.
 
 With `serializeJunctionData: true`, the output copy follows the train's lifecycle hook output policy:
 

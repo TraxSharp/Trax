@@ -43,10 +43,11 @@ public partial class TraxGraphQLBuilder
     internal bool AnonymousOperationsAllowed { get; private set; }
 
     /// <summary>
-    /// Acknowledges that the operations (admin) namespace is reachable without the builder's
-    /// <c>RequireAuthorization()</c> gate. Exposing <see cref="ExposeOperationMutations"/> without
-    /// a gate otherwise fails at startup: those mutations drive the scheduler directly, so
-    /// anonymous access to them must be a deliberate choice, never a forgotten one. Call this only
+    /// Acknowledges that the operations (admin) namespace carries no gate of its own. Exposing
+    /// the namespace without <see cref="GateOperations"/>,
+    /// <see cref="GateOperationsToAuthenticatedUsers"/> or this otherwise fails at startup: its
+    /// mutations drive the scheduler directly, so anonymous access to them must be a deliberate
+    /// choice, never a forgotten one. Call this only
     /// when the surface is protected another way (a private network, a sidecar, ASP.NET endpoint
     /// authorization) or is intentionally public. It has no effect on the schema; it only records
     /// that anonymous operations are intended so the startup guard stays quiet.
@@ -68,11 +69,10 @@ public partial class TraxGraphQLBuilder
     /// while a public train or query model on the same endpoint stays reachable.
     /// </summary>
     /// <remarks>
-    /// This is the posture an open endpoint actually wants. <c>RequireAuthorization()</c> gates
-    /// the whole endpoint, which a host with pre-login surfaces cannot do, and
-    /// <see cref="AllowAnonymousOperations"/> publishes the control plane. Without this there was
-    /// no third answer, so a host that needed one reached for the anonymous opt-in and got a
-    /// public scheduler console.
+    /// Exposing the namespace requires this, <see cref="GateOperationsToAuthenticatedUsers"/> or
+    /// <see cref="AllowAnonymousOperations"/>. <c>RequireAuthorization()</c> does not count: it
+    /// decides who may call the endpoint, which is every user of the application, not who may
+    /// operate it. A host that gates the endpoint gates this namespace as well.
     /// <para>
     /// A policy or roles is required. The namespace reads execution inputs, outputs, stack
     /// traces and logs, and requeues, cancels and reconfigures, so "any signed-in user" is not a

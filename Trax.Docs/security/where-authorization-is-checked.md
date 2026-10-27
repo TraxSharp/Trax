@@ -85,10 +85,14 @@ Everything downstream is trusted infrastructure:
 
 - The scheduler dequeues and calls `ITrainBus.RunAsync` directly, which never reaches the enforcer.
 - A remote worker runs what the scheduler sends it. A queued job goes through the job runner and
-  `ITrainBus`; a remote run (`UseRemoteRun`) goes through `ITrainExecutionService` inside a trusted
-  scope (`"scheduler.remote-run"`), so the enforcer skips it.
+  `ITrainBus`. A remote run (`UseRemoteRun`) has the train it names authorized inside a trusted
+  scope (`"scheduler.remote-run"`), so the enforcer skips that one check, and then runs the train
+  outside the scope. A gated train that train queues or runs from its junctions is checked, and
+  refused when there is no caller to check it against, as it would be on the scheduler's own host.
 - A system-owned state machine instance starts its trains inside a trusted scope, as a scheduled
-  manifest would. A user-owned instance's trains are authorized against that user.
+  manifest would, so it may invoke only a train that declares no `[TraxAuthorize]`: the startup
+  check refuses such a machine and the launcher refuses such a run. A user-owned instance's trains
+  are authorized against that user.
 
 So a train can carry `[TraxAuthorize("Admin")]` and still be scheduled with `AddScheduler()` or run
 on a remote worker. Re-checking it there would need a caller who is not present: a scheduled run
@@ -106,8 +110,9 @@ Because a remote worker trusts what it is sent, its own endpoints are where that
 Every runner entry point refuses to start without an authorization posture: a signing key shared
 with the scheduler, a policy that admits only the scheduler, or an explicit, logged
 `AllowUnsignedRequests()`. See [Remote execution](/docs/scheduler/remote-execution). Inside a
-remote run `TraxCaller.IsTrusted` is true, so anything keyed on it, row-level filters included,
-treats the request as the scheduler's.
+remote run's train `TraxCaller.IsTrusted` is false: the trusted scope covers only the
+authorization of the train the request names, so anything keyed on it, row-level filters
+included, treats the train's own work as it would on any other flow.
 
 ## The operations surface and the dashboard
 

@@ -46,7 +46,14 @@ A subscriber admitted to some broadcast trains is not refused; it simply never r
 
 A broadcast train streams its runs to subscribers, so it states who may receive them, the same way a train exposed as a query or mutation does. On an open endpoint it must carry `[TraxAuthorize]` (optionally with policies or roles) or `[TraxAllowAnonymous]`, or the host does not start. Each event then reaches only the subscribers that posture admits. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#who-receives-what).
 
-The posture admits a subscriber to **every run** of the train, not only the runs it started. A completion carries the run's output, so every caller the train admits sees every run's output. A train whose output belongs to one user or one room is published through a subscription field that checks the subscriber against the run ([Add a subscription field](/docs/api/add-a-subscription-field)), or keeps the output out with [`ExcludeOutput`](/docs/sdk-reference/configuration/save-train-parameters) or [`[TraxSensitive]`](/docs/sdk-reference/attributes/trax-sensitive).
+The posture admits a subscriber to **every run** of the train, not only the runs it started. So a broadcast subscriber does not receive a run's `output`: the field is `null` for it unless the host opts the train in on the GraphQL builder, which then sends every run's output to every caller the train admits:
+
+```csharp compile
+builder.Services.AddTraxGraphQL(graphql => graphql
+    .AllowOutputForBroadcastSubscribers<ILookupPlayerTrain>());
+```
+
+Opt a train in only when its output is meant for everyone its posture admits. The operations view always receives output. A train whose output belongs to one user or one room is published through a subscription field that checks the subscriber against the run ([Add a subscription field](/docs/api/add-a-subscription-field)). [`ExcludeOutput`](/docs/sdk-reference/configuration/save-train-parameters) and [`[TraxSensitive]`](/docs/sdk-reference/attributes/trax-sensitive) keep an output, or part of it, out of every event, the operations view's included.
 
 ### Combined with TraxQuery and TraxMutation
 
@@ -76,7 +83,7 @@ public class LookupPlayerTrain : ServiceTrain<LookupPlayerInput, LookupPlayerOut
 }
 ```
 
-When `LookupPlayerTrain` completes, subscribers to `onTrainCompleted` that its posture admits receive a `TrainLifecycleEvent` with the train name, state, and timestamp.
+When `LookupPlayerTrain` completes, subscribers to `onTrainCompleted` that its posture admits receive a `TrainLifecycleEvent` with the train name, state, and timestamp, and `output` only if the host called `AllowOutputForBroadcastSubscribers<ILookupPlayerTrain>()`.
 
 ## See also
 

@@ -255,7 +255,9 @@ public class TrainExecutionService(
     /// current caller, the user entering the state; a system-owned instance's, including one entered
     /// by the outcome of the run before it (<see cref="InvokedTrainLaunch.FromOutcome"/>), inside the
     /// trusted execution scope, as a scheduled manifest run is. A user-owned instance never launches
-    /// from an outcome: no user is present to authorize it, so it is refused.
+    /// from an outcome: no user is present to authorize it, so it is refused. A system-owned instance
+    /// never launches a train that declares <c>[TraxAuthorize]</c>: the trusted scope checks no user's
+    /// requirements, so that is refused too.
     /// </summary>
     /// <remarks>
     /// An invoked train may not stage its entry (central ADR 0018) or run an <c>OnQueue</c> hook:
@@ -263,7 +265,8 @@ public class TrainExecutionService(
     /// refuses such a train; this refuses it again rather than queue it any other way.
     /// </remarks>
     /// <exception cref="UnauthorizedAccessException">
-    /// The caller may not run the train, or a user-owned instance's run was launched from an outcome.
+    /// The caller may not run the train, a user-owned instance's run was launched from an outcome, or a
+    /// system-owned instance's train declares <c>[TraxAuthorize]</c>.
     /// </exception>
     /// <exception cref="InvalidOperationException">The train defers promotion or has an <c>OnQueue</c> hook.</exception>
     internal async Task<QueueTrainResult> QueueInvokedAsync(
@@ -307,9 +310,18 @@ public class TrainExecutionService(
                     + "system-owned machine chains runs through outcomes."
             );
 
-        // A system-owned instance's run is authorized as a scheduled manifest run is.
+        // A system-owned instance's run is authorized as a scheduled manifest run is. The trusted scope does not
+        // check a user's requirements, so a train that declares any is refused here, fail-closed, as the
+        // state-machine startup check refuses it, rather than approved without a user.
         if (launch.InvokedBy.OwnerKind == SnapshotOwnerKind.System)
         {
+            if (registration.HasAuthorizeAttribute)
+                throw new UnauthorizedAccessException(
+                    $"{registration.ServiceTypeName} declares [TraxAuthorize], and a system-owned instance of "
+                        + $"'{launch.InvokedBy.Machine}' has no user to check it against. A system-owned machine "
+                        + "invokes only a train with no [TraxAuthorize]."
+                );
+
             using (
                 serviceProvider
                     .GetRequiredService<ITrustedExecutionScope>()
@@ -437,6 +449,34 @@ public class TrainExecutionService(
         ArgumentNullException.ThrowIfNull(options);
         var (registration, input) = await PrepareCoreAsync(trainName, inputJson, ct);
 
+        return await ExecuteAsync(registration, input, options, ct);
+    }
+
+    /// <summary>
+    /// Runs a train <see cref="PrepareAsync"/> already found, authorized and read the input of, as
+    /// <see cref="RunAsync(string, string, RunTrainOptions, CancellationToken)"/> runs it after the
+    /// same steps. A remote runner authorizes the named train inside its trusted scope and runs it
+    /// here, outside the scope, so what the train itself queues or runs is checked as on any other
+    /// flow.
+    /// </summary>
+    internal Task<RunTrainResult> RunPreparedAsync(
+        PreparedTrain prepared,
+        RunTrainOptions options,
+        CancellationToken ct
+    )
+    {
+        ArgumentNullException.ThrowIfNull(prepared);
+        ArgumentNullException.ThrowIfNull(options);
+        return ExecuteAsync(prepared.Registration, prepared.Input, options, ct);
+    }
+
+    private async Task<RunTrainResult> ExecuteAsync(
+        TrainRegistration registration,
+        object input,
+        RunTrainOptions options,
+        CancellationToken ct
+    )
+    {
         registration.ServiceType.FullName.AssertLoaded();
 
         using var permit = await concurrencyLimiter.AcquireAsync(
@@ -992,8 +1032,9 @@ public class TrainExecutionService(
             return;
         }
 
-        // Trusted infrastructure (a scheduler pipeline, a remote job runner, the dashboard's
-        // admin surface) was authorized at its own gate, and an enforcer would skip it too.
+        // Trusted infrastructure (a remote runner authorizing the train a run names, a
+        // system-owned machine's launch) was authorized at its own gate, and an enforcer would
+        // skip it too.
         if (serviceProvider.GetService<ITrustedExecutionScope>() is { IsTrusted: true })
             return;
 

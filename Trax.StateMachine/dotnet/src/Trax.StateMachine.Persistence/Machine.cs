@@ -276,10 +276,15 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
 
     // The generic save serves only machines with no server-side behaviour: an event or a start gated by a role or a
     // policy, an invoked train, an effect or a timer each move the machine through a declared event, the start's rule
-    // or the server, which the save would step around.
+    // or the server, which the save would step around. So does anything an edge or the start decides or computes: a
+    // guard, a reducer that changes the context, a custom guard or reducer bound by name, a start that reduces its
+    // input. A save would store a state or a context none of them let through.
     // A child machine ends its parent's wait, so a save, which could put it in its end state, is refused too.
     private bool HasServerBehaviour =>
         Built.Rules.AnyGated
+        || Built.HasEdgeLogic
+        || Built.BindsCustomHandlers
+        || Built.StartReducesInput
         || Built.Invokes.Count > 0
         || Built.Effects.Count > 0
         || Built.Timers.Count > 0

@@ -133,6 +133,21 @@ public sealed class RunnerRequestVerifier
     public bool RequiresSignature => _options.SigningKey is not null;
 
     /// <summary>
+    /// The <see cref="RunnerRequestSignature.ResponseHeaderName"/> value for the answer to an
+    /// accepted request, or null with no signing key configured: a runner that accepts unsigned
+    /// requests answers unsigned. <paramref name="requestSignature"/> is the signature the request
+    /// was accepted with, which binds the answer to that request.
+    /// </summary>
+    internal string? SignResponse(
+        RunnerRequestPurpose purpose,
+        string? requestSignature,
+        ReadOnlySpan<byte> body
+    ) =>
+        _options.SigningKey is { } key
+            ? RunnerRequestSignature.CreateResponse(key, purpose, requestSignature, body)
+            : null;
+
+    /// <summary>
     /// Checks what can be checked of <paramref name="signature"/> without the body: that it is
     /// present and well formed, and, when <paramref name="requireFresh"/>, that its timestamp is
     /// within <see cref="TraxJobRunnerOptions.MaxClockSkew"/>. With no signing key configured,

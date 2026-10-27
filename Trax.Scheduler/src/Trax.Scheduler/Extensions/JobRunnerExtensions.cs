@@ -233,6 +233,11 @@ public static class JobRunnerExtensions
     )
     {
         var runnerOptions = RequirePosture(endpoints, route);
+        TraxRequestHandler.WarnIfExecutionServiceReplaced(
+            endpoints.ServiceProvider,
+            endpoints.ServiceProvider.GetRequiredService<ILogger<TraxRequestHandler>>(),
+            route
+        );
 
         var builder = endpoints
             .MapPost(
@@ -252,12 +257,10 @@ public static class JobRunnerExtensions
                     if (request is null)
                         return refused!;
 
+                    RemoteRunResponse response;
                     try
                     {
-                        return Results.Json(
-                            await handler.RunTrainAsync(request),
-                            RemoteRunJson.Write
-                        );
+                        response = await handler.RunTrainAsync(request);
                     }
                     catch (Exception ex)
                     {
@@ -266,16 +269,39 @@ public static class JobRunnerExtensions
                             "Remote run execution failed for train {TrainName}",
                             request.TrainName
                         );
-                        return Results.Json(
-                            TraxRequestHandler.BuildErrorResponse(ex),
-                            RemoteRunJson.Write
-                        );
+                        response = TraxRequestHandler.BuildErrorResponse(ex);
                     }
+
+                    return SignedRunResponse(httpRequest, verifier, response);
                 }
             )
             .Accepts<RemoteRunRequest>("application/json");
 
         return ApplyPolicy(builder, runnerOptions);
+    }
+
+    /// <summary>
+    /// A run's answer, written as the exact bytes it is signed over. With a signing key it carries
+    /// <see cref="RunnerRequestSignature.ResponseHeaderName"/>, bound to the request it answers, so
+    /// the scheduler accepts it only as the answer to that request; without one it goes unsigned.
+    /// </summary>
+    internal static IResult SignedRunResponse(
+        HttpRequest httpRequest,
+        RunnerRequestVerifier verifier,
+        RemoteRunResponse response
+    )
+    {
+        var body = JsonSerializer.SerializeToUtf8Bytes(response, RemoteRunJson.Write);
+        var signature = verifier.SignResponse(
+            RunnerRequestPurpose.Run,
+            httpRequest.Headers[RunnerRequestSignature.HeaderName].ToString(),
+            body
+        );
+        if (signature is not null)
+            httpRequest.HttpContext.Response.Headers[RunnerRequestSignature.ResponseHeaderName] =
+                signature;
+
+        return Results.Bytes(body, "application/json; charset=utf-8");
     }
 
     /// <summary>

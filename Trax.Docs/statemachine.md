@@ -98,8 +98,8 @@ Two write paths have different trust levels. Autosave is the soft path: the clie
 server validates it and stores it. Advance is the authoritative path: the client sends only a trigger, and the
 server re-drives the transition from the stored snapshot, never trusting a client-computed state. The soft path
 serves only machines with no server-side behaviour: a machine with an event or a start gated by a role or a policy,
-a timer, an invoked train or an effect refuses every save as `SAVE_NOT_ALLOWED`, and moves only through its declared
-events.
+a timer, an invoked train, an effect, a guard, a reducer other than `Keep`, a custom guard or reducer, or a start that
+reduces its input refuses every save as `SAVE_NOT_ALLOWED`, and moves only through its declared events.
 
 Autosave stores the context the client wrote, so any value an effect will act on has to be held to its true value
 by the state's rule, not just to its type. A checkout whose context carries a `total` holds

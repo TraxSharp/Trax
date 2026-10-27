@@ -47,7 +47,8 @@ public class DemoApiKeyEnvironmentTests
     [Test]
     public async Task An_unmarked_key_starts_outside_Development()
     {
-        var act = () => StartAsync(Environments.Production, "a-real-key-from-a-secret-store");
+        var act = () =>
+            StartAsync(Environments.Production, "a-real-key-from-a-secret-store-0123456789");
 
         await act.Should().NotThrowAsync();
     }

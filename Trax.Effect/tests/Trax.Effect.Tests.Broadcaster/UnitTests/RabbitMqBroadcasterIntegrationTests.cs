@@ -32,6 +32,7 @@ public class RabbitMqBroadcasterIntegrationTests
         new()
         {
             ConnectionString = AmqpUri,
+            SigningKey = TestBroadcastKey.Value,
             ExchangeName = $"trax.test.{suffix}.{Guid.NewGuid():N}",
         };
 

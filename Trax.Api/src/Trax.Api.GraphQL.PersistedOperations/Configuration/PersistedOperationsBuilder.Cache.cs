@@ -11,7 +11,7 @@ public sealed partial class PersistedOperationsBuilder
     /// the prepared operation for each id it serves, so with this off the database is read the
     /// first time a node serves an id, and again after a change to any operation empties those
     /// caches. Either way a change reaches other nodes through
-    /// <see cref="UseRabbitMqInvalidation"/>, and <see cref="WithCacheMaxAge"/> bounds how long
+    /// <see cref="UseRabbitMqInvalidation(string, Action{RabbitMqInvalidationOptions})"/>, and <see cref="WithCacheMaxAge"/> bounds how long
     /// any layer keeps a document; the TTL here can only be shorter.
     /// </remarks>
     public PersistedOperationsBuilder WithInMemoryCache(Action<CacheOptions>? configure = null)
@@ -38,7 +38,7 @@ public sealed partial class PersistedOperationsBuilder
     /// from the database. Defaults to five minutes.
     /// </summary>
     /// <remarks>
-    /// A change reaches every node at once through <see cref="UseRabbitMqInvalidation"/>, or
+    /// A change reaches every node at once through <see cref="UseRabbitMqInvalidation(string, Action{RabbitMqInvalidationOptions})"/>, or
     /// immediately on a <see cref="SingleNode"/> host. This is the backstop for a change that
     /// did not arrive: a broadcast lost while the broker connection stayed up, or a publish that
     /// failed (which the mutation reports). Such a node serves what it cached for at most this

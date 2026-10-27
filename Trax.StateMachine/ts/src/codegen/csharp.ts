@@ -134,7 +134,9 @@ function emitMachine(model: MachineModel, ir: IrDocument, options: CSharpViewOpt
     `    public const string IrHash = ${csString(options.irHash)};`,
     "",
     "    /// <summary>The IR, as the host exported it.</summary>",
-    `    public const string Ir = """"${options.irText}"""";`,
+    // A raw literal keeps the IR readable; one holding a character C# reads as a line break, which a single-line raw
+    // literal cannot, is written as an escaped one, which holds the same text.
+    `    public const string Ir = ${/[\r\n\u0085\u2028\u2029]/.test(options.irText) ? csString(options.irText) : `""""${options.irText}""""`};`,
     "",
     "    /// <summary>The engine built from <see cref=\"Ir\"/>.</summary>",
     "    public static IrMachine Create() => new(JsonNode.Parse(Ir)!.AsObject());",
@@ -273,6 +275,12 @@ function memberName(name: string): string {
   return /^[0-9]/.test(joined) ? `_${joined}` : joined;
 }
 
-// A C# string literal: JSON's escapes are C#'s for every character JSON escapes.
-const csString = (value: string): string => JSON.stringify(value);
+// A C# string literal: JSON's escapes are C#'s for every character JSON escapes. JSON leaves U+0085, U+2028 and
+// U+2029 as they are, and C# reads each as a line break, which a regular string literal cannot hold, so they are
+// escaped too.
+const csString = (value: string): string =>
+  JSON.stringify(value).replace(
+    /[\u0085\u2028\u2029]/g,
+    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
 

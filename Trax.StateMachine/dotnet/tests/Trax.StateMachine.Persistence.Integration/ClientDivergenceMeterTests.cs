@@ -38,16 +38,7 @@ public class ClientDivergenceMeterTests
         var user = $"u-{Guid.NewGuid():N}";
         var principal = new FakePrincipal(user);
         var id = Guid.NewGuid();
-        (
-            await new SaveSnapshotJunction(NewRegistry(), principal).Run(
-                new SaveSnapshotInput
-                {
-                    Machine = "declarative-turnstile",
-                    Id = id,
-                    Snapshot = Locked,
-                }
-            )
-        ).Problem.Should().BeNull();
+        await TestDb.Seed(user, id, Locked);
 
         var measurements = 0L;
         using var listener = new MeterListener();

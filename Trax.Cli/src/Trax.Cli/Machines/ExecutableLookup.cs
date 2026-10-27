@@ -11,6 +11,7 @@ namespace Trax.Cli.Machines;
 /// name is resolved first and the process is started from the full path, so only an absolute <c>PATH</c>
 /// entry is searched. An empty or relative <c>PATH</c> entry, which a shell reads as the current directory,
 /// is skipped.
+/// <c>trax generate</c> finds <c>dotnet</c> the same way.
 /// <para>
 /// The rule for a value given on purpose (<c>--node</c>): an absolute path is used as it is, a bare name is
 /// looked up on <c>PATH</c> like the default, and a relative path such as <c>./node</c> or <c>bin/node</c>
@@ -99,10 +100,15 @@ internal static class ExecutableLookup
 
         if (shim is not null)
             throw new InvalidOperationException(
-                $"The only '{command}' on PATH is {shim}, a batch file, and trax runs node only from a real "
+                $"The only '{command}' on PATH is {shim}, a batch file, and trax runs {command} only from a real "
                     + "executable (.exe or .com): a .cmd or .bat runs through cmd.exe, which parses its arguments "
-                    + "again and can let one escape its quoting. Pass --node with the absolute path of node.exe "
-                    + "(a version manager keeps it under its own install directory), or put node.exe on PATH."
+                    + "again and can let one escape its quoting. "
+                    + (
+                        command.Equals("node", StringComparison.OrdinalIgnoreCase)
+                            ? "Pass --node with the absolute path of node.exe (a version manager keeps it "
+                                + "under its own install directory), or put node.exe on PATH."
+                            : $"Put {command}.exe on PATH."
+                    )
             );
         return null;
     }

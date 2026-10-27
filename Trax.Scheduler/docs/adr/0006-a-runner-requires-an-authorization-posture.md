@@ -8,7 +8,9 @@ status: accepted
 
 A runner (`UseTraxJobRunner`, `UseTraxRunEndpoint`, `SqsJobRunnerHandler`, `TraxLambdaFunction`)
 runs what it is sent as trusted infrastructure: the scheduler already authorized the work, so the
-runner opens a trusted execution scope and skips per-train authorization. Every runner entry point
+runner skips the authorization of the train it is sent, inside a trusted execution scope, and runs
+that train outside the scope, where what the train queues or runs in turn is checked as anywhere
+else. Every runner entry point
 therefore refuses to start until the host says who may send it work, and a runner only ever
 deserializes into the input type of a train it has registered.
 
@@ -39,13 +41,15 @@ endpoint afterwards fails at startup with a message naming the three choices.
 function over HTTP for development, on whatever address the host listens on. A signing key
 applies there as everywhere. `AllowUnsignedRequests()` is a posture for the Lambda invocation
 entry point, which only callers the function's IAM policy admits can reach, so over HTTP it is
-honoured only for a caller on the loopback address; a request from any other address is refused
-with 401. The smaller of the two ways considered: the other was a separate opt-in for unsigned
-local routes, which adds an option whose only safe value is off. A developer who calls the local
-routes from another machine or a container gives the function a signing key.
+honoured only in the `Development` environment, and there only for a caller on the loopback
+address; any other request is refused with 401. Loopback alone was the first answer; the environment
+check keeps a deployed build from serving the routes unsigned at all. A function that serves the local routes unsigned under another environment
+name says so in code, by overriding `AllowUnsignedLocalDevelopmentRequests`, which lifts the
+environment check and not the loopback one. A developer who calls the local routes from another
+machine or a container gives the function a signing key.
 
-**`ITraxRequestHandler` verifies nothing.** It is the step behind the entry points, and runs what
-it is handed in a trusted scope. It stays public, because the separately shipped
+**`ITraxRequestHandler` verifies nothing.** It is the step behind the entry points, and trusts the
+authorization of what it is handed. It stays public, because the separately shipped
 Trax.Runner.Lambda and Trax.Scheduler.Sqs call it and a test swaps it for a fake, but it is hidden
 from IntelliSense and its documentation says a caller must have verified the request first. The
 alternative, a verification result only the verifier can create and the handler requires, changes
@@ -82,6 +86,29 @@ retry into a lost job. What stops a redelivered `Execute` running twice is the j
 
 The scheduler signs each HTTP retry afresh, so a retry is never refused as a replay of the attempt
 before it.
+
+**A run's answer is signed back.** The scheduler acts on what a run returns (its output, or its
+failure), so a signing runner signs that too: `Trax-Response-Signature`, `v1,s=<base64
+HMAC-SHA256>` under the same key, over the purpose, the nonce of the request it answers and the
+exact body. Binding it to the nonce means an answer only verifies for the attempt it was made for.
+A scheduler with a key refuses an unsigned or mismatched answer as a failed run; a runner without
+one answers unsigned, as it reads unsigned. Like the request's, the signature is a header, so
+[0001](./0001-remote-execution-is-a-json-wire-contract.md)'s body is unchanged; the cost is the
+upgrade order, runner first, since a scheduler on the release that checks it refuses an older
+runner's answers. A queued job's answer is not signed: the job's metadata row, not the answer, is
+the record of what ran.
+
+**What the response signature does not cover.** It authenticates a success body for the request
+it answers. The status code, the other headers and the body of a non-success answer are not
+authenticated, and cannot be: a refusal by the runner's posture (401, 413), a proxy's 502 and a
+gateway's 429 are written before or outside anything that holds the key. The scheduler therefore
+reads a non-success status only as a failed run, retries 429, 502 and 503, and keeps the start of
+the body for the log; none of them can make a run succeed or carry an output. In cleartext they
+could still be forged to fail or delay runs, so `UseRemoteRun` and `UseRemoteWorkers` refuse an
+`http://` base URL to a host that is not loopback unless the options set `AllowInsecureTransport`,
+the name the RabbitMQ options and Trax.Client use for the same choice. A run's answer is read up
+to `RemoteRunOptions.MaxResponseBodyBytes` (16 MiB by default) before its signature is checked,
+and a larger one fails the run.
 
 ## Only registered trains
 
@@ -154,7 +181,13 @@ request as stale.
   stale, replayed), the posture check and its startup warning, and the HTTP senders signing each
   attempt.
 - `JobRunnerEndpointTests` maps the endpoints with no runner, with no posture, with a policy and
-  with a key, and checks the refusals and that no message or stack trace is returned. It also
+  with a key, and checks the refusals and that no message or stack trace is returned. With a key a
+  run's answer carries a response signature that verifies for its request and that
+  `HttpRunExecutor` reads; with the unsigned posture it carries none. `RunnerRequestSigningTests`
+  refuses an unsigned answer, one signed for another request and one whose body changed, and reads
+  the answer to the last attempt after a retry. `RemoteRunnerTransportTests` refuses an
+  `http://` base URL off loopback without `AllowInsecureTransport`, fails a run whose answer is
+  over `MaxResponseBodyBytes`, declared or streamed, and reads only the start of an error body. It also
   pins the reading order: a missing, malformed or stale signature is a 401 with a body stream
   that throws if read, a body over `MaxRequestBodyBytes` is a 413 with or without a declared
   length, and repeated refusals are one warning.
@@ -163,6 +196,11 @@ request as stale.
 - `RunnerRefusesSchedulerTrainsTests` sends each scheduler train's full and short name to the run
   path and a `Pending` row of one to the job runner, and asserts nothing ran and the row stayed
   `Pending`; `TraxRequestHandlerTests` checks a host train sharing a short name still runs.
+- `RemoteRunTrustTests` runs a gated train through the run path, and a train whose junction queues
+  a gated train, and asserts the first runs, the second is refused with nothing queued, and a
+  junction sees no trusted scope. It and `JobRunnerEndpointTests` also check that a runner whose
+  `ITrainExecutionService` replaces the mediator's, and so runs with no trusted scope, warns when
+  its run entry point starts.
 - `StoredInputTypeResolutionTests` gives the dispatcher and the local worker a stored input type
   that no train takes and asserts nothing is constructed from it; `RegisteredInputTypesTests`
   covers the name matching itself.
@@ -173,7 +211,8 @@ request as stale.
 - `SqsJobRunnerHandlerTests` and `TraxLambdaFunctionTests` cover the same posture on the SQS and
   Lambda paths, including a redelivered `Execute` running again and a repeated `Run` refused.
   `TraxLambdaFunctionTests` also pins the local routes: unsigned from another address refused,
-  from loopback served, a signed request served from anywhere, the header checked before the body
+  unsigned outside `Development` refused unless the function opts in, from loopback in
+  `Development` served, a signed request served from anywhere, the header checked before the body
   and the size limit.
 - [Remote Execution](/docs/scheduler/remote-execution) is the rule this produces.
 
@@ -183,6 +222,21 @@ of its own. Sharing nonces across runner instances is
 
 ## Changelog
 
+- **2026-10-27**: A runner whose `ITrainExecutionService` is not the mediator's logs a warning
+  when its run entry point starts, since every gated remote run is then refused.
+- **2026-10-27**: The response signature is documented as covering a success body only.
+  `UseRemoteRun` and `UseRemoteWorkers` refuse plain `http://` off loopback without
+  `AllowInsecureTransport`, and a run's answer is read only up to `MaxResponseBodyBytes`.
+
+- **2026-10-23**: A signing runner signs a run's answer, bound to the nonce of the request it
+  answers, and `UseRemoteRun` with a key refuses an answer that does not verify. The local Lambda
+  run route signs it the same way.
+- **2026-10-23**: The local Lambda routes honour an unsigned posture only in the `Development`
+  environment, or when the function overrides `AllowUnsignedLocalDevelopmentRequests`, and still
+  only for loopback callers. The separate opt-in this record had turned down is the override.
+- **2026-10-23**: The run path's trusted scope covers only the authorization of the train the
+  request names; the train runs outside it, so a gated train it queues or runs is checked, and a
+  junction reading `IsTrusted` sees false. It used to cover the whole run.
 - **2026-09-30**: The HTTP entry points check the signature header before reading the body, hold
   the body to `MaxRequestBodyBytes`, and log refusals as one warning a minute. The local Lambda
   routes honour an unsigned posture only for loopback callers. `ITraxRequestHandler` is hidden

@@ -266,6 +266,47 @@ public class InvokesAuthorizationTests(StoreProvider provider)
     }
 
     [Test]
+    public async Task A_system_owned_launch_of_a_train_with_requirements_is_refused_and_queues_nothing()
+    {
+        // The startup check refuses a system-owned machine that invokes such a train. This host's hosted services
+        // never start, so the check never runs; the launcher refuses the run itself rather than authorize it in the
+        // trusted scope, where a user's requirements are not checked.
+        var externalId = Guid.NewGuid().ToString("N");
+
+        var launch = async () =>
+        {
+            using var scope = _host.Scope();
+            await scope
+                .ServiceProvider.GetRequiredService<IInvokedTrainLauncher>()
+                .Launch(
+                    new InvokedTrainLaunch(
+                        typeof(IAdminTrain),
+                        new AdminInput("repo"),
+                        externalId,
+                        new InvokedBy(
+                            "system-admin-stage",
+                            Guid.NewGuid(),
+                            SnapshotOwnerKind.System
+                        ),
+                        "Running"
+                    ),
+                    scope.ServiceProvider.GetRequiredService<IDataContext>()
+                );
+        };
+
+        var refused = await launch.Should().ThrowAsync<UnauthorizedAccessException>();
+        refused
+            .Which.Message.Should()
+            .Contain("IAdminTrain")
+            .And.Contain("[TraxAuthorize]")
+            .And.Contain("system-admin-stage");
+        RecordingAuthorization
+            .Calls.Should()
+            .BeEmpty($"nothing is authorized, in the trusted scope or out of it. See {Adr}");
+        (await Entries(externalId)).Should().Be(0);
+    }
+
+    [Test]
     public async Task A_launch_whose_input_is_not_the_trains_input_type_is_refused_and_queues_nothing()
     {
         // A machine's input mapping is typed by its declaration, so this cannot come from one; if a launch carries

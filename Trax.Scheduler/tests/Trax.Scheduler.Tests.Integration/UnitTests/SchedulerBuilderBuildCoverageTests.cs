@@ -172,7 +172,7 @@ public class SchedulerBuilderBuildCoverageTests
                 .AddMediator(typeof(SchedulerBuilderBuildCoverageTests).Assembly)
                 .AddScheduler(scheduler =>
                     scheduler.UseRemoteWorkers(
-                        o => o.BaseUrl = "http://endpoint",
+                        o => o.BaseUrl = "https://endpoint",
                         // Need at least one ForTrain so a RoutedSubmitterRegistration is created
                         // (without one, RegisterRoutedSubmitters early-returns and the
                         // attribute-discovery loop never runs).

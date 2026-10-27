@@ -14,11 +14,10 @@ dormant dependents a parent train activates) and admin-surface actions on manife
 dead-letter requeue) may build a work queue row themselves; the admin actions are governed by
 the admin surface's gate as a whole rather than by each train's requirements.
 
-The dashboard is the admin surface. Its queue dialog and Re-queue button go through
-`QueueAsync` inside a trusted execution scope (`"dashboard"`), so `OnQueue`, the subject key and
-the input cap apply but per-train `[TraxAuthorize]` does not: the dashboard is gated as a whole
-by its host. Its Run dialog calls `IOperationsService.RunTrainAsync` inside the same scope, so
-`OnQueue` and the input cap apply to a run as well; it writes no work queue entry.
+The operations console is a client of the API's operations namespace. Its queue, re-queue and run
+actions are `queueTrain`, `requeueExecution` and `runTrain`, which go through `QueueAsync` (or the
+mediator's run) under the caller's own principal, so the train's `[TraxAuthorize]` requirements
+apply to it as to any caller. No code opens a trusted scope for it.
 
 ## Status
 
@@ -36,13 +35,14 @@ for now. Those paths let the caller choose which manifest, never the train or th
 they are reachable only through the admin surface. The admin surface is meant to carry admin
 privileges as a whole, and is expected to gain user-provided authorization (Microsoft Entra or
 another provider) rather than a per-train check bolted onto each admin action. Until then its
-posture is `GateOperations`, `RequireAuthorization` or `AllowAnonymousOperations` (api/0004).
+posture is `GateOperations`, `GateOperationsToAuthenticatedUsers` or `AllowAnonymousOperations`
+(api/0004).
 
-**Applying per-train requirements to the dashboard.** Rejected. A Blazor Server circuit has no
-HTTP request behind a click, so the enforcer, which reads the user from the request, refused
-every `[TraxAuthorize]` train from the dashboard, for admins too. Per-user checks belong to the
-admin surface's own authorization when it arrives, not to a per-train check the dashboard cannot
-satisfy.
+**Exempting the dashboard from per-train requirements.** What this recorded until 2026-10-23: a
+Blazor Server circuit has no HTTP request behind a click, so the enforcer could not read the user,
+and the dashboard enqueued inside a trusted scope instead. The Blazor dashboard is gone; the
+console that replaced it sends each action as a GraphQL request, so the exemption has nothing left
+to cover.
 
 **Checking authorization inside `TraxScheduler`.** Rejected because `TraxScheduler` is also
 called from a host's own background code, where there is no user; a check there would refuse
@@ -58,18 +58,7 @@ enforcer registered honours a trusted scope the same way the enforcer does. That
 matters where hosted services do not run (the Lambda runner, a bare `ServiceProvider`): in a
 hosted app, `AuthorizationRegistrationValidator` refuses to start a host with `[TraxAuthorize]`
 trains and no `ITrainAuthorizationService` unless it calls `AllowMissingAuthorizationService()`
-(mediator/0001), so a dashboard-only or scheduler-only host needs that opt-out or an enforcer.
-
-**The dashboard's trusted scope extends into consumer code.** The scope is an `AsyncLocal`, and the
-dashboard's enqueue runs the train's `OnQueue` hook and `QueueSubjectKey` inside it. Anything
-those run or enqueue through `ITrainExecutionService` is therefore trusted too and skips that
-train's `[TraxAuthorize]` requirements, and code reading `TraxCaller.IsTrusted` sees `true`. That
-includes work the hook starts with `Task.Run` or any other call that captures the execution
-context, which keeps the scope after the dashboard's enqueue has returned. This is a known
-consequence of gating the dashboard as a whole rather than per train, and is recorded rather than
-closed: the scope marks the whole async flow, and nothing separates the dashboard's own call from
-consumer code running inside it. A hook that must not act as trusted has to check
-`ITrustedExecutionScope.IsTrusted` itself.
+(mediator/0001), so a scheduler-only host needs that opt-out or an enforcer.
 
 A dormant dependent's input is chosen at runtime by the parent train's code
 (`IDormantDependentContext.ActivateAsync(externalId, input)`), not fixed by a manifest, and its
@@ -85,13 +74,16 @@ allowed sites). `OperationsServiceAuthorizationTests` in Trax.Scheduler pins the
 operations service against the real mediator. `QueueTrainAuthorizationTests` in Trax.Api pins
 only the error shape, the `TRAX_AUTHORIZATION` error `queueTrain` returns.
 
-Not covered: nothing checks that the dashboard is actually gated by its host, which is what its
-trusted scope assumes. The guards find `WorkQueue.Create` by text, so a call through a helper outside `src` would pass.
+Not covered: the guards find `WorkQueue.Create` by text, so a call through a helper outside `src` would pass.
 `WorkQueue`'s parameterless constructor is protected, so there is no other way to build a row. Nothing checks that the manifest paths stay behind the admin
 gate; that posture is api/0004's.
 
 ## Changelog
 
+- **2026-10-23**: The dashboard's trusted scope is no longer described: the Blazor dashboard that
+  opened it is gone, and the operations console's actions go through the API's operations under the
+  caller's own per-train authorization.
+- **2026-10-23**: The admin surface's posture no longer includes `RequireAuthorization` (api/0004).
 - **2026-10-01**: The dashboard's Run dialog calls `IOperationsService.RunTrainAsync` inside the
   trusted scope instead of submitting to the job submitter itself.
 - **2026-09-24**: `WorkQueue.Create` is now the only way to build a row, so the guards' text

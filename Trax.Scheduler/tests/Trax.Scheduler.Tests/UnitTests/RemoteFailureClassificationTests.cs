@@ -118,6 +118,33 @@ public class RemoteFailureClassificationTests
     }
 
     [Test]
+    public void The_rebuilt_failure_carries_its_record_attached_not_only_in_its_message()
+    {
+        var response = TraxRequestHandler.BuildErrorResponse(
+            WithAttachedData(FailureClass.Conflict)
+        );
+
+        var rebuilt = response.ToTrainException();
+
+        rebuilt
+            .Data["TrainExceptionData"]
+            .Should()
+            .BeOfType<TrainExceptionData>()
+            .Which.Should()
+            .BeEquivalentTo(
+                new
+                {
+                    Type = nameof(InvalidOperationException),
+                    Junction = "SomeJunction",
+                    Message = "the remote thing went wrong",
+                    FailureClass = (FailureClass?)FailureClass.Conflict,
+                },
+                "the calling side reads the record from the exception, not by parsing its message"
+            );
+        rebuilt.Should().BeOfType<RemoteRunException>();
+    }
+
+    [Test]
     public void A_worker_that_sent_no_classification_records_Unclassified()
     {
         var rebuilt = HttpRunExecutor.BuildExceptionFromErrorResponse(

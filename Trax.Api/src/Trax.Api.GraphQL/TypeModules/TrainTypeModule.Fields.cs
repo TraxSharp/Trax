@@ -1,8 +1,12 @@
+using System.Security.Claims;
+using HotChocolate;
 using HotChocolate.Language;
 using HotChocolate.Resolvers;
 using HotChocolate.Types;
 using Trax.Api.DTOs;
+using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Startup;
+using Trax.Api.GraphQL.Subscriptions;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -155,6 +159,18 @@ public partial class TrainTypeModule
         TrainRegistration registration
     )
     {
+        // Priority orders the whole queue, other callers' work included, so raising it is an
+        // operator's decision: a caller who does not satisfy the operations gate queues at the
+        // default, and one who asks for more is refused before anything is read or written.
+        var priority = ctx.ArgumentValue<int?>("priority") ?? 0;
+        if (priority != 0)
+        {
+            var user = ctx.GetGlobalStateOrDefault<ClaimsPrincipal>("ClaimsPrincipal");
+            var access = ctx.Service<LifecycleSubscriptionAccess>();
+            if (!await access.OperationsFor(user).ConfigureAwait(false))
+                throw new GraphQLException(EndpointPolicyRequestMiddleware.NotAuthorized());
+        }
+
         var inputJson = SerializeInput(ctx, registration.InputType);
         var executionService = ctx.Service<ITrainExecutionService>();
 
@@ -172,7 +188,6 @@ public partial class TrainTypeModule
             throw QueueDispatch.Unavailable();
         }
 
-        var priority = ctx.ArgumentValue<int?>("priority") ?? 0;
         return await executionService.QueueAsync(
             registration.ServiceType.FullName!,
             inputJson,

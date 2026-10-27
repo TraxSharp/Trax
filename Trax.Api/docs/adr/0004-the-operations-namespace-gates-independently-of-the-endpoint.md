@@ -60,6 +60,15 @@ authenticated principal really is an operator says so with
 compiled against the old one still binds and meets the refusal at startup rather than a
 missing method.
 
+**The endpoint gate is not an answer.** `RequireAuthorization()` without a gate of the
+namespace's own used to satisfy the check. On most hosts it admits every user of the
+application, not its operators, so it says nothing about who may operate. Exposing the
+namespace now needs `GateOperations(...)`, `GateOperationsToAuthenticatedUsers()` or
+`AllowAnonymousOperations()` whether or not the endpoint is gated, and `RequireAuthorization()`
+alone fails at startup with a message naming the first two. The operations view of the
+subscriptions follows the same rule: with no gate declared it is granted only under
+`AllowAnonymousOperations()`, never on the strength of the endpoint gate.
+
 **Persisted operations does not touch the namespace.** `UsePersistedOperations` used to graft it
 on, so taking enforcement meant taking a GraphQL-exposed scheduler console, and a deploy pipeline
 that uploads documents needed the operator's credential. The management fields now sit at the
@@ -70,7 +79,8 @@ way.
 
 ## Exemplars
 
-- `OperationsExposureTests` pins the three answers, the refusal of a `GateOperations` with
+- `OperationsExposureTests` pins the three answers, the refusal of `RequireAuthorization()`
+  alone, the refusal of a `GateOperations` with
   neither a policy nor roles, the two contradictions
   (`AllowAnonymousOperations` with either gate), the dead-configuration case, and that the
   directive reaches both root fields and is absent without the gate.
@@ -89,6 +99,8 @@ with ASP.NET Core. An unknown policy name fails at request time, the same way it
 
 ## Changelog
 
+- **2026-10-23**: `RequireAuthorization()` no longer answers for the namespace; the answers are
+  `GateOperations`, `GateOperationsToAuthenticatedUsers` and `AllowAnonymousOperations`.
 - **2026-10-15**: `UsePersistedOperations` no longer exposes the namespace. Persisted-operation
   management moved to the root behind its own gate, `GateManagement`; `ExposeOperationsNamespace`
   is removed.

@@ -93,10 +93,7 @@ public class ChangeFeedSwitchTests
         await using var notices = await SnapshotNotices.Listen(_db.ConnectionString);
 
         var id = Guid.NewGuid();
-        using (var scope = host.Scope())
-            (await host.Service(scope, "turnstile").Autosave(User, id, TestTurnstile.InitialJson))
-                .Should()
-                .BeOfType<AutosaveResult.Saved>();
+        await host.SeedDraft(User, id, TestTurnstile.InitialJson);
         var rowId = await host.RowId(id);
 
         (await notices.Collect())

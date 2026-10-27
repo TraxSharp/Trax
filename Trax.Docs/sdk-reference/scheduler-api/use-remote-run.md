@@ -39,11 +39,13 @@ public SchedulerConfigurationBuilder UseRemoteRun(
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `BaseUrl` | `string` | required | The URL that receives run requests, for example `https://my-runner.example.com/trax/run` |
+| `BaseUrl` | `string` | required | The URL that receives run requests, for example `https://my-runner.example.com/trax/run`. Must be `https://` unless the host is loopback or `AllowInsecureTransport` is set |
+| `AllowInsecureTransport` | `bool` | `false` | Accept an `http://` `BaseUrl` to a host that is not loopback. Without it such a URL refuses the build, since status codes and error bodies are not signed. Set it only when the network to the runner is trusted, such as a container network on one machine |
+| `MaxResponseBodyBytes` | `long` | 16 MiB (`DefaultMaxResponseBodyBytes`) | The largest answer read. A larger one, by its declared length or by what arrives, fails the run with `RemoteRunException` before its signature is checked, and is not read past the limit. Must be positive |
 | `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Configures the `HttpClient`: headers, and anything else the runner expects |
 | `Timeout` | `TimeSpan` | 5 minutes | The request timeout. A run request waits for the train to complete |
 | `Retry` | [`HttpRetryOptions`](/docs/sdk-reference/scheduler-api/use-remote-workers#httpretryoptions) | 5 retries, 1 second base, 30 seconds cap | Retries on HTTP 429, 502 and 503 |
-| `SigningKey` | `byte[]?` | `null` | The key shared with the runner's `AddTraxJobRunner(runner => runner.SigningKey = ...)`, at least 32 bytes. When set, each request, and each retry, carries a `Trax-Signature` the runner verifies. See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) |
+| `SigningKey` | `byte[]?` | `null` | The key shared with the runner's `AddTraxJobRunner(runner => runner.SigningKey = ...)`, at least 32 bytes. When set, each request, and each retry, carries a `Trax-Signature` the runner verifies, and the runner's answer must carry a `Trax-Response-Signature` over its body, bound to the request it answers; an unsigned or mismatched answer fails the run with `RemoteRunException`. A runner signs its answers from the next Trax.Scheduler and Trax.Runner.Lambda release, so upgrade the runner before the scheduler. See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) |
 
 ## Returns
 
@@ -59,6 +61,15 @@ public SchedulerConfigurationBuilder UseRemoteRun(
   transport failure or any failure other than a train author's `TrainException`.
 - A signed run request must reach the runner within its `MaxClockSkew` (five minutes by default)
   and is accepted once.
+- The `Trax-Response-Signature` authenticates a success body for the request it answers, and
+  nothing else. The status code, the other headers and a non-success body are not authenticated:
+  any non-success status fails the run with `RemoteRunException`, 429, 502 and 503 are retried
+  first, and the start of the body goes into the exception's `Message` only. Over cleartext, then,
+  anyone on the path could fail or delay a run, which is why `BaseUrl` must be `https://` off
+  loopback.
+- Building the services throws `InvalidOperationException` for an `http://` `BaseUrl` to a host
+  that is not loopback without `AllowInsecureTransport`, or a `MaxResponseBodyBytes` that is not
+  positive.
 - The runner calls `ITrainExecutionService.RunAsync` itself, so the run's metadata is in the
   shared database.
 

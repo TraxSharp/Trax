@@ -70,8 +70,9 @@ public class AddJobJunction : Junction<AddJobInput, Job>
 ```
 
 **Inject TraxCaller.** [TraxCaller](/docs/sdk-reference/api-auth/trax-caller) never throws:
-`Principal` is `null` for an anonymous caller, and `IsTrusted` says whether the scheduler or a
-runner is executing:
+`Principal` is `null` for an anonymous caller, and `IsTrusted` says whether the code runs inside
+a trusted execution scope. Trax opens one only around an authorization check, never around a
+train's junctions, so a junction of a scheduled or remote run sees `false`, with no `Principal`:
 
 ```csharp compile
 using Trax.Api.Auth;

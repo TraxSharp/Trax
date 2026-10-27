@@ -582,10 +582,12 @@ public class Metadata : IModel, IDisposable
     /// <returns>A Unit value (similar to void, but functional)</returns>
     /// <remarks>
     /// This method extracts information from the provided exception and populates
-    /// the failure-related properties of the metadata record. It attempts to deserialize
-    /// the exception message as a TrainExceptionData object, which provides structured
-    /// information about the failure. If deserialization fails, it falls back to extracting
-    /// information directly from the exception.
+    /// the failure-related properties of the metadata record. It reads structured data attached
+    /// to the exception first; failing that, and only for an exception whose type is exactly
+    /// <see cref="TrainException"/>, the type a recorded failure is rebuilt as, it reads the message
+    /// as a TrainExceptionData object. Any other exception, a type derived from
+    /// <see cref="TrainException"/> included, is recorded from its own type, message and stack
+    /// trace, whatever its message looks like.
     ///
     /// The method sets:
     /// 1. FailureException - The type of the exception
@@ -595,9 +597,9 @@ public class Metadata : IModel, IDisposable
     ///
     /// This information is valuable for diagnosing and analyzing train failures.
     ///
-    /// <para>The failure class is read from attached data, or from the message of a
-    /// <see cref="TrainException"/>, which is the type a recorded failure is rebuilt as. Any other
-    /// exception's message is its own text, so a class in it is not recorded. A value outside
+    /// <para>The failure class, like the rest of the record, is read from attached data, or from
+    /// the message of an exception whose type is exactly <see cref="TrainException"/>. Any other exception's message is its own
+    /// text, so nothing in it is read as a record. A value outside
     /// <see cref="Trax.Core.Exceptions.FailureClass"/> is recorded as
     /// <see cref="Trax.Core.Exceptions.FailureClass.Unclassified"/>, as the remote wire already
     /// does.</para>
@@ -616,25 +618,32 @@ public class Metadata : IModel, IDisposable
             return Unit.Default;
         }
 
-        // Priority 2: JSON-serialized TrainExceptionData in the message (remote execution / legacy).
-        // The class is taken only from a TrainException, the type a recorded failure is rebuilt as.
-        try
+        // Priority 2: JSON-serialized TrainExceptionData in the message (legacy). Read only from an
+        // exception whose type is exactly TrainException, the type a recorded failure is rebuilt
+        // as; a remote failure arrives with its record attached instead. Any other exception's
+        // message, a subclass's included, is its own text (often a remote system's response body),
+        // and reading it as a record would let that text name the failure's type, junction and
+        // stack trace.
+        if (trainException.GetType() == typeof(TrainException))
         {
-            var deserialized = JsonSerializer.Deserialize<TrainExceptionData>(
-                trainException.Message
-            );
-            if (deserialized != null)
+            try
             {
-                FailureException = deserialized.Type;
-                FailureReason = deserialized.Message;
-                if (trainException is TrainException && deserialized.FailureClass is { } remote)
-                    FailureClass = Defined(remote);
-                FailureJunction = deserialized.Junction;
-                StackTrace = deserialized.StackTrace ?? trainException.StackTrace;
-                return Unit.Default;
+                var deserialized = JsonSerializer.Deserialize<TrainExceptionData>(
+                    trainException.Message
+                );
+                if (deserialized != null)
+                {
+                    FailureException = deserialized.Type;
+                    FailureReason = deserialized.Message;
+                    if (deserialized.FailureClass is { } remote)
+                        FailureClass = Defined(remote);
+                    FailureJunction = deserialized.Junction;
+                    StackTrace = deserialized.StackTrace ?? trainException.StackTrace;
+                    return Unit.Default;
+                }
             }
+            catch (JsonException) { }
         }
-        catch { }
 
         // Priority 3: Plain exception (no Trax context)
         FailureException = trainException.GetType().Name;

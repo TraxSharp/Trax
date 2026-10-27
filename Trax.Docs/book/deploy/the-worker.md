@@ -38,6 +38,13 @@ var rabbitMq =
     builder.Configuration.GetConnectionString("RabbitMq")
     ?? throw new InvalidOperationException("ConnectionStrings:RabbitMq is not set.");
 
+// The key the hub and the workers sign their events with. A process drops any event not signed
+// with it. appsettings.Development.json holds a key printed in the book, for Development only.
+var broadcastKey = Convert.FromBase64String(
+    builder.Configuration["Broadcast:SigningKey"]
+        ?? throw new InvalidOperationException("Broadcast:SigningKey is not set.")
+);
+
 builder.Services.AddShopfront(connectionString);
 
 // The trains ask who the caller is. On the worker nobody is, and that is the answer they get.
@@ -48,7 +55,21 @@ builder.Services.AddTrax(trax =>
             effects
                 .UsePostgres(connectionString)
                 // The runs this worker executes reach the hub's subscriptions over RabbitMQ.
-                .UseBroadcaster(broadcaster => broadcaster.UseRabbitMq(rabbitMq))
+                .UseBroadcaster(broadcaster =>
+                    broadcaster.UseRabbitMq(
+                        rabbitMq,
+                        rabbit =>
+                        {
+                            rabbit.SigningKey = broadcastKey;
+                            // Set by compose.yaml, whose broker is reached by name on its own
+                            // network. A broker anywhere else is reached over amqps://.
+                            rabbit.AllowInsecureTransport = builder.Configuration.GetValue(
+                                "Broadcast:AllowInsecureTransport",
+                                false
+                            );
+                        }
+                    )
+                )
                 .SaveTrainParameters()
                 .AddJunctionLogger(serializeJunctionData: true)
                 .AddJunctionProgress()
@@ -73,7 +94,9 @@ app.MapHealthChecks("/health/live");
 await app.RunAsync();
 ```
 
-The worker publishes the events of every run it executes. Trax has no health check for a worker,
+The worker publishes the events of every run it executes, signed with the same
+`Broadcast:SigningKey` as the hub. Run locally, it reads the Development key only with
+`--environment Development`, since no launch profile sets its environment. Trax has no health check for a worker,
 so `/health/live` says only that the process answers. A worker that is stopped finishes the run it
 is in, for up to 30 seconds, then gives up on it; a worker that dies leaves its run for the hub to
 fail, as chapter 11 showed.
@@ -116,6 +139,16 @@ fail, as chapter 11 showed.
       "Default": "Information",
       "Microsoft.AspNetCore": "Warning"
     }
+  }
+}
+```
+
+`Shopfront.Worker/appsettings.Development.json`:
+
+```json file=Shopfront.Worker/appsettings.Development.json
+{
+  "Broadcast": {
+    "SigningKey": "c2hvcGZyb250LWRldmVsb3BtZW50LWJyb2FkY2FzdC1rZXktcHJpbnRlZC1pbi10aGUtYm9vaw=="
   }
 }
 ```

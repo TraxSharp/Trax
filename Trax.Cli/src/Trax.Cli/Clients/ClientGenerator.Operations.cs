@@ -32,6 +32,8 @@ internal sealed partial class ClientGenerator
         "configureTraxOperations",
         "traxTransport",
         "httpTransport",
+        "requireSecureEndpoint",
+        "requireSecureSocket",
         "execute",
         "send",
         "subscribe",
@@ -86,7 +88,8 @@ internal sealed partial class ClientGenerator
         };
         var index = new StringBuilder(OperationsHeader);
         index.Append(
-            "export { configureTraxOperations, traxTransport, httpTransport, execute, send, subscribe, TraxOperationError, "
+            "export { configureTraxOperations, traxTransport, httpTransport, requireSecureEndpoint, requireSecureSocket, "
+                + "execute, send, subscribe, TraxOperationError, "
                 + "TraxTransportError, type TraxDocument, type TraxRequest, type TraxAnswer, type TraxGraphQLError, "
                 + "type TraxSink, type TraxTransport, type HttpTransport, type HttpTransportOptions, type ResultOf, "
                 + "type VariablesOf } from \"./client.g\";\n"
@@ -134,13 +137,13 @@ internal sealed partial class ClientGenerator
     public static IReadOnlyList<ClientFile> Write(
         OperationsGenerateOptions options,
         string outDir
-    ) => Write(Render(options), outDir);
+    ) => Write(Render(options), outDir, Writer.OperationsTypeScript);
 
     /// <summary>What differs between the operations client the documents generate and the one under <paramref name="outDir"/>.</summary>
     public static IReadOnlyList<ClientDrift> Check(
         OperationsGenerateOptions options,
         string outDir
-    ) => Check(Render(options), outDir);
+    ) => Check(Render(options), outDir, Writer.OperationsTypeScript);
 
     // A console document's module: its descriptor, the types of its variables and of what it selects, and the function
     // that sends it (or, for a subscription, follows it).
@@ -453,6 +456,14 @@ internal sealed partial class ClientGenerator
               socket?: Omit<ClientOptions, "url" | "connectionParams" | "jsonMessageReplacer">;
               /** The fetch to send with, looked up per request when not given. */
               fetch?: typeof fetch;
+              /**
+               * Lets the transport send to an absolute `http:` url, or open a `ws:` socketUrl, on a host that is not
+               * loopback. Only for a trusted network: the headers and connectionParams would travel in cleartext. Off by
+               * default, and httpTransport refuses such a url.
+               */
+              allowInsecureTransport?: boolean;
+              /** The most bytes of an answer the transport reads before it refuses it. 16 MiB when not given. */
+              maxResponseBytes?: number;
             }
 
             /** httpTransport's transport, and a way to drop its socket so the next stream opens a new one. */
@@ -465,9 +476,14 @@ internal sealed partial class ClientGenerator
 
             /**
              * A transport over HTTP POST and one graphql-ws socket. A document goes by its id when `byId` says so: over HTTP
-             * the body carries the id and no text, and over the socket the text is left out of the subscribe message.
+             * the body carries the id and no text, and over the socket the text is left out of the subscribe message. It
+             * refuses a url or socketUrl that would travel in cleartext to another host (see requireSecureEndpoint and
+             * requireSecureSocket) unless `allowInsecureTransport` is set, follows no redirect, and reads at most
+             * `maxResponseBytes` of an answer.
              */
             export function httpTransport(options: HttpTransportOptions): HttpTransport {
+              requireSecureEndpoint(options.url, options.allowInsecureTransport);
+              requireSecureSocket(options.socketUrl, options.allowInsecureTransport);
               let socket: Client | null = null;
               const byId = options.byId ?? ((document) => document.id !== null);
               const open = (): Client =>
@@ -494,14 +510,17 @@ internal sealed partial class ClientGenerator
                       method: "POST",
                       headers: { "Content-Type": "application/json", Accept: "application/graphql-response+json, application/json", ...options.headers?.() },
                       body: JSON.stringify(body.query === "" ? withoutQuery(body) : body),
+                      // A redirect would carry the headers to wherever it points.
+                      redirect: "error",
                     });
                   } catch (cause) {
                     throw new TraxTransportError(`The host could not be reached: ${String(cause)}`, undefined, { cause });
                   }
                   let answer: unknown;
                   try {
-                    answer = await response.json();
+                    answer = await readJson(response, options.maxResponseBytes);
                   } catch (cause) {
+                    if (cause instanceof RangeError) throw new TraxTransportError(cause.message, response.status, { cause });
                     throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status, {
                       cause,
                     });
@@ -541,5 +560,31 @@ internal sealed partial class ClientGenerator
               return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
             }
 
-            """;
+            """
+        + OperationsEndpointGuard
+        + TransportGuards;
+
+    // The machine client's check of its url, which the operations client cannot import from the engine.
+    private const string OperationsEndpointGuard = """
+
+        /**
+         * Refuses an absolute `http:` url whose host is not loopback (`localhost`, `127.0.0.0/8`, `::1`), since the
+         * headers would travel in cleartext; a relative url is the page's own origin and is accepted. `allowInsecure`
+         * lifts the refusal, for a network you trust.
+         */
+        export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean | undefined): void {
+          if (allowInsecure) return;
+          let url: URL;
+          try {
+            url = new URL(endpoint);
+          } catch {
+            return;
+          }
+          if (url.protocol === "https:" || isLoopbackHost(url.hostname)) return;
+          throw new Error(
+            `The endpoint ${url.protocol}//${url.host} is not over TLS, so whatever authenticates the client would travel in cleartext. Use https://, a loopback host, or set allowInsecureTransport when the network is trusted.`,
+          );
+        }
+
+        """;
 }

@@ -10,10 +10,12 @@ namespace {{ Namespace }};
 /// {{ DocDescription }}
 /// </summary>
 [{{ Attribute }}({{ if GraphQLNamespace }}Namespace = GraphQLNamespaces.{{ GraphQLNamespace }}, {{ end }}Description = "{{ Description }}")]
-// Exposed anonymously so the scaffold runs out of the box. Swap for
-// [TraxAuthorize(...)] once you wire up authentication, or gate the whole
-// endpoint with UseTraxGraphQL(configure: e => e.RequireAuthorization(...)).
-[TraxAllowAnonymous]
+// Callers need the User role, the posture of the hub's own trains. In
+// Development the hub's demo key carries it (see the hub's Program.cs), so
+// `dotnet run` works as scaffolded; anywhere else, register real credentials.
+// Change the roles or use Policy = "..." to suit. Only a train anyone may
+// call should be marked TraxAllowAnonymous instead.
+[TraxAuthorize(Roles = "User")]
 public class {{ TrainName }}Train
     : global::Trax.Effect.Services.ServiceTrain.ServiceTrain<{{ InputTypeName }}, {{ OutputTypeName }}>,
         I{{ TrainName }}Train

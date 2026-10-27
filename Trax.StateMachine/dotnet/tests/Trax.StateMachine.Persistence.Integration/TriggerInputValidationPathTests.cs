@@ -71,10 +71,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
             case "junction":
             {
                 var id = Guid.NewGuid();
-                using (var scope = _host.Scope())
-                    (await _host.Service(scope, Machine).Autosave(User, id, LockedJson(Machine)))
-                        .Should()
-                        .BeOfType<AutosaveResult.Saved>();
+                await _host.SeedDraft(User, id, LockedJson(Machine));
                 return new Path(
                     id,
                     SnapshotOwnerKind.User,

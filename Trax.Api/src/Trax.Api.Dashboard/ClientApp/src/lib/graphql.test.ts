@@ -2,7 +2,10 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { httpTransport, persistedOperationsAvailableDocument, serverVersionDocument } from "../trax/index.g";
 import { client } from "./graphql";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 const answer = (data: unknown) =>
   new Response(JSON.stringify({ data }), { headers: { "Content-Type": "application/json" } });
@@ -36,7 +39,7 @@ describe("the console's client", () => {
 
 describe("the generated transport", () => {
   const transport = (byId?: Parameters<typeof httpTransport>[0]["byId"]) =>
-    httpTransport({ url: "/trax/graphql", socketUrl: "ws://host/trax/graphql", byId });
+    httpTransport({ url: "/trax/graphql", socketUrl: "ws://localhost/trax/graphql", byId });
 
   test("sends a document the host registered by its id, without its text", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(answer({ operations: null }));
@@ -70,5 +73,80 @@ describe("the generated transport", () => {
     await expect(transport().execute({ document: serverVersionDocument, variables: {} })).rejects.toThrow(
       "The host answered 502 with no GraphQL answer.",
     );
+  });
+});
+
+describe("the generated transport's checks", () => {
+  const options = { url: "/trax/graphql", socketUrl: "wss://ops.example.com/trax/graphql" };
+
+  test.each(["/trax/graphql", "https://ops.example.com/trax/graphql", "http://localhost:5310/trax/graphql", "http://127.0.0.1/g"])(
+    "accepts the url %s",
+    (url) => expect(() => httpTransport({ ...options, url })).not.toThrow(),
+  );
+
+  test("refuses a cleartext url to another host", () =>
+    expect(() => httpTransport({ ...options, url: "http://ops.example.com/trax/graphql" })).toThrow("is not over TLS"));
+
+  test.each(["wss://ops.example.com/trax/graphql", "ws://localhost:5310/trax/graphql", "ws://127.0.0.1/g", "ws://[::1]/g"])(
+    "accepts the socket %s",
+    (socketUrl) => expect(() => httpTransport({ ...options, socketUrl })).not.toThrow(),
+  );
+
+  test("refuses a cleartext socket to another host", () =>
+    expect(() => httpTransport({ ...options, socketUrl: "ws://ops.example.com/trax/graphql" })).toThrow("is not over TLS"));
+
+  test.each(["/trax/graphql", "https://ops.example.com/trax/graphql"])("refuses the socket %s, which is not ws or wss", (socketUrl) =>
+    expect(() => httpTransport({ ...options, socketUrl })).toThrow(/not (an absolute )?(a )?ws:\/\/ or wss:\/\/ URL/),
+  );
+
+  test("accepts a cleartext socket to the origin of a page served over http", () => {
+    vi.stubGlobal("location", { protocol: "http:", host: "ops.lan:8080" });
+
+    expect(() => httpTransport({ ...options, socketUrl: "ws://ops.lan:8080/trax/graphql" })).not.toThrow();
+    expect(() => httpTransport({ ...options, socketUrl: "ws://other.lan:8080/trax/graphql" })).toThrow("is not over TLS");
+  });
+
+  test("allowInsecureTransport lifts both refusals", () =>
+    expect(() =>
+      httpTransport({
+        url: "http://ops.lan/trax/graphql",
+        socketUrl: "ws://ops.lan/trax/graphql",
+        allowInsecureTransport: true,
+      }),
+    ).not.toThrow());
+
+  test("follows no redirect", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(answer({ operations: null }));
+
+    await httpTransport(options).execute({ document: serverVersionDocument, variables: {} });
+
+    expect((fetchSpy.mock.calls[0][1] as RequestInit).redirect).toBe("error");
+  });
+
+  test("an answer longer than maxResponseBytes is a transport error, read no further", async () => {
+    const body = JSON.stringify({ data: { operations: { serverVersion: "x".repeat(2048) } } });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(body, { status: 200 }));
+
+    await expect(
+      httpTransport({ ...options, maxResponseBytes: 1024 }).execute({ document: serverVersionDocument, variables: {} }),
+    ).rejects.toThrow("more than 1024 bytes");
+  });
+
+  test("an answer whose Content-Length is over the limit is refused before it is read", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("{}", { status: 200, headers: { "Content-Length": String(32 * 1024 * 1024) } }),
+    );
+
+    await expect(httpTransport(options).execute({ document: serverVersionDocument, variables: {} })).rejects.toThrow(
+      `more than ${16 * 1024 * 1024} bytes`,
+    );
+  });
+
+  test("an answer within the limit is read", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(answer({ operations: null }));
+
+    await expect(
+      httpTransport({ ...options, maxResponseBytes: 64 }).execute({ document: serverVersionDocument, variables: {} }),
+    ).resolves.toEqual({ data: { operations: null } });
   });
 });

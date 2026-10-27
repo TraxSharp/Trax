@@ -46,7 +46,13 @@ internal class JunctionLoggerProvider(
                 "Effect Junction's Metadata should not be null. Something has gone horribly wrong."
             );
 
-        logger.Log(configuration.LogLevel, "{@JunctionMetadata}", effectJunction.Metadata);
+        // The masked string, never the record: a structured sink that destructures an argument
+        // walks its public properties and would skip the masking.
+        logger.Log(
+            configuration.LogLevel,
+            "{JunctionMetadata}",
+            effectJunction.Metadata.ToString()
+        );
     }
 
     /// <summary>
@@ -89,7 +95,7 @@ internal class JunctionLoggerProvider(
             Bottom: () => { }
         );
 
-        logger.Log(configuration.LogLevel, "{@Metadata}", effectJunction.Metadata);
+        logger.Log(configuration.LogLevel, "{Metadata}", effectJunction.Metadata.ToString());
     }
 
     /// <summary>

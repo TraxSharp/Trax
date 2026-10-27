@@ -347,6 +347,41 @@ public class TraxLambdaFunctionTests
         fn.Handler.RunCalls.Should().HaveCount(1);
     }
 
+    [Test]
+    public async Task ConfigureRoutes_SigningKey_RunResponse_IsSignedForTheRequest()
+    {
+        var fn = new TestFunction(o => o.SigningKey = Key);
+        using var host = await CreateRouteHost(fn);
+        var payload = RunPayload();
+        var requestSignature = RunnerRequestSignature.Create(
+            Key,
+            RunnerRequestPurpose.Run,
+            System.Text.Encoding.UTF8.GetBytes(payload)
+        );
+        var request = new HttpRequestMessage(HttpMethod.Post, "/trax/run")
+        {
+            Content = new StringContent(payload),
+        };
+        request.Headers.Add(RunnerRequestSignature.HeaderName, requestSignature);
+
+        var response = await host.GetTestClient().SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        RunnerRequestSignature
+            .VerifyResponse(
+                Key,
+                RunnerRequestPurpose.Run,
+                requestSignature,
+                response.Headers.GetValues(RunnerRequestSignature.ResponseHeaderName).Single(),
+                await response.Content.ReadAsByteArrayAsync()
+            )
+            .Should()
+            .BeTrue(
+                "the local run route signs its answer as UseTraxRunEndpoint does (see "
+                    + "docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
+    }
+
     [TestCase("/trax/execute")]
     [TestCase("/trax/run")]
     public async Task ConfigureRoutes_Unsigned_RequestFromAnotherMachine_Is401(string path)
@@ -366,6 +401,85 @@ public class TraxLambdaFunctionTests
             );
         fn.Handler.RunCalls.Should().BeEmpty();
         fn.Handler.ExecuteCalls.Should().BeEmpty();
+    }
+
+    [TestCase("/trax/execute")]
+    [TestCase("/trax/run")]
+    public async Task ConfigureRoutes_Unsigned_OutsideDevelopment_Is401(string path)
+    {
+        var fn = new TestFunction(o => o.AllowUnsignedRequests());
+        using var host = await CreateRouteHost(fn, environment: "Production");
+        var client = host.GetTestClient();
+
+        var response = await client.PostAsync(path, new StringContent(RunPayload()));
+
+        response
+            .StatusCode.Should()
+            .Be(
+                HttpStatusCode.Unauthorized,
+                "without a signing key the local routes serve only the Development environment, "
+                    + "even from loopback (see docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
+        fn.Handler.RunCalls.Should().BeEmpty();
+        fn.Handler.ExecuteCalls.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task ConfigureRoutes_Unsigned_OutsideDevelopmentWithTheOptIn_RunsFromThisMachineOnly()
+    {
+        var fn = new TestFunction(o => o.AllowUnsignedRequests(), allowUnsignedLocal: true);
+        using (var host = await CreateRouteHost(fn, environment: "Staging"))
+        {
+            var response = await host.GetTestClient()
+                .PostAsync("/trax/run", new StringContent(RunPayload()));
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        using (
+            var host = await CreateRouteHost(
+                fn,
+                IPAddress.Parse("10.0.0.5"),
+                environment: "Staging"
+            )
+        )
+        {
+            var response = await host.GetTestClient()
+                .PostAsync("/trax/run", new StringContent(RunPayload()));
+            response
+                .StatusCode.Should()
+                .Be(
+                    HttpStatusCode.Unauthorized,
+                    "the opt-in lifts the environment check, not the loopback one (see "
+                        + "docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+                );
+        }
+
+        fn.Handler.RunCalls.Should().HaveCount(1);
+    }
+
+    [Test]
+    public async Task ConfigureRoutes_SigningKey_SignedRequestOutsideDevelopment_Runs()
+    {
+        var fn = new TestFunction(o => o.SigningKey = Key);
+        using var host = await CreateRouteHost(fn, environment: "Production");
+        var payload = RunPayload();
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/trax/run")
+        {
+            Content = new StringContent(payload),
+        };
+        request.Headers.Add(
+            RunnerRequestSignature.HeaderName,
+            RunnerRequestSignature.Create(
+                Key,
+                RunnerRequestPurpose.Run,
+                System.Text.Encoding.UTF8.GetBytes(payload)
+            )
+        );
+        var response = await host.GetTestClient().SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        fn.Handler.RunCalls.Should().HaveCount(1);
     }
 
     [Test]
@@ -778,30 +892,37 @@ public class TraxLambdaFunctionTests
     private const string UnreadableBodyHeader = "X-Test-Unreadable-Body";
 
     /// <summary>
-    /// Hosts the local routes. Requests come from <paramref name="caller"/>, this machine unless a
-    /// test says otherwise, and a request marked for it gets a body that throws if it is read.
+    /// Hosts the local routes, in the <c>Development</c> environment unless a test names another.
+    /// Requests come from <paramref name="caller"/>, this machine unless a test says otherwise, and
+    /// a request marked for it gets a body that throws if it is read.
     /// </summary>
-    private static async Task<IHost> CreateRouteHost(TestFunction fn, IPAddress? caller = null)
+    private static async Task<IHost> CreateRouteHost(
+        TestFunction fn,
+        IPAddress? caller = null,
+        string environment = "Development"
+    )
     {
-        var builder = new HostBuilder().ConfigureWebHost(webHost =>
-        {
-            webHost.UseTestServer();
-            webHost.ConfigureServices(services => services.AddRouting());
-            webHost.Configure(app =>
+        var builder = new HostBuilder()
+            .UseEnvironment(environment)
+            .ConfigureWebHost(webHost =>
             {
-                app.Use(
-                    (context, next) =>
-                    {
-                        context.Connection.RemoteIpAddress = caller ?? IPAddress.Loopback;
-                        if (context.Request.Headers.ContainsKey(UnreadableBodyHeader))
-                            context.Request.Body = new ThrowingStream();
-                        return next(context);
-                    }
-                );
-                app.UseRouting();
-                app.UseEndpoints(routes => fn.ExposeConfigureRoutes(routes));
+                webHost.UseTestServer();
+                webHost.ConfigureServices(services => services.AddRouting());
+                webHost.Configure(app =>
+                {
+                    app.Use(
+                        (context, next) =>
+                        {
+                            context.Connection.RemoteIpAddress = caller ?? IPAddress.Loopback;
+                            if (context.Request.Headers.ContainsKey(UnreadableBodyHeader))
+                                context.Request.Body = new ThrowingStream();
+                            return next(context);
+                        }
+                    );
+                    app.UseRouting();
+                    app.UseEndpoints(routes => fn.ExposeConfigureRoutes(routes));
+                });
             });
-        });
         var host = await builder.StartAsync();
         return host;
     }
@@ -812,10 +933,13 @@ public class TraxLambdaFunctionTests
 
     private sealed class TestFunction(
         Action<TraxJobRunnerOptions>? runner = null,
-        bool withDatabase = false
+        bool withDatabase = false,
+        bool allowUnsignedLocal = false
     ) : TraxLambdaFunction
     {
         private IServiceProvider? _services;
+
+        protected override bool AllowUnsignedLocalDevelopmentRequests => allowUnsignedLocal;
 
         public FakeRequestHandler Handler { get; } = new();
 

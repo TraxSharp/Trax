@@ -27,10 +27,10 @@ namespace Trax.Api.Tests;
 /// </summary>
 internal static class PostureHost
 {
-    public const string AdminKey = "posture-admin";
-    public const string SupportKey = "posture-support";
-    public const string AdminSupportKey = "posture-admin-support";
-    public const string ReaderKey = "posture-reader";
+    public const string AdminKey = "posture-admin-0123456789abcdefghijklmnop";
+    public const string SupportKey = "posture-support-0123456789abcdefghijklmn";
+    public const string AdminSupportKey = "posture-admin-support-0123456789abcdefgh";
+    public const string ReaderKey = "posture-reader-0123456789abcdefghijklmno";
 
     /// <summary>A registered policy that requires the <c>Admin</c> role.</summary>
     public const string AdminPolicy = "PostureAdmin";

@@ -75,6 +75,8 @@ public class PublicApiSurfaceTests
         yield return new TestCaseData(
             typeof(Trax.Api.Dashboard.Extensions.ApiDashboardEndpointExtensions).Assembly
         ).SetName("Trax.Api.Dashboard");
+        // A tool: everything in it is internal, so the baseline pins that it exposes nothing.
+        yield return new TestCaseData(Assembly.Load("trax-console")).SetName("trax-console");
     }
 
     /// <summary>
@@ -108,7 +110,15 @@ public class PublicApiSurfaceTests
             )
                 continue;
 
-            if (!File.Exists(Path.Combine(BaselineSourceDir, $"{name}.received.txt")))
+            // The baseline is named after the assembly, which a tool names after its command (trax-console).
+            var assembly = System.Text.RegularExpressions.Regex.Match(
+                File.ReadAllText(csproj),
+                "<AssemblyName>([^<]+)</AssemblyName>"
+            )
+                is { Success: true } named
+                ? named.Groups[1].Value
+                : name;
+            if (!File.Exists(Path.Combine(BaselineSourceDir, $"{assembly}.received.txt")))
                 missing.Add(name);
         }
 

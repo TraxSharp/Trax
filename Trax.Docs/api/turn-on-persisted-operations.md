@@ -93,7 +93,10 @@ using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 
 builder.Services.AddPersistedOperationStore(store =>
-    store.UseRabbitMqInvalidation(rabbitMqConnectionString)
+    store.UseRabbitMqInvalidation(
+        rabbitMqConnectionString,
+        o => o.SigningKey = Convert.FromBase64String(configuration["Trax:InvalidationSigningKey"]!)
+    )
 );
 
 var app = builder.Build();
@@ -111,7 +114,8 @@ foreach (var error in result.Errors)
     Console.WriteLine($"{error.Code}: {error.Message}");
 ```
 
-`UseRabbitMqInvalidation` here is the broker the GraphQL nodes use, so they hear of the upload;
+`UseRabbitMqInvalidation` here is the broker the GraphQL nodes use, with the signing key they share,
+so they hear of the upload;
 `store.SingleNode()` instead when no other process caches the operations. A refused upload comes
 back as an error with a code, never as an exception; the codes are on
 [Management mutations](/docs/sdk-reference/persisted-operations/management-mutations#error-payload).
@@ -176,13 +180,20 @@ builder.Services.AddTraxGraphQL(graphql =>
     graphql
         .UsePersistedOperations(opts =>
             opts.RequirePersisted(true)
-                .UseRabbitMqInvalidation(rabbitMqConnectionString)
+                .UseRabbitMqInvalidation(
+                    rabbitMqConnectionString,
+                    o => o.SigningKey = Convert.FromBase64String(configuration["Trax:InvalidationSigningKey"]!)
+                )
                 .WithCacheMaxAge(TimeSpan.FromMinutes(2))
                 .GateManagement(roles: "Deployer")
         )
 );
 ```
 
+- Every node and uploader signs each change with the same key, at least 32 bytes
+  (`openssl rand -base64 32`), and a node drops a message not signed with it. Without a key the host
+  refuses to start, and so it does for plain `amqp://` to a broker that is not on this machine; see
+  [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder#signing-and-transport).
 - `WithCacheMaxAge` bounds how long a node serves a change it missed. The default is five minutes.
 - When a mutation returns `CHANGE_NOT_BROADCAST`, the change is saved and in force on the node that
   made it, and the broker did not confirm the broadcast. Repeat the change to send it again.

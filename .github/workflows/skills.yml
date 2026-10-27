@@ -64,6 +64,11 @@ jobs:
         env:
           REF: ${{ inputs.ref }}
         run: |
+          # Dispatched from main only: the workflow file that runs is the reviewed one.
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            echo "::error::Dispatch this workflow from main, not $GITHUB_REF."
+            exit 1
+          fi
           # Skills describe released packages, so main is not accepted, unlike the site.
           if ! [[ "$REF" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             echo "::error::'$REF' is not a release tag (vX.Y.Z)."
@@ -75,6 +80,15 @@ jobs:
         with:
           ref: refs/tags/${{ inputs.ref }}
           persist-credentials: false
+          # The whole history, so the tag can be checked against main.
+          fetch-depth: 0
+      - name: Only a tag on main
+        run: |
+          # A tag can be created anywhere; main only through review.
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "::error::$(git rev-parse HEAD) is not on main."
+            exit 1
+          fi
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:

@@ -44,11 +44,16 @@ export interface MachineServerOptions extends HttpExecutorOptions {
    * included. Each must be of this machine and of the IR its twin was generated from.
    */
   documents: readonly MachineDocument[];
-  /** The socket the change stream is subscribed over. */
+  /**
+   * The socket the change stream is subscribed over. The page owns it and parses its frames, so no limit here bounds
+   * them: cap a frame's size on the socket itself, for a graphql-ws client by giving it a `webSocketImpl` that closes
+   * the socket on a message larger than the page accepts.
+   */
   socket: PersistedSubscriptionSocket;
   /**
    * Delays, in milliseconds, before subscribing again after a stream that ended without saying why (its host stopped,
-   * or the socket gave up). The last delay repeats for as long as the stream is wanted.
+   * or the socket gave up). The last delay repeats for as long as the stream is wanted. A socket the host refused (a
+   * close with 4401 or 4403) is not subscribed again: it ends the controller as `UNAUTHENTICATED` or `FORBIDDEN`.
    */
   resubscribeDelays?: readonly number[];
   /**
@@ -85,6 +90,26 @@ export function persistedMessageReplacer(key: string, value: unknown): unknown {
 const CHANGED = 'changed';
 const CLIENT_OUTDATED = RefusalCode.ClientOutdated;
 const NOT_FOUND = RefusalCode.NotFound;
+
+/** The close codes a host turns a caller away with, and the code the controller stops with for each. */
+const REFUSED_CLOSES: Readonly<Record<number, string>> = {
+  4401: RefusalCode.Unauthenticated,
+  4403: RefusalCode.Forbidden,
+};
+
+/**
+ * The code and message a socket error ends the stream with when the host refused the socket (a close with 4401 or
+ * 4403, which graphql-ws hands the sink as the close event), or null. Subscribing again would get the same answer.
+ */
+const refusedOf = (error: unknown): { code: string; message: string } | null => {
+  const close = (error as { code?: unknown } | null)?.code;
+  if (typeof close !== 'number') return null;
+  const code = REFUSED_CLOSES[close];
+  if (code === undefined) return null;
+  const reason = (error as { reason?: unknown }).reason;
+  const said = typeof reason === 'string' && reason !== '' ? ` ${reason}` : '';
+  return { code, message: `The host refused the socket: ${close}${said}.` };
+};
 
 interface MachineChange {
   rowId?: number | string | null;
@@ -130,7 +155,8 @@ const answered = (output: SnapshotOutput): { kind: 'ok'; snapshot: ServerSnapsho
  *
  * The stream maps each push event onto the controller's messages: a snapshot (with its incarnation as
  * `rowId`), `gone` for a deleted or expired instance, `gone` with `notFound` for one the server will not let the caller
- * watch (the answer it gives a missing id), `CLIENT_OUTDATED`, and `reconnected` when the server asks for a reload, and `ended` for a socket error whose code is one of
+ * watch (the answer it gives a missing id), `CLIENT_OUTDATED`, and `reconnected` when the server asks for a reload, and `ended` for a socket the host
+ * refused (closed with 4401, `UNAUTHENTICATED`, or 4403, `FORBIDDEN`) or a socket error whose code is one of
  * {@link MachineServerOptions.terminalStreamErrors}; a request rejected with one of those codes is named by `endedBy`, so
  * the controller stops on it as well. A stream that ends any other way is subscribed again after {@link MachineServerOptions.resubscribeDelays}; the new stream's first
  * event is the instance as it is then, so nothing written meanwhile is lost and nothing is read again.
@@ -159,6 +185,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
       fetch: options.fetch,
       headers: options.headers,
       allowInsecureTransport: options.allowInsecureTransport,
+      maxResponseSize: options.maxResponseSize,
       machines: [{ machine, documents }],
     }),
   );
@@ -251,7 +278,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
             });
           },
           error: (error) => {
-            const end = terminalOf(error);
+            const end = refusedOf(error) ?? terminalOf(error);
             if (end) deliver({ type: 'ended', ...end });
             else again();
           },

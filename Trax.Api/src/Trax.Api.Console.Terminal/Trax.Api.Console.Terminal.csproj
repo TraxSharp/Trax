@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>trax-console</ToolCommandName>
+    <!-- System.CommandLine names the root command after the running assembly, so the assembly is named after the
+         command: help then reads `Usage: trax-console ...`. -->
+    <AssemblyName>trax-console</AssemblyName>
+    <RootNamespace>Trax.Api.Console.Terminal</RootNamespace>
+    <PackageId>Trax.Api.Console.Terminal</PackageId>
+    <Description>trax-console, the Trax .NET operations console in a terminal: runs, dead letters, the work queue, manifests, a run's trace and machine instances, read and acted on over a host's Trax GraphQL operations surface with the same documents the browser console sends. Also answers in JSON lines for scripts and agents. Install it with `dotnet tool install -g Trax.Api.Console.Terminal`.</Description>
+    <PackageTags>trax;dotnet;dotnet-tool;operations;console;terminal;tui;graphql</PackageTags>
+    <PackageProjectUrl>https://traxsharp.net/docs/reference/trax-console</PackageProjectUrl>
+    <TraxPackageReadme>$(MSBuildThisFileDirectory)README.md</TraxPackageReadme>
+    <!-- A new package id, so nuget.org has no release to validate against yet. Remove after the first release that
+         ships it (Directory.Build.props). -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Terminal.Gui" />
+    <!-- The runtime the generated client in Operations/ sends through. Nothing from Trax.Api: the tool talks to a host
+         over HTTP and a socket only. -->
+    <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.Client/Trax.Client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Api.Console.Terminal.Tests" />
+    <InternalsVisibleTo Include="Trax.Api.Tests.StateMachine.E2E" />
+  </ItemGroup>
+</Project>

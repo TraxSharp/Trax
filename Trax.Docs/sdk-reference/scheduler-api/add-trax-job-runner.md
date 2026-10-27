@@ -59,7 +59,7 @@ The overload without `configure` registers the execution pipeline with no postur
 | `SigningKey` | `byte[]?` | `null` | The key shared with the scheduler's `SigningKey`, at least 32 bytes. When set, every request must carry a valid `Trax-Signature` |
 | `AuthorizationPolicy` | `string?` | `null` | An ASP.NET authorization policy applied to `UseTraxJobRunner` and `UseTraxRunEndpoint`. Must admit only the scheduler. Not applicable to SQS or Lambda |
 | `MaxRequestBodyBytes` | `long` | 8 MiB (`DefaultMaxRequestBodyBytes`) | The largest request body the HTTP entry points (`UseTraxJobRunner`, `UseTraxRunEndpoint`, and `TraxLambdaFunction`'s local routes) read; a larger one gets `413`. The default holds a train input at the mediator's default stored-input cap; raise it together with the scheduler's `MaxInputJsonBytes`. Must be positive |
-| `MaxClockSkew` | `TimeSpan` | 5 minutes | How far a signed request's timestamp may be from the runner's clock, and how long a nonce is remembered |
+| `MaxClockSkew` | `TimeSpan` | 5 minutes | How far a signed request's timestamp may be from the runner's clock, and how long a nonce is remembered. Must be positive and at most one hour |
 | `AllowUnsignedRequests()` | method | | Accepts requests with no signature. Each entry point logs a warning when it starts. Returns the options |
 | `UnsignedRequestsAllowed` | `bool` | `false` | Whether `AllowUnsignedRequests()` was called |
 | `UseInMemoryNonceStore()` | method | | Keeps accepted nonces in this process instead of the database. Only for a runner that runs as one instance: each instance keeps its own. Returns the options |
@@ -96,7 +96,7 @@ See [Authorization Posture](/docs/scheduler/remote-execution#authorization-postu
 | `ITraxScheduler` → `TraxScheduler` | Scoped | Runtime scheduler interface |
 | `IDormantDependentContext` → `DormantDependentContext` | Scoped | Dependent train context |
 | `IJobRunnerTrain` → `JobRunnerTrain` | Scoped | The train execution pipeline |
-| `ITraxRequestHandler` → `TraxRequestHandler` | Scoped | The execution step behind the runner's entry points: reads a request's input, resolves the train and runs it inside a trusted scope. It checks no posture and verifies no signature, so call it only from an entry point that has already verified the request; the entry points Trax ships do. Hidden from IntelliSense |
+| `ITraxRequestHandler` → `TraxRequestHandler` | Scoped | The execution step behind the runner's entry points: reads a request's input, resolves the train, authorizes a run's named train inside a trusted scope and runs it outside that scope. It checks no posture and verifies no signature, so call it only from an entry point that has already verified the request; the entry points Trax ships do. Hidden from IntelliSense |
 | `TraxJobRunnerOptions` | Singleton | The posture passed to `configure` |
 | `INonceStore` | Singleton | Where a signing runner records accepted nonces: the `runner_nonce` table through `IDataContext.RunnerNonces`, shared by every instance on the database, or memory after `UseInMemoryNonceStore()`. Registered with `TryAdd`, so a host's own store replaces it. With a `SigningKey` and neither a relational data provider nor `UseInMemoryNonceStore()`, resolving it fails at startup |
 | `RunnerRequestVerifier` | Singleton | Checks the posture at startup and each request's signature and freshness |
@@ -125,9 +125,9 @@ Enforces the same posture as `UseTraxJobRunner`, and throws while mapping withou
 
 1. Reads a `RemoteRunRequest` from the request body (contains train name and input JSON), after the same `415`, `401` and `413` checks, and with the same `400` refusals
 2. Refuses a train name that is one of the scheduler's own trains (ManifestManager, JobDispatcher, JobRunner, MetadataCleanup, DeadLetterCleanup), by full name, or by short name unless a host train shares it
-3. Resolves `ITrainExecutionService` and calls `RunAsync(trainName, inputJson)`
+3. Resolves `ITrainExecutionService`, prepares the named train inside a trusted scope (`scheduler.remote-run`), which skips that train's own authorization, and runs it after the scope has closed, so a gated train it queues or runs from a junction is checked as anywhere else. A replacement `ITrainExecutionService` is called with `RunAsync(trainName, inputJson)` and no trusted scope, so every run of a `[TraxAuthorize]` train is refused; `UseTraxRunEndpoint` and `TraxLambdaFunction` log a warning saying so when they start
 4. Serializes the train output as JSON
-5. Returns `200 OK` with a `RemoteRunResponse` containing the metadata ID, output JSON, and output type
+5. Returns `200 OK` with a `RemoteRunResponse` containing the metadata ID, output JSON, and output type. With a `SigningKey`, the answer, error or not, carries a `Trax-Response-Signature` header: `v1,s=<base64 HMAC-SHA256>` over the purpose, the nonce of the request it answers and the exact body, which `UseRemoteRun` checks. Without one it is unsigned. A refusal before the train runs (`401`, `413`, `415`, `400`) is a status code, which is not signed
 6. On error: returns `200 OK` with `RemoteRunResponse.IsError = true` and structured error fields (`ErrorMessage`, `ExceptionType`, `FailureJunction`, `FailureClass`). `StackTrace` is always null, and `ErrorMessage` is fixed text unless the failure is a `TrainException`. `FailureClass` is the classification this process's `IFailureClassifier` assigned, or null when none is registered or it did not recognise the failure. `PublicMessage` is the message of a plain `TrainException` and null for anything else, including a type derived from `TrainException`. The response is written with Trax's own JSON options (enums as integers), not the host's, so a host configured to write enums as strings does not change the wire. The reading side also accepts names, and reads a class it does not know as `Unclassified`. Uses in-band errors to distinguish from infrastructure failures
 
 ### Shared requirements
@@ -145,6 +145,7 @@ Public because the runner and scheduler packages ship separately and share them;
 | Type or member | Description |
 |----------------|-------------|
 | `RunnerRequestSignature` | Signs a runner request and checks a signature. The value is `v1,t=<unix seconds>,n=<nonce>,s=<base64 HMAC-SHA256>` in the `Trax-Signature` header, a Lambda envelope's `Signature`, or an SQS message attribute |
+| `RunnerRequestSignature.ResponseHeaderName` | `Trax-Response-Signature`: the header a signing runner puts on a run's answer |
 | `RunnerRequestSignature.MinimumKeyLength` | `32`: the shortest signing key accepted, in bytes |
 | `RunnerRequestSignature.EnsureKey(key, paramName)` | Throws when the key is missing or shorter than `MinimumKeyLength` |
 | `RunnerRequestPurpose` | What a signed request is for, part of the signed text: `Execute` (a queued job) or `Run` (a synchronous run) |

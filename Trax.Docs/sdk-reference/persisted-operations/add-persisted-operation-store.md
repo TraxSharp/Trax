@@ -43,6 +43,9 @@ public static IServiceCollection AddPersistedOperationStore(
 
 public sealed class PersistedOperationStoreBuilder
 {
+    public PersistedOperationStoreBuilder UseRabbitMqInvalidation(
+        string connectionString,
+        Action<RabbitMqInvalidationOptions> configure);
     public PersistedOperationStoreBuilder UseRabbitMqInvalidation(string connectionString);
     public PersistedOperationStoreBuilder SingleNode();
     public PersistedOperationStoreBuilder GateManagement(string? policy = null, string? roles = null);
@@ -59,7 +62,8 @@ public sealed class PersistedOperationStoreBuilder
 
 | `PersistedOperationStoreBuilder` method | Description |
 |-----------------------------------------|-------------|
-| `UseRabbitMqInvalidation(connectionString)` | Broadcast every change over the broker the GraphQL nodes use with their own `UseRabbitMqInvalidation`, so each empties its caches. Throws `ArgumentException` for a blank connection string |
+| `UseRabbitMqInvalidation(connectionString, configure)` | Broadcast every change over the broker the GraphQL nodes use with their own `UseRabbitMqInvalidation`, so each empties its caches, signed with the key they share (`configure` sets `SigningKey`; see [Signing and transport](/docs/sdk-reference/persisted-operations/persisted-operations-builder#signing-and-transport)). Throws `ArgumentException` for a blank connection string |
+| `UseRabbitMqInvalidation(connectionString)` | The same with no key, which refuses the start until one is set through the overload above |
 | `SingleNode()` | Declare that no other process caches these operations: this one serves them itself, or nothing serves them while it writes. Nothing checks the claim; a GraphQL node elsewhere sees a change only when its cached entry reaches its maximum age |
 | `GateManagement(policy, roles)` | Declare who may manage documents through this process's surfaces, the dashboard's pages. The same rules as [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)' `GateManagement`: a policy or roles is required, a comma-separated role list is any of, repeated calls are all of. Without it the dashboard shows no management pages. Code calling the service with no person behind it is not gated |
 | `GateManagementToAuthenticatedUsers()` | Let any authenticated person manage documents through the dashboard. Prefer `GateManagement` |
@@ -71,11 +75,14 @@ The same `IServiceCollection`.
 ## Behavior
 
 - Throws `ArgumentNullException` for a `null` argument, and `InvalidOperationException` when
-  `configure` calls neither builder method or calls both. Both are thrown when
+  `configure` calls neither builder method or calls both, or sets a broker without a signing key
+  (unless `AllowUnsignedMessages()`), with a key shorter than 32 bytes, or as plain `amqp://` to a
+  host that is not loopback without `AllowInsecureTransport`. All are thrown when
   `AddPersistedOperationStore` runs.
 - The one-string overload is a compile error; called through reflection it throws as if
   `configure` did nothing. The two-string overload ignores the first string and forwards to
-  `store => store.UseRabbitMqInvalidation(rabbitMqInvalidationConnectionString)`.
+  `store => store.UseRabbitMqInvalidation(rabbitMqInvalidationConnectionString)`, which has no key
+  and so refuses the start.
 - Called alongside [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)
   in one host, the GraphQL registration's validator replaces the no-op one.
 - Called alongside `UsePersistedOperations` in one host, `UsePersistedOperations`' options are the
@@ -100,7 +107,12 @@ The same `IServiceCollection`.
 
 ```csharp compile
 services.AddPersistedOperationStore(store =>
-    store.UseRabbitMqInvalidation(rabbitMqConnectionString).GateManagement(roles: "Deployer")
+    store
+        .UseRabbitMqInvalidation(
+            rabbitMqConnectionString,
+            o => o.SigningKey = Convert.FromBase64String(configuration["Trax:InvalidationSigningKey"]!)
+        )
+        .GateManagement(roles: "Deployer")
 );
 ```
 

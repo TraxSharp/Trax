@@ -65,12 +65,15 @@ Not covered:
 
 - The guard reads `PackageReference` entries, so a dependency taken by copying source
   across repos is invisible to it.
-- It only recognises the eight `Trax.*` families it lists. `Trax.Samples` references
-  `Trax.Runner.Lambda`, published out of Trax.Scheduler, and the guard skips it because the
-  name is not in that list.
+- It knows only the eight `Trax.*` families it lists and the ids mapped to a family by hand
+  (`Trax.Client` to Trax.StateMachine, `Trax.Runner.Lambda` to Trax.Scheduler). A reference to
+  any other `Trax.*` id fails it until the id is mapped to the folder that ships it, so a new
+  package with an unprefixed name cannot slip past the chain.
 
 ## Changelog
 
+- **2026-10-23**: A `Trax.*` id in no family now fails the guard instead of being skipped, and
+  `Trax.Runner.Lambda` is mapped to Trax.Scheduler.
 - **2026-09-11**: Corrected the opening claim that the repos are a total order. The allow-map
   in `DependencyDirectionTests` encodes Api and Cli as parallel branches off Scheduler, and the
   body already said so two paragraphs later.

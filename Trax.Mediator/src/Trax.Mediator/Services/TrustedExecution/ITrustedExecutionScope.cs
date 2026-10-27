@@ -30,8 +30,9 @@ namespace Trax.Mediator.Services.TrustedExecution;
 /// </para>
 /// <para>
 /// <strong>When to open one.</strong> Only around work that was already authorized at a gate of
-/// its own. Trax opens scopes for a scheduler dispatching queued work, a remote worker running a job
-/// it was sent, and the dashboard, whose host gates the whole admin surface. Never open one around
+/// its own. Trax opens one around a remote runner's authorization of the train a run names, which
+/// was authorized when the run was submitted, and around a system-owned state machine's
+/// authorization of the train it invokes; the train itself runs outside both. Never open one around
 /// code that serves a caller the train's authorization is meant to check, and never decide to open
 /// one from anything the caller supplies. If one does, any caller can run any
 /// <c>[TraxAuthorize]</c> train.

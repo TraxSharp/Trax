@@ -205,7 +205,9 @@ public class SignalRSinkRegistrationTests
         var builder = new TraxBuilder(services, registry);
 
         builder.AddEffects(effects =>
-            effects.UseBroadcaster(b => b.UseRabbitMq("amqp://localhost").UseSignalRHub())
+            effects.UseBroadcaster(b =>
+                b.UseRabbitMq("amqp://localhost", o => o.AllowUnsignedMessages()).UseSignalRHub()
+            )
         );
 
         await using var sp = services.BuildServiceProvider();

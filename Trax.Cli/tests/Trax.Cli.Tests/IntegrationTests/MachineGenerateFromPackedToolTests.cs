@@ -323,11 +323,11 @@ public class MachineGenerateFromPackedToolTests
         import { configureTrax, followRunProgress, reminderServer, startRun, TraxOperationError, useRememberedReminder, useReminder, useRunProgress } from "./trax/index.g";
 
         // Every request, with its headers, answered only when the test says so.
-        const requests: { id: string; variables: Record<string, unknown>; headers: Record<string, string>; answer(data: unknown): void }[] = [];
-        globalThis.fetch = ((_url: string, init: { body: string; headers: Record<string, string> }) =>
+        const requests: { id: string; variables: Record<string, unknown>; headers: Record<string, string>; redirect?: string; answer(data: unknown): void }[] = [];
+        globalThis.fetch = ((_url: string, init: { body: string; headers: Record<string, string>; redirect?: string }) =>
           new Promise((resolve) => {
             const { id, variables } = JSON.parse(init.body);
-            requests.push({ id, variables, headers: init.headers, answer: (data) => resolve({ ok: true, status: 200, json: async () => ({ data }) } as Response) });
+            requests.push({ id, variables, headers: init.headers, redirect: init.redirect, answer: (data) => resolve(new Response(JSON.stringify({ data }), { status: 200 })) });
           })) as unknown as typeof fetch;
 
         const signIn = (key: string, user = key) =>
@@ -447,6 +447,28 @@ public class MachineGenerateFromPackedToolTests
           expect(sent).toHaveLength(1);
           await act(async () => sent[0].answer({}));
           await expect(running).resolves.toBeUndefined();
+        });
+
+        it("A_cleartext_socket_to_another_host_is_refused_unless_the_connection_allows_it", async () => {
+          configureTrax({ url: "https://host/graphql", socketUrl: "ws://api:8080/graphql" });
+          expect(() => reminderServer()).toThrow(/socket ws:\/\/api:8080 is not over TLS/);
+          expect(() => followRunProgress("r-9", () => {})).toThrow(/not over TLS/);
+          configureTrax({ url: "https://host/graphql", socketUrl: "/graphql" });
+          expect(() => reminderServer()).toThrow(/not an absolute ws:\/\/ or wss:\/\/ URL/);
+
+          configureTrax({ url: "https://host/graphql", socketUrl: "ws://api:8080/graphql", allowInsecureTransport: true });
+          expect(() => reminderServer()).not.toThrow();
+        });
+
+        it("A_train_function_follows_no_redirect_and_refuses_an_answer_over_its_limit", async () => {
+          configureTrax({ url: "https://host/graphql", socketUrl: "wss://host/graphql", headers: () => ({ "X-Api-Key": "X" }), maxResponseBytes: 64 });
+          const running = startRun({ scenario: "ok" });
+          await settle();
+          const sent = requests.filter((r) => r.headers["X-Api-Key"] === "X");
+          expect(sent.map((r) => r.redirect)).toEqual(["error"]);
+          const refused = expect(running).rejects.toThrow(/more than 64 bytes/);
+          await act(async () => sent[0].answer({ startRun: "x".repeat(128) }));
+          await refused;
         });
 
         it("The_remembered_key_follows_the_user_given_to_configureTrax", async () => {

@@ -32,8 +32,8 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class MachineInstanceQueriesOverHttpTests
 {
-    private const string OperatorKey = "machines-operator-key";
-    private const string UserKey = "machines-user-key";
+    private const string OperatorKey = "machines-operator-key-0123456789abcdefgh";
+    private const string UserKey = "machines-user-key-0123456789abcdefghijkl";
     private const string Machine = "Acme.Fulfilment";
 
     private static readonly Guid InstanceId = Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff");

@@ -1,9 +1,7 @@
 using System.Globalization;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Client;
 
 namespace Trax.StateMachine.Client;
 
@@ -12,7 +10,9 @@ public sealed record GraphQLMachineServerOptions
 {
     /// <summary>
     /// The client the requests go through. Set its authentication on it, a default header or a delegating handler, as
-    /// for any other <see cref="System.Net.Http.HttpClient"/>.
+    /// for any other <see cref="System.Net.Http.HttpClient"/>. Build it on a handler with automatic redirects off: a
+    /// redirect drops only <c>Authorization</c>, so any other header would follow it to the new host. An answer from
+    /// another host than <see cref="Endpoint"/>'s fails the request.
     /// </summary>
     public required HttpClient Http { get; init; }
 
@@ -39,7 +39,8 @@ public sealed record GraphQLMachineServerOptions
 
     /// <summary>
     /// Delays before subscribing again after a stream that ended without saying why (its host stopped, or the socket
-    /// closed). The last repeats for as long as the stream is wanted.
+    /// closed). The last repeats for as long as the stream is wanted. A socket the host refused (4401, 4403, or an
+    /// upgrade answered 401 or 403) is not subscribed again: it stops the controller.
     /// </summary>
     public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
 
@@ -233,78 +234,32 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 variables[name] = value.DeepClone();
         var body = new JsonObject { ["id"] = document.Id, ["variables"] = variables };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
-        {
-            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
-        };
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        using var response = await _options
-            .Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+        var answered = await TraxHttpTransport
+            .PostAsync(
+                _options.Http,
+                _options.Endpoint,
+                body,
+                _options.MaxResponseSize,
+                cancellationToken
+            )
             .ConfigureAwait(false);
-        var text = await ReadBoundedAsync(response.Content, cancellationToken)
-            .ConfigureAwait(false);
-
-        JsonObject? answered;
-        try
-        {
-            answered = JsonNode.Parse(text) as JsonObject;
-        }
-        catch (JsonException) when (!response.IsSuccessStatusCode)
-        {
-            answered = null;
-        }
-        // A GraphQL error with a code is the host's to answer with whatever status it chose; anything else not 2xx failed.
-        if (answered?["errors"] is JsonArray { Count: > 0 } errors)
-        {
-            var error = errors[0] as JsonObject;
-            var code =
-                error?["extensions"]?["code"] is JsonValue c && c.TryGetValue<string>(out var s)
-                    ? s
-                    : null;
-            var message =
-                error?["message"] is JsonValue m && m.TryGetValue<string>(out var t)
-                    ? t
-                    : "The server refused the request.";
-            if (code == ClientOutdated || code == ServerOutdated)
-                return (null, ServerAnswer.Refused(code, message));
-            throw new HttpRequestException(message);
-        }
-        if (!response.IsSuccessStatusCode)
+        if (answered.Failure is { } failure)
             throw new HttpRequestException(
-                $"The server answered {(int)response.StatusCode} {response.ReasonPhrase}.",
+                failure.Message,
                 null,
-                response.StatusCode
+                failure.Status is { } status ? (System.Net.HttpStatusCode)status : null
             );
-        if (answered is null)
-            throw new HttpRequestException("The server's answer is not JSON.");
-
-        return (answered["data"]?["machines"]?[_field]?[operation] as JsonObject, null);
-    }
-
-    // The body as text, refused once it passes MaxResponseSize, whether or not the host said its length up front.
-    private async Task<string> ReadBoundedAsync(
-        HttpContent content,
-        CancellationToken cancellationToken
-    )
-    {
-        var max = _options.MaxResponseSize;
-        if (content.Headers.ContentLength > max)
-            throw TooLarge(max);
-        using var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var body = new MemoryStream();
-        var buffer = new byte[8192];
-        int read;
-        while ((read = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+        // A GraphQL error with a code is the host's to answer with whatever status it chose.
+        if (answered.Errors.Count > 0)
         {
-            if (body.Length + read > max)
-                throw TooLarge(max);
-            body.Write(buffer, 0, read);
+            var error = answered.Errors[0];
+            if (error.Code == ClientOutdated || error.Code == ServerOutdated)
+                return (null, ServerAnswer.Refused(error.Code, error.Message));
+            throw new HttpRequestException(error.Message);
         }
-        return Encoding.UTF8.GetString(body.GetBuffer(), 0, (int)body.Length);
-    }
 
-    private static HttpRequestException TooLarge(long max) =>
-        new($"The server answered with a body larger than {max} bytes.");
+        return (answered.Data?["machines"]?[_field]?[operation] as JsonObject, null);
+    }
 
     private ServerAnswer AnswerOf(JsonObject? answer)
     {
@@ -339,8 +294,10 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// <remarks>
     /// Each push becomes a message: a snapshot (with its incarnation), <see cref="StreamMessage.Gone"/> for a deleted
     /// instance or one the server will not let the caller watch, <see cref="StreamMessage.ClientOutdated"/>, and
-    /// <see cref="StreamMessage.Reload"/> when the server asks for one. A stream that ends any other way is subscribed
-    /// again after the resubscribe delays; the new stream's first event is the instance as it is then.
+    /// <see cref="StreamMessage.Reload"/> when the server asks for one. A socket the host refused (closed with 4401 or
+    /// 4403, or an upgrade answered 401 or 403) is <see cref="StreamMessage.Refused"/>, and is not subscribed again. A
+    /// stream that ends any other way is subscribed again after the resubscribe delays; the new stream's first event
+    /// is the instance as it is then.
     /// </remarks>
     public IDisposable Subscribe(string id, Action<StreamMessage> onMessage)
     {
@@ -372,8 +329,11 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 _ended = false;
             }
             var current = server._options.Socket.Subscribe(
-                server._changed.Id,
-                new JsonObject { ["id"] = id },
+                new JsonObject
+                {
+                    ["id"] = server._changed.Id,
+                    ["variables"] = new JsonObject { ["id"] = id },
+                },
                 this
             );
             bool close;
@@ -449,7 +409,25 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             );
         }
 
-        public void Error(Exception error) => Again();
+        public void Error(Exception error)
+        {
+            if (RefusedCode(error) is { } code)
+                Deliver(new StreamMessage.Refused(code, error.Message));
+            else
+                Again();
+        }
+
+        // The code a socket the host refused stops the controller with, or null for a close to subscribe again after.
+        private static string? RefusedCode(Exception error) =>
+            error switch
+            {
+                SocketClosedException { CloseStatus: 4401 }
+                or SocketClosedException { HttpStatus: 401 } =>
+                    RefusalCode.Unauthenticated.ToWire(),
+                SocketClosedException { CloseStatus: 4403 }
+                or SocketClosedException { HttpStatus: 403 } => RefusalCode.Forbidden.ToWire(),
+                _ => null,
+            };
 
         public void Complete() => Again();
 
@@ -459,7 +437,12 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             {
                 if (!_wanted || _ended)
                     return;
-                if (message is StreamMessage.Gone or StreamMessage.ClientOutdated)
+                if (
+                    message
+                    is StreamMessage.Gone
+                        or StreamMessage.ClientOutdated
+                        or StreamMessage.Refused
+                )
                     _ended = true;
             }
             onMessage(message);

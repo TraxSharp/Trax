@@ -61,6 +61,7 @@ public class RabbitMqJunctionExchangeTests
         var options = new RabbitMqBroadcasterOptions
         {
             ConnectionString = AmqpUri,
+            SigningKey = TestBroadcastKey.Value,
             ExchangeName = $"trax.test.junctions.{Guid.NewGuid():N}",
         };
 
@@ -155,6 +156,7 @@ public class RabbitMqJunctionExchangeTests
         new()
         {
             ConnectionString = AmqpUri,
+            SigningKey = TestBroadcastKey.Value,
             ExchangeName = $"trax.test.junctions.{Guid.NewGuid():N}",
         };
 
@@ -178,10 +180,25 @@ public class RabbitMqJunctionExchangeTests
     )
     {
         await channel.ExchangeDeclareAsync(exchange, ExchangeType.Fanout, durable: true);
+        // Signed for the exchange it is published to, so only the exchange check can drop it.
+        var body = JsonSerializer.SerializeToUtf8Bytes(message);
         await channel.BasicPublishAsync(
             exchange,
             string.Empty,
-            JsonSerializer.SerializeToUtf8Bytes(message)
+            mandatory: false,
+            new BasicProperties
+            {
+                Headers = new Dictionary<string, object?>
+                {
+                    [BroadcastMessageSignature.Header] = BroadcastMessageSignature.Create(
+                        TestBroadcastKey.Value,
+                        exchange,
+                        body,
+                        DateTimeOffset.UtcNow
+                    ),
+                },
+            },
+            body
         );
     }
 

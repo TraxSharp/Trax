@@ -104,8 +104,8 @@ public sealed class InstanceHost : IDisposable
 
     /// <summary>
     /// Creates <paramref name="user"/>'s draft from <paramref name="json"/> as host code does, through the public
-    /// <see cref="ISnapshotStore"/>: a machine with a rule, a timer, an invoke or an effect moves through its declared
-    /// events only, so no save creates its draft.
+    /// <see cref="ISnapshotStore"/>: a machine with a rule, a timer, an invoke, an effect, a guard or a reducer moves
+    /// through its declared events only, so no save creates its draft.
     /// </summary>
     public async Task SeedDraft(string user, Guid id, string json)
     {
