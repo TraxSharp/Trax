@@ -55,7 +55,7 @@ public class TraxRemoteRoutingBuildTests
                 trax.AddEffects(effects => effects.UseInMemory())
                     .AddMediator(typeof(AssemblyMarker).Assembly)
                     .AddScheduler(scheduler =>
-                        scheduler.UseRemoteWorkers(o => o.BaseUrl = "http://endpoint")
+                        scheduler.UseRemoteWorkers(o => o.BaseUrl = "https://endpoint")
                     )
             );
 

@@ -80,6 +80,13 @@ otherwise, so an answer made for another request is refused as well. A runner wi
 Upgrade a signing runner before its scheduler: a scheduler on this release refuses an older
 runner's unsigned answers.
 
+The response signature authenticates a success body for the request it answers, and only that. A
+status code, the other headers and the body of a non-success answer are not authenticated: the
+scheduler treats any non-success status as a failed run, after retrying 429, 502 and 503. Over
+cleartext anyone on the path could fail or delay runs that way, so `UseRemoteRun` and
+`UseRemoteWorkers` refuse an `http://` `BaseUrl` to a host that is not loopback unless the options
+set `AllowInsecureTransport`.
+
 ### What each transport checks
 
 | Transport | Checked |

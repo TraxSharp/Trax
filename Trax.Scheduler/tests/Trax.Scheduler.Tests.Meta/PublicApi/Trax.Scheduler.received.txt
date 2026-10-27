@@ -66,9 +66,12 @@ namespace Trax.Scheduler.Configuration
     }
     public class RemoteRunOptions
     {
+        public const long DefaultMaxResponseBodyBytes = 16777216;
         public RemoteRunOptions() { }
+        public bool AllowInsecureTransport { get; set; }
         public string BaseUrl { get; set; }
         public System.Action<System.Net.Http.HttpClient>? ConfigureHttpClient { get; set; }
+        public long MaxResponseBodyBytes { get; set; }
         public Trax.Scheduler.Configuration.HttpRetryOptions Retry { get; set; }
         public byte[]? SigningKey { get; set; }
         public System.TimeSpan Timeout { get; set; }
@@ -76,6 +79,7 @@ namespace Trax.Scheduler.Configuration
     public class RemoteWorkerOptions
     {
         public RemoteWorkerOptions() { }
+        public bool AllowInsecureTransport { get; set; }
         public string BaseUrl { get; set; }
         public System.Action<System.Net.Http.HttpClient>? ConfigureHttpClient { get; set; }
         public Trax.Scheduler.Configuration.HttpRetryOptions Retry { get; set; }

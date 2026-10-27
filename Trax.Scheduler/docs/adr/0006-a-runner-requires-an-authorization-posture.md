@@ -98,6 +98,18 @@ upgrade order, runner first, since a scheduler on the release that checks it ref
 runner's answers. A queued job's answer is not signed: the job's metadata row, not the answer, is
 the record of what ran.
 
+**What the response signature does not cover.** It authenticates a success body for the request
+it answers. The status code, the other headers and the body of a non-success answer are not
+authenticated, and cannot be: a refusal by the runner's posture (401, 413), a proxy's 502 and a
+gateway's 429 are written before or outside anything that holds the key. The scheduler therefore
+reads a non-success status only as a failed run, retries 429, 502 and 503, and keeps the start of
+the body for the log; none of them can make a run succeed or carry an output. In cleartext they
+could still be forged to fail or delay runs, so `UseRemoteRun` and `UseRemoteWorkers` refuse an
+`http://` base URL to a host that is not loopback unless the options set `AllowInsecureTransport`,
+the name the RabbitMQ options and Trax.Client use for the same choice. A run's answer is read up
+to `RemoteRunOptions.MaxResponseBodyBytes` (16 MiB by default) before its signature is checked,
+and a larger one fails the run.
+
 ## Only registered trains
 
 A queued job's request names its input type. The runner looks that name up among the input types
@@ -173,7 +185,9 @@ request as stale.
   run's answer carries a response signature that verifies for its request and that
   `HttpRunExecutor` reads; with the unsigned posture it carries none. `RunnerRequestSigningTests`
   refuses an unsigned answer, one signed for another request and one whose body changed, and reads
-  the answer to the last attempt after a retry. It also
+  the answer to the last attempt after a retry. `RemoteRunnerTransportTests` refuses an
+  `http://` base URL off loopback without `AllowInsecureTransport`, fails a run whose answer is
+  over `MaxResponseBodyBytes`, declared or streamed, and reads only the start of an error body. It also
   pins the reading order: a missing, malformed or stale signature is a 401 with a body stream
   that throws if read, a body over `MaxRequestBodyBytes` is a 413 with or without a declared
   length, and repeated refusals are one warning.
@@ -205,6 +219,10 @@ of its own. Sharing nonces across runner instances is
 [0009](./0009-a-runner-shares-its-accepted-nonces-through-the-database.md)'s, and its guards are named there.
 
 ## Changelog
+
+- **2026-10-27**: The response signature is documented as covering a success body only.
+  `UseRemoteRun` and `UseRemoteWorkers` refuse plain `http://` off loopback without
+  `AllowInsecureTransport`, and a run's answer is read only up to `MaxResponseBodyBytes`.
 
 - **2026-10-23**: A signing runner signs a run's answer, bound to the nonce of the request it
   answers, and `UseRemoteRun` with a key refuses an answer that does not verify. The local Lambda

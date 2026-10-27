@@ -11,10 +11,19 @@ namespace Trax.Scheduler.Configuration;
 public class RemoteWorkerOptions
 {
     /// <summary>
-    /// The base URL of the remote endpoint that receives job requests.
+    /// The base URL of the remote endpoint that receives job requests. It must be <c>https://</c>
+    /// unless its host is loopback or <see cref="AllowInsecureTransport"/> is set.
     /// </summary>
     /// <example>https://my-workers.example.com/trax/execute</example>
     public string BaseUrl { get; set; } = null!;
+
+    /// <summary>
+    /// Accepts an <c>http://</c> <see cref="BaseUrl"/> to a host that is not loopback. Off by
+    /// default: the runner's answers are not signed, so in cleartext one could be changed on the
+    /// way, and whatever authenticates the requests would cross the network unencrypted. Set it
+    /// only when the network to the runner is trusted, such as a container network on one machine.
+    /// </summary>
+    public bool AllowInsecureTransport { get; set; }
 
     /// <summary>
     /// Optional callback to configure the <see cref="HttpClient"/> used for dispatching jobs.

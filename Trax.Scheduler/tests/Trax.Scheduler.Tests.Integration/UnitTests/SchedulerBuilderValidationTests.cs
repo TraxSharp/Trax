@@ -188,11 +188,11 @@ public class SchedulerBuilderValidationTests
                     .AddScheduler(scheduler =>
                         scheduler
                             .UseRemoteWorkers(
-                                o => o.BaseUrl = "http://endpoint-a",
+                                o => o.BaseUrl = "https://endpoint-a",
                                 routing => routing.ForTrain<ITestTrain>()
                             )
                             .UseRemoteWorkers(
-                                o => o.BaseUrl = "http://endpoint-b",
+                                o => o.BaseUrl = "https://endpoint-b",
                                 routing => routing.ForTrain<ITestTrain>()
                             )
                     )
@@ -217,11 +217,11 @@ public class SchedulerBuilderValidationTests
                     .AddScheduler(scheduler =>
                         scheduler
                             .UseRemoteWorkers(
-                                o => o.BaseUrl = "http://endpoint-a",
+                                o => o.BaseUrl = "https://endpoint-a",
                                 routing => routing.ForTrain<ITestTrain>()
                             )
                             .UseRemoteWorkers(
-                                o => o.BaseUrl = "http://endpoint-b",
+                                o => o.BaseUrl = "https://endpoint-b",
                                 routing => routing.ForTrain<ITestTrainB>()
                             )
                     )

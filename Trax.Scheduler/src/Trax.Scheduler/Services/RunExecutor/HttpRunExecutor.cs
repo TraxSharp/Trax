@@ -45,8 +45,9 @@ internal class HttpRunExecutor(
     /// <param name="ct">Cancels the HTTP call, including waits between retries.</param>
     /// <returns>The remote run's metadata id, external id (empty when none) and output.</returns>
     /// <exception cref="RemoteRunException">
-    /// The endpoint answered with a non-success status after retries, with an empty body, or,
-    /// with a signing key, with a response not signed for this request.
+    /// The endpoint answered with a non-success status after retries, with an empty body, with a
+    /// body larger than <see cref="RemoteRunOptions.MaxResponseBodyBytes"/>, or, with a signing
+    /// key, with a response not signed for this request.
     /// </exception>
     /// <exception cref="TrainException">
     /// The remote train failed (rebuilt by <see cref="RemoteRunResponse.ToTrainException"/>), or
@@ -81,22 +82,38 @@ internal class HttpRunExecutor(
             ct,
             options.SigningKey,
             RunnerRequestPurpose.Run,
-            signature => requestSignature = signature
+            signature => requestSignature = signature,
+            HttpCompletionOption.ResponseHeadersRead
         );
 
         if (!httpResponse.IsSuccessStatusCode)
         {
-            // The reply is unauthenticated and goes into Message only, capped. A client is shown
-            // PublicMessage, which is null here, so the GraphQL error filter answers "The train
-            // failed." (central docs/0028); Message reaches the caller's log, and the failure
-            // recorded for a train that made this run from a junction, which operators read.
-            var body = await ReadErrorBodyAsync(httpResponse);
+            // The status and the reply are unauthenticated: the response signature covers a
+            // success body only, so this is only ever a failure, and the reply goes into Message
+            // only, capped. A client is shown PublicMessage, which is null here, so the GraphQL
+            // error filter answers "The train failed." (central docs/0028); Message reaches the
+            // caller's log, and the failure recorded for a train that made this run from a
+            // junction, which operators read.
+            var body = await ReadErrorBodyAsync(httpResponse, ct);
             throw new RemoteRunException(
                 $"Remote run endpoint returned HTTP {(int)httpResponse.StatusCode}: {body}"
             );
         }
 
-        var responseBody = await httpResponse.Content.ReadAsByteArrayAsync(ct);
+        // Read up to the limit before anything else looks at it, the signature included, so an
+        // answer of any size costs at most MaxResponseBodyBytes.
+        var (responseBody, tooLarge) = await BoundedBody.ReadAsync(
+            httpResponse.Content,
+            options.MaxResponseBodyBytes,
+            httpClient.Timeout,
+            ct
+        );
+        if (tooLarge)
+            throw new RemoteRunException(
+                "The remote run endpoint's response is larger than "
+                    + $"RemoteRunOptions.MaxResponseBodyBytes ({options.MaxResponseBodyBytes} "
+                    + "bytes), so it was not read."
+            );
 
         // With a signing key, only an answer the runner signed for this request is read: the
         // signature covers the body and is bound to the nonce of the attempt it answers, so an
@@ -151,20 +168,31 @@ internal class HttpRunExecutor(
     internal static TrainException BuildExceptionFromErrorResponse(RemoteRunResponse response) =>
         response.ToTrainException();
 
-    private static async Task<string> ReadErrorBodyAsync(HttpResponseMessage response)
+    // Only the start of an error body is read: it is unauthenticated, and only ever logged.
+    private async Task<string> ReadErrorBodyAsync(
+        HttpResponseMessage response,
+        CancellationToken ct
+    )
     {
         try
         {
-            var body = await response.Content.ReadAsStringAsync();
+            var (bytes, exceeded) = await BoundedBody.ReadAsync(
+                response.Content,
+                MaxErrorBodyLength * 4L,
+                httpClient.Timeout,
+                ct,
+                prefix: true
+            );
+            var body = System.Text.Encoding.UTF8.GetString(bytes);
 
             if (string.IsNullOrWhiteSpace(body))
                 return response.ReasonPhrase ?? "no response body";
 
-            return body.Length > MaxErrorBodyLength
-                ? body[..MaxErrorBodyLength] + "... (truncated)"
+            return exceeded || body.Length > MaxErrorBodyLength
+                ? body[..Math.Min(body.Length, MaxErrorBodyLength)] + "... (truncated)"
                 : body;
         }
-        catch
+        catch (Exception) when (!ct.IsCancellationRequested)
         {
             return response.ReasonPhrase ?? "unable to read response body";
         }

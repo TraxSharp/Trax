@@ -49,6 +49,13 @@ public static class RunnerRequestSignature
     /// purpose, the nonce of the request it answers and the exact body, so the scheduler accepts
     /// only an answer the runner made for that request.
     /// </summary>
+    /// <remarks>
+    /// It authenticates a success body for that request, and nothing else: the status code, the
+    /// other headers and the body of a non-success answer are not covered. The scheduler treats
+    /// any non-success status as a failed run and retries only 429, 502 and 503, so the most an
+    /// unauthenticated answer can do is fail or delay a run; TLS is what keeps it from being
+    /// changed, which is why a runner's base URL must be <c>https://</c> off loopback.
+    /// </remarks>
     public const string ResponseHeaderName = "Trax-Response-Signature";
 
     private const string Version = "v1";
