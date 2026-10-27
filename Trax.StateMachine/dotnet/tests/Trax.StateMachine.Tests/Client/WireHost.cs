@@ -46,9 +46,16 @@ internal sealed class WireHost : IAsyncDisposable
                     _peers.Add(RunAsync(tcp, script));
             }
         }
-        catch (OperationCanceledException)
+        catch (Exception ex)
+            when (_stop.IsCancellationRequested
+                && ex
+                    is OperationCanceledException
+                        or InvalidOperationException
+                        or ObjectDisposedException
+                        or SocketException
+            )
         {
-            // Disposed.
+            // Disposed. A loop that comes back round after Stop() is told the listener is not listening.
         }
     }
 
