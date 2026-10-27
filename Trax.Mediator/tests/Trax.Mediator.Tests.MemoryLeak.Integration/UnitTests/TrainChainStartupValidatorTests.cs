@@ -1181,9 +1181,13 @@ public class TrainChainStartupValidatorTests
 
     public class AwaitingTrain : ServiceTrain<ChainProbeInput, bool>, IAwaitingTrain
     {
+        // Something that never finishes. Task.Yield finished on the thread pool, now and then before the check looked,
+        // and the body then declared its chain as if it had never awaited.
+        private static readonly TaskCompletionSource Pending = new();
+
         protected override async Task<Either<Exception, bool>> Junctions()
         {
-            await Task.Yield();
+            await Pending.Task;
             return await Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
         }
     }
