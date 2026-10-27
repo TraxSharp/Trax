@@ -191,8 +191,16 @@ jobs:
         # revision and its own script downloads that build from Playwright's CDN, with the system
         # libraries it needs. The build put the script beside the test assembly. Only chromium,
         # the one browser the tests launch (Trax.Docs/adr/0049).
+        # The CDN's addresses change between lookups, and a lookup the egress filter did not see is
+        # refused, so a refused download is tried again before the job fails.
         if: matrix.package.playwright
-        run: pwsh Trax.Samples/tests/Trax.Samples.Recovery.Browser/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            pwsh Trax.Samples/tests/Trax.Samples.Recovery.Browser/bin/Release/net10.0/playwright.ps1 install --with-deps chromium && exit 0
+            echo "::warning::Installing chromium failed (attempt $attempt of 3)."
+            sleep 20
+          done
+          exit 1
       - name: Pack (package validation)
         # Package validation runs on pack, not build. Packing here compares every package with
         # its baseline release before a merge, instead of at release time, after
@@ -409,8 +417,15 @@ jobs:
         run: dotnet build "$PROJECT" --configuration Release --no-restore -warnaserror
       - name: Install chromium
         # The playwright.ps1 the build put beside the test assembly, as in the dotnet job.
+        # Tried again on a refused download, as in the dotnet job.
         if: matrix.suite.chromium
-        run: pwsh "$FOLDER/$PROJECT/bin/Release/net10.0/playwright.ps1" install --with-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            pwsh "$FOLDER/$PROJECT/bin/Release/net10.0/playwright.ps1" install --with-deps chromium && exit 0
+            echo "::warning::Installing chromium failed (attempt $attempt of 3)."
+            sleep 20
+          done
+          exit 1
       - name: Create test databases
         if: matrix.suite.databases[0] != null
         env:
