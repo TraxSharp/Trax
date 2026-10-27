@@ -186,7 +186,8 @@ internal sealed record ConsoleTarget(
             }
             text = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex)
+            when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
         {
             throw new InvalidOperationException(
                 $"{option}: cannot read {path} ({ex.Message}).",
@@ -197,7 +198,8 @@ internal sealed record ConsoleTarget(
     }
 
     // On Unix the file is opened with O_NONBLOCK, so a pipe with no writer answers at once instead of blocking the
-    // open, and O_NOFOLLOW, so a link swapped in after the check above is refused. Elsewhere it is opened as usual.
+    // open, and O_NOFOLLOW, so a link swapped in after the check above is refused. On Windows it is opened as usual;
+    // on a Unix whose flag values are not known it is not opened at all.
     private static FileStream OpenWithoutWaiting(string path)
     {
         if (CredentialFile.OpenFlags() is not { } flags)

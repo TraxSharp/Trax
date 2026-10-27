@@ -14,24 +14,56 @@ internal static class CredentialFile
     private const int ReadOnly = 0;
 
     /// <summary>
-    /// <c>O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_NOCTTY | O_CLOEXEC</c> for this OS, or null where the values are not
-    /// known (Windows among them), and the file is opened as usual.
+    /// <c>O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_NOCTTY | O_CLOEXEC</c> for this OS and architecture, or null on
+    /// Windows, where the file is opened as usual.
     /// </summary>
+    /// <exception cref="PlatformNotSupportedException">
+    /// A Unix whose flag values are not known here. Opening the file with flags that mean something else (<c>O_NOFOLLOW</c>'s generic value is
+    /// <c>O_LARGEFILE</c> on ARM and <c>O_DIRECT</c> on PowerPC) would drop the checks the open is for, so the file is
+    /// not read at all.
+    /// </exception>
     public static int? OpenFlags()
     {
+        if (OperatingSystem.IsWindows())
+            return null;
         if (OperatingSystem.IsLinux())
-        {
-            // 32-bit ARM numbers O_NOFOLLOW apart from every other Linux .NET runs on.
-            var noFollow =
-                RuntimeInformation.ProcessArchitecture == Architecture.Arm ? 0x8000 : 0x20000;
-            return ReadOnly | 0x800 | noFollow | 0x100 | 0x80000;
-        }
+            return LinuxOpenFlags(RuntimeInformation.ProcessArchitecture)
+                ?? throw Unsupported($"Linux on {RuntimeInformation.ProcessArchitecture}");
         if (OperatingSystem.IsMacOS() || OperatingSystem.IsMacCatalyst())
             return ReadOnly | 0x4 | 0x100 | 0x20000 | 0x1000000;
         if (OperatingSystem.IsFreeBSD())
             return ReadOnly | 0x4 | 0x100 | 0x8000 | 0x100000;
-        return null;
+        throw Unsupported(RuntimeInformation.OSDescription);
     }
+
+    /// <summary>
+    /// The open flags on Linux for <paramref name="architecture"/>, from the kernel's <c>uapi</c> headers, or null for
+    /// an architecture not listed. <c>asm-generic/fcntl.h</c> gives <c>O_NONBLOCK</c> <c>0x800</c>, <c>O_NOCTTY</c>
+    /// <c>0x100</c>, <c>O_NOFOLLOW</c> <c>0x20000</c> and <c>O_CLOEXEC</c> <c>0x80000</c>; 32- and 64-bit ARM and
+    /// PowerPC override <c>O_NOFOLLOW</c> to <c>0x8000</c>, and keep the other three. MIPS, SPARC, Alpha and PA-RISC
+    /// override more, and .NET does not run on them; they would be added here, value by value, if it did.
+    /// </summary>
+    internal static int? LinuxOpenFlags(Architecture architecture) =>
+        architecture switch
+        {
+            Architecture.X86
+            or Architecture.X64
+            or Architecture.S390x
+            or Architecture.LoongArch64
+            or Architecture.RiscV64 => Linux(noFollow: 0x20000),
+            Architecture.Arm or Architecture.Armv6 or Architecture.Arm64 or Architecture.Ppc64le =>
+                Linux(noFollow: 0x8000),
+            _ => null,
+        };
+
+    private static int Linux(int noFollow) => ReadOnly | 0x800 | noFollow | 0x100 | 0x80000;
+
+    private static PlatformNotSupportedException Unsupported(string platform) =>
+        new(
+            $"reading a credential file is not supported on {platform}, where the flags that open it without "
+                + $"following a link or waiting on a pipe are not known; set {ConsoleTarget.ApiKeyVariable} or "
+                + $"{ConsoleTarget.TokenVariable} instead"
+        );
 
     /// <summary>open(2): the descriptor, or -1 with the error in <see cref="Marshal.GetLastPInvokeError"/>.</summary>
     [DllImport("libc", EntryPoint = "open", SetLastError = true)]
