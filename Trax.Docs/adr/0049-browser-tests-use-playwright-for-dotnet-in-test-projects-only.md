@@ -63,6 +63,6 @@ test.
 
 ## Changelog
 
-- **2026-10-09**: Recorded.
 - **2026-10-27**: CI installs the browser without `--with-deps`, whose fonts took six minutes from the runner's apt
   mirror; the system packages are installed only when `ldd` finds a library missing.
+- **2026-10-09**: Recorded.
