@@ -69,6 +69,9 @@ updates:
       # PublicApiGenerator changes how it renders members, which rewrites the
       # committed PublicApi baselines: bump it and regenerate them together.
       - dependency-name: "PublicApiGenerator"
+      # Microsoft.Playwright and the screenshot script's npm playwright must name the same
+      # version, so both download one browser build (PlaywrightVersionTests). Bump them together.
+      - dependency-name: "Microsoft.Playwright"
   - package-ecosystem: "github-actions"
     # "/" covers .github/workflows only; the local composite actions pin their own steps.
     directories: ["/", "/.github/actions/*"]
@@ -86,6 +89,8 @@ updates:
       - "/Trax.Core/plugins/vscode/trax-hints"
       # Each sample's frontend, and the scripts that record and photograph the samples for
       # traxsharp.net.
+      - "/Trax.Samples/samples/Board/Trax.Samples.Board.Agents"
+      - "/Trax.Samples/samples/Board/Trax.Samples.Board.Client"
       - "/Trax.Samples/samples/ChatService/Trax.Samples.ChatService.Client"
       - "/Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client"
       - "/Trax.Samples/samples/StateMachine/web"
@@ -110,6 +115,20 @@ updates:
       # ignore rules do not apply to security updates.
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # Held to Microsoft.Playwright in Directory.Packages.props; see the nuget ignore above.
+      - dependency-name: "playwright"
+  # The book's web project, which the book prints file by file (BookSampleIsTheBookTests), so a
+  # version bump to its package.json is a change to the book and is made there by hand. A limit of
+  # zero turns version updates off and leaves security updates on.
+  - package-ecosystem: "npm"
+    directory: "/Trax.Samples/book/Shopfront/web"
+    schedule: { interval: "weekly" }
+    cooldown: { default-days: 7 }
+    open-pull-requests-limit: 0
+    groups:
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
   # The Rust engine's workspace: the engine has no dependencies, its client's are pinned in the
   # one Cargo.lock. Resolver 3 keeps an update within the workspace's rust-version.
   - package-ecosystem: "cargo"
