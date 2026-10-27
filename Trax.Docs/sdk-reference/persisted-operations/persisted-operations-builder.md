@@ -108,7 +108,7 @@ logging a warning at most once a minute.
 | `RabbitMqInvalidationOptions` | Default | Purpose |
 |---|---|---|
 | `SigningKey` | `null` | The shared key, at least `MinimumSigningKeyLength` (32) bytes. Required unless `AllowUnsignedMessages()` is called. |
-| `MaxClockSkew` | 5 minutes | How far a message's timestamp may be from the receiving node's clock, either way. Must be positive. |
+| `MaxClockSkew` | 5 minutes | How far a message's timestamp may be from the receiving node's clock, either way. Must be positive and at most one hour. |
 | `AllowUnsignedMessages()` | off | Publish unsigned and accept messages without a signature when no key is set. The receiver logs a warning when it starts. Only for a broker no one else can publish to. Read back from `UnsignedMessagesAllowed`. |
 | `AllowInsecureTransport` | `false` | Accept plain `amqp://` to a broker that is not loopback. Without it such a URI refuses the start, since the broker credentials and every message would cross the network in cleartext. The receiver logs a warning when it is what lets the connection through. |
 

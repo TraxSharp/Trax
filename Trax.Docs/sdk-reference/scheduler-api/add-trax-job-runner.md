@@ -59,7 +59,7 @@ The overload without `configure` registers the execution pipeline with no postur
 | `SigningKey` | `byte[]?` | `null` | The key shared with the scheduler's `SigningKey`, at least 32 bytes. When set, every request must carry a valid `Trax-Signature` |
 | `AuthorizationPolicy` | `string?` | `null` | An ASP.NET authorization policy applied to `UseTraxJobRunner` and `UseTraxRunEndpoint`. Must admit only the scheduler. Not applicable to SQS or Lambda |
 | `MaxRequestBodyBytes` | `long` | 8 MiB (`DefaultMaxRequestBodyBytes`) | The largest request body the HTTP entry points (`UseTraxJobRunner`, `UseTraxRunEndpoint`, and `TraxLambdaFunction`'s local routes) read; a larger one gets `413`. The default holds a train input at the mediator's default stored-input cap; raise it together with the scheduler's `MaxInputJsonBytes`. Must be positive |
-| `MaxClockSkew` | `TimeSpan` | 5 minutes | How far a signed request's timestamp may be from the runner's clock, and how long a nonce is remembered |
+| `MaxClockSkew` | `TimeSpan` | 5 minutes | How far a signed request's timestamp may be from the runner's clock, and how long a nonce is remembered. Must be positive and at most one hour |
 | `AllowUnsignedRequests()` | method | | Accepts requests with no signature. Each entry point logs a warning when it starts. Returns the options |
 | `UnsignedRequestsAllowed` | `bool` | `false` | Whether `AllowUnsignedRequests()` was called |
 | `UseInMemoryNonceStore()` | method | | Keeps accepted nonces in this process instead of the database. Only for a runner that runs as one instance: each instance keeps its own. Returns the options |

@@ -224,6 +224,38 @@ public class RabbitMqMessageSigningTests
         Register("amqp://localhost", o => o.AllowUnsignedMessages());
     }
 
+    [TestCase(61)]
+    [TestCase(int.MaxValue)]
+    public void UseRabbitMq_with_a_clock_skew_over_an_hour_is_refused(int minutes)
+    {
+        var skew = minutes == int.MaxValue ? TimeSpan.MaxValue : TimeSpan.FromMinutes(minutes);
+
+        var act = () =>
+            Register(
+                "amqp://localhost",
+                o =>
+                {
+                    o.SigningKey = TestBroadcastKey.Value;
+                    o.MaxClockSkew = skew;
+                }
+            );
+
+        act.Should()
+            .Throw<ArgumentException>()
+            .WithMessage("*MaxClockSkew must be at most one hour*");
+    }
+
+    [Test]
+    public void UseRabbitMq_with_a_clock_skew_of_an_hour_registers() =>
+        Register(
+            "amqp://localhost",
+            o =>
+            {
+                o.SigningKey = TestBroadcastKey.Value;
+                o.MaxClockSkew = TimeSpan.FromHours(1);
+            }
+        );
+
     [TestCase("amqp://trax:trax123@rabbitmq.internal:5672/")]
     [TestCase("amqp://10.0.0.5/")]
     public void UseRabbitMq_with_plain_amqp_to_another_host_is_refused(string uri)

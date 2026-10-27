@@ -44,6 +44,44 @@ public class InvalidationSigningTests
     }
 
     [Test]
+    public void Build_AClockSkewOverAnHour_RefusesToStart()
+    {
+        var act = () =>
+            new PersistedOperationsBuilder()
+                .UseRabbitMqInvalidation(
+                    "amqp://localhost",
+                    o =>
+                    {
+                        o.SigningKey = TestInvalidationKey.Value;
+                        o.MaxClockSkew = TimeSpan.MaxValue;
+                    }
+                )
+                .Build();
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*MaxClockSkew must be at most one hour*");
+    }
+
+    [Test]
+    public void Build_AClockSkewOfAnHour_Starts()
+    {
+        var act = () =>
+            new PersistedOperationsBuilder()
+                .UseRabbitMqInvalidation(
+                    "amqp://localhost",
+                    o =>
+                    {
+                        o.SigningKey = TestInvalidationKey.Value;
+                        o.MaxClockSkew = TimeSpan.FromHours(1);
+                    }
+                )
+                .Build();
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
     public void Build_UnsignedMessagesAllowedByName_Starts()
     {
         var options = new PersistedOperationsBuilder()

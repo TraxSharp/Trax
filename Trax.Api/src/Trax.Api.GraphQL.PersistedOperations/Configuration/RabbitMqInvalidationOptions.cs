@@ -30,9 +30,13 @@ public sealed class RabbitMqInvalidationOptions
 
     /// <summary>
     /// How far a signed message's timestamp may be from the receiving node's clock, either way,
-    /// before the message is dropped. Default five minutes. Must be positive.
+    /// before the message is dropped. Default five minutes. Must be positive and at most an hour:
+    /// a longer window would let a captured message be replayed for that long.
     /// </summary>
     public TimeSpan MaxClockSkew { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>The longest <see cref="MaxClockSkew"/> accepted: one hour.</summary>
+    internal static readonly TimeSpan LongestClockSkew = TimeSpan.FromHours(1);
 
     /// <summary>Whether <see cref="AllowUnsignedMessages"/> was called.</summary>
     public bool UnsignedMessagesAllowed { get; private set; }
@@ -82,6 +86,10 @@ public sealed class RabbitMqInvalidationOptions
 
         if (MaxClockSkew <= TimeSpan.Zero)
             return "RabbitMqInvalidationOptions.MaxClockSkew must be positive.";
+
+        if (MaxClockSkew > LongestClockSkew)
+            return "RabbitMqInvalidationOptions.MaxClockSkew must be at most one hour: a signed "
+                + "message is accepted for that long either side of the node's clock.";
 
         if (!AllowInsecureTransport && IsCleartextToAnotherHost(connectionString, out var host))
             return $"The RabbitMQ broker {host} is not reached over TLS, so its credentials and "

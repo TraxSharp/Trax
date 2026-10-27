@@ -4,6 +4,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.Http;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RequestSigning;
@@ -500,6 +501,37 @@ public class RunnerRequestSigningTests
             .VerifyResponse(Key, RunnerRequestPurpose.Run, request, request, Body)
             .Should()
             .BeFalse("a request signature is not a response signature");
+    }
+
+    [TestCase(61)]
+    [TestCase(int.MaxValue)]
+    public void AddTraxJobRunner_AClockSkewOverAnHour_IsRefused(int minutes)
+    {
+        var skew = minutes == int.MaxValue ? TimeSpan.MaxValue : TimeSpan.FromMinutes(minutes);
+
+        var act = () =>
+            new Microsoft.Extensions.DependencyInjection.ServiceCollection().AddTraxJobRunner(o =>
+            {
+                o.SigningKey = Key;
+                o.MaxClockSkew = skew;
+            });
+
+        act.Should()
+            .Throw<ArgumentOutOfRangeException>()
+            .WithMessage("*MaxClockSkew must be at most one hour*");
+    }
+
+    [Test]
+    public void AddTraxJobRunner_AClockSkewOfAnHour_IsAccepted()
+    {
+        var act = () =>
+            new Microsoft.Extensions.DependencyInjection.ServiceCollection().AddTraxJobRunner(o =>
+            {
+                o.SigningKey = Key;
+                o.MaxClockSkew = TimeSpan.FromHours(1);
+            });
+
+        act.Should().NotThrow();
     }
 
     [Test]

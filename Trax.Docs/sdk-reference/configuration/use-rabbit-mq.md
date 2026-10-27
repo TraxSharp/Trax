@@ -47,7 +47,7 @@ public static BroadcasterBuilder UseRabbitMq(
 | `JunctionExchangeName` | `string?` | `ExchangeName` + `".junctions"` | Fanout exchange [junction events](/docs/effect/junction-events) are published to. Must differ from `ExchangeName`, or `UseRabbitMq` throws `ArgumentException`. |
 | `PrefetchCount` | `ushort` | `64` | How many received events the receiver may hold unacknowledged at once. The broker holds the rest until the handlers acknowledge one, so a slow handler leaves events queued on the broker rather than in the receiving process. `0` (no limit) is refused: `UseRabbitMq` throws `ArgumentException`, and a directly constructed receiver throws `InvalidOperationException` from `StartAsync`. |
 | `SigningKey` | `byte[]?` | `null` | The key every process on the exchange shares, at least `MinimumSigningKeyLength` (32) bytes. Required unless `AllowUnsignedMessages()` is called. See [Signing and transport](#signing-and-transport). |
-| `MaxClockSkew` | `TimeSpan` | 5 minutes | How far a signed message's timestamp may be from the receiver's clock, either way, before it is dropped. Must be positive. |
+| `MaxClockSkew` | `TimeSpan` | 5 minutes | How far a signed message's timestamp may be from the receiver's clock, either way, before it is dropped. Must be positive and at most one hour. |
 | `AllowInsecureTransport` | `bool` | `false` | Accepts plain `amqp://` to a broker that is not on this machine. Set it only when the network to the broker is trusted. |
 | `UnsignedMessagesAllowed` | `bool` | `false` | Whether `AllowUnsignedMessages()` was called. Read-only. |
 
