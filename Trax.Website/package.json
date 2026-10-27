@@ -10,6 +10,8 @@
     "test": "bash scripts/sync-docs.sh && node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON 'tests/**/*.test.ts'"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
     "gray-matter": "^4.0.3",
     "next": "16.4.2",
     "next-mdx-remote": "^6.0.0",

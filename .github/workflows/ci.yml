@@ -611,8 +611,6 @@ jobs:
             release-assets.githubusercontent.com:443
             objects.githubusercontent.com:443
             registry.npmjs.org:443
-            fonts.googleapis.com:443
-            fonts.gstatic.com:443
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
