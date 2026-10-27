@@ -5,7 +5,7 @@ using Trax.Api.Console.Terminal.Machines;
 namespace Trax.Api.Console.Terminal.Tests.UnitTests;
 
 /// <summary>
-/// What the graph does with a machine it was not drawn for: a big one is laid out in bounded time, a huge one is
+/// What the graph does with a machine it was not drawn for: a big one is laid out in bounded work, a huge one is
 /// listed, and a second state of one name or a transition to no state is said rather than thrown or dropped.
 /// </summary>
 [TestFixture]
@@ -13,7 +13,7 @@ public class GraphLayoutTests
 {
     [TestCase(false)]
     [TestCase(true)]
-    public void A_machine_of_a_hundred_states_and_three_hundred_transitions_is_laid_out_quickly(
+    public void A_machine_of_a_hundred_states_and_three_hundred_transitions_is_laid_out_within_a_bounded_search(
         bool vertical
     )
     {
@@ -34,11 +34,21 @@ public class GraphLayoutTests
             .ToList();
 
         var clock = Stopwatch.StartNew();
-        var lines = GraphLayout.Render(states, edges, current: "S50", vertical: vertical);
+        var lines = GraphLayout.Render(states, edges, "S50", vertical, out var work);
         clock.Stop();
-        TestContext.Out.WriteLine($"{clock.ElapsedMilliseconds} ms, {lines.Count} lines");
+        TestContext.Out.WriteLine(
+            $"{clock.ElapsedMilliseconds} ms, {lines.Count} lines, {work.Steps} of {work.Budget} steps, {work.CellsSearched} cells searched"
+        );
 
-        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(2));
+        // The bound is the work, not the clock: a runner is several times slower than a laptop, and a test of
+        // milliseconds fails on the runner without anything having changed. The searches share one budget, and each
+        // line past it costs one step to give up. Each search resets the window it covers, which the budget does not
+        // count: today these 300 lines cover about 4M cells across and 9M down, and a search that went back to
+        // covering the whole drawing for every line would cover several times that.
+        work.Steps.Should().BeLessThanOrEqualTo(work.Budget + edges.Count);
+        work.CellsSearched.Should().BeLessThan(4 * work.Budget);
+        // A ceiling for what neither count sees (layering, ordering, placing), far above what any runner takes.
+        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30));
         var text = string.Join("\n", lines);
         text.Should().Contain("S0").And.Contain("S99");
     }

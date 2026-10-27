@@ -23,6 +23,12 @@ internal sealed record GraphEdge(string From, string To, string Label);
 /// A machine too big to draw in a terminal is listed instead, state by state with its transitions; a transition to a
 /// state the machine does not declare, or a second state of one name, is said under the graph.
 /// </summary>
+/// <summary>
+/// How much routing one drawing took: the search steps of all its lines together, out of the budget they share, and
+/// the cells their search windows covered.
+/// </summary>
+internal readonly record struct LayoutWork(long Steps, long CellsSearched, long Budget);
+
 internal static class GraphLayout
 {
     private const int N = 1,
@@ -48,8 +54,21 @@ internal static class GraphLayout
         IReadOnlyList<GraphEdge> edges,
         string? current = null,
         bool vertical = false
+    ) => Render(states, edges, current, vertical, out _);
+
+    /// <summary>
+    /// As <see cref="Render(IReadOnlyList{GraphState}, IReadOnlyList{GraphEdge}, string?, bool)"/>, and how much
+    /// routing it took, which a test can bound where a clock would depend on the machine it runs on.
+    /// </summary>
+    internal static IReadOnlyList<string> Render(
+        IReadOnlyList<GraphState> states,
+        IReadOnlyList<GraphEdge> edges,
+        string? current,
+        bool vertical,
+        out LayoutWork work
     )
     {
+        work = default;
         if (states.Count == 0)
             return ["(no states)"];
         // What the graph cannot draw is said under it rather than left out.
@@ -162,6 +181,7 @@ internal static class GraphLayout
         legend.AddRange(unplaced);
         legend.AddRange(problems);
         legend.AddRange(states.Where(s => s.Note is not null).Select(s => $"{s.Name}: {s.Note}"));
+        work = new LayoutWork(canvas.Steps, canvas.CellsSearched, SearchBudget);
         if (legend.Count > 0)
         {
             output.Add("");
@@ -490,6 +510,12 @@ internal static class GraphLayout
         // has its remaining lines said under the graph instead.
         private long _budget = SearchBudget;
 
+        /// <summary>The steps every line's search took together.</summary>
+        public long Steps => SearchBudget - _budget;
+
+        /// <summary>The cells every line's search window covered together, each reset before it was searched.</summary>
+        public long CellsSearched { get; private set; }
+
         private int Cell(int x, int y, int d) => ((y * width) + x) * 4 + d;
 
         public void Box(Placed box, bool current, List<string>? loops)
@@ -601,6 +627,7 @@ internal static class GraphLayout
             var prev = _prev;
             for (var y = y0; y <= y1; y++)
                 Array.Fill(dist, int.MaxValue, Cell(x0, y, 0), (x1 - x0 + 1) * 4);
+            CellsSearched += (long)(x1 - x0 + 1) * (y1 - y0 + 1);
             var queue = new PriorityQueue<(int X, int Y, int D), int>();
             foreach (var s in starts)
             {
