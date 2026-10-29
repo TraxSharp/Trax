@@ -188,32 +188,51 @@ export function requireNoRedirect(response: Response): void {
 
 /**
  * The response body as text, read no further than `max` bytes. Throws once it passes the limit, whether or not the
- * host said its length up front, and stops reading the body.
+ * host said its length up front, and stops reading the body. A response with no body stream to read (an XHR polyfill,
+ * React Native) is read whole only when it says a length within the limit, and refused otherwise; a Node stream is
+ * read by async iteration.
  */
 export async function readBounded(response: Response, max: number): Promise<string> {
   const tooLarge = () => new Error(`The server answered with a body larger than ${max} bytes.`);
-  const declared = Number(response.headers?.get('content-length') ?? NaN);
+  const header = response.headers?.get('content-length');
+  const declared = header == null || header.trim() === '' ? NaN : Number(header);
   if (Number.isFinite(declared) && declared > max) {
-    await response.body?.cancel().catch(() => undefined);
+    await cancel(response.body);
     throw tooLarge();
   }
-  if (!response.body) {
+  const body = response.body as unknown;
+  if (!body) {
+    if (!Number.isFinite(declared) || declared < 0)
+      throw new Error('The server answered without a length, and the response has no body stream to read it bounded.');
     const text = await response.text();
     if (new TextEncoder().encode(text).length > max) throw tooLarge();
     return text;
   }
-  const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  const take = (value: Uint8Array): boolean => {
     total += value.byteLength;
-    if (total > max) {
-      await reader.cancel().catch(() => undefined);
-      throw tooLarge();
-    }
+    if (total > max) return false;
     chunks.push(value);
+    return true;
+  };
+  if (typeof (body as ReadableStream<Uint8Array>).getReader === 'function') {
+    const reader = (body as ReadableStream<Uint8Array>).getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!take(value)) {
+        await reader.cancel().catch(() => undefined);
+        throw tooLarge();
+      }
+    }
+  } else if (typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === 'function') {
+    // Leaving the loop early returns the iterator, which destroys a Node stream.
+    for await (const value of body as AsyncIterable<Uint8Array | string>) {
+      if (!take(typeof value === 'string' ? new TextEncoder().encode(value) : value)) throw tooLarge();
+    }
+  } else {
+    throw new Error('The response body is not a stream this client can read.');
   }
   const bytes = new Uint8Array(total);
   let offset = 0;
@@ -223,6 +242,16 @@ export async function readBounded(response: Response, max: number): Promise<stri
   }
   return new TextDecoder().decode(bytes);
 }
+
+const cancel = async (body: unknown): Promise<void> => {
+  const stream = body as { cancel?: () => Promise<void>; destroy?: () => void } | null;
+  try {
+    if (typeof stream?.cancel === 'function') await stream.cancel();
+    else stream?.destroy?.();
+  } catch {
+    // The body is abandoned either way.
+  }
+};
 
 /**
  * Throws unless `endpoint` may carry credentials: an absolute one must be https unless its host is this machine
