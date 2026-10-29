@@ -354,6 +354,21 @@ public class GraphQLSubscriptionSocketTests
             .NotBeOfType<SocketClosedException>("a 502 is a host that may be back soon");
     }
 
+    [TestCase(4401, null, true)]
+    [TestCase(4403, null, true)]
+    [TestCase(null, 401, true)]
+    [TestCase(null, 403, true)]
+    [TestCase(4400, null, false)]
+    [TestCase(4408, null, false)]
+    [TestCase(4429, null, false)]
+    [TestCase(4499, null, false)]
+    [TestCase(1011, null, false)]
+    public void Only_4401_and_4403_and_an_upgrade_answered_401_or_403_are_refusals(
+        int? closeStatus,
+        int? httpStatus,
+        bool refused
+    ) => new SocketClosedException("closed", closeStatus, httpStatus).Refused.Should().Be(refused);
+
     [Test]
     public async Task A_subscription_disposed_before_the_connection_is_acknowledged_is_never_sent()
     {

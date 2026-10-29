@@ -689,9 +689,10 @@ public sealed class SubscriptionErrorException : Exception
 
 /// <summary>
 /// The socket closed, before it was acknowledged or while subscribed, or the host refused to open it.
-/// <see cref="CloseStatus"/> is the code the server closed it with, when it sent one: a 44xx code is the host refusing
-/// the connection (4401 unauthorized, 4403 forbidden), and subscribing again will not change its answer. So is an
-/// upgrade answered 401 or 403 (<see cref="HttpStatus"/>).
+/// <see cref="CloseStatus"/> is the code the server closed it with, when it sent one: 4401 (unauthorized) or 4403
+/// (forbidden) is the host refusing the connection, and subscribing again will not change its answer. So is an upgrade
+/// answered 401 or 403 (<see cref="HttpStatus"/>). Any other close, 4408 (the connection was not initialised in time)
+/// and 4429 (too many initialisation requests) among them, may be answered differently next time.
 /// </summary>
 public sealed class SocketClosedException : IOException
 {
@@ -710,10 +711,10 @@ public sealed class SocketClosedException : IOException
     public int? HttpStatus { get; }
 
     /// <summary>
-    /// Whether the host refused the connection itself (a 4400 to 4499 close, or an upgrade answered 401 or 403), so a
+    /// Whether the host refused the connection itself (a 4401 or 4403 close, or an upgrade answered 401 or 403), so a
     /// retry gets the same answer.
     /// </summary>
-    public bool Refused => CloseStatus is >= 4400 and <= 4499 || HttpStatus is 401 or 403;
+    public bool Refused => CloseStatus is 4401 or 4403 || HttpStatus is 401 or 403;
 }
 
 /// <summary>

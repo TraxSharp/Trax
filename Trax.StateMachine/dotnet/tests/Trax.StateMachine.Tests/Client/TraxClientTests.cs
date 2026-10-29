@@ -451,6 +451,32 @@ public class TraxClientTests
         (await socket.Subscriptions.Take(Wait)).Should().NotBeNull();
     }
 
+    [TestCase(4408)]
+    [TestCase(4429)]
+    [TestCase(4400)]
+    public async Task A_socket_closed_with_a_code_other_than_4401_or_4403_is_subscribed_again(
+        int closeStatus
+    )
+    {
+        var socket = new HandSocket();
+        var time = new FakeTimeProvider();
+        var events = new EventLog<ChangedResult>();
+        using var stream = new TraxClient(
+            Transport(socket),
+            new TraxClientOptions { Time = time }
+        ).Subscribe(Changed, TraxNoVariables.Instance, events.Add);
+        var first = await socket.Subscriptions.Take(Wait);
+
+        first.Sink.Error(new SocketClosedException("The socket was closed.", closeStatus));
+
+        (await events.Take(1))
+            .Single()
+            .Should()
+            .BeOfType<TraxStreamEvent<ChangedResult>.Interrupted>();
+        time.Advance(TimeSpan.FromSeconds(1));
+        (await socket.Subscriptions.Take(Wait)).Should().NotBeSameAs(first);
+    }
+
     [Test]
     public async Task Disposing_the_handle_cancels_a_pending_resubscribe()
     {
