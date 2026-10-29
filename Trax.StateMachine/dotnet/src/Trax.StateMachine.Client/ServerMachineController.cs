@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Nodes;
 
@@ -175,7 +176,8 @@ public sealed record ServerMachineOptions
 /// <para><b>Stopping.</b> A gone instance and <c>CLIENT_OUTDATED</c> stop the controller for good.</para>
 /// <para><b>Threads.</b> The controller does its work on one exclusive scheduler, so it handles one thing at a time
 /// whichever thread calls it. <see cref="Changed"/> is raised there: a handler reads <see cref="View"/> and must not
-/// block on the controller. A UI app marshals to its own thread from the handler.</para>
+/// block on the controller. A UI app marshals to its own thread from the handler. A handler that throws is reported to
+/// <see cref="Trace"/> and does not stop the controller or the handlers after it.</para>
 /// <para>Every operation is total: none throws for a refusal or a failed request.</para>
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/dotnet-client">SDK reference</seealso>
@@ -256,7 +258,10 @@ public sealed class ServerMachineController : IDisposable
         _view = BuildView();
     }
 
-    /// <summary>Raised after every change of <see cref="View"/>, on the controller's scheduler.</summary>
+    /// <summary>
+    /// Raised after every change of <see cref="View"/>, on the controller's scheduler, once the sends the change settled
+    /// are settled. A handler that throws is reported to <see cref="Trace"/>; the other handlers still run.
+    /// </summary>
     public event EventHandler? Changed;
 
     /// <summary>The current view. The same object until something changes.</summary>
@@ -791,8 +796,8 @@ public sealed class ServerMachineController : IDisposable
     private Task<SendOutcome> Enqueue(QueuedEvent entry)
     {
         _queue.Add(entry);
-        Emit();
         Pump();
+        Emit();
         return entry.Settle.Task;
     }
 
@@ -893,9 +898,11 @@ public sealed class ServerMachineController : IDisposable
     {
         _queue.Remove(entry);
         _sending = false;
-        Emit();
+        // The view the outcome is read against goes out first; the handlers hear of it once the queue has moved on.
+        Publish();
         entry.Settle.TrySetResult(outcome);
         Pump();
+        Emit();
     }
 
     // ── Stopping and timing ────────────────────────────────────────────────────────────────────
@@ -912,9 +919,10 @@ public sealed class ServerMachineController : IDisposable
         _sending = false;
         var stranded = _queue.ToList();
         _queue.Clear();
-        Emit();
+        Publish();
         foreach (var queued in stranded)
             queued.Settle.TrySetResult(new SendOutcome.Stopped(error));
+        Emit();
     }
 
     // Runs `next` after the attempt's delay, or `exhausted` at once when there is none left.
@@ -969,12 +977,32 @@ public sealed class ServerMachineController : IDisposable
             string.IsNullOrEmpty(ex.Message) ? "The server could not be reached." : ex.Message
         );
 
+    // Publishes the view and tells every handler. Never throws: a handler's exception is its own, and must not leave a
+    // send unsettled or the queue stuck behind it.
     private void Emit()
     {
         if (_disposed)
             return;
-        Volatile.Write(ref _view, BuildView());
-        Changed?.Invoke(this, EventArgs.Empty);
+        Publish();
+        if (Changed is not { } changed)
+            return;
+        foreach (var handler in changed.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler)handler)(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError($"A ServerMachineController.Changed handler threw: {ex}");
+            }
+        }
+    }
+
+    private void Publish()
+    {
+        if (!_disposed)
+            Volatile.Write(ref _view, BuildView());
     }
 
     private MachineView BuildView() =>

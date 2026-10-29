@@ -160,6 +160,55 @@ public class ClientPredictionTests
     }
 
     [Test]
+    public async Task A_change_handler_that_throws_on_the_confirming_change_leaves_the_send_settled_and_the_queue_draining()
+    {
+        var server = new HandServer();
+        using var controller = Open(server, MachinePredictor.For(DeclarativeTurnstile.Built));
+        await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
+        var throwing = false;
+        var heard = 0;
+        controller.Changed += (_, _) =>
+        {
+            if (Volatile.Read(ref throwing))
+                throw new InvalidOperationException("handler bug");
+        };
+        controller.Changed += (_, _) => Interlocked.Increment(ref heard);
+
+        var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
+        var push = controller.SendAsync("Push");
+        var first = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        Volatile.Write(ref throwing, true);
+        var before = Volatile.Read(ref heard);
+        first.Answer.SetResult(
+            ServerAnswer.Of(At(2, "Unlocked", new JsonObject { ["paidWith"] = "quarter" }))
+        );
+
+        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        var second = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        second.Trigger.Should().Be("Push");
+        second.Answer.SetResult(ServerAnswer.Of(At(3, "Locked")));
+        (await push.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        Volatile.Read(ref heard).Should().BeGreaterThan(before);
+    }
+
+    [Test]
+    public async Task A_change_handler_that_throws_when_an_event_is_queued_does_not_fail_the_send()
+    {
+        var server = new HandServer();
+        using var controller = Open(server, MachinePredictor.For(DeclarativeTurnstile.Built));
+        await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
+        controller.Changed += (_, _) => throw new InvalidOperationException("handler bug");
+
+        var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
+        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
+            ServerAnswer.Of(At(2, "Unlocked", new JsonObject { ["paidWith"] = "quarter" }))
+        );
+
+        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        controller.View.Confirmed!.State.Should().Be("Unlocked");
+    }
+
+    [Test]
     public void A_predictor_of_another_version_than_the_manifest_is_refused()
     {
         var other = Turnstile with { IrHash = new string('0', 64) };

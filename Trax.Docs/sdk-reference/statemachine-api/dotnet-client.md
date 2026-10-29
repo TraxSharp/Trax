@@ -145,8 +145,9 @@ The controller behaves as the TypeScript `ServerMachineController` does, and the
   An answer larger than `MaxResponseSize` fails its request as a transport failure, and a socket message larger than
   `MaxMessageSize` fails the connection, which is subscribed again; neither is read into memory first.
 - **Threads.** The controller works on one exclusive scheduler, so it handles one thing at a time whichever thread calls
-  it. `Changed` is raised there: read `View` and marshal to the UI thread in the handler, and do not block on the
-  controller from it.
+  it. `Changed` is raised there, after the sends a change settled are settled: read `View` and marshal to the UI
+  thread in the handler, and do not block on the controller from it. A handler that throws is reported to `Trace` and
+  stops neither the controller nor the handlers after it.
 
 ## Example
 
