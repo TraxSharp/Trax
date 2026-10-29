@@ -68,7 +68,14 @@ internal static class EventPlanner
     // engine's limit, which every engine's planner holds a plan to, so they refuse the same values.
     internal const int MaxNesting = 512;
 
-    private sealed record Node(Snapshot Snapshot, Node? Parent, PlannedEvent? Event, int Depth);
+    // A snapshot waiting to be expanded, and, when the goal test already applied the fields event to it, that step and
+    // its wire, which the expansion takes instead of advancing it again and then lets go of.
+    private sealed record Node(Snapshot Snapshot, Node? Parent, PlannedEvent? Event, int Depth)
+    {
+        public Applied? Fields { get; set; }
+    }
+
+    private sealed record Applied(AdvanceResult Next, string? Key);
 
     public static PlanResult Plan(
         PlanGraph graph,
@@ -109,26 +116,33 @@ internal static class EventPlanner
         // snapshots that differ only there are the same.
         string Key(Snapshot s) => graph.Serialize(s with { Context = WithoutNulls(s.Context) });
 
-        bool IsGoal(Snapshot s)
+        // The goal: the target state, where the fields event, when there is one, changes nothing. A fields event this
+        // engine cannot evaluate there, or one the target refuses, never reaches it. `key` is the snapshot's own, and
+        // `applied` the fields event's step when the test took one, with its wire when it transitioned.
+        bool IsGoal(Snapshot s, string key, out Applied? applied)
         {
+            applied = null;
             if (s.State != target)
                 return false;
             if (fields is null)
                 return true;
-            // A fields event this engine cannot evaluate there, or one the target refuses, never reaches the goal.
             if (!graph.Determines(s.State, fields.Trigger))
                 return false;
-            return graph.Advance(s, fields.Trigger, fields.Input?.DeepClone())
-                    is AdvanceResult.Transitioned applied
-                && Key(applied.Snapshot) == Key(s);
+            var next = graph.Advance(s, fields.Trigger, fields.Input?.DeepClone());
+            applied = new Applied(
+                next,
+                next is AdvanceResult.Transitioned moved ? Key(moved.Snapshot) : null
+            );
+            return applied.Key == key;
         }
 
-        if (IsGoal(snapshot))
+        var startKey = Key(snapshot);
+        if (IsGoal(snapshot, startKey, out var startApplied))
             return new PlanResult.Planned([]);
 
-        var seen = new HashSet<string>(StringComparer.Ordinal) { Key(snapshot) };
+        var seen = new HashSet<string>(StringComparer.Ordinal) { startKey };
         var queue = new Queue<Node>();
-        queue.Enqueue(new Node(snapshot, null, null, 0));
+        queue.Enqueue(new Node(snapshot, null, null, 0) { Fields = startApplied });
         var expanded = 0;
         var cut = false;
         (string Trigger, Node From)? undetermined = null;
@@ -148,8 +162,9 @@ internal static class EventPlanner
                 break;
             }
             expanded++;
-            foreach (var edge in edges)
+            for (var k = 0; k < edges.Count; k++)
             {
+                var edge = edges[k];
                 // An edge this engine cannot evaluate is not tried; the first one met is kept in case nothing else
                 // reaches the target.
                 if (!graph.Determines(node.Snapshot.State, edge.Trigger))
@@ -157,18 +172,29 @@ internal static class EventPlanner
                     undetermined ??= (edge.Trigger, node);
                     continue;
                 }
+                // The fields event is the first edge, and the goal test may have taken that step already.
+                var reused = k == 0 && fields is not null ? node.Fields : null;
                 if (
-                    graph.Advance(node.Snapshot, edge.Trigger, edge.Input?.DeepClone())
+                    (
+                        reused?.Next
+                        ?? graph.Advance(node.Snapshot, edge.Trigger, edge.Input?.DeepClone())
+                    )
                     is not AdvanceResult.Transitioned next
                 )
                     continue;
-                if (!seen.Add(Key(next.Snapshot)))
+                var key = reused?.Key ?? Key(next.Snapshot);
+                if (!seen.Add(key))
                     continue;
-                var reached = new Node(next.Snapshot, node, edge, node.Depth + 1);
-                if (IsGoal(reached.Snapshot))
+                var goal = IsGoal(next.Snapshot, key, out var applied);
+                var reached = new Node(next.Snapshot, node, edge, node.Depth + 1)
+                {
+                    Fields = applied,
+                };
+                if (goal)
                     return new PlanResult.Planned(PathTo(reached));
                 queue.Enqueue(reached);
             }
+            node.Fields = null;
         }
 
         if (undetermined is { } u)

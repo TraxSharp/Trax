@@ -101,6 +101,47 @@ public class PlanTests
         Triggers(plan).Should().Equal("Update", "Skip");
     }
 
+    // The wizard's search over a graph that counts what it asks of the engine.
+    private static (PlanResult Plan, List<string> Advanced, int Serialized) Counted(Snapshot from)
+    {
+        var machine = new IrMachine(WizardIr());
+        var advanced = new List<string>();
+        var serialized = 0;
+        var graph = new PlanGraph(
+            4,
+            s => s is "Start" or "Details" or "Review" or "Sent",
+            t => t is "Begin" or "Next" or "Back" or "Update",
+            (_, _) => true,
+            (s, trigger, input) =>
+            {
+                // Read with the machine's own Serialize, which the count below does not see.
+                advanced.Add($"{machine.Serialize(s)} {trigger}");
+                return machine.Advance(s, trigger, input);
+            },
+            s =>
+            {
+                serialized++;
+                return machine.Serialize(s);
+            }
+        );
+        var plan = EventPlanner.Plan(graph, from, "Review", Fill, Navigation, null);
+        return (plan, advanced, serialized);
+    }
+
+    [Test]
+    public void Each_snapshot_is_advanced_by_each_edge_once_the_goal_tests_fields_event_included()
+    {
+        foreach (var from in new[] { Wizard("Start"), Wizard("Review", "Bob", "bob@example.com") })
+        {
+            var (plan, advanced, serialized) = Counted(from);
+
+            plan.Should().BeOfType<PlanResult.Planned>();
+            advanced.Should().OnlyHaveUniqueItems();
+            // One wire for the snapshot the search starts from, and at most one for each step it took.
+            serialized.Should().BeLessThanOrEqualTo(advanced.Count + 1);
+        }
+    }
+
     [Test]
     public void A_navigation_trigger_listed_twice_is_tried_once_from_each_snapshot()
     {
