@@ -679,3 +679,58 @@ async fn start_settles_once_its_first_read_has_settled_not_while_it_is_retried()
         .expect("start never settled");
     assert_eq!(controller.view().revision, Some(1));
 }
+
+// A server that refuses every start, and answers nothing else.
+struct Refusing;
+
+impl MachineServer for Refusing {
+    async fn start(&self, _: Option<Value>, _: String) -> Result<ServerAnswer, TransportError> {
+        Ok(ServerAnswer::Refused(ServerProblem {
+            code: "FORBIDDEN".into(),
+            message: "Not yours.".into(),
+        }))
+    }
+
+    async fn event(&self, _: EventRequest) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn get(&self, _: String) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    fn subscribe(&self, _: String, _: StreamSink) -> Box<dyn Subscription> {
+        Box::new(Nothing)
+    }
+}
+
+#[tokio::test]
+async fn a_send_with_no_instance_to_send_to_settles_not_ready() {
+    let (ir, hash) = turnstile();
+    let controller = ServerMachineController::new(ServerMachineOptions::new(ir, hash, Refusing)).unwrap();
+
+    let started = controller.start();
+    let queued = controller.send("Push", None);
+    let synced = controller.sync_to("Unlocked", None, vec!["Coin".to_owned()]);
+    started.await;
+    let after = controller.send("Push", None);
+
+    let wait = Duration::from_secs(5);
+    for outcome in [queued, after] {
+        let outcome = tokio::time::timeout(wait, outcome)
+            .await
+            .expect("the send never settled");
+        assert!(
+            matches!(&outcome, SendOutcome::Failed(p) if p.code == "NOT_READY"),
+            "{outcome:?}"
+        );
+    }
+    let synced = tokio::time::timeout(wait, synced)
+        .await
+        .expect("the sync never settled");
+    assert!(
+        matches!(&synced, SyncOutcome::Failed(p) if p.code == "NOT_READY"),
+        "{synced:?}"
+    );
+    assert!(!controller.view().pending);
+}

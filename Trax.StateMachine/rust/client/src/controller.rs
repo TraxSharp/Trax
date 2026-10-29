@@ -38,6 +38,8 @@ pub mod codes {
     pub const NOTHING_TO_RETRY: &str = "NOTHING_TO_RETRY";
     /// The controller was disposed before the server answered.
     pub const DISPOSED: &str = "DISPOSED";
+    /// There is no instance to send to: the start was refused or failed, or the first read gave up.
+    pub const NOT_READY: &str = "NOT_READY";
     pub(crate) const CLIENT_OUTDATED: &str = "CLIENT_OUTDATED";
     pub(crate) const SERVER_OUTDATED: &str = "SERVER_OUTDATED";
     pub(crate) const CLIENT_DIVERGENCE: &str = "CLIENT_DIVERGENCE";
@@ -276,6 +278,7 @@ impl ServerMachineController {
             sending: false,
             last_failed: None,
             start_failed: false,
+            creating: false,
             start_waiters: Vec::new(),
             opened: false,
             open_waiters: Vec::new(),
@@ -316,7 +319,8 @@ impl ServerMachineController {
     /// Sends one event under a fresh request id, after every earlier event of this instance has settled. The event is
     /// queued when this is called, so two calls send in the order they were made. A trigger the machine does not declare
     /// as an event is refused here, with the code [`Machine::advance`] gives it (`NO_TRANSITION`, `OUTCOME_BOUND` or
-    /// `TIMER_BOUND`), and sends nothing.
+    /// `TIMER_BOUND`), and sends nothing. Once `start` has settled with no instance to send to (the start was refused or
+    /// failed, or the first read gave up), an event settles failed as `NOT_READY`, and so does one that waited for it.
     pub fn send(
         &self,
         trigger: impl Into<String>,
@@ -437,6 +441,13 @@ fn disposed_problem() -> MachineProblem {
     refusal(
         codes::DISPOSED,
         "The controller was disposed before the server answered.",
+    )
+}
+
+fn not_ready_problem() -> MachineProblem {
+    refusal(
+        codes::NOT_READY,
+        "There is no instance to send to: the start was refused or failed, or the first read gave up.",
     )
 }
 
@@ -621,6 +632,8 @@ struct Actor<S> {
     sending: bool,
     last_failed: Option<EventRequest>,
     start_failed: bool,
+    // Whether a start is in flight, or waits to be tried again.
+    creating: bool,
     start_waiters: Vec<oneshot::Sender<SendOutcome>>,
     // Whether `start` was called, who waits for the opening to be answered, and whether it still is being answered.
     opened: bool,
@@ -682,6 +695,8 @@ impl<S: MachineServer> Actor<S> {
                     let _ = reply.send(SendOutcome::Stopped(error.clone()));
                 } else if self.disposed {
                     let _ = reply.send(disposed_outcome());
+                } else if self.not_ready() {
+                    let _ = reply.send(SendOutcome::Failed(not_ready_problem()));
                 } else {
                     self.enqueue(trigger, input, None, Some(reply));
                 }
@@ -710,7 +725,9 @@ impl<S: MachineServer> Actor<S> {
             } => {
                 // A start retried under its request id has not settled yet: `start` waits for the last attempt.
                 if self.on_created(request_id, attempt, result) {
+                    self.creating = false;
                     self.settle_open();
+                    self.settle_not_ready();
                 }
             }
             Msg::Read {
@@ -734,6 +751,7 @@ impl<S: MachineServer> Actor<S> {
                 }
                 if !self.reloading {
                     self.read_settled(failure);
+                    self.settle_not_ready();
                 }
             }
             Msg::Delivered { entry, attempt, result } => self.on_delivered(entry, attempt, result),
@@ -758,6 +776,31 @@ impl<S: MachineServer> Actor<S> {
                 }
             }
         }
+    }
+
+    // Whether there is no instance to send to: `start` was called, and nothing is starting or reading one, but the
+    // client holds no snapshot (the start was refused or failed, or the first read gave up). Before `start` is called,
+    // an event waits for it.
+    fn not_ready(&self) -> bool {
+        self.confirmed.is_none() && self.opened && !self.opening && !self.creating && !self.reloading
+    }
+
+    // Settles every event waiting to be sent, and the sync, once there is no instance to send them to.
+    fn settle_not_ready(&mut self) {
+        if self.disposed || self.error.is_some() || !self.not_ready() {
+            return;
+        }
+        let stranded: Vec<Queued> = self.queue.drain(..).collect();
+        if !stranded.is_empty() {
+            self.emit();
+        }
+        for queued in stranded {
+            if let Some(reply) = queued.reply {
+                let _ = reply.send(SendOutcome::Failed(not_ready_problem()));
+            }
+        }
+        self.settle_sync(SyncOutcome::Failed(not_ready_problem()));
+        self.settle_superseded();
     }
 
     // The first answer of the opening (the start or the first read) settles whoever waits on `start`.
@@ -811,6 +854,7 @@ impl<S: MachineServer> Actor<S> {
         if self.disposed || self.error.is_some() {
             return;
         }
+        self.creating = true;
         let server = self.server.clone();
         let commands = self.commands.clone();
         let input = self.start_input.clone();
@@ -1396,6 +1440,10 @@ impl<S: MachineServer> Actor<S> {
         }
         if self.disposed {
             let _ = reply.send(SyncOutcome::Failed(disposed_problem()));
+            return;
+        }
+        if self.not_ready() {
+            let _ = reply.send(SyncOutcome::Failed(not_ready_problem()));
             return;
         }
         // The sync it takes over from settles once its event in flight answers, and sends nothing more. A read that one
