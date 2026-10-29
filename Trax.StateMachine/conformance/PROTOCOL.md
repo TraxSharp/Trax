@@ -96,6 +96,41 @@ string no JSON parser carries (a lone surrogate), as UTF-16 code units: `stringU
 { "id": 5, "wire": "{\"machine\":\"m\",\"version\":1,\"state\":\"S\",\"context\":{\"n\":1e+21}}" }
 ```
 
+**`plan`** finds the events that take `snapshot` of `machine` to the state `target` with the page's fields applied:
+what a client sends to bring the server to where a page that ran ahead of it is. `fields` is the event that writes the
+page's fields (`trigger` and its `input`), or null; `navigation` is the triggers, without input, that move between
+states; `maxDepth` is the longest plan to look for, twice the machine's states when absent.
+
+```json
+{ "id": 6, "op": "plan", "machine": "wizard", "snapshot": { ... }, "target": "Review",
+  "fields": { "trigger": "Update", "input": { "name": "Ada", "email": "ada@example.com" } }, "navigation": ["Begin", "Next", "Back"] }
+{ "id": 6, "result": "plan", "events": [{ "trigger": "Begin" }, { "trigger": "Update", "input": { ... } }, { "trigger": "Next" }] }
+{ "id": 6, "result": "unreachable" }
+{ "id": 6, "result": "exceeded" }
+{ "id": 6, "result": "undetermined", "trigger": "Skip", "events": [] }
+{ "id": 6, "result": "invalid", "trigger": "Send" }
+```
+
+Every engine answers the same plan, so the search is fixed:
+
+- **Invalid first.** A `target` that is not a state answers `invalid` with `target`. Then the fields trigger, then each
+  navigation trigger in order: one the machine does not have, one bound to the effect, an outcome, a timer, or a
+  navigation trigger equal to the fields trigger answers `invalid` with that `trigger`.
+- **The goal.** A snapshot is the goal when its state is `target` and, with `fields` given, advancing it by the fields
+  event transitions to the same wire. A fields event the target state refuses never reaches the goal.
+- **Breadth first, in the caller's order.** From each snapshot the edges are tried in a fixed order: the fields event
+  first, then `navigation` as given, each through `advance`. A refused edge is skipped. A snapshot whose wire was seen
+  is not visited again. The start is the goal test's first case; after it, each new snapshot is tested as it is
+  reached, and the first that is the goal ends the search with the events on its path. A plan never depends on the
+  order an engine lists its transitions in.
+- **Depth.** A snapshot reached by `maxDepth` events is not expanded, and the search answers `exceeded` rather than
+  `unreachable` when it ends without a plan after leaving one unexpanded, or after expanding 10 000 snapshots.
+- **Custom rules.** An edge whose transition rests on a custom rule the engine holds no handler for (a custom guard, a
+  custom reduction, or a custom requirement of the state it enters) is not tried. The first such edge the search meets
+  is kept: when the search ends without a plan, the answer is `undetermined` with that `trigger` and `events`, the
+  path to the snapshot it leaves from. A client sends those, then that event unpredicted, and plans again from the
+  answer.
+
 **`end`** is the last request. The testee answers `{ "id" }` and exits.
 
 ## What the runner sends
@@ -108,6 +143,7 @@ string no JSON parser carries (a lone surrogate), as UTF-16 code units: `stringU
 | `machines/<m>/fixtures/rehydrate/*.json` | `rehydrate`, with the fixture's `fromServer` |
 | `machines/<m>/wire-handoff.json` | `serialize` |
 | `conformance/strict-input/` | `load`, then one `advance` per case |
+| `conformance/plan/` | `load` of `wizard.ir.json`, then one `plan` per case in `cases.json` |
 | `conformance/unreadable-ir/cases.json` | one `load` per case, which must be refused |
 | `conformance/canonical-wire.json` | `canonical` |
 

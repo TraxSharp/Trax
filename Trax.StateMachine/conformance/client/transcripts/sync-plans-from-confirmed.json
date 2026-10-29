@@ -1,0 +1,30 @@
+{
+  "about": "A sync plans from what the host confirmed and sends the plan one event at a time, each planned again from the answer before it: Begin, the fields, then Next. The view is unsaved until the last confirms.",
+  "machine": "wizard",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "begin": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "update": "$id: UUID!, $input: UpdateInput!, $requestId: String!, $clientResult: String",
+    "next": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "back": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "skip": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "send": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Start", "context": {} } },
+    { "view": { "status": "ready", "unsaved": false } },
+    { "client": "sync", "target": "Review", "fields": { "trigger": "Update", "input": { "email": "ada@example.com", "name": "Ada" } }, "navigation": ["Begin", "Next", "Back"], "as": "s" },
+    { "view": { "unsaved": true } },
+    { "request": "begin", "answer": { "id": "i-1", "revision": 2, "state": "Details", "context": {} } },
+    { "request": "update", "answer": { "id": "i-1", "revision": 3, "state": "Details", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "request": "next", "answer": { "id": "i-1", "revision": 4, "state": "Review", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "await": "s", "expect": { "outcome": "synced", "state": "Review", "revision": 4 } },
+    { "view": { "unsaved": false, "state": "Review" } }
+  ]
+}

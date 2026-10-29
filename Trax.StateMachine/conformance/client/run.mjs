@@ -14,6 +14,8 @@ const clientDir = fileURLToPath(new URL(".", import.meta.url));
 const machinesDir = join(clientDir, "..", "machines");
 // Machines only the client kit drives, beside the engine kit's: one IR file each, as the C# machine would export it.
 const clientMachinesDir = join(clientDir, "machines");
+// The planner's machine, which the sync transcripts drive.
+const planDir = join(clientDir, "..", "plan");
 const transcriptsDir = join(clientDir, "transcripts");
 
 // How long a step waits for the client before the transcript fails. Every delay a transcript configures is far
@@ -37,7 +39,8 @@ export const machineField = (id) =>
  */
 export function machineOf(id) {
   const own = join(clientMachinesDir, `${id}.ir.json`);
-  const path = existsSync(own) ? own : join(machinesDir, id, `${id}.ir.json`);
+  const planned = join(planDir, `${id}.ir.json`);
+  const path = existsSync(own) ? own : existsSync(planned) ? planned : join(machinesDir, id, `${id}.ir.json`);
   const text = readFileSync(path, "utf8").replace(/\n+$/, "");
   const irHash = createHash("sha256").update(text, "utf8").digest("hex");
   return { ir: JSON.parse(text), irHash };

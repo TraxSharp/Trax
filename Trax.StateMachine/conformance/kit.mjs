@@ -119,6 +119,29 @@ function strictInputCases() {
   ];
 }
 
+// The planner over the wizard machine: a load, then one plan per case, compared exactly.
+function planCases() {
+  const dir = join(conformanceDir, "plan");
+  const doc = readJson(join(dir, "cases.json"));
+  const machine = doc.machine;
+  return [
+    { name: "plan/load", request: { op: "load", machine, ir: readJson(join(dir, `${machine}.ir.json`)) }, expect: { loaded: true } },
+    ...doc.cases.map((c) => ({
+      name: `plan/${c.name}`,
+      request: {
+        op: "plan",
+        machine,
+        snapshot: c.given,
+        target: c.target,
+        fields: c.fields,
+        navigation: c.navigation,
+        ...(c.maxDepth === undefined ? {} : { maxDepth: c.maxDepth }),
+      },
+      expect: c.expect,
+    })),
+  ];
+}
+
 // Each IR names one construct no engine knows; loading it must be refused. The runner passes any `error` answer: the
 // message is the engine's own.
 function unreadableIrCases() {
@@ -146,8 +169,8 @@ function canonicalWireCases() {
 }
 
 /**
- * Every case of the kit, in a fixed order: each machine's, then the strict inputs, then the IRs that must be refused,
- * then the wire vectors.
+ * Every case of the kit, in a fixed order: each machine's, then the strict inputs, then the planner's, then the IRs that
+ * must be refused, then the wire vectors.
  */
 export function kitCases() {
   const machines = readdirSync(machinesDir, { withFileTypes: true })
@@ -157,6 +180,7 @@ export function kitCases() {
   return [
     ...machines.flatMap(machineCases),
     ...strictInputCases(),
+    ...planCases(),
     ...unreadableIrCases(),
     ...canonicalWireCases(),
   ];

@@ -90,12 +90,30 @@ what the send came to:
 { "id": 4, "outcome": "stopped", "code": "CLIENT_OUTDATED" }
 ```
 
+**`sync`** brings the host to where a page that ran ahead of it is: the state `target`, with the fields event
+`fields` (`trigger` and `input`, or null) applied, moving through the triggers in `navigation`. It plans with the
+engine's planner (`../PROTOCOL.md`, `plan`) from the snapshot the host last confirmed, sends the first event of the
+plan as `send` does, and plans again from each answer until the plan is empty. A refusal (`GUARD_FAILED`,
+`NO_TRANSITION`, `CLIENT_DIVERGENCE`, `CONFLICT`) reads the instance once and plans again; a second one settles the sync
+`refused`. An `undetermined` plan sends its `events`, then its `trigger` unpredicted. A sync started while another
+runs supersedes it: the older settles `superseded` once the event it has in flight answers, and sends nothing more.
+No sync sends more than twice the machine's states in events; past that it settles `exceeded`.
+
+```json
+{ "id": 6, "op": "sync", "target": "Review", "fields": { "trigger": "Update", "input": { ... } }, "navigation": ["Begin", "Next", "Back"] }
+{ "id": 6, "outcome": "synced", "state": "Review", "revision": 4 }
+{ "id": 6, "outcome": "superseded" }
+{ "id": 6, "outcome": "unreachable" }
+```
+
+and `refused`, `failed` and `stopped` with their `code`, as for `send`, and `exceeded` and `invalid`.
+
 **`view`** answers with what the client shows now:
 
 ```json
 { "id": 5, "status": "ready", "instance": "i-1", "state": "Unlocked", "context": { "paidWith": "quarter" },
   "confirmed": { "state": "Locked", "context": {} }, "rowId": null, "revision": 3, "dueAt": null,
-  "pending": true, "problem": null, "error": null, "deleted": null }
+  "pending": true, "problem": null, "error": null, "deleted": null, "unsaved": false }
 ```
 
 `status` is `loading`, `ready` or `stopped`. `dueAt` is the due time as an ISO-8601 instant with its offset, in
@@ -103,7 +121,8 @@ whatever offset and precision the client holds it; the runner compares it as the
 `2026-10-22T12:10:00.000+02:00` and `2026-10-22T10:10:00Z` are one value, and one read without its offset is not. `state` and `context` are what to show (the prediction while one is
 pending), `confirmed` what the host last confirmed. `problem` is the code of the last refusal or transport failure,
 `error` the code that stopped the client (`GONE`, `CLIENT_OUTDATED`, or `UNAUTHENTICATED` and `FORBIDDEN` for a socket
-or a stream the host refused), and `deleted` whether a `GONE` came from a
+or a stream the host refused), and `unsaved` whether a sync is running or the last one
+did not settle `synced` (a page holds a leave guard on it), and `deleted` whether a `GONE` came from a
 deletion (true) or a host that holds no such instance for the caller (false). A context holds no member whose value
 is null: a typed answer cannot tell a member stored as null from one the state does not hold.
 

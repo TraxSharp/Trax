@@ -1,0 +1,25 @@
+{
+  "about": "A sync to a state no navigation reaches sends nothing and settles unreachable.",
+  "machine": "wizard",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "begin": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "update": "$id: UUID!, $input: UpdateInput!, $requestId: String!, $clientResult: String",
+    "next": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "back": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "skip": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "send": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Review", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "view": { "status": "ready", "unsaved": false } },
+    { "client": "sync", "target": "Sent", "fields": null, "navigation": ["Begin", "Next", "Back"], "expect": { "outcome": "unreachable" } },
+    { "quiet": 50 }
+  ]
+}

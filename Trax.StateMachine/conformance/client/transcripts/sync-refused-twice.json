@@ -1,0 +1,30 @@
+{
+  "about": "A sync re-reads and plans again once; a second refusal settles it refused with that code, and the view stays unsaved.",
+  "machine": "wizard",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "begin": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "update": "$id: UUID!, $input: UpdateInput!, $requestId: String!, $clientResult: String",
+    "next": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "back": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "skip": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "send": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Details", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "view": { "status": "ready", "unsaved": false } },
+    { "client": "sync", "target": "Review", "fields": { "trigger": "Update", "input": { "email": "ada@example.com", "name": "Ada" } }, "navigation": ["Begin", "Next", "Back"], "as": "s" },
+    { "request": "next", "answer": { "problem": { "code": "GUARD_FAILED", "message": "No." } } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 2, "state": "Details", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "request": "next", "answer": { "problem": { "code": "GUARD_FAILED", "message": "No." } } },
+    { "await": "s", "expect": { "outcome": "refused", "code": "GUARD_FAILED" } },
+    { "view": { "unsaved": true } },
+    { "quiet": 50 }
+  ]
+}
