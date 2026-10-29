@@ -98,6 +98,19 @@ describe("plan", () => {
     });
   });
 
+  it("tries a navigation trigger listed twice once from each snapshot", () => {
+    let asked = 0;
+    const refusing = new SnapshotMachine(machineFromIr(wizardIr, { approved: () => (asked++, false) }));
+    const details = { ...empty, state: "Details" };
+    const once = refusing.plan(details, { target: "Review", fields: filled, navigation: ["Skip"] });
+    const onceAsked = asked;
+    asked = 0;
+    const thrice = refusing.plan(details, { target: "Review", fields: filled, navigation: ["Skip", "Skip", "Skip"] });
+
+    expect(thrice).toEqual(once);
+    expect(asked).toBe(onceAsked);
+  });
+
   // A counter that counts up to `ceiling`: every Up is a new wire, and Never is never reached.
   const counter = (ceiling: number) =>
     new SnapshotMachine(

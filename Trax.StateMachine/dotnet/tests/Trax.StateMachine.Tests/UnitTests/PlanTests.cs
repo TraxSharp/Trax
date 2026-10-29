@@ -102,6 +102,32 @@ public class PlanTests
     }
 
     [Test]
+    public void A_navigation_trigger_listed_twice_is_tried_once_from_each_snapshot()
+    {
+        var asked = 0;
+        var machine = new IrMachine(
+            WizardIr(),
+            new Dictionary<string, Func<JsonObject, JsonNode?, bool>>
+            {
+                ["approved"] = (_, _) =>
+                {
+                    asked++;
+                    return false;
+                },
+            }
+        );
+
+        var once = machine.Plan(Wizard("Details"), "Review", Fill, ["Skip"]);
+        var onceAsked = asked;
+        asked = 0;
+        var thrice = machine.Plan(Wizard("Details"), "Review", Fill, ["Skip", "Skip", "Skip"]);
+
+        thrice.Should().BeOfType<PlanResult.Unreachable>();
+        once.Should().BeOfType<PlanResult.Unreachable>();
+        asked.Should().Be(onceAsked);
+    }
+
+    [Test]
     public void A_target_past_the_depth_limit_is_exceeded_rather_than_unreachable()
     {
         var machine = new IrMachine(WizardIr());

@@ -129,7 +129,8 @@ Every engine answers the same plan, so the search is fixed:
   event transitions to the same wire. A fields event the target state refuses, or one that rests there on a custom rule
   the engine holds no handler for, never reaches the goal.
 - **Breadth first, in the caller's order.** From each snapshot the edges are tried in a fixed order: the fields event
-  first, then `navigation` as given, each through `advance`. A refused edge is skipped. A snapshot whose wire was seen
+  first, then `navigation` as given, each through `advance`; a trigger `navigation` lists more than once is tried
+  once, where it is first listed. A refused edge is skipped. A snapshot whose wire was seen
   is not visited again. The start is the goal test's first case; after it, each new snapshot is tested as it is
   reached, and the first that is the goal ends the search with the events on its path. A plan never depends on the
   order an engine lists its transitions in.

@@ -96,6 +96,8 @@ internal static class EventPlanner
             if (!graph.Navigable(trigger) || trigger == fields?.Trigger)
                 return new PlanResult.Invalid(Trigger: trigger);
 
+        // A trigger listed twice is tried once, where it is first listed.
+        navigation = navigation.Distinct(StringComparer.Ordinal).ToList();
         fields = fields is null ? null : fields with { Input = fields.Input?.DeepClone() };
         var edges = new List<PlannedEvent>(navigation.Count + 1);
         if (fields is not null)

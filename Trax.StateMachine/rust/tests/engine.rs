@@ -453,3 +453,24 @@ fn a_plan_from_a_context_or_with_an_input_nested_past_the_limit_is_invalid_not_o
         PlanAnswer::Invalid(PlanInvalid::Input)
     );
 }
+
+#[test]
+fn a_navigation_trigger_listed_twice_is_tried_once_from_each_snapshot() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let asked = Arc::new(AtomicUsize::new(0));
+    let counted = asked.clone();
+    let machine = wizard().with_guard("approved", move |_, _| {
+        counted.fetch_add(1, Ordering::SeqCst);
+        false
+    });
+    let skip = |times: usize| vec!["Skip".to_owned(); times];
+
+    let once = machine.plan(&details(), "Review", Some(&ada()), &skip(1), None);
+    let once_asked = asked.swap(0, Ordering::SeqCst);
+    let thrice = machine.plan(&details(), "Review", Some(&ada()), &skip(3), None);
+
+    assert_eq!(thrice, once);
+    assert_eq!(asked.load(Ordering::SeqCst), once_asked);
+}

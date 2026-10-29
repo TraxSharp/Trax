@@ -109,10 +109,17 @@ impl Machine {
         if !self.state_set.contains(target) {
             return PlanAnswer::Invalid(PlanInvalid::Target(target.to_owned()));
         }
+        // A trigger listed twice is tried once, where it is first listed.
+        let mut listed = HashSet::new();
         let edges: Vec<PlanEvent> = fields
             .cloned()
             .into_iter()
-            .chain(navigation.iter().map(|t| PlanEvent::new(t.as_str(), None)))
+            .chain(
+                navigation
+                    .iter()
+                    .filter(|t| listed.insert(t.as_str()))
+                    .map(|t| PlanEvent::new(t.as_str(), None)),
+            )
             .collect();
         let fields_trigger = fields.map(|f| f.trigger.as_str());
         for (i, edge) in edges.iter().enumerate() {

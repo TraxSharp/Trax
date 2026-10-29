@@ -90,7 +90,8 @@ export function searchPlan(
   const def = machine.definition;
   const { target } = request;
   const fields = request.fields ?? null;
-  const navigation = [...request.navigation];
+  // A trigger listed twice is tried once, where it is first listed.
+  const navigation = [...new Set(request.navigation)];
 
   // Checked first, as advance would refuse them: the search copies and compares both.
   if (fields !== null && nestsTooDeep(fields.input)) return { result: 'invalid', code: RefusalCode.InvalidInput };

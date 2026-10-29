@@ -110,7 +110,8 @@ the same plan, and the conformance kit's `plan` cases hold them to it:
   the fields event, answers `Invalid`.
 - The goal is a snapshot in `target` that the fields event leaves as it is. A fields event the target refuses never
   reaches it. Contexts are compared without their null members, at any depth, since a host omits them.
-- The search is breadth first, and from each snapshot it tries the fields event, then `navigation` in the order given.
+- The search is breadth first, and from each snapshot it tries the fields event, then `navigation` in the order given,
+  a trigger listed twice once, where it is first listed.
   A refused edge is skipped and a snapshot already seen is not visited again, so the plan never depends on the order
   the IR lists its transitions in.
 - A snapshot reached by `maxDepth` events (twice the machine's states by default) is not expanded, and the search
