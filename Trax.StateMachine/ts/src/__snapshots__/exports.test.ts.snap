@@ -19,6 +19,7 @@ exports[`the published exports > match the committed baseline 1`] = `
     "DifferentialCorpus",
     "DifferentialSpec",
     "FieldSchema",
+    "FormSyncTarget",
     "FormView",
     "FormViewOptions",
     "Guard",

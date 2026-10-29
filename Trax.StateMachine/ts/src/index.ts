@@ -76,7 +76,7 @@ export { createDevLogger, type DevLoggerOptions } from './devtools';
 // A FormView derives the whole bridge — step↔state both ways, snapshot building, advance/can/serialize,
 // resume — from a step map and one projection.
 export { createFormView } from './formView';
-export type { FormView, FormViewOptions, ResumedStep, StepAdvance } from './formView';
+export type { FormSyncTarget, FormView, FormViewOptions, ResumedStep, StepAdvance } from './formView';
 
 // ── 5. Building a machine from its IR ─────────────────────────────────────────────────────────────
 // `machineFromIr` runs the IR's declarative guards/reducers through the rule interpreter — no

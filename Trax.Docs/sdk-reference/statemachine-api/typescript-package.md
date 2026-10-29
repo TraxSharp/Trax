@@ -79,13 +79,13 @@ From `@traxsharp/state-machine`, for a machine no server holds (a preview, a tes
 | Export | What it is |
 | --- | --- |
 | `MachineController` | A framework-free store held in memory: `send`, `can`, `available`, `reset`, `subscribe`, `getSnapshot`. It stores nothing, and a refused action still emits a view with its `problem`. A machine a server holds is driven through `ServerMachineController` instead. |
-| `createFormView(machine, { steps, toContext })` | For a UI that owns its data and asks the machine: maps each UI step to a state (one to one), and gives `advance`, `can`, `snapshotFor`, `serialize`, `resume` and `isCommitted` in the UI's own step names. |
+| `createFormView(machine, { steps, toContext, fieldsEvent?, navigation? })` | For a UI that owns its data and asks the machine: maps each UI step to a state (one to one), and gives `advance`, `can`, `snapshotFor`, `serialize`, `resume` and `isCommitted` in the UI's own step names. With `fieldsEvent` (the trigger that writes the form's values, and an `input` projection, `toContext` by default) and `navigation` (the triggers that move between steps), `plan(serverSnapshotJson, step, values)` answers the machine's `plan` from the server's snapshot to that step with those values, or null when there is no snapshot or it does not read, and `sync(controller, step, values)` calls the controller's `syncTo` with the same. |
 | `problemFromAdvance`, `problemFromRehydration`, `Problem` | A refusal shaped for display. |
 | `createDevLogger(options?)` | Logs transitions and refusals in development, as a `MachineObserver`. `DevLoggerOptions`: `strict`, which throws on an internal error (a guard or reducer that threw) instead of logging it, and the `console` to write to. |
 | `ControllerOptions<Spec>` | What a `MachineController` is built with: the `initial` snapshot, or a function that makes it, and an `observer`. |
 | `ControllerView<Spec>` | What it holds and emits: the `snapshot` and the `problem` of the last refused action, or null. |
 | `MachineObserver<Spec>` | Callbacks on a controller: `onTransition(from, trigger, to, snapshot)`, `onRejected(trigger, problem, snapshot)` and `onInternalError(trigger, detail, snapshot)`. |
-| `FormView`, `FormViewOptions` | What `createFormView` answers and takes: `stateFor`, `stepFor`, `snapshotFor`, `advance`, `can`, `serialize`, `resume`, `isCommitted`; and the `steps` map and `toContext` projection ([Drive a form from a machine](/docs/statemachine/drive-a-form-from-a-machine)). |
+| `FormView`, `FormViewOptions`, `FormSyncTarget` | What `createFormView` answers and takes: `stateFor`, `stepFor`, `snapshotFor`, `advance`, `can`, `serialize`, `resume`, `isCommitted`, `plan`, `sync`; the `steps` map, `toContext` projection, `fieldsEvent` and `navigation`; and what `sync` drives, anything with `syncTo`, a `ServerMachineController` among them ([Drive a form from a machine](/docs/statemachine/drive-a-form-from-a-machine)). |
 | `StepAdvance<Step>`, `ResumedStep<Spec, Step>` | `advance`'s answer, `{ ok: true, step }` or `{ ok: false, reason, detail? }`; and `resume`'s, the `step` and the rehydrated `snapshot`. |
 
 ### Talking to a server
