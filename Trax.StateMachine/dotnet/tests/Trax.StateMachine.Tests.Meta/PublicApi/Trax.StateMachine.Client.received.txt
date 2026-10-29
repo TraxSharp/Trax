@@ -27,6 +27,7 @@ namespace Trax.StateMachine.Client
         public long MaxResponseSize { get; init; }
         public System.Collections.Generic.IReadOnlyList<System.TimeSpan>? ResubscribeDelays { get; init; }
         public required Trax.Client.ISubscriptionSocket Socket { get; init; }
+        public System.Collections.Generic.IReadOnlyCollection<string>? TerminalStreamErrors { get; init; }
     }
     public interface IMachinePredictor
     {

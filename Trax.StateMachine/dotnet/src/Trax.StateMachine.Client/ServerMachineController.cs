@@ -42,7 +42,8 @@ public sealed record MachineProblem(MachineProblemKind Kind, string Code, string
 /// </summary>
 /// <param name="Code">
 /// <see cref="ClientProblemCodes.Gone"/>, <c>CLIENT_OUTDATED</c>, or the code of a stream that ended for good
-/// (<see cref="StreamMessage.Refused"/>): <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c> for a socket the host refused,
+/// (<see cref="StreamMessage.Refused"/>): <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c> for a socket or a stream the host
+/// refused, a code of <see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/>, or
 /// <see cref="ClientProblemCodes.TransportError"/> for a push the client cannot read.
 /// </param>
 /// <param name="Message">What to tell a person.</param>

@@ -42,9 +42,18 @@ public sealed record GraphQLMachineServerOptions
     /// <summary>
     /// Delays before subscribing again after a stream that ended without saying why (its host stopped, or the socket
     /// closed). The last repeats for as long as the stream is wanted. A socket the host refused (4401, 4403, or an
-    /// upgrade answered 401 or 403) is not subscribed again: it stops the controller.
+    /// upgrade answered 401 or 403), or a stream it refused with a GraphQL error coded <c>TRAX_AUTHORIZATION</c>,
+    /// <c>AUTH_NOT_AUTHENTICATED</c> or <c>AUTH_NOT_AUTHORIZED</c>, is not subscribed again: it stops the controller as
+    /// <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c>.
     /// </summary>
     public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
+
+    /// <summary>
+    /// The codes of a stream error that ends the controller for good, beside the refusals above. A stream event or error
+    /// whose first GraphQL error has one as its <c>extensions.code</c> is not subscribed again: it reaches the
+    /// controller as <see cref="StreamMessage.Refused"/> with that code and the error's message.
+    /// </summary>
+    public IReadOnlyCollection<string>? TerminalStreamErrors { get; init; }
 
     /// <summary>
     /// The largest response body the host may answer with, in bytes; 16 MiB by default. A larger one fails the request,
@@ -78,6 +87,18 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     private static readonly string ClientOutdated = RefusalCode.ClientOutdated.ToWire();
     private static readonly string ServerOutdated = RefusalCode.ServerOutdated.ToWire();
 
+    // The GraphQL error codes a host refuses one subscription with on a socket it accepted (an expired token, an
+    // anonymous socket), and the code each stops the controller with. Subscribing again would get the same answer.
+    private static readonly IReadOnlyDictionary<string, string> RefusedErrors = new Dictionary<
+        string,
+        string
+    >(StringComparer.Ordinal)
+    {
+        ["TRAX_AUTHORIZATION"] = RefusalCode.Forbidden.ToWire(),
+        ["AUTH_NOT_AUTHENTICATED"] = RefusalCode.Unauthenticated.ToWire(),
+        ["AUTH_NOT_AUTHORIZED"] = RefusalCode.Forbidden.ToWire(),
+    };
+
     private readonly GraphQLMachineServerOptions _options;
     private readonly MachineShape _shape;
     private readonly string _field;
@@ -85,6 +106,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     private readonly IReadOnlyDictionary<string, Document> _documents;
     private readonly Document _changed;
     private readonly IReadOnlyList<TimeSpan> _resubscribeDelays;
+    private readonly IReadOnlySet<string> _terminal;
 
     private sealed record Document(string Id, IReadOnlySet<string> Variables);
 
@@ -136,6 +158,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         _resubscribeDelays = options.ResubscribeDelays is { Count: > 0 } delays
             ? delays
             : DefaultResubscribeDelays;
+        _terminal = (options.TerminalStreamErrors ?? []).ToHashSet(StringComparer.Ordinal);
     }
 
     /// <inheritdoc/>
@@ -300,8 +323,10 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// instance or one the server will not let the caller watch, <see cref="StreamMessage.ClientOutdated"/>, and
     /// <see cref="StreamMessage.Reload"/> when the server asks for one. A socket the host refused (closed with 4401 or
     /// 4403, or an upgrade answered 401 or 403) is <see cref="StreamMessage.Refused"/>, and is not subscribed again; so
-    /// is a push the client cannot read (a member of the wrong type, or one given twice), as
-    /// <see cref="ClientProblemCodes.TransportError"/>. A
+    /// is a stream the host refused with a GraphQL error coded <c>TRAX_AUTHORIZATION</c> or <c>AUTH_NOT_AUTHORIZED</c>
+    /// (<c>FORBIDDEN</c>) or <c>AUTH_NOT_AUTHENTICATED</c> (<c>UNAUTHENTICATED</c>), one whose error code is among
+    /// <see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/> (with that code), and a push the client cannot
+    /// read (a member of the wrong type, or one given twice), as <see cref="ClientProblemCodes.TransportError"/>. A
     /// stream that ends any other way is subscribed again after the resubscribe delays; the new stream's first event
     /// is the instance as it is then.
     /// </remarks>
@@ -390,13 +415,8 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         {
             if (value["errors"] is JsonArray { Count: > 0 } errors)
             {
-                if (
-                    errors[0]?["extensions"]?["code"] is JsonValue c
-                    && c.TryGetValue<string>(out var code)
-                    && code == ClientOutdated
-                )
-                    return (new StreamMessage.ClientOutdated(), false);
-                return (null, true);
+                var ended = EndOf(errors);
+                return (ended, ended is null);
             }
             if (value["data"]?[server._pushField] is not JsonObject change)
                 return (null, false);
@@ -441,8 +461,36 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         {
             if (RefusedCode(error) is { } code)
                 Deliver(new StreamMessage.Refused(code, error.Message));
+            else if (
+                error is SubscriptionErrorException { Errors: var errors }
+                && EndOf(errors) is { } ended
+            )
+                Deliver(ended);
             else
                 Again();
+        }
+
+        // How GraphQL errors end the stream for good: CLIENT_OUTDATED, a refusal the host answers per operation, or a
+        // code the caller named terminal. Null for any other, which is subscribed again.
+        private StreamMessage? EndOf(JsonArray errors)
+        {
+            if (
+                errors.Count == 0
+                || errors[0] is not JsonObject first
+                || Text((first["extensions"] as JsonObject)?["code"]) is not { } code
+            )
+                return null;
+            if (code == ClientOutdated)
+                return new StreamMessage.ClientOutdated();
+            var message = Text(first["message"]) is { Length: > 0 } said ? said : code;
+            if (RefusedErrors.TryGetValue(code, out var refused))
+                return new StreamMessage.Refused(
+                    refused,
+                    $"The host refused the stream: {message}"
+                );
+            return server._terminal.Contains(code)
+                ? new StreamMessage.Refused(code, message)
+                : null;
         }
 
         // The code a socket the host refused stops the controller with, or null for a close to subscribe again after.

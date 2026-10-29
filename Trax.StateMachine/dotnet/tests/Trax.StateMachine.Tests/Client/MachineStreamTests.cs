@@ -31,7 +31,9 @@ public class MachineStreamTests
         ],
     };
 
-    private static (HandSocket Socket, Channel<StreamMessage> Messages, IDisposable Stream) Follow()
+    private static (HandSocket Socket, Channel<StreamMessage> Messages, IDisposable Stream) Follow(
+        IReadOnlyCollection<string>? terminal = null
+    )
     {
         var socket = new HandSocket();
         var server = new GraphQLMachineServer(
@@ -42,6 +44,7 @@ public class MachineStreamTests
                 Machine = Turnstile,
                 Socket = socket,
                 ResubscribeDelays = [TimeSpan.FromMilliseconds(10)],
+                TerminalStreamErrors = terminal,
             }
         );
         var messages = Channel.CreateUnbounded<StreamMessage>();
@@ -141,6 +144,86 @@ public class MachineStreamTests
         // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
         await Task.Delay(100);
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    private static JsonObject Errors(string code) =>
+        (JsonObject)
+            JsonNode.Parse(
+                $$$"""{"data":null,"errors":[{"message":"Not allowed.","extensions":{"code":"{{{code}}}"}}]}"""
+            )!;
+
+    [TestCase("TRAX_AUTHORIZATION", "FORBIDDEN")]
+    [TestCase("AUTH_NOT_AUTHORIZED", "FORBIDDEN")]
+    [TestCase("AUTH_NOT_AUTHENTICATED", "UNAUTHENTICATED")]
+    public async Task A_stream_the_host_refuses_in_a_next_ends_and_is_not_subscribed_again(
+        string error,
+        string code
+    )
+    {
+        var (socket, messages, stream) = Follow();
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Push(Errors(error));
+
+        var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        message.Should().BeOfType<StreamMessage.Refused>().Which.Code.Should().Be(code);
+        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
+        await Task.Delay(100);
+        socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    [TestCase("TRAX_AUTHORIZATION", "FORBIDDEN")]
+    [TestCase("AUTH_NOT_AUTHORIZED", "FORBIDDEN")]
+    [TestCase("AUTH_NOT_AUTHENTICATED", "UNAUTHENTICATED")]
+    public async Task A_stream_the_host_refuses_in_an_error_ends_and_is_not_subscribed_again(
+        string error,
+        string code
+    )
+    {
+        var (socket, messages, stream) = Follow();
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Sink.Error(
+            new SubscriptionErrorException((JsonArray)Errors(error)["errors"]!.DeepClone())
+        );
+
+        var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        message.Should().BeOfType<StreamMessage.Refused>().Which.Code.Should().Be(code);
+        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
+        await Task.Delay(100);
+        socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task A_code_the_caller_named_terminal_ends_the_stream_with_that_code()
+    {
+        var (socket, messages, stream) = Follow(terminal: ["CONNECTION_CHANGED"]);
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Push(Errors("CONNECTION_CHANGED"));
+
+        var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        message.Should().Be(new StreamMessage.Refused("CONNECTION_CHANGED", "Not allowed."));
+        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
+        await Task.Delay(100);
+        socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task A_stream_error_with_any_other_code_is_subscribed_again()
+    {
+        var (socket, messages, stream) = Follow(terminal: ["CONNECTION_CHANGED"]);
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Push(Errors("INTERNAL_SERVER_ERROR"));
+
+        var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        second.Should().NotBeSameAs(first);
+        messages.Reader.TryRead(out _).Should().BeFalse();
     }
 
     // A socket each subscription is handed to the test through.
