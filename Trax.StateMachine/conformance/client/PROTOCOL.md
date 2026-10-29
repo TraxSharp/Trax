@@ -202,8 +202,14 @@ Rust's `tests/controller.rs`). A change to one is a change here and in all three
 | --- | --- | --- |
 | Request timeout | 30 s | One request, from sending it to the last byte of its answer. Past it the request fails as `TRANSPORT_ERROR`. C#'s also yields to a shorter `HttpClient.Timeout`. |
 | Retry delays | 250, 500, 1000, 2000, 4000 ms | The waits before each retry of a `SERVER_OUTDATED` answer and of a read the transport failed: one retry per delay, then the event fails and `retry` resends it. An empty list retries nothing. |
-| Resubscribe delays | 1000, 2000, 5000 ms | The waits before subscribing again after a stream ended without saying why. The last repeats for as long as the stream is wanted, and the schedule starts over once a stream has delivered its second push, since every stream's first is the instance as it is. An empty list is the default. |
+| Resubscribe delays | 1000, 2000, 5000 ms | The steps of the waits before subscribing again after a stream ended without saying why. The last repeats for as long as the stream is wanted, and the schedule starts over once a stream has delivered its second push, since every stream's first is the instance as it is. An empty list is the default. Each wait is jittered, below. |
 | Response size | 16 MiB | The largest answer body read; a larger one fails its request as `TRANSPORT_ERROR` and is not read past the limit. C# and Rust hold a socket message to the same limit. |
+
+Each resubscribe wait is drawn uniformly between 50% and 100% of its step: `step × (1 − r / 2)`, with `r` uniform in
+[0, 1), drawn afresh for every wait, so the clients a host restart or a refusal like `TOO_MANY_SUBSCRIPTIONS` dropped
+together do not subscribe again in lockstep. Retry delays are not jittered. The random source is the language's
+ordinary one and each client's unit tests replace it (TypeScript's spies on `Math.random`), so a draw of 0 waits the
+whole step. The transcripts' delays are short enough that the kit does not see the jitter.
 
 The socket's own timing is not pinned, because the TypeScript client does not own its socket: a page builds its
 graphql-ws client and its options with it, and graphql-ws waits for an acknowledgement and stays silent for as long

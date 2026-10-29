@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { turnstile, type TurnstileSpec } from '../machines/turnstile/turnstile';
 import { DEFAULT_RETRY_DELAYS, ServerMachineController, type StreamMessage } from '../server/serverController';
@@ -18,6 +18,7 @@ import { DEFAULT_MAX_RESPONSE_SIZE, DEFAULT_REQUEST_TIMEOUT } from './transport'
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 const hash = turnstile.schemaHash;
@@ -241,6 +242,12 @@ describe('createMachineServer operations', () => {
 });
 
 describe('createMachineServer change stream', () => {
+  // Each resubscribe delay is drawn between half the step and the whole of it; a draw of 0 is the whole step, so the
+  // tests below that count milliseconds see the steps as given.
+  beforeEach(() => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+  });
+
   const follow = (resubscribeDelays?: number[], terminalStreamErrors?: string[]) => {
     const { server, socket } = serverOver(http().fetch, new FakeSocket(), resubscribeDelays, terminalStreamErrors);
     const messages: StreamMessage[] = [];
@@ -341,6 +348,28 @@ describe('createMachineServer change stream', () => {
     socket.last.sink.complete();
     vi.advanceTimersByTime(100);
     expect(socket.subscriptions).toHaveLength(4);
+  });
+
+  it('waits a random share of each step, between half of it and all of it, so clients do not resubscribe together', () => {
+    vi.useFakeTimers();
+    const draws = [0.5, 0.75, 0.25];
+    vi.spyOn(Math, 'random').mockImplementation(() => draws.shift() ?? 0);
+    const { socket } = follow([1000, 2000, 4000]);
+
+    const waits: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const before = socket.subscriptions.length;
+      socket.last.sink.complete();
+      let waited = 0;
+      while (socket.subscriptions.length === before) {
+        vi.advanceTimersByTime(1);
+        waited++;
+      }
+      waits.push(waited);
+    }
+
+    // 1000 at 0.5 is 750, 2000 at 0.75 is 1250, 4000 at 0.25 is 3500.
+    expect(waits).toEqual([750, 1250, 3500]);
   });
 
   it('closes the socket subscription and any pending resubscription when closed', () => {
@@ -809,6 +838,7 @@ describe('the time-based defaults', () => {
 
   it('a server built without resubscribe delays subscribes again after 1, 2, then 5 seconds', () => {
     vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
     const { server, socket } = unconfigured(http().fetch);
     server.subscribe('i-1', () => {});
 

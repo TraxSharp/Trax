@@ -61,8 +61,8 @@ function Wizard({ id }: { id?: string }) {
   `endedBy` names it, and the controller stops on it the same way. The generated client lists `CONNECTION_CHANGED`
   there, which a server made before the last `configureTrax` refuses every request and stream with. A stream that ends any
   other way (its host stopped, the socket gave up, `TOO_MANY_SUBSCRIPTIONS`) is subscribed again after
-  `resubscribeDelays` (1, 2, then every 5 seconds); the new stream's first event is the instance as it is then, so
-  nothing is read again.
+  `resubscribeDelays` (1, 2, then every 5 seconds, each wait drawn between half the delay and all of it); the new
+  stream's first event is the instance as it is then, so nothing is read again.
 - **Adds `discard(id, requestId)`**, for a page that throws an instance away.
 
 ## What useServerMachine does

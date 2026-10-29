@@ -52,7 +52,8 @@ export interface MachineServerOptions extends HttpExecutorOptions {
   socket: PersistedSubscriptionSocket;
   /**
    * Delays, in milliseconds, before subscribing again after a stream that ended without saying why (its host stopped,
-   * or the socket gave up). The last delay repeats for as long as the stream is wanted, and the schedule starts over
+   * or the socket gave up). Each wait is drawn uniformly between half the delay and the whole of it, so the pages a
+   * host dropped together do not subscribe again together. The last delay repeats for as long as the stream is wanted, and the schedule starts over
    * once a stream has delivered a second push: every new stream's first is the instance as it is then. A socket the host refused (a
    * close with 4401 or 4403), or a stream it refused with a GraphQL error coded `TRAX_AUTHORIZATION`,
    * `AUTH_NOT_AUTHENTICATED` or `AUTH_NOT_AUTHORIZED`, is not subscribed again: it ends the controller as
@@ -92,6 +93,12 @@ export const DEFAULT_RESUBSCRIBE_DELAYS: readonly number[] = [1000, 2000, 5000];
 export function persistedMessageReplacer(key: string, value: unknown): unknown {
   return key === 'query' && value === '' ? undefined : value;
 }
+
+/**
+ * A resubscribe step's wait: drawn uniformly between half the step and the whole of it, so the clients a host restart
+ * dropped together do not all subscribe again at the same moment.
+ */
+const jittered = (step: number): number => step * (1 - Math.random() / 2);
 
 /** The operation a machine's push document is registered under. */
 const CHANGED = 'changed';
@@ -288,9 +295,9 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
         const close = unsubscribe;
         unsubscribe = null;
         close?.();
-        const delay = delays[Math.min(attempt, delays.length - 1)];
+        const step = delays[Math.min(attempt, delays.length - 1)];
         attempt++;
-        timer = setTimeout(open, delay);
+        timer = setTimeout(open, jittered(step));
       };
 
       unsubscribe = socket.subscribe(
