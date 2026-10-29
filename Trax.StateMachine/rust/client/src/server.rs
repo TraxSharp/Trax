@@ -105,8 +105,9 @@ pub trait Subscription: Send {}
 
 /// The operations of one machine a host serves, and its change stream: what a
 /// [`ServerMachineController`](crate::ServerMachineController) drives one instance through. A refusal is
-/// `Ok(ServerAnswer::Refused)`; a request that did not get through is `Err`. [`GraphQLMachineServer`](crate::GraphQLMachineServer)
-/// is the one over a host's typed `machines` root.
+/// `Ok(ServerAnswer::Refused)`; a request that did not get through is `Err`, and so is one that panics (under
+/// `panic = "unwind"`). [`GraphQLMachineServer`](crate::GraphQLMachineServer) is the one over a host's typed `machines`
+/// root.
 pub trait MachineServer: Send + Sync + 'static {
     /// Creates an instance from the machine's start. A retry under the same request id answers the same instance.
     fn start(

@@ -498,3 +498,58 @@ async fn a_trigger_the_machine_does_not_declare_is_refused_and_sends_nothing() {
     );
     assert_eq!(controller.view().error, None);
 }
+
+// A server whose every request panics, as a binding's host callback might, except the read, which answers Locked.
+struct Panicking;
+
+impl MachineServer for Panicking {
+    async fn start(&self, _: Option<Value>, _: String) -> Result<ServerAnswer, TransportError> {
+        panic!("a host callback's bug")
+    }
+
+    async fn event(&self, _: EventRequest) -> Result<ServerAnswer, TransportError> {
+        panic!("a host callback's bug")
+    }
+
+    async fn get(&self, _: String) -> Result<ServerAnswer, TransportError> {
+        stored(snapshot(None, 1, "Locked"))
+    }
+
+    fn subscribe(&self, _: String, _: StreamSink) -> Box<dyn Subscription> {
+        Box::new(Nothing)
+    }
+}
+
+#[tokio::test]
+async fn a_start_whose_request_panics_settles_as_a_transport_error() {
+    let (ir, hash) = turnstile();
+    let mut options = ServerMachineOptions::new(ir, hash, Panicking);
+    options.retry_delays = Some(Vec::new());
+    let controller = ServerMachineController::new(options).unwrap();
+
+    tokio::time::timeout(Duration::from_secs(5), controller.start())
+        .await
+        .expect("the start never settled");
+
+    let view = controller.view();
+    assert_eq!(view.problem.as_ref().map(|p| p.code.as_str()), Some("TRANSPORT_ERROR"));
+}
+
+#[tokio::test]
+async fn an_event_whose_request_panics_settles_failed_as_a_transport_error() {
+    let (ir, hash) = turnstile();
+    let mut options = ServerMachineOptions::new(ir, hash, Panicking);
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+    controller.start().await;
+
+    let outcome = tokio::time::timeout(Duration::from_secs(5), controller.send("Push", None))
+        .await
+        .expect("the send never settled");
+
+    assert!(
+        matches!(&outcome, SendOutcome::Failed(p) if p.code == "TRANSPORT_ERROR"),
+        "{outcome:?}"
+    );
+    assert!(!controller.view().pending);
+}

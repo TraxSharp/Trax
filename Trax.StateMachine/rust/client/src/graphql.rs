@@ -4,11 +4,12 @@
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
+use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{FutureExt, SinkExt, StreamExt};
 use reqwest::header::HeaderMap;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -362,6 +363,10 @@ impl Inner {
             }
             Ok::<_, TransportError>((status, bytes))
         };
+        // A headers provider that panics fails the request as one that did not get through.
+        let exchange = AssertUnwindSafe(exchange).catch_unwind().map(|caught| {
+            caught.unwrap_or_else(|_| Err(TransportError("The request panicked before it was sent.".to_owned())))
+        });
         let (status, bytes) = tokio::time::timeout(self.request_timeout, exchange)
             .await
             .map_err(|_| {
@@ -596,7 +601,10 @@ impl Inner {
     async fn stream(&self, id: String, sink: StreamSink) {
         let mut attempt = 0usize;
         loop {
-            match self.subscribe_once(&id, &sink, &mut attempt).await {
+            // A provider that panics (a host callback a binding wraps) ends that subscription as one that ended without
+            // saying why, so the stream is subscribed again rather than dying silently.
+            let once = AssertUnwindSafe(self.subscribe_once(&id, &sink, &mut attempt)).catch_unwind();
+            match once.await.unwrap_or(Ended::Again) {
                 Ended::ForGood => return,
                 Ended::Again => {
                     let delay = self.resubscribe_delays[attempt.min(self.resubscribe_delays.len() - 1)];
@@ -1363,6 +1371,50 @@ mod tests {
             }
         });
         (port, heard)
+    }
+
+    #[tokio::test]
+    async fn a_provider_that_panics_fails_that_connection_and_the_stream_is_subscribed_again() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        let (port, mut heard) = recording_host(|_| Reply::Acknowledge).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        let asked = Arc::new(AtomicU32::new(0));
+        given.connection_params = Some(Arc::new(move || {
+            let n = asked.fetch_add(1, Ordering::SeqCst) + 1;
+            if n == 1 {
+                panic!("a host callback's bug");
+            }
+            Box::pin(async move {
+                let mut payload = Map::new();
+                payload.insert("token".into(), Value::from(format!("t{n}")));
+                Ok(Some(Value::Object(payload)))
+            })
+        }));
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        let heard = tokio::time::timeout(Duration::from_secs(10), heard.recv()).await;
+
+        assert_eq!(
+            heard.expect("the stream died with the provider").unwrap(),
+            (None, Some("t2".into()))
+        );
+    }
+
+    #[tokio::test]
+    async fn a_headers_provider_that_panics_fails_the_request() {
+        let mut given = with_get(options("http://127.0.0.1:9/graphql", "ws://127.0.0.1:9/graphql"));
+        given.headers = Some(Arc::new(|| Box::pin(async { panic!("a host callback's bug") })));
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let answered = tokio::spawn(async move { server.get("i-1".into()).await }).await;
+
+        assert!(matches!(answered, Ok(Err(_))), "{answered:?}");
     }
 
     #[tokio::test]

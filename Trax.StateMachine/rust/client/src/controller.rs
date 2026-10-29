@@ -11,11 +11,14 @@
 //! languages, without locks.
 
 use std::collections::hash_map::RandomState;
+use std::future::Future;
 use std::hash::{BuildHasher, Hasher};
+use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures_util::FutureExt;
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot, watch};
 use trax_state_machine::{canonical_wire, IrError, Machine, Map, PlanAnswer, PlanEvent, PlanInvalid, Snapshot, Value};
@@ -459,6 +462,18 @@ fn transport_failure(error: &TransportError) -> MachineProblem {
     }
 }
 
+// A server's request that panics (a custom server's bug, or a host callback a binding wraps) answers as one that did not
+// get through, so whatever waits on it settles rather than waiting for good. The call itself is made inside it.
+async fn guarded(
+    request: impl Future<Output = Result<ServerAnswer, TransportError>>,
+) -> Result<ServerAnswer, TransportError> {
+    AssertUnwindSafe(request).catch_unwind().await.unwrap_or_else(|_| {
+        Err(TransportError(
+            "The request panicked before it was answered.".to_owned(),
+        ))
+    })
+}
+
 /// The hash a host's manifest gives an IR: the lowercase hex SHA-256 of its canonical JSON.
 pub fn ir_hash(ir: &Value) -> String {
     ring::digest::digest(&ring::digest::SHA256, ir.to_json().as_bytes())
@@ -782,7 +797,7 @@ impl<S: MachineServer> Actor<S> {
         let commands = self.commands.clone();
         let input = self.start_input.clone();
         self.runtime.spawn(async move {
-            let result = server.start(input, request_id.clone()).await;
+            let result = guarded(async { server.start(input, request_id.clone()).await }).await;
             let _ = commands.send(Msg::Created {
                 request_id,
                 attempt,
@@ -937,7 +952,7 @@ impl<S: MachineServer> Actor<S> {
         let server = self.server.clone();
         let commands = self.commands.clone();
         self.runtime.spawn(async move {
-            let result = server.get(id).await;
+            let result = guarded(async { server.get(id).await }).await;
             let _ = commands.send(Msg::Read {
                 row_id,
                 attempt,
@@ -1255,7 +1270,7 @@ impl<S: MachineServer> Actor<S> {
         let server = self.server.clone();
         let commands = self.commands.clone();
         self.runtime.spawn(async move {
-            let result = server.event(request).await;
+            let result = guarded(async { server.event(request).await }).await;
             let _ = commands.send(Msg::Delivered { entry, attempt, result });
         });
     }
