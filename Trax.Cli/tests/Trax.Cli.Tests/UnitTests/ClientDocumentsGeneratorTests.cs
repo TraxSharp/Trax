@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Cli.Clients;
 using Trax.Cli.Commands;
+using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
 using Trax.StateMachine;
 
@@ -632,6 +633,67 @@ public class ClientDocumentsGeneratorTests
                 "fragments.g.ts",
             ])
             .And.NotContain(p => p.StartsWith("documents/", StringComparison.Ordinal));
+    }
+
+    [Test]
+    public void Generating_without_documents_removes_and_check_reports_the_files_a_run_with_them_wrote()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"trax-docs-stale-{Guid.NewGuid():N}");
+        var generator = new ClientGenerator(new FakeNodeRunner());
+        var with = new ClientGenerateOptions(
+            Manifest,
+            Documents: [new ClientDocumentFile("cards/orderCard.graphql", OrderCard)]
+        );
+        var without = new ClientGenerateOptions(Manifest);
+        try
+        {
+            generator.Write(with, dir);
+            string[] written = ["trax.documents.json", "schema.graphql", "graphql.config.yml"];
+            foreach (var name in written)
+                File.Exists(Path.Combine(dir, name)).Should().BeTrue();
+
+            generator
+                .Check(without, dir)
+                .Should()
+                .Contain(written.Select(name => new ClientDrift(name, DriftStatus.Drifted)));
+
+            generator.Write(without, dir);
+            foreach (var name in written)
+                File.Exists(Path.Combine(dir, name)).Should().BeFalse(name);
+            generator.Check(without, dir).Should().BeEmpty();
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Test]
+    public void Generating_without_documents_keeps_files_of_those_names_it_did_not_write()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"trax-docs-own-{Guid.NewGuid():N}");
+        var generator = new ClientGenerator(new FakeNodeRunner());
+        var without = new ClientGenerateOptions(Manifest);
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "trax.documents.json"), "{\"format\": 1}\n");
+            File.WriteAllText(Path.Combine(dir, "schema.graphql"), "type Query { a: Int }\n");
+            File.WriteAllText(Path.Combine(dir, "graphql.config.yml"), "schema: x.graphql\n");
+
+            string[] own = ["trax.documents.json", "schema.graphql", "graphql.config.yml"];
+            generator.Check(without, dir).Select(d => d.Path).Should().NotContain(own);
+            generator.Write(without, dir);
+
+            foreach (var name in own)
+                File.Exists(Path.Combine(dir, name)).Should().BeTrue(name);
+            generator.Check(without, dir).Should().BeEmpty();
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     #endregion

@@ -211,7 +211,7 @@ internal sealed partial class ClientGenerator
             files.Add(new(EditorSchemaFileName, EditorSchema(manifest)));
             files.Add(
                 new(
-                    "graphql.config.yml",
+                    EditorConfigFileName,
                     EditorConfig(
                         options.DocumentGlobs
                             ?? options
@@ -244,7 +244,8 @@ internal sealed partial class ClientGenerator
     /// Writes the client under <paramref name="outDir"/>, replacing generated files that changed. A file this
     /// generator wrote (a client module starting with its header, or the twin of a machine the previous run served)
     /// that the manifest no longer generates is deleted first, then any folder that leaves empty, so a train removed
-    /// on the host leaves nothing behind for <c>--check</c> to report. Any other file is left alone, and a linked
+    /// on the host leaves nothing behind for <c>--check</c> to report. So are the documents file and the editor's
+    /// schema and config a run with documents wrote, when this run has none. Any other file is left alone, and a linked
     /// folder is not entered. A link at any path the client writes, or at a folder on the way there, is refused
     /// before anything is written.
     /// </summary>
@@ -371,8 +372,9 @@ internal sealed partial class ClientGenerator
     }
 
     // The files under outDir this writer wrote and the client no longer holds, by their path under it: only files of
-    // the extension it writes. A client module is this writer's when its first line is the header it writes. A twin
-    // is the manifest client's when it sits where that client puts one, <id>/<id>.machine.g.ts or
+    // the extension it writes, and for the manifest client the document files at its root (DocumentFile). A client
+    // module is this writer's when its first line is the header it writes. A twin is the manifest client's when it
+    // sits where that client puts one, <id>/<id>.machine.g.ts or
     // <id>/<id>.contexts.g.ts, starts with the header the twin generator writes for that id, and <id> is a machine the
     // previous run served: trax machine generate writes the same header, so the header alone does not say which tool
     // wrote it. Anything else, an app's own *.g.ts or *.g.cs or another writer's, is left alone. A folder below outDir
@@ -404,7 +406,45 @@ internal sealed partial class ClientGenerator
                 if (!IsRoot(sub, writer))
                     folders.Push(sub);
         }
+        if (writer == Writer.Manifest)
+            foreach (var name in DocumentFiles)
+                if (!expected.Contains(name) && DocumentFile(Path.Combine(outDir, name), name))
+                    stale.Add(name);
         return stale.Order(StringComparer.Ordinal).ToList();
+    }
+
+    // What the manifest client writes at its root beside the modules when it is given documents. A run without them
+    // writes none of these, and one an earlier run left would still be registered by the host and read by the editor.
+    private static readonly string[] DocumentFiles =
+    [
+        DocumentsFileName,
+        EditorSchemaFileName,
+        EditorConfigFileName,
+    ];
+
+    // Whether a file at the client's root is the one this generator writes under that name: the editor's files start
+    // with their header; trax.documents.json carries none, so it is this generator's when it is the object it writes,
+    // format 1 and its documents, and nothing else.
+    private static bool DocumentFile(string path, string name)
+    {
+        if (name != DocumentsFileName)
+            return FirstLine(path)
+                == (name == EditorSchemaFileName ? EditorSchemaHeader : EditorConfigHeader);
+        if (ReadPrefix(path, ManifestBytes) is not { } text)
+            return false;
+        try
+        {
+            return JsonNode.Parse(text) is JsonObject json
+                && json.Count == 2
+                && json["format"] is JsonValue format
+                && format.TryGetValue<int>(out var version)
+                && version == 1
+                && json["documents"] is JsonArray;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
     }
 
     // One folder's entries, in the case they are written, without following a link.
