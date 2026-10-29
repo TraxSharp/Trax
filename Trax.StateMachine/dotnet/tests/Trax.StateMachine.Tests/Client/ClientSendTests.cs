@@ -268,6 +268,117 @@ public class ClientSendTests
         server.Events.Reader.TryRead(out _).Should().BeFalse();
     }
 
+    [Test]
+    public async Task An_answer_whose_numbers_cannot_be_held_fails_the_send_and_the_next_one_goes_out()
+    {
+        var server = new StepServer();
+        using var controller = Open(
+            server,
+            id: "i-1",
+            retryDelays: [],
+            predictor: MachinePredictor.FromIr(Turnstile)
+        );
+        var start = controller.StartAsync();
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(At(1, "Unlocked", new JsonObject { ["paidWith"] = "dollar" }))
+        );
+        await start.WaitAsync(Wait);
+
+        var push = controller.SendAsync("Push");
+        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
+            ServerAnswer.Of(At(2, "Locked", (JsonObject)JsonNode.Parse("""{"n":1e400}""")!))
+        );
+
+        (await push.WaitAsync(Wait))
+            .Should()
+            .BeOfType<SendOutcome.Failed>()
+            .Which.Problem.Code.Should()
+            .Be("TRANSPORT_ERROR");
+        var next = controller.SendAsync("Push");
+        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        sent.Trigger.Should().Be("Push");
+        sent.Answer.SetResult(ServerAnswer.Of(At(2, "Locked")));
+        (await next.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+    }
+
+    [Test]
+    public async Task A_first_read_whose_numbers_cannot_be_held_settles_the_start_as_a_failure()
+    {
+        var server = new StepServer();
+        using var controller = Open(
+            server,
+            id: "i-1",
+            retryDelays: [],
+            predictor: MachinePredictor.FromIr(Turnstile)
+        );
+
+        var start = controller.StartAsync();
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(At(1, "Locked", (JsonObject)JsonNode.Parse("""{"n":-1e400}""")!))
+        );
+
+        await start.WaitAsync(Wait);
+        controller.View.Status.Should().Be(MachineStatus.Loading);
+        controller.View.Problem!.Code.Should().Be("TRANSPORT_ERROR");
+    }
+
+    [Test]
+    public async Task A_prediction_that_cannot_be_written_is_sent_without_one_and_the_queue_goes_on()
+    {
+        var server = new StepServer();
+        using var controller = Open(
+            server,
+            id: "i-1",
+            retryDelays: [],
+            predictor: new UnwritablePredictions(MachinePredictor.FromIr(Turnstile))
+        );
+        var start = controller.StartAsync();
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(At(1, "Locked"))
+        );
+        await start.WaitAsync(Wait);
+
+        var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
+        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        sent.ClientResult.Should().BeNull();
+        sent.Answer.SetResult(ServerAnswer.Of(At(2, "Locked")));
+        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+    }
+
+    // A predictor whose every prediction out of Locked fails to serialize, as one holding a number past a double's range
+    // does.
+    private sealed class UnwritablePredictions(IMachinePredictor inner) : IMachinePredictor
+    {
+        public string IrHash => inner.IrHash;
+
+        public AdvanceResult Advance(Snapshot snapshot, string trigger, JsonNode? input) =>
+            inner.Advance(snapshot, trigger, input);
+
+        public RehydrationResult Rehydrate(string json) => inner.Rehydrate(json);
+
+        public string Serialize(Snapshot snapshot) =>
+            snapshot.State == "Unlocked"
+                ? throw new ArgumentException(
+                    "NaN and Infinity are not valid canonical JSON numbers."
+                )
+                : inner.Serialize(snapshot);
+
+        public bool CanFire(Snapshot snapshot, string trigger, JsonNode? input) =>
+            inner.CanFire(snapshot, trigger, input);
+
+        public IReadOnlyList<string> AvailableTriggers(Snapshot snapshot) =>
+            inner.AvailableTriggers(snapshot);
+
+        public PlanResult Plan(
+            Snapshot snapshot,
+            string target,
+            PlannedEvent? fields,
+            IReadOnlyList<string> navigation,
+            int? maxDepth = null
+        ) => inner.Plan(snapshot, target, fields, navigation, maxDepth);
+    }
+
     // A server whose every start, event and read the test answers by hand, as each arrives.
     private sealed class StepServer : IMachineServer
     {

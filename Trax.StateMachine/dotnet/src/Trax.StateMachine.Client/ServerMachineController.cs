@@ -681,7 +681,14 @@ public sealed class ServerMachineController : IDisposable
         Listen(id);
         // The stream's first event is the instance as it is then, so a write between the answer and the subscription
         // reaches it there; the answer is the snapshot to show until then.
-        Accept(answer.Snapshot!, Source.Answer);
+        Accept(answer.Snapshot!, Source.Answer, out var unreadable);
+        if (unreadable is not null)
+        {
+            _problem = unreadable;
+            Emit();
+            SettleStart(new SendOutcome.Failed(unreadable));
+            return;
+        }
         Emit();
         SettleStart(new SendOutcome.Confirmed(answer.Snapshot!));
         Pump();
@@ -728,7 +735,14 @@ public sealed class ServerMachineController : IDisposable
         switch (message)
         {
             case StreamMessage.Changed changed:
-                if (Accept(changed.Snapshot, Source.Push))
+                var taken = Accept(changed.Snapshot, Source.Push, out var unreadable);
+                if (unreadable is not null)
+                {
+                    // As a push the server cannot read ends the stream: the host would send the same again.
+                    Stop(new MachineError(unreadable.Code, unreadable.Message));
+                    return;
+                }
+                if (taken)
                     Emit();
                 Pump();
                 return;
@@ -796,19 +810,7 @@ public sealed class ServerMachineController : IDisposable
         {
             if (_disposed || _error is not null)
                 return;
-            _problem = TransportFailure(ex);
-            Emit();
-            // The first read settles the start once its retries have.
-            await Later(
-                attempt,
-                () => ReadAsync(rowId, attempt + 1),
-                () =>
-                {
-                    EndRead();
-                    Pump();
-                    return Task.CompletedTask;
-                }
-            );
+            await ReadFailedAsync(rowId, attempt, TransportFailure(ex));
             return;
         }
         if (_disposed || _error is not null)
@@ -844,19 +846,44 @@ public sealed class ServerMachineController : IDisposable
             return;
         }
         var snapshot = answer.Snapshot! with { RowId = answer.Snapshot.RowId ?? rowId ?? _rowId };
-        var changed = Accept(snapshot, Source.Load);
+        var changed = Accept(snapshot, Source.Load, out var unreadable);
+        if (unreadable is not null)
+        {
+            await ReadFailedAsync(rowId, attempt, unreadable);
+            return;
+        }
         // A push of the incarnation now held is taken after the read; one of another incarnation is kept until a read
         // of that incarnation answers.
         var buffered = _buffered;
         if (buffered is not null && _error is null && buffered.RowId == _rowId)
         {
             _buffered = null;
-            changed = Accept(buffered, Source.Push) || changed;
+            changed = Accept(buffered, Source.Push, out var unreadablePush) || changed;
+            if (unreadablePush is not null)
+                Stop(new MachineError(unreadablePush.Code, unreadablePush.Message));
         }
         EndRead();
         if (changed && _error is null)
             Emit();
         Pump();
+    }
+
+    // A read that did not get through, or whose answer this client cannot hold, is read again after the next delay; past
+    // the last, the read ends with the failure shown. The first read settles the start once its retries have.
+    private async Task ReadFailedAsync(string? rowId, int attempt, MachineProblem failure)
+    {
+        _problem = failure;
+        Emit();
+        await Later(
+            attempt,
+            () => ReadAsync(rowId, attempt + 1),
+            () =>
+            {
+                EndRead();
+                Pump();
+                return Task.CompletedTask;
+            }
+        );
     }
 
     private void EndRead()
@@ -891,9 +918,12 @@ public sealed class ServerMachineController : IDisposable
         incoming is { } i && held is { } h && i <= h;
 
     // Takes a server snapshot if it is newer than the one held; returns whether the view changed. A push of another
-    // incarnation than the one held starts one read instead, and is kept until that read answers.
-    private bool Accept(ServerSnapshot incoming, Source source)
+    // incarnation than the one held starts one read instead, and is kept until that read answers. A snapshot this
+    // client cannot write as canonical wire (a number past a double's range, which no engine stores) is not taken:
+    // `unreadable` says why, and whatever carried it is a failure.
+    private bool Accept(ServerSnapshot incoming, Source source, out MachineProblem? unreadable)
     {
+        unreadable = null;
         var rowId = incoming.RowId;
         var otherIncarnation = rowId is not null && _rowId is not null && rowId != _rowId;
 
@@ -940,7 +970,20 @@ public sealed class ServerMachineController : IDisposable
         };
         if (_predictor is not null)
         {
-            var parsed = _predictor.Rehydrate(_predictor.Serialize(snapshot));
+            RehydrationResult parsed;
+            try
+            {
+                parsed = _predictor.Rehydrate(_predictor.Serialize(snapshot));
+            }
+            catch (Exception ex)
+            {
+                unreadable = new MachineProblem(
+                    MachineProblemKind.Transport,
+                    ClientProblemCodes.TransportError,
+                    $"The server sent a snapshot this client cannot hold: {ex.Message}"
+                );
+                return false;
+            }
             if (parsed is not RehydrationResult.Ok ok)
             {
                 // The server serves a snapshot this client's machine cannot read: it was built for another version.
@@ -1033,12 +1076,25 @@ public sealed class ServerMachineController : IDisposable
             var predicted = !Predicts(_confirmed.State, next.Trigger)
                 ? null
                 : _predictor.Advance(_confirmed, next.Trigger, next.Input?.DeepClone());
+            string? clientResult = null;
+            if (predicted is AdvanceResult.Transitioned t)
+            {
+                try
+                {
+                    clientResult = _predictor!.Serialize(t.Snapshot);
+                }
+                catch (Exception)
+                {
+                    // A prediction this client cannot write as canonical wire (a number past a double's range) is not
+                    // sent: the server decides alone, as for an event the predictor refuses.
+                }
+            }
             next.Request = new EventRequest(
                 _id,
                 next.Trigger,
                 next.Input,
                 _newRequestId(),
-                predicted is AdvanceResult.Transitioned t ? _predictor!.Serialize(t.Snapshot) : null
+                clientResult
             );
         }
         _ = DeliverAsync(next, next.Request, 0);
@@ -1074,7 +1130,15 @@ public sealed class ServerMachineController : IDisposable
         if (answer.Problem is not { } problem)
         {
             var snapshot = answer.Snapshot!;
-            Accept(snapshot, Source.Answer);
+            Accept(snapshot, Source.Answer, out var unreadable);
+            if (unreadable is not null)
+            {
+                // Applied, perhaps, but not an answer this client can hold; a retry replays it under the same request id.
+                _lastFailed = request;
+                _problem = unreadable;
+                Finish(entry, new SendOutcome.Failed(unreadable));
+                return;
+            }
             // A confirmed event supersedes one that failed before it: resending that one now would apply it out of order.
             _lastFailed = null;
             _problem = null;
