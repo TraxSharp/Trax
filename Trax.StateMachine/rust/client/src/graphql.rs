@@ -68,8 +68,9 @@ pub struct GraphQLMachineServerOptions {
     /// The `connection_init` payload, asked for on every connection: how a host authenticates a socket.
     pub connection_params: Option<ConnectionParams>,
     /// Delays before subscribing again after a stream that ended without saying why. The last repeats. A socket the
-    /// host refused (closed with 4401 or 4403, or an upgrade answered 401 or 403) is not subscribed again: the stream
-    /// delivers [`StreamMessage::Refused`] and ends.
+    /// host refused (closed with 4401 or 4403, an upgrade answered 401 or 403, or a stream error with an authorization
+    /// code or one of `terminal_stream_errors`) is not subscribed again: the stream delivers [`StreamMessage::Refused`]
+    /// and ends.
     pub resubscribe_delays: Option<Vec<Duration>>,
     /// How long a socket may take to connect and be acknowledged before the attempt counts as failed and is tried
     /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default.
@@ -89,6 +90,11 @@ pub struct GraphQLMachineServerOptions {
     /// Accepts an `http` endpoint or a `ws` socket on a host that is not loopback. Off by default: whatever
     /// authenticates the client would travel in cleartext.
     pub allow_insecure_transport: bool,
+    /// The codes of a stream error that end the stream for good, beside the host's authorization codes
+    /// (`TRAX_AUTHORIZATION`, `AUTH_NOT_AUTHORIZED`, `AUTH_NOT_AUTHENTICATED`). A `next` or `error` whose first error
+    /// carries one is not subscribed again: the stream delivers [`StreamMessage::Refused`] with that code and the
+    /// error's message, and the controller stops on it. Empty by default.
+    pub terminal_stream_errors: Vec<String>,
     /// The tokio runtime each subscription's task runs on. `None` takes the runtime `new` is called from, or failing
     /// that the one `subscribe` is called from; a subscription asked for outside any is refused rather than panicking.
     pub runtime: Option<tokio::runtime::Handle>,
@@ -116,6 +122,7 @@ impl GraphQLMachineServerOptions {
             idle_timeout: DEFAULT_IDLE_TIMEOUT,
             max_message_size: DEFAULT_MAX_MESSAGE_SIZE,
             allow_insecure_transport: false,
+            terminal_stream_errors: Vec::new(),
             runtime: None,
         }
     }
@@ -180,6 +187,7 @@ struct Inner {
     request_timeout: Duration,
     idle_timeout: Duration,
     max_message_size: usize,
+    terminal_stream_errors: HashSet<String>,
     runtime: Option<tokio::runtime::Handle>,
 }
 
@@ -250,6 +258,7 @@ impl GraphQLMachineServer {
                 request_timeout: options.request_timeout,
                 idle_timeout: options.idle_timeout,
                 max_message_size: options.max_message_size,
+                terminal_stream_errors: options.terminal_stream_errors.into_iter().collect(),
                 runtime: options.runtime.or_else(|| tokio::runtime::Handle::try_current().ok()),
             }),
         })
@@ -721,7 +730,20 @@ impl Inner {
                         break ended;
                     }
                 }
-                Some("error") | Some("complete") => break Ended::Again,
+                Some("error") => {
+                    let first = message
+                        .get("payload")
+                        .and_then(|p| p.as_array())
+                        .and_then(|e| e.first());
+                    break match first.and_then(|error| self.refused_by(error)) {
+                        Some(refusal) => {
+                            sink(StreamMessage::Refused(refusal));
+                            Ended::ForGood
+                        }
+                        None => Ended::Again,
+                    };
+                }
+                Some("complete") => break Ended::Again,
                 _ => {}
             }
         };
@@ -739,6 +761,10 @@ impl Inner {
                 .and_then(|c| c.as_str());
             if code == Some(codes::CLIENT_OUTDATED) {
                 sink(StreamMessage::ClientOutdated);
+                return Some(Ended::ForGood);
+            }
+            if let Some(refusal) = self.refused_by(error) {
+                sink(StreamMessage::Refused(refusal));
                 return Some(Ended::ForGood);
             }
             return Some(Ended::Again);
@@ -772,6 +798,37 @@ impl Inner {
         None
     }
 }
+
+impl Inner {
+    // The refusal a stream error is when the host turned the caller away with it: an authorization code ends the stream
+    // as UNAUTHENTICATED or FORBIDDEN, as 4401 and 4403 do, and a code the caller marked terminal ends it with that
+    // code. Subscribing again would get the same answer. Any other error is `None`.
+    fn refused_by(&self, error: &Value) -> Option<ServerProblem> {
+        let code = error
+            .get("extensions")
+            .and_then(|x| x.get("code"))
+            .and_then(|c| c.as_str())?;
+        let code = match code {
+            AUTH_NOT_AUTHENTICATED => codes::UNAUTHENTICATED,
+            TRAX_AUTHORIZATION | AUTH_NOT_AUTHORIZED => codes::FORBIDDEN,
+            code if self.terminal_stream_errors.contains(code) => code,
+            _ => return None,
+        };
+        let message = match error.get("message").and_then(|m| m.as_str()).filter(|m| !m.is_empty()) {
+            Some(message) => message.to_owned(),
+            None => format!("The host refused the stream: {code}."),
+        };
+        Some(ServerProblem {
+            code: code.to_owned(),
+            message,
+        })
+    }
+}
+
+// The codes a host refuses a stream's caller with as a GraphQL error: Trax's own, and Hot Chocolate's.
+const TRAX_AUTHORIZATION: &str = "TRAX_AUTHORIZATION";
+const AUTH_NOT_AUTHORIZED: &str = "AUTH_NOT_AUTHORIZED";
+const AUTH_NOT_AUTHENTICATED: &str = "AUTH_NOT_AUTHENTICATED";
 
 // The refusal a close frame is when the host turned the caller away with it: 4401 is `UNAUTHENTICATED`, 4403
 // `FORBIDDEN`. Subscribing again would get the same answer. Any other close, or none, is `None`.
@@ -1140,7 +1197,14 @@ mod tests {
         Flood,
         // Acknowledges it, then answers every ping with a pong and says nothing else.
         Pong,
+        // Acknowledges it, then answers the subscription with a `next` whose first error has this code.
+        NextError(&'static str),
+        // Acknowledges it, then answers the subscription with an `error` whose first error has this code.
+        ErrorMessage(&'static str),
     }
+
+    // How the host answers connection n.
+    type Replies = fn(usize) -> Reply;
 
     type Heard = tokio::sync::mpsc::UnboundedReceiver<(Option<String>, Option<String>)>;
 
@@ -1209,6 +1273,17 @@ mod tests {
                             let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
                         }
                         Reply::Silent => {}
+                        Reply::NextError(code) | Reply::ErrorMessage(code) => {
+                            let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
+                            let _ = socket.next().await;
+                            let error = format!(r#"[{{"message":"Refused.","extensions":{{"code":"{code}"}}}}]"#);
+                            let message = if let Reply::NextError(_) = reply {
+                                format!(r#"{{"id":"1","type":"next","payload":{{"errors":{error}}}}}"#)
+                            } else {
+                                format!(r#"{{"id":"1","type":"error","payload":{error}}}"#)
+                            };
+                            let _ = socket.send(Message::text(message)).await;
+                        }
                         Reply::Pong => {
                             let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
                             while let Some(Ok(message)) = socket.next().await {
@@ -1664,6 +1739,82 @@ mod tests {
         drop(stream);
 
         assert!(delivered.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_stream_the_host_refuses_with_a_graphql_error_ends_for_good() {
+        let cases: [(Replies, &str); 5] = [
+            (|_| Reply::NextError("TRAX_AUTHORIZATION"), "FORBIDDEN"),
+            (|_| Reply::NextError("AUTH_NOT_AUTHORIZED"), "FORBIDDEN"),
+            (|_| Reply::NextError("AUTH_NOT_AUTHENTICATED"), "UNAUTHENTICATED"),
+            (|_| Reply::ErrorMessage("TRAX_AUTHORIZATION"), "FORBIDDEN"),
+            (|_| Reply::ErrorMessage("AUTH_NOT_AUTHENTICATED"), "UNAUTHENTICATED"),
+        ];
+        for (reply, code) in cases {
+            let (port, mut heard) = recording_host(reply).await;
+            let (delivered, again) = follow(port, Vec::new(), &mut heard).await;
+
+            assert!(
+                matches!(&delivered, Some(StreamMessage::Refused(p)) if p.code == code),
+                "{delivered:?}"
+            );
+            assert!(again.is_err(), "the refused stream was subscribed again");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_stream_error_whose_code_the_caller_marked_terminal_ends_for_good_with_that_code() {
+        let (port, mut heard) = recording_host(|_| Reply::NextError("CONNECTION_CHANGED")).await;
+
+        let (delivered, again) = follow(port, vec!["CONNECTION_CHANGED".into()], &mut heard).await;
+
+        assert!(
+            matches!(&delivered, Some(StreamMessage::Refused(p)) if p.code == "CONNECTION_CHANGED"),
+            "{delivered:?}"
+        );
+        assert!(again.is_err(), "the stream was subscribed again");
+    }
+
+    #[tokio::test]
+    async fn a_stream_error_with_another_code_is_subscribed_again() {
+        let (port, mut heard) = recording_host(|_| Reply::NextError("CONNECTION_CHANGED")).await;
+
+        let (delivered, again) = follow(port, Vec::new(), &mut heard).await;
+
+        assert_eq!(delivered, None);
+        assert!(again.is_ok(), "the stream was never subscribed again");
+    }
+
+    // Follows "i-1" on the host at `port` with these terminal codes, and answers what the stream delivered within a
+    // second of its first connection and whether a second connection came in that time.
+    async fn follow(
+        port: u16,
+        terminal: Vec<String>,
+        heard: &mut Heard,
+    ) -> (
+        Option<StreamMessage>,
+        Result<Option<(Option<String>, Option<String>)>, tokio::time::error::Elapsed>,
+    ) {
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        given.terminal_stream_errors = terminal;
+        let server = GraphQLMachineServer::new(given).unwrap();
+        let (deliver, mut delivered) = tokio::sync::mpsc::unbounded_channel();
+        let _stream = server.subscribe(
+            "i-1".into(),
+            Arc::new(move |message| {
+                let _ = deliver.send(message);
+            }),
+        );
+        tokio::time::timeout(Duration::from_secs(10), heard.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let again = tokio::time::timeout(Duration::from_millis(1000), heard.recv()).await;
+        (delivered.try_recv().ok(), again)
     }
 
     #[test]

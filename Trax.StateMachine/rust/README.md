@@ -39,8 +39,10 @@ match machine.advance(&draft, "Pay", Some(&Value::parse(r#"{"receipt":null}"#)?)
 serves, predicting each event with the machine built from the manifest's IR, over `GraphQLMachineServer` (persisted
 ids over HTTP, the change stream over graphql-transport-ws, on tokio). An event with an edge that rests on a custom
 rule is sent with no prediction, since the client binds no handler. A stream that ends without saying why is
-subscribed again after `resubscribe_delays`; a socket the host refused (closed with 4401 or 4403, or an upgrade
-answered 401 or 403) is not, and stops the controller as `UNAUTHENTICATED` or `FORBIDDEN`. The controller's task runs
+subscribed again after `resubscribe_delays`; a socket or a stream the host refused (closed with 4401 or 4403, an
+upgrade answered 401 or 403, or a stream error coded `AUTH_NOT_AUTHENTICATED`, `TRAX_AUTHORIZATION` or
+`AUTH_NOT_AUTHORIZED`) is not, and stops the controller as `UNAUTHENTICATED` or `FORBIDDEN`, as does a stream error with
+one of the caller's `terminal_stream_errors`, with its own code. The controller's task runs
 on the tokio runtime `ServerMachineOptions::runtime` names, or the one it is built in, and may be called from any
 thread once built. It is held to the client conformance kit, as the TypeScript and C# clients are.
 

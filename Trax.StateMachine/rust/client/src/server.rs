@@ -78,9 +78,11 @@ pub enum StreamMessage {
     Reload,
     /// The server no longer serves this client's version of the machine.
     ClientOutdated,
-    /// The host refused the socket: it closed it with 4401 or 4403, or answered its upgrade 401 or 403. Subscribing
-    /// again would get the same answer. The code is `UNAUTHENTICATED` for 4401 and 401, `FORBIDDEN` for 4403 and 403;
-    /// the message names the code the host closed or answered with.
+    /// The host refused the socket or the stream: it closed the socket with 4401 or 4403, answered its upgrade 401 or
+    /// 403, or answered the stream with an error whose code is `AUTH_NOT_AUTHENTICATED`, `TRAX_AUTHORIZATION` or
+    /// `AUTH_NOT_AUTHORIZED`. Subscribing again would get the same answer. The code is `UNAUTHENTICATED` for 4401, 401
+    /// and `AUTH_NOT_AUTHENTICATED`, `FORBIDDEN` for the rest; a stream error whose code the caller marked terminal
+    /// keeps its code.
     Refused(ServerProblem),
 }
 

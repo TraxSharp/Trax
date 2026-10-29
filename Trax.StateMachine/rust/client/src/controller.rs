@@ -62,10 +62,11 @@ pub struct MachineProblem {
 }
 
 /// Why a controller stopped for good: the instance is gone, this client is out of date and must reload, or the host
-/// refused the socket.
+/// refused the socket or the stream.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MachineError {
-    /// `GONE`, `CLIENT_OUTDATED`, or `UNAUTHENTICATED` or `FORBIDDEN` for a socket the host refused.
+    /// `GONE`, `CLIENT_OUTDATED`, `UNAUTHENTICATED` or `FORBIDDEN` for a socket or a stream the host refused, or a
+    /// stream error's code the server was told is terminal.
     pub code: String,
     pub message: String,
     /// With `GONE`: true when the instance was deleted, false when the server answered `NOT_FOUND`.
