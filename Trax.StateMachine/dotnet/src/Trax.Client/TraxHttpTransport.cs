@@ -42,8 +42,11 @@ public sealed record TraxHttpTransportOptions
     /// <see cref="SocketsHttpHandler.AllowAutoRedirect"/> off, behind any delegating handlers
     /// (<c>new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })</c>). A client whose handler follows
     /// redirects, <c>new HttpClient()</c> among them, is refused when the transport is built, and so is one on a handler
-    /// of another kind unless <see cref="HandlerFollowsNoRedirects"/> is set. An answer from another host than
-    /// <see cref="Endpoint"/>'s is a <see cref="TraxAnswer.Failure"/>.
+    /// of another kind unless <see cref="HandlerFollowsNoRedirects"/> is set. The check reads the handler at the end of
+    /// the chain, so each delegating handler before it must pass every request on once, to the handler after it, and
+    /// send none of its own: one that sends a request again, to the host a redirect names or anywhere else, does what
+    /// the check cannot see. An answer from another host than <see cref="Endpoint"/>'s is a
+    /// <see cref="TraxAnswer.Failure"/>.
     /// </summary>
     public required HttpClient Http { get; init; }
 

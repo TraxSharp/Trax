@@ -41,7 +41,9 @@ internal static class TransportSecurity
 
     // A client is accepted only when the check can show its handler follows no redirect: an HttpClientHandler or a
     // SocketsHttpHandler with AllowAutoRedirect off at the end of its chain. Any other handler is accepted only when the
-    // caller vouches for it; a known handler that follows redirects is refused whether or not they do.
+    // caller vouches for it; a known handler that follows redirects is refused whether or not they do. The delegating
+    // handlers before it are required, as the options document, to pass each request on once and send none of their
+    // own; what one does inside SendAsync is not something a check of the chain can read.
     public static void RequireNoRedirects(HttpClient? http, bool vouched, string paramName)
     {
         if (http is null)
