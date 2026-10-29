@@ -107,17 +107,19 @@ export function generateMachineFactory(
   // reads it. Strip it so the generated module stays lean and doesn't ship test inputs to the browser.
   const { differential: _differential, ...runtimeIr } = ir;
   const specifierStyle = importStyle === "specifier";
+  // JSON.stringify escapes CR and LF but leaves U+2028 and U+2029, which end a line comment as well.
+  const literal = JSON.stringify(specifier).replace(/[\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16)}`);
   const engineImports = specifierStyle
-      ? // JSON.stringify, so a specifier holding a quote stays one string literal rather than ending it.
-        [`import { typedMachineFromIr, type IrDocument } from ${JSON.stringify(specifier)};`]
+      ? // A JSON literal, so a specifier holding a quote stays one string literal rather than ending it.
+        [`import { typedMachineFromIr, type IrDocument } from ${literal};`]
       : [
           `import { typedMachineFromIr } from "../../typed";`,
           `import type { IrDocument } from "../../rules/irMachine";`,
         ];
-  // JSON.stringify keeps the specifier one line, so it cannot end the comment it is written into.
+  // The literal keeps the specifier one line, so it cannot end the comment it is written into.
   const importNote = specifierStyle
     ? [
-        `// Imports the engine from ${JSON.stringify(specifier)} (trax machine generate --import-style specifier, the`,
+        `// Imports the engine from ${literal} (trax machine generate --import-style specifier, the`,
         "// default without --engine-src). Name another module with --specifier <module>, or import an engine",
         "// checkout by relative path with --import-style relative --engine-src <engine/src>.",
       ]

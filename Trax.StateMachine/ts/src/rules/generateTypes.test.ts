@@ -354,6 +354,15 @@ describe("generateMachineFactory import styles", () => {
     expect(out).not.toContain(`from "x";`);
   });
 
+  it.each(["2028", "2029"])("keeps a specifier holding U+%s inside the comment it is written into", (code) => {
+    // A line comment ends at U+2028 and U+2029 as it does at a newline, and JSON.stringify leaves both as they are.
+    const separator = String.fromCharCode(parseInt(code, 16));
+    const out = generateMachineFactory(ir, { importStyle: "specifier", specifier: `x${separator}globalThis.pwned = true;//` });
+
+    expect(out).not.toContain(separator);
+    expect(out).toContain(`// Imports the engine from "x\\u${code}globalThis.pwned = true;//" (trax machine generate`);
+  });
+
   it("records the IR format in a specifier twin's IR, where an engine older than the check ignores it", () => {
     const out = generateMachineFactory(ir, { importStyle: "specifier" });
     expect(out).toContain(`const ir = {\n  "irFormat": ${irFormatVersion},\n  "committedStates"`);
