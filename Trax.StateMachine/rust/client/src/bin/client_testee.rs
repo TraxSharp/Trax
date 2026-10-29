@@ -17,6 +17,9 @@ use trax_state_machine_client::{
 
 type Out = Arc<Mutex<tokio::io::Stdout>>;
 
+/// The name the kit's allowlist of what a client may lack knows this client by.
+const CLIENT: &str = "rust";
+
 #[tokio::main]
 async fn main() {
     let out: Out = Arc::new(Mutex::new(tokio::io::stdout()));
@@ -33,11 +36,12 @@ async fn main() {
                 let answer = match open(&request) {
                     Ok(opened) => {
                         controller = Some(opened);
-                        object([("opened", Value::Bool(true))])
+                        object([("opened", Value::Bool(true)), ("client", Value::from(CLIENT))])
                     }
                     // A client refusing cleartext to another host refuses to be built, before it sends anything.
                     Err(error) if error.contains("not over TLS") => object([
                         ("opened", Value::Bool(false)),
+                        ("client", Value::from(CLIENT)),
                         ("code", Value::from("INSECURE_TRANSPORT")),
                     ]),
                     Err(error) => object([("error", Value::from(error))]),

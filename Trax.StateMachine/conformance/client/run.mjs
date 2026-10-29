@@ -17,6 +17,7 @@ const clientMachinesDir = join(clientDir, "machines");
 // The planner's machine, which the sync transcripts drive.
 const planDir = join(clientDir, "..", "plan");
 const transcriptsDir = join(clientDir, "transcripts");
+const protocolPath = join(clientDir, "PROTOCOL.md");
 
 // How long a step waits for the client before the transcript fails. Every delay a transcript configures is far
 // shorter, so only a client that never does what the step waits for reaches it.
@@ -77,6 +78,35 @@ export function transcripts() {
     .map((f) => ({ name: f.slice(0, -".json".length), ...readJson(join(transcriptsDir, f)) }));
 }
 
+/**
+ * What a client may lack: the `json lacks` block of PROTOCOL.md, one entry per capability and client, each with its
+ * reason. A testee that says its client lacks anything else fails the transcript it said it on, so a client cannot
+ * skip a transcript it fails by claiming it cannot run it.
+ */
+export function allowedLacks(text = readFileSync(protocolPath, "utf8")) {
+  const block = /^```json lacks\n([\s\S]*?)^```$/m.exec(text);
+  if (!block) throw new Error("PROTOCOL.md has no `json lacks` block.");
+  const entries = JSON.parse(block[1]);
+  if (!Array.isArray(entries)) throw new Error("PROTOCOL.md's `json lacks` block is not an array.");
+  for (const e of entries)
+    for (const key of ["capability", "client", "reason"])
+      if (typeof e?.[key] !== "string" || e[key].trim() === "")
+        throw new Error(`An entry of PROTOCOL.md's \`json lacks\` block has no ${key}: ${JSON.stringify(e)}`);
+  return entries;
+}
+
+/** Why an answer to `open` cannot stand, or null: it names no client, or a lack the allowlist does not grant it. */
+export function lacksRefused(opened, allowed) {
+  if (typeof opened?.client !== "string" || opened.client === "")
+    return `open: the answer names no client, so what it lacks cannot be checked: ${canonical(opened)}`;
+  const lacks = opened.lacks ?? [];
+  if (!Array.isArray(lacks)) return `open: lacks is not an array: ${canonical(lacks)}`;
+  const refused = lacks.filter((l) => !allowed.some((a) => a.client === opened.client && a.capability === l));
+  return refused.length === 0
+    ? null
+    : `open: the ${opened.client} client says it lacks ${refused.join(", ")}, which PROTOCOL.md does not allow it`;
+}
+
 // What a real host sends beside an answer's own fields, so a transcript writes only what matters to it.
 const ANSWER_DEFAULTS = { dueAt: null, dueAtKnown: true, problem: null };
 const PROBLEM_DEFAULTS = { id: null, revision: null, state: null, context: null, dueAt: null, dueAtKnown: true };
@@ -109,7 +139,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * that failed; returns when every step passed and nothing arrived that no step took, or `{ skipped }` naming what the
  * transcript needs that the client said it lacks.
  */
-export async function runTranscript(transcript, host, askTestee) {
+export async function runTranscript(transcript, host, askTestee, allowed = allowedLacks()) {
   // Every answer comes within the step timeout, or the transcript fails naming the request it waited on, and no answer
   // may be an `error` or `unsupported`, the ones no step compares included.
   const ask = (request) => withTimeout(askTestee(request), `the testee's answer to ${request.op}`).then(checked(request));
@@ -133,6 +163,8 @@ export async function runTranscript(transcript, host, askTestee) {
     resubscribeDelays: transcript.resubscribeDelays ?? [10],
     ...(transcript.open ?? {}),
   });
+  const refused = lacksRefused(opened, allowed);
+  if (refused !== null) throw new Error(refused);
   // A transcript that needs what the client says it cannot do is skipped, and reported as skipped, not passed.
   const lacking = (transcript.needs ?? []).filter((n) => (opened.lacks ?? []).includes(n));
   if (lacking.length > 0) {
@@ -294,9 +326,10 @@ function withTimeout(promise, what) {
  */
 export async function runTranscripts(list, host, ask, onResult = () => {}) {
   const failures = [];
+  const allowed = allowedLacks();
   for (const t of list) {
     try {
-      const result = await runTranscript(t, host, ask);
+      const result = await runTranscript(t, host, ask, allowed);
       onResult({ name: t.name, skipped: result?.skipped });
     } catch (err) {
       failures.push({ name: t.name, error: err.message });

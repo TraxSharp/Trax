@@ -46,7 +46,7 @@ one.)
 { "id": 1, "op": "open", "machine": "turnstile", "ir": { ... }, "irHash": "40b0…", "documents": [ ... ],
   "endpoint": "http://127.0.0.1:41234/graphql", "socket": "ws://127.0.0.1:41234/graphql",
   "instance": "i-1", "startInput": null, "effectEvent": null, "retryDelays": [10, 10], "resubscribeDelays": [10] }
-{ "id": 1, "opened": true }
+{ "id": 1, "opened": true, "client": "ts" }
 ```
 
 - `ir` is the machine's IR as committed in `../machines/<m>/`, or in `machines/<m>.ir.json` here for a machine only
@@ -62,11 +62,14 @@ one.)
 - `maxResponseSize` (bytes), `requestTimeout` (milliseconds) and `allowInsecureTransport` are given only when a
   transcript sets them, and go to the client's own options of those names: the largest answer or socket message it
   reads, how long it waits for an answer, and whether it may talk cleartext to a host that is not this machine.
+- Every answer to `open` names its client in `client`: `ts`, `dotnet` or `rust`, or the name a new client is given
+  in [the allowlist](#what-a-client-may-lack).
 - A client that refuses to be built because its endpoint or socket is cleartext to a host that is not this machine
-  answers `{ "id": 1, "opened": false, "code": "INSECURE_TRANSPORT" }`, having sent nothing.
-- `opened` may carry `lacks`, the capabilities named in transcripts' `needs` that this client cannot have, with the
-  reason in the testee's source: `upgrade-status` for a socket that cannot tell what status a failed upgrade was
-  answered with (a WebSocket in a browser or in node). A transcript that needs one is skipped, and reported as skipped.
+  answers `{ "id": 1, "opened": false, "client": "ts", "code": "INSECURE_TRANSPORT" }`, having sent nothing.
+- `opened` may carry `lacks`, the capabilities named in transcripts' `needs` that this client cannot have. A
+  transcript that needs one is skipped, and reported as skipped. A client may lack only what
+  [the allowlist](#what-a-client-may-lack) grants it: an answer that names no client, or lacks anything else, fails
+  the transcript it opened, so a client cannot skip a transcript it fails by saying it cannot run it.
 - **Request ids.** The client mints them `r1`, `r2`, … in the order it needs them, counting from each `open`. The
   host compares them, so they must be the ids the client actually sends.
 
@@ -134,6 +137,22 @@ is null: a typed answer cannot tell a member stored as null from one the state d
 
 **`dispose`** closes the client: its stream, and every request it would still send. It is answered `{ "disposed":
 true }`. **`end`** is the last request; the testee answers `{ "id" }` and exits.
+
+## What a client may lack
+
+A client may lack a capability only where this block grants it, by capability and client, with the reason; the runner
+reads it from here. A reason names what the client's platform does not give it: a capability the client could have
+and does not yet is a bug in the client, not an entry here.
+
+```json lacks
+[
+  {
+    "capability": "upgrade-status",
+    "client": "ts",
+    "reason": "A WebSocket in a browser or in node does not say what status a failed upgrade was answered with."
+  }
+]
+```
 
 ## What the host does
 

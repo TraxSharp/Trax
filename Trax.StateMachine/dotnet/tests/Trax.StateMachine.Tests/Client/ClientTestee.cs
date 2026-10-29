@@ -13,6 +13,9 @@ namespace Trax.StateMachine.Tests.Client;
 /// </summary>
 public sealed class ClientTestee : IAsyncDisposable
 {
+    // The name the kit's allowlist of what a client may lack knows this client by.
+    private const string Client = "dotnet";
+
     private HttpClient _http = NewHttp(null);
     private ServerMachineController? _controller;
     private GraphQLSubscriptionSocket? _socket;
@@ -134,7 +137,12 @@ public sealed class ClientTestee : IAsyncDisposable
         catch (ArgumentException ex)
             when (ex.Message.Contains("not over TLS", StringComparison.Ordinal))
         {
-            return new JsonObject { ["opened"] = false, ["code"] = "INSECURE_TRANSPORT" };
+            return new JsonObject
+            {
+                ["opened"] = false,
+                ["client"] = Client,
+                ["code"] = "INSECURE_TRANSPORT",
+            };
         }
         var count = 0;
         _controller = new ServerMachineController(
@@ -149,7 +157,7 @@ public sealed class ClientTestee : IAsyncDisposable
                 RetryDelays = Delays(request["retryDelays"]),
             }
         );
-        return new JsonObject { ["opened"] = true };
+        return new JsonObject { ["opened"] = true, ["client"] = Client };
     }
 
     // Redirects off, as the client requires; a transcript's request timeout is the client's own.

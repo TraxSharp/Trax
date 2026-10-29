@@ -8,6 +8,8 @@ import { bundleModule } from "../lib/engine-loader.mjs";
 // exports only.
 
 const MISSING_DEPENDENCIES = 3;
+// The name the kit's allowlist of what a client may lack knows this client by.
+const CLIENT = "ts";
 const clientEntry = fileURLToPath(new URL("./client-entry.ts", import.meta.url));
 
 // A requestId minter that counts: r1, r2, ... from each open, so the host can tell which request is which.
@@ -90,7 +92,7 @@ export function createClientTestee(engine) {
         });
       } catch (err) {
         // A client refusing cleartext to another host refuses to be built, before it sends anything.
-        if (/not over TLS/.test(err.message)) return { opened: false, code: "INSECURE_TRANSPORT" };
+        if (/not over TLS/.test(err.message)) return { opened: false, client: CLIENT, code: "INSECURE_TRANSPORT" };
         throw err;
       }
       controller = new ServerMachineController({
@@ -102,7 +104,7 @@ export function createClientTestee(engine) {
         retryDelays: r.retryDelays,
       });
       // A WebSocket in a browser or in node does not say what status an upgrade it failed was answered with.
-      return { opened: true, lacks: ["upgrade-status"] };
+      return { opened: true, client: CLIENT, lacks: ["upgrade-status"] };
     },
     start: async () => {
       await controller.start();
