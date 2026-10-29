@@ -262,6 +262,35 @@ public class ClientDocumentsGeneratorTests
             .And.Contain("ledger: Array<{");
     }
 
+    // A variable-less document's module writes Record<string, never> beside the types it imports: a GraphQL type named
+    // Record would hide the global one, and the module would not compile.
+    [TestCase("Record")]
+    [TestCase("Readonly")]
+    [TestCase("Partial")]
+    public void A_type_named_as_a_global_generic_is_refused(string name)
+    {
+        var manifest = Manifest with
+        {
+            Types = System.Text.RegularExpressions.Regex.Replace(Types, @"\bLevel\b", name),
+        };
+
+        var render = () =>
+            new ClientGenerator(new FakeNodeRunner()).Render(
+                new ClientGenerateOptions(
+                    manifest,
+                    Documents:
+                    [
+                        new ClientDocumentFile(
+                            "src/shop.graphql",
+                            "query Shop { discover { shop { catalog { level } } } }"
+                        ),
+                    ]
+                )
+            );
+
+        render.Should().Throw<InvalidOperationException>().WithMessage($"*'{name}'*reserves*");
+    }
+
     [Test]
     public void A_namespace_holding_only_query_models_resolves()
     {

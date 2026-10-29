@@ -175,6 +175,28 @@ public class OperationsClientGeneratorTests
             .Contain("httpTransport, requireSecureEndpoint, requireSecureSocket, ");
     }
 
+    // A variable-less document's module writes Record<string, never> beside the types it imports: an enum named Record
+    // would hide the global one, and the module would not compile.
+    [TestCase("Record")]
+    [TestCase("Omit")]
+    [TestCase("Pick")]
+    public void A_type_named_as_a_global_generic_is_refused(string name)
+    {
+        var options = new OperationsGenerateOptions(
+            Schema.Replace("RunState", name, StringComparison.Ordinal),
+            [
+                new ClientDocumentFile(
+                    "src/graphql/Run.graphql",
+                    "query Run { operations { run(id: 1) { state } } }"
+                ),
+            ]
+        );
+
+        var render = () => ClientGenerator.Render(options);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage($"*'{name}'*reserves*");
+    }
+
     [TestCase("requireSecureEndpoint")]
     [TestCase("requireSecureSocket")]
     public void A_document_named_like_a_transport_check_is_refused(string name)
