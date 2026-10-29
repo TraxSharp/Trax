@@ -309,7 +309,8 @@ impl ServerMachineController {
     }
 
     /// Resends what last failed under the same request id: the start while there is no instance, else the last event
-    /// that failed, unless a later event has been confirmed since.
+    /// that failed, unless a later event has been confirmed since, or is queued or in flight now (resending it then would
+    /// apply it out of order, predicted from a state the server has moved past): either answers `NOTHING_TO_RETRY`.
     pub fn retry(&self) -> impl std::future::Future<Output = SendOutcome> + Send + 'static {
         let (reply, answer) = oneshot::channel();
         let _ = self.commands.send(Msg::Retry(reply));
@@ -1059,6 +1060,14 @@ impl<S: MachineServer> Actor<S> {
                 let _ = reply.send(SendOutcome::Failed(refusal(
                     codes::NOTHING_TO_RETRY,
                     "No event has failed since the last one was retried.",
+                )));
+            }
+            // Every event in the queue was sent after the one that failed; it would go out behind them.
+            Some(request) if !self.queue.is_empty() => {
+                self.last_failed = Some(request);
+                let _ = reply.send(SendOutcome::Failed(refusal(
+                    codes::NOTHING_TO_RETRY,
+                    "A later event is still being sent; the failed one cannot be resent after it.",
                 )));
             }
             Some(request) => {

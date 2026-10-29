@@ -306,7 +306,8 @@ public sealed class ServerMachineController : IDisposable
     /// <summary>
     /// Resends what last failed under the same request id, so the server replays its recorded result if the first
     /// attempt did arrive: the start while there is no instance, else the last event that failed, unless a later event
-    /// has been confirmed since.
+    /// has been confirmed since, or is queued or in flight now (resending it then would apply it out of order, predicted
+    /// from a state the server has moved past): either answers <c>NOTHING_TO_RETRY</c>.
     /// </summary>
     public Task<SendOutcome> RetryAsync() =>
         Post(() =>
@@ -330,6 +331,16 @@ public sealed class ServerMachineController : IDisposable
                         Refusal(
                             ClientProblemCodes.NothingToRetry,
                             "No event has failed since the last one was retried."
+                        )
+                    )
+                );
+            // Every event in the queue was sent after the one that failed; it would go out behind them.
+            if (_queue.Count > 0)
+                return Task.FromResult<SendOutcome>(
+                    new SendOutcome.Failed(
+                        Refusal(
+                            ClientProblemCodes.NothingToRetry,
+                            "A later event is still being sent; the failed one cannot be resent after it."
                         )
                     )
                 );

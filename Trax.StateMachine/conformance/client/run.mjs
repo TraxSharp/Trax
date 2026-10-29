@@ -112,7 +112,7 @@ export async function runTranscript(transcript, host, askTestee) {
   const { ir, irHash } = machineOf(transcript.machine);
   const documents = documentsOf(transcript.machine, irHash, transcript.documents);
   const field = machineField(transcript.machine);
-  host.reset({ documents, refuse: transcript.refuseConnections ?? 0 });
+  host.reset({ documents, refuse: transcript.refuseConnections ?? 0, refuseUpgrades: transcript.refuseUpgrades ?? [] });
 
   const opened = await ask({
     op: "open",
@@ -127,8 +127,13 @@ export async function runTranscript(transcript, host, askTestee) {
     effectEvent: transcript.effectEvent ?? null,
     retryDelays: transcript.retryDelays ?? [10, 10],
     resubscribeDelays: transcript.resubscribeDelays ?? [10],
+    ...(transcript.open ?? {}),
   });
-  if (!opened.opened) throw new Error(`open: ${opened.error ?? JSON.stringify(opened)}`);
+  // A transcript that expects the client to refuse to open compares that answer and has no steps to run.
+  if (transcript.opened !== undefined) {
+    if (!matches(transcript.opened, opened)) throw new Error(`open: expected ${canonical(transcript.opened)}, got ${canonical(opened)}`);
+    if (opened.opened !== true) return;
+  } else if (!opened.opened) throw new Error(`open: ${opened.error ?? JSON.stringify(opened)}`);
 
   // Answers a step names to await later, and answers no step looks at, which must still come.
   const pending = new Map();
@@ -164,9 +169,17 @@ export async function runTranscript(transcript, host, askTestee) {
       if (step.variables !== undefined && canonical(request.body.variables ?? {}) !== canonical(step.variables))
         fail(`expected variables ${canonical(step.variables)}, got ${canonical(request.body.variables ?? {})}`);
       if (step.drop) request.respond({ close: true });
+      else if (step.hang) request.respond({ hang: true });
+      else if (step.redirect !== undefined)
+        request.respond({ status: step.redirect === true ? 307 : step.redirect, headers: { location: host.decoy } });
+      else if (step.raw !== undefined) request.respond({ raw: step.raw });
       else if (step.status !== undefined) request.respond({ status: step.status, json: step.body });
       else if (step.errors !== undefined) request.respond({ json: { data: null, errors: step.errors } });
-      else request.respond({ json: { data: { machines: { [field]: { [step.request]: answerOf(step.answer ?? null) } } } } });
+      else
+        request.respond({
+          json: { data: { machines: { [field]: { [step.request]: answerOf(step.answer ?? null) } } } },
+          pad: step.pad ?? 0,
+        });
     } else if (step.subscribe !== undefined) {
       subscription = await host.subscriptions.take(STEP_TIMEOUT, "subscription").catch((e) => fail(e.message));
       if (subscription.operation !== "changed") fail(`expected the changed document, got ${subscription.payload.id}`);
@@ -175,7 +188,7 @@ export async function runTranscript(transcript, host, askTestee) {
         fail(`expected variables ${canonical(step.subscribe)}, got ${canonical(subscription.payload.variables ?? {})}`);
     } else if (step.push !== undefined) {
       if (!subscription?.open) fail("no subscription is open to push on");
-      subscription.next({ data: { [`${field}Changed`]: { ...CHANGE_DEFAULTS, ...step.push } } });
+      subscription.next({ data: { [`${field}Changed`]: { ...CHANGE_DEFAULTS, ...step.push } } }, step.pad ?? 0);
     } else if (step.pushErrors !== undefined) {
       if (!subscription?.open) fail("no subscription is open to push on");
       subscription.next({ data: null, errors: step.pushErrors });
@@ -185,6 +198,17 @@ export async function runTranscript(transcript, host, askTestee) {
     } else if (step.dropSocket !== undefined) {
       if (!subscription) fail("no socket to drop");
       subscription.drop(step.dropSocket === true ? undefined : step.dropSocket);
+    } else if (step.ping !== undefined) {
+      if (!subscription) fail("no socket to ping");
+      const before = subscription.pongs;
+      subscription.ping();
+      const deadline = Date.now() + STEP_TIMEOUT;
+      while (subscription.pongs === before) {
+        if (Date.now() > deadline) fail("the client did not answer the host's ping with a pong");
+        await delay(5);
+      }
+    } else if (step.decoy !== undefined) {
+      if (host.decoyHits() !== step.decoy) fail(`expected ${step.decoy} requests at the redirect's target, got ${host.decoyHits()}`);
     } else if (step.view !== undefined) {
       const deadline = Date.now() + STEP_TIMEOUT;
       let got;

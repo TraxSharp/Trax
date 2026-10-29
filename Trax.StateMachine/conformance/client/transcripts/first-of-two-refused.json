@@ -1,0 +1,25 @@
+{
+  "about": "When the first of two queued events is refused, the second is predicted from what the host confirmed, not from the refused one's prediction.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "view": { "status": "ready" } },
+    { "client": "send", "trigger": "Coin", "input": { "coin": "dollar" }, "as": "dollar" },
+    { "client": "send", "trigger": "Coin", "input": { "coin": "quarter" }, "as": "quarter" },
+    { "request": "coin", "variables": { "id": "i-1", "input": { "coin": "dollar" }, "requestId": "r1", "clientResult": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"dollar\"}}" }, "answer": { "problem": { "code": "GUARD_FAILED", "message": "Refused." } } },
+    { "await": "dollar", "expect": { "outcome": "refused", "code": "GUARD_FAILED" } },
+    { "request": "coin", "variables": { "id": "i-1", "input": { "coin": "quarter" }, "requestId": "r2", "clientResult": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}" }, "answer": { "id": "i-1", "revision": 2, "state": "Unlocked", "context": { "paidWith": "quarter" } } },
+    { "await": "quarter", "expect": { "outcome": "confirmed", "revision": 2 } }
+  ]
+}
