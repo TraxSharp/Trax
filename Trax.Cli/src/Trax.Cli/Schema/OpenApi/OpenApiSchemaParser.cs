@@ -541,7 +541,7 @@ public partial class OpenApiSchemaParser : ISchemaParser
         // Find the first successful response (200, 201, 204, etc.)
         var successResponse = operation
             .Responses.Where(r => r.Key.StartsWith('2'))
-            .OrderBy(r => r.Key)
+            .OrderBy(r => r.Key, StringComparer.Ordinal)
             .Select(r => r.Value)
             .FirstOrDefault();
 

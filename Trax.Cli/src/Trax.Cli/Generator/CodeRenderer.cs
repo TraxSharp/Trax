@@ -323,7 +323,10 @@ public partial class CodeRenderer
 
         foreach (var resourceName in assembly.GetManifestResourceNames())
         {
-            if (!resourceName.StartsWith(prefix) || !resourceName.EndsWith(".sbn"))
+            if (
+                !resourceName.StartsWith(prefix, StringComparison.Ordinal)
+                || !resourceName.EndsWith(".sbn", StringComparison.Ordinal)
+            )
                 continue;
 
             var templateName = resourceName[prefix.Length..^4]; // strip prefix and .sbn
