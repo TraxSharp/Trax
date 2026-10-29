@@ -94,6 +94,55 @@ public class MachineStreamTests
         messages.Reader.TryRead(out _).Should().BeFalse();
     }
 
+    [TestCase("""{"turnstileChanged":{"gone":"yes"}}""")]
+    [TestCase("""{"turnstileChanged":{"reload":1}}""")]
+    [TestCase("""{"turnstileChanged":{"state":"Locked","revision":"one","context":{}}}""")]
+    [TestCase(
+        """{"turnstileChanged":{"state":"Locked","revision":1,"dueAt":"soon","context":{}}}"""
+    )]
+    public async Task A_push_the_client_cannot_read_ends_the_stream_once_with_a_failure(string data)
+    {
+        var (socket, messages, stream) = Follow();
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Push((JsonObject)JsonNode.Parse($$"""{"data":{{data}}}""")!);
+
+        var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        message
+            .Should()
+            .BeOfType<StreamMessage.Refused>()
+            .Which.Code.Should()
+            .Be(ClientProblemCodes.TransportError);
+        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
+        await Task.Delay(100);
+        socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task A_push_with_a_member_given_twice_ends_the_stream_once_with_a_failure()
+    {
+        var (socket, messages, stream) = Follow();
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Push(
+            (JsonObject)
+                JsonNode.Parse(
+                    """{"data":{"turnstileChanged":{"state":"Locked","state":"Unlocked","revision":1}}}"""
+                )!
+        );
+
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+            .Should()
+            .BeOfType<StreamMessage.Refused>()
+            .Which.Code.Should()
+            .Be(ClientProblemCodes.TransportError);
+        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
+        await Task.Delay(100);
+        socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
+    }
+
     // A socket each subscription is handed to the test through.
     private sealed class HandSocket : ISubscriptionSocket
     {
@@ -111,6 +160,19 @@ public class MachineStreamTests
     {
         public ISubscriptionSink Sink { get; } = sink;
         public bool Disposed { get; private set; }
+
+        // Hands the sink one push as GraphQLSubscriptionSocket does: a sink that throws gets its exception as the error.
+        public void Push(JsonObject value)
+        {
+            try
+            {
+                Sink.Next(value);
+            }
+            catch (Exception ex)
+            {
+                Sink.Error(ex);
+            }
+        }
 
         public void Dispose() => Disposed = true;
     }

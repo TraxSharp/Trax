@@ -584,6 +584,41 @@ public class TraxClientTests
     }
 
     [Test]
+    public async Task A_frame_with_a_member_given_twice_ends_the_stream_instead_of_retrying()
+    {
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.AckAsync();
+            var id = await peer.SubscribedAsync();
+            await peer.SendAsync(
+                $"{{\"type\":\"next\",\"id\":\"{id}\",\"payload\":"
+                    + """{"data":null,"data":{"onDataChanged":{"domain":"A"}}}}"""
+            );
+            await peer.GoneAsync();
+        });
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var events = new EventLog<ChangedResult>();
+        var client = new TraxClient(
+            Transport(socket),
+            new TraxClientOptions { ResubscribeDelays = [TimeSpan.FromMilliseconds(10)] }
+        );
+
+        using var stream = client.Subscribe(Changed, TraxNoVariables.Instance, events.Add);
+
+        (await events.Take(1))
+            .Single()
+            .Should()
+            .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
+            .Which.Failure!.Message.Should()
+            .Contain("not a GraphQL result");
+        // negative-wait: a retry would have connected again within the 10 ms delay.
+        await Task.Delay(300);
+        host.Connections.Should().Be(1);
+    }
+
+    [Test]
     public async Task An_error_with_no_errors_over_a_real_socket_ends_the_stream()
     {
         await using var host = new WireHost(async peer =>

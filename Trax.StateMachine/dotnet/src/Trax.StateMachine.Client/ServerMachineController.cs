@@ -41,8 +41,9 @@ public sealed record MachineProblem(MachineProblemKind Kind, string Code, string
 /// refused the socket.
 /// </summary>
 /// <param name="Code">
-/// <see cref="ClientProblemCodes.Gone"/>, <c>CLIENT_OUTDATED</c>, or <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c> for a
-/// socket the host refused (<see cref="StreamMessage.Refused"/>).
+/// <see cref="ClientProblemCodes.Gone"/>, <c>CLIENT_OUTDATED</c>, or the code of a stream that ended for good
+/// (<see cref="StreamMessage.Refused"/>): <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c> for a socket the host refused,
+/// <see cref="ClientProblemCodes.TransportError"/> for a push the client cannot read.
 /// </param>
 /// <param name="Message">What to tell a person.</param>
 /// <param name="Deleted">
@@ -231,6 +232,10 @@ public sealed class ServerMachineController : IDisposable
 
     private bool _reloading;
     private string? _reloadRowId;
+
+    // Set by a CLIENT_DIVERGENCE: nothing more is sent, predicted from the snapshot that diverged, until the instance
+    // has been read again.
+    private bool _resyncing;
     private bool _reloadAgain;
     private ServerSnapshot? _buffered;
 
@@ -609,6 +614,7 @@ public sealed class ServerMachineController : IDisposable
                 () =>
                 {
                     EndRead();
+                    Pump();
                     return Task.CompletedTask;
                 }
             );
@@ -627,6 +633,7 @@ public sealed class ServerMachineController : IDisposable
                     () =>
                     {
                         EndRead();
+                        Pump();
                         return Task.CompletedTask;
                     }
                 );
@@ -641,6 +648,7 @@ public sealed class ServerMachineController : IDisposable
             {
                 _problem = Refusal(problem.Code, problem.Message);
                 Emit();
+                Pump();
             }
             return;
         }
@@ -664,7 +672,9 @@ public sealed class ServerMachineController : IDisposable
         {
             _reloadAgain = false;
             Reload(null);
+            return;
         }
+        _resyncing = false;
     }
 
     // ── Ordering ───────────────────────────────────────────────────────────────────────────────
@@ -803,7 +813,14 @@ public sealed class ServerMachineController : IDisposable
 
     private void Pump()
     {
-        if (_sending || _disposed || _error is not null || _id is null || _confirmed is null)
+        if (
+            _sending
+            || _resyncing
+            || _disposed
+            || _error is not null
+            || _id is null
+            || _confirmed is null
+        )
             return;
         if (_queue.Count == 0)
             return;
@@ -888,8 +905,12 @@ public sealed class ServerMachineController : IDisposable
             return;
         }
         if (problem.Code == ClientDivergence)
-            // The predictor and the server disagree about this step: what the client holds cannot be trusted.
+        {
+            // The predictor and the server disagree about this step: what the client holds cannot be trusted, and the
+            // next event would be predicted from it too, so it waits for the read.
+            _resyncing = true;
             Reload(null);
+        }
         _problem = Refusal(problem.Code, problem.Message);
         Finish(entry, new SendOutcome.Refused(_problem));
     }

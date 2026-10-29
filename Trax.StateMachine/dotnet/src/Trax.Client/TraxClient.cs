@@ -252,9 +252,18 @@ public sealed class TraxClient
 
         public void Next(JsonObject value)
         {
+            TraxAnswer? frame;
+            try
+            {
+                frame = TraxAnswer.Of(value);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                // A member given twice. The host would send the same again, so the stream ends rather than resubscribing.
+                frame = null;
+            }
             var answer = client.Read<TResult>(
-                TraxAnswer.Of(value)
-                    ?? TraxAnswer.Failed("The host sent a frame that is not a GraphQL result.")
+                frame ?? TraxAnswer.Failed("The host sent a frame that is not a GraphQL result.")
             );
             if (answer.Failure is not null || answer.Errors.Count > 0)
             {

@@ -81,7 +81,10 @@ public sealed record GraphQLSubscriptionSocketOptions
     /// </summary>
     public TimeSpan KeepAliveTimeout { get; init; } = TimeSpan.FromSeconds(15);
 
-    /// <summary>How long a connection may take to be acknowledged before it counts as failed.</summary>
+    /// <summary>
+    /// How long a connection may take to be acknowledged, its <c>connection_init</c> included, before it counts as
+    /// failed; and how long a close waits for the host's answer before the connection is dropped.
+    /// </summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
@@ -109,7 +112,6 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
 
     private readonly GraphQLSubscriptionSocketOptions _options;
     private readonly object _gate = new();
-    private readonly SemaphoreSlim _send = new(1, 1);
     private Connection? _connection;
     private long _next;
     private bool _disposed;
@@ -141,6 +143,12 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         public required Task Ready { get; init; }
         public Dictionary<string, Subscription> Sinks { get; } = new(StringComparer.Ordinal);
         public CancellationTokenSource Stop { get; } = new();
+
+        /// <summary>
+        /// One send at a time, as the socket allows. Each connection has its own, so a send stalled on an old
+        /// connection never holds up a new one.
+        /// </summary>
+        public SemaphoreSlim Sending { get; } = new(1, 1);
         public bool Closed { get; set; }
 
         /// <summary>The host sent a message over the limit, whose rest is never read.</summary>
@@ -268,17 +276,20 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         _ = CloseAsync(connection);
     }
 
-    private static async Task CloseAsync(Connection connection)
+    // Closes a connection, waiting for the host's answer no longer than a connection may take to open: a host that never
+    // answers the close, or a send stalled ahead of it, would otherwise hold the socket open for good.
+    private async Task CloseAsync(Connection connection)
     {
         try
         {
+            using var timeout = new CancellationTokenSource(_options.ConnectTimeout);
             await connection
-                .Socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None)
+                .Socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", timeout.Token)
                 .ConfigureAwait(false);
         }
         catch (Exception)
         {
-            // Already closed.
+            // Already closed, or the host did not answer in time; disposing the socket drops it.
         }
         connection.Stop.Cancel();
         connection.Socket.Dispose();
@@ -324,7 +335,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                 var init = new JsonObject { ["type"] = "connection_init" };
                 if (_options.ConnectionParams is { } parameters)
                     init["payload"] = await parameters(timeout.Token).ConfigureAwait(false);
-                await SendAsync(connection, init).ConfigureAwait(false);
+                await SendAsync(connection, init, timeout.Token).ConfigureAwait(false);
                 var first = await ReceiveAsync(connection, timeout.Token).ConfigureAwait(false);
                 if (first is null)
                     throw Closed(connection.Socket, "before it was acknowledged");
@@ -552,19 +563,26 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             End(subscription, error);
     }
 
-    private async Task SendAsync(Connection connection, JsonObject message)
+    // Sends one message over the connection, until it closes or `token` is cancelled; the connection's own stop when
+    // none is given.
+    private static async Task SendAsync(
+        Connection connection,
+        JsonObject message,
+        CancellationToken? token = null
+    )
     {
         var bytes = Encoding.UTF8.GetBytes(message.ToJsonString());
-        await _send.WaitAsync(connection.Stop.Token).ConfigureAwait(false);
+        var cancel = token ?? connection.Stop.Token;
+        await connection.Sending.WaitAsync(cancel).ConfigureAwait(false);
         try
         {
             await connection
-                .Socket.SendAsync(bytes, WebSocketMessageType.Text, true, connection.Stop.Token)
+                .Socket.SendAsync(bytes, WebSocketMessageType.Text, true, cancel)
                 .ConfigureAwait(false);
         }
         finally
         {
-            _send.Release();
+            connection.Sending.Release();
         }
     }
 

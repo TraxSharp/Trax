@@ -299,7 +299,9 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// Each push becomes a message: a snapshot (with its incarnation), <see cref="StreamMessage.Gone"/> for a deleted
     /// instance or one the server will not let the caller watch, <see cref="StreamMessage.ClientOutdated"/>, and
     /// <see cref="StreamMessage.Reload"/> when the server asks for one. A socket the host refused (closed with 4401 or
-    /// 4403, or an upgrade answered 401 or 403) is <see cref="StreamMessage.Refused"/>, and is not subscribed again. A
+    /// 4403, or an upgrade answered 401 or 403) is <see cref="StreamMessage.Refused"/>, and is not subscribed again; so
+    /// is a push the client cannot read (a member of the wrong type, or one given twice), as
+    /// <see cref="ClientProblemCodes.TransportError"/>. A
     /// stream that ends any other way is subscribed again after the resubscribe delays; the new stream's first event
     /// is the instance as it is then.
     /// </remarks>
@@ -353,6 +355,39 @@ public sealed partial class GraphQLMachineServer : IMachineServer
 
         public void Next(JsonObject value)
         {
+            StreamMessage? message;
+            bool again;
+            try
+            {
+                (message, again) = Read(value);
+            }
+            catch (Exception ex)
+            {
+                // A member of the wrong type, or one given twice: the host would send the same push again, so the
+                // stream ends once rather than being subscribed again.
+                Deliver(
+                    new StreamMessage.Refused(
+                        ClientProblemCodes.TransportError,
+                        $"The host sent a push this client cannot read: {ex.Message}"
+                    )
+                );
+                return;
+            }
+            if (again)
+                Again();
+            else if (message is not null)
+            {
+                if (message is StreamMessage.Changed)
+                    lock (_gate)
+                        _attempt = 0;
+                Deliver(message);
+            }
+        }
+
+        // What one push says: a message to deliver, a stream to subscribe again, or nothing. Throws on a push it cannot
+        // read.
+        private (StreamMessage? Message, bool Again) Read(JsonObject value)
+        {
             if (value["errors"] is JsonArray { Count: > 0 } errors)
             {
                 if (
@@ -360,42 +395,30 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                     && c.TryGetValue<string>(out var code)
                     && code == ClientOutdated
                 )
-                    Deliver(new StreamMessage.ClientOutdated());
-                else
-                    Again();
-                return;
+                    return (new StreamMessage.ClientOutdated(), false);
+                return (null, true);
             }
             if (value["data"]?[server._pushField] is not JsonObject change)
-                return;
+                return (null, false);
             if (change["problem"] is JsonObject problem)
             {
                 var code = Text(problem["code"]);
                 if (code == ClientOutdated)
-                    Deliver(new StreamMessage.ClientOutdated());
-                else if (code == RefusalCode.NotFound.ToWire())
-                    Deliver(new StreamMessage.Gone(NotFound: true));
-                else
-                    Again();
-                return;
+                    return (new StreamMessage.ClientOutdated(), false);
+                if (code == RefusalCode.NotFound.ToWire())
+                    return (new StreamMessage.Gone(NotFound: true), false);
+                return (null, true);
             }
             if (change["gone"] is JsonValue gone && gone.GetValue<bool>())
-            {
-                Deliver(new StreamMessage.Gone(NotFound: false));
-                return;
-            }
+                return (new StreamMessage.Gone(NotFound: false), false);
             if (change["reload"] is JsonValue reload && reload.GetValue<bool>())
-            {
-                Deliver(new StreamMessage.Reload());
-                return;
-            }
+                return (new StreamMessage.Reload(), false);
             if (
                 Text(change["state"]) is not { } state
                 || change["revision"] is not JsonValue revision
             )
-                return;
-            lock (_gate)
-                _attempt = 0;
-            Deliver(
+                return (null, false);
+            return (
                 new StreamMessage.Changed(
                     new ServerSnapshot
                     {
@@ -409,7 +432,8 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                             change["dueAtKnown"] is not JsonValue known || known.GetValue<bool>(),
                         DueAt = DueAtOf(change["dueAt"]),
                     }
-                )
+                ),
+                false
             );
         }
 

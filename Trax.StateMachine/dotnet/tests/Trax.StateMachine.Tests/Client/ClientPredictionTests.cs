@@ -209,6 +209,33 @@ public class ClientPredictionTests
     }
 
     [Test]
+    public async Task After_a_divergence_the_next_queued_event_waits_for_the_read_and_is_predicted_from_it()
+    {
+        var server = new HandServer();
+        using var controller = Open(server, MachinePredictor.For(DeclarativeTurnstile.Built));
+        // What the client holds is stale: the server's instance was unlocked with a dollar since.
+        await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
+
+        var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
+        var push = controller.SendAsync("Push");
+        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
+            ServerAnswer.Refused("CLIENT_DIVERGENCE", "The prediction differs.")
+        );
+        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Refused>();
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(At(5, "Unlocked", new JsonObject { ["paidWith"] = "dollar" }))
+        );
+
+        var second = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        second.Trigger.Should().Be("Push");
+        second
+            .ClientResult.Should()
+            .Be("{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}");
+        second.Answer.SetResult(ServerAnswer.Of(At(6, "Locked")));
+        (await push.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+    }
+
+    [Test]
     public void A_predictor_of_another_version_than_the_manifest_is_refused()
     {
         var other = Turnstile with { IrHash = new string('0', 64) };
