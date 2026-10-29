@@ -372,6 +372,10 @@ public partial class ClientGeneratorTests
                 "if (!response.ok)\n    throw new TraxOperationError(undefined,",
                 "an answer that is not 2xx and names no GraphQL error is a failed request, not undefined data"
             )
+            .And.Contain(
+                "if (typeof data !== \"object\" || data === null)\n    throw new TraxOperationError(undefined, `The host answered ${response.status} with no GraphQL answer.`);",
+                "a 2xx answer with no data to read ({}, null, a number, data: null) is refused, not undefined data"
+            )
             .And.Contain("maxResponseBytes?: number;")
             .And.Contain("await readJson(response, maxResponseBytes)")
             .And.NotContain("response.json()");

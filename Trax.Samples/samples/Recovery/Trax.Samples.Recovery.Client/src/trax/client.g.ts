@@ -119,7 +119,11 @@ export async function sendDocument<T>(id: string, variables: Record<string, unkn
   // Not 2xx, and no GraphQL error to say why: the request failed, whatever data the body holds.
   if (!response.ok)
     throw new TraxOperationError(undefined, `The host answered ${[response.status, response.statusText].filter(Boolean).join(" ")}.`);
-  let value: unknown = answer?.data;
+  // 2xx with no error and no data to read the field from: neither a GraphQL answer nor a value.
+  const data: unknown = answer?.data;
+  if (typeof data !== "object" || data === null)
+    throw new TraxOperationError(undefined, `The host answered ${response.status} with no GraphQL answer.`);
+  let value: unknown = data;
   for (const key of path) value = (value as Record<string, unknown> | null | undefined)?.[key];
   return value as T;
 }

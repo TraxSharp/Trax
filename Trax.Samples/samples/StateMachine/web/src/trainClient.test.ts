@@ -49,6 +49,15 @@ describe("a train function", () => {
     await expect(stateMachineListMachines()).rejects.toThrow("The host answered 502.");
   });
 
+  it.each([{}, null, 5, { data: null }])("fails on a 2xx answer with no data to read (%j), rather than reading undefined", async (body) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(json(body));
+
+    const sent = stateMachineListMachines();
+
+    await expect(sent).rejects.toBeInstanceOf(TraxOperationError);
+    await expect(sent).rejects.toThrow("The host answered 200 with no GraphQL answer.");
+  });
+
   it("throws the host's GraphQL error, whatever the status", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       json({ errors: [{ message: "Not authorized.", extensions: { code: "AUTH_NOT_AUTHORIZED" } }] }, 401),
