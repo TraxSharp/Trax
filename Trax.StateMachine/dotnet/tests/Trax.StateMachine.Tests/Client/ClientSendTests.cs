@@ -527,6 +527,57 @@ public class ClientSendTests
         }
     }
 
+    [Test]
+    public async Task A_subscribe_that_throws_stops_the_controller_with_a_transport_error()
+    {
+        using var controller = new ServerMachineController(
+            new ServerMachineOptions
+            {
+                Machine = Turnstile,
+                Server = new SubscribeThrows(),
+                Id = "i-1",
+            }
+        );
+
+        await controller.StartAsync().WaitAsync(Wait);
+        var outcome = await controller.SendAsync("Push").WaitAsync(Wait);
+
+        outcome
+            .Should()
+            .BeOfType<SendOutcome.Stopped>()
+            .Which.Error.Code.Should()
+            .Be(ClientProblemCodes.TransportError);
+        controller.View.Status.Should().Be(MachineStatus.Stopped);
+        controller.View.Error!.Code.Should().Be(ClientProblemCodes.TransportError);
+    }
+
+    // A server whose every read answers the turnstile locked, and whose Subscribe throws, as a custom server's bug would.
+    private sealed class SubscribeThrows : IMachineServer
+    {
+        public Task<ServerAnswer> StartAsync(
+            JsonNode? input,
+            string requestId,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<ServerAnswer> EventAsync(
+            string id,
+            string trigger,
+            JsonNode? input,
+            string requestId,
+            string? clientResult,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<ServerAnswer> GetAsync(
+            string id,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(ServerAnswer.Of(At(1, "Locked")));
+
+        public IDisposable Subscribe(string id, Action<StreamMessage> onMessage) =>
+            throw new InvalidOperationException("a custom server's bug");
+    }
+
     private static ServerMachineController Open(
         StepServer server,
         string? id,

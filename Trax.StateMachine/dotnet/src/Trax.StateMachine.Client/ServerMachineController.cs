@@ -720,15 +720,35 @@ public sealed class ServerMachineController : IDisposable
     private void Listen(string id)
     {
         var open = true;
-        var stream = _server.Subscribe(
-            id,
-            message =>
-                Post(() =>
-                {
-                    if (open && !_disposed && _error is null)
-                        OnStream(message);
-                })
-        );
+        IDisposable stream;
+        try
+        {
+            stream = _server.Subscribe(
+                id,
+                message =>
+                    Post(() =>
+                    {
+                        if (open && !_disposed && _error is null)
+                            OnStream(message);
+                    })
+            );
+        }
+        catch (Exception ex)
+        {
+            // A server whose Subscribe throws (a custom server's bug) has no stream to follow: the controller stops as
+            // it does on a stream the host refused, once whatever opened it has run.
+            _ = Post(() =>
+            {
+                if (!_disposed && _error is null)
+                    OnStream(
+                        new StreamMessage.Refused(
+                            ClientProblemCodes.TransportError,
+                            $"The change stream could not be opened: the server's Subscribe threw: {ex.Message}"
+                        )
+                    );
+            });
+            return;
+        }
         _stream = new Closer(() =>
         {
             if (!open)
