@@ -346,6 +346,86 @@ describe('ServerMachineController', () => {
     expect(server.events[2].request).toEqual(server.events[0].request);
   });
 
+  it('a retried start whose answer the twin cannot read settles stopped, not confirmed', async () => {
+    const server = new FakeMachineServer();
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      startInput: {},
+      newRequestId: sequentialRequestIds(),
+    });
+
+    void controller.start();
+    await flushMicrotasks();
+    server.starts[0].fail();
+    await flushMicrotasks();
+
+    const retried = controller.retry();
+    await flushMicrotasks();
+    server.starts[1].resolve({ kind: 'started', id: 'i-1', snapshot: serverSnapshot({ state: 'Nowhere' }) });
+
+    expect(await retried).toMatchObject({ outcome: 'stopped', error: { code: 'CLIENT_OUTDATED' } });
+    expect(controller.get()).toMatchObject({ status: 'stopped', error: { code: 'CLIENT_OUTDATED' } });
+  });
+
+  it('opening an instance whose every read fails shows the problem, and retry reads it again', async () => {
+    vi.useFakeTimers();
+    const server = new FakeMachineServer();
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      retryDelays: [100],
+      newRequestId: sequentialRequestIds(),
+    });
+
+    const started = controller.start();
+    await flushMicrotasks();
+    server.gets[0].fail();
+    await vi.advanceTimersByTimeAsync(100);
+    server.gets[1].fail();
+    await started;
+    await flushMicrotasks();
+    expect(server.gets).toHaveLength(2);
+    expect(controller.get()).toMatchObject({ status: 'loading', problem: { code: 'TRANSPORT_ERROR' } });
+
+    const retried = controller.retry();
+    await flushMicrotasks();
+    expect(server.gets).toHaveLength(3);
+    server.gets[2].resolve({ kind: 'ok', snapshot: serverSnapshot() });
+
+    expect(await retried).toMatchObject({ outcome: 'confirmed', snapshot: { revision: 1, state: 'Locked' } });
+    expect(controller.get()).toMatchObject({ status: 'ready', revision: 1, problem: null });
+    expect(await controller.retry()).toMatchObject({ outcome: 'failed', problem: { code: 'NOTHING_TO_RETRY' } });
+  });
+
+  it('a retried read that fails again settles failed, and can be retried once more', async () => {
+    const server = new FakeMachineServer();
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      retryDelays: [],
+      newRequestId: sequentialRequestIds(),
+    });
+
+    const started = controller.start();
+    await flushMicrotasks();
+    server.gets[0].fail();
+    await started;
+
+    const retried = controller.retry();
+    await flushMicrotasks();
+    server.gets[1].fail();
+    expect(await retried).toMatchObject({ outcome: 'failed', problem: { code: 'TRANSPORT_ERROR' } });
+
+    const again = controller.retry();
+    await flushMicrotasks();
+    expect(server.gets).toHaveLength(3);
+    server.gets[2].resolve({ kind: 'ok', snapshot: serverSnapshot() });
+    expect(await again).toMatchObject({ outcome: 'confirmed' });
+  });
+
   it('a start that failed in transport is resent by retry under its requestId, creating one instance', async () => {
     const server = new FakeMachineServer();
     const controller = new ServerMachineController<TurnstileSpec>({

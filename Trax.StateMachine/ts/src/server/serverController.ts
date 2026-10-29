@@ -242,9 +242,11 @@ export class ServerMachineController<Spec extends MachineSpec> {
   private readonly queue: QueuedEvent[] = [];
   private sending = false;
   private lastFailed: EventRequest | null = null;
-  // Whether the `start` that creates the instance failed in a way `retry` resends (a transport failure, or
-  // `SERVER_OUTDATED` past every retry), and who waits for the start a retry resent.
+  // Whether the `start` that creates the instance, or the first read of an instance opened by id, failed in a way
+  // `retry` resends (a transport failure, or `SERVER_OUTDATED` past every retry), and who waits for the start or read
+  // a retry resent.
   private startFailed = false;
+  private readFailed = false;
   private readonly startWaiters: ((outcome: SendOutcome) => void)[] = [];
 
   private disposed = false;
@@ -293,10 +295,11 @@ export class ServerMachineController<Spec extends MachineSpec> {
   /**
    * Resends what last failed (a transport failure, or `SERVER_OUTDATED` past every retry) under the same requestId,
    * so the server replays its recorded result if the first attempt did arrive: the `start` that creates the instance
-   * while it has none, else the last event that failed, unless a later event has been confirmed since, which
+   * while it has none, or the first read of an instance opened by id while none has answered, else the last event that
+   * failed, unless a later event has been confirmed since, which
    * supersedes it, or is queued or in flight now (resending it then would apply it out of order, predicted from a state
-   * the server has moved past): either answers `NOTHING_TO_RETRY`. A retried start settles `confirmed` with the
-   * instance's first snapshot.
+   * the server has moved past): either answers `NOTHING_TO_RETRY`. A retried start or read settles `confirmed` with
+   * the instance's snapshot.
    */
   retry(): Promise<SendOutcome> {
     if (this.error) return Promise.resolve({ outcome: 'stopped', error: this.error });
@@ -307,6 +310,13 @@ export class ServerMachineController<Spec extends MachineSpec> {
       return new Promise<SendOutcome>((resolve) => {
         this.startWaiters.push(resolve);
         void this.create(requestId, 0);
+      });
+    }
+    if (this.readFailed && this.id !== null && this.confirmed === null) {
+      this.readFailed = false;
+      return new Promise<SendOutcome>((resolve) => {
+        this.startWaiters.push(resolve);
+        this.reload(null);
       });
     }
     const request = this.lastFailed;
@@ -411,10 +421,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
       answer = await this.server.start(this.startInput, requestId);
     } catch (error) {
       if (this.disposed) return;
-      if (this.endedBy(error)) {
-        this.settleStart({ outcome: 'stopped', error: this.error! });
-        return;
-      }
+      // Stopping settles whoever waits for the start.
+      if (this.endedBy(error)) return;
       this.problem = transportFailure(error);
       this.startFailed = true;
       this.emit();
@@ -430,7 +438,6 @@ export class ServerMachineController<Spec extends MachineSpec> {
       }
       if (answer.code === CLIENT_OUTDATED) {
         this.stop({ code: RefusalCode.ClientOutdated, message: answer.message });
-        this.settleStart({ outcome: 'stopped', error: this.error! });
         return;
       }
       this.problem = refusal(answer.code, answer.message);
@@ -446,6 +453,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
     // The stream's first event is the instance as it is then, so a write between the answer and the subscription
     // reaches it there; the answer itself is the snapshot to show until then.
     this.accept(answer.snapshot, 'answer');
+    // A snapshot the twin cannot read stopped the controller, which settled the start as stopped.
+    if (this.error) return;
     this.emit();
     this.settleStart({ outcome: 'confirmed', snapshot: answer.snapshot });
     this.pump();
@@ -528,28 +537,38 @@ export class ServerMachineController<Spec extends MachineSpec> {
       }
       this.problem = transportFailure(error);
       this.emit();
-      this.later(attempt, () => void this.read(rowId, attempt + 1), () => this.endRead());
+      this.later(attempt, () => void this.read(rowId, attempt + 1), () => this.readGaveUp('failed'));
       return;
     }
     if (this.disposed || this.error) return;
 
     if (answer.kind === 'problem') {
       if (answer.code === SERVER_OUTDATED && attempt < this.retryDelays.length) {
-        this.later(attempt, () => void this.read(rowId, attempt + 1), () => this.endRead());
+        this.later(attempt, () => void this.read(rowId, attempt + 1), () => this.readGaveUp('failed'));
         return;
       }
-      this.endRead();
-      if (answer.code === CLIENT_OUTDATED) this.stop({ code: RefusalCode.ClientOutdated, message: answer.message });
-      else if (answer.code === NOT_FOUND) this.stop({ code: ClientProblemCode.Gone, message: answer.message, deleted: false });
-      else {
+      if (answer.code === CLIENT_OUTDATED) {
+        this.endRead();
+        this.stop({ code: RefusalCode.ClientOutdated, message: answer.message });
+      } else if (answer.code === NOT_FOUND) {
+        this.endRead();
+        this.stop({ code: ClientProblemCode.Gone, message: answer.message, deleted: false });
+      } else {
         this.problem = refusal(answer.code, answer.message);
         this.emit();
+        this.readGaveUp(answer.code === SERVER_OUTDATED ? 'failed' : 'refused');
       }
       return;
     }
 
+    const first = this.confirmed === null;
     const snapshot = { ...answer.snapshot, rowId: answer.snapshot.rowId ?? rowId ?? this.rowId };
     let changed = this.accept(snapshot, 'load');
+    // The first snapshot ends whatever failure the reads before it showed.
+    if (first && this.confirmed !== null && this.problem !== null) {
+      this.problem = null;
+      changed = true;
+    }
     const buffered = this.buffered;
     this.buffered = null;
     if (buffered && !this.error && buffered.rowId === this.rowId) changed = this.accept(buffered, 'push') || changed;
@@ -557,7 +576,17 @@ export class ServerMachineController<Spec extends MachineSpec> {
     else if (buffered && this.reloadAgain && buffered.rowId === this.reloadAgainRowId) this.buffered = buffered;
     this.endRead();
     if (changed && !this.error) this.emit();
+    if (this.confirmed !== null && !this.error) this.settleStart({ outcome: 'confirmed', snapshot });
     this.pump();
+  }
+
+  // A read that answered with no snapshot, past every retry it had. While the instance has never been read, `retry`
+  // reads it again: nothing else would, and every send waits for it.
+  private readGaveUp(outcome: 'failed' | 'refused'): void {
+    this.endRead();
+    if (this.disposed || this.error || this.confirmed !== null) return;
+    this.readFailed = outcome === 'failed';
+    this.settleStart({ outcome, problem: this.problem! });
   }
 
   private endRead(): void {
@@ -759,6 +788,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
     const stranded = this.queue.splice(0);
     this.emit();
     for (const queued of stranded) queued.settle({ outcome: 'stopped', error });
+    this.settleStart({ outcome: 'stopped', error });
   }
 
   // Stops for good when the server says a rejection ends the controller; returns whether it did.
