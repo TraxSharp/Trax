@@ -280,6 +280,23 @@ describe("generateMachineFactory shared output schemas", () => {
     expect(text).toContain("const sharedOutput0 = {");
     expect(text.split('"output": sharedOutput0').length - 1).toBe(2);
   });
+
+  // Only the outcomes' outputs become the shared const: a string of the IR is written as the string it is, whatever
+  // it holds.
+  it("leaves every string of the IR as it is", () => {
+    const marked = { ...ir, note: ["\u0000sharedOutput0", "sharedOutput0"] } as unknown as IrDocument;
+    const text = generateMachineFactory(marked);
+    expect(text).toContain('"note": [\n    "\\u0000sharedOutput0",\n    "sharedOutput0"\n  ]');
+    expect(text.split('"output": sharedOutput0').length - 1).toBe(2);
+  });
+
+  it("writes the IR as JSON.stringify does when no output is shared", () => {
+    const single = { ...ir, outcomes: { "A.done": outcome("A") } } as unknown as IrDocument;
+    const shared = generateMachineFactory(ir);
+    expect(generateMachineFactory(single)).toContain(`const ir = ${JSON.stringify(single, null, 2)} as IrDocument;`);
+    // The shared const is the output schema, as JSON.stringify writes it.
+    expect(shared).toContain(`const sharedOutput0 = ${JSON.stringify(output, null, 2)};`);
+  });
 });
 
 // The import-style option is what lets a vendoring consumer collapse the three relative
