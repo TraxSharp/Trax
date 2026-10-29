@@ -98,6 +98,7 @@ export function checkoutServer(): ReturnType<typeof createMachineServer> {
       },
       allowInsecureTransport: connection.allowInsecureTransport,
       maxResponseSize: connection.maxResponseBytes,
+      requestTimeout: connection.requestTimeout,
       machine: checkout,
       documents: checkoutDocuments,
       // A stream refused below ends for good: the controller stops with it instead of subscribing again.

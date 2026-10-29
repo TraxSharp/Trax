@@ -525,7 +525,11 @@ internal sealed partial class ClientGenerator
                   : { query: request.document.text, operationName: request.document.name, variables: request.variables };
               return {
                 execute(request) {
-                  return withRequestTimeout(options.requestTimeout ?? defaultRequestTimeout, (signal) => exchange(request, signal));
+                  return withRequestTimeout(
+                    options.requestTimeout ?? defaultRequestTimeout,
+                    (signal) => exchange(request, signal),
+                    (message) => new TraxTransportError(message),
+                  );
                 },
                 subscribe(request, sink) {
                   return open().subscribe(payload(request), {
@@ -586,30 +590,6 @@ internal sealed partial class ClientGenerator
                 if (!refused && !isRecord(answer.data))
                   throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status);
                 return answer as TraxAnswer;
-              }
-            }
-
-            /** The request timeout when none is set: 30 seconds. */
-            const defaultRequestTimeout = 30_000;
-
-            /**
-             * Runs one request under `timeout` milliseconds: past it, the signal `run` was given is aborted and the promise
-             * rejects with a TraxTransportError, whether or not the fetch heeds the signal.
-             */
-            async function withRequestTimeout<T>(timeout: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
-              const controller = new AbortController();
-              if (!Number.isFinite(timeout)) return run(controller.signal);
-              let timer: ReturnType<typeof setTimeout> | undefined;
-              const expired = new Promise<never>((_, reject) => {
-                timer = setTimeout(() => {
-                  controller.abort();
-                  reject(new TraxTransportError(`The host did not answer within ${timeout} ms.`));
-                }, Math.max(0, timeout));
-              });
-              try {
-                return await Promise.race([run(controller.signal), expired]);
-              } finally {
-                clearTimeout(timer);
               }
             }
 

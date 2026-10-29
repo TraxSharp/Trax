@@ -72,6 +72,7 @@ describe("the connection's limits", () => {
   const connection = { url: "/trax/graphql", socketUrl: "wss://example.test/trax/graphql" };
   const instance = "00000000-0000-0000-0000-000000000001";
   const large = () => json({ data: machines, padding: "x".repeat(256) });
+  const never = () => new Promise<Response>(() => {});
 
   it("a train function reads no more of an answer than maxResponseBytes", async () => {
     configureTrax({ ...connection, maxResponseBytes: 64 });
@@ -85,5 +86,26 @@ describe("the connection's limits", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => large());
 
     await expect(checkoutServer().get(instance)).rejects.toThrow("larger than 64 bytes");
+  });
+
+  it("a train function gives up on a host that does not answer within requestTimeout", async () => {
+    configureTrax({ ...connection, requestTimeout: 50 });
+    vi.spyOn(globalThis, "fetch").mockImplementation(never);
+
+    const sent = stateMachineListMachines();
+
+    await expect(sent).rejects.toBeInstanceOf(TraxOperationError);
+    await expect(sent).rejects.toThrow("did not answer within 50 ms");
+  });
+
+  it("a machine server gives up on a host that does not answer within requestTimeout", async () => {
+    configureTrax({ ...connection, requestTimeout: 50 });
+    vi.spyOn(globalThis, "fetch").mockImplementation(never);
+
+    await expect(checkoutServer().get(instance)).rejects.toThrow("did not answer within 50 ms");
+  });
+
+  it.each([Number.NaN, -1, 0])("refuses a requestTimeout of %s", (requestTimeout) => {
+    expect(() => configureTrax({ ...connection, requestTimeout })).toThrow(RangeError);
   });
 });

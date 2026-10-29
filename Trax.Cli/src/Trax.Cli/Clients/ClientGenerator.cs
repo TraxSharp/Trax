@@ -856,6 +856,42 @@ internal sealed partial class ClientGenerator
         /** The most bytes of an answer the client reads, unless the app names another limit: 16 MiB. */
         const defaultMaxResponseBytes = 16 * 1024 * 1024;
 
+        /** How long one request may take, unless the app names another timeout: 30 seconds. */
+        const defaultRequestTimeout = 30_000;
+
+        /** Refuses a request timeout that is not a positive number of milliseconds (`Infinity` waits as long as the host takes). */
+        function requireRequestTimeout(timeout: number): void {
+          if (typeof timeout !== "number" || !(timeout > 0))
+            throw new RangeError(`requestTimeout must be a positive number of milliseconds, or Infinity, got ${timeout}.`);
+        }
+
+        /**
+         * Runs one request under `timeout` milliseconds: past it, the signal `run` was given is aborted and the promise
+         * rejects with the error `expired` makes, whether or not the fetch heeds the signal.
+         */
+        async function withRequestTimeout<T>(
+          timeout: number,
+          run: (signal: AbortSignal) => Promise<T>,
+          expired: (message: string) => Error,
+        ): Promise<T> {
+          requireRequestTimeout(timeout);
+          const controller = new AbortController();
+          // setTimeout fires at once for a delay past 2^31 - 1 ms, so one that long waits as Infinity does.
+          if (timeout > 2_147_483_647) return run(controller.signal);
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const late = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              controller.abort();
+              reject(expired(`The host did not answer within ${timeout} ms.`));
+            }, timeout);
+          });
+          try {
+            return await Promise.race([run(controller.signal), late]);
+          } finally {
+            clearTimeout(timer);
+          }
+        }
+
         /**
          * Refuses a socket URL whose traffic would be in cleartext: `wss:` is accepted, `ws:` only to a loopback host
          * (`localhost`, `127.0.0.0/8`, `::1`) or to the origin of a page that was itself served over `http:`, and anything
@@ -974,6 +1010,12 @@ internal sealed partial class ClientGenerator
               allowInsecureTransport?: boolean;
               /** The most bytes of an answer a train function or machine server reads before it refuses it. 16 MiB when not given. */
               maxResponseBytes?: number;
+              /**
+               * How long one request of a train function or machine server may take, in milliseconds, from sending it to the
+               * last byte of its answer; 30 seconds when not given, `Infinity` to wait as long as the host takes. A request past
+               * it is aborted and fails. configureTrax refuses anything else that is not a positive number.
+               */
+              requestTimeout?: number;
             }
 
             let connection: TraxConnection | null = null;
@@ -988,6 +1030,7 @@ internal sealed partial class ClientGenerator
              * hook renders again onto it.
              */
             export function configureTrax(next: TraxConnection): void {
+              if (next.requestTimeout !== undefined) requireRequestTimeout(next.requestTimeout);
               connection = next;
               generation += 1;
               const closing = socket;
@@ -1042,25 +1085,32 @@ internal sealed partial class ClientGenerator
 
             /** Sends a persisted document by its id, never its text, and returns the field at `path` of its answer. */
             export async function sendDocument<T>(id: string, variables: Record<string, unknown>, path: readonly string[]): Promise<T> {
-              const { url, headers, allowInsecureTransport, maxResponseBytes } = traxConnection();
+              const { url, headers, allowInsecureTransport, maxResponseBytes, requestTimeout } = traxConnection();
               requireSecureEndpoint(url, allowInsecureTransport);
-              const response = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", ...headers?.() },
-                body: JSON.stringify({ id, variables: withoutUndefined(variables) }),
-                // A redirect would carry the headers to wherever it points.
-                redirect: "error",
-              });
-              requireNoRedirect(response);
               type Answer = { data?: Record<string, unknown> | null; errors?: { message: string; extensions?: { code?: string } }[] };
-              let answer: Answer | null;
-              try {
-                answer = (await readJson(response, maxResponseBytes)) as Answer | null;
-              } catch (cause) {
-                // A body that is not JSON is the status's to explain; one past the limit is refused either way.
-                if (response.ok || cause instanceof RangeError) throw cause;
-                answer = null;
-              }
+              // The request and the whole of its answer, under the request timeout.
+              const { response, answer } = await withRequestTimeout(
+                requestTimeout ?? defaultRequestTimeout,
+                async (signal) => {
+                  const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", ...headers?.() },
+                    body: JSON.stringify({ id, variables: withoutUndefined(variables) }),
+                    // A redirect would carry the headers to wherever it points.
+                    redirect: "error",
+                    signal,
+                  });
+                  requireNoRedirect(response);
+                  try {
+                    return { response, answer: (await readJson(response, maxResponseBytes)) as Answer | null };
+                  } catch (cause) {
+                    // A body that is not JSON is the status's to explain; one past the limit is refused either way.
+                    if (response.ok || cause instanceof RangeError) throw cause;
+                    return { response, answer: null };
+                  }
+                },
+                (message) => new TraxOperationError(undefined, message),
+              );
               const error = answer?.errors?.[0];
               if (error) throw new TraxOperationError(error.extensions?.code, error.message);
               // Not 2xx, and no GraphQL error to say why: the request failed, whatever data the body holds.
@@ -1200,6 +1250,7 @@ internal sealed partial class ClientGenerator
         sb.Append("      },\n");
         sb.Append("      allowInsecureTransport: connection.allowInsecureTransport,\n");
         sb.Append("      maxResponseSize: connection.maxResponseBytes,\n");
+        sb.Append("      requestTimeout: connection.requestTimeout,\n");
         sb.Append($"      machine: {camel},\n");
         sb.Append($"      documents: {camel}Documents,\n");
         sb.Append(
