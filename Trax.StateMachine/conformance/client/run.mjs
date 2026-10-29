@@ -184,6 +184,34 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
   const settled = new Set();
   const background = [];
   let subscription = null;
+  // When the host last ended a stream (completed it, failed it, or closed its socket), for a step that bounds how long
+  // the client waited before subscribing again.
+  let ended = null;
+  // Asks for the view once and compares, without polling: after a fence, a request or subscription the client sent only
+  // once it had taken everything before it, so what it shows then is what it settled on.
+  const viewOnce = async (expected, fail) => {
+    const got = await ask({ op: "view" });
+    if (!matches(expected, got)) fail(`expected the view to hold ${canonical(expected)}, it holds ${canonical(got)}`);
+  };
+  // Requests a step took and holds unanswered until a `respond` step answers them.
+  const held = new Map();
+  // Answers one request the way its step says.
+  const respond = (request, step, fail) => {
+    if (step.drop) request.respond({ close: true });
+    else if (step.hang) request.respond({ hang: true });
+    else if (step.redirect !== undefined)
+      request.respond({ status: step.redirect === true ? 307 : step.redirect, headers: { location: host.decoy } });
+    else if (step.raw !== undefined) request.respond({ raw: step.raw });
+    else if (step.status !== undefined) request.respond({ status: step.status, json: step.body });
+    else if (step.errors !== undefined) request.respond({ json: { data: null, errors: step.errors } });
+    else {
+      const json = { data: { machines: { [field]: { [request.operation]: answerOf(step.answer ?? null) } } } };
+      // `padTo` pads the body to exactly that many bytes, for a step on either side of a size limit.
+      const pad = step.padTo !== undefined ? step.padTo - Buffer.byteLength(JSON.stringify(json)) : (step.pad ?? 0);
+      if (pad < 0) fail(`the answer is already larger than padTo ${step.padTo}`);
+      request.respond({ json, pad });
+    }
+  };
 
   for (const [index, step] of transcript.steps.entries()) {
     const where = `step ${index + 1} (${JSON.stringify(step).slice(0, 80)})`;
@@ -216,24 +244,27 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
         fail(`expected a ${step.request} request, got ${request.operation} ${canonical(request.body.variables ?? {})}`);
       if (step.variables !== undefined && canonical(request.body.variables ?? {}) !== canonical(step.variables))
         fail(`expected variables ${canonical(step.variables)}, got ${canonical(request.body.variables ?? {})}`);
-      if (step.drop) request.respond({ close: true });
-      else if (step.hang) request.respond({ hang: true });
-      else if (step.redirect !== undefined)
-        request.respond({ status: step.redirect === true ? 307 : step.redirect, headers: { location: host.decoy } });
-      else if (step.raw !== undefined) request.respond({ raw: step.raw });
-      else if (step.status !== undefined) request.respond({ status: step.status, json: step.body });
-      else if (step.errors !== undefined) request.respond({ json: { data: null, errors: step.errors } });
-      else
-        request.respond({
-          json: { data: { machines: { [field]: { [step.request]: answerOf(step.answer ?? null) } } } },
-          pad: step.pad ?? 0,
-        });
+      if (step.hold !== undefined) held.set(step.hold, request);
+      else respond(request, step, fail);
+    } else if (step.respond !== undefined) {
+      const request = held.get(step.respond) ?? fail(`no request is held as ${step.respond}`);
+      held.delete(step.respond);
+      respond(request, step, fail);
     } else if (step.subscribe !== undefined) {
       subscription = await host.subscriptions.take(STEP_TIMEOUT, "subscription").catch((e) => fail(e.message));
       if (subscription.operation !== "changed") fail(`expected the changed document, got ${subscription.payload.id}`);
       if (subscription.payload.query) fail(`the subscription sent a document beside its id: ${subscription.payload.query}`);
       if (canonical(subscription.payload.variables ?? {}) !== canonical(step.subscribe))
         fail(`expected variables ${canonical(step.subscribe)}, got ${canonical(subscription.payload.variables ?? {})}`);
+      // How long after the host ended the stream before it the client subscribed again, against the bounds the
+      // resubscribe delays set: at least half a step (the most jitter takes off), and below the next step's half.
+      if (ended !== null && (step.notBefore !== undefined || step.before !== undefined)) {
+        const waited = Date.now() - ended;
+        if (step.notBefore !== undefined && waited < step.notBefore)
+          fail(`subscribed again ${waited} ms after the stream ended, sooner than ${step.notBefore} ms`);
+        if (step.before !== undefined && waited >= step.before)
+          fail(`subscribed again ${waited} ms after the stream ended, not within ${step.before} ms`);
+      }
     } else if (step.push !== undefined) {
       if (!subscription?.open) fail("no subscription is open to push on");
       subscription.next({ data: { [`${field}Changed`]: { ...CHANGE_DEFAULTS, ...step.push } } }, step.pad ?? 0);
@@ -243,17 +274,22 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
     } else if (step.complete !== undefined) {
       if (!subscription?.open) fail("no subscription is open to complete");
       subscription.complete();
+      ended = Date.now();
     } else if (step.dropSocket !== undefined) {
       if (!subscription) fail("no socket to drop");
       subscription.drop(step.dropSocket === true ? undefined : step.dropSocket);
+      ended = Date.now();
     } else if (step.unsettled !== undefined) {
       if (!pending.has(step.unsettled)) fail(`nothing named ${step.unsettled} was sent`);
-      // Long enough for an answer the testee already wrote to arrive, shorter than any retry a transcript configures.
-      await delay(30);
+      // A round trip through the testee rather than a wait: an answer it wrote before its answer to this view has been
+      // read by the time that one is, and a turn of the event loop lets its handlers run.
+      await ask({ op: "view" });
+      await new Promise((resolve) => setImmediate(resolve));
       if (settled.has(step.unsettled)) fail(`${step.unsettled} was answered before it had settled`);
     } else if (step.streamError !== undefined) {
       if (!subscription?.open) fail("no subscription is open to end");
       subscription.error(step.streamError);
+      ended = Date.now();
     } else if (step.ping !== undefined) {
       if (!subscription) fail("no socket to ping");
       const before = subscription.pongs;
@@ -265,6 +301,8 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
       }
     } else if (step.decoy !== undefined) {
       if (host.decoyHits() !== step.decoy) fail(`expected ${step.decoy} requests at the redirect's target, got ${host.decoyHits()}`);
+    } else if (step.view !== undefined && step.once === true) {
+      await viewOnce(step.view, fail);
     } else if (step.view !== undefined) {
       const deadline = Date.now() + STEP_TIMEOUT;
       let got;
@@ -284,6 +322,7 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
   }
 
   if (pending.size > 0) throw new Error(`no step awaited ${[...pending.keys()].join(", ")}`);
+  if (held.size > 0) throw new Error(`no step answered the request held as ${[...held.keys()].join(", ")}`);
   await Promise.all(background);
   await delay(30);
   const extra = host.leftovers();

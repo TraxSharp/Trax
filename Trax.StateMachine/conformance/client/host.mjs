@@ -8,8 +8,16 @@ import { createServer } from "node:http";
 
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const PROTOCOL = "graphql-transport-ws";
-/** The reason a socket closed with one of the codes a host turns a caller away with is sent with. */
-const CLOSE_REASONS = { 4401: "Unauthorized", 4403: "Forbidden" };
+/**
+ * The reason a socket closed with one of graphql-transport-ws's codes is sent with: the two a host turns a caller away
+ * with, and two it closes a socket with that the client may open again.
+ */
+const CLOSE_REASONS = {
+  4401: "Unauthorized",
+  4403: "Forbidden",
+  4408: "Connection initialisation timeout",
+  4429: "Too many initialisation requests",
+};
 
 /** A queue whose `take` waits for the next item, or fails after `timeout` milliseconds. */
 class Inbox {
@@ -278,8 +286,8 @@ export async function startHost() {
           live.get(conn)?.delete(message.id);
           conn.send({ id: message.id, type: "complete" });
         },
-        // Closes the socket, with 1011 as a host that goes away does, or with the code given (4401, 4403) as one that
-        // turns the caller away while subscribed does.
+        // Closes the socket, with 1011 as a host that goes away does, or with the code given: 4401 or 4403 as one that
+        // turns the caller away while subscribed does, 4408 or 4429 as one that closes a socket it may take again.
         drop: (code = 1011) => conn.close(code, CLOSE_REASONS[code] ?? "Going away"),
       };
       live.get(conn).add(message.id);

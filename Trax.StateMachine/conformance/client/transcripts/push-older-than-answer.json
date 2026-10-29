@@ -1,5 +1,5 @@
 {
-  "about": "A push older than the answer the client holds is dropped: the answer at revision 3 stands when the push of revision 2 arrives after it.",
+  "about": "A push older than the answer the client holds is dropped: the answer at revision 3 stands when the push of revision 2 arrives after it. The reload pushed after it is the fence: the client reads only once it has taken the push before it, so the view it shows while that read is held is what it made of the stale push.",
   "machine": "turnstile",
   "instance": "i-1",
   "documents": {
@@ -19,7 +19,10 @@
     { "request": "push", "variables": { "id": "i-1", "requestId": "r1", "clientResult": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}" }, "answer": { "id": "i-1", "revision": 3, "state": "Locked", "context": {} } },
     { "await": "push", "expect": { "outcome": "confirmed", "revision": 3 } },
     { "push": { "revision": 2, "state": "Unlocked", "context": { "paidWith": "quarter" } } },
-    { "wait": 30 },
-    { "view": { "state": "Locked", "revision": 3 } }
+    { "push": { "reload": true } },
+    { "request": "get", "variables": { "id": "i-1" }, "hold": "fence" },
+    { "view": { "state": "Locked", "revision": 3 }, "once": true },
+    { "respond": "fence", "answer": { "id": "i-1", "revision": 3, "state": "Locked", "context": {} } },
+    { "view": { "state": "Locked", "revision": 3, "pending": false } }
   ]
 }

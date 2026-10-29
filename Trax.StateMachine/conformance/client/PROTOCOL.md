@@ -119,7 +119,10 @@ machine's states in events, the unpredicted ones counted; past that it settles `
 { "id": 6, "outcome": "unreachable" }
 ```
 
-and `refused`, `failed` and `stopped` with their `code`, as for `send`, and `exceeded` and `invalid`.
+and `refused`, `failed` and `stopped` with their `code`, as for `send`, and `exceeded` and `invalid` (with the
+`trigger` or `target` it cannot plan with, or the `code` of an input or context nested too deep). `tooDeep: "input"`, when
+given, has the testee build 600 arrays nested one in another, in memory, and sync with them as the fields input, as the
+engine kit's `plan` does (`../PROTOCOL.md`): no reader need take a text nested that deep.
 
 **`view`** answers with what the client shows now:
 
@@ -192,15 +195,22 @@ and does not yet is a bug in the client, not an entry here.
     "capability": "upgrade-status",
     "client": "ts",
     "reason": "A WebSocket in a browser or in node does not say what status a failed upgrade was answered with."
+  },
+  {
+    "capability": "socket-message-limit",
+    "client": "ts",
+    "reason": "The page builds the graphql-ws client given as socket and its WebSocket, which read every message whole, so the client never sees a message before it is read and cannot cap its size."
   }
 ]
 ```
 
 ## Defaults
 
-A client built without these options has these values, in every language. The transcripts set shorter ones, so the
-kit cannot see them: each client's unit tests hold them (TypeScript's `machineServer.test.ts`, C#'s `TransportTests`,
-Rust's `tests/controller.rs`). A change to one is a change here and in all three.
+A client built without these options has these values, in every language. A testee sets only the options a transcript
+gives, so a transcript that gives none sees the defaults: `response-size-default` holds the response size. The others
+are too long for a transcript to wait out, and each client's unit tests hold them by what the client does
+(TypeScript's `machineServer.test.ts`, C#'s `TransportTests`, Rust's `tests/controller.rs`). A change to one is a
+change here and in all three.
 
 | Option | Default | What it bounds |
 | --- | --- | --- |
@@ -213,7 +223,8 @@ Each resubscribe wait is drawn uniformly between 50% and 100% of its step: `step
 [0, 1), drawn afresh for every wait, so the clients a host restart or a refusal like `TOO_MANY_SUBSCRIPTIONS` dropped
 together do not subscribe again in lockstep. Retry delays are not jittered. The random source is the language's
 ordinary one and each client's unit tests replace it (TypeScript's spies on `Math.random`), so a draw of 0 waits the
-whole step. The transcripts' delays are short enough that the kit does not see the jitter.
+whole step. The kit does not pin the random source: `resubscribe-backoff` bounds each wait by half its step, the
+shortest a draw can make it, so it holds the order and growth of the waits whatever is drawn.
 
 The socket's own timing is not pinned, because the TypeScript client does not own its socket: a page builds its
 graphql-ws client and its options with it, and graphql-ws waits for an acknowledgement and stays silent for as long
@@ -230,7 +241,9 @@ It acknowledges a socket's `connection_init` unless the transcript refuses that 
 the socket with 4403 before acknowledging it. A socket the host closes with 4401 or 4403, before it is acknowledged or
 while subscribed, is the host turning the caller away, and the client stops for good: `UNAUTHENTICATED` for 4401,
 `FORBIDDEN` for 4403, and the same for an upgrade answered 401 or 403 where the client's socket can tell one. It
-subscribes again after any other close.
+subscribes again after any other close, graphql-transport-ws's 4408 (not initialised in time) and 4429 (too many
+initialisation requests) among them. C# and Rust hold a socket message to the response size: one larger fails the
+socket, unread past the limit, and the client subscribes again on a new one.
 
 A host can also refuse one subscription on a socket it accepted (an expired token, an anonymous socket it
 acknowledged): it answers a `next` whose first GraphQL error carries the refusal in `extensions.code`, or an `error`
@@ -275,20 +288,26 @@ documents from it. The steps run in order:
 | --- | --- |
 | `{ "client": "<op>", ...args }` | Sends the request. With `"expect"`, waits for its answer and compares; with `"as": "<name>"`, goes on and a later `await` compares; with neither, goes on, and the answer must still come before the transcript ends. |
 | `{ "await": "<name>", "expect": { ... } }` | Waits for the answer sent under that name and compares. |
-| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503` (with `"body": {...}`, the JSON it answers with, or none), `"drop": true` (the connection is closed with no answer), `"hang": true` (no answer ever comes), `"redirect": true` (a 307, or the status given, whose `Location` is a second host that counts what reaches it) or `"raw": "..."` (a 200 with that text as its body). `"pad": n` adds n bytes of whitespace after an answer's JSON. |
-| `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. |
+| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503` (with `"body": {...}`, the JSON it answers with, or none), `"drop": true` (the connection is closed with no answer), `"hang": true` (no answer ever comes), `"redirect": true` (a 307, or the status given, whose `Location` is a second host that counts what reaches it) or `"raw": "..."` (a 200 with that text as its body). `"pad": n` adds n bytes of whitespace after an answer's JSON, and `"padTo": n` pads the body to exactly n bytes. With `"hold": "<name>"` instead of an answer, it answers nothing yet. |
+| `{ "respond": "<name>", <answer> }` | Answers the request held under that name, as a `request` step would. |
+| `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. `"notBefore": ms` and `"before": ms` bound how long after the host last ended a stream (`complete`, `streamError`, `dropSocket`) it came. |
 | `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription; `"pad": n` beside a `push` adds n bytes of whitespace to its frame. |
-| `{ "unsettled": "<name>" }` | Checks that the answer sent under that name has not come yet. |
+| `{ "unsettled": "<name>" }` | Checks that the answer sent under that name has not come yet. It asks for the view first and checks once that answer is in, so an answer the testee wrote before it has been read; put it after a fence (below). |
 | `{ "streamError": [...] }` | Ends the last subscription with a graphql-transport-ws `error` message carrying those errors. |
 | `{ "ping": true }` | Sends a graphql-transport-ws `ping` on the last subscription's socket and waits for the client's `pong`. |
 | `{ "decoy": 0 }` | Checks how many requests reached the second host a redirect points at. |
 | `{ "complete": true }`, `{ "dropSocket": true }` | Completes the last subscription, or closes its socket (with 1011, or with the code given: `{ "dropSocket": 4401 }`). |
-| `{ "view": { ... } }` | Asks for the view until it holds every member given, for up to three seconds. |
+| `{ "view": { ... } }` | Asks for the view until it holds every member given, for up to three seconds. With `"once": true`, asks once: what must stay as it is is checked after a fence, not by waiting. |
 | `{ "quiet": 50 }` | Waits that many milliseconds; nothing may arrive meanwhile. |
 | `{ "wait": 50 }` | Waits that many milliseconds, so the client has taken every request sent before it; what arrives meanwhile waits for a later step. |
 
 A comparison holds when every member the step gives equals the answer's, canonically; members it does not give are
-not compared. After the last step the runner waits briefly, and anything that arrived that no step took fails the
+not compared.
+
+A step that checks something did not happen (a stale push not applied, a send not settled) does not wait for it to
+happen late. It follows a **fence**: something the client sends only once it has taken what came before, such as the
+read a `reload` push makes it send or the subscription it opens after a socket failed. The fence's request is held
+(`hold`), the check made (`"once": true`, `unsettled`), and the request answered (`respond`). After the last step the runner waits briefly, and anything that arrived that no step took fails the
 transcript: a client sends nothing the transcript does not expect.
 
 ## The client surface
