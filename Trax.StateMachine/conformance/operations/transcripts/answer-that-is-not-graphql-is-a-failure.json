@@ -1,0 +1,11 @@
+{
+  "about": "A 200 whose body is not JSON, or is JSON with neither data nor errors, is a transport failure carrying the status.",
+  "steps": [
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "html"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "raw": "<html>Sign in</html>"},
+    {"await": "html", "expect": {"outcome": "failed", "code": "TRANSPORT_ERROR", "status": 200}},
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "empty"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "status": 200, "body": {}},
+    {"await": "empty", "expect": {"outcome": "failed", "code": "TRANSPORT_ERROR", "status": 200}}
+  ]
+}

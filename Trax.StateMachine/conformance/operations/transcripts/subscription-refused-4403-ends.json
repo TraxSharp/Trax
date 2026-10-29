@@ -1,0 +1,9 @@
+{
+  "about": "A socket the host closes with 4403 before acknowledging it ends the stream for good with that close code: the client does not connect again.",
+  "refuseConnections": 1,
+  "steps": [
+    {"client": "subscribe", "operation": "Changes", "variables": {"domain": "RUN"}, "expect": {"subscribed": true}},
+    {"events": [{"ended": "closed", "close": 4403}]},
+    {"quiet": 300}
+  ]
+}

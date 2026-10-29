@@ -1,0 +1,6 @@
+{
+  "about": "A ws socket on a host that is not loopback is refused when the client is built, before anything is sent.",
+  "open": {"socket": "ws://example.com/graphql"},
+  "opened": {"opened": false, "code": "INSECURE_TRANSPORT"},
+  "steps": []
+}

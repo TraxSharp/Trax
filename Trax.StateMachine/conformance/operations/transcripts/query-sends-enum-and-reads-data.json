@@ -1,0 +1,8 @@
+{
+  "about": "A query goes by its id with its variables, an enum by its GraphQL name, and its data reads back as the host sent it, enum values and nulls included.",
+  "steps": [
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "runs"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "data": {"operations": {"runs": [{"id": "1", "state": "FAILED", "name": "nightly"}, {"id": "2", "state": "FAILED", "name": null}]}}},
+    {"await": "runs", "expect": {"outcome": "data", "data": {"operations": {"runs": [{"id": "1", "state": "FAILED", "name": "nightly"}, {"id": "2", "state": "FAILED", "name": null}]}}}}
+  ]
+}

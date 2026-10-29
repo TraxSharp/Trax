@@ -1,0 +1,67 @@
+# The operations schema the kit's documents are generated against: a query, a mutation and a stream, as a host that
+# serves the operations console roots them, with an enum on both sides of the wire and an input with a default.
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+type Query {
+  operations: OperationsQueries!
+}
+
+type Mutation {
+  operations: OperationsMutations!
+}
+
+type Subscription {
+  onDataChanged(domain: Domain): DataChanged!
+}
+
+type OperationsQueries {
+  runs(state: RunState, take: Int! = 25): [Run!]!
+}
+
+type OperationsMutations {
+  retry(input: RetryInput!): RetryAnswer!
+}
+
+input RetryInput {
+  id: ID!
+  priority: Priority! = NORMAL
+  note: String
+}
+
+enum RunState {
+  RUNNING
+  FAILED
+  COMPLETED
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH_NOW
+}
+
+enum Domain {
+  RUN
+  QUEUE
+}
+
+type Run {
+  id: ID!
+  state: RunState!
+  name: String
+}
+
+type RetryAnswer {
+  accepted: Boolean!
+  state: RunState
+  note: String
+}
+
+type DataChanged {
+  domain: Domain!
+  id: ID
+}

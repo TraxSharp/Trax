@@ -309,7 +309,7 @@ const checked = (request) => (answer) => {
   return answer;
 };
 
-function withTimeout(promise, what) {
+export function withTimeout(promise, what) {
   let timer;
   return Promise.race([
     promise,
@@ -372,7 +372,12 @@ export function readLines(input, onLine, onClose) {
   input.on("close", end);
 }
 
-function lineAsker(input, output) {
+/**
+ * An `ask` over a line-per-request pipe: writes each request as a line on `output` under a fresh id, and resolves it
+ * with the answer line on `input` that carries the same id, without the id. The operations kit asks its testees this way
+ * too.
+ */
+export function lineAsker(input, output) {
   const waiting = new Map();
   let next = 0;
   let closed = false;

@@ -1,0 +1,11 @@
+{
+  "about": "An input field that is not set is left out of the variables, one set to null is sent as null, and an enum value whose name has underscores goes as written.",
+  "steps": [
+    {"client": "send", "operation": "Retry", "variables": {"input": {"id": "7", "priority": "HIGH_NOW"}}, "as": "first"},
+    {"request": "Retry", "variables": {"input": {"id": "7", "priority": "HIGH_NOW"}}, "data": {"operations": {"retry": {"accepted": true, "state": "RUNNING", "note": null}}}},
+    {"await": "first", "expect": {"outcome": "data", "data": {"operations": {"retry": {"accepted": true, "state": "RUNNING", "note": null}}}}},
+    {"client": "send", "operation": "Retry", "variables": {"input": {"id": "7", "note": null}}, "as": "second"},
+    {"request": "Retry", "variables": {"input": {"id": "7", "note": null}}, "data": {"operations": {"retry": {"accepted": true, "state": "RUNNING", "note": null}}}},
+    {"await": "second", "expect": {"outcome": "data", "data": {"operations": {"retry": {"accepted": true, "state": "RUNNING", "note": null}}}}}
+  ]
+}

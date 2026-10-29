@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "documents": [
+    {
+      "name": "Changes",
+      "text": "subscription Changes($domain: Domain) {\n  onDataChanged(domain: $domain) {\n    domain\n    id\n  }\n}\n"
+    },
+    {
+      "name": "Retry",
+      "text": "mutation Retry($input: RetryInput!) {\n  operations {\n    retry(input: $input) {\n      accepted\n      state\n      note\n    }\n  }\n}\n"
+    },
+    {
+      "name": "Runs",
+      "text": "query Runs($state: RunState, $take: Int) {\n  operations {\n    runs(state: $state, take: $take) {\n      id\n      state\n      name\n    }\n  }\n}\n"
+    }
+  ]
+}

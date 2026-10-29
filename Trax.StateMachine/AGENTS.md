@@ -22,6 +22,7 @@ The folder is laid out by language, with what spans the languages at its root.
 | `rust/` | `trax-state-machine`, the engine in Rust that the bindings for other languages are built on (not published yet): the engine (`src/`, no dependencies, no I/O) and its conformance testee (`src/bin/testee.rs`), and `trax-state-machine-client` (`client/`), the client that drives a served machine from Rust over tokio, with its client-kit testee (`client/src/bin/client_testee.rs`). A Cargo workspace with a committed `Cargo.lock`; its toolchain is pinned in `rust-toolchain.toml`. |
 | `conformance/` | Engine-neutral data any engine replays: the shared machines (`machines/<m>/`, each machine's IR, fixtures, differential corpus and migration golden), the IR's JSON Schema (`ir.schema.json`, normative), the canonical-wire vectors, the refusal-code registry, the strict-input cases, and the runner (`run.mjs`, `kit.mjs`) that sends all of it to one engine over the protocol in `PROTOCOL.md`. A vector goes here, not in one engine's tests. |
 | `conformance/client/` | The client kit: transcripts of a host, request by request and push by push (`transcripts/`), the machines only it drives (`machines/`), the fake host that plays them (`host.mjs`) and the runner (`run.mjs`) that drives one client's testee through them over the protocol in its `PROTOCOL.md`. The TypeScript client (`ts/tools/conformance/client-testee-ts.mjs`), the C# one (`ClientConformanceTests`) and the Rust one (`rust/client`) pass it. |
+| `conformance/operations/` | The operations kit: transcripts that hold the operations clients `trax client --operations` writes, TypeScript and C#, to one transport and error behaviour, played on the client kit's host. Its fixture's TypeScript client is committed under `ts/tools/conformance/operations/client/` and run by vitest; the C# one is in Trax.Cli's tests (`OperationsConformanceTests`), which also check both are what the CLI generates. See its `PROTOCOL.md`. |
 | `docs/adr/` | This folder's decisions, for every language. |
 
 Another language's engine gets a directory of its own beside `dotnet/`, `ts/` and `rust/`, and joins the
@@ -126,6 +127,7 @@ node conformance/run.mjs --testee node ts/tools/conformance/testee-ts.mjs
 node conformance/client/run.mjs --testee node ts/tools/conformance/client-testee-ts.mjs
 node conformance/run.mjs --testee rust/target/release/trax-state-machine-testee
 node conformance/client/run.mjs --testee rust/target/release/trax-state-machine-client-testee
+node conformance/operations/run.mjs --testee node ts/tools/conformance/operations-testee-ts.mjs
 ```
 
 ## CI

@@ -1,0 +1,13 @@
+{
+  "about": "A subscription goes by its id with its variables, hands on each push's data as the host sent it, and ends when the host completes it.",
+  "steps": [
+    {"client": "subscribe", "operation": "Changes", "variables": {"domain": "RUN"}, "expect": {"subscribed": true}},
+    {"subscribe": "Changes", "variables": {"domain": "RUN"}},
+    {"push": {"onDataChanged": {"domain": "RUN", "id": "1"}}},
+    {"push": {"onDataChanged": {"domain": "QUEUE", "id": null}}},
+    {"events": [{"next": {"onDataChanged": {"domain": "RUN", "id": "1"}}}, {"next": {"onDataChanged": {"domain": "QUEUE", "id": null}}}]},
+    {"complete": true},
+    {"events": [{"next": {"onDataChanged": {"domain": "RUN", "id": "1"}}}, {"next": {"onDataChanged": {"domain": "QUEUE", "id": null}}}, {"ended": "complete"}]},
+    {"quiet": 100}
+  ]
+}

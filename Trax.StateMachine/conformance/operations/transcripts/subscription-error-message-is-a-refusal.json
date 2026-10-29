@@ -1,0 +1,10 @@
+{
+  "about": "An error message on a subscription ends the stream with the client's typed operation error, coded as the first error.",
+  "steps": [
+    {"client": "subscribe", "operation": "Changes", "variables": {"domain": "RUN"}, "expect": {"subscribed": true}},
+    {"subscribe": "Changes", "variables": {"domain": "RUN"}},
+    {"streamError": [{"message": "Not allowed.", "extensions": {"code": "AUTH_NOT_AUTHORIZED"}}]},
+    {"events": [{"ended": "refused", "code": "AUTH_NOT_AUTHORIZED"}]},
+    {"quiet": 100}
+  ]
+}
