@@ -309,6 +309,30 @@ describe('createMachineServer change stream', () => {
     expect(socket.subscriptions).toHaveLength(3);
   });
 
+  it('backs off further while each new stream ends after its first push, and starts over once one delivers a second', () => {
+    vi.useFakeTimers();
+    const { socket } = follow([100, 200, 400]);
+    const snapshot = (revision: number) => socket.push({ rowId: 7, revision, state: 'Locked', context: {} });
+
+    socket.last.sink.complete();
+    vi.advanceTimersByTime(100);
+    expect(socket.subscriptions).toHaveLength(2);
+
+    // Every new stream's first push is the instance as it is: it says nothing about whether the stream holds.
+    snapshot(1);
+    socket.last.sink.complete();
+    vi.advanceTimersByTime(199);
+    expect(socket.subscriptions).toHaveLength(2);
+    vi.advanceTimersByTime(1);
+    expect(socket.subscriptions).toHaveLength(3);
+
+    snapshot(1);
+    snapshot(2);
+    socket.last.sink.complete();
+    vi.advanceTimersByTime(100);
+    expect(socket.subscriptions).toHaveLength(4);
+  });
+
   it('closes the socket subscription and any pending resubscription when closed', () => {
     vi.useFakeTimers();
     const { socket, close } = follow([100]);

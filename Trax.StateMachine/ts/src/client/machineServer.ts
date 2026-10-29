@@ -52,7 +52,8 @@ export interface MachineServerOptions extends HttpExecutorOptions {
   socket: PersistedSubscriptionSocket;
   /**
    * Delays, in milliseconds, before subscribing again after a stream that ended without saying why (its host stopped,
-   * or the socket gave up). The last delay repeats for as long as the stream is wanted. A socket the host refused (a
+   * or the socket gave up). The last delay repeats for as long as the stream is wanted, and the schedule starts over
+   * once a stream has delivered a second push: every new stream's first is the instance as it is then. A socket the host refused (a
    * close with 4401 or 4403), or a stream it refused with a GraphQL error coded `TRAX_AUTHORIZATION`,
    * `AUTH_NOT_AUTHENTICATED` or `AUTH_NOT_AUTHORIZED`, is not subscribed again: it ends the controller as
    * `UNAUTHENTICATED` or `FORBIDDEN`.
@@ -263,6 +264,9 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
       if (!wanted) return;
       // Whether this stream ended for good (the instance is gone, or this client is outdated), or delivered anything.
       let ended = false;
+      // The snapshots this stream delivered. Its first is the instance as it is when it opens, which every new stream
+      // sends, so only a second says the stream held and the backoff starts over.
+      let pushes = 0;
       const deliver = (message: StreamMessage) => {
         if (!wanted || ended) return;
         if (message.type === 'gone' || message.type === 'client-outdated' || message.type === 'ended') ended = true;
@@ -302,7 +306,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
             if (change.gone) return deliver({ type: 'gone' });
             if (change.reload) return deliver({ type: 'reconnected' });
             if (change.state == null || change.revision == null) return;
-            attempt = 0;
+            if (++pushes === 2) attempt = 0;
             deliver({
               type: 'snapshot',
               snapshot: {
