@@ -8,11 +8,15 @@ namespace Trax.StateMachine.Tests.Meta.Tests;
 /// member of the three clients side by side. Every C# name the table gives must be public in the client's assemblies,
 /// and every public member of a type the table covers must be in it, so a member added here, or in another client, is
 /// a row the pull request has to write. The TypeScript and Rust clients run the same check
-/// (<c>ts/src/clientSurface.test.ts</c>, <c>rust/client/tests/client_surface.rs</c>).
+/// (<c>ts/src/clientSurface.test.ts</c>, <c>rust/client/tests/client_surface.rs</c>). Enforces
+/// docs/adr/0004-the-machine-clients-share-one-surface-table.md.
 /// </summary>
 [TestFixture]
+[Property("adr", "docs/adr/0004-the-machine-clients-share-one-surface-table.md")]
 public class ClientSurfaceTests
 {
+    private const string Adr = "docs/adr/0004-the-machine-clients-share-one-surface-table.md";
+
     private const int CSharp = 2;
 
     private const string TypesHeader = "| Type | TypeScript | C# | Rust |";
@@ -56,7 +60,7 @@ public class ClientSurfaceTests
             .Should()
             .BeEmpty(
                 "the client surface table names C# members that Trax.StateMachine.Client and Trax.Client do not "
-                    + "make public. Fix the row, or the client:\n  "
+                    + $"make public ({Adr}). Fix the row, or the client:\n  "
                     + string.Join("\n  ", missing)
             );
     }
@@ -88,7 +92,7 @@ public class ClientSurfaceTests
             .BeEmpty(
                 "every public member of a type the client surface table covers has a row in "
                     + "conformance/client/PROTOCOL.md, with its TypeScript and Rust names, or `—` and the reason a "
-                    + "language has none. Missing:\n  "
+                    + $"language has none ({Adr}). Missing:\n  "
                     + string.Join("\n  ", missing)
             );
     }

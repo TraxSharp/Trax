@@ -41,7 +41,8 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | Area | ADRs |
 | --- | --- |
 | `data-model` | [0001](./0001-a-request-id-replays-only-the-request-it-recorded.md), [0002](./0002-only-the-effect-runner-reaches-a-committed-state.md), [0003](./0003-a-machine-instance-history-is-written-with-its-snapshot.md) |
-| `platform` | [0001](./0001-a-request-id-replays-only-the-request-it-recorded.md), [0002](./0002-only-the-effect-runner-reaches-a-committed-state.md), [0003](./0003-a-machine-instance-history-is-written-with-its-snapshot.md) |
+| `platform` | [0001](./0001-a-request-id-replays-only-the-request-it-recorded.md), [0002](./0002-only-the-effect-runner-reaches-a-committed-state.md), [0003](./0003-a-machine-instance-history-is-written-with-its-snapshot.md), [0004](./0004-the-machine-clients-share-one-surface-table.md) |
+| `testing` | [0004](./0004-the-machine-clients-share-one-surface-table.md) |
 
 ## All of them
 
@@ -50,3 +51,4 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0001](./0001-a-request-id-replays-only-the-request-it-recorded.md) | A request id replays only the request it recorded | platform, data-model |
 | [0002](./0002-only-the-effect-runner-reaches-a-committed-state.md) | Only the effect runner puts a draft into a committed state or an effect's target | platform, data-model |
 | [0003](./0003-a-machine-instance-history-is-written-with-its-snapshot.md) | A machine instance's history is written by the store, with its snapshot, and goes with the instance | data-model, platform |
+| [0004](./0004-the-machine-clients-share-one-surface-table.md) | The machine clients share one surface, written down once, and each language is held to it | platform, testing |
