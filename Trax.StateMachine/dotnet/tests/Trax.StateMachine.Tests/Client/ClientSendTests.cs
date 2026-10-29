@@ -225,6 +225,29 @@ public class ClientSendTests
     }
 
     [Test]
+    public async Task A_send_and_a_sync_before_start_wait_for_it_and_then_go_out()
+    {
+        var server = new StepServer();
+        using var controller = Open(server, id: "i-1", retryDelays: []);
+        var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
+        var sync = controller.SyncToAsync("Unlocked", null, []);
+
+        var start = controller.StartAsync();
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(At(1, "Locked"))
+        );
+        await start.WaitAsync(Wait);
+        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        sent.Trigger.Should().Be("Coin");
+        sent.Answer.SetResult(
+            ServerAnswer.Of(At(2, "Unlocked", new JsonObject { ["paidWith"] = "quarter" }))
+        );
+
+        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        (await sync.WaitAsync(Wait)).Should().BeOfType<SyncOutcome.Synced>();
+    }
+
+    [Test]
     public async Task A_send_after_a_refused_start_fails_NOT_READY()
     {
         var server = new StepServer();

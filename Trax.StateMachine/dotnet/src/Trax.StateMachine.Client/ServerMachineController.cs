@@ -283,6 +283,9 @@ public sealed class ServerMachineController : IDisposable
 
     // While the start or the first read, or a retried start, is in flight: a send waits for it rather than failing.
     private bool _opening;
+
+    // Once a start or a first read has begun. A send before it waits for StartAsync, as one during it does.
+    private bool _opened;
     private readonly List<TaskCompletionSource<SendOutcome>> _startWaiters = [];
 
     private bool _disposed;
@@ -357,9 +360,9 @@ public sealed class ServerMachineController : IDisposable
     /// <remarks>
     /// A trigger the machine does not declare as an event is refused at once and sent nowhere, with the code the engine's
     /// advance refuses it with: <c>OUTCOME_BOUND</c> for an invoked train's outcome, <c>TIMER_BOUND</c> for a state's
-    /// timer, <c>NO_TRANSITION</c> for any other. A send while there is no instance to send to, and none is being
-    /// started or read, fails <see cref="ClientProblemCodes.NotReady"/>; one sent while the start or the first read is in
-    /// flight waits for it.
+    /// timer, <c>NO_TRANSITION</c> for any other. A send made before <see cref="StartAsync"/>, or while the start or the
+    /// first read is in flight, waits for it. Once a start or a first read has ended without an instance (refused, or
+    /// given up), a send fails <see cref="ClientProblemCodes.NotReady"/>, and so does one waiting for it.
     /// </remarks>
     /// <param name="trigger">The trigger's name, as the machine declares it (<c>Coin</c>).</param>
     /// <param name="input">The trigger's input, or null when it takes none.</param>
@@ -586,6 +589,7 @@ public sealed class ServerMachineController : IDisposable
     private async Task OpeningAsync(Func<Task> open)
     {
         _opening = true;
+        _opened = true;
         try
         {
             await open();
@@ -597,8 +601,9 @@ public sealed class ServerMachineController : IDisposable
         }
     }
 
-    // Whether there is no instance to send to and none is coming: no snapshot, and no start or read in flight.
-    private bool Unready() => _confirmed is null && !_opening && !_reloading;
+    // Whether there is no instance to send to and none is coming: a start or a first read has ended with no snapshot,
+    // and no other is in flight. Before StartAsync one is still coming.
+    private bool Unready() => _opened && _confirmed is null && !_opening && !_reloading;
 
     // Fails every send waiting for an instance that is not coming, and wakes every sync waiting for one.
     private void FailUnready()
