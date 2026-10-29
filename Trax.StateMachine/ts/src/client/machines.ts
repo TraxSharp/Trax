@@ -21,6 +21,7 @@
  */
 import { eventRefusal } from '../machine';
 import { RefusalCode, type ProblemCode } from '../results';
+import { MAX_STORED_DEPTH } from '../storedText';
 import type { MachineSpec, TypedMachine } from '../typed';
 import {
   DEFAULT_MAX_RESPONSE_SIZE,
@@ -111,17 +112,25 @@ interface TypedAnswer {
   problem?: { code: ProblemCode; message: string } | null;
 }
 
-// A context with every null member left out, at every depth.
-export const withoutNulls = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(withoutNulls);
-  if (value !== null && typeof value === 'object')
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .filter(([, v]) => v !== null && v !== undefined)
-        .map(([k, v]) => [k, withoutNulls(v)]),
-    );
-  return value;
+// A context with every null member left out, at every depth. Throws for one nested deeper than a stored snapshot may
+// be (MAX_STORED_DEPTH containers, the snapshot that holds the context counting as one): no store wrote it.
+export const withoutNulls = (value: unknown): unknown => stripNulls(value, 2);
+
+const stripNulls = (value: unknown, level: number): unknown => {
+  if (value === null || typeof value !== 'object') return value;
+  if (level > MAX_STORED_DEPTH)
+    throw new Error(`The server's answer holds a context nested deeper than ${MAX_STORED_DEPTH} levels.`);
+  if (Array.isArray(value)) return value.map((v) => stripNulls(v, level + 1));
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== null && v !== undefined)
+      .map(([k, v]) => [k, stripNulls(v, level + 1)]),
+  );
 };
+
+// Whether `value` is a context: an object, not an array.
+export const isContext = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
 
 const parseInput = (input: unknown): Record<string, unknown> | undefined => {
   if (typeof input !== 'string' || input.length === 0) return undefined;
@@ -241,12 +250,17 @@ export function createMachineExecutor(
     const output = (answer: TypedAnswer | null | undefined): SnapshotOutput | null => {
       if (!answer) return null;
       if (answer.problem) return { snapshot: null, problem: answer.problem, id: answer.id ?? null };
+      // An answer with neither a problem nor a snapshot is malformed: a transport failure, not a snapshot this
+      // client's machine cannot read, which would stop it as outdated.
+      const context = answer.context ?? {};
+      if (typeof answer.state !== 'string' || !isContext(context))
+        throw new Error("The server's answer holds no state, or a context that is not an object.");
       return {
         snapshot: JSON.stringify({
           machine: machineId,
           version: typed.machine.version,
           state: answer.state,
-          context: withoutNulls(answer.context ?? {}),
+          context: withoutNulls(context),
         }),
         problem: null,
         id: answer.id ?? null,

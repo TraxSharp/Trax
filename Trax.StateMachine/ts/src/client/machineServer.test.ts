@@ -511,6 +511,33 @@ describe('ServerMachineController over createMachineServer', () => {
     expect(socket.last.closed).toBe(true);
   });
 
+  it('fails a send answered malformed as a transport error and keeps running, and drops a malformed push', async () => {
+    const deep = Array.from({ length: 70 }).reduce<unknown>((inner) => ({ inner }), 'x');
+    const { fetch } = http(
+      answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, problem: null }),
+      answer('coin', { id: 'i-1', revision: 2, state: null, context: null, problem: null }),
+      answer('coin', { id: 'i-1', revision: 2, state: 'Unlocked', context: { paidWith: 'dollar', deep }, problem: null }),
+    );
+    const { server, socket } = serverOver(fetch);
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      newRequestId: sequentialRequestIds(),
+    });
+    await controller.start();
+
+    for (let i = 0; i < 2; i++)
+      expect(await controller.send('Coin', { coin: 'dollar' })).toMatchObject({
+        outcome: 'failed',
+        problem: { code: 'TRANSPORT_ERROR' },
+      });
+    expect(controller.get()).toMatchObject({ status: 'ready', error: null, revision: 1 });
+
+    expect(() => socket.push({ rowId: 7, revision: 3, state: 'Locked', context: { deep } })).not.toThrow();
+    expect(controller.get()).toMatchObject({ status: 'ready', error: null, revision: 1 });
+  });
+
   it('stops with the error of a stream refused as CONNECTION_CHANGED, and sends nothing more', async () => {
     vi.useFakeTimers();
     const { sent, fetch } = http(

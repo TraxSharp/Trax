@@ -18,7 +18,7 @@ import type {
   StartResponse,
   StreamMessage,
 } from '../server/serverController';
-import { createMachineExecutor, machineField, withoutNulls, type MachineDocument } from './machines';
+import { createMachineExecutor, isContext, machineField, withoutNulls, type MachineDocument } from './machines';
 import { createSnapshotClient, type HttpExecutorOptions, type SnapshotOutput } from './transport';
 
 /** What a subscription delivers: one GraphQL result per event, as graphql-ws hands it to a sink. */
@@ -306,6 +306,15 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
             if (change.gone) return deliver({ type: 'gone' });
             if (change.reload) return deliver({ type: 'reconnected' });
             if (change.state == null || change.revision == null) return;
+            // A push whose context no store could have written is dropped, as one without a state is.
+            let context: Record<string, unknown>;
+            try {
+              const given = change.context ?? {};
+              if (!isContext(given)) return;
+              context = withoutNulls(given) as Record<string, unknown>;
+            } catch {
+              return;
+            }
             if (++pushes === 2) attempt = 0;
             deliver({
               type: 'snapshot',
@@ -313,7 +322,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
                 rowId: change.rowId == null ? null : String(change.rowId),
                 revision: change.revision,
                 state: change.state,
-                context: withoutNulls(change.context ?? {}) as Record<string, unknown>,
+                context,
                 dueAt: change.dueAt,
               },
             });
