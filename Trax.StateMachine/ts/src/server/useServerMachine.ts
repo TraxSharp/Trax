@@ -8,6 +8,8 @@ import {
   type SendOutcome,
   type ServerMachineError,
   type ServerMachineView,
+  type SyncOptions,
+  type SyncOutcome,
 } from './serverController';
 
 // The React binding over ServerMachineController: one instance, owned by the server, predicted by the twin.
@@ -70,6 +72,15 @@ export interface UseServerMachineResult<Spec extends MachineSpec> {
    * be a new request. Never throws.
    */
   retry(): Promise<SendOutcome>;
+  /**
+   * Whether a `syncTo` is running, or the last one did not settle `synced`: hold a leave guard on it.
+   */
+  unsaved: boolean;
+  /**
+   * Brings the server to `target` with the fields event applied, moving through `navigation`, one planned event at a
+   * time (`ServerMachineController.syncTo`). Never throws.
+   */
+  syncTo(target: StateOf<Spec>, options: SyncOptions<Spec>): Promise<SyncOutcome>;
   /** Whether the twin allows the event from what is shown. False while loading and once stopped. */
   can<T extends TriggerOf<Spec>>(trigger: T, ...input: InputArgs<Spec, T>): boolean;
   /** The events the twin allows from what is shown. */
@@ -87,9 +98,10 @@ const LOADING: ServerMachineView<MachineSpec> = {
   pending: false,
   problem: null,
   error: null,
+  unsaved: false,
 };
 
-const NOT_READY: SendOutcome = {
+const NOT_READY: { outcome: 'failed'; problem: Problem } = {
   outcome: 'failed',
   problem: { kind: 'rejected', code: ClientProblemCode.NotReady, message: 'The machine has not opened yet.' },
 };
@@ -243,6 +255,11 @@ export function useServerMachine<Spec extends MachineSpec>(
     (): Promise<SendOutcome> => (controller ? controller.retry() : Promise.resolve(NOT_READY)),
     [controller],
   );
+  const syncTo = useCallback(
+    (target: StateOf<Spec>, syncOptions: SyncOptions<Spec>): Promise<SyncOutcome> =>
+      controller ? controller.syncTo(target, syncOptions) : Promise.resolve(NOT_READY),
+    [controller],
+  );
   const can = useCallback(
     <T extends TriggerOf<Spec>>(trigger: T, ...input: InputArgs<Spec, T>): boolean =>
       controller ? controller.can(trigger, ...input) : false,
@@ -260,8 +277,10 @@ export function useServerMachine<Spec extends MachineSpec>(
     pending: view.pending,
     problem: view.problem,
     error: view.error,
+    unsaved: view.unsaved,
     send,
     retry,
+    syncTo,
     can,
     available: controller ? controller.available() : [],
   };

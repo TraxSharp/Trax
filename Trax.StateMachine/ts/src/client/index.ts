@@ -80,4 +80,6 @@ export {
   type ServerSnapshot,
   type StartResponse,
   type StreamMessage,
+  type SyncOptions,
+  type SyncOutcome,
 } from '../server/serverController';

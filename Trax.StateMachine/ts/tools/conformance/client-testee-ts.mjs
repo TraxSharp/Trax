@@ -31,13 +31,21 @@ function viewOf(view) {
     problem: view.problem?.code ?? null,
     error: view.error?.code ?? null,
     deleted: view.error?.deleted ?? null,
+    unsaved: view.unsaved,
   };
 }
 
 function outcomeOf(outcome) {
   switch (outcome.outcome) {
     case "confirmed":
-      return { outcome: "confirmed", state: outcome.snapshot.state, revision: outcome.snapshot.revision };
+    case "synced":
+      return { outcome: outcome.outcome, state: outcome.snapshot.state, revision: outcome.snapshot.revision };
+    case "superseded":
+    case "unreachable":
+    case "exceeded":
+      return { outcome: outcome.outcome };
+    case "invalid":
+      return outcome;
     case "stopped":
       return { outcome: "stopped", code: outcome.error.code };
     default:
@@ -102,6 +110,8 @@ export function createClientTestee(engine) {
     },
     send: async (r) => outcomeOf(await (r.input == null ? controller.send(r.trigger) : controller.send(r.trigger, r.input))),
     retry: async () => outcomeOf(await controller.retry()),
+    sync: async (r) =>
+      outcomeOf(await controller.syncTo(r.target, { fields: r.fields ?? null, navigation: r.navigation })),
     view: async () => viewOf(controller.get()),
     dispose: async () => {
       close();

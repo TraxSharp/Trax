@@ -116,6 +116,8 @@ exports[`the published exports > match the committed baseline 1`] = `
     "StartResult",
     "StreamMessage",
     "SubscriptionSink",
+    "SyncOptions",
+    "SyncOutcome",
     "TRANSPORT_ERROR",
     "TRANSPORT_FAILED",
     "TypedMachineOperations",
