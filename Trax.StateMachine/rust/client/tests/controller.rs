@@ -651,3 +651,31 @@ async fn a_sync_plans_off_the_controllers_task() {
         "{outcome:?}"
     );
 }
+
+#[tokio::test]
+async fn start_settles_once_its_first_read_has_settled_not_while_it_is_retried() {
+    let (ir, hash) = turnstile();
+    let (server, mut script) = scripted();
+    let mut options = ServerMachineOptions::new(ir, hash, server);
+    options.id = Some("i-1".into());
+    options.retry_delays = Some(vec![Duration::from_millis(10)]);
+    let controller = ServerMachineController::new(options).unwrap();
+
+    let started = controller.start();
+    tokio::pin!(started);
+    let first = script.read().await;
+    let _ = first.send(Err(TransportError("dropped".into())));
+    let second = script.read().await;
+
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut started)
+            .await
+            .is_err(),
+        "start settled while its read was retried"
+    );
+    let _ = second.send(stored(snapshot(None, 1, "Locked")));
+    tokio::time::timeout(Duration::from_secs(5), started)
+        .await
+        .expect("start never settled");
+    assert_eq!(controller.view().revision, Some(1));
+}

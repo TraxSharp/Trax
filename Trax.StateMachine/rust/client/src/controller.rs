@@ -303,7 +303,8 @@ impl ServerMachineController {
     }
 
     /// Opens the instance: subscribes first, then reads it, so no write falls between the two. Without an id it starts
-    /// one and subscribes to the id the server minted. Resolves once the start or the first read has been answered.
+    /// one and subscribes to the id the server minted. Resolves once the start or the first read has settled,
+    /// after any retry of `SERVER_OUTDATED` or of a failed read, or the controller has stopped.
     pub fn start(&self) -> impl std::future::Future<Output = ()> + Send + 'static {
         let (reply, answer) = oneshot::channel();
         let _ = self.commands.send(Msg::Start(reply));
@@ -707,8 +708,10 @@ impl<S: MachineServer> Actor<S> {
                 attempt,
                 result,
             } => {
-                self.on_created(request_id, attempt, result);
-                self.settle_open();
+                // A start retried under its request id has not settled yet: `start` waits for the last attempt.
+                if self.on_created(request_id, attempt, result) {
+                    self.settle_open();
+                }
             }
             Msg::Read {
                 row_id,
@@ -725,8 +728,10 @@ impl<S: MachineServer> Actor<S> {
                     }
                     Ok(ServerAnswer::Stored { .. }) => None,
                 };
-                self.on_read(row_id, attempt, result);
-                self.settle_open();
+                // So does a read retried after a transport failure or SERVER_OUTDATED.
+                if self.on_read(row_id, attempt, result) {
+                    self.settle_open();
+                }
                 if !self.reloading {
                     self.read_settled(failure);
                 }
@@ -819,9 +824,10 @@ impl<S: MachineServer> Actor<S> {
         });
     }
 
-    fn on_created(&mut self, request_id: String, attempt: usize, result: Result<ServerAnswer, TransportError>) {
+    // Returns false when the start is tried again, true when it has settled.
+    fn on_created(&mut self, request_id: String, attempt: usize, result: Result<ServerAnswer, TransportError>) -> bool {
         if self.disposed || self.error.is_some() {
-            return;
+            return true;
         }
         match result {
             Err(error) => {
@@ -841,7 +847,7 @@ impl<S: MachineServer> Actor<S> {
                             attempt: attempt + 1,
                         },
                     );
-                    return;
+                    return false;
                 }
                 if problem.code == codes::CLIENT_OUTDATED {
                     self.stop(MachineError {
@@ -851,7 +857,7 @@ impl<S: MachineServer> Actor<S> {
                     });
                     let error = self.error.clone().unwrap();
                     self.settle_start(SendOutcome::Stopped(error));
-                    return;
+                    return true;
                 }
                 let retryable = problem.code == codes::SERVER_OUTDATED;
                 let p = refusal(&problem.code, &problem.message);
@@ -873,7 +879,7 @@ impl<S: MachineServer> Actor<S> {
                     self.start_failed = true;
                     self.emit();
                     self.settle_start(SendOutcome::Failed(problem));
-                    return;
+                    return true;
                 };
                 self.id = Some(id.clone());
                 self.problem = None;
@@ -886,6 +892,7 @@ impl<S: MachineServer> Actor<S> {
                 self.pump();
             }
         }
+        true
     }
 
     fn settle_start(&mut self, outcome: SendOutcome) {
@@ -974,9 +981,15 @@ impl<S: MachineServer> Actor<S> {
         });
     }
 
-    fn on_read(&mut self, row_id: Option<String>, attempt: usize, result: Result<ServerAnswer, TransportError>) {
+    // Returns false when the read is tried again, true when it has settled.
+    fn on_read(
+        &mut self,
+        row_id: Option<String>,
+        attempt: usize,
+        result: Result<ServerAnswer, TransportError>,
+    ) -> bool {
         if self.disposed || self.error.is_some() {
-            return;
+            return true;
         }
         match result {
             Err(error) => {
@@ -990,9 +1003,9 @@ impl<S: MachineServer> Actor<S> {
                             attempt: attempt + 1,
                         },
                     );
-                } else {
-                    self.end_read();
+                    return false;
                 }
+                self.end_read();
             }
             Ok(ServerAnswer::Refused(problem)) => {
                 if problem.code == codes::SERVER_OUTDATED && attempt < self.retry_delays.len() {
@@ -1003,7 +1016,7 @@ impl<S: MachineServer> Actor<S> {
                             attempt: attempt + 1,
                         },
                     );
-                    return;
+                    return false;
                 }
                 self.end_read();
                 if problem.code == codes::CLIENT_OUTDATED {
@@ -1052,6 +1065,7 @@ impl<S: MachineServer> Actor<S> {
                 self.pump();
             }
         }
+        true
     }
 
     fn end_read(&mut self) {
@@ -1564,7 +1578,9 @@ impl<S: MachineServer> Actor<S> {
         self.error = Some(error.clone());
         self.status = MachineStatus::Stopped;
         self.close();
+        // A retry the opening waits for will not run.
         self.epoch += 1;
+        self.settle_open();
         self.sending = false;
         let stranded: Vec<Queued> = self.queue.drain(..).collect();
         self.emit();
