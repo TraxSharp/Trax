@@ -740,4 +740,90 @@ describe('the time-based defaults', () => {
     expect(DEFAULT_RETRY_DELAYS).toEqual([250, 500, 1000, 2000, 4000]);
     expect(DEFAULT_MAX_RESPONSE_SIZE).toBe(16 * 1024 * 1024);
   });
+
+  // A server and a controller built without any of the options, so each default above is the one in force.
+  const unconfigured = (fetch: typeof globalThis.fetch, socket = new FakeSocket()) => {
+    const server = createMachineServer('/graphql', { fetch, machine: turnstile, documents: DOCUMENTS, socket });
+    const controller = new ServerMachineController<TurnstileSpec>({ machine: turnstile, server, id: 'i-1' });
+    return { server, controller, socket };
+  };
+
+  it('a server built without a request timeout gives up on a request after 30 seconds', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const fetch = ((_url: string, init: RequestInit) => {
+      signal = init.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    }) as unknown as typeof globalThis.fetch;
+    const { server } = unconfigured(fetch);
+
+    let settled = false;
+    const read = server.get('i-1').then(
+      () => 'answered',
+      () => 'rejected',
+    );
+    void read.then(() => (settled = true));
+    await vi.advanceTimersByTimeAsync(DEFAULT_REQUEST_TIMEOUT - 1);
+    expect(settled).toBe(false);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(await read).toBe('rejected');
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('a server built without a response size reads an answer up to 16 MiB and refuses a larger one', async () => {
+    const answerOf = (size: number) => {
+      const body = JSON.stringify(
+        answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, dueAt: null, problem: null }),
+      );
+      return body + ' '.repeat(size - body.length);
+    };
+    const serve = (body: string) =>
+      (async () => new Response(body, { status: 200 })) as unknown as typeof globalThis.fetch;
+
+    const within = unconfigured(serve(answerOf(DEFAULT_MAX_RESPONSE_SIZE))).server;
+    expect(await within.get('i-1')).toMatchObject({ kind: 'ok', snapshot: { revision: 1, state: 'Locked' } });
+
+    const past = unconfigured(serve(answerOf(DEFAULT_MAX_RESPONSE_SIZE + 1))).server;
+    await expect(past.get('i-1')).rejects.toThrow(/larger than 16777216 bytes/);
+  });
+
+  it('a controller built without retry delays retries SERVER_OUTDATED after 250, 500, 1000, 2000 and 4000 ms', async () => {
+    vi.useFakeTimers();
+    const sent: number[] = [];
+    const outdated = { data: { machines: { turnstile: { get: { problem: { code: 'SERVER_OUTDATED', message: 'Rolling.' } } } } } };
+    const fetch = (async () => {
+      sent.push(Date.now());
+      return new Response(JSON.stringify(outdated), { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+    const { controller } = unconfigured(fetch);
+    const begun = Date.now();
+
+    const started = controller.start();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await started;
+
+    expect(sent.map((at) => at - begun)).toEqual([0, 250, 750, 1750, 3750, 7750]);
+  });
+
+  it('a server built without resubscribe delays subscribes again after 1, 2, then 5 seconds', () => {
+    vi.useFakeTimers();
+    const { server, socket } = unconfigured(http().fetch);
+    server.subscribe('i-1', () => {});
+
+    const waits: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const before = socket.subscriptions.length;
+      socket.last.sink.complete();
+      let waited = 0;
+      while (socket.subscriptions.length === before) {
+        vi.advanceTimersByTime(1);
+        waited++;
+      }
+      waits.push(waited);
+    }
+
+    expect(waits).toEqual([1000, 2000, 5000, 5000]);
+  });
 });
