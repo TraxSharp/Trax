@@ -555,6 +555,49 @@ async fn an_event_whose_request_panics_settles_failed_as_a_transport_error() {
     assert!(!controller.view().pending);
 }
 
+// A server whose subscribe panics, as a custom server's bug might; its read answers Locked and nothing else answers.
+struct SubscribePanics;
+
+impl MachineServer for SubscribePanics {
+    async fn start(&self, _: Option<Value>, _: String) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn event(&self, _: EventRequest) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn get(&self, _: String) -> Result<ServerAnswer, TransportError> {
+        stored(snapshot(None, 1, "Locked"))
+    }
+
+    fn subscribe(&self, _: String, _: StreamSink) -> Box<dyn Subscription> {
+        panic!("a custom server's bug")
+    }
+}
+
+#[tokio::test]
+async fn a_subscribe_that_panics_stops_the_controller_with_a_transport_error() {
+    let (ir, hash) = turnstile();
+    let mut options = ServerMachineOptions::new(ir, hash, SubscribePanics);
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+
+    tokio::time::timeout(Duration::from_secs(5), controller.start())
+        .await
+        .expect("the start never settled");
+    let outcome = tokio::time::timeout(Duration::from_secs(5), controller.send("Coin", None))
+        .await
+        .expect("the send never settled");
+
+    assert!(
+        matches!(&outcome, SendOutcome::Stopped(e) if e.code == "TRANSPORT_ERROR"),
+        "{outcome:?}"
+    );
+    let view = controller.view();
+    assert_eq!(view.error.as_ref().map(|e| e.code.as_str()), Some("TRANSPORT_ERROR"));
+}
+
 // A machine whose plans search widely: ten states any of them moves to, and three numbers each of them sets to one of
 // four values, so a plan to the state nothing reaches expands hundreds of snapshots before it is answered.
 fn sprawl() -> (Value, String) {

@@ -576,6 +576,11 @@ enum Msg {
     },
 }
 
+// The stream of a subscribe that panicked: there is nothing to close.
+struct NoStream;
+
+impl Subscription for NoStream {}
+
 enum Later {
     Create { request_id: String, attempt: usize },
     Read { row_id: Option<String>, attempt: usize },
@@ -968,10 +973,27 @@ impl<S: MachineServer> Actor<S> {
         self.stream_generation += 1;
         let generation = self.stream_generation;
         let commands = self.commands.clone();
+        let refused = commands.clone();
         let sink: crate::server::StreamSink = Arc::new(move |message| {
             let _ = commands.send(Msg::Stream { generation, message });
         });
-        self.stream = Some(self.server.subscribe(id, sink));
+        let server = &self.server;
+        match std::panic::catch_unwind(AssertUnwindSafe(|| server.subscribe(id, sink))) {
+            Ok(stream) => self.stream = Some(stream),
+            Err(_) => {
+                // A server whose subscribe panics (a custom server's bug) has no stream to follow: the controller stops
+                // as it does on a stream the host refused, once whatever opened it has run, and every waiter settles
+                // with that error.
+                self.stream = Some(Box::new(NoStream));
+                let _ = refused.send(Msg::Stream {
+                    generation,
+                    message: StreamMessage::Refused(ServerProblem {
+                        code: codes::TRANSPORT_ERROR.to_owned(),
+                        message: "The change stream could not be opened: the server's subscribe panicked.".to_owned(),
+                    }),
+                });
+            }
+        }
     }
 
     fn close(&mut self) {
