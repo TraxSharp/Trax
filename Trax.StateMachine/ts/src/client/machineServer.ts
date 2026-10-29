@@ -99,10 +99,10 @@ const CLIENT_OUTDATED = RefusalCode.ClientOutdated;
 const NOT_FOUND = RefusalCode.NotFound;
 
 /** The close codes a host turns a caller away with, and the code the controller stops with for each. */
-const REFUSED_CLOSES: Readonly<Record<number, string>> = {
-  4401: RefusalCode.Unauthenticated,
-  4403: RefusalCode.Forbidden,
-};
+const REFUSED_CLOSES: ReadonlyMap<number, string> = new Map([
+  [4401, RefusalCode.Unauthenticated],
+  [4403, RefusalCode.Forbidden],
+]);
 
 /**
  * The code and message a socket error ends the stream with when the host refused the socket (a close with 4401 or
@@ -111,7 +111,7 @@ const REFUSED_CLOSES: Readonly<Record<number, string>> = {
 const refusedOf = (error: unknown): { code: string; message: string } | null => {
   const close = (error as { code?: unknown } | null)?.code;
   if (typeof close !== 'number') return null;
-  const code = REFUSED_CLOSES[close];
+  const code = REFUSED_CLOSES.get(close);
   if (code === undefined) return null;
   const reason = (error as { reason?: unknown }).reason;
   const said = typeof reason === 'string' && reason !== '' ? ` ${reason}` : '';
@@ -123,11 +123,11 @@ const refusedOf = (error: unknown): { code: string; message: string } | null => 
  * answers them per operation (an expired token, an anonymous socket it acknowledged), so subscribing again would get
  * the same answer.
  */
-const REFUSED_ERRORS: Readonly<Record<string, string>> = {
-  TRAX_AUTHORIZATION: RefusalCode.Forbidden,
-  AUTH_NOT_AUTHENTICATED: RefusalCode.Unauthenticated,
-  AUTH_NOT_AUTHORIZED: RefusalCode.Forbidden,
-};
+const REFUSED_ERRORS: ReadonlyMap<string, string> = new Map([
+  ['TRAX_AUTHORIZATION', RefusalCode.Forbidden],
+  ['AUTH_NOT_AUTHENTICATED', RefusalCode.Unauthenticated],
+  ['AUTH_NOT_AUTHORIZED', RefusalCode.Forbidden],
+]);
 
 type GraphQLErrors = readonly { message?: unknown; extensions?: Record<string, unknown> }[];
 
@@ -214,7 +214,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
   const endOfErrors = (errors: GraphQLErrors | undefined): { code: string; message: string } | null => {
     const first = firstErrorOf(errors);
     if (!first) return null;
-    const refused = REFUSED_ERRORS[first.code];
+    const refused = REFUSED_ERRORS.get(first.code);
     if (refused !== undefined) return { code: refused, message: `The host refused the stream: ${first.message}` };
     return terminal.has(first.code) ? first : null;
   };

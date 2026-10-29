@@ -461,6 +461,22 @@ describe('createMachineServer change stream', () => {
     expect(socket.subscriptions).toHaveLength(2);
   });
 
+  it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(
+    'subscribes again after a stream error coded %s, which names no refusal',
+    (code) => {
+      vi.useFakeTimers();
+      const { socket, messages } = follow([100]);
+
+      socket.last.sink.next({ data: null, errors: [{ message: 'Odd.', extensions: { code } }] });
+      vi.advanceTimersByTime(100);
+      socket.last.sink.error([{ message: 'Odd.', extensions: { code } }]);
+      vi.advanceTimersByTime(100);
+
+      expect(messages).toEqual([]);
+      expect(socket.subscriptions).toHaveLength(3);
+    },
+  );
+
   it('subscribes again after an error whose code was not marked terminal', () => {
     vi.useFakeTimers();
     const { socket, messages } = follow([100], ['CONNECTION_CHANGED']);
