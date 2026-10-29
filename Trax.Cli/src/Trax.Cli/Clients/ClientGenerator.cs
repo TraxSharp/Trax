@@ -151,7 +151,7 @@ internal sealed partial class ClientGenerator
                     StringComparer.Ordinal
                 )
             )
-                names.Claim(TypeScript.Identifier(name, "fragment"), $"the fragment {name}");
+                names.Claim(TypeScript.TypeName(name, "fragment"), $"the fragment {name}");
             foreach (var operation in clientDocuments.Operations)
             {
                 var owner = $"the client document {operation.Name} ({operation.Source})";

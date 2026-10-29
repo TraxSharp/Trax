@@ -279,6 +279,11 @@ public class ClientDocumentsGeneratorTests
     [TestCase("string")]
     [TestCase("boolean")]
     [TestCase("undefined")]
+    // The type operators: a field typed `keyof` is the start of a type, not a type.
+    [TestCase("keyof")]
+    [TestCase("readonly")]
+    [TestCase("unique")]
+    [TestCase("infer")]
     public void A_type_named_as_a_global_generic_is_refused(string name)
     {
         var manifest = Manifest with

@@ -173,7 +173,7 @@ internal sealed class SdlTypes
                 .OrderBy(d => d.Key, StringComparer.Ordinal)
         )
         {
-            var identifier = TypeScript.Identifier(name, "GraphQL type");
+            var identifier = TypeScript.TypeName(name, "GraphQL type");
             sb.Append('\n');
             switch (definition)
             {
