@@ -268,6 +268,17 @@ public class ClientDocumentsGeneratorTests
     [TestCase("Record")]
     [TestCase("Readonly")]
     [TestCase("Partial")]
+    // TypeScript's primitive types cannot name a type alias at all.
+    [TestCase("bigint")]
+    [TestCase("symbol")]
+    [TestCase("unknown")]
+    [TestCase("never")]
+    [TestCase("object")]
+    [TestCase("any")]
+    [TestCase("number")]
+    [TestCase("string")]
+    [TestCase("boolean")]
+    [TestCase("undefined")]
     public void A_type_named_as_a_global_generic_is_refused(string name)
     {
         var manifest = Manifest with

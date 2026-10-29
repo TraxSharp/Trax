@@ -61,6 +61,7 @@ internal static partial class TypeScript
         "static",
         "yield",
         "any",
+        "bigint",
         "boolean",
         "number",
         "string",
