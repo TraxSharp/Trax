@@ -217,6 +217,27 @@ public partial class ClientGeneratorTests
         node.Calls.Should().BeEmpty();
     }
 
+    [TestCase("machine", "useRememberedMachine")]
+    [TestCase("server-machine", "useServerMachine")]
+    [TestCase("create-machine", "createMachineServer")]
+    public void A_machine_whose_functions_are_named_as_a_name_its_client_module_uses_is_refused(
+        string id,
+        string function
+    )
+    {
+        var node = new FakeNodeRunner();
+        var checkout = ClientManifests.Sample().Machines[0];
+        var manifest = ClientManifests.Sample() with { Machines = [checkout with { Id = id }] };
+
+        var render = () => Render(manifest, node);
+
+        render
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"*'{id}'*'{function}'*its generated modules use*");
+        node.Calls.Should().BeEmpty();
+    }
+
     [TestCase("states", "__proto__")]
     [TestCase("states", "constructor")]
     [TestCase("triggers", "toString")]

@@ -98,6 +98,21 @@ internal sealed partial class ClientGenerator
                         + "Rename it on the host."
                 );
             var pascal = TypeScript.Pascal(machine.Id);
+            // The client module declares these beside the camel id, in the same scope as its imports.
+            foreach (
+                var derived in new[]
+                {
+                    $"use{pascal}",
+                    $"useRemembered{pascal}",
+                    $"{camel}Server",
+                    $"{camel}Documents",
+                }
+            )
+                if (MachineModuleNames.Contains(derived))
+                    throw new InvalidOperationException(
+                        $"The machine '{machine.Id}' gets a function '{derived}', a name its generated modules use. "
+                            + "Rename it on the host."
+                    );
             names.Claim($"use{pascal}", machine.Id);
             names.Claim($"useRemembered{pascal}", machine.Id);
             names.Claim($"{camel}Server", machine.Id);
@@ -577,8 +592,8 @@ internal sealed partial class ClientGenerator
     }
 
     // The names a machine's client module and its twin declare or import beside the machine's own, which its camel id
-    // would hide or redeclare. The twin's (ir, irHash, typedMachineFromIr, sharedOutput<n>) are the engine's
-    // TWIN_MODULE_NAMES, which trax machine generate refuses through the engine.
+    // or the functions named after it would hide or redeclare. The twin's (ir, irHash, typedMachineFromIr,
+    // sharedOutput<n>) are the engine's TWIN_MODULE_NAMES, which trax machine generate refuses through the engine.
     private static readonly HashSet<string> MachineModuleNames = new(StringComparer.Ordinal)
     {
         "server",
@@ -604,6 +619,11 @@ internal sealed partial class ClientGenerator
         "ir",
         "irHash",
         "typedMachineFromIr",
+        "MachineDocument",
+        "PersistedSubscriptionSocket",
+        "UseRememberedMachineOptions",
+        "UseServerMachineOptions",
+        "TraxOperationError",
     };
 
     // A schema several of a twin's outcomes share is declared as sharedOutput0, sharedOutput1, ...
