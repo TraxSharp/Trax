@@ -372,7 +372,9 @@ impl ServerMachineController {
     /// each answer until nothing is left to send. A refusal that a re-read can explain (`GUARD_FAILED`,
     /// `NO_TRANSITION`, `CLIENT_DIVERGENCE`, `CONFLICT`) reads the instance once and plans again; a second settles the
     /// sync refused. An undetermined plan sends its events, then its trigger unpredicted. A later sync supersedes this
-    /// one once the event it has in flight answers. No sync sends more than twice the machine's states in events.
+    /// one once the event it has in flight answers. No sync sends more than twice the machine's states in events. A
+    /// fields input nested deeper than [`MAX_DEPTH`](trax_state_machine::MAX_DEPTH) settles it invalid with
+    /// [`PlanInvalid::Input`] and sends nothing.
     pub fn sync_to(
         &self,
         target: impl Into<String>,
@@ -385,10 +387,8 @@ impl ServerMachineController {
             .and_then(|f| f.input.as_ref())
             .is_some_and(Value::is_too_deep)
         {
-            let _ = reply.send(SyncOutcome::Refused(refusal(
-                codes::INVALID_INPUT,
-                "The input nests deeper than 512 arrays and objects.",
-            )));
+            // As the planner answers it, before anything copies the input.
+            let _ = reply.send(SyncOutcome::Invalid(PlanInvalid::Input));
         } else {
             let _ = self.commands.send(Msg::Sync {
                 target: target.into(),

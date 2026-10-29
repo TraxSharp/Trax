@@ -111,10 +111,15 @@ async fn main() {
                     }
                     "sync" => {
                         let target = request.get("target").and_then(|t| t.as_str()).unwrap_or("").to_owned();
+                        let too_deep = request.get("tooDeep").and_then(|t| t.as_str()) == Some("input");
                         let fields = request.get("fields").filter(|f| !f.is_null()).map(|f| {
                             PlanEvent::new(
                                 f.get("trigger").and_then(|t| t.as_str()).unwrap_or(""),
-                                f.get("input").cloned(),
+                                if too_deep {
+                                    Some(nested_too_deep())
+                                } else {
+                                    f.get("input").cloned()
+                                },
                             )
                         });
                         let navigation = request
@@ -182,6 +187,15 @@ async fn main() {
             }
         }
     }
+}
+
+// 600 arrays nested one in another, built in memory (PROTOCOL.md, sync, tooDeep): no reader takes the text.
+fn nested_too_deep() -> Value {
+    let mut deep = Value::Array(Vec::new());
+    for _ in 1..600 {
+        deep = Value::Array(vec![deep]);
+    }
+    deep
 }
 
 fn open(request: &Value) -> Result<Opened, String> {

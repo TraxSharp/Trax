@@ -72,7 +72,9 @@ public sealed class ClientTestee : IAsyncDisposable
                     request["fields"] is JsonObject fields
                         ? new PlannedEvent(
                             fields["trigger"]!.GetValue<string>(),
-                            fields["input"]?.DeepClone()
+                            request["tooDeep"]?.GetValue<string>() == "input"
+                                ? TooDeep()
+                                : fields["input"]?.DeepClone()
                         )
                         : null,
                     request["navigation"]!.AsArray().Select(t => t!.GetValue<string>()).ToList()
@@ -127,6 +129,15 @@ public sealed class ClientTestee : IAsyncDisposable
             ["outcome"] = problem.Code == ClientProblemCodes.TransportError ? "failed" : "refused",
             ["code"] = problem.Code,
         };
+    }
+
+    // 600 arrays nested one in another, built in memory (PROTOCOL.md, sync, tooDeep): no reader takes the text.
+    private static JsonNode TooDeep()
+    {
+        var deep = new JsonArray();
+        for (var i = 1; i < 600; i++)
+            deep = new JsonArray(deep);
+        return deep;
     }
 
     private static async Task<JsonObject> Settled(Task started)
@@ -271,7 +282,16 @@ public sealed class ClientTestee : IAsyncDisposable
                 ["outcome"] = "invalid",
                 ["code"] = code.ToWire(),
             },
-            SyncOutcome.Invalid => new JsonObject { ["outcome"] = "invalid" },
+            SyncOutcome.Invalid { Trigger: { } trigger } => new JsonObject
+            {
+                ["outcome"] = "invalid",
+                ["trigger"] = trigger,
+            },
+            SyncOutcome.Invalid i => new JsonObject
+            {
+                ["outcome"] = "invalid",
+                ["target"] = i.Target,
+            },
             SyncOutcome.Refused r => new JsonObject
             {
                 ["outcome"] = "refused",

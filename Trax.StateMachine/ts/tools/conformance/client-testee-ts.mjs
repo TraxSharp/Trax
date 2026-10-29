@@ -55,6 +55,13 @@ function outcomeOf(outcome) {
   }
 }
 
+/** 600 arrays nested one in another, built in memory (PROTOCOL.md, sync, tooDeep). */
+function tooDeep() {
+  let deep = [];
+  for (let i = 1; i < 600; i++) deep = [deep];
+  return deep;
+}
+
 /**
  * What a discard came to. The controller has no discard of its own: a page discards through the server it built, the
  * public `discard` of `createMachineServer`'s answer, under a request id it mints.
@@ -126,8 +133,15 @@ export function createClientTestee(engine) {
     },
     send: async (r) => outcomeOf(await (r.input == null ? controller.send(r.trigger) : controller.send(r.trigger, r.input))),
     retry: async () => outcomeOf(await controller.retry()),
-    sync: async (r) =>
-      outcomeOf(await controller.syncTo(r.target, { fields: r.fields ?? null, navigation: r.navigation })),
+    sync: async (r) => {
+      const fields = r.fields ?? null;
+      return outcomeOf(
+        await controller.syncTo(r.target, {
+          fields: r.tooDeep === "input" && fields !== null ? { ...fields, input: tooDeep() } : fields,
+          navigation: r.navigation,
+        }),
+      );
+    },
     view: async () => viewOf(controller.get()),
     can: async (r) => ({ can: r.input == null ? controller.can(r.trigger) : controller.can(r.trigger, r.input) }),
     available: async () => ({ triggers: [...controller.available()].sort() }),
