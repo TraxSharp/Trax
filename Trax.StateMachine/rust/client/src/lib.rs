@@ -20,7 +20,7 @@ pub use controller::{
 pub use graphql::{
     event_field, machine_field, ConfigError, ConnectionParams, GraphQLMachineServer, GraphQLMachineServerOptions,
     ManifestDocument, Provided, RequestHeaders, DEFAULT_CONNECT_TIMEOUT, DEFAULT_IDLE_TIMEOUT,
-    DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_RESUBSCRIBE_DELAYS,
+    DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESUBSCRIBE_DELAYS,
 };
 pub use server::{
     DueAt, EventRequest, MachineServer, ServerAnswer, ServerProblem, ServerSnapshot, StreamMessage, StreamSink,

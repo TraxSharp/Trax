@@ -192,6 +192,26 @@ and does not yet is a bug in the client, not an entry here.
 ]
 ```
 
+## Defaults
+
+A client built without these options has these values, in every language. The transcripts set shorter ones, so the
+kit cannot see them: each client's unit tests hold them (TypeScript's `machineServer.test.ts`, C#'s `TransportTests`,
+Rust's `tests/controller.rs`). A change to one is a change here and in all three.
+
+| Option | Default | What it bounds |
+| --- | --- | --- |
+| Request timeout | 30 s | One request, from sending it to the last byte of its answer. Past it the request fails as `TRANSPORT_ERROR`. C#'s also yields to a shorter `HttpClient.Timeout`. |
+| Retry delays | 250, 500, 1000, 2000, 4000 ms | The waits before each retry of a `SERVER_OUTDATED` answer and of a read the transport failed: one retry per delay, then the event fails and `retry` resends it. An empty list retries nothing. |
+| Resubscribe delays | 1000, 2000, 5000 ms | The waits before subscribing again after a stream ended without saying why. The last repeats for as long as the stream is wanted, and the schedule starts over once a stream has delivered its second push, since every stream's first is the instance as it is. An empty list is the default. |
+| Response size | 16 MiB | The largest answer body read; a larger one fails its request as `TRANSPORT_ERROR` and is not read past the limit. C# and Rust hold a socket message to the same limit. |
+
+The socket's own timing is not pinned, because the TypeScript client does not own its socket: a page builds its
+graphql-ws client and its options with it, and graphql-ws waits for an acknowledgement and stays silent for as long
+as it is not told otherwise. The C# socket gives up a connection not acknowledged within 10 seconds and pings at the
+WebSocket level every 15 seconds, closing one whose pong does not come within 15 more. The Rust one gives up a
+connection after the same 10 seconds, and an acknowledged socket silent for 60, sending a graphql-transport-ws `ping`
+halfway through the silence.
+
 ## What the host does
 
 The host answers nothing by itself. A request for an id that is not one of the transcript's documents is answered

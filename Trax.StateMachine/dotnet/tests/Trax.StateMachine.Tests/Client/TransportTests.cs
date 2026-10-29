@@ -253,6 +253,34 @@ public class TransportTests
             .Be(16 * 1024 * 1024);
     }
 
+    // The time-based defaults every client of the kit shares (conformance/client/PROTOCOL.md, "Defaults").
+    [Test]
+    public void The_time_based_defaults_are_the_client_kits()
+    {
+        new GraphQLMachineServerOptions
+        {
+            Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
+            Endpoint = new Uri("https://h/graphql"),
+            Machine = Turnstile,
+            Socket = new NoSocket(),
+        }
+            .RequestTimeout.Should()
+            .Be(TimeSpan.FromSeconds(30));
+        GraphQLMachineServer.DefaultRequestTimeout.Should().Be(TimeSpan.FromSeconds(30));
+        GraphQLMachineServer
+            .DefaultResubscribeDelays.Should()
+            .Equal(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5));
+        ServerMachineController
+            .DefaultRetryDelays.Should()
+            .Equal(
+                TimeSpan.FromMilliseconds(250),
+                TimeSpan.FromMilliseconds(500),
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(2),
+                TimeSpan.FromSeconds(4)
+            );
+    }
+
     [Test]
     public void A_request_timeout_that_is_neither_positive_nor_infinite_is_refused()
     {

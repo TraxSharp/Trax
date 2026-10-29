@@ -9,9 +9,10 @@ use trax_state_machine::Map;
 use trax_state_machine::Value;
 use trax_state_machine::{PlanEvent, PlanInvalid};
 use trax_state_machine_client::{
-    ir_hash, DueAt, EventRequest, MachineServer, MachineView, SendOutcome, ServerAnswer, ServerMachineController,
-    ServerMachineOptions, ServerProblem, ServerSnapshot, StreamMessage, StreamSink, Subscription, SyncOutcome,
-    TransportError,
+    ir_hash, DueAt, EventRequest, GraphQLMachineServerOptions, MachineServer, MachineView, SendOutcome, ServerAnswer,
+    ServerMachineController, ServerMachineOptions, ServerProblem, ServerSnapshot, StreamMessage, StreamSink,
+    Subscription, SyncOutcome, TransportError, DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_REQUEST_TIMEOUT,
+    DEFAULT_RESUBSCRIBE_DELAYS, DEFAULT_RETRY_DELAYS,
 };
 
 // The turnstile's IR as the kit commits it, and the hash a host's manifest gives it: the SHA-256 of that text.
@@ -733,4 +734,23 @@ async fn a_send_with_no_instance_to_send_to_settles_not_ready() {
         "{synced:?}"
     );
     assert!(!controller.view().pending);
+}
+
+// The defaults every client of the kit shares (conformance/client/PROTOCOL.md, "Defaults").
+#[test]
+fn the_defaults_are_the_client_kits() {
+    let ms = Duration::from_millis;
+    assert_eq!(DEFAULT_REQUEST_TIMEOUT, ms(30_000));
+    assert_eq!(DEFAULT_RESUBSCRIBE_DELAYS, [ms(1000), ms(2000), ms(5000)]);
+    assert_eq!(DEFAULT_RETRY_DELAYS, [ms(250), ms(500), ms(1000), ms(2000), ms(4000)]);
+    assert_eq!(DEFAULT_MAX_MESSAGE_SIZE, 16 * 1024 * 1024);
+    let options = GraphQLMachineServerOptions::new("https://h/graphql", "wss://h/graphql", "turnstile", Vec::new());
+    assert_eq!(options.request_timeout, DEFAULT_REQUEST_TIMEOUT);
+    assert_eq!(options.max_message_size, DEFAULT_MAX_MESSAGE_SIZE);
+    assert!(options.resubscribe_delays.is_none());
+    let (ir, hash) = turnstile();
+    let server = Silent {
+        dropped: Arc::new(AtomicBool::new(false)),
+    };
+    assert!(ServerMachineOptions::new(ir, hash, server).retry_delays.is_none());
 }

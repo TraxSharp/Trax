@@ -1,15 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { turnstile, type TurnstileSpec } from '../machines/turnstile/turnstile';
-import { ServerMachineController, type StreamMessage } from '../server/serverController';
+import { DEFAULT_RETRY_DELAYS, ServerMachineController, type StreamMessage } from '../server/serverController';
 import { flushMicrotasks, sequentialRequestIds } from '../server/testing/FakeMachineServer';
 import {
   createMachineServer,
+  DEFAULT_RESUBSCRIBE_DELAYS,
   persistedMessageReplacer,
   type PersistedSubscriptionSocket,
   type SubscriptionSink,
 } from './machineServer';
 import type { MachineDocument } from './machines';
+import { DEFAULT_MAX_RESPONSE_SIZE, DEFAULT_REQUEST_TIMEOUT } from './transport';
 
 // createMachineServer over a fake fetch and a fake graphql-ws socket: each operation goes by its persisted id with
 // its values as variables, and the change stream is subscribed by id with an empty document.
@@ -711,5 +713,15 @@ describe('ServerMachineController over createMachineServer', () => {
     await controller.start();
 
     expect(controller.get()).toMatchObject({ status: 'loading', error: null, problem: { kind: 'transport' } });
+  });
+});
+
+// The defaults every client of the kit shares (conformance/client/PROTOCOL.md, "Defaults").
+describe('the time-based defaults', () => {
+  it('are the client kit\'s', () => {
+    expect(DEFAULT_REQUEST_TIMEOUT).toBe(30_000);
+    expect(DEFAULT_RESUBSCRIBE_DELAYS).toEqual([1000, 2000, 5000]);
+    expect(DEFAULT_RETRY_DELAYS).toEqual([250, 500, 1000, 2000, 4000]);
+    expect(DEFAULT_MAX_RESPONSE_SIZE).toBe(16 * 1024 * 1024);
   });
 });
