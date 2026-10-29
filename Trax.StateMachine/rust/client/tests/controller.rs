@@ -942,6 +942,48 @@ async fn a_send_with_no_instance_to_send_to_settles_not_ready() {
     assert!(!controller.view().pending);
 }
 
+// A send made before start waits for it: the read goes out first, and the event only once the read has answered,
+// predicted from what it answered (conformance/client/PROTOCOL.md, `send`).
+#[tokio::test]
+async fn a_send_before_start_waits_for_it() {
+    let (ir, hash) = turnstile();
+    let (server, mut script) = scripted();
+    let mut options = ServerMachineOptions::new(ir, hash, server);
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+
+    let sent = controller.send("Coin", Some(Value::parse(r#"{"coin":"quarter"}"#).unwrap()));
+    let started = controller.start();
+    let read = script.read().await;
+    assert!(
+        script.events.try_recv().is_err(),
+        "the event went out before the read answered"
+    );
+    let _ = read.send(stored(snapshot(None, 1, "Locked")));
+    started.await;
+
+    let (request, answer) = script.event().await;
+    assert_eq!(request.trigger, "Coin");
+    assert!(
+        request
+            .client_result
+            .as_deref()
+            .is_some_and(|r| r.contains("\"Unlocked\"")),
+        "{:?}",
+        request.client_result
+    );
+    let mut unlocked = snapshot(None, 2, "Unlocked");
+    unlocked.context.insert("paidWith".into(), Value::from("quarter"));
+    let _ = answer.send(stored(unlocked));
+    let outcome = tokio::time::timeout(Duration::from_secs(5), sent)
+        .await
+        .expect("the send never settled");
+    assert!(
+        matches!(&outcome, SendOutcome::Confirmed(s) if s.revision == Some(2)),
+        "{outcome:?}"
+    );
+}
+
 // The defaults every client of the kit shares (conformance/client/PROTOCOL.md, "Defaults").
 #[test]
 fn the_defaults_are_the_client_kits() {
