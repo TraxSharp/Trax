@@ -1386,6 +1386,27 @@ public class OperationsClientGeneratorTests
             .Be("refused", "a required field the answer lacks is an error, not a default");
     }
 
+    // GraphQL allows `enum Empty` with no values in SDL text but not in a schema: TypeScript would write `= ;`.
+    [Test]
+    public void An_enum_with_no_values_is_refused_by_both_clients()
+    {
+        var options = new OperationsGenerateOptions(
+            Schema + "\nenum Empty\n",
+            [new("src/graphql/Runs.graphql", Runs)]
+        );
+
+        ((Action)(() => ClientGenerator.Render(options)))
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("The GraphQL enum Empty declares no values*");
+        var csharp = () =>
+            ClientGenerator.RenderCSharp(options, ClientGenerator.DefaultOperationsNamespace);
+        csharp
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("The GraphQL enum Empty declares no values*");
+    }
+
     [Test]
     public void Two_enum_values_that_take_one_member_are_refused()
     {

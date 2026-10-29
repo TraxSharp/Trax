@@ -49,7 +49,15 @@ internal sealed class SdlTypes
         _written = new HashSet<string>(filterInputs ?? [], StringComparer.Ordinal);
         foreach (var definition in sdl.Definitions)
             if (definition is GraphQLTypeDefinition type and not GraphQLScalarTypeDefinition)
+            {
+                // SDL text may leave an enum's values out, but a schema may not: there is no value of it to write.
+                if (definition is GraphQLEnumTypeDefinition { Values: null or { Items.Count: 0 } })
+                    throw new InvalidOperationException(
+                        $"The GraphQL enum {type.Name.StringValue} declares no values, which a GraphQL schema does "
+                            + "not allow. Give it a value or remove it."
+                    );
                 _definitions[type.Name.StringValue] = definition;
+            }
     }
 
     /// <summary>The names <see cref="Render"/> exports, in name order: every enum and input.</summary>

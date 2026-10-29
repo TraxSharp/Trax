@@ -523,7 +523,7 @@ host and runs `--check`, which also catches a HotChocolate change that moved a d
 manifest is checked before it is written: a machine id or an operation name that is a word TypeScript reserves, a
 GraphQL type or fragment named for a type operator (`keyof`, `readonly`, `unique`, `infer`), which no annotation can name, two
 that generate one name (`map-2d` and `map2d`), two documents whose files differ only in case, a train field that is not
-a GraphQL name, and a name the client's runtime exports (`configureTrax`), a machine's client module declares
+a GraphQL name, an enum with no values (in the operations schema too, for either language), and a name the client's runtime exports (`configureTrax`), a machine's client module declares
 (`server`, `socket`) or a document's module imports or declares (`sendDocument`, `<operation>DocumentId`) are refused; a string is
 written as a literal and a description cannot close its comment. Each machine's IR must name the machine, its states,
 triggers and outcomes must be identifiers and no state or trigger may be named after an `Object.prototype` member
