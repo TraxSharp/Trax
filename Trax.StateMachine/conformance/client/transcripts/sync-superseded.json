@@ -22,6 +22,7 @@
     { "client": "sync", "target": "Review", "fields": { "trigger": "Update", "input": { "email": "ada@example.com", "name": "Ada" } }, "navigation": ["Begin", "Next", "Back"], "as": "first" },
     { "view": { "pending": true } },
     { "client": "sync", "target": "Details", "fields": { "trigger": "Update", "input": { "email": "bob@example.com", "name": "Bob" } }, "navigation": ["Begin", "Next", "Back"], "as": "second" },
+    { "view": { "unsaved": true } },
     { "request": "begin", "answer": { "id": "i-1", "revision": 2, "state": "Details", "context": {} } },
     { "await": "first", "expect": { "outcome": "superseded" } },
     { "request": "update", "answer": { "id": "i-1", "revision": 3, "state": "Details", "context": { "email": "bob@example.com", "name": "Bob" } } },

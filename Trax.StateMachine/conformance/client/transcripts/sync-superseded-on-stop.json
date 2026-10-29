@@ -22,6 +22,7 @@
     { "client": "sync", "target": "Review", "fields": { "trigger": "Update", "input": { "email": "ada@example.com", "name": "Ada" } }, "navigation": ["Begin", "Next", "Back"], "as": "first" },
     { "request": "begin", "hang": true },
     { "client": "sync", "target": "Details", "fields": { "trigger": "Update", "input": { "email": "bob@example.com", "name": "Bob" } }, "navigation": ["Begin", "Next", "Back"], "as": "second" },
+    { "view": { "unsaved": true } },
     { "push": { "gone": true } },
     { "await": "first", "expect": { "outcome": "superseded" } },
     { "await": "second", "expect": { "outcome": "stopped", "code": "GONE" } }
