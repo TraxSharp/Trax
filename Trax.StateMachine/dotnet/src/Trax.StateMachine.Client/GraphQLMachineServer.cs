@@ -377,7 +377,8 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// is a stream the host refused with a GraphQL error coded <c>TRAX_AUTHORIZATION</c> or <c>AUTH_NOT_AUTHORIZED</c>
     /// (<c>FORBIDDEN</c>) or <c>AUTH_NOT_AUTHENTICATED</c> (<c>UNAUTHENTICATED</c>), one whose error code is among
     /// <see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/> (with that code), and a push the client cannot
-    /// read (a member of the wrong type, or one given twice), as <see cref="ClientProblemCodes.TransportError"/>. A
+    /// read (a member of the wrong type, or one given twice), or a socket that follows no more subscriptions (a
+    /// <see cref="SocketUnavailableException"/>: it was disposed), as <see cref="ClientProblemCodes.TransportError"/>. A
     /// stream that ends any other way is subscribed again after the resubscribe delays; the new stream's first event
     /// is the instance as it is then.
     /// </remarks>
@@ -517,6 +518,11 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         {
             if (RefusedCode(error) is { } code)
                 Deliver(new StreamMessage.Refused(code, error.Message));
+            // No socket to follow it over: subscribing again gets the same answer.
+            else if (error is SocketUnavailableException)
+                Deliver(
+                    new StreamMessage.Refused(ClientProblemCodes.TransportError, error.Message)
+                );
             else if (
                 error is SubscriptionErrorException { Errors: var errors }
                 && EndOf(errors) is { } ended

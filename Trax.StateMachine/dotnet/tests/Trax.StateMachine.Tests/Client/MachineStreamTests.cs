@@ -81,6 +81,27 @@ public class MachineStreamTests
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
     }
 
+    [Test]
+    public async Task A_socket_that_follows_no_more_subscriptions_ends_the_stream_and_is_not_subscribed_again()
+    {
+        var (socket, messages, stream) = Follow();
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var disposed = new SocketUnavailableException(
+            "The socket was disposed: it follows no more subscriptions."
+        );
+
+        first.Sink.Error(disposed);
+
+        var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        message
+            .Should()
+            .Be(new StreamMessage.Refused(ClientProblemCodes.TransportError, disposed.Message));
+        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
+        await Task.Delay(100);
+        socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
+    }
+
     [TestCase(1006)]
     [TestCase(1011)]
     [TestCase(4500)]

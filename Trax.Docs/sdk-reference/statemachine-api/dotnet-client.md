@@ -131,7 +131,8 @@ or an `error` whose first GraphQL error is coded `TRAX_AUTHORIZATION` or `AUTH_N
 `FORBIDDEN`, one coded `AUTH_NOT_AUTHENTICATED` with `UNAUTHENTICATED`, and one coded `CLIENT_OUTDATED` delivers
 `ClientOutdated`; a code among `TerminalStreamErrors` delivers `Refused` with that code and the error's message. None
 of them is subscribed again. A push the client cannot read (a member of the wrong type, or one given twice) would come again the same way,
-so it delivers `Refused` with `TRANSPORT_ERROR` once and is not subscribed again either. Every other `Error` the socket
+so it delivers `Refused` with `TRANSPORT_ERROR` once and is not subscribed again either, and so does a
+`SocketUnavailableException`, a socket that was disposed and follows no more subscriptions. Every other `Error` the socket
 raises, and every `Complete`, is a stream that ended without saying why, which it subscribes to again after
 `ResubscribeDelays`.
 
