@@ -394,3 +394,22 @@ fn a_custom_reduction_on_the_fields_event_never_shows_the_fields_applied() {
         }
     );
 }
+
+// A machine whose one field is nullable and whose Edit sets it from the input.
+const NOTE: &str = r#"{"id":"note","version":1,"initialState":"A","initialContext":{},"states":["A"],
+  "triggers":["Edit"],"committedStates":[],
+  "context":{"A":{"fields":[{"name":"note","type":"string","nullable":true,"constraints":[]}]}},
+  "inputs":{"Edit":{"fields":[{"name":"note","type":"string","nullable":true,"constraints":[]}]}},
+  "transitions":[{"from":"A","trigger":"Edit","to":"A","reduce":{"reduce":"set","steps":[{"field":"note","value":{"input":"note"}}]}}]}"#;
+
+#[test]
+fn a_member_the_host_omits_as_null_counts_as_null() {
+    let machine = Machine::from_ir_text(NOTE).unwrap();
+    // The host answers the context without its null members.
+    let answered = Snapshot::from_value(&object(r#"{"machine":"note","version":1,"state":"A","context":{}}"#)).unwrap();
+    let clear = PlanEvent::new("Edit", Some(object(r#"{"note":null}"#)));
+
+    let plan = machine.plan(&answered, "A", Some(&clear), &[], None);
+
+    assert_eq!(plan, PlanAnswer::Plan(Vec::new()));
+}

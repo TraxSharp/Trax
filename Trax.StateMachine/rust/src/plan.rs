@@ -1,13 +1,13 @@
 // The event planner: the events that bring a snapshot to a target state with a page's fields applied, the Rust twin of
 // the planner in the TypeScript and C# engines (conformance/PROTOCOL.md, `plan`). Every engine answers the same plan, so
 // the search is fixed: breadth first, the fields event before the navigation triggers in the caller's order, each
-// snapshot visited once by its canonical wire. Pure and bounded: at most `max_depth` events deep and
+// snapshot visited once by its canonical wire with null members left out. Pure and bounded: at most `max_depth` events deep and
 // `MAX_PLAN_EXPANSIONS` snapshots expanded.
 
 use std::collections::{HashSet, VecDeque};
 
 use crate::machine::{canonical_wire, Machine, Snapshot};
-use crate::value::Value;
+use crate::value::{Map, Value};
 
 /// The most snapshots one plan expands before it answers [`PlanAnswer::Exceeded`].
 pub const MAX_PLAN_EXPANSIONS: usize = 10_000;
@@ -70,7 +70,8 @@ impl Machine {
     /// states when `None`.
     ///
     /// A snapshot is the goal when its state is `target` and, with `fields` given, advancing it by the fields event
-    /// transitions to the same wire. From each snapshot the fields event is tried first, then `navigation` in the order
+    /// transitions to the same wire. Wires are compared with every null member of the context left out, at every depth,
+    /// as the host omits them: a snapshot it answers without a member and one holding it as null are the same. From each snapshot the fields event is tried first, then `navigation` in the order
     /// given, each through [`Machine::advance`]; a refused edge is skipped, and a snapshot whose wire was seen is not
     /// visited again. An edge that [rests on a custom rule](Machine::rests_on_unhandled_rule) is not tried. The plan
     /// never depends on the order the IR lists its transitions in.
@@ -105,7 +106,7 @@ impl Machine {
                     !self.rests_on_unhandled_rule(&s.state, &f.trigger)
                         && self
                             .advance(s, &f.trigger, f.input.as_ref())
-                            .is_ok_and(|next| canonical_wire(&next) == canonical_wire(s))
+                            .is_ok_and(|next| wire(&next) == wire(s))
                 })
         };
 
@@ -117,7 +118,7 @@ impl Machine {
             parent: None,
             depth: 0,
         }];
-        let mut seen: HashSet<String> = HashSet::from([canonical_wire(from)]);
+        let mut seen: HashSet<String> = HashSet::from([wire(from)]);
         let mut queue = VecDeque::from([0usize]);
         let mut undetermined: Option<(String, usize)> = None;
         let mut left_unexpanded = false;
@@ -142,7 +143,7 @@ impl Machine {
                 let Ok(next) = self.advance(snapshot, &edge.trigger, edge.input.as_ref()) else {
                     continue;
                 };
-                if !seen.insert(canonical_wire(&next)) {
+                if !seen.insert(wire(&next)) {
                     continue;
                 }
                 let goal = is_goal(&next);
@@ -188,4 +189,28 @@ fn path(nodes: &[Node], edges: &[PlanEvent], mut at: usize) -> Vec<PlanEvent> {
     }
     events.reverse();
     events
+}
+
+// The canonical wire with every null member of the context left out, at every depth: what the planner compares, since
+// the host answers a context without its null members.
+fn wire(snapshot: &Snapshot) -> String {
+    canonical_wire(&Snapshot {
+        context: without_nulls(&snapshot.context),
+        ..snapshot.clone()
+    })
+}
+
+fn without_nulls(map: &Map) -> Map {
+    map.iter()
+        .filter(|(_, v)| !v.is_null())
+        .map(|(k, v)| (k.clone(), strip(v)))
+        .collect()
+}
+
+fn strip(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(without_nulls(map)),
+        Value::Array(items) => Value::Array(items.iter().map(strip).collect()),
+        other => other.clone(),
+    }
 }
