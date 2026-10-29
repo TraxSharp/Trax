@@ -110,6 +110,9 @@ describe("the C# view of a machine whose names C# cannot hold", () => {
       'has the trigger "value__", which C# does not take as a member name',
     ));
 
+  it("writes a machine with no triggers as an enum with no members", () =>
+    expect(view(withTriggers([]))).toContain("public enum TurnstileTrigger\n{\n}"));
+
   it("refuses context fields that differ only in case, which the view's JSON reads as one", () =>
     expect(() => view(withFields([field("Id"), field("id")]))).toThrow(
       'The fields "Id" and "id" of TurnstileUnlockedContext differ only in case',

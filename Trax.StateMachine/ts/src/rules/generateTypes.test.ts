@@ -96,6 +96,24 @@ describe("generateContextTypes", () => {
       expect(out).toContain("ids: number[];");
     });
 
+    // A oneOf with no values admits no string at all.
+    it("gives a oneOf string with no values the type never", () => {
+      const out = generateContextTypes(
+        schemaFor({
+          name: "size",
+          type: "string",
+          nullable: false,
+          constraints: [{ rule: "oneOf", source: "context", field: "size", values: [] }],
+        }),
+      );
+      expect(out).toContain("size: never;");
+    });
+
+    it("gives a machine with no triggers the trigger type never", () => {
+      const out = generateContextTypes({ ...schemaFor({ name: "x", type: "string", nullable: false, constraints: [] }), triggers: [] });
+      expect(out).toContain("export type SampleTrigger = never;");
+    });
+
     it("gives a oneOf string its literal union instead of string", () => {
       const out = generateContextTypes(
         schemaFor({

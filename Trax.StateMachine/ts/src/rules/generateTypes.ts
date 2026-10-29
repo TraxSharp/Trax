@@ -235,6 +235,7 @@ function tsType(type: TypeRef): string {
 const valueType = (value: ValueRef): string =>
   value.nullable ? `${tsType(value.type)} | null` : tsType(value.type);
 
-// Each value as a string literal: its JSON, so nothing in it can end the literal.
+// Each value as a string literal: its JSON, so nothing in it can end the literal. No values at all (a machine with no
+// triggers, a oneOf that admits nothing) is the type no value has.
 const union = (values: readonly string[]): string =>
-  values.map((v) => JSON.stringify(v)).join(" | ");
+  values.length === 0 ? "never" : values.map((v) => JSON.stringify(v)).join(" | ");
