@@ -166,7 +166,8 @@ public class OperationsConformanceTests
         report.Should().MatchRegex(@"([1-9]\d*) of \1 transcripts passed\.");
     }
 
-    // The repository's root: the directory above the test binary that holds global.json and Trax.StateMachine.
+    // The repository's root: the directory above the test binary that holds global.json and Trax.StateMachine. Under CI,
+    // which always builds from a checkout, not finding it fails rather than skipping.
     private static string RepositoryRoot()
     {
         for (
@@ -179,6 +180,11 @@ public class OperationsConformanceTests
                 && Directory.Exists(Path.Combine(dir.FullName, "Trax.StateMachine", "conformance"))
             )
                 return dir.FullName;
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI")))
+            Assert.Fail(
+                "The repository is not checked out around this build, and CI always builds from a checkout, so a "
+                    + "test that skipped here would prove nothing."
+            );
         Assert.Ignore("The repository is not checked out around this build (an isolated build).");
         return "";
     }
