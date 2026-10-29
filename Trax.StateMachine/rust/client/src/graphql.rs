@@ -77,6 +77,11 @@ pub struct GraphQLMachineServerOptions {
     /// How long one request may take, from sending it to reading the last byte of its answer, before it fails as a
     /// [`TransportError`]. [`DEFAULT_REQUEST_TIMEOUT`] (30 seconds) by default.
     pub request_timeout: Duration,
+    /// How long an acknowledged socket may stay silent before it is given up and subscribed again after the
+    /// resubscribe delays, so a connection dropped without a close (a NAT that forgot it) is noticed. Halfway through
+    /// the silence the client sends a `ping`, which a live host answers with a `pong`. [`DEFAULT_IDLE_TIMEOUT`] (60
+    /// seconds) by default.
+    pub idle_timeout: Duration,
     /// The largest response body, and the largest socket message or frame, the host may send, in bytes. A larger
     /// response fails its request as a [`TransportError`]; a larger message ends the stream, which is subscribed again.
     /// [`DEFAULT_MAX_MESSAGE_SIZE`] (16 MiB) by default.
@@ -105,6 +110,7 @@ impl GraphQLMachineServerOptions {
             resubscribe_delays: None,
             connect_timeout: DEFAULT_CONNECT_TIMEOUT,
             request_timeout: DEFAULT_REQUEST_TIMEOUT,
+            idle_timeout: DEFAULT_IDLE_TIMEOUT,
             max_message_size: DEFAULT_MAX_MESSAGE_SIZE,
             allow_insecure_transport: false,
         }
@@ -121,6 +127,9 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long one request may take before it fails, by default.
 pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How long an acknowledged socket may stay silent before it is given up, by default.
+pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// The default delays before subscribing again after a stream ended without a reason.
 pub const DEFAULT_RESUBSCRIBE_DELAYS: [Duration; 3] =
@@ -165,6 +174,7 @@ struct Inner {
     resubscribe_delays: Vec<Duration>,
     connect_timeout: Duration,
     request_timeout: Duration,
+    idle_timeout: Duration,
     max_message_size: usize,
 }
 
@@ -233,6 +243,7 @@ impl GraphQLMachineServer {
                 resubscribe_delays: delays,
                 connect_timeout: options.connect_timeout,
                 request_timeout: options.request_timeout,
+                idle_timeout: options.idle_timeout,
                 max_message_size: options.max_message_size,
             }),
         })
@@ -287,18 +298,18 @@ impl Inner {
         body.insert("id".into(), Value::from(document.id.as_str()));
         body.insert("variables".into(), Value::Object(variables));
 
-        let mut request = self
-            .http
-            .post(&self.endpoint)
-            .header("content-type", "application/json")
-            .header("accept", "application/json");
-        if let Some(headers) = &self.headers {
-            request = request.headers(headers().await?);
-        }
-        let request = request.body(Value::Object(body).to_json());
-        // The whole exchange, sending and reading the answer, within the request timeout: a host that never answers
-        // fails the request rather than holding it forever.
+        // The whole exchange, asking for the headers, sending and reading the answer, within the request timeout: a
+        // host or a token refresh that never answers fails the request rather than holding it forever.
         let exchange = async {
+            let mut request = self
+                .http
+                .post(&self.endpoint)
+                .header("content-type", "application/json")
+                .header("accept", "application/json");
+            if let Some(headers) = &self.headers {
+                request = request.headers(headers().await?);
+            }
+            let request = request.body(Value::Object(body).to_json());
             let mut response = request.send().await.map_err(transport_error)?;
             let status = response.status();
             // A redirect is not followed, and an answer a client reached by following one is not the endpoint's.
@@ -404,21 +415,30 @@ fn answer_of(answer: &Value) -> Result<ServerAnswer, TransportError> {
     if let Some(problem) = answer.get("problem").and_then(problem_of) {
         return Ok(ServerAnswer::Refused(problem));
     }
-    let snapshot = snapshot_of(answer)
-        .ok_or_else(|| TransportError("The server answered a snapshot without a state.".to_owned()))?;
+    let snapshot = snapshot_of(answer)?;
     Ok(ServerAnswer::Stored {
         id: answer.get("id").and_then(|i| i.as_str()).map(str::to_owned),
         snapshot,
     })
 }
 
-fn snapshot_of(value: &Value) -> Option<ServerSnapshot> {
-    let state = value.get("state")?.as_str()?.to_owned();
+fn snapshot_of(value: &Value) -> Result<ServerSnapshot, TransportError> {
+    let state = value
+        .get("state")
+        .and_then(|s| s.as_str())
+        .ok_or_else(|| TransportError("The server answered a snapshot without a state.".to_owned()))?
+        .to_owned();
     // A revision the store does not record stays `None`: it is not revision 0, which would order every later answer
-    // below it.
+    // below it. One that is not an integer a double holds exactly is refused, not rounded: a revision read as larger
+    // than it is would make every later snapshot look stale.
     let revision = match value.get("revision") {
         None | Some(Value::Null) => None,
-        Some(revision) => Some(revision.as_f64()? as i64),
+        Some(revision) => Some(revision_of(revision).ok_or_else(|| {
+            TransportError(format!(
+                "The server answered a revision that is not an integer: {}.",
+                revision.to_json()
+            ))
+        })?),
     };
     let context = value
         .get("context")
@@ -440,13 +460,23 @@ fn snapshot_of(value: &Value) -> Option<ServerSnapshot> {
         Some(Value::Number(n)) => Some(trax_state_machine::number_text(*n)),
         _ => None,
     };
-    Some(ServerSnapshot {
+    Ok(ServerSnapshot {
         row_id,
         revision,
         state,
         context,
         due_at,
     })
+}
+
+// The largest integer a double holds exactly, 2^53 - 1: past it a revision cannot be told from its neighbours.
+const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
+
+fn revision_of(value: &Value) -> Option<i64> {
+    match value {
+        Value::Number(n) if n.fract() == 0.0 && n.abs() <= MAX_SAFE_INTEGER => Some(*n as i64),
+        _ => None,
+    }
 }
 
 fn problem_of(value: &Value) -> Option<ServerProblem> {
@@ -629,8 +659,24 @@ impl Inner {
             return Ended::Again;
         }
 
+        // A host that says nothing for half the idle limit is pinged; one that says nothing for the rest of it is gone.
+        let mut pinged = false;
         let ended = loop {
-            let text = match socket.next().await {
+            let next = match tokio::time::timeout(self.idle_timeout / 2, socket.next()).await {
+                Ok(next) => {
+                    pinged = false;
+                    next
+                }
+                Err(_) if !pinged => {
+                    pinged = true;
+                    if socket.send(Message::text(r#"{"type":"ping"}"#)).await.is_err() {
+                        break Ended::Again;
+                    }
+                    continue;
+                }
+                Err(_) => break Ended::Again,
+            };
+            let text = match next {
                 Some(Ok(Message::Text(text))) => text,
                 Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Binary(_) | Message::Frame(_))) => continue,
                 Some(Ok(Message::Close(frame))) => match refused_close(frame.as_ref()) {
@@ -699,7 +745,7 @@ impl Inner {
             sink(StreamMessage::Reload);
             return None;
         }
-        let snapshot = snapshot_of(change).filter(|s| s.revision.is_some())?;
+        let snapshot = snapshot_of(change).ok().filter(|s| s.revision.is_some())?;
         *attempt = 0;
         sink(StreamMessage::Changed(snapshot));
         None
@@ -1071,6 +1117,8 @@ mod tests {
         Silent,
         // Acknowledges it, then sends a 64 KiB message.
         Flood,
+        // Acknowledges it, then answers every ping with a pong and says nothing else.
+        Pong,
     }
 
     type Heard = tokio::sync::mpsc::UnboundedReceiver<(Option<String>, Option<String>)>;
@@ -1140,6 +1188,17 @@ mod tests {
                             let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
                         }
                         Reply::Silent => {}
+                        Reply::Pong => {
+                            let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
+                            while let Some(Ok(message)) = socket.next().await {
+                                if let Message::Text(text) = message {
+                                    if text.as_str().contains(r#""type":"ping""#) {
+                                        let _ = socket.send(Message::text(r#"{"type":"pong"}"#)).await;
+                                    }
+                                }
+                            }
+                            return;
+                        }
                         Reply::Flood => {
                             let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
                             let large = format!(r#"{{"type":"ping","payload":"{}"}}"#, "x".repeat(64 * 1024));
@@ -1471,6 +1530,90 @@ mod tests {
             };
             assert!(error.0.contains("did not answer within 200 ms"), "{}", error.0);
         }
+    }
+
+    #[tokio::test]
+    async fn a_headers_provider_that_never_answers_fails_the_request_within_the_request_timeout() {
+        let mut given = with_get(options("http://127.0.0.1:9/graphql", "ws://127.0.0.1:9/graphql"));
+        given.headers = Some(Arc::new(|| Box::pin(std::future::pending())));
+        given.request_timeout = Duration::from_millis(200);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let answered = tokio::time::timeout(Duration::from_secs(10), server.get("i-1".into())).await;
+
+        let Ok(Err(error)) = answered else {
+            panic!("the request outlived its timeout while the headers were asked for");
+        };
+        assert!(error.0.contains("did not answer within 200 ms"), "{}", error.0);
+    }
+
+    #[test]
+    fn a_revision_is_read_only_as_an_integer() {
+        let read = |revision: &str| {
+            let answer = Value::parse(&format!(
+                r#"{{"id":"i-1","revision":{revision},"state":"Locked","context":{{}}}}"#
+            ))
+            .unwrap();
+            answer_of(&answer).map(|a| match a {
+                ServerAnswer::Stored { snapshot, .. } => snapshot.revision,
+                ServerAnswer::Refused(p) => panic!("{p:?}"),
+            })
+        };
+
+        assert_eq!(read("7"), Ok(Some(7)));
+        assert_eq!(read("9007199254740991"), Ok(Some(9_007_199_254_740_991)));
+        for revision in ["4.5", "1e19", "-1e19", "\"7\"", "true"] {
+            let Err(error) = read(revision) else {
+                panic!("the revision {revision} was read");
+            };
+            assert!(error.0.contains("revision"), "{}", error.0);
+        }
+    }
+
+    #[tokio::test]
+    async fn an_acknowledged_socket_that_goes_silent_is_opened_again() {
+        let (port, mut heard) = recording_host(|_| Reply::Acknowledge).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.idle_timeout = Duration::from_millis(200);
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        let wait = Duration::from_secs(10);
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let again = tokio::time::timeout(wait, heard.recv()).await;
+
+        assert!(again.is_ok(), "the silent socket was never given up");
+    }
+
+    #[tokio::test]
+    async fn a_socket_whose_host_answers_the_ping_is_kept() {
+        let (port, mut heard) = recording_host(|_| Reply::Pong).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.idle_timeout = Duration::from_millis(200);
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        tokio::time::timeout(Duration::from_secs(10), heard.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let again = tokio::time::timeout(Duration::from_millis(1000), heard.recv()).await;
+
+        assert!(again.is_err(), "a socket that answered every ping was opened again");
+    }
+
+    #[test]
+    fn the_idle_timeout_is_sixty_seconds_by_default() {
+        let given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
+        assert_eq!(given.idle_timeout, Duration::from_secs(60));
     }
 
     #[test]
