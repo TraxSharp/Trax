@@ -331,6 +331,7 @@ public class TraxClientTests
                 new TraxHttpTransportOptions
                 {
                     Http = new HttpClient(new Host("{}")),
+                    HandlerFollowsNoRedirects = true,
                     Endpoint = new Uri("https://host/trax/graphql"),
                     Socket = socket,
                 }
