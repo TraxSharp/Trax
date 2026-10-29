@@ -38,3 +38,32 @@ describe('the published exports', () => {
     expect(exportNames()).toMatchSnapshot();
   }, 30_000);
 });
+
+// What package.json says each entry point resolves to. tsup writes an `.d.ts` beside each ESM file and an `.d.cts`
+// beside each CommonJS one; in a `"type": "module"` package a `require` that resolved the `.d.ts` would be typed as
+// ESM. The peers are bounded to the majors the package is tested on.
+describe('the package manifest', () => {
+  const manifest = JSON.parse(ts.sys.readFile(path.join(here, '..', 'package.json'))!) as {
+    type: string;
+    exports: Record<string, string | Record<string, Record<string, string>>>;
+    peerDependencies: Record<string, string>;
+  };
+  const subpaths: Record<string, string> = { '.': 'index', './react': 'react', './client': 'client/index' };
+
+  it.each(Object.entries(subpaths))('types %s for import and for require each with its own declarations', (subpath, file) => {
+    expect(manifest.type).toBe('module');
+    expect(manifest.exports[subpath]).toEqual({
+      import: { types: `./dist/${file}.d.ts`, default: `./dist/${file}.js` },
+      require: { types: `./dist/${file}.d.cts`, default: `./dist/${file}.cjs` },
+    });
+  });
+
+  it('exports package.json, and every entry point tsup builds', () => {
+    expect(manifest.exports['./package.json']).toBe('./package.json');
+    expect(Object.keys(manifest.exports).sort()).toEqual([...Object.keys(subpaths), './package.json'].sort());
+  });
+
+  it('bounds each peer to the majors it supports', () => {
+    expect(manifest.peerDependencies).toEqual({ 'graphql-ws': '^6.0.0', react: '^18.0.0 || ^19.0.0' });
+  });
+});
