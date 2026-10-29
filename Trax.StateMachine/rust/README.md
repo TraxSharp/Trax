@@ -61,7 +61,9 @@ leaves that step to the server.
 the server: breadth first, the fields event before the navigation triggers in the order given, at most twice the
 machine's states deep and `MAX_PLAN_EXPANSIONS` snapshots wide, so every engine answers the same plan. It answers
 `Plan` with the events, `Unreachable`, `Exceeded`, `Invalid`, or `Undetermined` when the only way on is an edge that
-rests on a custom rule with no handler (`rests_on_unhandled_rule`), which the server has to decide.
+rests on a custom rule with no handler (`rests_on_unhandled_rule`), which the server has to decide. A snapshot or a
+fields input built in memory that nests deeper than `MAX_DEPTH` is `Invalid` (`PlanInvalid::Context` or
+`PlanInvalid::Input`, what `advance` refuses as `INVALID_CONTEXT` and `INVALID_INPUT`), before the search copies it.
 
 ## Where this fits
 

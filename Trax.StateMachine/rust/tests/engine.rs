@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use trax_state_machine::{JsString, Machine, Map, PlanAnswer, PlanEvent, RefusalCode, Snapshot, Value};
+use trax_state_machine::{JsString, Machine, Map, PlanAnswer, PlanEvent, PlanInvalid, RefusalCode, Snapshot, Value};
 
 fn conformance(path: &str) -> Value {
     let file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -434,4 +434,22 @@ fn an_event_the_machine_does_not_declare_is_refused_from_every_state_as_advance_
     }
     assert!(machine.event_refusal("Retry").is_none());
     assert!(machine.event_refusal("Start").is_none());
+}
+
+#[test]
+fn a_plan_from_a_context_or_with_an_input_nested_past_the_limit_is_invalid_not_overflowed() {
+    let machine = wizard();
+    let navigation = ["Next".to_owned()];
+    let mut deep = details();
+    deep.context.insert("deep".into(), too_deep());
+    let deep_fields = PlanEvent::new("Update", Some(too_deep()));
+
+    assert_eq!(
+        machine.plan(&deep, "Review", Some(&ada()), &navigation, None),
+        PlanAnswer::Invalid(PlanInvalid::Context)
+    );
+    assert_eq!(
+        machine.plan(&details(), "Review", Some(&deep_fields), &navigation, None),
+        PlanAnswer::Invalid(PlanInvalid::Input)
+    );
 }

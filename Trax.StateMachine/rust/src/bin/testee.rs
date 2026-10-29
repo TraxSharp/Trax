@@ -210,6 +210,18 @@ fn plan_members(plan: PlanAnswer) -> Vec<(&'static str, Value)> {
                 ("trigger", Value::from(trigger.as_str())),
             ]
         }
+        PlanAnswer::Invalid(PlanInvalid::Context) => {
+            vec![
+                ("result", Value::from("invalid")),
+                ("code", Value::from("INVALID_CONTEXT")),
+            ]
+        }
+        PlanAnswer::Invalid(PlanInvalid::Input) => {
+            vec![
+                ("result", Value::from("invalid")),
+                ("code", Value::from("INVALID_INPUT")),
+            ]
+        }
     }
 }
 

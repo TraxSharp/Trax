@@ -7,7 +7,7 @@
 use std::collections::{HashSet, VecDeque};
 
 use crate::machine::{canonical_wire, Machine, Snapshot};
-use crate::value::{Map, Value};
+use crate::value::{map_too_deep, Map, Value};
 
 /// The most snapshots one plan expands before it answers [`PlanAnswer::Exceeded`].
 pub const MAX_PLAN_EXPANSIONS: usize = 10_000;
@@ -37,6 +37,12 @@ pub enum PlanInvalid {
     /// The fields trigger or a navigation trigger is not one a caller may plan with: one the machine does not have,
     /// one bound to the effect, an outcome, a timer, or a navigation trigger equal to the fields trigger.
     Trigger(String),
+    /// The snapshot's context nests deeper than [`MAX_DEPTH`](crate::MAX_DEPTH), which [`Machine::advance`] refuses as
+    /// `INVALID_CONTEXT`.
+    Context,
+    /// The fields input nests deeper than [`MAX_DEPTH`](crate::MAX_DEPTH), which [`Machine::advance`] refuses as
+    /// `INVALID_INPUT`.
+    Input,
 }
 
 /// What [`Machine::plan`] answers.
@@ -74,7 +80,9 @@ impl Machine {
     /// as the host omits them: a snapshot it answers without a member and one holding it as null are the same. From each snapshot the fields event is tried first, then `navigation` in the order
     /// given, each through [`Machine::advance`]; a refused edge is skipped, and a snapshot whose wire was seen is not
     /// visited again. An edge that [rests on a custom rule](Machine::rests_on_unhandled_rule) is not tried. The plan
-    /// never depends on the order the IR lists its transitions in.
+    /// never depends on the order the IR lists its transitions in. A snapshot or a fields input built in memory that
+    /// nests deeper than [`MAX_DEPTH`](crate::MAX_DEPTH) is [`PlanInvalid::Context`] or [`PlanInvalid::Input`], checked
+    /// before anything copies or compares it.
     pub fn plan(
         &self,
         from: &Snapshot,
@@ -83,6 +91,13 @@ impl Machine {
         navigation: &[String],
         max_depth: Option<usize>,
     ) -> PlanAnswer {
+        // Checked first, as advance checks them: the search copies and compares both, and would recurse over them.
+        if fields.and_then(|f| f.input.as_ref()).is_some_and(Value::is_too_deep) {
+            return PlanAnswer::Invalid(PlanInvalid::Input);
+        }
+        if map_too_deep(&from.context) {
+            return PlanAnswer::Invalid(PlanInvalid::Context);
+        }
         if !self.state_set.contains(target) {
             return PlanAnswer::Invalid(PlanInvalid::Target(target.to_owned()));
         }

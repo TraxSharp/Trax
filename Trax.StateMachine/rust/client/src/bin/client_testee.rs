@@ -290,6 +290,8 @@ fn sync_outcome_of(outcome: &SyncOutcome) -> Map {
             ("outcome", Value::from("invalid")),
             ("trigger", Value::from(trigger.as_str())),
         ]),
+        SyncOutcome::Invalid(PlanInvalid::Context) => coded("invalid", "INVALID_CONTEXT"),
+        SyncOutcome::Invalid(PlanInvalid::Input) => coded("invalid", "INVALID_INPUT"),
         SyncOutcome::Refused(p) => coded("refused", &p.code),
         SyncOutcome::Failed(p) => coded("failed", &p.code),
         SyncOutcome::Stopped(e) => coded("stopped", &e.code),
