@@ -237,12 +237,22 @@ export function checkNames(ir: IrDocument): void {
           `The machine '${ir.id}' has the ${what} ${JSON.stringify(name)}, a name every JavaScript object has.`,
         );
   }
+  // Each outcome names its output's type (`Fetching.done` -> `FetchingDoneOutput`), with the first letter of each half
+  // raised: two outcomes that differ only there would declare one type twice.
+  const outputTypes = new Map<string, string>();
   for (const outcome of Object.keys(ir.outcomes ?? {})) {
     const parts = outcome.split(".");
     if (parts.length !== 2 || !parts.every((p) => IDENTIFIER.test(p)))
       throw new Error(
         `The machine '${ir.id}' has the outcome ${JSON.stringify(outcome)}, which is not <State>.<kind>.`,
       );
+    const type = outcomeSuffix(outcome);
+    const other = outputTypes.get(type);
+    if (other !== undefined)
+      throw new Error(
+        `The machine '${ir.id}' has the outcomes ${JSON.stringify(other)} and ${JSON.stringify(outcome)}, which would both name the type ${type}. Rename one of them.`,
+      );
+    outputTypes.set(type, outcome);
   }
   // A state's context and invariant, and a trigger's input, are looked up by name: a key that is none of them is not
   // the host's.

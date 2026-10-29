@@ -439,6 +439,12 @@ describe("generated names", () => {
     expect(() => generateContextTypes({ ...ir, outcomes })).toThrow(/not <State>.<kind>/);
   });
 
+  it("refuses two outcomes whose output types would take one name", () => {
+    const outcomes = { "a.done": { from: "Locked" }, "A.done": { from: "Locked" } } as unknown as IrDocument["outcomes"];
+    expect(() => generateContextTypes({ ...ir, outcomes })).toThrow(/would both name the type ADoneOutput/);
+    expect(() => generateMachineFactory({ ...ir, outcomes })).toThrow(/would both name the type ADoneOutput/);
+  });
+
   it("refuses an id that is not kebab-case", () => {
     expect(() => generateContextTypes({ ...ir, id: "../escaped" })).toThrow(/kebab-case/);
     expect(() => generateMachineFactory({ ...ir, id: "turnstile\n// x" })).toThrow(/kebab-case/);
