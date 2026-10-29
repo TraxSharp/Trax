@@ -53,8 +53,10 @@ function Wizard({ id }: { id?: string }) {
   id is answered with as gone with `notFound`; `CLIENT_OUTDATED` as client-outdated; `reload: true` as a read. A socket
   the host closed with 4401 or 4403 refused the caller, and subscribing again would get the same answer: it ends the
   stream for good as `ended`, with `UNAUTHENTICATED` or `FORBIDDEN` and a message naming the close code (graphql-ws gives
-  up on 4401 at once and on 4403 after its own `retryAttempts`). A socket error whose `code` is in `terminalStreamErrors`
-  ends the stream for good too: it reaches the controller as `ended`, and is not
+  up on 4401 at once and on 4403 after its own `retryAttempts`). A stream the host refuses on a socket it accepted, with
+  a GraphQL error coded `TRAX_AUTHORIZATION` or `AUTH_NOT_AUTHORIZED` (`FORBIDDEN`) or `AUTH_NOT_AUTHENTICATED`
+  (`UNAUTHENTICATED`), ends the same way. A socket error whose `code` is in `terminalStreamErrors`, or a stream error
+  whose `extensions.code` is, ends the stream for good too: it reaches the controller as `ended`, and is not
   subscribed again. A request rejected with one of those codes is not a transport failure either: the server's
   `endedBy` names it, and the controller stops on it the same way. The generated client lists `CONNECTION_CHANGED`
   there, which a server made before the last `configureTrax` refuses every request and stream with. A stream that ends any

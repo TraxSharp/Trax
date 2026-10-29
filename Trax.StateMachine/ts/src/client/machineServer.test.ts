@@ -376,6 +376,46 @@ describe('createMachineServer change stream', () => {
     expect(socket.subscriptions).toHaveLength(3);
   });
 
+  it.each([
+    ['TRAX_AUTHORIZATION', 'FORBIDDEN'],
+    ['AUTH_NOT_AUTHORIZED', 'FORBIDDEN'],
+    ['AUTH_NOT_AUTHENTICATED', 'UNAUTHENTICATED'],
+  ])('a stream refused with a %s error is not subscribed again, and ends as %s', (refused, code) => {
+    vi.useFakeTimers();
+    const onNext = follow([100]);
+    onNext.socket.last.sink.next({ data: null, errors: [{ message: 'Not authorized.', extensions: { code: refused } }] });
+    const onError = follow([100]);
+    onError.socket.last.sink.error([{ message: 'Not authorized.', extensions: { code: refused } }]);
+    vi.advanceTimersByTime(10_000);
+
+    for (const { socket, messages } of [onNext, onError]) {
+      expect(messages).toEqual([{ type: 'ended', code, message: 'The host refused the stream: Not authorized.' }]);
+      expect(socket.subscriptions).toHaveLength(1);
+    }
+  });
+
+  it('a stream event whose error has a code marked terminal ends the stream with it', () => {
+    vi.useFakeTimers();
+    const { socket, messages } = follow([100], ['CONNECTION_CHANGED']);
+
+    socket.last.sink.next({ data: null, errors: [{ message: 'Changed.', extensions: { code: 'CONNECTION_CHANGED' } }] });
+    vi.advanceTimersByTime(10_000);
+
+    expect(messages).toEqual([{ type: 'ended', code: 'CONNECTION_CHANGED', message: 'Changed.' }]);
+    expect(socket.subscriptions).toHaveLength(1);
+  });
+
+  it('subscribes again after a stream event whose error has any other code', () => {
+    vi.useFakeTimers();
+    const { socket, messages } = follow([100]);
+
+    socket.last.sink.next({ data: null, errors: [{ message: 'Oops.', extensions: { code: 'INTERNAL' } }] });
+    vi.advanceTimersByTime(100);
+
+    expect(messages).toEqual([]);
+    expect(socket.subscriptions).toHaveLength(2);
+  });
+
   it('subscribes again after an error whose code was not marked terminal', () => {
     vi.useFakeTimers();
     const { socket, messages } = follow([100], ['CONNECTION_CHANGED']);
@@ -457,6 +497,29 @@ describe('ServerMachineController over createMachineServer', () => {
       status: 'stopped',
       error: { code: 'CONNECTION_CHANGED', message: 'configureTrax was called since this server was made.' },
     });
+    expect(await controller.send('Coin', { coin: 'dollar' })).toMatchObject({ outcome: 'stopped' });
+    expect(socket.subscriptions).toHaveLength(1);
+    expect(sent).toHaveLength(1);
+  });
+
+  it('stops FORBIDDEN on a stream refused with TRAX_AUTHORIZATION, and subscribes once', async () => {
+    vi.useFakeTimers();
+    const { sent, fetch } = http(
+      answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, dueAt: null, problem: null }),
+    );
+    const { server, socket } = serverOver(fetch, new FakeSocket(), [100]);
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      newRequestId: sequentialRequestIds(),
+    });
+
+    await controller.start();
+    socket.last.sink.next({ data: null, errors: [{ message: 'Not authorized.', extensions: { code: 'TRAX_AUTHORIZATION' } }] });
+    vi.advanceTimersByTime(10_000);
+
+    expect(controller.get()).toMatchObject({ status: 'stopped', error: { code: 'FORBIDDEN' } });
     expect(await controller.send('Coin', { coin: 'dollar' })).toMatchObject({ outcome: 'stopped' });
     expect(socket.subscriptions).toHaveLength(1);
     expect(sent).toHaveLength(1);

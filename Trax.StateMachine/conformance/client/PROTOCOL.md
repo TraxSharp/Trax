@@ -94,7 +94,7 @@ whatever offset and precision the client holds it; the runner compares it as the
 `2026-10-22T12:10:00.000+02:00` and `2026-10-22T10:10:00Z` are one value, and one read without its offset is not. `state` and `context` are what to show (the prediction while one is
 pending), `confirmed` what the host last confirmed. `problem` is the code of the last refusal or transport failure,
 `error` the code that stopped the client (`GONE`, `CLIENT_OUTDATED`, or `UNAUTHENTICATED` and `FORBIDDEN` for a socket
-the host refused), and `deleted` whether a `GONE` came from a
+or a stream the host refused), and `deleted` whether a `GONE` came from a
 deletion (true) or a host that holds no such instance for the caller (false). A context holds no member whose value
 is null: a typed answer cannot tell a member stored as null from one the state does not hold.
 
@@ -110,6 +110,15 @@ the socket with 4403 before acknowledging it. A socket the host closes with 4401
 while subscribed, is the host turning the caller away, and the client stops for good: `UNAUTHENTICATED` for 4401,
 `FORBIDDEN` for 4403, and the same for an upgrade answered 401 or 403 where the client's socket can tell one. It
 subscribes again after any other close.
+
+A host can also refuse one subscription on a socket it accepted (an expired token, an anonymous socket it
+acknowledged): it answers a `next` whose first GraphQL error carries the refusal in `extensions.code`, or an `error`
+message carrying it. That is the same refusal, and the client stops for good without subscribing again:
+`TRAX_AUTHORIZATION` and `AUTH_NOT_AUTHORIZED` stop it as `FORBIDDEN`, `AUTH_NOT_AUTHENTICATED` as `UNAUTHENTICATED`.
+A `next` or `error` coded `CLIENT_OUTDATED` stops it as `CLIENT_OUTDATED`. A client that lets its caller name further
+terminal codes (TypeScript's `terminalStreamErrors`, C#'s `TerminalStreamErrors`) stops on those as well, whether they
+come in a `next` or an `error`, with the code as given. A stream error with any other code, or none, is subscribed
+again after the resubscribe delay.
 
 An answer is wrapped the way a host serves it, `{ "data": { "machines": { "<machine>": { "<operation>": … } } } }`,
 and a push as `{ "data": { "<machine>Changed": … } }`, with the fields a host selects that the step does not give

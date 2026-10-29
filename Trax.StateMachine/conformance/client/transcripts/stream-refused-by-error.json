@@ -1,0 +1,24 @@
+{
+  "about": "A stream the host refuses with a GraphQL error coded TRAX_AUTHORIZATION (an anonymous socket it acknowledged, a token that expired) stops the client for good as FORBIDDEN: nothing is subscribed again, and a later send is answered stopped without reaching the host.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "resubscribeDelays": [10],
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "view": { "status": "ready" } },
+    { "pushErrors": [{ "message": "Not authorized.", "extensions": { "code": "TRAX_AUTHORIZATION" } }] },
+    { "view": { "status": "stopped", "error": "FORBIDDEN" } },
+    { "client": "send", "trigger": "Coin", "input": { "coin": "quarter" }, "expect": { "outcome": "stopped", "code": "FORBIDDEN" } },
+    { "quiet": 50 }
+  ]
+}
