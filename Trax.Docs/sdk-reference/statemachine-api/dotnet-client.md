@@ -45,6 +45,10 @@ public sealed class ServerMachineController : IDisposable
     public Task StartAsync();
     public Task<SendOutcome> SendAsync(string trigger, JsonNode? input = null);
     public Task<SendOutcome> RetryAsync();
+    public Task<SyncOutcome> SyncToAsync(
+        string target,
+        PlannedEvent? fields,
+        IReadOnlyList<string> navigation);
     public bool CanSend(string trigger, JsonNode? input = null);
     public IReadOnlyList<string> AvailableTriggers();
     public void Dispose();
@@ -76,13 +80,15 @@ public static class MachinePredictor
 | `StartAsync()` | Opens the instance: subscribes to its changes, then reads it, so no write falls between the two. Without an `Id` it starts one under `StartRequestId` and subscribes to the id the server minted. A second call returns the same task. |
 | `SendAsync(trigger, input)` | Sends one event under a fresh request id, after every earlier one has settled. While it is pending, `View.Snapshot` is the prediction, and the prediction's canonical wire goes with the event as its `clientResult`. |
 | `RetryAsync()` | Resends what last failed under the same request id, so the server replays it rather than applying it twice: the start while there is no instance, else the last event that failed, unless a later one was confirmed since. With nothing to resend it answers `Failed` with `NOTHING_TO_RETRY`. |
+| `SyncToAsync(target, fields, navigation)` | Brings the server to where a page that ran ahead of it is: the state `target`, with the `fields` event applied, moving through the `navigation` triggers. See [Syncing](#syncing). |
 | `CanSend(trigger, input)`, `AvailableTriggers()` | Whether the predictor allows a trigger from what is shown, and the triggers with an edge out of the shown state. Without a predictor, `CanSend` is true for any trigger with such an edge: the server decides. Both are false or empty before the first snapshot and once stopped. |
 | `View`, `Changed` | The current `MachineView`, a new object on every change, and the event raised after each change. |
 | `Dispose()` | Closes the stream and drops every late answer. Pending sends settle as `Failed` with `DISPOSED`. |
 | `DefaultRetryDelays` | 250 ms, 500 ms, 1 s, 2 s and 4 s: the delays between retries of `SERVER_OUTDATED` and of a failed read. |
 | `ServerMachineOptions` | What the controller is built with: the `Machine` as the manifest lists it, the `Server`, an optional `Predictor`, the `Id` of an instance to open or the `StartInput` and `StartRequestId` to start one, `NewRequestId` and `RetryDelays`. |
-| `MachineView` | `Status` (a `MachineStatus`: `Loading`, `Ready`, `Stopped`), the instance `Id`, the `Snapshot` shown, the `Confirmed` one, `RowId`, `Revision`, `DueAt`, `Pending`, `Problem` and `Error`. |
+| `MachineView` | `Status` (a `MachineStatus`: `Loading`, `Ready`, `Stopped`), the instance `Id`, the `Snapshot` shown, the `Confirmed` one, `RowId`, `Revision`, `DueAt`, `Pending`, `Problem`, `Error`, and `Unsaved`: true while a sync runs and after one that did not settle `Synced`, which a page holds a leave guard on. |
 | `SendOutcome` | What one send came to: `Confirmed` with the server's `Snapshot`, `Refused` or `Failed` with the `Problem`, or `Stopped` with the `Error`. |
+| `SyncOutcome` | What one sync came to: `Synced` with the server's `Snapshot`, `Superseded` by a later sync, `Unreachable`, `Exceeded`, `Invalid` with the `Trigger` or `Target`, `Refused` or `Failed` with the `Problem`, or `Stopped` with the `Error`. |
 | `MachineProblem`, `MachineProblemKind` | The last refusal or transport failure: its `Kind` (`Rejected` or `Transport`), its `Code` and its `Message`. |
 | `MachineError` | Why the controller stopped for good: its `Code` (`GONE`, `CLIENT_OUTDATED`, or `UNAUTHENTICATED` or `FORBIDDEN` for a socket the host refused), `Message`, and with `GONE`, `Deleted`: true when the instance was deleted, false when the server answered `NOT_FOUND`, which it answers alike for a missing instance and another caller's. |
 | `ClientProblemCodes` | The codes the client reports itself: `Gone`, `TransportError`, `NothingToRetry`, `Disposed` (`GONE`, `TRANSPORT_ERROR`, `NOTHING_TO_RETRY`, `DISPOSED`). Every other code is a [result code](/docs/sdk-reference/statemachine-api/result-codes). |
@@ -93,7 +99,7 @@ public static class MachinePredictor
 | --- | --- |
 | `MachinePredictor.FromIr(machine)` | The predictor built from the machine's IR as the manifest lists it, with an [`IrMachine`](/docs/sdk-reference/statemachine-api/ir-machine): no reference to the host's assembly, the way every language's client builds its machine. A snapshot the server sends is read trusting the custom state requirements it has no handler for. It holds no handler for any custom rule, so an event with an edge whose guard or reduction is custom, or that enters a state with a custom requirement, is sent with no prediction, and `CanSend` says only whether the state has an edge for it. |
 | `MachinePredictor.For(machine)` | The predictor over a compiled machine's engine (`BuiltMachine`, what `MachineBuilder.Build` answers). Its `IrHash` is the SHA-256 of the machine's exported IR; the controller refuses one whose hash is not the manifest's, since the server would answer every request `CLIENT_OUTDATED`. |
-| `IMachinePredictor` | What the controller predicts with: `IrHash`, `Advance`, `Rehydrate`, `Serialize`, `CanFire` and `AvailableTriggers`, each the engine's own. |
+| `IMachinePredictor` | What the controller predicts with: `IrHash`, `Advance`, `Rehydrate`, `Serialize`, `CanFire`, `AvailableTriggers` and `Plan`, each the engine's own. |
 
 `FromIr` is the usual choice: the app needs only the manifest. It has no handler for a custom rule, so an event whose
 prediction depends on a custom guard, custom state requirement or custom reduction goes with no `clientResult`, and the
@@ -141,6 +147,14 @@ The controller behaves as the TypeScript `ServerMachineController` does, and the
 - **Effects.** An event bound to the machine's effect is sent with no prediction, and nothing queued after it is
   predicted until it answers. So is an event with an edge that rests on a custom rule the predictor has no handler
   for.
+- **Syncing.** `SyncToAsync` plans with the predictor's [planner](/docs/sdk-reference/statemachine-api/ir-machine#planning),
+  or the machine built from the manifest's IR when there is no predictor. It plans from what the server confirmed once
+  nothing is queued, in flight or being read, sends the plan's first event as `SendAsync` does, and plans again from
+  each answer until the plan is empty. An `Undetermined` plan sends its events, then its trigger with no prediction. A
+  `GUARD_FAILED`, `NO_TRANSITION`, `CLIENT_DIVERGENCE` or `CONFLICT` reads the instance and plans again once per
+  sync; a second settles it `Refused`. A sync started while another runs supersedes it: the older settles
+  `Superseded` once its event in flight answers, and sends nothing more. No sync sends more than twice the machine's
+  states in events; past that it settles `Exceeded`.
 - **Timers** are the server's: `DueAt` is shown and never fired. An answer that does not know it keeps the one held
   while the state stays; entering a timed state without one reads the instance once for it.
 - **Stopping.** A gone instance, `CLIENT_OUTDATED`, a socket or a stream the host refused (`UNAUTHENTICATED` or
@@ -190,6 +204,16 @@ await controller.StartAsync();
 
 var outcome = await controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
 // SendOutcome.Confirmed when the server stored it; Refused, Failed or Stopped otherwise, never a throw
+```
+
+### Syncing
+
+```csharp fragment
+var outcome = await controller.SyncToAsync(
+    "Review",
+    new PlannedEvent("Update", new JsonObject { ["name"] = "Ada", ["email"] = "ada@example.com" }),
+    ["Begin", "Next", "Back"]);
+// SyncOutcome.Synced once the server holds Review with those fields; View.Unsaved is false again
 ```
 
 ## See also

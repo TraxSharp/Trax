@@ -28,6 +28,19 @@ public interface IMachinePredictor
 
     /// <summary>The triggers with an edge out of the snapshot's state.</summary>
     IReadOnlyList<string> AvailableTriggers(Snapshot snapshot);
+
+    /// <summary>
+    /// The events that take <paramref name="snapshot"/> to <paramref name="target"/> with the page's fields applied
+    /// (<see cref="IrMachine.Plan"/>). An edge this predictor cannot tell the outcome of answers
+    /// <see cref="PlanResult.Undetermined"/> rather than a guess. Never throws.
+    /// </summary>
+    PlanResult Plan(
+        Snapshot snapshot,
+        string target,
+        PlannedEvent? fields,
+        IReadOnlyList<string> navigation,
+        int? maxDepth = null
+    );
 }
 
 /// <summary>Builds an <see cref="IMachinePredictor"/>, from the host's IR or from a compiled machine.</summary>
@@ -54,61 +67,23 @@ public static class MachinePredictor
         ArgumentNullException.ThrowIfNull(machine);
         return new IrPredictor(
             new IrMachine((JsonObject)machine.Ir.DeepClone()),
-            Hash(machine.IrText()),
-            UnpredictableEdges(machine.Ir)
+            Hash(machine.IrText())
         );
     }
-
-    // The (state, trigger) pairs with an edge whose guard names a custom rule, whose reduction is custom, or whose
-    // destination's requirement names a custom rule. A machine built from the IR binds no handler to any, so without one
-    // its guard fails and its reduction keeps the context, which is not what the server does. The TypeScript and Rust
-    // clients read the same edges the same way.
-    internal static IReadOnlySet<(string State, string Trigger)> UnpredictableEdges(JsonObject ir)
-    {
-        var invariants = ir["invariants"] as JsonObject;
-        return (ir["transitions"] as JsonArray ?? [])
-            .OfType<JsonObject>()
-            .Where(t =>
-                NamesCustom(t["guard"])
-                || (
-                    t["reduce"]?["reduce"] is JsonValue r
-                    && r.TryGetValue<string>(out var kind)
-                    && kind == "custom"
-                )
-                || (
-                    t["to"] is JsonValue to
-                    && to.TryGetValue<string>(out var target)
-                    && NamesCustom(invariants?[target])
-                )
-            )
-            .Select(t =>
-                (t["from"]?.GetValue<string>() ?? "", t["trigger"]?.GetValue<string>() ?? "")
-            )
-            .ToHashSet();
-    }
-
-    private static bool NamesCustom(JsonNode? rule) =>
-        rule is JsonObject r
-        && (r["rule"] as JsonValue)?.GetValue<string>() switch
-        {
-            "custom" => true,
-            "all" or "any" => (r["rules"] as JsonArray ?? []).Any(NamesCustom),
-            _ => false,
-        };
 
     private static string Hash(string ir) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(ir)));
 
-    private sealed class IrPredictor(
-        IrMachine machine,
-        string irHash,
-        IReadOnlySet<(string, string)> unpredictable
-    ) : IMachinePredictor, IPartialPredictor
+    // A machine built from the IR binds no handler to a custom rule, so without one its guard fails and its reduction
+    // keeps the context, which is not what the server does: an edge that rests on one is not predicted. The TypeScript
+    // and Rust clients read the same edges the same way.
+    private sealed class IrPredictor(IrMachine machine, string irHash)
+        : IMachinePredictor,
+            IPartialPredictor
     {
         public string IrHash { get; } = irHash;
 
-        public bool Predicts(string state, string trigger) =>
-            !unpredictable.Contains((state, trigger));
+        public bool Predicts(string state, string trigger) => machine.Determines(state, trigger);
 
         public AdvanceResult Advance(Snapshot snapshot, string trigger, JsonNode? input) =>
             machine.Advance(snapshot, trigger, input);
@@ -123,6 +98,14 @@ public static class MachinePredictor
 
         public IReadOnlyList<string> AvailableTriggers(Snapshot snapshot) =>
             machine.AvailableTriggers(snapshot);
+
+        public PlanResult Plan(
+            Snapshot snapshot,
+            string target,
+            PlannedEvent? fields,
+            IReadOnlyList<string> navigation,
+            int? maxDepth = null
+        ) => machine.Plan(snapshot, target, fields, navigation, maxDepth);
     }
 
     private sealed class EnginePredictor<TState, TTrigger>(BuiltMachine<TState, TTrigger> machine)
@@ -146,6 +129,14 @@ public static class MachinePredictor
 
         public IReadOnlyList<string> AvailableTriggers(Snapshot snapshot) =>
             _engine.AvailableTriggers(snapshot);
+
+        public PlanResult Plan(
+            Snapshot snapshot,
+            string target,
+            PlannedEvent? fields,
+            IReadOnlyList<string> navigation,
+            int? maxDepth = null
+        ) => machine.Plan(snapshot, target, fields, navigation, maxDepth);
     }
 }
 
@@ -162,6 +153,7 @@ internal sealed class MachineShape
 {
     public required string Id { get; init; }
     public required int Version { get; init; }
+    public required int StateCount { get; init; }
     public required IReadOnlySet<string> TimedStates { get; init; }
     public required IReadOnlySet<string> EffectTriggers { get; init; }
     public required IReadOnlyDictionary<string, IReadOnlyList<string>> TriggersFrom { get; init; }
@@ -183,6 +175,7 @@ internal sealed class MachineShape
         {
             Id = machine.Id,
             Version = ir["version"]?.GetValue<int>() ?? 1,
+            StateCount = (ir["states"] as JsonArray)?.Count ?? 0,
             TimedStates = (ir["timers"] as JsonArray ?? [])
                 .OfType<JsonObject>()
                 .Select(t => t["state"]?.GetValue<string>() ?? "")

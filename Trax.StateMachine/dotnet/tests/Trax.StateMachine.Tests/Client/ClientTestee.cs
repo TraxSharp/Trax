@@ -61,6 +61,18 @@ public sealed class ClientTestee : IAsyncDisposable
                 )
             ),
             "retry" => OutcomeOf(await controller.RetryAsync()),
+            "sync" => SyncOf(
+                await controller.SyncToAsync(
+                    request["target"]!.GetValue<string>(),
+                    request["fields"] is JsonObject fields
+                        ? new PlannedEvent(
+                            fields["trigger"]!.GetValue<string>(),
+                            fields["input"]?.DeepClone()
+                        )
+                        : null,
+                    request["navigation"]!.AsArray().Select(t => t!.GetValue<string>()).ToList()
+                )
+            ),
             "view" => ViewOf(controller.View),
             _ => new JsonObject { ["unsupported"] = true },
         };
@@ -181,6 +193,37 @@ public sealed class ClientTestee : IAsyncDisposable
             _ => new JsonObject { ["error"] = $"unknown outcome {outcome}" },
         };
 
+    private static JsonObject SyncOf(SyncOutcome outcome) =>
+        outcome switch
+        {
+            SyncOutcome.Synced s => new JsonObject
+            {
+                ["outcome"] = "synced",
+                ["state"] = s.Snapshot.State,
+                ["revision"] = s.Snapshot.Revision,
+            },
+            SyncOutcome.Superseded => new JsonObject { ["outcome"] = "superseded" },
+            SyncOutcome.Unreachable => new JsonObject { ["outcome"] = "unreachable" },
+            SyncOutcome.Exceeded => new JsonObject { ["outcome"] = "exceeded" },
+            SyncOutcome.Invalid => new JsonObject { ["outcome"] = "invalid" },
+            SyncOutcome.Refused r => new JsonObject
+            {
+                ["outcome"] = "refused",
+                ["code"] = r.Problem.Code,
+            },
+            SyncOutcome.Failed f => new JsonObject
+            {
+                ["outcome"] = "failed",
+                ["code"] = f.Problem.Code,
+            },
+            SyncOutcome.Stopped s => new JsonObject
+            {
+                ["outcome"] = "stopped",
+                ["code"] = s.Error.Code,
+            },
+            _ => new JsonObject { ["error"] = $"unknown outcome {outcome}" },
+        };
+
     private static JsonObject ViewOf(MachineView view) =>
         new()
         {
@@ -203,6 +246,7 @@ public sealed class ClientTestee : IAsyncDisposable
             ["problem"] = view.Problem?.Code,
             ["error"] = view.Error?.Code,
             ["deleted"] = view.Error?.Deleted,
+            ["unsaved"] = view.Unsaved,
         };
 
     private async Task CloseAsync()

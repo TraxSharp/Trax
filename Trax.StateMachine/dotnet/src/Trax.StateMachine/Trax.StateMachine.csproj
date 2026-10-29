@@ -27,5 +27,7 @@
     <InternalsVisibleTo Include="Trax.Mediator" />
     <!-- Writes and reads a TimeSpan on the typed machine surface as the ISO-8601 duration a timer reads. -->
     <InternalsVisibleTo Include="Trax.Api.GraphQL" />
+    <!-- Reads which edges a machine built from the IR cannot evaluate, so the client sends those with no prediction. -->
+    <InternalsVisibleTo Include="Trax.StateMachine.Client" />
   </ItemGroup>
 </Project>

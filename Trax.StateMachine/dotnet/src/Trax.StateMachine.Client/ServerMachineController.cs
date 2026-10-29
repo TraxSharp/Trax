@@ -98,6 +98,12 @@ public sealed record MachineView
 
     /// <summary>Why the controller stopped, once it has.</summary>
     public MachineError? Error { get; init; }
+
+    /// <summary>
+    /// Whether a sync (<see cref="ServerMachineController.SyncToAsync"/>) is running, or the last one did not settle
+    /// <see cref="SyncOutcome.Synced"/>: the server is not where the page is. A page holds a leave guard on it.
+    /// </summary>
+    public bool Unsaved { get; init; }
 }
 
 /// <summary>What one send came to. Never an exception.</summary>
@@ -116,6 +122,36 @@ public abstract record SendOutcome
 
     /// <summary>The controller stopped for good before or while it was sent.</summary>
     public sealed record Stopped(MachineError Error) : SendOutcome;
+}
+
+/// <summary>What one sync came to. Never an exception.</summary>
+public abstract record SyncOutcome
+{
+    private SyncOutcome() { }
+
+    /// <summary>The server is at the target with the fields applied, as <see cref="Snapshot"/> holds it.</summary>
+    public sealed record Synced(ServerSnapshot Snapshot) : SyncOutcome;
+
+    /// <summary>A later sync took over; this one sent nothing after the event it had in flight.</summary>
+    public sealed record Superseded : SyncOutcome;
+
+    /// <summary>No events reach the target from what the server holds.</summary>
+    public sealed record Unreachable : SyncOutcome;
+
+    /// <summary>The planner stopped at its depth, or the sync sent as many events as it may (twice the machine's states).</summary>
+    public sealed record Exceeded : SyncOutcome;
+
+    /// <summary>The target is not a state, or <see cref="Trigger"/> is not one a client may move with (<see cref="PlanResult.Invalid"/>).</summary>
+    public sealed record Invalid(string? Trigger, string? Target) : SyncOutcome;
+
+    /// <summary>The server refused an event twice, the second time after the instance was read again.</summary>
+    public sealed record Refused(MachineProblem Problem) : SyncOutcome;
+
+    /// <summary>An event did not get through; syncing again plans from what the server confirmed.</summary>
+    public sealed record Failed(MachineProblem Problem) : SyncOutcome;
+
+    /// <summary>The controller stopped for good before or while it synced.</summary>
+    public sealed record Stopped(MachineError Error) : SyncOutcome;
 }
 
 /// <summary>How a <see cref="ServerMachineController"/> is built.</summary>
@@ -175,6 +211,9 @@ public sealed record ServerMachineOptions
 /// <para><b>Retries.</b> <c>SERVER_OUTDATED</c> is retried under the same request id after each of the retry delays. A
 /// transport failure ends the event as failed; <see cref="RetryAsync"/> resends it under the same request id, so the
 /// server replays it rather than applying it twice.</para>
+/// <para><b>Syncing.</b> <see cref="SyncToAsync"/> brings the server to where a page that ran ahead of it is. It plans
+/// from what the server confirmed once every earlier event has settled, sends the first event of the plan, and plans
+/// again from each answer. A refusal reads the instance once and plans again; a later sync supersedes it.</para>
 /// <para><b>Stopping.</b> A gone instance and <c>CLIENT_OUTDATED</c> stop the controller for good.</para>
 /// <para><b>Threads.</b> The controller does its work on one exclusive scheduler, so it handles one thing at a time
 /// whichever thread calls it. <see cref="Changed"/> is raised there: a handler reads <see cref="View"/> and must not
@@ -200,6 +239,15 @@ public sealed class ServerMachineController : IDisposable
     private static readonly string ClientDivergence = RefusalCode.ClientDivergence.ToWire();
     private static readonly string NotFound = RefusalCode.NotFound.ToWire();
 
+    // The refusals a sync reads the instance again after, once: what the server holds is not what the plan was made from.
+    private static readonly HashSet<string> Replans = new(StringComparer.Ordinal)
+    {
+        RefusalCode.GuardFailed.ToWire(),
+        RefusalCode.NoTransition.ToWire(),
+        RefusalCode.ClientDivergence.ToWire(),
+        RefusalCode.Conflict.ToWire(),
+    };
+
     private readonly TaskScheduler _loop =
         new ConcurrentExclusiveSchedulerPair().ExclusiveScheduler;
     private readonly MachineShape _shape;
@@ -209,6 +257,8 @@ public sealed class ServerMachineController : IDisposable
     private readonly Func<string> _newRequestId;
     private readonly IReadOnlyList<TimeSpan> _retryDelays;
     private readonly object _startGate = new();
+    private readonly JsonObject _ir;
+    private IrMachine? _planner;
 
     private string? _id;
     private string? _startRequestId;
@@ -243,6 +293,11 @@ public sealed class ServerMachineController : IDisposable
     private string? _reloadNextRowId;
     private ServerSnapshot? _buffered;
 
+    // The sync that runs is the one of this generation; an older one settles superseded at its next step.
+    private long _syncGeneration;
+    private bool _unsaved;
+    private List<TaskCompletionSource> _syncWaiters = [];
+
     private MachineView _view;
 
     /// <summary>Builds a controller. It sends nothing until <see cref="StartAsync"/>.</summary>
@@ -251,6 +306,7 @@ public sealed class ServerMachineController : IDisposable
     {
         ArgumentNullException.ThrowIfNull(options);
         _shape = MachineShape.Of(options.Machine);
+        _ir = options.Machine.Ir;
         _server = options.Server;
         _predictor = options.Predictor;
         if (_predictor is not null && _predictor.IrHash != options.Machine.IrHash)
@@ -348,6 +404,52 @@ public sealed class ServerMachineController : IDisposable
             return Enqueue(new QueuedEvent(request.Trigger, request.Input) { Request = request });
         });
 
+    /// <summary>
+    /// Brings the server to where a page that ran ahead of it is: the state <paramref name="target"/>, with the fields
+    /// event <paramref name="fields"/> applied, moving through <paramref name="navigation"/>. Once every earlier event has
+    /// settled it plans from what the server confirmed (<see cref="IMachinePredictor.Plan"/>, or the machine built from
+    /// the manifest's IR without a predictor), sends the plan's first event as <see cref="SendAsync"/> does, and plans
+    /// again from each answer until the plan is empty. An undetermined plan sends its events, then its trigger with no
+    /// prediction.
+    /// </summary>
+    /// <remarks>
+    /// A <c>GUARD_FAILED</c>, <c>NO_TRANSITION</c>, <c>CLIENT_DIVERGENCE</c> or <c>CONFLICT</c> reads the instance once
+    /// and plans again; a second settles the sync <see cref="SyncOutcome.Refused"/>. A sync started while another runs
+    /// supersedes it: the older settles <see cref="SyncOutcome.Superseded"/> once the event it has in flight answers,
+    /// and sends nothing more. No sync sends more than twice the machine's states in events. <see cref="MachineView.Unsaved"/>
+    /// holds while a sync runs and after one that did not settle <see cref="SyncOutcome.Synced"/>.
+    /// </remarks>
+    /// <param name="target">The state the page is in.</param>
+    /// <param name="fields">The event that writes the page's fields, with its input, or null when there is none.</param>
+    /// <param name="navigation">The triggers, without input, that move between states.</param>
+    public Task<SyncOutcome> SyncToAsync(
+        string target,
+        PlannedEvent? fields,
+        IReadOnlyList<string> navigation
+    )
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(navigation);
+        var request = new SyncRequest(
+            target,
+            fields is null ? null : fields with { Input = fields.Input?.DeepClone() },
+            navigation.ToList()
+        );
+        return Post(() =>
+        {
+            if (_error is not null)
+                return Task.FromResult<SyncOutcome>(new SyncOutcome.Stopped(_error));
+            if (_disposed)
+                return Task.FromResult<SyncOutcome>(new SyncOutcome.Failed(DisposedProblem()));
+            var generation = ++_syncGeneration;
+            _unsaved = true;
+            // An older sync waiting for its turn hears of this one now.
+            WakeSyncs();
+            Emit();
+            return SyncAsync(generation, request);
+        });
+    }
+
     /// <summary>Whether the predictor allows <paramref name="trigger"/> from what is shown. False before the first snapshot and once stopped.</summary>
     /// <remarks>
     /// Without a predictor, true for any trigger with an edge out of the shown state: the server decides. An event bound to
@@ -428,6 +530,7 @@ public sealed class ServerMachineController : IDisposable
         foreach (var entry in queued)
             entry.Settle.TrySetResult(DisposedOutcome());
         SettleStart(DisposedOutcome());
+        WakeSyncs();
         Changed = null;
     }
 
@@ -698,6 +801,7 @@ public sealed class ServerMachineController : IDisposable
             return;
         }
         _resyncing = false;
+        WakeSyncs();
     }
 
     // ── Ordering ───────────────────────────────────────────────────────────────────────────────
@@ -949,6 +1053,161 @@ public sealed class ServerMachineController : IDisposable
         Emit();
     }
 
+    // ── Syncing ────────────────────────────────────────────────────────────────────────────────
+
+    private sealed record SyncRequest(
+        string Target,
+        PlannedEvent? Fields,
+        IReadOnlyList<string> Navigation
+    );
+
+    private async Task<SyncOutcome> SyncAsync(long generation, SyncRequest request)
+    {
+        var outcome = await SyncCoreAsync(generation, request);
+        // Only the newest sync says whether the page is saved; a superseded one leaves it to the one that took over.
+        if (generation == _syncGeneration && !_disposed)
+        {
+            _unsaved = outcome is not SyncOutcome.Synced;
+            Emit();
+        }
+        return outcome;
+    }
+
+    private async Task<SyncOutcome> SyncCoreAsync(long generation, SyncRequest request)
+    {
+        var budget = 2 * _shape.StateCount;
+        var sent = 0;
+        var reread = false;
+        while (true)
+        {
+            // Planned from what the server confirmed once nothing is in flight, queued or being read: when the event is
+            // sent, not when the sync was asked for.
+            while (!Settled())
+            {
+                if (generation != _syncGeneration)
+                    return new SyncOutcome.Superseded();
+                if (_error is not null)
+                    return new SyncOutcome.Stopped(_error);
+                if (_disposed)
+                    return new SyncOutcome.Failed(DisposedProblem());
+                var waiter = new TaskCompletionSource(
+                    TaskCreationOptions.RunContinuationsAsynchronously
+                );
+                _syncWaiters.Add(waiter);
+                await waiter.Task;
+            }
+            if (generation != _syncGeneration)
+                return new SyncOutcome.Superseded();
+
+            PlannedEvent next;
+            switch (Plan(_confirmed!, request))
+            {
+                case PlanResult.Planned { Events.Count: 0 }:
+                    return new SyncOutcome.Synced(ConfirmedSnapshot());
+                case PlanResult.Planned planned:
+                    next = planned.Events[0];
+                    break;
+                case PlanResult.Undetermined undetermined:
+                    // The events up to the edge, then the edge itself, which the controller sends with no prediction: the
+                    // fields event with the fields' input.
+                    next =
+                        undetermined.Events.Count > 0 ? undetermined.Events[0]
+                        : undetermined.Trigger == request.Fields?.Trigger ? request.Fields
+                        : new PlannedEvent(undetermined.Trigger);
+                    break;
+                case PlanResult.Invalid invalid:
+                    return new SyncOutcome.Invalid(invalid.Trigger, invalid.Target);
+                case PlanResult.Unreachable:
+                    return new SyncOutcome.Unreachable();
+                case null:
+                    return new SyncOutcome.Failed(
+                        Refusal(
+                            ClientOutdated,
+                            "This client's engine cannot read the machine's IR, so it cannot plan."
+                        )
+                    );
+                default:
+                    return new SyncOutcome.Exceeded();
+            }
+            if (sent == budget)
+                return new SyncOutcome.Exceeded();
+            sent++;
+
+            var outcome = await Enqueue(new QueuedEvent(next.Trigger, next.Input?.DeepClone()));
+            if (generation != _syncGeneration)
+                return new SyncOutcome.Superseded();
+            switch (outcome)
+            {
+                case SendOutcome.Confirmed:
+                    continue;
+                case SendOutcome.Refused refused when Replans.Contains(refused.Problem.Code):
+                    if (reread)
+                        return new SyncOutcome.Refused(refused.Problem);
+                    reread = true;
+                    // A divergence is read again already, and nothing is sent until it answers.
+                    if (refused.Problem.Code != ClientDivergence)
+                        Reload(null);
+                    continue;
+                case SendOutcome.Refused refused:
+                    return new SyncOutcome.Refused(refused.Problem);
+                case SendOutcome.Failed failed:
+                    return new SyncOutcome.Failed(failed.Problem);
+                case SendOutcome.Stopped stopped:
+                    return new SyncOutcome.Stopped(stopped.Error);
+            }
+        }
+    }
+
+    // Nothing in flight, queued or being read, and a snapshot confirmed to plan from.
+    private bool Settled() =>
+        !_disposed
+        && _error is null
+        && _id is not null
+        && _confirmed is not null
+        && _queue.Count == 0
+        && !_sending
+        && !_reloading
+        && !_resyncing;
+
+    // Every waiting sync looks again at whether it may go on.
+    private void WakeSyncs()
+    {
+        if (_syncWaiters.Count == 0)
+            return;
+        var waiters = _syncWaiters;
+        _syncWaiters = [];
+        foreach (var waiter in waiters)
+            waiter.TrySetResult();
+    }
+
+    // The predictor's planner, or without one the machine built from the manifest's IR; null when this engine cannot read
+    // the IR.
+    private PlanResult? Plan(Snapshot confirmed, SyncRequest request)
+    {
+        if (_predictor is not null)
+            return _predictor.Plan(confirmed, request.Target, request.Fields, request.Navigation);
+        try
+        {
+            _planner ??= new IrMachine((JsonObject)_ir.DeepClone());
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        return _planner.Plan(confirmed, request.Target, request.Fields, request.Navigation);
+    }
+
+    private ServerSnapshot ConfirmedSnapshot() =>
+        new()
+        {
+            RowId = _rowId,
+            Revision = _revision,
+            State = _confirmed!.State,
+            Context = (JsonObject)_confirmed.Context.DeepClone(),
+            DueAtKnown = true,
+            DueAt = _dueAt,
+        };
+
     // ── Stopping and timing ────────────────────────────────────────────────────────────────────
 
     private void Stop(MachineError error)
@@ -966,6 +1225,7 @@ public sealed class ServerMachineController : IDisposable
         Publish();
         foreach (var queued in stranded)
             queued.Settle.TrySetResult(new SendOutcome.Stopped(error));
+        WakeSyncs();
         Emit();
     }
 
@@ -1003,12 +1263,12 @@ public sealed class ServerMachineController : IDisposable
             )
             : answer;
 
-    private static SendOutcome DisposedOutcome() =>
-        new SendOutcome.Failed(
-            Refusal(
-                ClientProblemCodes.Disposed,
-                "The controller was disposed before the server answered."
-            )
+    private static SendOutcome DisposedOutcome() => new SendOutcome.Failed(DisposedProblem());
+
+    private static MachineProblem DisposedProblem() =>
+        Refusal(
+            ClientProblemCodes.Disposed,
+            "The controller was disposed before the server answered."
         );
 
     private static MachineProblem Refusal(string code, string message) =>
@@ -1028,6 +1288,7 @@ public sealed class ServerMachineController : IDisposable
         if (_disposed)
             return;
         Publish();
+        WakeSyncs();
         if (Changed is not { } changed)
             return;
         foreach (var handler in changed.GetInvocationList())
@@ -1062,6 +1323,7 @@ public sealed class ServerMachineController : IDisposable
             Pending = _queue.Count > 0,
             Problem = _problem,
             Error = _error,
+            Unsaved = _unsaved,
         };
 
     // Whether the predictor can tell what `trigger` leads to from `state`: there is one, the trigger is not bound to the
