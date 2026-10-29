@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Threading.Channels;
 using AwesomeAssertions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
@@ -178,6 +179,121 @@ public class ClientSendTests
         ir["timers"] = timers;
         return ir;
     }
+
+    [Test]
+    public async Task Start_settles_once_a_read_that_failed_has_been_read_again()
+    {
+        var server = new StepServer();
+        using var controller = Open(
+            server,
+            id: "i-1",
+            retryDelays: [TimeSpan.FromMilliseconds(100)]
+        );
+
+        var start = controller.StartAsync();
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetException(
+            new HttpRequestException("dropped")
+        );
+        var again = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        start.IsCompleted.Should().BeFalse("the read is still being retried");
+        again.SetResult(ServerAnswer.Of(At(1, "Locked")));
+        await start.WaitAsync(Wait);
+        controller.View.Status.Should().Be(MachineStatus.Ready);
+    }
+
+    [Test]
+    public async Task Start_settles_once_a_start_answered_SERVER_OUTDATED_has_been_retried()
+    {
+        var server = new StepServer();
+        using var controller = Open(
+            server,
+            id: null,
+            retryDelays: [TimeSpan.FromMilliseconds(100)]
+        );
+
+        var start = controller.StartAsync();
+        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Refused("SERVER_OUTDATED", "Another version answered.")
+        );
+        var again = await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        start.IsCompleted.Should().BeFalse("the start is still being retried");
+        again.SetResult(ServerAnswer.Of(At(1, "Locked"), "i-1"));
+        await start.WaitAsync(Wait);
+        controller.View.Status.Should().Be(MachineStatus.Ready);
+    }
+
+    // A server whose every start, event and read the test answers by hand, as each arrives.
+    private sealed class StepServer : IMachineServer
+    {
+        public Channel<TaskCompletionSource<ServerAnswer>> Starts { get; } =
+            Channel.CreateUnbounded<TaskCompletionSource<ServerAnswer>>();
+
+        public Channel<TaskCompletionSource<ServerAnswer>> Reads { get; } =
+            Channel.CreateUnbounded<TaskCompletionSource<ServerAnswer>>();
+
+        public Channel<HandServer.Sent> Events { get; } =
+            Channel.CreateUnbounded<HandServer.Sent>();
+
+        private static Task<ServerAnswer> Hand(Channel<TaskCompletionSource<ServerAnswer>> to)
+        {
+            var answer = new TaskCompletionSource<ServerAnswer>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            to.Writer.TryWrite(answer);
+            return answer.Task;
+        }
+
+        public Task<ServerAnswer> StartAsync(
+            JsonNode? input,
+            string requestId,
+            CancellationToken cancellationToken = default
+        ) => Hand(Starts);
+
+        public Task<ServerAnswer> EventAsync(
+            string id,
+            string trigger,
+            JsonNode? input,
+            string requestId,
+            string? clientResult,
+            CancellationToken cancellationToken = default
+        )
+        {
+            var sent = new HandServer.Sent(trigger, input, clientResult);
+            Events.Writer.TryWrite(sent);
+            return sent.Answer.Task;
+        }
+
+        public Task<ServerAnswer> GetAsync(
+            string id,
+            CancellationToken cancellationToken = default
+        ) => Hand(Reads);
+
+        public IDisposable Subscribe(string id, Action<StreamMessage> onMessage) => new Nothing();
+
+        private sealed class Nothing : IDisposable
+        {
+            public void Dispose() { }
+        }
+    }
+
+    private static ServerMachineController Open(
+        StepServer server,
+        string? id,
+        IReadOnlyList<TimeSpan> retryDelays,
+        IMachinePredictor? predictor = null
+    ) =>
+        new(
+            new ServerMachineOptions
+            {
+                Machine = Turnstile,
+                Server = server,
+                Predictor = predictor,
+                Id = id,
+                RetryDelays = retryDelays,
+            }
+        );
 
     private static ServerMachineController Open(HandServer server, IMachinePredictor? predictor) =>
         new(

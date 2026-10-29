@@ -334,8 +334,9 @@ public sealed class ServerMachineController : IDisposable
 
     /// <summary>
     /// Opens the instance: subscribes first, then reads it, so no write falls between the two. Without an id it starts
-    /// one under the start request id and subscribes to the id the server minted. Calling it again returns the same
-    /// task; a start that failed is resent by <see cref="RetryAsync"/>.
+    /// one under the start request id and subscribes to the id the server minted. The task completes once the start or
+    /// the first read has settled, its retries included. Calling it again returns the same task; a start that failed is
+    /// resent by <see cref="RetryAsync"/>.
     /// </summary>
     public Task StartAsync()
     {
@@ -587,8 +588,13 @@ public sealed class ServerMachineController : IDisposable
         {
             if (problem.Code == ServerOutdated && attempt < _retryDelays.Count)
             {
-                // Another node of a rolling deploy answered: another may run this version.
-                Later(attempt, () => CreateAsync(requestId, attempt + 1), () => Task.CompletedTask);
+                // Another node of a rolling deploy answered: another may run this version. The start settles once the
+                // retry has.
+                await Later(
+                    attempt,
+                    () => CreateAsync(requestId, attempt + 1),
+                    () => Task.CompletedTask
+                );
                 return;
             }
             if (problem.Code == ClientOutdated)
@@ -740,7 +746,8 @@ public sealed class ServerMachineController : IDisposable
                 return;
             _problem = TransportFailure(ex);
             Emit();
-            Later(
+            // The first read settles the start once its retries have.
+            await Later(
                 attempt,
                 () => ReadAsync(rowId, attempt + 1),
                 () =>
@@ -759,7 +766,7 @@ public sealed class ServerMachineController : IDisposable
         {
             if (problem.Code == ServerOutdated && attempt < _retryDelays.Count)
             {
-                Later(
+                await Later(
                     attempt,
                     () => ReadAsync(rowId, attempt + 1),
                     () =>
@@ -1031,7 +1038,7 @@ public sealed class ServerMachineController : IDisposable
         {
             if (attempt < _retryDelays.Count)
             {
-                Later(
+                await Later(
                     attempt,
                     () => DeliverAsync(entry, request, attempt + 1),
                     () => Task.CompletedTask
@@ -1241,16 +1248,13 @@ public sealed class ServerMachineController : IDisposable
         Emit();
     }
 
-    // Runs `next` after the attempt's delay, or `exhausted` at once when there is none left.
-    private void Later(int attempt, Func<Task> next, Func<Task> exhausted)
+    // Runs `next` after the attempt's delay, or `exhausted` at once when there is none left. Completes once whichever
+    // ran has, or once the controller stops or is disposed before the delay ends.
+    private Task Later(int attempt, Func<Task> next, Func<Task> exhausted)
     {
         if (attempt >= _retryDelays.Count)
-        {
-            _ = exhausted();
-            return;
-        }
-        var token = _timers.Token;
-        _ = DelayThen(_retryDelays[attempt], token, next);
+            return exhausted();
+        return DelayThen(_retryDelays[attempt], _timers.Token, next);
     }
 
     private async Task DelayThen(TimeSpan delay, CancellationToken token, Func<Task> next)
