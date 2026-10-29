@@ -1520,15 +1520,29 @@ internal sealed partial class ClientGenerator
                     ? error
                     : new TraxOperationError("CONNECTION_CHANGED", "configureTrax was called while following this run: follow it again."),
                 );
-              return traxSocket().subscribe<{ runProgress: RunProgressEvent }>(payload, {
+              // Set once a frame with neither data nor an error has ended the stream, which then says nothing more.
+              let failed = false;
+              const stop = traxSocket().subscribe<{ runProgress: RunProgressEvent }>(payload, {
                 next: (result) => {
+                  if (failed) return;
                   const error = result.errors?.[0];
                   if (error) onEnd?.(new TraxOperationError(error.extensions?.code as string | undefined, error.message));
-                  else if (result.data) onEvent(result.data.runProgress);
+                  else if (typeof result.data === "object" && result.data !== null) onEvent(result.data.runProgress);
+                  else {
+                    // Neither a refusal nor an event: the stream ends with that failure, as a send answered so does.
+                    failed = true;
+                    stop();
+                    end(new TraxOperationError(undefined, "The host sent a frame with neither data nor an error."));
+                  }
                 },
-                error: (error) => end(error),
-                complete: () => end(),
+                error: (error) => {
+                  if (!failed) end(error);
+                },
+                complete: () => {
+                  if (!failed) end();
+                },
               });
+              return stop;
             }
 
             /** A run as useRunProgress shows it. */
