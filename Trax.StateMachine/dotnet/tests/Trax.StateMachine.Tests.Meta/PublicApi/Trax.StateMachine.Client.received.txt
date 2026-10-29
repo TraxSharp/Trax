@@ -10,6 +10,7 @@ namespace Trax.StateMachine.Client
     }
     public sealed class GraphQLMachineServer : Trax.StateMachine.Client.IMachineServer
     {
+        public static readonly System.TimeSpan DefaultRequestTimeout;
         public static readonly System.Collections.Generic.IReadOnlyList<System.TimeSpan> DefaultResubscribeDelays;
         public GraphQLMachineServer(Trax.StateMachine.Client.GraphQLMachineServerOptions options) { }
         public System.Threading.Tasks.Task<Trax.StateMachine.Client.ServerProblem?> DiscardAsync(string id, string requestId, System.Threading.CancellationToken cancellationToken = default) { }
@@ -26,6 +27,7 @@ namespace Trax.StateMachine.Client
         public required System.Net.Http.HttpClient Http { get; init; }
         public required Trax.StateMachine.ClientManifestMachine Machine { get; init; }
         public long MaxResponseSize { get; init; }
+        public System.TimeSpan RequestTimeout { get; init; }
         public System.Collections.Generic.IReadOnlyList<System.TimeSpan>? ResubscribeDelays { get; init; }
         public required Trax.Client.ISubscriptionSocket Socket { get; init; }
         public System.Collections.Generic.IReadOnlyCollection<string>? TerminalStreamErrors { get; init; }

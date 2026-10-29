@@ -135,7 +135,7 @@ public sealed class TraxHttpTransport : ITraxTransport
             _options.Endpoint,
             Payload(request),
             _options.MaxResponseSize,
-            cancellationToken
+            cancellationToken: cancellationToken
         );
 
     /// <inheritdoc/>
@@ -160,7 +160,8 @@ public sealed class TraxHttpTransport : ITraxTransport
     /// failure (a status that is not success with no errors among them, whatever data came with it), and so is a
     /// body larger than <paramref name="maxResponseSize"/>, which is refused as it arrives rather than read whole, a
     /// body that breaks off, an answer from another scheme, host or port than <paramref name="endpoint"/>'s (a
-    /// redirect the client followed), and a request that outlasts <see cref="HttpClient.Timeout"/>, body included. Throws only
+    /// redirect the client followed), and a request that outlasts <see cref="HttpClient.Timeout"/> or
+    /// <paramref name="requestTimeout"/>, whichever is shorter, body included. Throws only
     /// when <paramref name="cancellationToken"/> is cancelled. Internal: the endpoint is checked for TLS by whoever
     /// built it, a transport or the machine server.
     /// </summary>
@@ -169,6 +170,7 @@ public sealed class TraxHttpTransport : ITraxTransport
         Uri endpoint,
         JsonObject body,
         long maxResponseSize = TraxHttpTransportOptions.DefaultMaxResponseSize,
+        TimeSpan? requestTimeout = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -190,8 +192,9 @@ public sealed class TraxHttpTransport : ITraxTransport
 
         // With ResponseHeadersRead the client's timeout stops at the headers; this one runs on through the body.
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        if (http.Timeout != Timeout.InfiniteTimeSpan)
-            timeout.CancelAfter(http.Timeout);
+        var limit = Shorter(http.Timeout, requestTimeout ?? Timeout.InfiniteTimeSpan);
+        if (limit != Timeout.InfiniteTimeSpan)
+            timeout.CancelAfter(limit);
         try
         {
             using var response = await http.SendAsync(
@@ -230,7 +233,7 @@ public sealed class TraxHttpTransport : ITraxTransport
         {
             // A timeout surfaces as a cancellation the caller did not ask for.
             return TraxAnswer.Failed(
-                $"The host did not answer within {http.Timeout.TotalSeconds:0.###} seconds."
+                $"The host did not answer within {limit.TotalSeconds:0.###} seconds."
             );
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException)
@@ -239,6 +242,13 @@ public sealed class TraxHttpTransport : ITraxTransport
             return TraxAnswer.Failed($"The host could not be reached: {ex.Message}");
         }
     }
+
+    // The shorter of two timeouts, either of which may be infinite.
+    private static TimeSpan Shorter(TimeSpan a, TimeSpan b) =>
+        a == Timeout.InfiniteTimeSpan ? b
+        : b == Timeout.InfiniteTimeSpan ? a
+        : a < b ? a
+        : b;
 
     private static TraxAnswer AnswerOf(HttpResponseMessage response, string? text, long max)
     {

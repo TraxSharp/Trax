@@ -16,7 +16,7 @@ public sealed class ClientTestee : IAsyncDisposable
     // The name the kit's allowlist of what a client may lack knows this client by.
     private const string Client = "dotnet";
 
-    private HttpClient _http = NewHttp(null);
+    private HttpClient _http = NewHttp();
     private ServerMachineController? _controller;
     private GraphQLMachineServer? _server;
     private Func<string> _newRequestId = () => "r0";
@@ -155,8 +155,9 @@ public sealed class ClientTestee : IAsyncDisposable
         };
         var insecure = request["allowInsecureTransport"]?.GetValue<bool>() ?? false;
         var maxResponseSize = request["maxResponseSize"]?.GetValue<long>();
+        var requestTimeout = request["requestTimeout"]?.GetValue<double>();
         _http.Dispose();
-        _http = NewHttp(request["requestTimeout"]?.GetValue<double>());
+        _http = NewHttp();
         GraphQLMachineServer server;
         try
         {
@@ -178,6 +179,9 @@ public sealed class ClientTestee : IAsyncDisposable
                     Socket = _socket,
                     ResubscribeDelays = Delays(request["resubscribeDelays"]),
                     MaxResponseSize = maxResponseSize ?? 16 * 1024 * 1024,
+                    RequestTimeout = requestTimeout is { } ms
+                        ? TimeSpan.FromMilliseconds(ms)
+                        : GraphQLMachineServer.DefaultRequestTimeout,
                 }
             );
         }
@@ -210,13 +214,12 @@ public sealed class ClientTestee : IAsyncDisposable
         return new JsonObject { ["opened"] = true, ["client"] = Client };
     }
 
-    // Redirects off, as the client requires; a transcript's request timeout is the client's own.
-    private static HttpClient NewHttp(double? timeoutMs) =>
+    // Redirects off, as the client requires, and no timeout of its own: a transcript's request timeout is the server's
+    // RequestTimeout.
+    private static HttpClient NewHttp() =>
         new(new SocketsHttpHandler { AllowAutoRedirect = false })
         {
-            Timeout = timeoutMs is { } ms
-                ? TimeSpan.FromMilliseconds(ms)
-                : TimeSpan.FromSeconds(100),
+            Timeout = Timeout.InfiniteTimeSpan,
         };
 
     private static IReadOnlyList<TimeSpan> Delays(JsonNode? delays) =>

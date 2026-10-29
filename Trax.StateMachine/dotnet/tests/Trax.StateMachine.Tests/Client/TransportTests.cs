@@ -253,6 +253,23 @@ public class TransportTests
             .Be(16 * 1024 * 1024);
     }
 
+    [Test]
+    public void A_request_timeout_that_is_neither_positive_nor_infinite_is_refused()
+    {
+        var build = () =>
+            new GraphQLMachineServer(
+                new GraphQLMachineServerOptions
+                {
+                    Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
+                    Endpoint = new Uri("https://h/graphql"),
+                    Machine = Turnstile,
+                    Socket = new NoSocket(),
+                    RequestTimeout = TimeSpan.Zero,
+                }
+            );
+        build.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
     private sealed class Sink : ISubscriptionSink
     {
         public TaskCompletionSource<Exception> Failed { get; } =

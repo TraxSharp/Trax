@@ -61,6 +61,14 @@ public sealed record GraphQLMachineServerOptions
     /// which the controller reports as a transport failure, rather than being read into memory.
     /// </summary>
     public long MaxResponseSize { get; init; } = 16 * 1024 * 1024;
+
+    /// <summary>
+    /// How long one request may take, from sending it to reading the last byte of its answer, before it fails as a
+    /// transport failure; <see cref="GraphQLMachineServer.DefaultRequestTimeout"/> (30 seconds) by default. The
+    /// <see cref="Http"/> client's own <see cref="HttpClient.Timeout"/> still applies, so the shorter of the two holds.
+    /// <see cref="Timeout.InfiniteTimeSpan"/> leaves only the client's.
+    /// </summary>
+    public TimeSpan RequestTimeout { get; init; } = GraphQLMachineServer.DefaultRequestTimeout;
 }
 
 /// <summary>
@@ -83,6 +91,9 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         TimeSpan.FromSeconds(2),
         TimeSpan.FromSeconds(5),
     ];
+
+    /// <summary>How long one request may take before it fails, by default: 30 seconds.</summary>
+    public static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(30);
 
     private const string ChangedOperation = "changed";
     private static readonly string ClientOutdated = RefusalCode.ClientOutdated.ToWire();
@@ -120,6 +131,15 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     public GraphQLMachineServer(GraphQLMachineServerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        if (
+            options.RequestTimeout <= TimeSpan.Zero
+            && options.RequestTimeout != Timeout.InfiniteTimeSpan
+        )
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.RequestTimeout,
+                "The request timeout must be positive, or Timeout.InfiniteTimeSpan."
+            );
         TransportSecurity.RequireNoRedirects(options.Http, nameof(options));
         TransportSecurity.RequireSecure(
             options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
@@ -297,6 +317,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 _options.Endpoint,
                 body,
                 _options.MaxResponseSize,
+                _options.RequestTimeout,
                 cancellationToken
             )
             .ConfigureAwait(false);
