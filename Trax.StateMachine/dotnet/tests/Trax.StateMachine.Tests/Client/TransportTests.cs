@@ -53,7 +53,7 @@ public class TransportTests
         new(
             new GraphQLMachineServerOptions
             {
-                Http = http ?? new HttpClient(),
+                Http = http ?? new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
                 Endpoint = new Uri(endpoint, UriKind.RelativeOrAbsolute),
                 Machine = Turnstile,
                 Socket = new NoSocket(),
@@ -135,16 +135,40 @@ public class TransportTests
         var cleartext = () =>
             Server(
                 "trax/graphql",
-                http: new HttpClient { BaseAddress = new Uri("http://api.example.com/") }
+                http: new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })
+                {
+                    BaseAddress = new Uri("http://api.example.com/"),
+                }
             );
         var tls = () =>
             Server(
                 "trax/graphql",
-                http: new HttpClient { BaseAddress = new Uri("https://api.example.com/") }
+                http: new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })
+                {
+                    BaseAddress = new Uri("https://api.example.com/"),
+                }
             );
 
         cleartext.Should().Throw<ArgumentException>();
         tls.Should().NotThrow();
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void A_relative_endpoint_with_no_base_address_is_refused(bool allowInsecure)
+    {
+        var server = () => Server("trax/graphql", allowInsecure);
+        var socket = () =>
+            new GraphQLSubscriptionSocket(
+                new GraphQLSubscriptionSocketOptions
+                {
+                    Endpoint = new Uri("trax/graphql", UriKind.Relative),
+                    AllowInsecureTransport = allowInsecure,
+                }
+            );
+
+        server.Should().Throw<ArgumentException>().WithMessage("*relative*base address*");
+        socket.Should().Throw<ArgumentException>().WithMessage("*relative*");
     }
 
     // Answers every request with a body of `size` bytes, with or without its length up front.
@@ -220,13 +244,58 @@ public class TransportTests
             .Be(16 * 1024 * 1024);
         new GraphQLMachineServerOptions
         {
-            Http = new HttpClient(),
+            Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
             Endpoint = new Uri("https://h/graphql"),
             Machine = Turnstile,
             Socket = new NoSocket(),
         }
             .MaxResponseSize.Should()
             .Be(16 * 1024 * 1024);
+    }
+
+    // The time-based defaults every client of the kit shares (conformance/client/PROTOCOL.md, "Defaults").
+    [Test]
+    public void The_time_based_defaults_are_the_client_kits()
+    {
+        new GraphQLMachineServerOptions
+        {
+            Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
+            Endpoint = new Uri("https://h/graphql"),
+            Machine = Turnstile,
+            Socket = new NoSocket(),
+        }
+            .RequestTimeout.Should()
+            .Be(TimeSpan.FromSeconds(30));
+        GraphQLMachineServer.DefaultRequestTimeout.Should().Be(TimeSpan.FromSeconds(30));
+        GraphQLMachineServer
+            .DefaultResubscribeDelays.Should()
+            .Equal(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5));
+        ServerMachineController
+            .DefaultRetryDelays.Should()
+            .Equal(
+                TimeSpan.FromMilliseconds(250),
+                TimeSpan.FromMilliseconds(500),
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(2),
+                TimeSpan.FromSeconds(4)
+            );
+    }
+
+    [Test]
+    public void A_request_timeout_that_is_neither_positive_nor_infinite_is_refused()
+    {
+        var build = () =>
+            new GraphQLMachineServer(
+                new GraphQLMachineServerOptions
+                {
+                    Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
+                    Endpoint = new Uri("https://h/graphql"),
+                    Machine = Turnstile,
+                    Socket = new NoSocket(),
+                    RequestTimeout = TimeSpan.Zero,
+                }
+            );
+        build.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     private sealed class Sink : ISubscriptionSink

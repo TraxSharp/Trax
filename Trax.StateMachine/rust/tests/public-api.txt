@@ -1,0 +1,203 @@
+// The public surface of trax-state-machine, as tests/support/surface.rs reads it from the source. A test compares
+// it; after a deliberate change, run `TRAX_UPDATE_PUBLIC_API=1 cargo test --workspace` and commit the diff.
+
+pub type GuardFn = dyn Fn(&Map, Option<&Value>) -> bool + Send + Sync;
+pub const IR_FORMAT_VERSION: i64 = 1;
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IrError {
+    pub message: String,
+}
+impl fmt::Display for IrError {}
+impl std::error::Error for IrError {}
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct JsString(Repr);
+impl JsString {
+    pub fn from_units(units: &[u16]) -> JsString {}
+    pub fn as_str(&self) -> Option<&str> {}
+    pub fn is_well_formed(&self) -> bool {}
+    pub fn utf16_len(&self) -> usize {}
+    pub fn to_units(&self) -> Vec<u16> {}
+    pub fn to_string_lossy(&self) -> String {}
+}
+impl From<&str> for JsString {}
+impl From<String> for JsString {}
+impl PartialEq<str> for JsString {}
+impl Ord for JsString {}
+impl PartialOrd for JsString {}
+impl fmt::Debug for JsString {}
+pub const MAX_DEPTH: usize = 512;
+pub const MAX_PLAN_EXPANSIONS: usize = 10_000;
+pub struct Machine {}
+impl std::fmt::Debug for Machine {}
+impl Machine {
+    pub fn from_ir(ir: &Value) -> Result<Machine, IrError> {}
+    pub fn from_ir_text(text: &str) -> Result<Machine, IrError> {}
+    pub fn with_guard(
+        mut self,
+        name: impl Into<String>,
+        guard: impl Fn(&Map, Option<&Value>) -> bool + Send + Sync + 'static,
+    ) -> Machine {}
+    pub fn with_reducer(
+        mut self,
+        name: impl Into<String>,
+        reducer: impl Fn(&Map, Option<&Value>) -> Map + Send + Sync + 'static,
+    ) -> Machine {}
+    pub fn with_migration(
+        mut self,
+        from_version: i32,
+        migrate: impl Fn(&str, Map) -> (String, Map) + Send + Sync + 'static,
+    ) -> Machine {}
+    pub fn id(&self) -> &str {}
+    pub fn version(&self) -> i32 {}
+    pub fn initial_state(&self) -> &str {}
+    pub fn states(&self) -> &[String] {}
+    pub fn committed_states(&self) -> &[String] {}
+    pub fn effect_triggers(&self) -> &[String] {}
+    pub fn outcome_triggers(&self) -> impl Iterator<Item = &str> {}
+    pub fn event_refusal(&self, trigger: &str) -> Option<Refusal> {}
+    pub fn initial_snapshot(&self) -> Snapshot {}
+    pub fn advance(
+        &self,
+        snapshot: &Snapshot,
+        trigger: &str,
+        input: Option<&Value>,
+    ) -> Result<Snapshot, Refusal> {}
+    pub fn apply_outcome(
+        &self,
+        snapshot: &Snapshot,
+        trigger: &str,
+        output: Option<&Value>,
+    ) -> Result<Snapshot, Refusal> {}
+    pub fn apply_timer(
+        &self,
+        snapshot: &Snapshot,
+        trigger: &str,
+    ) -> Result<Snapshot, Refusal> {}
+    pub fn timer(&self, snapshot: &Snapshot) -> Option<Timer> {}
+    pub fn rehydrate(&self, text: &str) -> Result<Snapshot, Refusal> {}
+    pub fn rehydrate_from_server(&self, text: &str) -> Result<Snapshot, Refusal> {}
+    pub fn serialize(&self, snapshot: &Snapshot) -> String {}
+    pub fn can_fire(
+        &self,
+        snapshot: &Snapshot,
+        trigger: &str,
+        input: Option<&Value>,
+    ) -> bool {}
+    pub fn available_triggers(&self, snapshot: &Snapshot) -> Vec<String> {}
+    pub fn rests_on_unhandled_rule(&self, state: &str, trigger: &str) -> bool {}
+}
+impl Machine {
+    pub fn plan(
+        &self,
+        from: &Snapshot,
+        target: &str,
+        fields: Option<&PlanEvent>,
+        navigation: &[String],
+        max_depth: Option<usize>,
+    ) -> PlanAnswer {}
+}
+pub type Map = BTreeMap<JsString, Value>;
+pub type MigrationFn = dyn Fn(&str, Map) -> (String, Map) + Send + Sync;
+pub const OLDEST_IR_FORMAT_READ: i64 = 1;
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParseError {
+    pub offset: usize,
+    pub message: &'static str,
+}
+impl fmt::Display for ParseError {}
+impl std::error::Error for ParseError {}
+#[derive(Clone, Debug, PartialEq)]
+pub enum PlanAnswer {
+    Plan(Vec<PlanEvent>),
+    Unreachable,
+    Exceeded,
+    Undetermined { trigger: String, events: Vec<PlanEvent> },
+    Invalid(PlanInvalid),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlanEvent {
+    pub trigger: String,
+    pub input: Option<Value>,
+}
+impl PlanEvent {
+    pub fn new(trigger: impl Into<String>, input: Option<Value>) -> PlanEvent {}
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PlanInvalid {
+    Target(String),
+    Trigger(String),
+    Context,
+    Input,
+}
+pub type ReducerFn = dyn Fn(&Map, Option<&Value>) -> Map + Send + Sync;
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Refusal {
+    pub code: RefusalCode,
+    pub detail: String,
+}
+impl fmt::Display for Refusal {}
+impl std::error::Error for Refusal {}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RefusalCode {}
+impl fmt::Display for RefusalCode {}
+impl RefusalCode {
+    pub const ALL: &'static [RefusalCode] = &[];
+    pub fn as_str(self) -> &'static str {}
+    pub fn name(self) -> &'static str {}
+    pub fn from_code(code: &str) -> Option<RefusalCode> {}
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct Snapshot {
+    pub machine: String,
+    pub version: i32,
+    pub state: String,
+    pub context: Map,
+}
+impl Snapshot {
+    pub fn from_value(value: &Value) -> Option<Snapshot> {}
+    pub fn to_value(&self) -> Value {}
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Timer {
+    pub trigger: String,
+    pub target: String,
+    pub after: Option<String>,
+    pub field: Option<TimerField>,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TimerField {
+    pub name: String,
+    pub min: String,
+    pub max: String,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum Value {
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(JsString),
+    Array(Vec<Value>),
+    Object(Map),
+}
+impl Drop for Value {}
+impl Value {
+    pub fn parse(text: &str) -> Result<Value, ParseError> {}
+    pub fn to_json(&self) -> String {}
+    pub fn is_too_deep(&self) -> bool {}
+    pub fn get(&self, key: &str) -> Option<&Value> {}
+    pub fn as_str(&self) -> Option<&str> {}
+    pub fn as_f64(&self) -> Option<f64> {}
+    pub fn as_bool(&self) -> Option<bool> {}
+    pub fn as_array(&self) -> Option<&Vec<Value>> {}
+    pub fn as_object(&self) -> Option<&Map> {}
+    pub fn is_null(&self) -> bool {}
+}
+impl From<&str> for Value {}
+impl From<String> for Value {}
+impl From<f64> for Value {}
+impl From<bool> for Value {}
+impl From<Map> for Value {}
+impl From<Vec<Value>> for Value {}
+pub fn canonical_wire(snapshot: &Snapshot) -> String {}
+pub fn duration_ticks(text: &str) -> Option<u128> {}
+pub fn number_text(n: f64) -> String {}

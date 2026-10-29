@@ -8,7 +8,10 @@ machine from that IR and answers what the server would do with a trigger, byte f
 code on a refusal. It is pure (no I/O, no clock, no async) and has no dependencies, so the bindings for other
 languages can be built on it. Every operation is total: a refusal is a value, never a panic. A custom handler
 that panics is caught and refused with `INTERNAL_ERROR`, which needs the build that links the crate to unwind on
-panic (`panic = "unwind"`, Rust's default). Under `panic = "abort"` such a panic ends the process.
+panic (`panic = "unwind"`, Rust's default). Under `panic = "abort"` such a panic ends the process. A `Value` built in
+memory that nests deeper than `MAX_DEPTH` (512) is refused as its text would be, `INVALID_INPUT` for an input and
+`INVALID_CONTEXT` for a context, and is written and dropped without recursion; check `Value::is_too_deep` before
+cloning or comparing one a binding built.
 
 ## Install
 
@@ -35,14 +38,34 @@ match machine.advance(&draft, "Pay", Some(&Value::parse(r#"{"receipt":null}"#)?)
 `trax-state-machine-client` (`client/`) is the client over it: `ServerMachineController` drives one instance a host
 serves, predicting each event with the machine built from the manifest's IR, over `GraphQLMachineServer` (persisted
 ids over HTTP, the change stream over graphql-transport-ws, on tokio). An event with an edge that rests on a custom
-rule is sent with no prediction, since the client binds no handler. A stream that ends without saying why is
-subscribed again after `resubscribe_delays`; a socket the host refused (closed with 4401 or 4403, or an upgrade
-answered 401 or 403) is not, and stops the controller as `UNAUTHENTICATED` or `FORBIDDEN`. It is held to the client
-conformance kit, as the TypeScript and C# clients are.
+rule is sent with no prediction, since the client binds no handler. A trigger the machine does not declare as an event
+is refused where it is sent, with the code `advance` gives it, and never reaches the host. A stream that ends without saying why is
+subscribed again after `resubscribe_delays`; a socket or a stream the host refused (closed with 4401 or 4403, an
+upgrade answered 401 or 403, or a stream error coded `AUTH_NOT_AUTHENTICATED`, `TRAX_AUTHORIZATION` or
+`AUTH_NOT_AUTHORIZED`) is not, and stops the controller as `UNAUTHENTICATED` or `FORBIDDEN`, as does a stream error with
+one of the caller's `terminal_stream_errors`, with its own code. A push, or a stream error in a `next` or an `error`,
+coded `CLIENT_OUTDATED` stops it as `CLIENT_OUTDATED`. The controller's task runs
+on the tokio runtime `ServerMachineOptions::runtime` names, or the one it is built in, and may be called from any
+thread once built. It is held to the client conformance kit, as the TypeScript and C# clients are.
+
+`sync_to` brings the host to where a page that ran ahead of it is: a target state, the fields event, and the
+navigation triggers. It plans with the engine's `plan` from what the host last confirmed, on the runtime's blocking
+threads rather than the controller's task, sends one event at a time and plans again from each answer, reads the
+instance once and plans again on a refusal a re-read can explain, and sends no more than twice the machine's states in
+events. A later sync supersedes it. `MachineView::unsaved` is true while a
+sync runs or after one that did not settle synced, for a page's leave guard.
 
 `advance` takes the triggers a client sends, `apply_outcome` an invoked train's outcome and `apply_timer` a state's
 timer. A custom rule is bound by name with `with_guard` or `with_reducer`; one with no handler fails, so the engine
 leaves that step to the server.
+
+`plan` finds the events that bring a snapshot to a state with a page's fields applied, for a page that ran ahead of
+the server: breadth first, the fields event before the navigation triggers in the order given, at most twice the
+machine's states deep and `MAX_PLAN_EXPANSIONS` snapshots wide, so every engine answers the same plan. It answers
+`Plan` with the events, `Unreachable`, `Exceeded`, `Invalid`, or `Undetermined` when the only way on is an edge that
+rests on a custom rule with no handler (`rests_on_unhandled_rule`), which the server has to decide. A snapshot or a
+fields input built in memory that nests deeper than `MAX_DEPTH` is `Invalid` (`PlanInvalid::Context` or
+`PlanInvalid::Input`, what `advance` refuses as `INVALID_CONTEXT` and `INVALID_INPUT`), before the search copies it.
 
 ## Where this fits
 
@@ -62,6 +85,11 @@ podman run --rm -v "$PWD/..":/src:Z -w /src docker.io/library/node:24-bookworm \
 ```
 
 Run them from this directory. The testee speaks `../conformance/PROTOCOL.md` through the crate's public API only.
+
+Each crate's public surface is committed (`tests/public-api.txt`, `client/tests/public-api.txt`) and a test compares
+it; after a deliberate change, run the tests with `-e TRAX_UPDATE_PUBLIC_API=1` and commit the new snapshot with the
+change. A new client member also gets its row in the table under "The client surface" in
+`../conformance/client/PROTOCOL.md`.
 
 ## License
 

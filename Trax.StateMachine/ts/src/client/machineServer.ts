@@ -7,7 +7,7 @@
  * graphql-ws socket the page owns. The package does not depend on graphql-ws: any socket with its `subscribe` shape
  * will do, and {@link persistedMessageReplacer} is the `jsonMessageReplacer` that lets it send a persisted id.
  */
-import { RefusalCode, type ProblemCode } from '../results';
+import { ClientProblemCode, RefusalCode, type ProblemCode } from '../results';
 import type { MachineSpec, TypedMachine } from '../typed';
 import type {
   EventResponse,
@@ -18,7 +18,7 @@ import type {
   StartResponse,
   StreamMessage,
 } from '../server/serverController';
-import { createMachineExecutor, machineField, withoutNulls, type MachineDocument } from './machines';
+import { createMachineExecutor, isContext, machineField, withoutNulls, type MachineDocument } from './machines';
 import { createSnapshotClient, type HttpExecutorOptions, type SnapshotOutput } from './transport';
 
 /** What a subscription delivers: one GraphQL result per event, as graphql-ws hands it to a sink. */
@@ -52,13 +52,17 @@ export interface MachineServerOptions extends HttpExecutorOptions {
   socket: PersistedSubscriptionSocket;
   /**
    * Delays, in milliseconds, before subscribing again after a stream that ended without saying why (its host stopped,
-   * or the socket gave up). The last delay repeats for as long as the stream is wanted. A socket the host refused (a
-   * close with 4401 or 4403) is not subscribed again: it ends the controller as `UNAUTHENTICATED` or `FORBIDDEN`.
+   * or the socket gave up). The last delay repeats for as long as the stream is wanted, and the schedule starts over
+   * once a stream has delivered a second push: every new stream's first is the instance as it is then. A socket the host refused (a
+   * close with 4401 or 4403), or a stream it refused with a GraphQL error coded `TRAX_AUTHORIZATION`,
+   * `AUTH_NOT_AUTHENTICATED` or `AUTH_NOT_AUTHORIZED`, is not subscribed again: it ends the controller as
+   * `UNAUTHENTICATED` or `FORBIDDEN`.
    */
   resubscribeDelays?: readonly number[];
   /**
-   * The codes of an error that ends the controller for good. A socket error whose `code` is one of them is not
-   * subscribed again: it reaches the controller as `ended`. A request rejected with one (its `headers` threw it, say)
+   * The codes of an error that ends the controller for good. A socket error whose `code` is one of them, or a stream
+   * event or error whose first GraphQL error has one as its `extensions.code`, is not subscribed again: it reaches the
+   * controller as `ended`. A request rejected with one (its `headers` threw it, say)
    * is not a transport failure that `retry` resends: `endedBy` names it. Either way the controller stops with that code
    * and the error's message. A generated client's server lists `CONNECTION_CHANGED`, which it refuses every request
    * and stream with once configureTrax was called again.
@@ -66,7 +70,10 @@ export interface MachineServerOptions extends HttpExecutorOptions {
   terminalStreamErrors?: readonly string[];
 }
 
-/** The answer to `discard`. A discard of an instance already gone, or never the caller's, is `discarded` too. */
+/**
+ * The answer to `discard`. A discard of an instance already gone, or never the caller's, is `discarded` too. An answer
+ * that does not say the instance was discarded, and gives no problem, is a `TRANSPORT_ERROR`.
+ */
 export type DiscardResponse = { kind: 'discarded' } | ServerProblem;
 
 /** A {@link MachineServer} that can also discard an instance. */
@@ -109,6 +116,27 @@ const refusedOf = (error: unknown): { code: string; message: string } | null => 
   const reason = (error as { reason?: unknown }).reason;
   const said = typeof reason === 'string' && reason !== '' ? ` ${reason}` : '';
   return { code, message: `The host refused the socket: ${close}${said}.` };
+};
+
+/**
+ * The GraphQL error codes a host refuses a subscription with, and the code the controller stops with for each. A host
+ * answers them per operation (an expired token, an anonymous socket it acknowledged), so subscribing again would get
+ * the same answer.
+ */
+const REFUSED_ERRORS: Readonly<Record<string, string>> = {
+  TRAX_AUTHORIZATION: RefusalCode.Forbidden,
+  AUTH_NOT_AUTHENTICATED: RefusalCode.Unauthenticated,
+  AUTH_NOT_AUTHORIZED: RefusalCode.Forbidden,
+};
+
+type GraphQLErrors = readonly { message?: unknown; extensions?: Record<string, unknown> }[];
+
+// The first GraphQL error's code and message, or null when it has no code.
+const firstErrorOf = (errors: GraphQLErrors | undefined): { code: string; message: string } | null => {
+  const error = errors?.[0];
+  const code = error?.extensions?.code;
+  if (typeof code !== 'string') return null;
+  return { code, message: typeof error!.message === 'string' && error!.message !== '' ? error!.message : code };
 };
 
 interface MachineChange {
@@ -156,8 +184,9 @@ const answered = (output: SnapshotOutput): { kind: 'ok'; snapshot: ServerSnapsho
  * The stream maps each push event onto the controller's messages: a snapshot (with its incarnation as
  * `rowId`), `gone` for a deleted or expired instance, `gone` with `notFound` for one the server will not let the caller
  * watch (the answer it gives a missing id), `CLIENT_OUTDATED`, and `reconnected` when the server asks for a reload, and `ended` for a socket the host
- * refused (closed with 4401, `UNAUTHENTICATED`, or 4403, `FORBIDDEN`) or a socket error whose code is one of
- * {@link MachineServerOptions.terminalStreamErrors}; a request rejected with one of those codes is named by `endedBy`, so
+ * refused (closed with 4401, `UNAUTHENTICATED`, or 4403, `FORBIDDEN`), a stream it refused with a GraphQL error coded
+ * `TRAX_AUTHORIZATION` or `AUTH_NOT_AUTHORIZED` (`FORBIDDEN`) or `AUTH_NOT_AUTHENTICATED` (`UNAUTHENTICATED`), or a
+ * socket error or GraphQL error whose code is one of {@link MachineServerOptions.terminalStreamErrors}; a request rejected with one of those codes is named by `endedBy`, so
  * the controller stops on it as well. A stream that ends any other way is subscribed again after {@link MachineServerOptions.resubscribeDelays}; the new stream's first
  * event is the instance as it is then, so nothing written meanwhile is lost and nothing is read again.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
@@ -180,12 +209,22 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
     const message = (error as { message?: unknown }).message;
     return { code, message: typeof message === 'string' && message !== '' ? message : code };
   };
+  // How GraphQL errors on the stream end it for good: a refusal the host answers per operation, or a code the caller
+  // marked terminal. Null for any other, which is subscribed again.
+  const endOfErrors = (errors: GraphQLErrors | undefined): { code: string; message: string } | null => {
+    const first = firstErrorOf(errors);
+    if (!first) return null;
+    const refused = REFUSED_ERRORS[first.code];
+    if (refused !== undefined) return { code: refused, message: `The host refused the stream: ${first.message}` };
+    return terminal.has(first.code) ? first : null;
+  };
   const client = createSnapshotClient(
     createMachineExecutor(endpoint, {
       fetch: options.fetch,
       headers: options.headers,
       allowInsecureTransport: options.allowInsecureTransport,
       maxResponseSize: options.maxResponseSize,
+      requestTimeout: options.requestTimeout,
       machines: [{ machine, documents }],
     }),
   );
@@ -214,6 +253,13 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
   const discard = async (id: string, requestId: string): Promise<DiscardResponse> => {
     const output = await client.discard(machine.id, id, requestId);
     if (output.problem) return problemOf(output.problem);
+    // An answer that is null, or says nothing was discarded and gives no problem, does not say the instance is gone.
+    if (output.discarded !== true)
+      return {
+        kind: 'problem',
+        code: ClientProblemCode.TransportError,
+        message: 'The server answered the discard without saying the instance was discarded.',
+      };
     return { kind: 'discarded' };
   };
 
@@ -228,6 +274,9 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
       if (!wanted) return;
       // Whether this stream ended for good (the instance is gone, or this client is outdated), or delivered anything.
       let ended = false;
+      // The snapshots this stream delivered. Its first is the instance as it is when it opens, which every new stream
+      // sends, so only a second says the stream held and the backoff starts over.
+      let pushes = 0;
       const deliver = (message: StreamMessage) => {
         if (!wanted || ended) return;
         if (message.type === 'gone' || message.type === 'client-outdated' || message.type === 'ended') ended = true;
@@ -250,7 +299,9 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
           next: (value) => {
             const error = value.errors?.[0];
             if (error) {
+              const end = endOfErrors(value.errors);
               if (error.extensions?.code === CLIENT_OUTDATED) deliver({ type: 'client-outdated' });
+              else if (end) deliver({ type: 'ended', ...end });
               else again();
               return;
             }
@@ -265,20 +316,32 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
             if (change.gone) return deliver({ type: 'gone' });
             if (change.reload) return deliver({ type: 'reconnected' });
             if (change.state == null || change.revision == null) return;
-            attempt = 0;
+            // A push whose context no store could have written is dropped, as one without a state is.
+            let context: Record<string, unknown>;
+            try {
+              const given = change.context ?? {};
+              if (!isContext(given)) return;
+              context = withoutNulls(given) as Record<string, unknown>;
+            } catch {
+              return;
+            }
+            if (++pushes === 2) attempt = 0;
             deliver({
               type: 'snapshot',
               snapshot: {
                 rowId: change.rowId == null ? null : String(change.rowId),
                 revision: change.revision,
                 state: change.state,
-                context: withoutNulls(change.context ?? {}) as Record<string, unknown>,
+                context,
                 dueAt: change.dueAt,
               },
             });
           },
           error: (error) => {
-            const end = refusedOf(error) ?? terminalOf(error);
+            // graphql-ws hands an `error` message's errors to the sink as the array itself.
+            const errors = Array.isArray(error) ? (error as GraphQLErrors) : undefined;
+            if (firstErrorOf(errors)?.code === CLIENT_OUTDATED) return deliver({ type: 'client-outdated' });
+            const end = refusedOf(error) ?? terminalOf(error) ?? endOfErrors(errors);
             if (end) deliver({ type: 'ended', ...end });
             else again();
           },

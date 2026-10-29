@@ -194,6 +194,59 @@ public class GraphQLSubscriptionSocketTests
     }
 
     [Test]
+    public async Task A_connection_init_the_host_never_reads_fails_within_the_connect_timeout()
+    {
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.UpgradeAsync();
+            await peer.StallAsync();
+        });
+        // Larger than the loopback buffers hold, so the send stalls until the host reads it.
+        var large = new string('x', 32 * 1024 * 1024);
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions
+            {
+                Endpoint = host.Endpoint,
+                ConnectTimeout = TimeSpan.FromMilliseconds(500),
+                ConnectionParams = _ =>
+                    ValueTask.FromResult<JsonObject?>(new JsonObject { ["token"] = large }),
+            }
+        );
+        var sink = new Sink();
+
+        using var subscription = socket.Subscribe(Payload, sink);
+
+        (await sink.Failed.Task.WaitAsync(Wait)).Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task A_close_the_host_never_answers_drops_the_connection_within_the_connect_timeout()
+    {
+        var dropped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.AckAsync();
+            await peer.SubscribedAsync();
+            await peer.LeaveCloseUnansweredAsync();
+            dropped.TrySetResult();
+        });
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions
+            {
+                Endpoint = host.Endpoint,
+                ConnectTimeout = TimeSpan.FromMilliseconds(500),
+            }
+        );
+        var sink = new Sink();
+        var subscription = socket.Subscribe(Payload, sink);
+        (await sink.Take(1)).Should().Equal("started");
+
+        subscription.Dispose();
+
+        await dropped.Task.WaitAsync(Wait);
+    }
+
+    [Test]
     public void The_keep_alive_is_fifteen_seconds_each_way_by_default()
     {
         var options = new GraphQLSubscriptionSocketOptions
@@ -299,6 +352,69 @@ public class GraphQLSubscriptionSocketTests
         (await sink.Failed.Task.WaitAsync(Wait))
             .Should()
             .NotBeOfType<SocketClosedException>("a 502 is a host that may be back soon");
+    }
+
+    [TestCase(4401, null, true)]
+    [TestCase(4403, null, true)]
+    [TestCase(null, 401, true)]
+    [TestCase(null, 403, true)]
+    [TestCase(4400, null, false)]
+    [TestCase(4408, null, false)]
+    [TestCase(4429, null, false)]
+    [TestCase(4499, null, false)]
+    [TestCase(1011, null, false)]
+    public void Only_4401_and_4403_and_an_upgrade_answered_401_or_403_are_refusals(
+        int? closeStatus,
+        int? httpStatus,
+        bool refused
+    ) => new SocketClosedException("closed", closeStatus, httpStatus).Refused.Should().Be(refused);
+
+    [Test]
+    public async Task A_subscription_disposed_before_the_connection_is_acknowledged_is_never_sent()
+    {
+        var acknowledge = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var received = new TaskCompletionSource<IReadOnlyList<JsonObject>>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.UpgradeAsync();
+            await peer.ReceiveAsync();
+            await acknowledge.Task.WaitAsync(peer.Stopping);
+            await peer.SendAsync("""{"type":"connection_ack"}""");
+            var messages = new List<JsonObject>();
+            try
+            {
+                while (await peer.ReceiveAsync() is { } message)
+                    messages.Add(message);
+            }
+            catch (Exception ex) when (ex is WebSocketException or IOException)
+            {
+                // Dropped rather than closed.
+            }
+            received.TrySetResult(messages);
+        });
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var gone = new Sink();
+        var kept = new Sink();
+
+        socket.Subscribe(Payload, gone).Dispose();
+        // A second subscription holds the connection open past the first one's end.
+        var held = socket.Subscribe(Payload, kept);
+        acknowledge.SetResult();
+        (await kept.Take(1)).Should().Equal("started");
+        held.Dispose();
+
+        var messages = await received.Task.WaitAsync(Wait);
+        messages
+            .Where(m => m["type"]!.GetValue<string>() == "subscribe")
+            .Select(m => m["id"]!.GetValue<string>())
+            .Should()
+            .Equal("2");
     }
 
     [Test]

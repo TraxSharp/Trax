@@ -1,0 +1,11 @@
+{
+  "about": "A push that carries GraphQL errors ends the stream with the client's typed operation error, coded as the first error.",
+  "steps": [
+    {"client": "subscribe", "operation": "Changes", "variables": {"domain": "RUN"}, "expect": {"subscribed": true}},
+    {"subscribe": "Changes", "variables": {"domain": "RUN"}},
+    {"push": {"onDataChanged": {"domain": "RUN", "id": "1"}}},
+    {"pushErrors": [{"message": "Too old.", "extensions": {"code": "CLIENT_OUTDATED"}}]},
+    {"events": [{"next": {"onDataChanged": {"domain": "RUN", "id": "1"}}}, {"ended": "refused", "code": "CLIENT_OUTDATED"}]},
+    {"quiet": 100}
+  ]
+}

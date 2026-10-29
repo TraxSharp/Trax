@@ -7,19 +7,20 @@
 //! persisted id the manifest lists and follows the instance over graphql-transport-ws. Every operation is total: a
 //! refusal or a request that did not get through is a value.
 
+#![deny(missing_docs)]
+
 mod controller;
 mod graphql;
 mod server;
-mod unhandled;
 
 pub use controller::{
     codes, ir_hash, without_nulls, MachineError, MachineProblem, MachineStatus, MachineView, ProblemKind, SendOutcome,
-    ServerMachineController, ServerMachineOptions, DEFAULT_RETRY_DELAYS,
+    ServerMachineController, ServerMachineOptions, SyncOutcome, DEFAULT_RETRY_DELAYS,
 };
 pub use graphql::{
     event_field, machine_field, ConfigError, ConnectionParams, GraphQLMachineServer, GraphQLMachineServerOptions,
-    ManifestDocument, Provided, RequestHeaders, DEFAULT_CONNECT_TIMEOUT, DEFAULT_MAX_MESSAGE_SIZE,
-    DEFAULT_RESUBSCRIBE_DELAYS,
+    ManifestDocument, Provided, RequestHeaders, DEFAULT_CONNECT_TIMEOUT, DEFAULT_IDLE_TIMEOUT,
+    DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESUBSCRIBE_DELAYS,
 };
 pub use server::{
     DueAt, EventRequest, MachineServer, ServerAnswer, ServerProblem, ServerSnapshot, StreamMessage, StreamSink,

@@ -11,6 +11,7 @@ import type {
   TransitionDefinition,
 } from "./types";
 import { storedTextProblems, unstorable } from "./storedText";
+import { searchPlan, type PlanRequest, type PlanResult } from "./plan";
 
 /**
  * Interprets a {@link MachineDefinition} over {@link Snapshot}s — the TypeScript half of the
@@ -66,16 +67,10 @@ export class SnapshotMachine<S extends string, T extends string> {
       );
     // An outcome records what an invoked run produced; from a caller, its input would be whatever was sent.
     if (this.outcomeTriggers.has(trigger))
-      return rejected(
-        RefusalCode.OutcomeBound,
-        "This step is completed by the outcome of its work, not by an action.",
-      );
+      return rejected(RefusalCode.OutcomeBound, OUTCOME_BOUND_DETAIL);
     // A timer is the server acting once a state has been held long enough; no caller fires it.
     if (this.timerTriggers.has(trigger))
-      return rejected(
-        RefusalCode.TimerBound,
-        "This step moves on by itself when its time is up, not by an action.",
-      );
+      return rejected(RefusalCode.TimerBound, TIMER_BOUND_DETAIL);
 
     const matches = this.def.transitions.filter(
       (t) => t.from === snapshot.state && t.trigger === trigger,
@@ -439,6 +434,21 @@ export class SnapshotMachine<S extends string, T extends string> {
     return [...seen];
   }
 
+  /**
+   * The events that take `snapshot` to the state `target` with the fields event applied: what a client sends to bring
+   * the server to where a page that ran ahead of it is. Breadth first, the fields event first and then `navigation` in
+   * the order given, each through `advance`, never visiting a canonical wire twice, so every engine answers the same
+   * plan. An edge on a custom rule this machine holds no handler for is not tried; when nothing else reaches the target,
+   * the answer is `undetermined` with the first such edge. Never throws.
+   */
+  plan(snapshot: Snapshot, request: PlanRequest<S, T>): PlanResult<T> {
+    return searchPlan(
+      this as unknown as SnapshotMachine<string, string>,
+      snapshot,
+      request,
+    ) as PlanResult<T>;
+  }
+
   /** The language-neutral structure (sorted ordinally) — the value the cross-language golden compares. */
   describe(): {
     id: string;
@@ -483,6 +493,28 @@ export class SnapshotMachine<S extends string, T extends string> {
     if (!validate) return null;
     return fromServer ? validate(context, { fromServer }) : validate(context);
   }
+}
+
+const OUTCOME_BOUND_DETAIL = "This step is completed by the outcome of its work, not by an action.";
+const TIMER_BOUND_DETAIL = "This step moves on by itself when its time is up, not by an action.";
+
+/**
+ * Why a caller may not send `trigger` to the machine `definition` describes, from any state, or null when it is an
+ * event the machine declares: `OUTCOME_BOUND` for an invoked train's outcome, `TIMER_BOUND` for a timer and
+ * `NO_TRANSITION` for a trigger with no edge at all, as `advance` refuses each. A client refuses these where they are
+ * sent: the host serves no event for them.
+ */
+export function eventRefusal<S extends string, T extends string>(
+  definition: MachineDefinition<S, T>,
+  trigger: string,
+): { code: RefusalCode; message: string } | null {
+  if (definition.outcomeTriggers?.includes(trigger))
+    return { code: RefusalCode.OutcomeBound, message: OUTCOME_BOUND_DETAIL };
+  if (Object.values<MachineTimer | undefined>(definition.timers ?? {}).some((t) => t?.trigger === trigger))
+    return { code: RefusalCode.TimerBound, message: TIMER_BOUND_DETAIL };
+  if (!definition.transitions.some((t) => t.trigger === trigger))
+    return { code: RefusalCode.NoTransition, message: `'${trigger}' is not an event of '${definition.id}'.` };
+  return null;
 }
 
 function rejected(reason: RefusalCode, detail: string): AdvanceResult {

@@ -24,6 +24,7 @@ namespace Trax.StateMachine
         public Trax.StateMachine.MachineDefinition<TState, TTrigger> Definition { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.EffectBinding<TState, TTrigger>> Effects { get; init; }
         public Trax.StateMachine.SnapshotMachine<TState, TTrigger> Engine { get; }
+        public Trax.StateMachine.PlanResult Plan(Trax.StateMachine.Snapshot snapshot, string target, Trax.StateMachine.PlannedEvent? fields, System.Collections.Generic.IReadOnlyList<string> navigation, int? maxDepth = default) { }
     }
     public sealed class ClientManifest : System.IEquatable<Trax.StateMachine.ClientManifest>
     {
@@ -309,6 +310,7 @@ namespace Trax.StateMachine
         public System.Collections.Generic.IReadOnlyList<string> AvailableTriggers(Trax.StateMachine.Snapshot snapshot) { }
         public bool CanFire(Trax.StateMachine.Snapshot snapshot, string trigger, System.Text.Json.Nodes.JsonNode? input = null) { }
         public Trax.StateMachine.Snapshot CreateInitialSnapshot() { }
+        public Trax.StateMachine.PlanResult Plan(Trax.StateMachine.Snapshot snapshot, string target, Trax.StateMachine.PlannedEvent? fields, System.Collections.Generic.IReadOnlyList<string> navigation, int? maxDepth = default) { }
         public Trax.StateMachine.RehydrationResult Rehydrate(string json) { }
         public Trax.StateMachine.RehydrationResult Rehydrate(string json, bool fromServer) { }
         public string Serialize(Trax.StateMachine.Snapshot snapshot) { }
@@ -379,6 +381,40 @@ namespace Trax.StateMachine
         public MigrationResult(string State, System.Text.Json.Nodes.JsonObject Context) { }
         public System.Text.Json.Nodes.JsonObject Context { get; init; }
         public string State { get; init; }
+    }
+    public abstract class PlanResult : System.IEquatable<Trax.StateMachine.PlanResult>
+    {
+        public sealed class Exceeded : Trax.StateMachine.PlanResult, System.IEquatable<Trax.StateMachine.PlanResult.Exceeded>
+        {
+            public Exceeded() { }
+        }
+        public sealed class Invalid : Trax.StateMachine.PlanResult, System.IEquatable<Trax.StateMachine.PlanResult.Invalid>
+        {
+            public Invalid(string? Trigger = null, string? Target = null) { }
+            public string? Target { get; init; }
+            public string? Trigger { get; init; }
+        }
+        public sealed class Planned : Trax.StateMachine.PlanResult, System.IEquatable<Trax.StateMachine.PlanResult.Planned>
+        {
+            public Planned(System.Collections.Generic.IReadOnlyList<Trax.StateMachine.PlannedEvent> Events) { }
+            public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.PlannedEvent> Events { get; init; }
+        }
+        public sealed class Undetermined : Trax.StateMachine.PlanResult, System.IEquatable<Trax.StateMachine.PlanResult.Undetermined>
+        {
+            public Undetermined(string Trigger, System.Collections.Generic.IReadOnlyList<Trax.StateMachine.PlannedEvent> Events) { }
+            public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.PlannedEvent> Events { get; init; }
+            public string Trigger { get; init; }
+        }
+        public sealed class Unreachable : Trax.StateMachine.PlanResult, System.IEquatable<Trax.StateMachine.PlanResult.Unreachable>
+        {
+            public Unreachable() { }
+        }
+    }
+    public sealed class PlannedEvent : System.IEquatable<Trax.StateMachine.PlannedEvent>
+    {
+        public PlannedEvent(string Trigger, System.Text.Json.Nodes.JsonNode? Input = null) { }
+        public System.Text.Json.Nodes.JsonNode? Input { get; init; }
+        public string Trigger { get; init; }
     }
     public abstract class Reduction : System.IEquatable<Trax.StateMachine.Reduction>
     {

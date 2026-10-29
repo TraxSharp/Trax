@@ -84,9 +84,14 @@ public abstract record StreamMessage
     public sealed record ClientOutdated : StreamMessage;
 
     /// <summary>
-    /// The host refused the socket: it closed it with 4401 or 4403, or answered its upgrade 401 or 403. Subscribing
-    /// again would get the same answer. <see cref="Code"/> is <c>UNAUTHENTICATED</c> for 4401 and 401,
-    /// <c>FORBIDDEN</c> for 4403 and 403; <see cref="Message"/> names the code the host closed or answered with.
+    /// The stream ended for good: subscribing again would get the same answer. The host refused the socket, closing it
+    /// with 4401 or 4403 or answering its upgrade 401 or 403, and <see cref="Code"/> is <c>UNAUTHENTICATED</c> for 4401
+    /// and 401, <c>FORBIDDEN</c> for 4403 and 403, with a <see cref="Message"/> that names the code the host closed or
+    /// answered with. Or the host refused the stream itself with a GraphQL error coded <c>TRAX_AUTHORIZATION</c> or
+    /// <c>AUTH_NOT_AUTHORIZED</c> (<c>FORBIDDEN</c>) or <c>AUTH_NOT_AUTHENTICATED</c> (<c>UNAUTHENTICATED</c>); or with
+    /// a code the caller named terminal (<see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/>), which is the
+    /// <see cref="Code"/>; or it sent a push the client cannot read, and <see cref="Code"/> is
+    /// <see cref="ClientProblemCodes.TransportError"/>.
     /// </summary>
     public sealed record Refused(string Code, string Message) : StreamMessage;
 }

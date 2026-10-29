@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createFormView } from './formView';
+import type { IrDocument } from './rules/irMachine';
+import { typedMachineFromIr } from './typed';
 import { checkout } from './machines/checkout/checkout';
 import type { CheckoutSpec } from './machines/checkout/checkout.contexts.g';
 
@@ -99,5 +101,109 @@ describe('serialize / resume', () => {
 
   it('returns null rather than throwing on a snapshot that fails to rehydrate', () => {
     expect(view.resume('{"machine":"checkout","version":99,"state":"Cart","context":{}}')).toBeNull();
+  });
+});
+
+// A sign-up wizard of three steps whose form saves later: Update writes the name in every step, Next needs it, Back
+// returns, Skip rests on a custom guard no handler is bound for, and Send runs an effect.
+type SignupFields = { name: string | null };
+interface SignupSpec {
+  states: { Name: SignupFields; Address: SignupFields; Done: SignupFields; Sent: SignupFields };
+  triggers: { Update: { name: string }; Next: undefined; Back: undefined; Skip: undefined; Send: undefined };
+}
+const nameField = { fields: [{ name: 'name', type: 'string', nullable: true, constraints: [] }] };
+const update = (from: string) => ({
+  from,
+  trigger: 'Update',
+  to: from,
+  reduce: { reduce: 'set', steps: [{ field: 'name', value: { input: 'name' } }] },
+});
+const signup = typedMachineFromIr<SignupSpec>({
+  id: 'signup',
+  version: 1,
+  initialState: 'Name',
+  initialContext: { name: null },
+  states: ['Address', 'Done', 'Name', 'Sent'],
+  triggers: ['Back', 'Next', 'Send', 'Skip', 'Update'],
+  committedStates: ['Sent'],
+  context: { Name: nameField, Address: nameField, Done: nameField, Sent: nameField },
+  inputs: { Update: { fields: [{ name: 'name', type: 'string', nullable: false, constraints: [] }] } },
+  transitions: [
+    update('Name'),
+    update('Address'),
+    update('Done'),
+    { from: 'Name', trigger: 'Next', to: 'Address', guard: { rule: 'present', source: 'context', field: 'name' } },
+    { from: 'Name', trigger: 'Skip', to: 'Done', guard: { rule: 'custom', name: 'vip' } },
+    { from: 'Address', trigger: 'Next', to: 'Done' },
+    { from: 'Address', trigger: 'Back', to: 'Name' },
+    { from: 'Done', trigger: 'Back', to: 'Address' },
+    { from: 'Done', trigger: 'Send', to: 'Sent', effect: { keyPrefix: 'signup:send' } },
+  ],
+} as unknown as IrDocument);
+
+type SignupStep = 'name' | 'address' | 'done' | 'sent';
+const signupOptions = {
+  steps: { name: 'Name', address: 'Address', done: 'Done', sent: 'Sent' } as const,
+  toContext: (values: { name: string }) => ({ name: values.name }),
+  fieldsEvent: { trigger: 'Update' as const },
+  navigation: ['Next', 'Back'] as const,
+};
+const signupView = createFormView<SignupSpec, SignupStep, { name: string }>(signup, signupOptions);
+const server = (state: string, name: string | null) => JSON.stringify({ machine: 'signup', version: 1, state, context: { name } });
+
+describe('plan', () => {
+  it('plans the fields, then each step, from the first step to two steps on', () => {
+    expect(signupView.plan(server('Name', null), 'done', { name: 'Ada' })).toEqual({
+      result: 'plan',
+      events: [{ trigger: 'Update', input: { name: 'Ada' } }, { trigger: 'Next' }, { trigger: 'Next' }],
+    });
+  });
+
+  it('plans nothing when the server already holds that step and those values', () => {
+    expect(signupView.plan(server('Done', 'Ada'), 'done', { name: 'Ada' })).toEqual({ result: 'plan', events: [] });
+  });
+
+  it('answers unreachable when no event reaches the step', () => {
+    expect(signupView.plan(server('Done', 'Ada'), 'sent', { name: 'Ada' })).toEqual({ result: 'unreachable' });
+  });
+
+  it('answers undetermined across an edge on a custom guard', () => {
+    const skipping = createFormView<SignupSpec, SignupStep, { name: string }>(signup, {
+      ...signupOptions,
+      navigation: ['Skip'],
+    });
+    expect(skipping.plan(server('Name', null), 'done', { name: 'Ada' })).toEqual({
+      result: 'undetermined',
+      trigger: 'Skip',
+      events: [],
+    });
+  });
+
+  it('takes the fields input from its own projection when given one', () => {
+    const shouting = createFormView<SignupSpec, SignupStep, { name: string }>(signup, {
+      ...signupOptions,
+      fieldsEvent: { trigger: 'Update', input: (values) => ({ name: values.name.toUpperCase() }) },
+    });
+    expect(shouting.plan(server('Done', 'Ada'), 'done', { name: 'Ada' })).toEqual({
+      result: 'plan',
+      events: [{ trigger: 'Update', input: { name: 'ADA' } }],
+    });
+  });
+
+  it('answers null when there is no server snapshot, or it does not read', () => {
+    expect(signupView.plan(null, 'done', { name: 'Ada' })).toBeNull();
+    expect(signupView.plan('not json', 'done', { name: 'Ada' })).toBeNull();
+  });
+});
+
+describe('sync', () => {
+  it('syncs a controller to the step\'s state with the fields event and the navigation', async () => {
+    const syncTo = vi.fn().mockResolvedValue({ outcome: 'superseded' });
+
+    expect(await signupView.sync({ syncTo }, 'address', { name: 'Ada' })).toEqual({ outcome: 'superseded' });
+    expect(syncTo).toHaveBeenCalledWith('Address', {
+      fields: { trigger: 'Update', input: { name: 'Ada' } },
+      navigation: ['Next', 'Back'],
+    });
   });
 });

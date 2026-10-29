@@ -4,11 +4,13 @@ namespace Trax.StateMachine.Client
     {
         public const string Disposed = "DISPOSED";
         public const string Gone = "GONE";
+        public const string NotReady = "NOT_READY";
         public const string NothingToRetry = "NOTHING_TO_RETRY";
         public const string TransportError = "TRANSPORT_ERROR";
     }
     public sealed class GraphQLMachineServer : Trax.StateMachine.Client.IMachineServer
     {
+        public static readonly System.TimeSpan DefaultRequestTimeout;
         public static readonly System.Collections.Generic.IReadOnlyList<System.TimeSpan> DefaultResubscribeDelays;
         public GraphQLMachineServer(Trax.StateMachine.Client.GraphQLMachineServerOptions options) { }
         public System.Threading.Tasks.Task<Trax.StateMachine.Client.ServerProblem?> DiscardAsync(string id, string requestId, System.Threading.CancellationToken cancellationToken = default) { }
@@ -25,8 +27,10 @@ namespace Trax.StateMachine.Client
         public required System.Net.Http.HttpClient Http { get; init; }
         public required Trax.StateMachine.ClientManifestMachine Machine { get; init; }
         public long MaxResponseSize { get; init; }
+        public System.TimeSpan RequestTimeout { get; init; }
         public System.Collections.Generic.IReadOnlyList<System.TimeSpan>? ResubscribeDelays { get; init; }
         public required Trax.Client.ISubscriptionSocket Socket { get; init; }
+        public System.Collections.Generic.IReadOnlyCollection<string>? TerminalStreamErrors { get; init; }
     }
     public interface IMachinePredictor
     {
@@ -34,6 +38,7 @@ namespace Trax.StateMachine.Client
         Trax.StateMachine.AdvanceResult Advance(Trax.StateMachine.Snapshot snapshot, string trigger, System.Text.Json.Nodes.JsonNode? input);
         System.Collections.Generic.IReadOnlyList<string> AvailableTriggers(Trax.StateMachine.Snapshot snapshot);
         bool CanFire(Trax.StateMachine.Snapshot snapshot, string trigger, System.Text.Json.Nodes.JsonNode? input);
+        Trax.StateMachine.PlanResult Plan(Trax.StateMachine.Snapshot snapshot, string target, Trax.StateMachine.PlannedEvent? fields, System.Collections.Generic.IReadOnlyList<string> navigation, int? maxDepth = default);
         Trax.StateMachine.RehydrationResult Rehydrate(string json);
         string Serialize(Trax.StateMachine.Snapshot snapshot);
     }
@@ -89,6 +94,7 @@ namespace Trax.StateMachine.Client
         public string? RowId { get; init; }
         public Trax.StateMachine.Snapshot? Snapshot { get; init; }
         public Trax.StateMachine.Client.MachineStatus Status { get; init; }
+        public bool Unsaved { get; init; }
     }
     public abstract class SendOutcome : System.IEquatable<Trax.StateMachine.Client.SendOutcome>
     {
@@ -134,6 +140,7 @@ namespace Trax.StateMachine.Client
         public System.Threading.Tasks.Task<Trax.StateMachine.Client.SendOutcome> RetryAsync() { }
         public System.Threading.Tasks.Task<Trax.StateMachine.Client.SendOutcome> SendAsync(string trigger, System.Text.Json.Nodes.JsonNode? input = null) { }
         public System.Threading.Tasks.Task StartAsync() { }
+        public System.Threading.Tasks.Task<Trax.StateMachine.Client.SyncOutcome> SyncToAsync(string target, Trax.StateMachine.PlannedEvent? fields, System.Collections.Generic.IReadOnlyList<string> navigation) { }
     }
     public sealed class ServerMachineOptions : System.IEquatable<Trax.StateMachine.Client.ServerMachineOptions>
     {
@@ -188,6 +195,47 @@ namespace Trax.StateMachine.Client
         public sealed class Reload : Trax.StateMachine.Client.StreamMessage, System.IEquatable<Trax.StateMachine.Client.StreamMessage.Reload>
         {
             public Reload() { }
+        }
+    }
+    public abstract class SyncOutcome : System.IEquatable<Trax.StateMachine.Client.SyncOutcome>
+    {
+        public sealed class Exceeded : Trax.StateMachine.Client.SyncOutcome, System.IEquatable<Trax.StateMachine.Client.SyncOutcome.Exceeded>
+        {
+            public Exceeded() { }
+        }
+        public sealed class Failed : Trax.StateMachine.Client.SyncOutcome, System.IEquatable<Trax.StateMachine.Client.SyncOutcome.Failed>
+        {
+            public Failed(Trax.StateMachine.Client.MachineProblem Problem) { }
+            public Trax.StateMachine.Client.MachineProblem Problem { get; init; }
+        }
+        public sealed class Invalid : Trax.StateMachine.Client.SyncOutcome, System.IEquatable<Trax.StateMachine.Client.SyncOutcome.Invalid>
+        {
+            public Invalid(string? Trigger, string? Target) { }
+            public string? Target { get; init; }
+            public string? Trigger { get; init; }
+        }
+        public sealed class Refused : Trax.StateMachine.Client.SyncOutcome, System.IEquatable<Trax.StateMachine.Client.SyncOutcome.Refused>
+        {
+            public Refused(Trax.StateMachine.Client.MachineProblem Problem) { }
+            public Trax.StateMachine.Client.MachineProblem Problem { get; init; }
+        }
+        public sealed class Stopped : Trax.StateMachine.Client.SyncOutcome, System.IEquatable<Trax.StateMachine.Client.SyncOutcome.Stopped>
+        {
+            public Stopped(Trax.StateMachine.Client.MachineError Error) { }
+            public Trax.StateMachine.Client.MachineError Error { get; init; }
+        }
+        public sealed class Superseded : Trax.StateMachine.Client.SyncOutcome, System.IEquatable<Trax.StateMachine.Client.SyncOutcome.Superseded>
+        {
+            public Superseded() { }
+        }
+        public sealed class Synced : Trax.StateMachine.Client.SyncOutcome, System.IEquatable<Trax.StateMachine.Client.SyncOutcome.Synced>
+        {
+            public Synced(Trax.StateMachine.Client.ServerSnapshot Snapshot) { }
+            public Trax.StateMachine.Client.ServerSnapshot Snapshot { get; init; }
+        }
+        public sealed class Unreachable : Trax.StateMachine.Client.SyncOutcome, System.IEquatable<Trax.StateMachine.Client.SyncOutcome.Unreachable>
+        {
+            public Unreachable() { }
         }
     }
 }

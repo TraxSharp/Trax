@@ -1,0 +1,12 @@
+{
+  "about": "A socket the host closes with 4401 while subscribed ends the stream for good with that close code: nothing is subscribed again.",
+  "steps": [
+    {"client": "subscribe", "operation": "Changes", "variables": {"domain": "RUN"}, "expect": {"subscribed": true}},
+    {"subscribe": "Changes", "variables": {"domain": "RUN"}},
+    {"push": {"onDataChanged": {"domain": "RUN", "id": "1"}}},
+    {"events": [{"next": {"onDataChanged": {"domain": "RUN", "id": "1"}}}]},
+    {"dropSocket": 4401},
+    {"events": [{"next": {"onDataChanged": {"domain": "RUN", "id": "1"}}}, {"ended": "closed", "close": 4401}]},
+    {"quiet": 300}
+  ]
+}

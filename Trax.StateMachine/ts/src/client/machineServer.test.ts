@@ -1,15 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { turnstile, type TurnstileSpec } from '../machines/turnstile/turnstile';
-import { ServerMachineController, type StreamMessage } from '../server/serverController';
+import { DEFAULT_RETRY_DELAYS, ServerMachineController, type StreamMessage } from '../server/serverController';
 import { flushMicrotasks, sequentialRequestIds } from '../server/testing/FakeMachineServer';
 import {
   createMachineServer,
+  DEFAULT_RESUBSCRIBE_DELAYS,
   persistedMessageReplacer,
   type PersistedSubscriptionSocket,
   type SubscriptionSink,
 } from './machineServer';
 import type { MachineDocument } from './machines';
+import { DEFAULT_MAX_RESPONSE_SIZE, DEFAULT_REQUEST_TIMEOUT } from './transport';
 
 // createMachineServer over a fake fetch and a fake graphql-ws socket: each operation goes by its persisted id with
 // its values as variables, and the change stream is subscribed by id with an empty document.
@@ -204,6 +206,14 @@ describe('createMachineServer operations', () => {
     expect(sent).toEqual([{ id: `trax_machine_turnstile_discard_${hash}`, variables: { id: 'i-1', requestId: 'rq-d' } }]);
   });
 
+  it('reports a discard answered null, or answered not discarded with no problem, as a failure', async () => {
+    const { fetch } = http(answer('discard', null), answer('discard', { id: 'i-1', discarded: false, problem: null }));
+    const { server } = serverOver(fetch);
+
+    expect(await server.discard('i-1', 'rq-d')).toMatchObject({ kind: 'problem', code: 'TRANSPORT_ERROR' });
+    expect(await server.discard('i-1', 'rq-d')).toMatchObject({ kind: 'problem', code: 'TRANSPORT_ERROR' });
+  });
+
   it('refuses at creation a document set without the push document', () => {
     expect(() =>
       createMachineServer('/graphql', {
@@ -309,6 +319,30 @@ describe('createMachineServer change stream', () => {
     expect(socket.subscriptions).toHaveLength(3);
   });
 
+  it('backs off further while each new stream ends after its first push, and starts over once one delivers a second', () => {
+    vi.useFakeTimers();
+    const { socket } = follow([100, 200, 400]);
+    const snapshot = (revision: number) => socket.push({ rowId: 7, revision, state: 'Locked', context: {} });
+
+    socket.last.sink.complete();
+    vi.advanceTimersByTime(100);
+    expect(socket.subscriptions).toHaveLength(2);
+
+    // Every new stream's first push is the instance as it is: it says nothing about whether the stream holds.
+    snapshot(1);
+    socket.last.sink.complete();
+    vi.advanceTimersByTime(199);
+    expect(socket.subscriptions).toHaveLength(2);
+    vi.advanceTimersByTime(1);
+    expect(socket.subscriptions).toHaveLength(3);
+
+    snapshot(1);
+    snapshot(2);
+    socket.last.sink.complete();
+    vi.advanceTimersByTime(100);
+    expect(socket.subscriptions).toHaveLength(4);
+  });
+
   it('closes the socket subscription and any pending resubscription when closed', () => {
     vi.useFakeTimers();
     const { socket, close } = follow([100]);
@@ -376,6 +410,57 @@ describe('createMachineServer change stream', () => {
     expect(socket.subscriptions).toHaveLength(3);
   });
 
+  it.each([
+    ['TRAX_AUTHORIZATION', 'FORBIDDEN'],
+    ['AUTH_NOT_AUTHORIZED', 'FORBIDDEN'],
+    ['AUTH_NOT_AUTHENTICATED', 'UNAUTHENTICATED'],
+  ])('a stream refused with a %s error is not subscribed again, and ends as %s', (refused, code) => {
+    vi.useFakeTimers();
+    const onNext = follow([100]);
+    onNext.socket.last.sink.next({ data: null, errors: [{ message: 'Not authorized.', extensions: { code: refused } }] });
+    const onError = follow([100]);
+    onError.socket.last.sink.error([{ message: 'Not authorized.', extensions: { code: refused } }]);
+    vi.advanceTimersByTime(10_000);
+
+    for (const { socket, messages } of [onNext, onError]) {
+      expect(messages).toEqual([{ type: 'ended', code, message: 'The host refused the stream: Not authorized.' }]);
+      expect(socket.subscriptions).toHaveLength(1);
+    }
+  });
+
+  it('a stream event whose error has a code marked terminal ends the stream with it', () => {
+    vi.useFakeTimers();
+    const { socket, messages } = follow([100], ['CONNECTION_CHANGED']);
+
+    socket.last.sink.next({ data: null, errors: [{ message: 'Changed.', extensions: { code: 'CONNECTION_CHANGED' } }] });
+    vi.advanceTimersByTime(10_000);
+
+    expect(messages).toEqual([{ type: 'ended', code: 'CONNECTION_CHANGED', message: 'Changed.' }]);
+    expect(socket.subscriptions).toHaveLength(1);
+  });
+
+  it('an error message coded client-outdated ends the stream as client-outdated, as a stream event does', () => {
+    vi.useFakeTimers();
+    const { socket, messages } = follow([100]);
+
+    socket.last.sink.error([{ message: 'Reload the page.', extensions: { code: 'CLIENT_OUTDATED' } }]);
+    vi.advanceTimersByTime(10_000);
+
+    expect(messages).toEqual([{ type: 'client-outdated' }]);
+    expect(socket.subscriptions).toHaveLength(1);
+  });
+
+  it('subscribes again after a stream event whose error has any other code', () => {
+    vi.useFakeTimers();
+    const { socket, messages } = follow([100]);
+
+    socket.last.sink.next({ data: null, errors: [{ message: 'Oops.', extensions: { code: 'INTERNAL' } }] });
+    vi.advanceTimersByTime(100);
+
+    expect(messages).toEqual([]);
+    expect(socket.subscriptions).toHaveLength(2);
+  });
+
   it('subscribes again after an error whose code was not marked terminal', () => {
     vi.useFakeTimers();
     const { socket, messages } = follow([100], ['CONNECTION_CHANGED']);
@@ -436,6 +521,33 @@ describe('ServerMachineController over createMachineServer', () => {
     expect(socket.last.closed).toBe(true);
   });
 
+  it('fails a send answered malformed as a transport error and keeps running, and drops a malformed push', async () => {
+    const deep = Array.from({ length: 70 }).reduce<unknown>((inner) => ({ inner }), 'x');
+    const { fetch } = http(
+      answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, problem: null }),
+      answer('coin', { id: 'i-1', revision: 2, state: null, context: null, problem: null }),
+      answer('coin', { id: 'i-1', revision: 2, state: 'Unlocked', context: { paidWith: 'dollar', deep }, problem: null }),
+    );
+    const { server, socket } = serverOver(fetch);
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      newRequestId: sequentialRequestIds(),
+    });
+    await controller.start();
+
+    for (let i = 0; i < 2; i++)
+      expect(await controller.send('Coin', { coin: 'dollar' })).toMatchObject({
+        outcome: 'failed',
+        problem: { code: 'TRANSPORT_ERROR' },
+      });
+    expect(controller.get()).toMatchObject({ status: 'ready', error: null, revision: 1 });
+
+    expect(() => socket.push({ rowId: 7, revision: 3, state: 'Locked', context: { deep } })).not.toThrow();
+    expect(controller.get()).toMatchObject({ status: 'ready', error: null, revision: 1 });
+  });
+
   it('stops with the error of a stream refused as CONNECTION_CHANGED, and sends nothing more', async () => {
     vi.useFakeTimers();
     const { sent, fetch } = http(
@@ -457,6 +569,29 @@ describe('ServerMachineController over createMachineServer', () => {
       status: 'stopped',
       error: { code: 'CONNECTION_CHANGED', message: 'configureTrax was called since this server was made.' },
     });
+    expect(await controller.send('Coin', { coin: 'dollar' })).toMatchObject({ outcome: 'stopped' });
+    expect(socket.subscriptions).toHaveLength(1);
+    expect(sent).toHaveLength(1);
+  });
+
+  it('stops FORBIDDEN on a stream refused with TRAX_AUTHORIZATION, and subscribes once', async () => {
+    vi.useFakeTimers();
+    const { sent, fetch } = http(
+      answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, dueAt: null, problem: null }),
+    );
+    const { server, socket } = serverOver(fetch, new FakeSocket(), [100]);
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      newRequestId: sequentialRequestIds(),
+    });
+
+    await controller.start();
+    socket.last.sink.next({ data: null, errors: [{ message: 'Not authorized.', extensions: { code: 'TRAX_AUTHORIZATION' } }] });
+    vi.advanceTimersByTime(10_000);
+
+    expect(controller.get()).toMatchObject({ status: 'stopped', error: { code: 'FORBIDDEN' } });
     expect(await controller.send('Coin', { coin: 'dollar' })).toMatchObject({ outcome: 'stopped' });
     expect(socket.subscriptions).toHaveLength(1);
     expect(sent).toHaveLength(1);
@@ -517,6 +652,46 @@ describe('ServerMachineController over createMachineServer', () => {
     expect(sent).toHaveLength(1);
   });
 
+  it('an event whose answer never comes fails as a transport error, and retry resends it under the same requestId', async () => {
+    vi.useFakeTimers();
+    const sent: Sent[] = [];
+    const bodies = [
+      answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, dueAt: null, problem: null }),
+      null,
+      answer('coin', { id: 'i-1', revision: 2, state: 'Unlocked', context: { paidWith: 'dollar' }, problem: null }),
+    ];
+    const fetch = ((_url: string, init: { body: string }) => {
+      sent.push(JSON.parse(init.body) as Sent);
+      const body = bodies.shift();
+      return body === null
+        ? new Promise<Response>(() => {})
+        : Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    }) as unknown as typeof globalThis.fetch;
+    const socket = new FakeSocket();
+    const server = createMachineServer('/graphql', {
+      fetch,
+      machine: turnstile,
+      documents: DOCUMENTS,
+      socket,
+      requestTimeout: 5000,
+    });
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      newRequestId: sequentialRequestIds(),
+    });
+    await controller.start();
+
+    const sending = controller.send('Coin', { coin: 'dollar' });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(await sending).toMatchObject({ outcome: 'failed', problem: { code: 'TRANSPORT_ERROR' } });
+    expect(controller.get().pending).toBe(false);
+
+    expect(await controller.retry()).toMatchObject({ outcome: 'confirmed' });
+    expect(sent.map((s) => s.variables.requestId)).toEqual([undefined, 'rq-1', 'rq-1']);
+  });
+
   it('a request rejected with a code not marked terminal is still a transport failure', async () => {
     const { fetch } = http();
     const server = createMachineServer('/graphql', {
@@ -538,5 +713,15 @@ describe('ServerMachineController over createMachineServer', () => {
     await controller.start();
 
     expect(controller.get()).toMatchObject({ status: 'loading', error: null, problem: { kind: 'transport' } });
+  });
+});
+
+// The defaults every client of the kit shares (conformance/client/PROTOCOL.md, "Defaults").
+describe('the time-based defaults', () => {
+  it('are the client kit\'s', () => {
+    expect(DEFAULT_REQUEST_TIMEOUT).toBe(30_000);
+    expect(DEFAULT_RESUBSCRIBE_DELAYS).toEqual([1000, 2000, 5000]);
+    expect(DEFAULT_RETRY_DELAYS).toEqual([250, 500, 1000, 2000, 4000]);
+    expect(DEFAULT_MAX_RESPONSE_SIZE).toBe(16 * 1024 * 1024);
   });
 });

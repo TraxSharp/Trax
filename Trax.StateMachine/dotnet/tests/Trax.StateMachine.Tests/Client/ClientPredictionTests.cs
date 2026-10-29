@@ -160,6 +160,107 @@ public class ClientPredictionTests
     }
 
     [Test]
+    public async Task A_change_handler_that_throws_on_the_confirming_change_leaves_the_send_settled_and_the_queue_draining()
+    {
+        var server = new HandServer();
+        using var controller = Open(server, MachinePredictor.For(DeclarativeTurnstile.Built));
+        await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
+        var throwing = false;
+        var heard = 0;
+        controller.Changed += (_, _) =>
+        {
+            if (Volatile.Read(ref throwing))
+                throw new InvalidOperationException("handler bug");
+        };
+        controller.Changed += (_, _) => Interlocked.Increment(ref heard);
+
+        var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
+        var push = controller.SendAsync("Push");
+        var first = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        Volatile.Write(ref throwing, true);
+        var before = Volatile.Read(ref heard);
+        first.Answer.SetResult(
+            ServerAnswer.Of(At(2, "Unlocked", new JsonObject { ["paidWith"] = "quarter" }))
+        );
+
+        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        var second = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        second.Trigger.Should().Be("Push");
+        second.Answer.SetResult(ServerAnswer.Of(At(3, "Locked")));
+        (await push.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        Volatile.Read(ref heard).Should().BeGreaterThan(before);
+    }
+
+    [Test]
+    public async Task A_change_handler_that_throws_when_an_event_is_queued_does_not_fail_the_send()
+    {
+        var server = new HandServer();
+        using var controller = Open(server, MachinePredictor.For(DeclarativeTurnstile.Built));
+        await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
+        controller.Changed += (_, _) => throw new InvalidOperationException("handler bug");
+
+        var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
+        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
+            ServerAnswer.Of(At(2, "Unlocked", new JsonObject { ["paidWith"] = "quarter" }))
+        );
+
+        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        controller.View.Confirmed!.State.Should().Be("Unlocked");
+    }
+
+    [Test]
+    public async Task After_a_divergence_the_next_queued_event_waits_for_the_read_and_is_predicted_from_it()
+    {
+        var server = new HandServer();
+        using var controller = Open(server, MachinePredictor.For(DeclarativeTurnstile.Built));
+        // What the client holds is stale: the server's instance was unlocked with a dollar since.
+        await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
+
+        var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
+        var push = controller.SendAsync("Push");
+        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
+            ServerAnswer.Refused("CLIENT_DIVERGENCE", "The prediction differs.")
+        );
+        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Refused>();
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(At(5, "Unlocked", new JsonObject { ["paidWith"] = "dollar" }))
+        );
+
+        var second = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        second.Trigger.Should().Be("Push");
+        second
+            .ClientResult.Should()
+            .Be("{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}");
+        second.Answer.SetResult(ServerAnswer.Of(At(6, "Locked")));
+        (await push.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+    }
+
+    [Test]
+    public async Task A_new_incarnation_pushed_while_a_read_is_pending_is_read_and_held()
+    {
+        var server = new HandServer();
+        using var controller = Open(server, MachinePredictor.For(DeclarativeTurnstile.Built));
+        await server.Answer(controller, ServerAnswer.Of(At(10, "Locked")));
+        server.Push(new StreamMessage.Changed(At(11, "Locked") with { RowId = "row-a" }));
+        await Until(controller, v => v.RowId == "row-a");
+
+        // The instance is deleted and created again while a reload's read is pending. A read's answer carries no
+        // incarnation, so the pending one cannot say which it read.
+        server.Push(new StreamMessage.Reload());
+        var first = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var recreated = At(1, "Unlocked", new JsonObject { ["paidWith"] = "dollar" });
+        server.Push(new StreamMessage.Changed(recreated with { RowId = "row-b" }));
+        first.SetResult(ServerAnswer.Of(recreated));
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(recreated)
+        );
+
+        await Until(controller, v => v.RowId == "row-b");
+        controller.View.Revision.Should().Be(1);
+        controller.View.Confirmed!.State.Should().Be("Unlocked");
+    }
+
+    [Test]
     public void A_predictor_of_another_version_than_the_manifest_is_refused()
     {
         var other = Turnstile with { IrHash = new string('0', 64) };

@@ -4,11 +4,12 @@
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
+use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{FutureExt, SinkExt, StreamExt};
 use reqwest::header::HeaderMap;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -67,9 +68,10 @@ pub struct GraphQLMachineServerOptions {
     pub headers: Option<RequestHeaders>,
     /// The `connection_init` payload, asked for on every connection: how a host authenticates a socket.
     pub connection_params: Option<ConnectionParams>,
-    /// Delays before subscribing again after a stream that ended without saying why. The last repeats. A socket the
-    /// host refused (closed with 4401 or 4403, or an upgrade answered 401 or 403) is not subscribed again: the stream
-    /// delivers [`StreamMessage::Refused`] and ends.
+    /// Delays before subscribing again after a stream that ended without saying why. The last repeats, and they start
+    /// over once a stream has delivered a second push. A socket the host refused (closed with 4401 or 4403, an upgrade
+    /// answered 401 or 403, or a stream error with an authorization code or one of `terminal_stream_errors`) is not
+    /// subscribed again: the stream delivers [`StreamMessage::Refused`] and ends.
     pub resubscribe_delays: Option<Vec<Duration>>,
     /// How long a socket may take to connect and be acknowledged before the attempt counts as failed and is tried
     /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default.
@@ -77,6 +79,11 @@ pub struct GraphQLMachineServerOptions {
     /// How long one request may take, from sending it to reading the last byte of its answer, before it fails as a
     /// [`TransportError`]. [`DEFAULT_REQUEST_TIMEOUT`] (30 seconds) by default.
     pub request_timeout: Duration,
+    /// How long an acknowledged socket may stay silent before it is given up and subscribed again after the
+    /// resubscribe delays, so a connection dropped without a close (a NAT that forgot it) is noticed. Halfway through
+    /// the silence the client sends a `ping`, which a live host answers with a `pong`. [`DEFAULT_IDLE_TIMEOUT`] (60
+    /// seconds) by default.
+    pub idle_timeout: Duration,
     /// The largest response body, and the largest socket message or frame, the host may send, in bytes. A larger
     /// response fails its request as a [`TransportError`]; a larger message ends the stream, which is subscribed again.
     /// [`DEFAULT_MAX_MESSAGE_SIZE`] (16 MiB) by default.
@@ -84,6 +91,14 @@ pub struct GraphQLMachineServerOptions {
     /// Accepts an `http` endpoint or a `ws` socket on a host that is not loopback. Off by default: whatever
     /// authenticates the client would travel in cleartext.
     pub allow_insecure_transport: bool,
+    /// The codes of a stream error that end the stream for good, beside the host's authorization codes
+    /// (`TRAX_AUTHORIZATION`, `AUTH_NOT_AUTHORIZED`, `AUTH_NOT_AUTHENTICATED`). A `next` or `error` whose first error
+    /// carries one is not subscribed again: the stream delivers [`StreamMessage::Refused`] with that code and the
+    /// error's message, and the controller stops on it. Empty by default.
+    pub terminal_stream_errors: Vec<String>,
+    /// The tokio runtime each subscription's task runs on. `None` takes the runtime `new` is called from, or failing
+    /// that the one `subscribe` is called from; a subscription asked for outside any is refused rather than panicking.
+    pub runtime: Option<tokio::runtime::Handle>,
 }
 
 impl GraphQLMachineServerOptions {
@@ -105,8 +120,11 @@ impl GraphQLMachineServerOptions {
             resubscribe_delays: None,
             connect_timeout: DEFAULT_CONNECT_TIMEOUT,
             request_timeout: DEFAULT_REQUEST_TIMEOUT,
+            idle_timeout: DEFAULT_IDLE_TIMEOUT,
             max_message_size: DEFAULT_MAX_MESSAGE_SIZE,
             allow_insecure_transport: false,
+            terminal_stream_errors: Vec::new(),
+            runtime: None,
         }
     }
 }
@@ -121,6 +139,9 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long one request may take before it fails, by default.
 pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How long an acknowledged socket may stay silent before it is given up, by default.
+pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// The default delays before subscribing again after a stream ended without a reason.
 pub const DEFAULT_RESUBSCRIBE_DELAYS: [Duration; 3] =
@@ -145,7 +166,9 @@ struct Document {
 
 /// The [`MachineServer`] over a host's typed `machines` root. A refusal is an answer, and so is `CLIENT_OUTDATED` or
 /// `SERVER_OUTDATED`, the host's answer to a document of another version; any other GraphQL error, a status that is
-/// not success, or a request that does not complete is a [`TransportError`].
+/// not success, or a request that does not complete is a [`TransportError`]. A clone shares the original's HTTP
+/// client and documents, so an app can keep one to discard through after handing the other to a controller.
+#[derive(Clone)]
 pub struct GraphQLMachineServer {
     inner: Arc<Inner>,
 }
@@ -165,7 +188,10 @@ struct Inner {
     resubscribe_delays: Vec<Duration>,
     connect_timeout: Duration,
     request_timeout: Duration,
+    idle_timeout: Duration,
     max_message_size: usize,
+    terminal_stream_errors: HashSet<String>,
+    runtime: Option<tokio::runtime::Handle>,
 }
 
 impl GraphQLMachineServer {
@@ -233,13 +259,17 @@ impl GraphQLMachineServer {
                 resubscribe_delays: delays,
                 connect_timeout: options.connect_timeout,
                 request_timeout: options.request_timeout,
+                idle_timeout: options.idle_timeout,
                 max_message_size: options.max_message_size,
+                terminal_stream_errors: options.terminal_stream_errors.into_iter().collect(),
+                runtime: options.runtime.or_else(|| tokio::runtime::Handle::try_current().ok()),
             }),
         })
     }
 
     /// Deletes one of the caller's instances. One already gone, or never the caller's, is answered discarded too, so
-    /// a retry is harmless. `Ok(None)` when it is gone; otherwise the refusal.
+    /// a retry is harmless. `Ok(None)` when it is gone; otherwise the refusal. An answer that neither says the instance
+    /// was discarded nor gives a problem does not say it is gone: it is a [`TransportError`].
     pub async fn discard(&self, id: &str, request_id: &str) -> Result<Option<ServerProblem>, TransportError> {
         match self
             .inner
@@ -253,7 +283,21 @@ impl GraphQLMachineServer {
             .await?
         {
             Posted::Refused(problem) => Ok(Some(problem)),
-            Posted::Answer(answer) => Ok(answer.as_ref().and_then(|a| a.get("problem")).and_then(problem_of)),
+            Posted::Answer(answer) => {
+                if let Some(problem) = answer.as_ref().and_then(|a| a.get("problem")).and_then(problem_of) {
+                    return Ok(Some(problem));
+                }
+                match answer
+                    .as_ref()
+                    .and_then(|a| a.get("discarded"))
+                    .and_then(|d| d.as_bool())
+                {
+                    Some(true) => Ok(None),
+                    _ => Err(TransportError(
+                        "The server answered the discard without saying the instance was discarded.".to_owned(),
+                    )),
+                }
+            }
         }
     }
 }
@@ -287,18 +331,18 @@ impl Inner {
         body.insert("id".into(), Value::from(document.id.as_str()));
         body.insert("variables".into(), Value::Object(variables));
 
-        let mut request = self
-            .http
-            .post(&self.endpoint)
-            .header("content-type", "application/json")
-            .header("accept", "application/json");
-        if let Some(headers) = &self.headers {
-            request = request.headers(headers().await?);
-        }
-        let request = request.body(Value::Object(body).to_json());
-        // The whole exchange, sending and reading the answer, within the request timeout: a host that never answers
-        // fails the request rather than holding it forever.
+        // The whole exchange, asking for the headers, sending and reading the answer, within the request timeout: a
+        // host or a token refresh that never answers fails the request rather than holding it forever.
         let exchange = async {
+            let mut request = self
+                .http
+                .post(&self.endpoint)
+                .header("content-type", "application/json")
+                .header("accept", "application/json");
+            if let Some(headers) = &self.headers {
+                request = request.headers(headers().await?);
+            }
+            let request = request.body(Value::Object(body).to_json());
             let mut response = request.send().await.map_err(transport_error)?;
             let status = response.status();
             // A redirect is not followed, and an answer a client reached by following one is not the endpoint's.
@@ -336,6 +380,10 @@ impl Inner {
             }
             Ok::<_, TransportError>((status, bytes))
         };
+        // A headers provider that panics fails the request as one that did not get through.
+        let exchange = AssertUnwindSafe(exchange).catch_unwind().map(|caught| {
+            caught.unwrap_or_else(|_| Err(TransportError("The request panicked before it was sent.".to_owned())))
+        });
         let (status, bytes) = tokio::time::timeout(self.request_timeout, exchange)
             .await
             .map_err(|_| {
@@ -404,21 +452,30 @@ fn answer_of(answer: &Value) -> Result<ServerAnswer, TransportError> {
     if let Some(problem) = answer.get("problem").and_then(problem_of) {
         return Ok(ServerAnswer::Refused(problem));
     }
-    let snapshot = snapshot_of(answer)
-        .ok_or_else(|| TransportError("The server answered a snapshot without a state.".to_owned()))?;
+    let snapshot = snapshot_of(answer)?;
     Ok(ServerAnswer::Stored {
         id: answer.get("id").and_then(|i| i.as_str()).map(str::to_owned),
         snapshot,
     })
 }
 
-fn snapshot_of(value: &Value) -> Option<ServerSnapshot> {
-    let state = value.get("state")?.as_str()?.to_owned();
+fn snapshot_of(value: &Value) -> Result<ServerSnapshot, TransportError> {
+    let state = value
+        .get("state")
+        .and_then(|s| s.as_str())
+        .ok_or_else(|| TransportError("The server answered a snapshot without a state.".to_owned()))?
+        .to_owned();
     // A revision the store does not record stays `None`: it is not revision 0, which would order every later answer
-    // below it.
+    // below it. One that is not an integer a double holds exactly is refused, not rounded: a revision read as larger
+    // than it is would make every later snapshot look stale.
     let revision = match value.get("revision") {
         None | Some(Value::Null) => None,
-        Some(revision) => Some(revision.as_f64()? as i64),
+        Some(revision) => Some(revision_of(revision).ok_or_else(|| {
+            TransportError(format!(
+                "The server answered a revision that is not an integer: {}.",
+                revision.to_json()
+            ))
+        })?),
     };
     let context = value
         .get("context")
@@ -440,13 +497,23 @@ fn snapshot_of(value: &Value) -> Option<ServerSnapshot> {
         Some(Value::Number(n)) => Some(trax_state_machine::number_text(*n)),
         _ => None,
     };
-    Some(ServerSnapshot {
+    Ok(ServerSnapshot {
         row_id,
         revision,
         state,
         context,
         due_at,
     })
+}
+
+// The largest integer a double holds exactly, 2^53 - 1: past it a revision cannot be told from its neighbours.
+const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
+
+fn revision_of(value: &Value) -> Option<i64> {
+    match value {
+        Value::Number(n) if n.fract() == 0.0 && n.abs() <= MAX_SAFE_INTEGER => Some(*n as i64),
+        _ => None,
+    }
 }
 
 fn problem_of(value: &Value) -> Option<ServerProblem> {
@@ -466,9 +533,20 @@ impl MachineServer for GraphQLMachineServer {
     }
 
     async fn event(&self, request: EventRequest) -> Result<ServerAnswer, TransportError> {
+        let field = event_field(&request.trigger);
+        // An event is never sent as one of the machine's own operations, whatever its trigger is named.
+        if OPERATIONS.contains(&field.as_str()) {
+            return Ok(ServerAnswer::Refused(ServerProblem {
+                code: codes::NO_TRANSITION.to_owned(),
+                message: format!(
+                    "'{}' names the operation '{field}', not an event of '{}'.",
+                    request.trigger, self.inner.machine
+                ),
+            }));
+        }
         self.inner
             .run(
-                &event_field(&request.trigger),
+                &field,
                 &[
                     ("id", Some(Value::from(request.id))),
                     ("input", request.input),
@@ -491,19 +569,37 @@ impl MachineServer for GraphQLMachineServer {
     }
 
     fn subscribe(&self, id: String, sink: StreamSink) -> Box<dyn Subscription> {
+        let Some(runtime) = self
+            .inner
+            .runtime
+            .clone()
+            .or_else(|| tokio::runtime::Handle::try_current().ok())
+        else {
+            sink(StreamMessage::Refused(ServerProblem {
+                code: codes::TRANSPORT_ERROR.to_owned(),
+                message: "The stream was asked for outside a tokio runtime, and the server's options name none."
+                    .to_owned(),
+            }));
+            return Box::new(Stream(None));
+        };
         let inner = self.inner.clone();
-        Box::new(Stream(tokio::spawn(async move { inner.stream(id, sink).await })))
+        Box::new(Stream(Some(runtime.spawn(async move { inner.stream(id, sink).await }))))
     }
 }
 
+// The operations a machine serves beside its events. An event's field is never looked up among them.
+const OPERATIONS: [&str; 4] = ["start", "get", "discard", "changed"];
+
 // The task that follows one instance; dropping the handle stops it and closes its socket.
-struct Stream(JoinHandle<()>);
+struct Stream(Option<JoinHandle<()>>);
 
 impl Subscription for Stream {}
 
 impl Drop for Stream {
     fn drop(&mut self) {
-        self.0.abort();
+        if let Some(task) = &self.0 {
+            task.abort();
+        }
     }
 }
 
@@ -522,7 +618,10 @@ impl Inner {
     async fn stream(&self, id: String, sink: StreamSink) {
         let mut attempt = 0usize;
         loop {
-            match self.subscribe_once(&id, &sink, &mut attempt).await {
+            // A provider that panics (a host callback a binding wraps) ends that subscription as one that ended without
+            // saying why, so the stream is subscribed again rather than dying silently.
+            let once = AssertUnwindSafe(self.subscribe_once(&id, &sink, &mut attempt)).catch_unwind();
+            match once.await.unwrap_or(Ended::Again) {
                 Ended::ForGood => return,
                 Ended::Again => {
                     let delay = self.resubscribe_delays[attempt.min(self.resubscribe_delays.len() - 1)];
@@ -629,8 +728,28 @@ impl Inner {
             return Ended::Again;
         }
 
+        // A host that says nothing for half the idle limit is pinged; one that says nothing for the rest of it is gone.
+        let mut pinged = false;
+        // What this subscription has delivered. Its first push is the instance as it is now, which every new stream
+        // sends, so only a second one shows the stream lasted: the resubscribe delays start over then, and a host that
+        // drops each stream right after its first push is subscribed again later each time.
+        let mut pushes = 0usize;
         let ended = loop {
-            let text = match socket.next().await {
+            let next = match tokio::time::timeout(self.idle_timeout / 2, socket.next()).await {
+                Ok(next) => {
+                    pinged = false;
+                    next
+                }
+                Err(_) if !pinged => {
+                    pinged = true;
+                    if socket.send(Message::text(r#"{"type":"ping"}"#)).await.is_err() {
+                        break Ended::Again;
+                    }
+                    continue;
+                }
+                Err(_) => break Ended::Again,
+            };
+            let text = match next {
                 Some(Ok(Message::Text(text))) => text,
                 Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Binary(_) | Message::Frame(_))) => continue,
                 Some(Ok(Message::Close(frame))) => match refused_close(frame.as_ref()) {
@@ -650,11 +769,37 @@ impl Inner {
                     let _ = socket.send(Message::text(r#"{"type":"pong"}"#)).await;
                 }
                 Some("next") => {
-                    if let Some(ended) = self.on_next(message.get("payload"), sink, attempt) {
+                    let ended = self.on_next(message.get("payload"), sink, &mut pushes);
+                    if pushes >= 2 {
+                        *attempt = 0;
+                    }
+                    if let Some(ended) = ended {
                         break ended;
                     }
                 }
-                Some("error") | Some("complete") => break Ended::Again,
+                Some("error") => {
+                    let first = message
+                        .get("payload")
+                        .and_then(|p| p.as_array())
+                        .and_then(|e| e.first());
+                    let code = first
+                        .and_then(|error| error.get("extensions"))
+                        .and_then(|x| x.get("code"))
+                        .and_then(|c| c.as_str());
+                    // The same codes end the stream as in a `next`: CLIENT_OUTDATED, and the refusals.
+                    if code == Some(codes::CLIENT_OUTDATED) {
+                        sink(StreamMessage::ClientOutdated);
+                        break Ended::ForGood;
+                    }
+                    break match first.and_then(|error| self.refused_by(error)) {
+                        Some(refusal) => {
+                            sink(StreamMessage::Refused(refusal));
+                            Ended::ForGood
+                        }
+                        None => Ended::Again,
+                    };
+                }
+                Some("complete") => break Ended::Again,
                 _ => {}
             }
         };
@@ -663,7 +808,7 @@ impl Inner {
     }
 
     // One event of the stream: a message for the controller, nothing, or the end of this subscription.
-    fn on_next(&self, payload: Option<&Value>, sink: &StreamSink, attempt: &mut usize) -> Option<Ended> {
+    fn on_next(&self, payload: Option<&Value>, sink: &StreamSink, pushes: &mut usize) -> Option<Ended> {
         let payload = payload?;
         if let Some(error) = payload.get("errors").and_then(|e| e.as_array()).and_then(|e| e.first()) {
             let code = error
@@ -672,6 +817,10 @@ impl Inner {
                 .and_then(|c| c.as_str());
             if code == Some(codes::CLIENT_OUTDATED) {
                 sink(StreamMessage::ClientOutdated);
+                return Some(Ended::ForGood);
+            }
+            if let Some(refusal) = self.refused_by(error) {
+                sink(StreamMessage::Refused(refusal));
                 return Some(Ended::ForGood);
             }
             return Some(Ended::Again);
@@ -696,15 +845,47 @@ impl Inner {
             return Some(Ended::ForGood);
         }
         if change.get("reload").and_then(|r| r.as_bool()) == Some(true) {
+            *pushes += 1;
             sink(StreamMessage::Reload);
             return None;
         }
-        let snapshot = snapshot_of(change).filter(|s| s.revision.is_some())?;
-        *attempt = 0;
+        let snapshot = snapshot_of(change).ok().filter(|s| s.revision.is_some())?;
+        *pushes += 1;
         sink(StreamMessage::Changed(snapshot));
         None
     }
 }
+
+impl Inner {
+    // The refusal a stream error is when the host turned the caller away with it: an authorization code ends the stream
+    // as UNAUTHENTICATED or FORBIDDEN, as 4401 and 4403 do, and a code the caller marked terminal ends it with that
+    // code. Subscribing again would get the same answer. Any other error is `None`.
+    fn refused_by(&self, error: &Value) -> Option<ServerProblem> {
+        let code = error
+            .get("extensions")
+            .and_then(|x| x.get("code"))
+            .and_then(|c| c.as_str())?;
+        let code = match code {
+            AUTH_NOT_AUTHENTICATED => codes::UNAUTHENTICATED,
+            TRAX_AUTHORIZATION | AUTH_NOT_AUTHORIZED => codes::FORBIDDEN,
+            code if self.terminal_stream_errors.contains(code) => code,
+            _ => return None,
+        };
+        let message = match error.get("message").and_then(|m| m.as_str()).filter(|m| !m.is_empty()) {
+            Some(message) => message.to_owned(),
+            None => format!("The host refused the stream: {code}."),
+        };
+        Some(ServerProblem {
+            code: code.to_owned(),
+            message,
+        })
+    }
+}
+
+// The codes a host refuses a stream's caller with as a GraphQL error: Trax's own, and Hot Chocolate's.
+const TRAX_AUTHORIZATION: &str = "TRAX_AUTHORIZATION";
+const AUTH_NOT_AUTHORIZED: &str = "AUTH_NOT_AUTHORIZED";
+const AUTH_NOT_AUTHENTICATED: &str = "AUTH_NOT_AUTHENTICATED";
 
 // The refusal a close frame is when the host turned the caller away with it: 4401 is `UNAUTHENTICATED`, 4403
 // `FORBIDDEN`. Subscribing again would get the same answer. Any other close, or none, is `None`.
@@ -1050,6 +1231,40 @@ mod tests {
         assert!(matches!(answer, ServerAnswer::Refused(ServerProblem { code, .. }) if code == "NOT_FOUND"));
     }
 
+    #[tokio::test]
+    async fn an_event_named_as_an_operation_is_refused_and_sends_nothing() {
+        use std::sync::atomic::Ordering;
+
+        let (port, received) = http_host(json_answer(NOT_FOUND)).await;
+        let mut given = at(format!("http://127.0.0.1:{port}/graphql"));
+        for operation in ["start", "discard"] {
+            given.documents.push(ManifestDocument {
+                id: format!("{operation}-1"),
+                operation: operation.into(),
+                document: "mutation Op($id: UUID!, $requestId: String!) { x }".into(),
+            });
+        }
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        for trigger in ["Discard", "Start", "Get", "Changed", "discard"] {
+            let answer = server
+                .event(EventRequest {
+                    id: "i-1".into(),
+                    trigger: trigger.into(),
+                    input: None,
+                    request_id: "r1".into(),
+                    client_result: None,
+                })
+                .await;
+
+            assert!(
+                matches!(&answer, Ok(ServerAnswer::Refused(p)) if p.code == codes::NO_TRANSITION),
+                "{trigger}: {answer:?}"
+            );
+        }
+        assert_eq!(received.load(Ordering::SeqCst), 0);
+    }
+
     #[test]
     fn a_machine_id_whose_part_starts_with_a_character_of_several_bytes_is_named_without_a_panic() {
         assert_eq!(machine_field("topic-\u{e9}t\u{e9}"), "topic\u{c9}t\u{e9}");
@@ -1071,7 +1286,19 @@ mod tests {
         Silent,
         // Acknowledges it, then sends a 64 KiB message.
         Flood,
+        // Acknowledges it, then answers every ping with a pong and says nothing else.
+        Pong,
+        // Acknowledges it, then answers the subscription with a `next` whose first error has this code.
+        NextError(&'static str),
+        // Acknowledges it, then answers the subscription with an `error` whose first error has this code.
+        ErrorMessage(&'static str),
+        // Acknowledges it, then answers the subscription with one snapshot and completes it, as a host that drops every
+        // stream right after its first push.
+        PushThenComplete,
     }
+
+    // How the host answers connection n.
+    type Replies = fn(usize) -> Reply;
 
     type Heard = tokio::sync::mpsc::UnboundedReceiver<(Option<String>, Option<String>)>;
 
@@ -1140,6 +1367,35 @@ mod tests {
                             let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
                         }
                         Reply::Silent => {}
+                        Reply::NextError(code) | Reply::ErrorMessage(code) => {
+                            let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
+                            let _ = socket.next().await;
+                            let error = format!(r#"[{{"message":"Refused.","extensions":{{"code":"{code}"}}}}]"#);
+                            let message = if let Reply::NextError(_) = reply {
+                                format!(r#"{{"id":"1","type":"next","payload":{{"errors":{error}}}}}"#)
+                            } else {
+                                format!(r#"{{"id":"1","type":"error","payload":{error}}}"#)
+                            };
+                            let _ = socket.send(Message::text(message)).await;
+                        }
+                        Reply::PushThenComplete => {
+                            let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
+                            let _ = socket.next().await;
+                            let push = r#"{"id":"1","type":"next","payload":{"data":{"turnstileChanged":{"state":"Locked","revision":1,"context":{}}}}}"#;
+                            let _ = socket.send(Message::text(push)).await;
+                            let _ = socket.send(Message::text(r#"{"id":"1","type":"complete"}"#)).await;
+                        }
+                        Reply::Pong => {
+                            let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
+                            while let Some(Ok(message)) = socket.next().await {
+                                if let Message::Text(text) = message {
+                                    if text.as_str().contains(r#""type":"ping""#) {
+                                        let _ = socket.send(Message::text(r#"{"type":"pong"}"#)).await;
+                                    }
+                                }
+                            }
+                            return;
+                        }
                         Reply::Flood => {
                             let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
                             let large = format!(r#"{{"type":"ping","payload":"{}"}}"#, "x".repeat(64 * 1024));
@@ -1160,6 +1416,82 @@ mod tests {
             }
         });
         (port, heard)
+    }
+
+    #[tokio::test]
+    async fn a_provider_that_panics_fails_that_connection_and_the_stream_is_subscribed_again() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        let (port, mut heard) = recording_host(|_| Reply::Acknowledge).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        let asked = Arc::new(AtomicU32::new(0));
+        given.connection_params = Some(Arc::new(move || {
+            let n = asked.fetch_add(1, Ordering::SeqCst) + 1;
+            if n == 1 {
+                panic!("a host callback's bug");
+            }
+            Box::pin(async move {
+                let mut payload = Map::new();
+                payload.insert("token".into(), Value::from(format!("t{n}")));
+                Ok(Some(Value::Object(payload)))
+            })
+        }));
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        let heard = tokio::time::timeout(Duration::from_secs(10), heard.recv()).await;
+
+        assert_eq!(
+            heard.expect("the stream died with the provider").unwrap(),
+            (None, Some("t2".into()))
+        );
+    }
+
+    #[tokio::test]
+    async fn a_headers_provider_that_panics_fails_the_request() {
+        let mut given = with_get(options("http://127.0.0.1:9/graphql", "ws://127.0.0.1:9/graphql"));
+        given.headers = Some(Arc::new(|| Box::pin(async { panic!("a host callback's bug") })));
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let answered = tokio::spawn(async move { server.get("i-1".into()).await }).await;
+
+        assert!(matches!(answered, Ok(Err(_))), "{answered:?}");
+    }
+
+    #[tokio::test]
+    async fn a_stream_dropped_after_its_first_push_backs_off_further_each_time() {
+        let (port, mut heard) = recording_host(|_| Reply::PushThenComplete).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10), Duration::from_millis(400)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let (deliver, mut delivered) = tokio::sync::mpsc::unbounded_channel();
+        let _stream = server.subscribe(
+            "i-1".into(),
+            Arc::new(move |message| {
+                let _ = deliver.send(message);
+            }),
+        );
+        let wait = Duration::from_secs(10);
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let second = std::time::Instant::now();
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+
+        // Every new stream's first push is the instance as it is, so it says nothing of whether the stream will last.
+        assert!(
+            second.elapsed() >= Duration::from_millis(300),
+            "subscribed again after {:?}",
+            second.elapsed()
+        );
+        assert!(matches!(delivered.try_recv(), Ok(StreamMessage::Changed(_))));
     }
 
     #[tokio::test]
@@ -1471,6 +1803,215 @@ mod tests {
             };
             assert!(error.0.contains("did not answer within 200 ms"), "{}", error.0);
         }
+    }
+
+    #[tokio::test]
+    async fn a_headers_provider_that_never_answers_fails_the_request_within_the_request_timeout() {
+        let mut given = with_get(options("http://127.0.0.1:9/graphql", "ws://127.0.0.1:9/graphql"));
+        given.headers = Some(Arc::new(|| Box::pin(std::future::pending())));
+        given.request_timeout = Duration::from_millis(200);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let answered = tokio::time::timeout(Duration::from_secs(10), server.get("i-1".into())).await;
+
+        let Ok(Err(error)) = answered else {
+            panic!("the request outlived its timeout while the headers were asked for");
+        };
+        assert!(error.0.contains("did not answer within 200 ms"), "{}", error.0);
+    }
+
+    #[test]
+    fn a_revision_is_read_only_as_an_integer() {
+        let read = |revision: &str| {
+            let answer = Value::parse(&format!(
+                r#"{{"id":"i-1","revision":{revision},"state":"Locked","context":{{}}}}"#
+            ))
+            .unwrap();
+            answer_of(&answer).map(|a| match a {
+                ServerAnswer::Stored { snapshot, .. } => snapshot.revision,
+                ServerAnswer::Refused(p) => panic!("{p:?}"),
+            })
+        };
+
+        assert_eq!(read("7"), Ok(Some(7)));
+        assert_eq!(read("9007199254740991"), Ok(Some(9_007_199_254_740_991)));
+        for revision in ["4.5", "1e19", "-1e19", "\"7\"", "true"] {
+            let Err(error) = read(revision) else {
+                panic!("the revision {revision} was read");
+            };
+            assert!(error.0.contains("revision"), "{}", error.0);
+        }
+    }
+
+    #[tokio::test]
+    async fn an_acknowledged_socket_that_goes_silent_is_opened_again() {
+        let (port, mut heard) = recording_host(|_| Reply::Acknowledge).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.idle_timeout = Duration::from_millis(200);
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        let wait = Duration::from_secs(10);
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let again = tokio::time::timeout(wait, heard.recv()).await;
+
+        assert!(again.is_ok(), "the silent socket was never given up");
+    }
+
+    #[tokio::test]
+    async fn a_socket_whose_host_answers_the_ping_is_kept() {
+        let (port, mut heard) = recording_host(|_| Reply::Pong).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.idle_timeout = Duration::from_millis(200);
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        tokio::time::timeout(Duration::from_secs(10), heard.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let again = tokio::time::timeout(Duration::from_millis(1000), heard.recv()).await;
+
+        assert!(again.is_err(), "a socket that answered every ping was opened again");
+    }
+
+    #[test]
+    fn a_stream_asked_for_outside_a_runtime_is_refused_not_panicked() {
+        let server = GraphQLMachineServer::new(options(
+            "https://api.example.com/graphql",
+            "wss://api.example.com/graphql",
+        ))
+        .unwrap();
+        let delivered = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let into = delivered.clone();
+
+        let stream = server.subscribe("i-1".into(), Arc::new(move |m| into.lock().unwrap().push(m)));
+        drop(stream);
+
+        let delivered = delivered.lock().unwrap();
+        assert!(
+            matches!(&delivered[..], [StreamMessage::Refused(p)] if p.code == codes::TRANSPORT_ERROR),
+            "{delivered:?}"
+        );
+    }
+
+    #[test]
+    fn a_stream_runs_on_the_runtime_the_options_name() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let mut given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
+        given.runtime = Some(runtime.handle().clone());
+        let server = GraphQLMachineServer::new(given).unwrap();
+        let delivered = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let into = delivered.clone();
+
+        let stream = server.subscribe("i-1".into(), Arc::new(move |m| into.lock().unwrap().push(m)));
+        drop(stream);
+
+        assert!(delivered.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_stream_the_host_refuses_with_a_graphql_error_ends_for_good() {
+        let cases: [(Replies, &str); 5] = [
+            (|_| Reply::NextError("TRAX_AUTHORIZATION"), "FORBIDDEN"),
+            (|_| Reply::NextError("AUTH_NOT_AUTHORIZED"), "FORBIDDEN"),
+            (|_| Reply::NextError("AUTH_NOT_AUTHENTICATED"), "UNAUTHENTICATED"),
+            (|_| Reply::ErrorMessage("TRAX_AUTHORIZATION"), "FORBIDDEN"),
+            (|_| Reply::ErrorMessage("AUTH_NOT_AUTHENTICATED"), "UNAUTHENTICATED"),
+        ];
+        for (reply, code) in cases {
+            let (port, mut heard) = recording_host(reply).await;
+            let (delivered, again) = follow(port, Vec::new(), &mut heard).await;
+
+            assert!(
+                matches!(&delivered, Some(StreamMessage::Refused(p)) if p.code == code),
+                "{delivered:?}"
+            );
+            assert!(again.is_err(), "the refused stream was subscribed again");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_stream_error_whose_code_the_caller_marked_terminal_ends_for_good_with_that_code() {
+        let (port, mut heard) = recording_host(|_| Reply::NextError("CONNECTION_CHANGED")).await;
+
+        let (delivered, again) = follow(port, vec!["CONNECTION_CHANGED".into()], &mut heard).await;
+
+        assert!(
+            matches!(&delivered, Some(StreamMessage::Refused(p)) if p.code == "CONNECTION_CHANGED"),
+            "{delivered:?}"
+        );
+        assert!(again.is_err(), "the stream was subscribed again");
+    }
+
+    #[tokio::test]
+    async fn a_stream_error_coded_client_outdated_ends_for_good_as_a_next_does() {
+        for reply in [(|_| Reply::ErrorMessage("CLIENT_OUTDATED")) as Replies, |_| {
+            Reply::NextError("CLIENT_OUTDATED")
+        }] {
+            let (port, mut heard) = recording_host(reply).await;
+
+            let (delivered, again) = follow(port, Vec::new(), &mut heard).await;
+
+            assert_eq!(delivered, Some(StreamMessage::ClientOutdated));
+            assert!(again.is_err(), "the outdated stream was subscribed again");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_stream_error_with_another_code_is_subscribed_again() {
+        let (port, mut heard) = recording_host(|_| Reply::NextError("CONNECTION_CHANGED")).await;
+
+        let (delivered, again) = follow(port, Vec::new(), &mut heard).await;
+
+        assert_eq!(delivered, None);
+        assert!(again.is_ok(), "the stream was never subscribed again");
+    }
+
+    // Follows "i-1" on the host at `port` with these terminal codes, and answers what the stream delivered within a
+    // second of its first connection and whether a second connection came in that time.
+    async fn follow(
+        port: u16,
+        terminal: Vec<String>,
+        heard: &mut Heard,
+    ) -> (
+        Option<StreamMessage>,
+        Result<Option<(Option<String>, Option<String>)>, tokio::time::error::Elapsed>,
+    ) {
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        given.terminal_stream_errors = terminal;
+        let server = GraphQLMachineServer::new(given).unwrap();
+        let (deliver, mut delivered) = tokio::sync::mpsc::unbounded_channel();
+        let _stream = server.subscribe(
+            "i-1".into(),
+            Arc::new(move |message| {
+                let _ = deliver.send(message);
+            }),
+        );
+        tokio::time::timeout(Duration::from_secs(10), heard.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let again = tokio::time::timeout(Duration::from_millis(1000), heard.recv()).await;
+        (delivered.try_recv().ok(), again)
+    }
+
+    #[test]
+    fn the_idle_timeout_is_sixty_seconds_by_default() {
+        let given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
+        assert_eq!(given.idle_timeout, Duration::from_secs(60));
     }
 
     #[test]

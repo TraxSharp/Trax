@@ -9,6 +9,7 @@ use crate::value::{JsString, Map, Value};
 /// Why an IR could not be read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IrError {
+    /// What is wrong with the IR, for people.
     pub message: String,
 }
 

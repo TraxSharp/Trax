@@ -1,0 +1,10 @@
+# The runs in one state.
+query Runs($state: RunState, $take: Int) {
+  operations {
+    runs(state: $state, take: $take) {
+      id
+      state
+      name
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "about": "A push of another incarnation that arrives while a read is in flight is not lost with that read: the read, which answers without a rowId, is taken for the incarnation held and dropped as stale, and the client then reads the new incarnation and holds it.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "push": { "rowId": "7", "revision": 10, "state": "Locked", "context": {} } },
+    { "view": { "rowId": "7", "revision": 10 } },
+    { "push": { "reload": true } },
+    { "wait": 50 },
+    { "push": { "rowId": "8", "revision": 1, "state": "Unlocked", "context": { "paidWith": "quarter" } } },
+    { "wait": 50 },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 9, "state": "Locked", "context": {} } },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "quarter" } } },
+    { "view": { "rowId": "8", "revision": 1, "state": "Unlocked" } },
+    { "quiet": 50 }
+  ]
+}

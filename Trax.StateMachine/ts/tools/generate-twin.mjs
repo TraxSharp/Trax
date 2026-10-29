@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { invokedDirectly, parseFlags, requireFlags } from "./lib/args.mjs";
 import { loadEngine } from "./lib/engine-loader.mjs";
@@ -46,9 +46,11 @@ export async function generateTwin({
   if (lang === "csharp") {
     // One file: the view embeds the IR as the host exported it, which is the text its hash is of.
     const view = generateCSharpView(ir, { namespace, irText: irRaw.replace(/\n+$/, ""), irHash });
-    const viewPath = resolve(outDir, `${pascalOf(ir.id)}.g.cs`);
+    const file = `${pascalOf(ir.id)}.g.cs`;
+    const viewPath = resolve(outDir, file);
     if (dirname(viewPath) !== resolve(outDir))
       throw new Error(`The IR's id ${JSON.stringify(ir.id)} would write outside ${outDir}.`);
+    refuseAnotherMachinesView(outDir, file, ir.id);
     mkdirSync(outDir, { recursive: true });
     writeFileSync(viewPath, view);
     return { viewPath };
@@ -72,6 +74,23 @@ export async function generateTwin({
   writeFileSync(contextsPath, contexts);
   writeFileSync(machinePath, factory);
   return { contextsPath, machinePath };
+}
+
+// Two ids can name one view file (`topic-map` writes TopicMap.g.cs, `topicmap` Topicmap.g.cs, which a disk that
+// ignores case holds as one file): a view of another machine already in outDir under a name equal to `file` ignoring
+// case is refused rather than overwritten. A file of that name the generator did not write is refused too, unless its
+// name is exactly `file`, which is the file it replaces.
+function refuseAnotherMachinesView(outDir, file, id) {
+  if (!existsSync(outDir)) return;
+  for (const name of readdirSync(outDir)) {
+    if (name.toLowerCase() !== file.toLowerCase()) continue;
+    const head = readFileSync(resolve(outDir, name), "utf8").split("\n", 3).join("\n");
+    const other = /^\/\/ AUTO-GENERATED from (.+)\.ir\.json by generateCSharpView\./m.exec(head)?.[1];
+    if (other === undefined ? name !== file : other !== id)
+      throw new Error(
+        `${name} in ${outDir} is ${other === undefined ? "not a view this generator wrote" : `the view of the machine '${other}'`}, and the machine '${id}' would write ${file}, the same file on a disk that ignores case. Rename one of the machines, or give each view its own --out-dir.`,
+      );
+  }
 }
 
 // The view's file name: the id in PascalCase, as its types are named (`ship-to-store` is `ShipToStore.g.cs`).

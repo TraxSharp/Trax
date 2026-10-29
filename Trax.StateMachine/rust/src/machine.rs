@@ -12,7 +12,7 @@ use crate::ir::{self, FieldType, IrError, Reduction, Rule, Schema};
 use crate::refusal::{Refusal, RefusalCode};
 use crate::rules::{self, Unhandled};
 use crate::stored::{stored_text_problems, unstorable};
-use crate::value::{json_copy_map, quote, write_object, JsString, Map, Value};
+use crate::value::{json_copy_map, map_too_deep, quote, write_object, JsString, Map, Value};
 
 /// A handler for a custom guard: reads the context and the input, says whether the edge may be taken.
 pub type GuardFn = dyn Fn(&Map, Option<&Value>) -> bool + Send + Sync;
@@ -32,16 +32,24 @@ pub(crate) struct CustomRules {
 /// The language-neutral state of an instance, the only thing that crosses the wire or lands in a row.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Snapshot {
+    /// The id of the machine that wrote it.
     pub machine: String,
+    /// The version of the definition that wrote it.
     pub version: i32,
+    /// The state the instance is in.
     pub state: String,
+    /// The state's context.
     pub context: Map,
 }
 
 impl Snapshot {
     /// Reads a snapshot object (`machine`, `version`, `state`, `context`) without checking it against a machine.
-    /// `None` when a member is missing or of the wrong type, or the version is not an integer in the int32 range.
+    /// `None` when a member is missing or of the wrong type, the version is not an integer in the int32 range, or the
+    /// value nests deeper than [`MAX_DEPTH`](crate::MAX_DEPTH).
     pub fn from_value(value: &Value) -> Option<Snapshot> {
+        if value.is_too_deep() {
+            return None;
+        }
         Some(Snapshot {
             machine: value.get("machine")?.as_str()?.to_owned(),
             version: as_int(value.get("version")?)?,
@@ -80,17 +88,24 @@ pub fn canonical_wire(snapshot: &Snapshot) -> String {
 /// no entry time, so it reports no due time.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Timer {
+    /// The trigger the timer fires.
     pub trigger: String,
+    /// The state it moves to.
     pub target: String,
+    /// The fixed duration, as ISO-8601, when the timer has one.
     pub after: Option<String>,
+    /// The context field the duration is read from, when it is not fixed.
     pub field: Option<TimerField>,
 }
 
 /// The context field a timer reads its duration from, and the ISO-8601 bounds the duration must be within.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TimerField {
+    /// The field's name.
     pub name: String,
+    /// The shortest duration it may hold, as ISO-8601.
     pub min: String,
+    /// The longest duration it may hold, as ISO-8601.
     pub max: String,
 }
 
@@ -118,10 +133,12 @@ pub struct Machine {
     initial_state: String,
     initial_context: Map,
     states: Vec<String>,
-    state_set: HashSet<String>,
+    pub(crate) state_set: HashSet<String>,
+    // The triggers the IR declares, which a caller may send.
+    pub(crate) triggers: HashSet<String>,
     edges: Vec<Edge>,
-    outcome_triggers: BTreeSet<String>,
-    timer_triggers: HashSet<String>,
+    pub(crate) outcome_triggers: BTreeSet<String>,
+    pub(crate) timer_triggers: HashSet<String>,
     timers: HashMap<String, Timer>,
     input_validators: HashMap<String, Schema>,
     context_validators: HashMap<String, ContextValidator>,
@@ -150,6 +167,23 @@ fn refuse<T>(code: RefusalCode, detail: impl Into<String>) -> Result<T, Refusal>
 }
 
 // An integral JSON number in the int32 range, as both other engines read a snapshot's version.
+const TOO_DEEP_CONTEXT: &str = "The context nests deeper than 512 arrays and objects.";
+
+// A snapshot or an input built in memory, where no parser held it to MAX_DEPTH, is refused before anything recurses
+// over it: an input as INVALID_INPUT, a context as INVALID_CONTEXT.
+fn too_deep(snapshot: &Snapshot, input: Option<&Value>) -> Result<(), Refusal> {
+    if input.is_some_and(Value::is_too_deep) {
+        return refuse(
+            RefusalCode::InvalidInput,
+            "The input nests deeper than 512 arrays and objects.",
+        );
+    }
+    if map_too_deep(&snapshot.context) {
+        return refuse(RefusalCode::InvalidContext, TOO_DEEP_CONTEXT);
+    }
+    Ok(())
+}
+
 fn as_int(value: &Value) -> Option<i32> {
     match value {
         Value::Number(n) if n.is_finite() && n.fract() == 0.0 && *n >= i32::MIN as f64 && *n <= i32::MAX as f64 => {
@@ -213,6 +247,11 @@ impl Machine {
     /// Builds a machine from its IR document. Refuses an IR it cannot interpret: a format newer than it reads, a
     /// missing section, a rule or reduction it does not know.
     pub fn from_ir(ir: &Value) -> Result<Machine, IrError> {
+        if ir.is_too_deep() {
+            return Err(IrError {
+                message: format!("The IR nests deeper than {} arrays and objects.", crate::MAX_DEPTH),
+            });
+        }
         let ir = ir::read(ir)?;
 
         // The machine's actual initial context if the IR carries it, else derived from the initial state's schema.
@@ -329,6 +368,7 @@ impl Machine {
             initial_context,
             state_set: ir.states.iter().cloned().collect(),
             states: ir.states,
+            triggers: ir.triggers.iter().cloned().collect(),
             edges,
             outcome_triggers: outcomes.iter().map(|o| o.name.clone()).collect(),
             timer_triggers,
@@ -381,18 +421,22 @@ impl Machine {
         self
     }
 
+    /// The machine's id.
     pub fn id(&self) -> &str {
         &self.id
     }
 
+    /// The definition's version, which every snapshot this machine writes carries.
     pub fn version(&self) -> i32 {
         self.version
     }
 
+    /// The state a new instance starts in.
     pub fn initial_state(&self) -> &str {
         &self.initial_state
     }
 
+    /// The machine's states, in the order the IR lists them.
     pub fn states(&self) -> &[String] {
         &self.states
     }
@@ -413,6 +457,30 @@ impl Machine {
         self.outcome_triggers.iter().map(String::as_str)
     }
 
+    /// The refusal [`Machine::advance`] gives `trigger` from every state when it is not an event a caller may send: an
+    /// outcome trigger (`OUTCOME_BOUND`), a timer trigger (`TIMER_BOUND`), or one the machine does not declare
+    /// (`NO_TRANSITION`). `None` for an event the machine declares, whatever state it is sent from.
+    pub fn event_refusal(&self, trigger: &str) -> Option<Refusal> {
+        if self.outcome_triggers.contains(trigger) {
+            Some(Refusal::new(
+                RefusalCode::OutcomeBound,
+                "This step is completed by the outcome of its work, not by an action.",
+            ))
+        } else if self.timer_triggers.contains(trigger) {
+            Some(Refusal::new(
+                RefusalCode::TimerBound,
+                "This step moves on by itself when its time is up, not by an action.",
+            ))
+        } else if !self.triggers.contains(trigger) {
+            Some(Refusal::new(
+                RefusalCode::NoTransition,
+                format!("The machine '{}' declares no event '{trigger}'.", self.id),
+            ))
+        } else {
+            None
+        }
+    }
+
     /// A new instance: the initial state and the initial context.
     pub fn initial_snapshot(&self) -> Snapshot {
         Snapshot {
@@ -423,13 +491,15 @@ impl Machine {
         }
     }
 
-    /// Applies a trigger a caller sends. Refusals, first match wins: an unknown state (`NO_TRANSITION`); an outcome
+    /// Applies a trigger a caller sends. Refusals, first match wins: an input or a context that nests deeper than
+    /// [`MAX_DEPTH`](crate::MAX_DEPTH) (`INVALID_INPUT`, `INVALID_CONTEXT`); an unknown state (`NO_TRANSITION`); an outcome
     /// trigger (`OUTCOME_BOUND`); a timer trigger (`TIMER_BOUND`); no edge from the state (`NO_TRANSITION`); an input
     /// that does not match the trigger's schema (`INVALID_INPUT`); a guard that declines (`GUARD_FAILED`); a target
     /// whose timer reads a duration the successor context does not hold within bounds (`INVALID_INPUT`); a successor
     /// context the target refuses (`INVALID_CONTEXT`). An input of `null` is no input.
     pub fn advance(&self, snapshot: &Snapshot, trigger: &str, input: Option<&Value>) -> Result<Snapshot, Refusal> {
         let input = input.filter(|v| !v.is_null());
+        too_deep(snapshot, input)?;
         if !self.state_set.contains(&snapshot.state) {
             return refuse(
                 RefusalCode::NoTransition,
@@ -478,7 +548,8 @@ impl Machine {
     /// Applies an invoked train's outcome (`Fetching.done`, `.failed`, `.cancelled`) with the train's output as its
     /// input. A success tries the state's edges in declaration order and takes the first whose guard accepts the
     /// output; an output no edge accepts, a trigger that is not an outcome, and an outcome of a state the snapshot is
-    /// not in are `NO_TRANSITION`. An output that does not match the train's output schema is `INVALID_INPUT`.
+    /// not in are `NO_TRANSITION`. An output that does not match the train's output schema, or nests deeper than
+    /// [`MAX_DEPTH`](crate::MAX_DEPTH), is `INVALID_INPUT`; a context that nests deeper is `INVALID_CONTEXT`.
     pub fn apply_outcome(
         &self,
         snapshot: &Snapshot,
@@ -486,6 +557,7 @@ impl Machine {
         output: Option<&Value>,
     ) -> Result<Snapshot, Refusal> {
         let output = output.filter(|v| !v.is_null());
+        too_deep(snapshot, output)?;
         if !self.state_set.contains(&snapshot.state) {
             return refuse(
                 RefusalCode::NoTransition,
@@ -526,6 +598,7 @@ impl Machine {
     /// own timer reads a duration the context does not hold within bounds is `INVALID_INPUT`; a target that refuses
     /// the context is `INVALID_CONTEXT`.
     pub fn apply_timer(&self, snapshot: &Snapshot, trigger: &str) -> Result<Snapshot, Refusal> {
+        too_deep(snapshot, None)?;
         if !self.state_set.contains(&snapshot.state) {
             return refuse(
                 RefusalCode::NoTransition,
@@ -636,6 +709,9 @@ impl Machine {
             (state, context) = migrate(&state, context);
             version += 1;
         }
+        if migrated && map_too_deep(&context) {
+            return refuse(RefusalCode::InvalidContext, TOO_DEEP_CONTEXT);
+        }
         if !self.state_set.contains(&state) {
             return refuse(RefusalCode::UnknownState, format!("Unknown state '{state}'."));
         }
@@ -667,7 +743,8 @@ impl Machine {
     /// does not match, or no edge whose guard passes.
     pub fn can_fire(&self, snapshot: &Snapshot, trigger: &str, input: Option<&Value>) -> bool {
         let input = input.filter(|v| !v.is_null());
-        if !self.state_set.contains(&snapshot.state)
+        if too_deep(snapshot, input).is_err()
+            || !self.state_set.contains(&snapshot.state)
             || self.outcome_triggers.contains(trigger)
             || self.timer_triggers.contains(trigger)
             || self.input_problem(trigger, input).is_some()
@@ -695,6 +772,32 @@ impl Machine {
             }
         }
         seen
+    }
+
+    /// Whether what `trigger` does from `state` rests on a custom rule this machine holds no handler for: an edge out of
+    /// `state` on `trigger` whose guard names one, whose reduction is one, or whose destination's requirement names
+    /// one. The engine counts such a guard as failed and such a reduction as keeping the context, which is not what the
+    /// server does, so a prediction or a plan through that edge would be a guess.
+    pub fn rests_on_unhandled_rule(&self, state: &str, trigger: &str) -> bool {
+        self.matches(state, trigger).iter().any(|e| {
+            let reduction =
+                matches!(&e.reduce, Some(Reduction::Custom(name)) if !self.custom.reducers.contains_key(name));
+            let requirement = self
+                .context_validators
+                .get(&e.to)
+                .and_then(|v| v.invariant.as_ref())
+                .is_some_and(|r| self.names_unhandled(r));
+            e.guard.as_ref().is_some_and(|g| self.names_unhandled(g)) || reduction || requirement
+        })
+    }
+
+    // Whether a rule is, or holds, a custom rule with no handler bound.
+    fn names_unhandled(&self, rule: &Rule) -> bool {
+        match rule {
+            Rule::Custom(name) => !self.custom.guards.contains_key(name),
+            Rule::All(rules) | Rule::Any(rules) => rules.iter().any(|r| self.names_unhandled(r)),
+            Rule::Leaf { .. } => false,
+        }
     }
 
     fn matches(&self, state: &str, trigger: &str) -> Vec<&Edge> {
@@ -729,6 +832,10 @@ impl Machine {
     // The successor of a transition into `state`: the target's timer reads its duration from the context first, so a
     // duration out of bounds is refused as input before the context is validated, as on the server.
     fn enter(&self, state: &str, context: Map) -> Result<Snapshot, Refusal> {
+        // A custom reducer's context is checked as a caller's is: validating it recurses.
+        if map_too_deep(&context) {
+            return refuse(RefusalCode::InvalidContext, TOO_DEEP_CONTEXT);
+        }
         if let Some(problem) = self.timer_problem(state, &context) {
             return refuse(RefusalCode::InvalidInput, problem);
         }

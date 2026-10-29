@@ -1,0 +1,9 @@
+mutation Retry($input: RetryInput!) {
+  operations {
+    retry(input: $input) {
+      accepted
+      state
+      note
+    }
+  }
+}

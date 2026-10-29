@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+
 import { describe, expect, it } from 'vitest';
 
 import { checkout } from '../machines/checkout/checkout';
@@ -72,5 +74,77 @@ describe('createMachineExecutor and the size of an answer', () => {
     const { fetch } = answering(padded(16 * 1024 * 1024 + 1), false);
 
     expect(await session(fetch).load()).toMatchObject({ ok: false, code: TRANSPORT_ERROR });
+  });
+
+  // A response as an XHR polyfill or React Native hands it back: no body stream, only `text()`, which reads it whole.
+  const withoutStream = (body: string, headers: Record<string, string> = {}) => {
+    const read = { whole: false };
+    const fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        redirected: false,
+        type: 'basic',
+        headers: new Headers(headers),
+        body: null,
+        text: async () => {
+          read.whole = true;
+          return body;
+        },
+      }) as unknown as Response) as typeof globalThis.fetch;
+    return { fetch, read };
+  };
+
+  it('refuses an answer with no body stream and no length before reading it', async () => {
+    const { fetch, read } = withoutStream(padded(32 * 1024 * 1024));
+
+    expect(await session(fetch).load()).toMatchObject({ ok: false, code: TRANSPORT_ERROR });
+    expect(read.whole).toBe(false);
+  });
+
+  it('reads an answer with no body stream when it says a length within the limit', async () => {
+    const body = padded(512);
+    const { fetch } = withoutStream(body, { 'Content-Length': String(body.length) });
+
+    expect(await session(fetch, 1024).load()).toEqual({ ok: true, snapshot: null });
+  });
+
+  // A fetch whose body is a Node stream, which has no `getReader`.
+  const nodeStream = (body: string) => {
+    const read = { bytes: 0 };
+    const bytes = Buffer.from(body);
+    const fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        redirected: false,
+        type: 'basic',
+        headers: new Headers(),
+        body: Readable.from(
+          (function* () {
+            for (let offset = 0; offset < bytes.length; offset += 256) {
+              read.bytes = Math.min(bytes.length, offset + 256);
+              yield bytes.subarray(offset, offset + 256);
+            }
+          })(),
+        ),
+        text: async () => body,
+      }) as unknown as Response) as typeof globalThis.fetch;
+    return { fetch, read };
+  };
+
+  it('reads a Node stream body', async () => {
+    const { fetch } = nodeStream(padded(512));
+
+    expect(await session(fetch, 1024).load()).toEqual({ ok: true, snapshot: null });
+  });
+
+  it('fails a Node stream body larger than the limit without reading it whole', async () => {
+    const { fetch, read } = nodeStream(padded(64 * 1024));
+
+    expect(await session(fetch, 1024).load()).toMatchObject({ ok: false, code: TRANSPORT_ERROR });
+    expect(read.bytes).toBeLessThan(8192);
   });
 });

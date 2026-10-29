@@ -23,3 +23,9 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
+
+# The public-surface tests read the crates' source (../tests/support/surface.rs); nothing ships with them.
+[dev-dependencies]
+prettyplease = "0.2"
+proc-macro2 = "1"
+syn = { version = "2", features = ["full"] }

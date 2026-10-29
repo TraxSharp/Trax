@@ -92,12 +92,27 @@ internal sealed partial class ClientGenerator
                 TypeScript.Identifier(TypeScript.Camel(machine.Id), "machine"),
                 machine.Id
             );
-            if (MachineModuleNames.Contains(camel))
+            if (MachineModuleNames.Contains(camel) || SharedOutput().IsMatch(camel))
                 throw new InvalidOperationException(
                     $"The machine '{machine.Id}' is written as '{camel}', a name its generated modules use. "
                         + "Rename it on the host."
                 );
             var pascal = TypeScript.Pascal(machine.Id);
+            // The client module declares these beside the camel id, in the same scope as its imports.
+            foreach (
+                var derived in new[]
+                {
+                    $"use{pascal}",
+                    $"useRemembered{pascal}",
+                    $"{camel}Server",
+                    $"{camel}Documents",
+                }
+            )
+                if (MachineModuleNames.Contains(derived))
+                    throw new InvalidOperationException(
+                        $"The machine '{machine.Id}' gets a function '{derived}', a name its generated modules use. "
+                            + "Rename it on the host."
+                    );
             names.Claim($"use{pascal}", machine.Id);
             names.Claim($"useRemembered{pascal}", machine.Id);
             names.Claim($"{camel}Server", machine.Id);
@@ -196,7 +211,7 @@ internal sealed partial class ClientGenerator
             files.Add(new(EditorSchemaFileName, EditorSchema(manifest)));
             files.Add(
                 new(
-                    "graphql.config.yml",
+                    EditorConfigFileName,
                     EditorConfig(
                         options.DocumentGlobs
                             ?? options
@@ -229,7 +244,8 @@ internal sealed partial class ClientGenerator
     /// Writes the client under <paramref name="outDir"/>, replacing generated files that changed. A file this
     /// generator wrote (a client module starting with its header, or the twin of a machine the previous run served)
     /// that the manifest no longer generates is deleted first, then any folder that leaves empty, so a train removed
-    /// on the host leaves nothing behind for <c>--check</c> to report. Any other file is left alone, and a linked
+    /// on the host leaves nothing behind for <c>--check</c> to report. So are the documents file and the editor's
+    /// schema and config a run with documents wrote, when this run has none. Any other file is left alone, and a linked
     /// folder is not entered. A link at any path the client writes, or at a folder on the way there, is refused
     /// before anything is written.
     /// </summary>
@@ -356,8 +372,9 @@ internal sealed partial class ClientGenerator
     }
 
     // The files under outDir this writer wrote and the client no longer holds, by their path under it: only files of
-    // the extension it writes. A client module is this writer's when its first line is the header it writes. A twin
-    // is the manifest client's when it sits where that client puts one, <id>/<id>.machine.g.ts or
+    // the extension it writes, and for the manifest client the document files at its root (DocumentFile). A client
+    // module is this writer's when its first line is the header it writes. A twin is the manifest client's when it
+    // sits where that client puts one, <id>/<id>.machine.g.ts or
     // <id>/<id>.contexts.g.ts, starts with the header the twin generator writes for that id, and <id> is a machine the
     // previous run served: trax machine generate writes the same header, so the header alone does not say which tool
     // wrote it. Anything else, an app's own *.g.ts or *.g.cs or another writer's, is left alone. A folder below outDir
@@ -389,7 +406,45 @@ internal sealed partial class ClientGenerator
                 if (!IsRoot(sub, writer))
                     folders.Push(sub);
         }
+        if (writer == Writer.Manifest)
+            foreach (var name in DocumentFiles)
+                if (!expected.Contains(name) && DocumentFile(Path.Combine(outDir, name), name))
+                    stale.Add(name);
         return stale.Order(StringComparer.Ordinal).ToList();
+    }
+
+    // What the manifest client writes at its root beside the modules when it is given documents. A run without them
+    // writes none of these, and one an earlier run left would still be registered by the host and read by the editor.
+    private static readonly string[] DocumentFiles =
+    [
+        DocumentsFileName,
+        EditorSchemaFileName,
+        EditorConfigFileName,
+    ];
+
+    // Whether a file at the client's root is the one this generator writes under that name: the editor's files start
+    // with their header; trax.documents.json carries none, so it is this generator's when it is the object it writes,
+    // format 1 and its documents, and nothing else.
+    private static bool DocumentFile(string path, string name)
+    {
+        if (name != DocumentsFileName)
+            return FirstLine(path)
+                == (name == EditorSchemaFileName ? EditorSchemaHeader : EditorConfigHeader);
+        if (ReadPrefix(path, ManifestBytes) is not { } text)
+            return false;
+        try
+        {
+            return JsonNode.Parse(text) is JsonObject json
+                && json.Count == 2
+                && json["format"] is JsonValue format
+                && format.TryGetValue<int>(out var version)
+                && version == 1
+                && json["documents"] is JsonArray;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
     }
 
     // One folder's entries, in the case they are written, without following a link.
@@ -577,7 +632,8 @@ internal sealed partial class ClientGenerator
     }
 
     // The names a machine's client module and its twin declare or import beside the machine's own, which its camel id
-    // would hide or redeclare.
+    // or the functions named after it would hide or redeclare. The twin's (ir, irHash, typedMachineFromIr,
+    // sharedOutput<n>) are the engine's TWIN_MODULE_NAMES, which trax machine generate refuses through the engine.
     private static readonly HashSet<string> MachineModuleNames = new(StringComparer.Ordinal)
     {
         "server",
@@ -603,7 +659,16 @@ internal sealed partial class ClientGenerator
         "ir",
         "irHash",
         "typedMachineFromIr",
+        "MachineDocument",
+        "PersistedSubscriptionSocket",
+        "UseRememberedMachineOptions",
+        "UseServerMachineOptions",
+        "TraxOperationError",
     };
+
+    // A schema several of a twin's outcomes share is declared as sharedOutput0, sharedOutput1, ...
+    [System.Text.RegularExpressions.GeneratedRegex(@"\AsharedOutput[0-9]+\z")]
+    private static partial System.Text.RegularExpressions.Regex SharedOutput();
 
     // The names the client's own modules export from the index, which no machine, train or type may take.
     private static readonly string[] RuntimeNames =
@@ -799,6 +864,15 @@ internal sealed partial class ClientGenerator
         }
 
         /**
+         * Throws unless `response` is the endpoint's own answer. Every request is sent with `redirect: "error"`, but a
+         * `fetch` that followed a redirect anyway, or handed back the redirect itself, must not have its answer read.
+         */
+        function requireNoRedirect(response: Response): void {
+          if (response.redirected || response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400))
+            throw new Error(`The host answered with a redirect (${response.status}), which is not followed.`);
+        }
+
+        /**
          * The answer's body as JSON, read to at most `maxBytes`: a longer one is cancelled and refused with a RangeError
          * rather than held in memory.
          */
@@ -877,7 +951,7 @@ internal sealed partial class ClientGenerator
                * every train function, machine server and socket refuses such a url.
                */
               allowInsecureTransport?: boolean;
-              /** The most bytes of an answer a train function reads before it refuses it. 16 MiB when not given. */
+              /** The most bytes of an answer a train function or machine server reads before it refuses it. 16 MiB when not given. */
               maxResponseBytes?: number;
             }
 
@@ -956,13 +1030,26 @@ internal sealed partial class ClientGenerator
                 // A redirect would carry the headers to wherever it points.
                 redirect: "error",
               });
-              const answer = (await readJson(response, maxResponseBytes)) as {
-                data?: Record<string, unknown> | null;
-                errors?: { message: string; extensions?: { code?: string } }[];
-              };
-              const error = answer.errors?.[0];
+              requireNoRedirect(response);
+              type Answer = { data?: Record<string, unknown> | null; errors?: { message: string; extensions?: { code?: string } }[] };
+              let answer: Answer | null;
+              try {
+                answer = (await readJson(response, maxResponseBytes)) as Answer | null;
+              } catch (cause) {
+                // A body that is not JSON is the status's to explain; one past the limit is refused either way.
+                if (response.ok || cause instanceof RangeError) throw cause;
+                answer = null;
+              }
+              const error = answer?.errors?.[0];
               if (error) throw new TraxOperationError(error.extensions?.code, error.message);
-              let value: unknown = answer.data;
+              // Not 2xx, and no GraphQL error to say why: the request failed, whatever data the body holds.
+              if (!response.ok)
+                throw new TraxOperationError(undefined, `The host answered ${[response.status, response.statusText].filter(Boolean).join(" ")}.`);
+              // 2xx with no error and no data to read the field from: neither a GraphQL answer nor a value.
+              const data: unknown = answer?.data;
+              if (typeof data !== "object" || data === null)
+                throw new TraxOperationError(undefined, `The host answered ${response.status} with no GraphQL answer.`);
+              let value: unknown = data;
               for (const key of path) value = (value as Record<string, unknown> | null | undefined)?.[key];
               return value as T;
             }
@@ -1091,6 +1178,7 @@ internal sealed partial class ClientGenerator
         sb.Append("        return connection.headers?.() ?? {};\n");
         sb.Append("      },\n");
         sb.Append("      allowInsecureTransport: connection.allowInsecureTransport,\n");
+        sb.Append("      maxResponseSize: connection.maxResponseBytes,\n");
         sb.Append($"      machine: {camel},\n");
         sb.Append($"      documents: {camel}Documents,\n");
         sb.Append(

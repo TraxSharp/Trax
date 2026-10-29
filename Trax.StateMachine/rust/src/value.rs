@@ -13,12 +13,17 @@ pub type Map = BTreeMap<JsString, Value>;
 /// A JSON value.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
+    /// `null`.
     Null,
+    /// `true` or `false`.
     Bool(bool),
     /// Every number is a double, as in the TypeScript engine; `1`, `1.0` and `1e0` are one value.
     Number(f64),
+    /// A string, as JavaScript holds it.
     String(JsString),
+    /// An array.
     Array(Vec<Value>),
+    /// An object, its members ordered by key as RFC 8785 sorts them.
     Object(Map),
 }
 
@@ -124,7 +129,9 @@ impl fmt::Debug for JsString {
 /// Why a text is not JSON. The byte offset is where the parser stopped.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParseError {
+    /// The byte offset the parser stopped at.
     pub offset: usize,
+    /// What it found there, for people.
     pub message: &'static str,
 }
 
@@ -136,9 +143,65 @@ impl fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-/// How deep arrays and objects may nest. Past it a text is refused rather than read, so no recursion over a value
-/// can exhaust the stack.
+/// How deep arrays and objects may nest. Past it a text is refused rather than read, and every entry point of the
+/// engine refuses a value built in memory, so no recursion over a value can exhaust the stack.
 pub const MAX_DEPTH: usize = 512;
+
+/// A value deeper than [`MAX_DEPTH`] is dropped and written ([`Value::to_json`]) without recursion; everything else
+/// the engine does with a value recurses, after the entry point has checked its depth. Cloning, comparing or
+/// formatting one with `{:?}` recurses too, so a binding that builds values from its host's objects checks
+/// [`Value::is_too_deep`] before doing any of them.
+impl Drop for Value {
+    fn drop(&mut self) {
+        // Dropped member by member, a value nested past the stack's depth would overflow it: its members are moved onto
+        // a list of our own instead, each emptied before it is dropped. A value with no array or object inside is
+        // dropped as it is.
+        let mut pending: Vec<Value> = match self {
+            Value::Array(items) if items.iter().any(is_container) => std::mem::take(items),
+            Value::Object(map) if map.values().any(is_container) => std::mem::take(map).into_values().collect(),
+            _ => return,
+        };
+        while let Some(mut value) = pending.pop() {
+            match &mut value {
+                Value::Array(items) => pending.append(items),
+                Value::Object(map) => pending.extend(std::mem::take(map).into_values()),
+                _ => {}
+            }
+        }
+    }
+}
+
+fn is_container(value: &Value) -> bool {
+    matches!(value, Value::Array(_) | Value::Object(_))
+}
+
+// Whether any of `values`, held at `depth` arrays and objects deep, nests past MAX_DEPTH. Never recurses.
+pub(crate) fn nests_too_deep<'a>(values: impl Iterator<Item = &'a Value>, depth: usize) -> bool {
+    let mut pending: Vec<(&Value, usize)> = values.map(|v| (v, depth)).collect();
+    while let Some((value, depth)) = pending.pop() {
+        match value {
+            Value::Array(items) => {
+                if depth >= MAX_DEPTH {
+                    return true;
+                }
+                pending.extend(items.iter().map(|v| (v, depth + 1)));
+            }
+            Value::Object(map) => {
+                if depth >= MAX_DEPTH {
+                    return true;
+                }
+                pending.extend(map.values().map(|v| (v, depth + 1)));
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+// Whether a context, an object at the top, nests past MAX_DEPTH.
+pub(crate) fn map_too_deep(map: &Map) -> bool {
+    nests_too_deep(map.values(), 1)
+}
 
 impl Value {
     /// Reads JSON text as `JSON.parse` does. Never panics.
@@ -164,6 +227,13 @@ impl Value {
         out
     }
 
+    /// Whether arrays and objects nest deeper than [`MAX_DEPTH`], the limit [`Value::parse`] holds text to. The engine
+    /// refuses such a value wherever it takes one; a binding that builds values from its host's objects can check
+    /// first. Never recurses.
+    pub fn is_too_deep(&self) -> bool {
+        nests_too_deep(std::iter::once(self), 0)
+    }
+
     /// The member `key` of an object, or `None` when this is not an object or has no such member.
     pub fn get(&self, key: &str) -> Option<&Value> {
         match self {
@@ -172,6 +242,7 @@ impl Value {
         }
     }
 
+    /// The string, or `None` when this is not a string or not a well-formed one.
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Value::String(s) => s.as_str(),
@@ -179,6 +250,7 @@ impl Value {
         }
     }
 
+    /// The number, or `None` when this is not one.
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Value::Number(n) => Some(*n),
@@ -186,6 +258,7 @@ impl Value {
         }
     }
 
+    /// The boolean, or `None` when this is not one.
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Value::Bool(b) => Some(*b),
@@ -193,6 +266,7 @@ impl Value {
         }
     }
 
+    /// The array's items, or `None` when this is not an array.
     pub fn as_array(&self) -> Option<&Vec<Value>> {
         match self {
             Value::Array(items) => Some(items),
@@ -200,6 +274,7 @@ impl Value {
         }
     }
 
+    /// The object's members, or `None` when this is not an object.
     pub fn as_object(&self) -> Option<&Map> {
         match self {
             Value::Object(map) => Some(map),
@@ -207,6 +282,7 @@ impl Value {
         }
     }
 
+    /// Whether this is `null`.
     pub fn is_null(&self) -> bool {
         matches!(self, Value::Null)
     }
@@ -466,38 +542,64 @@ impl Parser<'_> {
     }
 }
 
+// What is left to write: a value, an object's member, or a bracket or comma. Written from a list of our own rather than
+// by recursion, so a value of any depth is written.
+enum Step<'a> {
+    Value(&'a Value),
+    Member(&'a JsString, &'a Value),
+    Text(&'static str),
+}
+
 fn write_value(value: &Value, out: &mut String) {
-    match value {
-        Value::Null => out.push_str("null"),
-        Value::Bool(true) => out.push_str("true"),
-        Value::Bool(false) => out.push_str("false"),
-        Value::Number(n) => out.push_str(&number_text(*n)),
-        Value::String(s) => write_string(s, out),
-        Value::Array(items) => {
-            out.push('[');
-            for (i, item) in items.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                write_value(item, out);
-            }
-            out.push(']');
-        }
-        Value::Object(map) => write_object(map, out),
-    }
+    write_steps(vec![Step::Value(value)], out);
 }
 
 pub(crate) fn write_object(map: &Map, out: &mut String) {
+    let mut steps = Vec::new();
+    open_object(map, out, &mut steps);
+    write_steps(steps, out);
+}
+
+fn open_object<'a>(map: &'a Map, out: &mut String, steps: &mut Vec<Step<'a>>) {
     out.push('{');
-    for (i, (key, value)) in map.iter().enumerate() {
+    steps.push(Step::Text("}"));
+    for (i, (key, value)) in map.iter().enumerate().rev() {
+        steps.push(Step::Member(key, value));
         if i > 0 {
-            out.push(',');
+            steps.push(Step::Text(","));
         }
-        write_string(key, out);
-        out.push(':');
-        write_value(value, out);
     }
-    out.push('}');
+}
+
+fn write_steps(mut steps: Vec<Step<'_>>, out: &mut String) {
+    while let Some(step) = steps.pop() {
+        match step {
+            Step::Text(text) => out.push_str(text),
+            Step::Member(key, value) => {
+                write_string(key, out);
+                out.push(':');
+                steps.push(Step::Value(value));
+            }
+            Step::Value(value) => match value {
+                Value::Null => out.push_str("null"),
+                Value::Bool(true) => out.push_str("true"),
+                Value::Bool(false) => out.push_str("false"),
+                Value::Number(n) => out.push_str(&number_text(*n)),
+                Value::String(s) => write_string(s, out),
+                Value::Array(items) => {
+                    out.push('[');
+                    steps.push(Step::Text("]"));
+                    for (i, item) in items.iter().enumerate().rev() {
+                        steps.push(Step::Value(item));
+                        if i > 0 {
+                            steps.push(Step::Text(","));
+                        }
+                    }
+                }
+                Value::Object(map) => open_object(map, out, &mut steps),
+            },
+        }
+    }
 }
 
 /// A string as `JSON.stringify` writes it.
@@ -708,6 +810,25 @@ mod tests {
         ] {
             assert!(Value::parse(text).is_err(), "{text:?}");
         }
+    }
+
+    #[test]
+    fn a_value_is_too_deep_exactly_where_its_text_would_be_refused() {
+        let nested = |depth: usize| {
+            let mut value = Value::Array(Vec::new());
+            for _ in 1..depth {
+                value = Value::Array(vec![value]);
+            }
+            value
+        };
+        let at_limit = nested(MAX_DEPTH);
+        let past_it = nested(MAX_DEPTH + 1);
+
+        assert!(!at_limit.is_too_deep());
+        assert!(Value::parse(&at_limit.to_json()).is_ok());
+        assert!(past_it.is_too_deep());
+        assert!(Value::parse(&past_it.to_json()).is_err());
+        assert!(!Value::Null.is_too_deep());
     }
 
     #[test]

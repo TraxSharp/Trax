@@ -1,0 +1,25 @@
+{
+  "about": "A sync whose target the host already holds, with those fields, sends nothing and settles synced.",
+  "machine": "wizard",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "begin": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "update": "$id: UUID!, $input: UpdateInput!, $requestId: String!, $clientResult: String",
+    "next": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "back": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "skip": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "send": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Review", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "view": { "status": "ready", "unsaved": false } },
+    { "client": "sync", "target": "Review", "fields": { "trigger": "Update", "input": { "email": "ada@example.com", "name": "Ada" } }, "navigation": ["Begin", "Next", "Back"], "expect": { "outcome": "synced", "state": "Review", "revision": 1 } },
+    { "quiet": 50 }
+  ]
+}

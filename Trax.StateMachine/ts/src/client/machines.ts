@@ -19,16 +19,20 @@
  * operations refuses anything else. A document of another version of the machine is answered `CLIENT_OUTDATED` (the
  * page reloads) or `SERVER_OUTDATED` (retry), and the executor returns either as a problem.
  */
+import { eventRefusal } from '../machine';
 import { RefusalCode, type ProblemCode } from '../results';
+import { MAX_STORED_DEPTH } from '../storedText';
 import type { MachineSpec, TypedMachine } from '../typed';
 import {
   DEFAULT_MAX_RESPONSE_SIZE,
+  DEFAULT_REQUEST_TIMEOUT,
   readBounded,
   requireNoRedirect,
   requireSecureEndpoint,
   type HttpExecutorOptions,
   type SnapshotExecutor,
   type SnapshotOutput,
+  withRequestTimeout,
 } from './transport';
 
 /**
@@ -108,17 +112,25 @@ interface TypedAnswer {
   problem?: { code: ProblemCode; message: string } | null;
 }
 
-// A context with every null member left out, at every depth.
-export const withoutNulls = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(withoutNulls);
-  if (value !== null && typeof value === 'object')
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .filter(([, v]) => v !== null && v !== undefined)
-        .map(([k, v]) => [k, withoutNulls(v)]),
-    );
-  return value;
+// A context with every null member left out, at every depth. Throws for one nested deeper than a stored snapshot may
+// be (MAX_STORED_DEPTH containers, the snapshot that holds the context counting as one): no store wrote it.
+export const withoutNulls = (value: unknown): unknown => stripNulls(value, 2);
+
+const stripNulls = (value: unknown, level: number): unknown => {
+  if (value === null || typeof value !== 'object') return value;
+  if (level > MAX_STORED_DEPTH)
+    throw new Error(`The server's answer holds a context nested deeper than ${MAX_STORED_DEPTH} levels.`);
+  if (Array.isArray(value)) return value.map((v) => stripNulls(v, level + 1));
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== null && v !== undefined)
+      .map(([k, v]) => [k, stripNulls(v, level + 1)]),
+  );
 };
+
+// Whether `value` is a context: an object, not an array.
+export const isContext = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
 
 const parseInput = (input: unknown): Record<string, unknown> | undefined => {
   if (typeof input !== 'string' || input.length === 0) return undefined;
@@ -161,6 +173,9 @@ const documentsOf = (typed: TypedMachineOperations): Map<string, MachineDocument
   return byOperation;
 };
 
+// The operations that are not events: an event is never sent by one of their documents.
+const OPERATIONS: ReadonlySet<string> = new Set(['start', 'get', 'discard', 'changed']);
+
 type Answered = { answer: TypedAnswer | null | undefined } | { refused: SnapshotOutput };
 
 /**
@@ -169,7 +184,8 @@ type Answered = { answer: TypedAnswer | null | undefined } | { refused: Snapshot
  * which the session reports as a transport error; a refusal is a problem, as data, and so is `CLIENT_OUTDATED` or
  * `SERVER_OUTDATED`, the host's answer to a persisted document of another version of the machine. An absolute
  * `http:` endpoint on a host that is not loopback throws unless `allowInsecureTransport` is set. A redirect is not
- * followed, and a body larger than `maxResponseSize` (16 MiB by default) is not read: either fails the request.
+ * followed, and a body larger than `maxResponseSize` (16 MiB by default) is not read: either fails the request, as
+ * does one that takes longer than `requestTimeout` (30 seconds by default), which is aborted.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function createMachineExecutor(
@@ -179,22 +195,30 @@ export function createMachineExecutor(
   requireSecureEndpoint(endpoint, options.allowInsecureTransport);
   const doFetch = options.fetch ?? globalThis.fetch;
   const maxResponseSize = options.maxResponseSize ?? DEFAULT_MAX_RESPONSE_SIZE;
+  const requestTimeout = options.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT;
   const machines = new Map(options.machines.map((m) => [m.machine.id, { ...m, byOperation: documentsOf(m) }]));
 
-  const post = async (body: Record<string, unknown>, name: string): Promise<Answered> => {
-    const response = await doFetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...options.headers?.() },
-      body: JSON.stringify(body),
-      // A redirect would carry the request, and whatever authenticates it, to another host.
-      redirect: 'error',
+  // The answer's status and its body as text, the whole of it under the request timeout.
+  const exchange = (body: Record<string, unknown>) =>
+    withRequestTimeout(requestTimeout, async (signal) => {
+      const response = await doFetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...options.headers?.() },
+        body: JSON.stringify(body),
+        // A redirect would carry the request, and whatever authenticates it, to another host.
+        redirect: 'error',
+        signal,
+      });
+      requireNoRedirect(response);
+      return { response, text: await readBounded(response, maxResponseSize) };
     });
-    requireNoRedirect(response);
+
+  const post = async (body: Record<string, unknown>, name: string): Promise<Answered> => {
     type Body = {
       data?: { machines?: Record<string, Record<string, unknown>> } | null;
       errors?: { message: string; extensions?: { code?: string } }[];
     };
-    const text = await readBounded(response, maxResponseSize);
+    const { response, text } = await exchange(body);
     let answered: Body | null;
     try {
       answered = JSON.parse(text) as Body;
@@ -226,12 +250,17 @@ export function createMachineExecutor(
     const output = (answer: TypedAnswer | null | undefined): SnapshotOutput | null => {
       if (!answer) return null;
       if (answer.problem) return { snapshot: null, problem: answer.problem, id: answer.id ?? null };
+      // An answer with neither a problem nor a snapshot is malformed: a transport failure, not a snapshot this
+      // client's machine cannot read, which would stop it as outdated.
+      const context = answer.context ?? {};
+      if (typeof answer.state !== 'string' || !isContext(context))
+        throw new Error("The server's answer holds no state, or a context that is not an object.");
       return {
         snapshot: JSON.stringify({
           machine: machineId,
           version: typed.machine.version,
           state: answer.state,
-          context: withoutNulls(answer.context ?? {}),
+          context: withoutNulls(context),
         }),
         problem: null,
         id: answer.id ?? null,
@@ -258,6 +287,16 @@ export function createMachineExecutor(
       return post({ id: document.id, variables }, name);
     };
 
+    // A trigger that is not an event the machine declares has no event document to send it by, and is refused here.
+    // One whose field is another operation's (`Discard` is `discard`) is refused too, whether or not the machine is
+    // known: it would otherwise go out as that operation.
+    const notAnEvent = (trigger: string): SnapshotOutput | null => {
+      if (OPERATIONS.has(eventField(trigger)))
+        return problem(RefusalCode.NoTransition, `'${trigger}' is not an event of '${machineId}'.`);
+      const refused = 'core' in typed.machine ? eventRefusal(typed.machine.core.definition, trigger) : null;
+      return refused ? problem(refused.code, refused.message) : null;
+    };
+
     const answer = async (answered: Promise<Answered>) => {
       const done = await answered;
       return 'refused' in done ? done.refused : output(done.answer);
@@ -267,23 +306,31 @@ export function createMachineExecutor(
       case 'startSnapshot':
         return answer(run('start', { input: parseInput(input.input), requestId: input.requestId }));
 
-      case 'advanceSnapshot':
-        return answer(
-          run(eventField(String(input.trigger)), {
-            id: input.id,
-            input: parseInput(input.input),
-            requestId: input.requestId,
-            clientResult: input.clientResult ?? undefined,
-          }),
+      case 'advanceSnapshot': {
+        const trigger = String(input.trigger);
+        return (
+          notAnEvent(trigger) ??
+          answer(
+            run(eventField(trigger), {
+              id: input.id,
+              input: parseInput(input.input),
+              requestId: input.requestId,
+              clientResult: input.clientResult ?? undefined,
+            }),
+          )
         );
+      }
 
       case 'sendSnapshot':
         if (!typed.effectEvent) return problem(RefusalCode.NoEffect, `Machine '${machineId}' has no effect to send.`);
-        return answer(
-          run(eventField(typed.effectEvent), {
-            id: input.id,
-            requestId: input.requestId ?? `send:${String(input.id)}`,
-          }),
+        return (
+          notAnEvent(typed.effectEvent) ??
+          answer(
+            run(eventField(typed.effectEvent), {
+              id: input.id,
+              requestId: input.requestId ?? `send:${String(input.id)}`,
+            }),
+          )
         );
 
       case 'loadSnapshot': {

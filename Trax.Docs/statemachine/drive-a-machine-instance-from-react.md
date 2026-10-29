@@ -53,8 +53,10 @@ function Wizard({ id }: { id?: string }) {
   id is answered with as gone with `notFound`; `CLIENT_OUTDATED` as client-outdated; `reload: true` as a read. A socket
   the host closed with 4401 or 4403 refused the caller, and subscribing again would get the same answer: it ends the
   stream for good as `ended`, with `UNAUTHENTICATED` or `FORBIDDEN` and a message naming the close code (graphql-ws gives
-  up on 4401 at once and on 4403 after its own `retryAttempts`). A socket error whose `code` is in `terminalStreamErrors`
-  ends the stream for good too: it reaches the controller as `ended`, and is not
+  up on 4401 at once and on 4403 after its own `retryAttempts`). A stream the host refuses on a socket it accepted, with
+  a GraphQL error coded `TRAX_AUTHORIZATION` or `AUTH_NOT_AUTHORIZED` (`FORBIDDEN`) or `AUTH_NOT_AUTHENTICATED`
+  (`UNAUTHENTICATED`), ends the same way. A socket error whose `code` is in `terminalStreamErrors`, or a stream error
+  whose `extensions.code` is, ends the stream for good too: it reaches the controller as `ended`, and is not
   subscribed again. A request rejected with one of those codes is not a transport failure either: the server's
   `endedBy` names it, and the controller stops on it the same way. The generated client lists `CONNECTION_CHANGED`
   there, which a server made before the last `configureTrax` refuses every request and stream with. A stream that ends any
@@ -103,6 +105,10 @@ function Wizard({ id }: { id?: string }) {
   server replays its result rather than applying it twice. A later event the server confirms supersedes the failed
   one: resending it then would apply it after the later one, so `retry()` answers `NOTHING_TO_RETRY`. A refused
   start is not resent. `send` again would be a new request.
+- **Syncs a page that ran ahead.** `syncTo(target, { fields, navigation })` is for a page that moves on the twin and
+  saves later: it plans from what the server last confirmed, sends one event at a time and plans again from each
+  answer, reads the instance once on a refusal, and gives way to a later `syncTo`. `unsaved` is true while one runs
+  and after one that did not settle `synced`; hold a leave guard on it.
 - **Moves with its options.** A new `server`, `machine`, `id` or `startRequestId` closes the old instance's stream
   and opens the new one. From that render on the hook is `loading` and sends nothing, so a page whose server changed
   (another user signed in) never shows the instance before it under the new caller.
@@ -110,8 +116,8 @@ function Wizard({ id }: { id?: string }) {
   refuses. A custom one must keep to the server's rule: 1 to 200 characters, not blank, with no control character
   and no unpaired surrogate; anything else is answered `INVALID_REQUEST_ID`.
 
-It returns `status`, `id`, `snapshot`, `state`, `context`, `revision`, `dueAt`, `pending`, `problem`, `error`, `send`,
-`retry`, `can` and `available`. The Recovery sample's topic map is built on it
+It returns `status`, `id`, `snapshot`, `state`, `context`, `revision`, `dueAt`, `pending`, `problem`, `error`,
+`unsaved`, `send`, `retry`, `syncTo`, `can` and `available`. The Recovery sample's topic map is built on it
 ([Recovery](/docs/samples/recovery)).
 
 ## SDK Reference

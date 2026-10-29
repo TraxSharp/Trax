@@ -9,19 +9,40 @@ use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
-use trax_state_machine::{Map, Value};
+use trax_state_machine::{Map, PlanEvent, PlanInvalid, Value};
 use trax_state_machine_client::{
     GraphQLMachineServer, GraphQLMachineServerOptions, MachineStatus, MachineView, ManifestDocument, SendOutcome,
-    ServerMachineController, ServerMachineOptions,
+    ServerMachineController, ServerMachineOptions, SyncOutcome,
 };
 
 type Out = Arc<Mutex<tokio::io::Stdout>>;
+
+/// The client one `open` built, with the server it was built over, which a discard goes through, and its request ids.
+struct Opened {
+    controller: ServerMachineController,
+    server: GraphQLMachineServer,
+    count: Arc<AtomicU64>,
+}
+
+impl Opened {
+    fn next_request_id(&self) -> String {
+        next_request_id(&self.count)
+    }
+}
+
+// Request ids count r1, r2, ... from each open, so the host can tell which request is which.
+fn next_request_id(count: &AtomicU64) -> String {
+    format!("r{}", count.fetch_add(1, Ordering::Relaxed) + 1)
+}
+
+/// The name the kit's allowlist of what a client may lack knows this client by.
+const CLIENT: &str = "rust";
 
 #[tokio::main]
 async fn main() {
     let out: Out = Arc::new(Mutex::new(tokio::io::stdout()));
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
-    let mut controller: Option<ServerMachineController> = None;
+    let mut controller: Option<Opened> = None;
 
     while let Ok(Some(line)) = lines.next_line().await {
         let Ok(request) = Value::parse(&line) else { continue };
@@ -33,8 +54,14 @@ async fn main() {
                 let answer = match open(&request) {
                     Ok(opened) => {
                         controller = Some(opened);
-                        object([("opened", Value::Bool(true))])
+                        object([("opened", Value::Bool(true)), ("client", Value::from(CLIENT))])
                     }
+                    // A client refusing cleartext to another host refuses to be built, before it sends anything.
+                    Err(error) if error.contains("not over TLS") => object([
+                        ("opened", Value::Bool(false)),
+                        ("client", Value::from(CLIENT)),
+                        ("code", Value::from("INSECURE_TRANSPORT")),
+                    ]),
                     Err(error) => object([("error", Value::from(error))]),
                 };
                 write(&out, id, answer).await;
@@ -52,10 +79,11 @@ async fn main() {
                 }
             }
             _ => {
-                let Some(client) = &controller else {
+                let Some(opened) = &controller else {
                     write(&out, id, object([("error", Value::from("no client is open"))])).await;
                     continue;
                 };
+                let client = &opened.controller;
                 match op.as_str() {
                     "view" => write(&out, id, view_of(&client.view())).await,
                     "start" => {
@@ -81,6 +109,74 @@ async fn main() {
                             write(&out, id, outcome_of(&outcome)).await;
                         });
                     }
+                    "sync" => {
+                        let target = request.get("target").and_then(|t| t.as_str()).unwrap_or("").to_owned();
+                        let fields = request.get("fields").filter(|f| !f.is_null()).map(|f| {
+                            PlanEvent::new(
+                                f.get("trigger").and_then(|t| t.as_str()).unwrap_or(""),
+                                f.get("input").cloned(),
+                            )
+                        });
+                        let navigation = request
+                            .get("navigation")
+                            .and_then(|n| n.as_array())
+                            .map(|n| n.iter().filter_map(|t| t.as_str().map(str::to_owned)).collect())
+                            .unwrap_or_default();
+                        let settled = client.sync_to(target, fields, navigation);
+                        let out = out.clone();
+                        tokio::spawn(async move {
+                            let outcome = settled.await;
+                            write(&out, id, sync_outcome_of(&outcome)).await;
+                        });
+                    }
+                    "can" => {
+                        let trigger = request.get("trigger").and_then(|t| t.as_str()).unwrap_or("");
+                        let input = request.get("input").filter(|i| !i.is_null());
+                        write(
+                            &out,
+                            id,
+                            object([("can", Value::Bool(client.can_send(trigger, input)))]),
+                        )
+                        .await;
+                    }
+                    "available" => {
+                        let mut triggers = client.available_triggers();
+                        triggers.sort();
+                        let triggers = triggers.into_iter().map(Value::from).collect();
+                        write(&out, id, object([("triggers", Value::Array(triggers))])).await;
+                    }
+                    "discard" => {
+                        // The controller has no discard of its own: an app discards through the server it built, under
+                        // a request id it mints.
+                        let Some(instance) = client.view().id.clone() else {
+                            write(&out, id, object([("error", Value::from("no instance to discard"))])).await;
+                            continue;
+                        };
+                        let server = opened.server.clone();
+                        let request_id = opened.next_request_id();
+                        let out = out.clone();
+                        tokio::spawn(async move {
+                            let answer = match server.discard(&instance, &request_id).await {
+                                Ok(None) => object([("outcome", Value::from("discarded"))]),
+                                Ok(Some(problem)) => object([
+                                    (
+                                        "outcome",
+                                        Value::from(if problem.code == "TRANSPORT_ERROR" {
+                                            "failed"
+                                        } else {
+                                            "refused"
+                                        }),
+                                    ),
+                                    ("code", Value::from(problem.code.as_str())),
+                                ]),
+                                Err(_) => object([
+                                    ("outcome", Value::from("failed")),
+                                    ("code", Value::from("TRANSPORT_ERROR")),
+                                ]),
+                            };
+                            write(&out, id, answer).await;
+                        });
+                    }
                     _ => write(&out, id, object([("unsupported", Value::Bool(true))])).await,
                 }
             }
@@ -88,7 +184,7 @@ async fn main() {
     }
 }
 
-fn open(request: &Value) -> Result<ServerMachineController, String> {
+fn open(request: &Value) -> Result<Opened, String> {
     let text = |key: &str| request.get(key).and_then(|v| v.as_str()).map(str::to_owned);
     let delays = |key: &str| -> Vec<Duration> {
         request
@@ -120,21 +216,33 @@ fn open(request: &Value) -> Result<ServerMachineController, String> {
         documents,
     );
     server_options.resubscribe_delays = Some(delays("resubscribeDelays"));
+    if let Some(max) = request.get("maxResponseSize").and_then(|v| v.as_f64()) {
+        // One limit holds an HTTP answer and a socket message alike.
+        server_options.max_message_size = max as usize;
+    }
+    if let Some(ms) = request.get("requestTimeout").and_then(|v| v.as_f64()) {
+        server_options.request_timeout = Duration::from_millis(ms as u64);
+    }
+    server_options.allow_insecure_transport =
+        request.get("allowInsecureTransport").and_then(|v| v.as_bool()) == Some(true);
     let server = GraphQLMachineServer::new(server_options).map_err(|e| e.to_string())?;
-    // Request ids count r1, r2, ... from each open, so the host can tell which request is which.
     let count = Arc::new(AtomicU64::new(0));
     let mut options = ServerMachineOptions::new(
         request.get("ir").cloned().ok_or("no ir")?,
         text("irHash").ok_or("no irHash")?,
-        server,
+        server.clone(),
     );
     options.id = text("instance");
     options.start_input = request.get("startInput").filter(|i| !i.is_null()).cloned();
-    options.new_request_id = Some(Box::new(move || {
-        format!("r{}", count.fetch_add(1, Ordering::Relaxed) + 1)
-    }));
+    let minted = count.clone();
+    options.new_request_id = Some(Box::new(move || next_request_id(&minted)));
     options.retry_delays = Some(delays("retryDelays"));
-    ServerMachineController::new(options).map_err(|e| e.to_string())
+    let controller = ServerMachineController::new(options).map_err(|e| e.to_string())?;
+    Ok(Opened {
+        controller,
+        server,
+        count,
+    })
 }
 
 fn view_of(view: &MachineView) -> Map {
@@ -204,6 +312,7 @@ fn view_of(view: &MachineView) -> Map {
                 .map(Value::Bool)
                 .unwrap_or(Value::Null),
         ),
+        ("unsaved", Value::Bool(view.unsaved)),
     ])
 }
 
@@ -229,6 +338,37 @@ fn outcome_of(outcome: &SendOutcome) -> Map {
             ("outcome", Value::from("stopped")),
             ("code", Value::from(e.code.as_str())),
         ]),
+    }
+}
+
+fn sync_outcome_of(outcome: &SyncOutcome) -> Map {
+    let named = |name: &str| object([("outcome", Value::from(name))]);
+    let coded = |name: &str, code: &str| object([("outcome", Value::from(name)), ("code", Value::from(code))]);
+    match outcome {
+        SyncOutcome::Synced { snapshot, revision } => object([
+            ("outcome", Value::from("synced")),
+            ("state", Value::from(snapshot.state.as_str())),
+            (
+                "revision",
+                revision.map(|r| Value::Number(r as f64)).unwrap_or(Value::Null),
+            ),
+        ]),
+        SyncOutcome::Superseded => named("superseded"),
+        SyncOutcome::Unreachable => named("unreachable"),
+        SyncOutcome::Exceeded => named("exceeded"),
+        SyncOutcome::Invalid(PlanInvalid::Target(target)) => object([
+            ("outcome", Value::from("invalid")),
+            ("target", Value::from(target.as_str())),
+        ]),
+        SyncOutcome::Invalid(PlanInvalid::Trigger(trigger)) => object([
+            ("outcome", Value::from("invalid")),
+            ("trigger", Value::from(trigger.as_str())),
+        ]),
+        SyncOutcome::Invalid(PlanInvalid::Context) => coded("invalid", "INVALID_CONTEXT"),
+        SyncOutcome::Invalid(PlanInvalid::Input) => coded("invalid", "INVALID_INPUT"),
+        SyncOutcome::Refused(p) => coded("refused", &p.code),
+        SyncOutcome::Failed(p) => coded("failed", &p.code),
+        SyncOutcome::Stopped(e) => coded("stopped", &e.code),
     }
 }
 

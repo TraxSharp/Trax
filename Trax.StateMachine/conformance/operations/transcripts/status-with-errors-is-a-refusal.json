@@ -1,0 +1,8 @@
+{
+  "about": "A status that is not 2xx with GraphQL errors in its body is a refusal the host coded, not a transport failure.",
+  "steps": [
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "refused"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "status": 401, "body": {"errors": [{"message": "Sign in.", "extensions": {"code": "AUTH_NOT_AUTHENTICATED"}}]}},
+    {"await": "refused", "expect": {"outcome": "refused", "code": "AUTH_NOT_AUTHENTICATED"}}
+  ]
+}

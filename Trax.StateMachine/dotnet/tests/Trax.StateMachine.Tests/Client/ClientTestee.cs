@@ -13,8 +13,13 @@ namespace Trax.StateMachine.Tests.Client;
 /// </summary>
 public sealed class ClientTestee : IAsyncDisposable
 {
-    private readonly HttpClient _http = new();
+    // The name the kit's allowlist of what a client may lack knows this client by.
+    private const string Client = "dotnet";
+
+    private HttpClient _http = NewHttp();
     private ServerMachineController? _controller;
+    private GraphQLMachineServer? _server;
+    private Func<string> _newRequestId = () => "r0";
     private GraphQLSubscriptionSocket? _socket;
 
     /// <summary>Answers one request line with one answer line, once the request has settled.</summary>
@@ -61,8 +66,66 @@ public sealed class ClientTestee : IAsyncDisposable
                 )
             ),
             "retry" => OutcomeOf(await controller.RetryAsync()),
+            "sync" => SyncOf(
+                await controller.SyncToAsync(
+                    request["target"]!.GetValue<string>(),
+                    request["fields"] is JsonObject fields
+                        ? new PlannedEvent(
+                            fields["trigger"]!.GetValue<string>(),
+                            fields["input"]?.DeepClone()
+                        )
+                        : null,
+                    request["navigation"]!.AsArray().Select(t => t!.GetValue<string>()).ToList()
+                )
+            ),
             "view" => ViewOf(controller.View),
+            "can" => new JsonObject
+            {
+                ["can"] = controller.CanSend(
+                    request["trigger"]!.GetValue<string>(),
+                    request["input"]?.DeepClone()
+                ),
+            },
+            "available" => new JsonObject
+            {
+                ["triggers"] = new JsonArray(
+                    controller
+                        .AvailableTriggers()
+                        .Order(StringComparer.Ordinal)
+                        .Select(t => (JsonNode?)JsonValue.Create(t))
+                        .ToArray()
+                ),
+            },
+            "discard" => await DiscardAsync(controller.View.Id),
             _ => new JsonObject { ["unsupported"] = true },
+        };
+    }
+
+    // The controller has no discard of its own: an app discards through the server it built, under a request id it
+    // mints. A failed request throws, as every operation of the server does, and is a transport failure.
+    private async Task<JsonObject> DiscardAsync(string? id)
+    {
+        if (id is null || _server is not { } server)
+            return new JsonObject { ["error"] = "no instance to discard" };
+        ServerProblem? problem;
+        try
+        {
+            problem = await server.DiscardAsync(id, _newRequestId());
+        }
+        catch (HttpRequestException)
+        {
+            return new JsonObject
+            {
+                ["outcome"] = "failed",
+                ["code"] = ClientProblemCodes.TransportError,
+            };
+        }
+        if (problem is null)
+            return new JsonObject { ["outcome"] = "discarded" };
+        return new JsonObject
+        {
+            ["outcome"] = problem.Code == ClientProblemCodes.TransportError ? "failed" : "refused",
+            ["code"] = problem.Code,
         };
     }
 
@@ -90,23 +153,52 @@ public sealed class ClientTestee : IAsyncDisposable
                 })
                 .ToList(),
         };
-        _socket = new GraphQLSubscriptionSocket(
-            new GraphQLSubscriptionSocketOptions
+        var insecure = request["allowInsecureTransport"]?.GetValue<bool>() ?? false;
+        var maxResponseSize = request["maxResponseSize"]?.GetValue<long>();
+        var requestTimeout = request["requestTimeout"]?.GetValue<double>();
+        _http.Dispose();
+        _http = NewHttp();
+        GraphQLMachineServer server;
+        try
+        {
+            _socket = new GraphQLSubscriptionSocket(
+                new GraphQLSubscriptionSocketOptions
+                {
+                    Endpoint = new Uri(request["socket"]!.GetValue<string>()),
+                    AllowInsecureTransport = insecure,
+                    MaxMessageSize = (int?)maxResponseSize ?? 16 * 1024 * 1024,
+                }
+            );
+            server = new GraphQLMachineServer(
+                new GraphQLMachineServerOptions
+                {
+                    Http = _http,
+                    Endpoint = new Uri(request["endpoint"]!.GetValue<string>()),
+                    AllowInsecureTransport = insecure,
+                    Machine = machine,
+                    Socket = _socket,
+                    ResubscribeDelays = Delays(request["resubscribeDelays"]),
+                    MaxResponseSize = maxResponseSize ?? 16 * 1024 * 1024,
+                    RequestTimeout = requestTimeout is { } ms
+                        ? TimeSpan.FromMilliseconds(ms)
+                        : GraphQLMachineServer.DefaultRequestTimeout,
+                }
+            );
+        }
+        // A client refusing cleartext to another host refuses to be built, before it sends anything.
+        catch (ArgumentException ex)
+            when (ex.Message.Contains("not over TLS", StringComparison.Ordinal))
+        {
+            return new JsonObject
             {
-                Endpoint = new Uri(request["socket"]!.GetValue<string>()),
-            }
-        );
-        var server = new GraphQLMachineServer(
-            new GraphQLMachineServerOptions
-            {
-                Http = _http,
-                Endpoint = new Uri(request["endpoint"]!.GetValue<string>()),
-                Machine = machine,
-                Socket = _socket,
-                ResubscribeDelays = Delays(request["resubscribeDelays"]),
-            }
-        );
+                ["opened"] = false,
+                ["client"] = Client,
+                ["code"] = "INSECURE_TRANSPORT",
+            };
+        }
         var count = 0;
+        _server = server;
+        _newRequestId = () => $"r{Interlocked.Increment(ref count)}";
         _controller = new ServerMachineController(
             new ServerMachineOptions
             {
@@ -115,12 +207,20 @@ public sealed class ClientTestee : IAsyncDisposable
                 Predictor = MachinePredictor.FromIr(machine),
                 Id = request["instance"]?.GetValue<string>(),
                 StartInput = request["startInput"]?.DeepClone(),
-                NewRequestId = () => $"r{Interlocked.Increment(ref count)}",
+                NewRequestId = _newRequestId,
                 RetryDelays = Delays(request["retryDelays"]),
             }
         );
-        return new JsonObject { ["opened"] = true };
+        return new JsonObject { ["opened"] = true, ["client"] = Client };
     }
+
+    // Redirects off, as the client requires, and no timeout of its own: a transcript's request timeout is the server's
+    // RequestTimeout.
+    private static HttpClient NewHttp() =>
+        new(new SocketsHttpHandler { AllowAutoRedirect = false })
+        {
+            Timeout = Timeout.InfiniteTimeSpan,
+        };
 
     private static IReadOnlyList<TimeSpan> Delays(JsonNode? delays) =>
         (delays as JsonArray ?? [])
@@ -154,6 +254,37 @@ public sealed class ClientTestee : IAsyncDisposable
             _ => new JsonObject { ["error"] = $"unknown outcome {outcome}" },
         };
 
+    private static JsonObject SyncOf(SyncOutcome outcome) =>
+        outcome switch
+        {
+            SyncOutcome.Synced s => new JsonObject
+            {
+                ["outcome"] = "synced",
+                ["state"] = s.Snapshot.State,
+                ["revision"] = s.Snapshot.Revision,
+            },
+            SyncOutcome.Superseded => new JsonObject { ["outcome"] = "superseded" },
+            SyncOutcome.Unreachable => new JsonObject { ["outcome"] = "unreachable" },
+            SyncOutcome.Exceeded => new JsonObject { ["outcome"] = "exceeded" },
+            SyncOutcome.Invalid => new JsonObject { ["outcome"] = "invalid" },
+            SyncOutcome.Refused r => new JsonObject
+            {
+                ["outcome"] = "refused",
+                ["code"] = r.Problem.Code,
+            },
+            SyncOutcome.Failed f => new JsonObject
+            {
+                ["outcome"] = "failed",
+                ["code"] = f.Problem.Code,
+            },
+            SyncOutcome.Stopped s => new JsonObject
+            {
+                ["outcome"] = "stopped",
+                ["code"] = s.Error.Code,
+            },
+            _ => new JsonObject { ["error"] = $"unknown outcome {outcome}" },
+        };
+
     private static JsonObject ViewOf(MachineView view) =>
         new()
         {
@@ -176,12 +307,14 @@ public sealed class ClientTestee : IAsyncDisposable
             ["problem"] = view.Problem?.Code,
             ["error"] = view.Error?.Code,
             ["deleted"] = view.Error?.Deleted,
+            ["unsaved"] = view.Unsaved,
         };
 
     private async Task CloseAsync()
     {
         _controller?.Dispose();
         _controller = null;
+        _server = null;
         if (_socket is { } socket)
             await socket.DisposeAsync();
         _socket = null;

@@ -45,6 +45,10 @@ public sealed class ServerMachineController : IDisposable
     public Task StartAsync();
     public Task<SendOutcome> SendAsync(string trigger, JsonNode? input = null);
     public Task<SendOutcome> RetryAsync();
+    public Task<SyncOutcome> SyncToAsync(
+        string target,
+        PlannedEvent? fields,
+        IReadOnlyList<string> navigation);
     public bool CanSend(string trigger, JsonNode? input = null);
     public IReadOnlyList<string> AvailableTriggers();
     public void Dispose();
@@ -54,6 +58,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
 {
     public GraphQLMachineServer(GraphQLMachineServerOptions options);
     public static readonly IReadOnlyList<TimeSpan> DefaultResubscribeDelays;
+    public static readonly TimeSpan DefaultRequestTimeout;
     public Task<ServerProblem?> DiscardAsync(string id, string requestId, CancellationToken cancellationToken = default);
 }
 
@@ -73,19 +78,21 @@ public static class MachinePredictor
 | Member | What it is |
 | --- | --- |
 | `ServerMachineController` | Drives one instance. The server applies every transition; the controller predicts with the `Predictor`, if it has one, and shows the server's answer when it comes. Every operation is total: a refusal or a failed request is a `SendOutcome`, never an exception. |
-| `StartAsync()` | Opens the instance: subscribes to its changes, then reads it, so no write falls between the two. Without an `Id` it starts one under `StartRequestId` and subscribes to the id the server minted. A second call returns the same task. |
-| `SendAsync(trigger, input)` | Sends one event under a fresh request id, after every earlier one has settled. While it is pending, `View.Snapshot` is the prediction, and the prediction's canonical wire goes with the event as its `clientResult`. |
+| `StartAsync()` | Opens the instance: subscribes to its changes, then reads it, so no write falls between the two. Without an `Id` it starts one under `StartRequestId` and subscribes to the id the server minted. The task completes once the start or the first read has settled, its retries included. A second call returns the same task. |
+| `SendAsync(trigger, input)` | Sends one event under a fresh request id, after every earlier one has settled. While it is pending, `View.Snapshot` is the prediction, and the prediction's canonical wire goes with the event as its `clientResult`. A trigger the machine does not declare as an event is refused at once and sent nowhere, with the code the engine refuses it with: `OUTCOME_BOUND` for an invoked train's outcome, `TIMER_BOUND` for a timer, `NO_TRANSITION` for any other. |
 | `RetryAsync()` | Resends what last failed under the same request id, so the server replays it rather than applying it twice: the start while there is no instance, else the last event that failed, unless a later one was confirmed since. With nothing to resend it answers `Failed` with `NOTHING_TO_RETRY`. |
+| `SyncToAsync(target, fields, navigation)` | Brings the server to where a page that ran ahead of it is: the state `target`, with the `fields` event applied, moving through the `navigation` triggers. See [Syncing](#syncing). |
 | `CanSend(trigger, input)`, `AvailableTriggers()` | Whether the predictor allows a trigger from what is shown, and the triggers with an edge out of the shown state. Without a predictor, `CanSend` is true for any trigger with such an edge: the server decides. Both are false or empty before the first snapshot and once stopped. |
 | `View`, `Changed` | The current `MachineView`, a new object on every change, and the event raised after each change. |
 | `Dispose()` | Closes the stream and drops every late answer. Pending sends settle as `Failed` with `DISPOSED`. |
 | `DefaultRetryDelays` | 250 ms, 500 ms, 1 s, 2 s and 4 s: the delays between retries of `SERVER_OUTDATED` and of a failed read. |
 | `ServerMachineOptions` | What the controller is built with: the `Machine` as the manifest lists it, the `Server`, an optional `Predictor`, the `Id` of an instance to open or the `StartInput` and `StartRequestId` to start one, `NewRequestId` and `RetryDelays`. |
-| `MachineView` | `Status` (a `MachineStatus`: `Loading`, `Ready`, `Stopped`), the instance `Id`, the `Snapshot` shown, the `Confirmed` one, `RowId`, `Revision`, `DueAt`, `Pending`, `Problem` and `Error`. |
+| `MachineView` | `Status` (a `MachineStatus`: `Loading`, `Ready`, `Stopped`), the instance `Id`, the `Snapshot` shown, the `Confirmed` one, `RowId`, `Revision`, `DueAt`, `Pending`, `Problem`, `Error`, and `Unsaved`: true while a sync runs and after one that did not settle `Synced`, which a page holds a leave guard on. |
 | `SendOutcome` | What one send came to: `Confirmed` with the server's `Snapshot`, `Refused` or `Failed` with the `Problem`, or `Stopped` with the `Error`. |
+| `SyncOutcome` | What one sync came to: `Synced` with the server's `Snapshot`, `Superseded` by a later sync, `Unreachable`, `Exceeded`, `Invalid` with the `Trigger` or `Target`, `Refused` or `Failed` with the `Problem`, or `Stopped` with the `Error`. |
 | `MachineProblem`, `MachineProblemKind` | The last refusal or transport failure: its `Kind` (`Rejected` or `Transport`), its `Code` and its `Message`. |
 | `MachineError` | Why the controller stopped for good: its `Code` (`GONE`, `CLIENT_OUTDATED`, or `UNAUTHENTICATED` or `FORBIDDEN` for a socket the host refused), `Message`, and with `GONE`, `Deleted`: true when the instance was deleted, false when the server answered `NOT_FOUND`, which it answers alike for a missing instance and another caller's. |
-| `ClientProblemCodes` | The codes the client reports itself: `Gone`, `TransportError`, `NothingToRetry`, `Disposed` (`GONE`, `TRANSPORT_ERROR`, `NOTHING_TO_RETRY`, `DISPOSED`). Every other code is a [result code](/docs/sdk-reference/statemachine-api/result-codes). |
+| `ClientProblemCodes` | The codes the client reports itself: `Gone`, `TransportError`, `NothingToRetry`, `Disposed`, `NotReady` (`GONE`, `TRANSPORT_ERROR`, `NOTHING_TO_RETRY`, `DISPOSED`, `NOT_READY`). `NOT_READY` fails a send or a sync once a start or a first read has ended without an instance (the start was refused or failed, or the first read gave up) and none is being started or read. One made before `StartAsync`, or while the start or the first read is in flight, waits for it. Every other code is a [result code](/docs/sdk-reference/statemachine-api/result-codes). |
 
 ### Predicting
 
@@ -93,7 +100,7 @@ public static class MachinePredictor
 | --- | --- |
 | `MachinePredictor.FromIr(machine)` | The predictor built from the machine's IR as the manifest lists it, with an [`IrMachine`](/docs/sdk-reference/statemachine-api/ir-machine): no reference to the host's assembly, the way every language's client builds its machine. A snapshot the server sends is read trusting the custom state requirements it has no handler for. It holds no handler for any custom rule, so an event with an edge whose guard or reduction is custom, or that enters a state with a custom requirement, is sent with no prediction, and `CanSend` says only whether the state has an edge for it. |
 | `MachinePredictor.For(machine)` | The predictor over a compiled machine's engine (`BuiltMachine`, what `MachineBuilder.Build` answers). Its `IrHash` is the SHA-256 of the machine's exported IR; the controller refuses one whose hash is not the manifest's, since the server would answer every request `CLIENT_OUTDATED`. |
-| `IMachinePredictor` | What the controller predicts with: `IrHash`, `Advance`, `Rehydrate`, `Serialize`, `CanFire` and `AvailableTriggers`, each the engine's own. |
+| `IMachinePredictor` | What the controller predicts with: `IrHash`, `Advance`, `Rehydrate`, `Serialize`, `CanFire`, `AvailableTriggers` and `Plan`, each the engine's own. |
 
 `FromIr` is the usual choice: the app needs only the manifest. It has no handler for a custom rule, so an event whose
 prediction depends on a custom guard, custom state requirement or custom reduction goes with no `clientResult`, and the
@@ -106,10 +113,10 @@ server answers it.
 | Member | What it is |
 | --- | --- |
 | `IMachineServer` | The seam the controller drives: `StartAsync`, `EventAsync`, `GetAsync` and `Subscribe`. A refusal is an answer; a failed request throws, and the controller reports it as `TRANSPORT_ERROR`. |
-| `GraphQLMachineServer` | The `IMachineServer` over a host's typed `machines` root. It POSTs `{ id, variables }` for each operation through `TraxHttpTransport.PostAsync`, keeping only the variables its document declares, and subscribes to `<machine>Changed` by id. `CLIENT_OUTDATED` and `SERVER_OUTDATED` are answers; any other GraphQL error, or a response with no GraphQL answer in it, throws. A stream that ends without saying why is subscribed again after `ResubscribeDelays` (`DefaultResubscribeDelays`: 1, 2, then 5 seconds); a socket the host refused is not. `DiscardAsync` deletes one of the caller's instances, and answers null when it is gone. |
-| `GraphQLMachineServerOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, as for any other, and turn its automatic redirects off, which would carry a default header to another host: an answer from another host than the endpoint's fails the request; its `Timeout` bounds each request, body included); the GraphQL `Endpoint`; the `Machine` from the manifest, with its documents, `changed` among them; the `Socket`, an `ISubscriptionSocket` from `Trax.Client`; `ResubscribeDelays`; `MaxResponseSize`, the largest body read from an answer (16 MiB); and `AllowInsecureTransport`, without which an `http` endpoint that is not loopback is refused. |
+| `GraphQLMachineServer` | The `IMachineServer` over a host's typed `machines` root. It POSTs `{ id, variables }` for each operation through `TraxHttpTransport.PostAsync`, keeping only the variables its document declares, and subscribes to `<machine>Changed` by id. An event is sent only when the machine declares its trigger, and never as the `start`, `get`, `discard` or `changed` document; any other is refused without a request, as the engine refuses it. `CLIENT_OUTDATED` and `SERVER_OUTDATED` are answers; any other GraphQL error, or a response with no GraphQL answer in it, throws. A stream that ends without saying why is subscribed again after `ResubscribeDelays` (`DefaultResubscribeDelays`: 1, 2, then 5 seconds), which start over once a stream has delivered a second push (its first is always the instance as it is); a socket or a stream the host refused is not. `DiscardAsync` deletes one of the caller's instances, and answers null when it is gone; an answer that neither says it was discarded nor gives a problem throws, as a failed request does. |
+| `GraphQLMachineServerOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, as for any other, and turn its automatic redirects off, which would carry the body and a default header to another host: a client on an `HttpClientHandler` or `SocketsHttpHandler` that follows them, `new HttpClient()` among them, is refused when the server is built, and an answer from another host than the endpoint's fails the request; its own `Timeout` still bounds each request, body included); the GraphQL `Endpoint`; the `Machine` from the manifest, with its documents, `changed` among them; the `Socket`, an `ISubscriptionSocket` from `Trax.Client`; `ResubscribeDelays`; `TerminalStreamErrors`, the codes of a stream error that stop the controller for good beside the host's own refusals (a generated client lists `CONNECTION_CHANGED`, say); `MaxResponseSize`, the largest body read from an answer (16 MiB); `RequestTimeout`, how long one request may take, body included, before it fails as a transport failure (`DefaultRequestTimeout`, 30 seconds; the shorter of it and the `HttpClient`'s `Timeout` holds); and `AllowInsecureTransport`, without which an `http` endpoint that is not loopback is refused. |
 | `ServerAnswer`, `ServerSnapshot`, `ServerProblem` | An answer: the instance `Id` on a start, the `Snapshot` the server stored or the `Problem` it refused with (`Of` and `Refused` build one). A `ServerSnapshot` is the `State`, its `Context` with no null member, the `Revision` (null when the store records none, which the controller takes and cannot order), the incarnation `RowId`, and `DueAt`, which counts only when `DueAtKnown`. |
-| `StreamMessage` | What a change stream delivers: `Changed` with the `Snapshot`, `Gone` (with `NotFound` when the server answered `NOT_FOUND`), `Reload`, `ClientOutdated`, or `Refused` with the `Code` (`UNAUTHENTICATED` or `FORBIDDEN`) and `Message` of a socket the host refused. |
+| `StreamMessage` | What a change stream delivers: `Changed` with the `Snapshot`, `Gone` (with `NotFound` when the server answered `NOT_FOUND`), `Reload`, `ClientOutdated`, or `Refused` with the `Code` and `Message` of a stream that ended for good: `UNAUTHENTICATED` or `FORBIDDEN` for a socket or a stream the host refused, a code of `TerminalStreamErrors`, `TRANSPORT_ERROR` for a push the client cannot read. |
 
 The socket is `Trax.Client`'s, in the namespace `Trax.Client`: `GraphQLSubscriptionSocket`, its options, the
 `ISubscriptionSocket` and `ISubscriptionSink` seam (`Subscribe(payload, sink)`, and the sink's `Next`, `Error`,
@@ -119,8 +126,14 @@ with a payload of the `changed` document's persisted `id` and the instance id as
 `SocketClosedException` whose `CloseStatus` is 4401 or 4403, or whose `HttpStatus` is 401 or 403, is the host refusing
 the socket: subscribing again would get the same answer, so the stream delivers `Refused` (`UNAUTHENTICATED` for 4401
 and 401, `FORBIDDEN` for 4403 and 403, with the exception's message, which names the code) and is not subscribed
-again. Every other `Error` the socket raises, and every `Complete`, is a stream that ended without saying why, which it
-subscribes to again after `ResubscribeDelays`.
+again. A host can also refuse one subscription on a socket it accepted (an expired token, an anonymous socket): a `next`
+or an `error` whose first GraphQL error is coded `TRAX_AUTHORIZATION` or `AUTH_NOT_AUTHORIZED` delivers `Refused` with
+`FORBIDDEN`, one coded `AUTH_NOT_AUTHENTICATED` with `UNAUTHENTICATED`, and one coded `CLIENT_OUTDATED` delivers
+`ClientOutdated`; a code among `TerminalStreamErrors` delivers `Refused` with that code and the error's message. None
+of them is subscribed again. A push the client cannot read (a member of the wrong type, or one given twice) would come again the same way,
+so it delivers `Refused` with `TRANSPORT_ERROR` once and is not subscribed again either. Every other `Error` the socket
+raises, and every `Complete`, is a stream that ended without saying why, which it subscribes to again after
+`ResubscribeDelays`.
 
 ## Behavior
 
@@ -130,14 +143,24 @@ The controller behaves as the TypeScript `ServerMachineController` does, and the
 - **Ordering.** Every snapshot, pushed or answered, carries its revision; one at or below the revision held is dropped.
   An answer with no revision is applied and not ordered.
   A push of another incarnation (the instance was deleted and created again) makes the controller read the instance
-  again rather than compare revisions across incarnations.
+  again rather than compare revisions across incarnations. After a `CLIENT_DIVERGENCE` the instance is read again,
+  and nothing queued is sent until that read answers, so the next event is predicted from what the server holds.
 - **Effects.** An event bound to the machine's effect is sent with no prediction, and nothing queued after it is
   predicted until it answers. So is an event with an edge that rests on a custom rule the predictor has no handler
   for.
+- **Syncing.** `SyncToAsync` plans with the predictor's [planner](/docs/sdk-reference/statemachine-api/ir-machine#planning),
+  or the machine built from the manifest's IR when there is no predictor. It plans from what the server confirmed once
+  nothing is queued, in flight or being read, sends the plan's first event as `SendAsync` does, and plans again from
+  each answer until the plan is empty. An `Undetermined` plan sends its events, then its trigger with no prediction. A
+  `GUARD_FAILED`, `NO_TRANSITION`, `CLIENT_DIVERGENCE` or `CONFLICT` reads the instance and plans again once per
+  sync; a second settles it `Refused`. A sync started while another runs supersedes it: the older settles
+  `Superseded` once its event in flight answers, and sends nothing more. No sync sends more than twice the machine's
+  states in events; past that it settles `Exceeded`.
 - **Timers** are the server's: `DueAt` is shown and never fired. An answer that does not know it keeps the one held
   while the state stays; entering a timed state without one reads the instance once for it.
-- **Stopping.** A gone instance, `CLIENT_OUTDATED` and a socket the host refused (`UNAUTHENTICATED` or `FORBIDDEN`)
-  stop the controller for good, and every queued send settles `Stopped`. A snapshot the predictor cannot read stops it
+- **Stopping.** A gone instance, `CLIENT_OUTDATED`, a socket or a stream the host refused (`UNAUTHENTICATED` or
+  `FORBIDDEN`), a stream error coded with one of `TerminalStreamErrors`, and a push the client cannot read
+  (`TRANSPORT_ERROR`) stop the controller for good, and every queued send settles `Stopped`. A snapshot the predictor cannot read stops it
   as `CLIENT_OUTDATED` too.
 - **Transport.** An endpoint must be `https` (`wss` for the socket) unless its host is loopback (`localhost`,
   `127.0.0.0/8`, `::1`). Any other `http` or `ws` endpoint throws when the server or socket is built, since whatever
@@ -145,8 +168,9 @@ The controller behaves as the TypeScript `ServerMachineController` does, and the
   An answer larger than `MaxResponseSize` fails its request as a transport failure, and a socket message larger than
   `MaxMessageSize` fails the connection, which is subscribed again; neither is read into memory first.
 - **Threads.** The controller works on one exclusive scheduler, so it handles one thing at a time whichever thread calls
-  it. `Changed` is raised there: read `View` and marshal to the UI thread in the handler, and do not block on the
-  controller from it.
+  it. `Changed` is raised there, after the sends a change settled are settled: read `View` and marshal to the UI
+  thread in the handler, and do not block on the controller from it. A handler that throws is reported to `Trace` and
+  stops neither the controller nor the handlers after it.
 
 ## Example
 
@@ -181,6 +205,16 @@ await controller.StartAsync();
 
 var outcome = await controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
 // SendOutcome.Confirmed when the server stored it; Refused, Failed or Stopped otherwise, never a throw
+```
+
+### Syncing
+
+```csharp fragment
+var outcome = await controller.SyncToAsync(
+    "Review",
+    new PlannedEvent("Update", new JsonObject { ["name"] = "Ada", ["email"] = "ada@example.com" }),
+    ["Begin", "Next", "Back"]);
+// SyncOutcome.Synced once the server holds Review with those fields; View.Unsaved is false again
 ```
 
 ## See also

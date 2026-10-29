@@ -113,6 +113,16 @@ internal sealed class WirePeer(NetworkStream stream, CancellationToken stopping)
     /// <summary>Accepts the upgrade, reads <c>connection_init</c> and acknowledges it.</summary>
     public async Task AckAsync()
     {
+        await UpgradeAsync();
+        var init = await ReceiveAsync();
+        if (init?["type"]?.GetValue<string>() != "connection_init")
+            throw new InvalidOperationException("The client did not send connection_init first.");
+        await SendAsync("""{"type":"connection_ack"}""");
+    }
+
+    /// <summary>Accepts the upgrade and reads nothing yet.</summary>
+    public async Task UpgradeAsync()
+    {
         var key = (await ReadRequestAsync())
             .Split("\r\n")
             .First(l => l.StartsWith("Sec-WebSocket-Key:", StringComparison.OrdinalIgnoreCase))
@@ -132,10 +142,6 @@ internal sealed class WirePeer(NetworkStream stream, CancellationToken stopping)
             stream,
             new WebSocketCreationOptions { IsServer = true, SubProtocol = "graphql-transport-ws" }
         );
-        var init = await ReceiveAsync();
-        if (init?["type"]?.GetValue<string>() != "connection_init")
-            throw new InvalidOperationException("The client did not send connection_init first.");
-        await SendAsync("""{"type":"connection_ack"}""");
     }
 
     /// <summary>The next message, or null once the client closed the socket.</summary>
@@ -192,6 +198,23 @@ internal sealed class WirePeer(NetworkStream stream, CancellationToken stopping)
             while (await ReceiveAsync() is not null) { }
         }
         catch (Exception ex) when (ex is WebSocketException or IOException)
+        {
+            // Dropped rather than closed.
+        }
+    }
+
+    /// <summary>
+    /// Reads until the client's close, never answers it, and waits until the client drops the connection itself.
+    /// </summary>
+    public async Task LeaveCloseUnansweredAsync()
+    {
+        while (await ReceiveAsync() is not null) { }
+        var one = new byte[1];
+        try
+        {
+            while (await stream.ReadAsync(one, Stopping) > 0) { }
+        }
+        catch (IOException)
         {
             // Dropped rather than closed.
         }

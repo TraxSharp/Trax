@@ -56,6 +56,32 @@ wizard.resume(storedJson);                 // { step, snapshot } to reopen, or n
   does not read, and for one in a committed state (`.Committed()` in C#): a paid checkout does not reopen as a draft.
   `isCommitted(json)` answers that alone.
 
+## Catch the server up
+
+A form that saves on a debounce runs ahead of the server: by the time it saves, the user may be two steps on with
+new values. Name the event that writes the values and the triggers that move between steps, and the view plans the
+events that bring the server there.
+
+```ts
+const wizard = createFormView(signup, {
+  steps: { name: 'Name', address: 'Address', done: 'Done' },
+  toContext: (values) => ({ name: values.name }),
+  fieldsEvent: { trigger: 'Update' },     // its input is toContext's, unless you give `input: (values) => ...`
+  navigation: ['Next', 'Back'],
+});
+
+wizard.plan(serverJson, 'done', values);  // { result: 'plan', events: [Update, Next, Next] }
+await wizard.sync(controller, 'done', values);
+```
+
+- **`plan`** searches from the server's snapshot, breadth first, the fields event first and then `navigation` in the
+  order given. It answers the events (none when the server already holds that step and those values), `unreachable`,
+  `exceeded`, `invalid`, or `undetermined` when only an edge on a custom rule the twin cannot evaluate might get
+  there. It answers null when there is no server snapshot or it does not read.
+- **`sync`** hands the same plan to a `ServerMachineController`'s `syncTo`, which sends it one event at a time from
+  what the server confirmed, plans again after each answer and after a refusal, and gives way to a later sync. The
+  controller's view is `unsaved` until one settles `synced`: hold a leave guard on it.
+
 ## SDK Reference
 
 > [TypeScript package](/docs/sdk-reference/statemachine-api/typescript-package) | [Codegen pipeline](/docs/statemachine/codegen-pipeline)

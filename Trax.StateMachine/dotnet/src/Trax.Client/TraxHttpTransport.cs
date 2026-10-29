@@ -38,8 +38,11 @@ public sealed record TraxHttpTransportOptions
     /// The client the requests go through. Set its authentication on it, a default header (<c>X-Api-Key</c>,
     /// <c>Authorization</c>) or a delegating handler, as for any other <see cref="System.Net.Http.HttpClient"/>. Its
     /// <see cref="HttpClient.Timeout"/> bounds each request, its body included. Build it on a handler with automatic
-    /// redirects off: a redirect drops only <c>Authorization</c>, so any other header would follow it to the new host.
-    /// An answer from another host than <see cref="Endpoint"/>'s is a <see cref="TraxAnswer.Failure"/>.
+    /// redirects off: a redirect drops only <c>Authorization</c>, so the body and any other header would follow it to
+    /// the new host. A client on an <see cref="HttpClientHandler"/> or <see cref="SocketsHttpHandler"/> that follows
+    /// redirects, <c>new HttpClient()</c> among them, is refused when the transport is built. An answer from another
+    /// host than <see cref="Endpoint"/>'s, through a handler of another kind that followed one, is a
+    /// <see cref="TraxAnswer.Failure"/>.
     /// </summary>
     public required HttpClient Http { get; init; }
 
@@ -89,12 +92,14 @@ public sealed class TraxHttpTransport : ITraxTransport
 
     /// <summary>Builds the transport.</summary>
     /// <exception cref="ArgumentException">
-    /// The endpoint is not <c>https</c> on a host that is not loopback, and
-    /// <see cref="TraxHttpTransportOptions.AllowInsecureTransport"/> is not set.
+    /// The endpoint is relative and the client has no base address; or it is not <c>https</c> on a host that is not
+    /// loopback, and <see cref="TraxHttpTransportOptions.AllowInsecureTransport"/> is not set; or the client follows
+    /// redirects.
     /// </exception>
     public TraxHttpTransport(TraxHttpTransportOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        TransportSecurity.RequireNoRedirects(options.Http, nameof(options));
         TransportSecurity.RequireSecure(
             options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
                 ? options.Endpoint
@@ -130,7 +135,7 @@ public sealed class TraxHttpTransport : ITraxTransport
             _options.Endpoint,
             Payload(request),
             _options.MaxResponseSize,
-            cancellationToken
+            cancellationToken: cancellationToken
         );
 
     /// <inheritdoc/>
@@ -155,7 +160,8 @@ public sealed class TraxHttpTransport : ITraxTransport
     /// failure (a status that is not success with no errors among them, whatever data came with it), and so is a
     /// body larger than <paramref name="maxResponseSize"/>, which is refused as it arrives rather than read whole, a
     /// body that breaks off, an answer from another scheme, host or port than <paramref name="endpoint"/>'s (a
-    /// redirect the client followed), and a request that outlasts <see cref="HttpClient.Timeout"/>, body included. Throws only
+    /// redirect the client followed), and a request that outlasts <see cref="HttpClient.Timeout"/> or
+    /// <paramref name="requestTimeout"/>, whichever is shorter, body included. Throws only
     /// when <paramref name="cancellationToken"/> is cancelled. Internal: the endpoint is checked for TLS by whoever
     /// built it, a transport or the machine server.
     /// </summary>
@@ -164,6 +170,7 @@ public sealed class TraxHttpTransport : ITraxTransport
         Uri endpoint,
         JsonObject body,
         long maxResponseSize = TraxHttpTransportOptions.DefaultMaxResponseSize,
+        TimeSpan? requestTimeout = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -185,8 +192,9 @@ public sealed class TraxHttpTransport : ITraxTransport
 
         // With ResponseHeadersRead the client's timeout stops at the headers; this one runs on through the body.
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        if (http.Timeout != Timeout.InfiniteTimeSpan)
-            timeout.CancelAfter(http.Timeout);
+        var limit = Shorter(http.Timeout, requestTimeout ?? Timeout.InfiniteTimeSpan);
+        if (limit != Timeout.InfiniteTimeSpan)
+            timeout.CancelAfter(limit);
         try
         {
             using var response = await http.SendAsync(
@@ -195,7 +203,8 @@ public sealed class TraxHttpTransport : ITraxTransport
                     timeout.Token
                 )
                 .ConfigureAwait(false);
-            // A client that follows redirects has already sent the request on; its answer is not the endpoint's.
+            // A handler the transport could not see into followed a redirect: it has already sent the request on,
+            // and its answer is not the endpoint's.
             if (
                 asked is not null
                 && response.RequestMessage?.RequestUri is { IsAbsoluteUri: true } answeredBy
@@ -224,7 +233,7 @@ public sealed class TraxHttpTransport : ITraxTransport
         {
             // A timeout surfaces as a cancellation the caller did not ask for.
             return TraxAnswer.Failed(
-                $"The host did not answer within {http.Timeout.TotalSeconds:0.###} seconds."
+                $"The host did not answer within {limit.TotalSeconds:0.###} seconds."
             );
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException)
@@ -233,6 +242,13 @@ public sealed class TraxHttpTransport : ITraxTransport
             return TraxAnswer.Failed($"The host could not be reached: {ex.Message}");
         }
     }
+
+    // The shorter of two timeouts, either of which may be infinite.
+    private static TimeSpan Shorter(TimeSpan a, TimeSpan b) =>
+        a == Timeout.InfiniteTimeSpan ? b
+        : b == Timeout.InfiniteTimeSpan ? a
+        : a < b ? a
+        : b;
 
     private static TraxAnswer AnswerOf(HttpResponseMessage response, string? text, long max)
     {

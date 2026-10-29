@@ -6,11 +6,12 @@
 // Object shapes are emitted as `type` aliases, not `interface`, so they carry the implicit index signature
 // that `MachineSpec` (Record<string, ...>) requires.
 
-import { checkNames, camel, machineModel, pascal, type FieldModel, type TypeRef, type ValueRef } from "../codegen/model";
+import { checkTwinNames, camel, escapeBidi, machineModel, pascal, type FieldModel, type TypeRef, type ValueRef } from "../codegen/model";
 import { irFormatVersion } from "./irFormat";
 import type { IrDocument } from "./irMachine";
 
 export function generateContextTypes(ir: IrDocument): string {
+  checkTwinNames(ir);
   const model = machineModel(ir);
   const machine = model.pascal;
   const lines: string[] = [
@@ -56,7 +57,8 @@ export function generateContextTypes(ir: IrDocument): string {
     "",
   );
 
-  return lines.join("\n");
+  // A field name or a value the IR holds is written into a string literal, where a bidirectional control is escaped.
+  return escapeBidi(lines.join("\n"));
 }
 
 /**
@@ -96,7 +98,7 @@ export function generateMachineFactory(
   ir: IrDocument,
   options: MachineFactoryOptions = {},
 ): string {
-  checkNames(ir);
+  checkTwinNames(ir);
   const machine = pascal(ir.id);
   const importStyle = options.importStyle ?? "relative";
   const specifier = options.specifier ?? "@traxsharp/state-machine";
@@ -105,17 +107,19 @@ export function generateMachineFactory(
   // reads it. Strip it so the generated module stays lean and doesn't ship test inputs to the browser.
   const { differential: _differential, ...runtimeIr } = ir;
   const specifierStyle = importStyle === "specifier";
+  // JSON.stringify escapes CR and LF but leaves U+2028 and U+2029, which end a line comment as well.
+  const literal = JSON.stringify(specifier).replace(/[\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16)}`);
   const engineImports = specifierStyle
-      ? // JSON.stringify, so a specifier holding a quote stays one string literal rather than ending it.
-        [`import { typedMachineFromIr, type IrDocument } from ${JSON.stringify(specifier)};`]
+      ? // A JSON literal, so a specifier holding a quote stays one string literal rather than ending it.
+        [`import { typedMachineFromIr, type IrDocument } from ${literal};`]
       : [
           `import { typedMachineFromIr } from "../../typed";`,
           `import type { IrDocument } from "../../rules/irMachine";`,
         ];
-  // JSON.stringify keeps the specifier one line, so it cannot end the comment it is written into.
+  // The literal keeps the specifier one line, so it cannot end the comment it is written into.
   const importNote = specifierStyle
     ? [
-        `// Imports the engine from ${JSON.stringify(specifier)} (trax machine generate --import-style specifier, the`,
+        `// Imports the engine from ${literal} (trax machine generate --import-style specifier, the`,
         "// default without --engine-src). Name another module with --specifier <module>, or import an engine",
         "// checkout by relative path with --import-style relative --engine-src <engine/src>.",
       ]
@@ -123,7 +127,7 @@ export function generateMachineFactory(
   // The IR format rides in the IR rather than in a call, so an engine older than the check ignores it.
   const twinIr = specifierStyle ? { irFormat: irFormatVersion, ...runtimeIr } : runtimeIr;
   const { text: irText, shared } = shareOutputSchemas(twinIr);
-  return [
+  const source = [
     `// AUTO-GENERATED from ${ir.id}.ir.json by generateMachineFactory. Do not edit by hand.`,
     ...importNote,
     "",
@@ -140,6 +144,9 @@ export function generateMachineFactory(
     `export const ${camel(ir.id)} = typedMachineFromIr<${machine}Spec>(ir, irHash);`,
     "",
   ].join("\n");
+  // The IR's strings sit in string literals, where a bidirectional control is escaped; the import note's specifier is
+  // in a comment, where the escape is shown as text, which is what a reviewer should see.
+  return escapeBidi(source);
 }
 
 // An output schema two or more outcomes share (invoking states whose trains answer with one type) is written once,

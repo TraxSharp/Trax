@@ -31,6 +31,10 @@ public sealed class ConformanceTestee(bool fromIr = false)
     // every handler bound, so this testee checks the IR against the compiled machine and then serves it from the IR.
     private static readonly HashSet<string> ServedWithoutHandlers = ["vault"];
 
+    // The machines the kit holds only as an IR, with no C# source to check it against: the planner's wizard, whose IR
+    // was written for its cases. Every testee builds them from the IR.
+    private static readonly HashSet<string> OnlyAnIr = ["wizard"];
+
     // The one handler every testee binds: a custom guard named `throws`, which throws.
     private static readonly Dictionary<string, Func<JsonObject, JsonNode?, bool>> KitGuards = new()
     {
@@ -72,6 +76,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
                 request["fromServer"]?.GetValue<bool>() == true
             ),
             "serialize" => new JsonObject { ["wire"] = machine.Serialize(SnapshotOf(request)) },
+            "plan" => Planned(machine.Plan(SnapshotOf(request), PlanOf(request))),
             _ => new JsonObject { ["unsupported"] = true },
         };
     }
@@ -79,7 +84,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
     private JsonObject Load(JsonObject request)
     {
         var name = request["machine"]!.GetValue<string>();
-        if (fromIr)
+        if (fromIr || OnlyAnIr.Contains(name))
         {
             try
             {
@@ -113,6 +118,66 @@ public sealed class ConformanceTestee(bool fromIr = false)
         var copy = ir?.DeepClone() as JsonObject;
         copy?.Remove("differential");
         return copy;
+    }
+
+    private static (
+        string Target,
+        PlannedEvent? Fields,
+        IReadOnlyList<string> Navigation,
+        int? MaxDepth
+    ) PlanOf(JsonObject request) =>
+        (
+            request["target"]!.GetValue<string>(),
+            request["fields"] is JsonObject fields
+                ? new PlannedEvent(
+                    fields["trigger"]!.GetValue<string>(),
+                    fields["input"]?.DeepClone()
+                )
+                : null,
+            request["navigation"]!.AsArray().Select(t => t!.GetValue<string>()).ToList(),
+            request["maxDepth"]?.GetValue<int>()
+        );
+
+    private static JsonObject Planned(PlanResult result) =>
+        result switch
+        {
+            PlanResult.Planned p => new JsonObject
+            {
+                ["result"] = "plan",
+                ["events"] = Events(p.Events),
+            },
+            PlanResult.Unreachable => new JsonObject { ["result"] = "unreachable" },
+            PlanResult.Exceeded => new JsonObject { ["result"] = "exceeded" },
+            PlanResult.Undetermined u => new JsonObject
+            {
+                ["result"] = "undetermined",
+                ["trigger"] = u.Trigger,
+                ["events"] = Events(u.Events),
+            },
+            PlanResult.Invalid { Target: { } target } => new JsonObject
+            {
+                ["result"] = "invalid",
+                ["target"] = target,
+            },
+            PlanResult.Invalid i => new JsonObject
+            {
+                ["result"] = "invalid",
+                ["trigger"] = i.Trigger,
+            },
+            var other => new JsonObject { ["error"] = $"unexpected result {other}" },
+        };
+
+    private static JsonArray Events(IReadOnlyList<PlannedEvent> events)
+    {
+        var array = new JsonArray();
+        foreach (var e in events)
+        {
+            var written = new JsonObject { ["trigger"] = e.Trigger };
+            if (e.Input is not null)
+                written["input"] = e.Input.DeepClone();
+            array.Add(written);
+        }
+        return array;
     }
 
     private static string Trigger(JsonObject request) => request["trigger"]!.GetValue<string>();
@@ -157,7 +222,12 @@ public sealed class ConformanceTestee(bool fromIr = false)
         string Ir,
         Func<string, Snapshot, string, JsonNode?, AdvanceResult> Apply,
         Func<string, bool, RehydrationResult> Read,
-        Func<Snapshot, string> Write
+        Func<Snapshot, string> Write,
+        Func<
+            Snapshot,
+            (string Target, PlannedEvent? Fields, IReadOnlyList<string> Navigation, int? MaxDepth),
+            PlanResult
+        > Planner
     )
     {
         public static Served Of<TState, TTrigger>(BuiltMachine<TState, TTrigger> built)
@@ -176,7 +246,8 @@ public sealed class ConformanceTestee(bool fromIr = false)
                     },
                 // Every custom rule of a compiled machine has its handler, so a snapshot from the server reads the same.
                 (text, _) => engine.Rehydrate(text),
-                engine.Serialize
+                engine.Serialize,
+                (snapshot, p) => built.Plan(snapshot, p.Target, p.Fields, p.Navigation, p.MaxDepth)
             );
         }
 
@@ -191,7 +262,9 @@ public sealed class ConformanceTestee(bool fromIr = false)
                         _ => machine.Advance(snapshot, trigger, input?.DeepClone()),
                     },
                 machine.Rehydrate,
-                machine.Serialize
+                machine.Serialize,
+                (snapshot, p) =>
+                    machine.Plan(snapshot, p.Target, p.Fields, p.Navigation, p.MaxDepth)
             );
 
         public JsonObject Step(string op, Snapshot snapshot, string trigger, JsonNode? input) =>
@@ -227,5 +300,15 @@ public sealed class ConformanceTestee(bool fromIr = false)
             };
 
         public string Serialize(Snapshot snapshot) => Write(snapshot);
+
+        public PlanResult Plan(
+            Snapshot snapshot,
+            (
+                string Target,
+                PlannedEvent? Fields,
+                IReadOnlyList<string> Navigation,
+                int? MaxDepth
+            ) request
+        ) => Planner(snapshot, request);
     }
 }

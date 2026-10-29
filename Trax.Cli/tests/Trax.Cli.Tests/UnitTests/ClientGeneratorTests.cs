@@ -199,6 +199,8 @@ public partial class ClientGeneratorTests
     [TestCase("trax-socket")]
     [TestCase("use-server-machine")]
     [TestCase("ir")]
+    [TestCase("ir-hash")]
+    [TestCase("shared-output0")]
     [TestCase("queue-microtask")]
     public void A_machine_named_as_a_name_its_client_module_uses_is_refused(string id)
     {
@@ -212,6 +214,27 @@ public partial class ClientGeneratorTests
             .Should()
             .Throw<InvalidOperationException>()
             .WithMessage($"*'{id}'*its generated modules use*");
+        node.Calls.Should().BeEmpty();
+    }
+
+    [TestCase("machine", "useRememberedMachine")]
+    [TestCase("server-machine", "useServerMachine")]
+    [TestCase("create-machine", "createMachineServer")]
+    public void A_machine_whose_functions_are_named_as_a_name_its_client_module_uses_is_refused(
+        string id,
+        string function
+    )
+    {
+        var node = new FakeNodeRunner();
+        var checkout = ClientManifests.Sample().Machines[0];
+        var manifest = ClientManifests.Sample() with { Machines = [checkout with { Id = id }] };
+
+        var render = () => Render(manifest, node);
+
+        render
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"*'{id}'*'{function}'*its generated modules use*");
         node.Calls.Should().BeEmpty();
     }
 
@@ -320,6 +343,10 @@ public partial class ClientGeneratorTests
             .Contain(
                 "allowInsecureTransport: connection.allowInsecureTransport,",
                 "a machine's server refuses a cleartext url to another host unless the app said the network is trusted"
+            )
+            .And.Contain(
+                "maxResponseSize: connection.maxResponseBytes,",
+                "a machine's server reads no more of an answer than the connection allows"
             );
     }
 
@@ -337,6 +364,18 @@ public partial class ClientGeneratorTests
             )
             .And.Contain("export function requireSecureSocket(")
             .And.Contain("redirect: \"error\",")
+            .And.Contain(
+                "requireNoRedirect(response);",
+                "a fetch that ignores redirect: \"error\" must not have the answer it followed to read"
+            )
+            .And.Contain(
+                "if (!response.ok)\n    throw new TraxOperationError(undefined,",
+                "an answer that is not 2xx and names no GraphQL error is a failed request, not undefined data"
+            )
+            .And.Contain(
+                "if (typeof data !== \"object\" || data === null)\n    throw new TraxOperationError(undefined, `The host answered ${response.status} with no GraphQL answer.`);",
+                "a 2xx answer with no data to read ({}, null, a number, data: null) is refused, not undefined data"
+            )
             .And.Contain("maxResponseBytes?: number;")
             .And.Contain("await readJson(response, maxResponseBytes)")
             .And.NotContain("response.json()");

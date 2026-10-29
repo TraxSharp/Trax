@@ -17,7 +17,8 @@ public sealed record TraxClientOptions
 
     /// <summary>
     /// Delays before subscribing again after the socket dropped a stream. The last repeats for as long as the stream
-    /// is followed. <see cref="TraxClient.DefaultResubscribeDelays"/> when null or empty.
+    /// is followed; they start over once a subscription delivers a frame. <see cref="TraxClient.DefaultResubscribeDelays"/>
+    /// when null or empty.
     /// </summary>
     public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
 
@@ -244,7 +245,6 @@ public sealed class TraxClient
                     return;
                 resumed = _interrupted;
                 _interrupted = false;
-                _attempt = 0;
             }
             if (resumed)
                 Deliver(new TraxStreamEvent<TResult>.Resumed());
@@ -252,15 +252,28 @@ public sealed class TraxClient
 
         public void Next(JsonObject value)
         {
+            TraxAnswer? frame;
+            try
+            {
+                frame = TraxAnswer.Of(value);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                // A member given twice. The host would send the same again, so the stream ends rather than resubscribing.
+                frame = null;
+            }
             var answer = client.Read<TResult>(
-                TraxAnswer.Of(value)
-                    ?? TraxAnswer.Failed("The host sent a frame that is not a GraphQL result.")
+                frame ?? TraxAnswer.Failed("The host sent a frame that is not a GraphQL result.")
             );
             if (answer.Failure is not null || answer.Errors.Count > 0)
             {
                 End(answer.Errors, answer.Failure);
                 return;
             }
+            // A host that accepts the subscribe and drops it at once has not settled down; one that delivered a frame has,
+            // and the resubscribe delays start over.
+            lock (_gate)
+                _attempt = 0;
             Deliver(new TraxStreamEvent<TResult>.Next(answer.Data!));
         }
 
@@ -276,7 +289,13 @@ public sealed class TraxClient
                     );
                     return;
                 case SocketClosedException { Refused: true } closed:
-                    End([], new TraxTransportFailure(closed.Message, closed.HttpStatus));
+                    End(
+                        [],
+                        new TraxTransportFailure(closed.Message, closed.HttpStatus)
+                        {
+                            CloseStatus = closed.CloseStatus,
+                        }
+                    );
                     return;
                 case SocketUnavailableException:
                     End([], new TraxTransportFailure(error.Message));

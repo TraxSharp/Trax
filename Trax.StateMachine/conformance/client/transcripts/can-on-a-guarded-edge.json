@@ -1,0 +1,34 @@
+{
+  "about": "can and available read what the client shows: nothing before the first snapshot, then the guard on the edge out of it with the input given, and the prediction while a send is pending.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "can", "trigger": "Coin", "input": { "coin": "quarter" }, "expect": { "can": false } },
+    { "client": "available", "expect": { "triggers": [] } },
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "view": { "status": "ready", "state": "Locked" } },
+    { "client": "can", "trigger": "Coin", "input": { "coin": "quarter" }, "expect": { "can": true } },
+    { "client": "can", "trigger": "Coin", "input": { "coin": "penny" }, "expect": { "can": false } },
+    { "client": "can", "trigger": "Coin", "expect": { "can": false } },
+    { "client": "can", "trigger": "Push", "expect": { "can": false } },
+    { "client": "can", "trigger": "Kick", "expect": { "can": false } },
+    { "client": "available", "expect": { "triggers": ["Coin"] } },
+    { "client": "send", "trigger": "Coin", "input": { "coin": "quarter" }, "as": "coin" },
+    { "view": { "pending": true, "state": "Unlocked" } },
+    { "client": "can", "trigger": "Push", "expect": { "can": true } },
+    { "client": "can", "trigger": "Coin", "input": { "coin": "quarter" }, "expect": { "can": false } },
+    { "client": "available", "expect": { "triggers": ["Push"] } },
+    { "request": "coin", "answer": { "id": "i-1", "revision": 2, "state": "Unlocked", "context": { "paidWith": "quarter" } } },
+    { "await": "coin", "expect": { "outcome": "confirmed", "state": "Unlocked", "revision": 2 } }
+  ]
+}

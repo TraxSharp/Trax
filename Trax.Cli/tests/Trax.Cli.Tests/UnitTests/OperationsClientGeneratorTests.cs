@@ -159,12 +159,54 @@ public class OperationsClientGeneratorTests
                 "the socket carries the credential in connection_init, so it is held to the same rule"
             )
             .And.Contain("redirect: \"error\",")
+            .And.Contain(
+                "requireNoRedirect(response);",
+                "a fetch that ignores redirect: \"error\" must not have the answer it followed to read"
+            )
+            .And.Contain(
+                "if (!response.ok && !(Array.isArray(answer.errors) && answer.errors.length > 0))",
+                "an answer that is not 2xx and names no GraphQL error is a failed request, whatever data it holds"
+            )
             .And.Contain("answer = await readJson(response, options.maxResponseBytes);")
             .And.Contain("const defaultMaxResponseBytes = 16 * 1024 * 1024;")
+            .And.Contain(
+                "if (/^[\\\\/]{2}/.test(bare.slice(start)))",
+                "a url starting with two slashes either way round names another host on the page's scheme, not a path"
+            )
+            .And.Contain(
+                "withRequestTimeout(options.requestTimeout ?? defaultRequestTimeout,",
+                "a host that never answers fails the request, as it does in the C# client"
+            )
+            .And.Contain(
+                "error.code !== 4401 && error.code !== 4403",
+                "a socket the host turned away is not opened again, as in the C# client"
+            )
             .And.NotContain("response.json()");
         Text(files, "index.g.ts")
             .Should()
             .Contain("httpTransport, requireSecureEndpoint, requireSecureSocket, ");
+    }
+
+    // A variable-less document's module writes Record<string, never> beside the types it imports: an enum named Record
+    // would hide the global one, and the module would not compile.
+    [TestCase("Record")]
+    [TestCase("Omit")]
+    [TestCase("Pick")]
+    public void A_type_named_as_a_global_generic_is_refused(string name)
+    {
+        var options = new OperationsGenerateOptions(
+            Schema.Replace("RunState", name, StringComparison.Ordinal),
+            [
+                new ClientDocumentFile(
+                    "src/graphql/Run.graphql",
+                    "query Run { operations { run(id: 1) { state } } }"
+                ),
+            ]
+        );
+
+        var render = () => ClientGenerator.Render(options);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage($"*'{name}'*reserves*");
     }
 
     [TestCase("requireSecureEndpoint")]
@@ -315,6 +357,10 @@ public class OperationsClientGeneratorTests
     [TestCase(
         "query Unused($id: Long!) { operations { run(id: 1) { id } } }",
         "'Unused' declares the variable '$id' and never uses it."
+    )]
+    [TestCase(
+        "query Twice($id: Long!, $id: Long!) { operations { run(id: $id) { id } } }",
+        "1:25: 'Twice' declares the variable '$id' more than once."
     )]
     public void A_document_a_host_would_not_register_is_refused_naming_its_file(
         string document,
@@ -1467,6 +1513,7 @@ public class OperationsClientGeneratorTests
     [TestCase(".A")]
     [TestCase("A.")]
     [TestCase("A.B-C")]
+    [TestCase("My.class")]
     public void A_namespace_that_is_not_one_is_refused(string @namespace)
     {
         var act = () =>

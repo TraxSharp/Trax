@@ -1,0 +1,6 @@
+{
+  "about": "An endpoint that names a host but no scheme is refused when the client is built: it would go over whatever scheme the page or base address has.",
+  "open": {"endpoint": "//example.com/graphql"},
+  "opened": {"opened": false, "code": "INSECURE_TRANSPORT"},
+  "steps": []
+}

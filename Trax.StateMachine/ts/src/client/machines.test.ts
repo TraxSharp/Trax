@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { checkout } from '../machines/checkout/checkout';
 import { createDraftSession, startDraft } from './draftSession';
@@ -74,10 +74,27 @@ describe('createMachineExecutor', () => {
       'http://127.8.9.10/graphql',
       'http://[::1]:5000/graphql',
       '/graphql',
-      '//api.example.com/graphql',
     ])
       expect(build(endpoint)).not.toThrow();
     expect(build('http://api.example.com/graphql', true)).not.toThrow();
+  });
+
+  it('refuses a scheme-relative endpoint, which names another host, unless the caller allowed it', () => {
+    const { fetch } = recording();
+    const build = (endpoint: string, allowInsecureTransport?: boolean) => () =>
+      createMachineExecutor(endpoint, { fetch, allowInsecureTransport, machines: [{ machine: checkout, documents }] });
+
+    for (const endpoint of [
+      '//api.example.com/graphql',
+      '\\\\api.example.com\\graphql',
+      '/\\api.example.com/graphql',
+      '\\/api.example.com/graphql',
+      ' //api.example.com/graphql',
+      '/\t/api.example.com/graphql',
+    ]) {
+      expect(build(endpoint)).toThrow(/another host/);
+      expect(build(endpoint, true)).not.toThrow();
+    }
   });
 
   it('refuses a machine with no documents, naming the manifest', () => {
@@ -162,6 +179,30 @@ describe('createMachineExecutor', () => {
     expect(sent[0]).toEqual({ id: documents[5].id, variables: { id: 'draft-1', requestId: 'req-3' } });
   });
 
+  it('refuses a trigger the machine does not declare as an event, and never sends it as another operation', async () => {
+    const { sent, fetch } = recording();
+    const client = createSnapshotClient(persisted(fetch));
+
+    for (const trigger of ['Start', 'Get', 'Discard', 'Changed', 'Nope'])
+      expect((await client.advance('checkout', 'draft-1', trigger)).problem?.code).toBe('NO_TRANSITION');
+    expect(sent).toEqual([]);
+  });
+
+  it('refuses an operation name as an event even without the machine definition, and an effect named like one', async () => {
+    const { sent, fetch } = recording();
+    const bare = createSnapshotClient(
+      createMachineExecutor('/graphql', {
+        fetch,
+        machines: [{ machine: { id: 'checkout', version: 1 }, documents, effectEvent: 'Discard' }],
+      }),
+    );
+
+    for (const trigger of ['Start', 'Get', 'Discard', 'Changed'])
+      expect((await bare.advance('checkout', 'draft-1', trigger)).problem?.code).toBe('NO_TRANSITION');
+    expect((await bare.send('checkout', 'draft-1')).problem?.code).toBe('NO_TRANSITION');
+    expect(sent).toEqual([]);
+  });
+
   it('throws on a GraphQL error, which a session reports as a transport error', async () => {
     const { fetch } = recording({ errors: [{ message: 'The current user is not authorized.' }] });
     const session = createDraftSession({ executor: persisted(fetch), machine: checkout, id: 'draft-1' });
@@ -176,7 +217,10 @@ describe('createMachineExecutor with persisted documents', () => {
       answer('start', { id: 'draft-1', revision: 1, state: 'Cart', context: { items: [] }, problem: null }),
       answer('addItem', { id: 'draft-1', revision: 2, state: 'Cart', context: { items: ['book'] }, problem: null }),
     );
-    const client = createSnapshotClient(persisted(fetch));
+    // A machine given by its id alone, whose events the executor takes from the documents.
+    const client = createSnapshotClient(
+      createMachineExecutor('/graphql', { fetch, machines: [{ machine: { id: 'checkout', version: 1 }, documents }] }),
+    );
 
     await client.start('checkout', 'req-1');
     await client.advance('checkout', 'draft-1', 'AddItem', {
@@ -243,5 +287,48 @@ describe('createMachineExecutor with persisted documents', () => {
     const { fetch } = recording();
     expect(() => persisted(fetch, [{ ...documents[0], machine: 'other' }])).toThrow(/machine 'other'/);
     expect(() => persisted(fetch, [document('start', 'x', 'f'.repeat(64))])).toThrow(/another version/);
+  });
+});
+
+describe('createMachineExecutor and a host that does not answer', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const load = (fetch: typeof globalThis.fetch, requestTimeout?: number) =>
+    createDraftSession({
+      executor: createMachineExecutor('/graphql', { fetch, requestTimeout, machines: [{ machine: checkout, documents }] }),
+      machine: checkout,
+      id: 'draft-1',
+    }).load();
+
+  it('fails a request whose answer never comes after 30 seconds, and aborts it', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const fetch = ((_url: string, init: RequestInit) => {
+      signal = init.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    }) as unknown as typeof globalThis.fetch;
+
+    const loaded = load(fetch);
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(await loaded).toMatchObject({ ok: false, code: 'TRANSPORT_ERROR' });
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('fails a request whose body never ends within the timeout given', async () => {
+    vi.useFakeTimers();
+    const fetch = (async () =>
+      new Response(new ReadableStream<Uint8Array>({ pull: () => new Promise(() => {}) }), {
+        status: 200,
+      })) as unknown as typeof globalThis.fetch;
+
+    const loaded = load(fetch, 1000);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(await loaded).toMatchObject({ ok: false, code: 'TRANSPORT_ERROR' });
   });
 });

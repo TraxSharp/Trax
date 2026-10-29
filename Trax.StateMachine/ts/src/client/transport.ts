@@ -54,7 +54,8 @@ export type SnapshotOperation =
 /**
  * Runs one of the six generic mutations and returns its `output`. This is the seam between the engine and the
  * host's GraphQL stack: an app with generated typed documents (Apollo, urql, …) maps the operation name
- * onto its own document, and an app with none can use {@link createHttpExecutor}.
+ * onto its own document, and an app with none can use `createMachineExecutor`, which sends the typed `machines`
+ * root's persisted documents.
  *
  * It may throw — the transport is allowed to fail. Callers above ({@link SnapshotClient}) turn a throw
  * into a typed problem so no caller has to write a try/catch of its own.
@@ -171,10 +172,40 @@ export interface HttpExecutorOptions {
    * which the session reports as a transport error, and is not read past the limit.
    */
   maxResponseSize?: number;
+  /**
+   * How long one request may take, in milliseconds, from sending it to the last byte of its answer; 30 seconds by
+   * default. A request past it is aborted and fails as a transport error, which `retry` resends under the same request
+   * id. `Infinity` waits for as long as the host takes.
+   */
+  requestTimeout?: number;
 }
 
 /** The response body limit when none is set: 16 MiB. */
 export const DEFAULT_MAX_RESPONSE_SIZE = 16 * 1024 * 1024;
+
+/** The request timeout when none is set: 30 seconds. */
+export const DEFAULT_REQUEST_TIMEOUT = 30_000;
+
+/**
+ * Runs one request under `timeout` milliseconds: past it, the signal `run` was given is aborted and the promise rejects,
+ * whether or not the `fetch` heeds the signal.
+ */
+export async function withRequestTimeout<T>(timeout: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  if (!Number.isFinite(timeout)) return run(controller.signal);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`The server did not answer within ${timeout} ms.`));
+    }, Math.max(0, timeout));
+  });
+  try {
+    return await Promise.race([run(controller.signal), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * Throws unless `response` is the endpoint's own answer: a redirect is never followed (the request is sent with
@@ -188,32 +219,51 @@ export function requireNoRedirect(response: Response): void {
 
 /**
  * The response body as text, read no further than `max` bytes. Throws once it passes the limit, whether or not the
- * host said its length up front, and stops reading the body.
+ * host said its length up front, and stops reading the body. A response with no body stream to read (an XHR polyfill,
+ * React Native) is read whole only when it says a length within the limit, and refused otherwise; a Node stream is
+ * read by async iteration.
  */
 export async function readBounded(response: Response, max: number): Promise<string> {
   const tooLarge = () => new Error(`The server answered with a body larger than ${max} bytes.`);
-  const declared = Number(response.headers?.get('content-length') ?? NaN);
+  const header = response.headers?.get('content-length');
+  const declared = header == null || header.trim() === '' ? NaN : Number(header);
   if (Number.isFinite(declared) && declared > max) {
-    await response.body?.cancel().catch(() => undefined);
+    await cancel(response.body);
     throw tooLarge();
   }
-  if (!response.body) {
+  const body = response.body as unknown;
+  if (!body) {
+    if (!Number.isFinite(declared) || declared < 0)
+      throw new Error('The server answered without a length, and the response has no body stream to read it bounded.');
     const text = await response.text();
     if (new TextEncoder().encode(text).length > max) throw tooLarge();
     return text;
   }
-  const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  const take = (value: Uint8Array): boolean => {
     total += value.byteLength;
-    if (total > max) {
-      await reader.cancel().catch(() => undefined);
-      throw tooLarge();
-    }
+    if (total > max) return false;
     chunks.push(value);
+    return true;
+  };
+  if (typeof (body as ReadableStream<Uint8Array>).getReader === 'function') {
+    const reader = (body as ReadableStream<Uint8Array>).getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!take(value)) {
+        await reader.cancel().catch(() => undefined);
+        throw tooLarge();
+      }
+    }
+  } else if (typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === 'function') {
+    // Leaving the loop early returns the iterator, which destroys a Node stream.
+    for await (const value of body as AsyncIterable<Uint8Array | string>) {
+      if (!take(typeof value === 'string' ? new TextEncoder().encode(value) : value)) throw tooLarge();
+    }
+  } else {
+    throw new Error('The response body is not a stream this client can read.');
   }
   const bytes = new Uint8Array(total);
   let offset = 0;
@@ -224,10 +274,22 @@ export async function readBounded(response: Response, max: number): Promise<stri
   return new TextDecoder().decode(bytes);
 }
 
+const cancel = async (body: unknown): Promise<void> => {
+  const stream = body as { cancel?: () => Promise<void>; destroy?: () => void } | null;
+  try {
+    if (typeof stream?.cancel === 'function') await stream.cancel();
+    else stream?.destroy?.();
+  } catch {
+    // The body is abandoned either way.
+  }
+};
+
 /**
  * Throws unless `endpoint` may carry credentials: an absolute one must be https unless its host is this machine
  * (localhost, 127.0.0.0/8, ::1) or `allowInsecure` is set. A relative one goes to the page's own origin, whatever its
- * scheme. Every machine executor and server runs it; the generated client runs it before each train request too.
+ * scheme, except a scheme-relative one (`//host/...`, or `\\host\...`, which a browser reads the same way), which goes
+ * to the host it names and is refused unless `allowInsecure` is set. Every machine executor and server runs it; the
+ * generated client runs it before each train request too.
  */
 export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean | undefined): void {
   if (allowInsecure) return;
@@ -235,6 +297,10 @@ export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean |
   try {
     url = new URL(endpoint);
   } catch {
+    if (isSchemeRelative(endpoint))
+      throw new Error(
+        'The endpoint is scheme-relative, so it goes to another host than the page\'s own. Give an absolute https:// endpoint, a path on this origin, or set allowInsecureTransport when the network is trusted.',
+      );
     return;
   }
   if (url.protocol === 'https:' || isLoopback(url.hostname)) return;
@@ -242,6 +308,12 @@ export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean |
     `The endpoint ${url.protocol}//${url.host} is not over TLS, so whatever authenticates the client would travel in cleartext. Use https://, a loopback host, or set allowInsecureTransport when the network is trusted.`,
   );
 }
+
+// Whether a relative URL names a host of its own. A URL parser drops every tab and newline and the spaces and control
+// characters around it, and reads a backslash as a slash in an http or https URL, so `/\t/host` and `\\host` are
+// `//host` too.
+const isSchemeRelative = (endpoint: string): boolean =>
+  /^[\\/]{2}/.test(endpoint.replace(/[\t\n\r]/g, '').replace(/^[\u0000-\u0020]+/, ''));
 
 const isLoopback = (hostname: string): boolean =>
   hostname === 'localhost' || hostname === '[::1]' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);

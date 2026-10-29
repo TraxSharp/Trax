@@ -1,0 +1,6 @@
+subscription Changes($domain: Domain) {
+  onDataChanged(domain: $domain) {
+    domain
+    id
+  }
+}

@@ -9,7 +9,7 @@ import type {
   RuleSource,
   ValueSchema,
 } from "../rules/interpreter";
-import type { IrDocument } from "../rules/irMachine";
+import { checkIr, type IrDocument } from "../rules/irMachine";
 
 /** A value's type, as far as the IR describes it. */
 export type TypeRef =
@@ -180,6 +180,18 @@ function baseType(type: JsonFieldType): TypeRef {
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
+// The characters that reorder how a line of source reads (the bidirectional embeddings, overrides, isolates and
+// marks). The IR's strings are written into generated code, where one of these would show a reviewer something other
+// than what the compiler reads.
+const BIDI = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+
+/**
+ * `text` with every bidirectional control written as a `\uXXXX` escape. Only for generated text whose IR strings sit
+ * in string literals that read the escape as the character, which both TypeScript's and C#'s regular literals do.
+ */
+export const escapeBidi = (text: string): string =>
+  text.replace(BIDI, (c) => `\\u${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}`);
+
 // The names every object has (`__proto__`, `constructor`, `toString`): a state or trigger named so is found on every
 // map a lookup reads it from, and a `"__proto__"` key in the twin's IR literal sets its prototype instead.
 const PROTOTYPE_MEMBERS = new Set(Object.getOwnPropertyNames(Object.prototype));
@@ -187,6 +199,15 @@ const PROTOTYPE_MEMBERS = new Set(Object.getOwnPropertyNames(Object.prototype));
 /** The value `map` holds under `key` itself, never one it inherits. */
 export const own = <T>(map: Readonly<Record<string, T>> | undefined, key: string): T | undefined =>
   map !== undefined && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
+
+/**
+ * The names a machine's TypeScript twin module declares or imports beside the const named after the machine (its id
+ * in camelCase): a machine whose id is one of them would redeclare it. `sharedOutput<n>` is a schema several of its
+ * outcomes share. Trax.Cli's `trax client` refuses the same names for the modules it writes around the twin
+ * (`MachineModuleNames` in ClientGenerator.cs).
+ */
+export const TWIN_MODULE_NAMES: readonly string[] = ["ir", "irHash", "typedMachineFromIr"];
+const SHARED_OUTPUT = /^sharedOutput\d+$/;
 
 /**
  * Refuses an IR whose names cannot be written as code: the id names files and every type, a state or trigger names a
@@ -198,6 +219,7 @@ export function checkNames(ir: IrDocument): void {
     throw new Error(
       `The machine id ${JSON.stringify(ir.id)} is not kebab-case (lowercase letters and digits in words joined by '-'), so it cannot name generated code.`,
     );
+
   const names: [string, unknown[]][] = [
     ["state", ir.states],
     ["trigger", ir.triggers],
@@ -215,12 +237,22 @@ export function checkNames(ir: IrDocument): void {
           `The machine '${ir.id}' has the ${what} ${JSON.stringify(name)}, a name every JavaScript object has.`,
         );
   }
+  // Each outcome names its output's type (`Fetching.done` -> `FetchingDoneOutput`), with the first letter of each half
+  // raised: two outcomes that differ only there would declare one type twice.
+  const outputTypes = new Map<string, string>();
   for (const outcome of Object.keys(ir.outcomes ?? {})) {
     const parts = outcome.split(".");
     if (parts.length !== 2 || !parts.every((p) => IDENTIFIER.test(p)))
       throw new Error(
         `The machine '${ir.id}' has the outcome ${JSON.stringify(outcome)}, which is not <State>.<kind>.`,
       );
+    const type = outcomeSuffix(outcome);
+    const other = outputTypes.get(type);
+    if (other !== undefined)
+      throw new Error(
+        `The machine '${ir.id}' has the outcomes ${JSON.stringify(other)} and ${JSON.stringify(outcome)}, which would both name the type ${type}. Rename one of them.`,
+      );
+    outputTypes.set(type, outcome);
   }
   // A state's context and invariant, and a trigger's input, are looked up by name: a key that is none of them is not
   // the host's.
@@ -240,6 +272,19 @@ export function checkNames(ir: IrDocument): void {
   if (hasProtoKey(ir))
     throw new Error(
       `The machine '${ir.id}' has a key "__proto__", which the twin's object literal would read as its prototype.`,
+    );
+  // What no engine reads is refused as the engine refuses it: a field `constructor` would write a view that throws
+  // when it is loaded.
+  checkIr(ir);
+}
+
+/** Refuses a machine whose id the TypeScript twin cannot name its const after: {@link checkNames}, then this. */
+export function checkTwinNames(ir: IrDocument): void {
+  checkNames(ir);
+  const name = camel(ir.id);
+  if (TWIN_MODULE_NAMES.includes(name) || SHARED_OUTPUT.test(name))
+    throw new Error(
+      `The machine id '${ir.id}' is written as '${name}', a name its twin module already declares. Rename the machine.`,
     );
 }
 

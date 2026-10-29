@@ -1,0 +1,12 @@
+{
+  "about": "A request the host never answers fails as a transport failure once the client's timeout passes, and the next request goes out as usual.",
+  "open": {"requestTimeout": 200},
+  "steps": [
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "hung"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "hang": true},
+    {"await": "hung", "expect": {"outcome": "failed", "code": "TRANSPORT_ERROR"}},
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "next"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "data": {"operations": {"runs": [{"id": "1", "state": "FAILED", "name": "nightly"}, {"id": "2", "state": "FAILED", "name": null}]}}},
+    {"await": "next", "expect": {"outcome": "data", "data": {"operations": {"runs": [{"id": "1", "state": "FAILED", "name": "nightly"}, {"id": "2", "state": "FAILED", "name": null}]}}}}
+  ]
+}

@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Trax.Client;
 
 // What the client checks of an endpoint before it sends anything to it: a token in a header or in connection_init
@@ -5,6 +7,8 @@ namespace Trax.Client;
 // so.
 internal static class TransportSecurity
 {
+    // The endpoint is the one requests go to, resolved against the client's base address when it has one. One that is
+    // still relative has nowhere to go, whether or not cleartext is allowed.
     public static void RequireSecure(
         Uri endpoint,
         bool allowInsecure,
@@ -12,6 +16,11 @@ internal static class TransportSecurity
         string paramName
     )
     {
+        if (!endpoint.IsAbsoluteUri)
+            throw new ArgumentException(
+                $"The endpoint '{endpoint}' is relative, and there is no base address to resolve it against.",
+                paramName
+            );
         if (allowInsecure || IsSecure(endpoint, secureScheme))
             return;
         throw new ArgumentException(
@@ -29,4 +38,43 @@ internal static class TransportSecurity
             string.Equals(endpoint.Scheme, secureScheme, StringComparison.OrdinalIgnoreCase)
             || endpoint.IsLoopback
         );
+
+    public static void RequireNoRedirects(HttpClient? http, string paramName)
+    {
+        if (http is null || !FollowsRedirects(http))
+            return;
+        throw new ArgumentException(
+            "The HttpClient follows redirects, so a redirect would carry the request, its body and every default "
+                + "header but Authorization, to whatever host it names. Build it on a handler with automatic "
+                + "redirects off: new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }).",
+            paramName
+        );
+    }
+
+    // Whether the client's handler follows redirects. A redirect is followed inside the handler, before any answer
+    // comes back to be checked, so it has to be known before the first request. The handler is not public; it is read
+    // through an accessor, and a handler of a kind this does not know (a platform's own, a test's) is taken to follow
+    // none: the transport still fails an answer from another host.
+    internal static bool FollowsRedirects(HttpClient http)
+    {
+        HttpMessageHandler? handler;
+        try
+        {
+            handler = HandlerOf(http);
+        }
+        catch (MissingFieldException)
+        {
+            return false;
+        }
+        while (handler is DelegatingHandler delegating)
+            handler = delegating.InnerHandler;
+        if (handler is HttpClientHandler client)
+            return client.AllowAutoRedirect;
+        if (!OperatingSystem.IsBrowser() && handler is SocketsHttpHandler sockets)
+            return sockets.AllowAutoRedirect;
+        return false;
+    }
+
+    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_handler")]
+    private static extern ref HttpMessageHandler HandlerOf(HttpMessageInvoker invoker);
 }

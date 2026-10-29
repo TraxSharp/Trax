@@ -1,0 +1,11 @@
+{
+  "about": "A status that is not 2xx with no GraphQL error is a transport failure carrying the status, with no body or with data in it.",
+  "steps": [
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "empty"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "status": 503},
+    {"await": "empty", "expect": {"outcome": "failed", "code": "TRANSPORT_ERROR", "status": 503}},
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "data"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "status": 502, "body": {"data": {"operations": {"runs": [{"id": "1", "state": "FAILED", "name": "nightly"}, {"id": "2", "state": "FAILED", "name": null}]}}}},
+    {"await": "data", "expect": {"outcome": "failed", "code": "TRANSPORT_ERROR", "status": 502}}
+  ]
+}

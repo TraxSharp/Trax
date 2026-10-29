@@ -38,6 +38,8 @@ export {
 // SnapshotMachine. Illegal (state, context) pairs are rejected rather than represented.
 
 export { SnapshotMachine } from './machine';
+// The planner: the events that bring a snapshot to a target state with a page's fields applied.
+export type { PlannedEvent, PlanRequest, PlanResult } from './plan';
 
 // ── 3. The typed view ─────────────────────────────────────────────────────────────────────────────
 // The same engine with one machine's alphabet as types: `context` is discriminated by `state`, and a
@@ -74,7 +76,7 @@ export { createDevLogger, type DevLoggerOptions } from './devtools';
 // A FormView derives the whole bridge — step↔state both ways, snapshot building, advance/can/serialize,
 // resume — from a step map and one projection.
 export { createFormView } from './formView';
-export type { FormView, FormViewOptions, ResumedStep, StepAdvance } from './formView';
+export type { FormSyncTarget, FormView, FormViewOptions, ResumedStep, StepAdvance } from './formView';
 
 // ── 5. Building a machine from its IR ─────────────────────────────────────────────────────────────
 // `machineFromIr` runs the IR's declarative guards/reducers through the rule interpreter — no

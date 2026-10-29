@@ -284,7 +284,7 @@ const PROTOTYPE_NAMES = new Set(["__proto__", "constructor", "prototype"]);
 // know, as the C# IrMachine and the Rust engine do when they read it. Interpreting it instead would run a guard that
 // never holds or a reduction that does nothing, and answer differently from the server without saying so. A field
 // named `__proto__`, `constructor` or `prototype`, in any segment of its path, is refused too.
-function checkIr(ir: IrDocument): void {
+export function checkIr(ir: IrDocument): void {
   const fail = (message: string): never => {
     throw new Error(`This state-machine IR cannot be read: ${message}`);
   };

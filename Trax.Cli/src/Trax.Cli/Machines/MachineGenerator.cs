@@ -274,8 +274,9 @@ internal sealed partial class MachineGenerator
                 args.AddRange(["--lang", "csharp"]);
                 if (o.Namespace is not null)
                     args.AddRange(["--namespace", o.Namespace]);
-                RunNode(twinScript, args, "the C# view");
                 var file = $"{MachineScaffolder.Pascal(id)}.g.cs";
+                RefuseAnotherMachinesView(o.TwinOut, file, id);
+                RunNode(twinScript, args, "the C# view");
                 twin = [new("view", Path.Combine(twinStage, file), Path.Combine(o.TwinOut, file))];
             }
             else
@@ -392,6 +393,11 @@ internal sealed partial class MachineGenerator
             throw new InvalidOperationException(
                 "--namespace names the C# view's namespace and needs --lang csharp."
             );
+        if (o.Namespace is not null && !Clients.ClientGenerator.IsNamespace(o.Namespace))
+            throw new InvalidOperationException(
+                $"--namespace '{o.Namespace}' is not a C# namespace (dotted identifiers, none of them a keyword, "
+                    + "such as My.App.Machines)."
+            );
         if (o.ImportStyle is not null and not "relative" and not "specifier")
             throw new InvalidOperationException(
                 $"--import-style must be 'relative' or 'specifier', got '{o.ImportStyle}'."
@@ -491,8 +497,49 @@ internal sealed partial class MachineGenerator
     [System.Text.RegularExpressions.GeneratedRegex(@"^[a-z][a-z0-9]*(-[a-z0-9]+)*\z")]
     private static partial System.Text.RegularExpressions.Regex MachineId();
 
+    // Line endings aside: a checkout with core.autocrlf holds the committed artifacts with CRLF, and the generators
+    // write LF. The client check compares the same way.
     private static bool FilesEqual(string a, string b) =>
-        File.ReadAllBytes(a).AsSpan().SequenceEqual(File.ReadAllBytes(b));
+        File.ReadAllText(a).Replace("\r\n", "\n", StringComparison.Ordinal)
+        == File.ReadAllText(b).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Refuses to write <paramref name="file"/> into <paramref name="twinOut"/> when a file there has the same name
+    /// ignoring case and is the view of another machine (<c>topic-map</c> writes <c>TopicMap.g.cs</c> and
+    /// <c>topicmap</c> <c>Topicmap.g.cs</c>, which a disk that ignores case holds as one file), or is a file the
+    /// generator did not write under a name that differs only in case.
+    /// </summary>
+    private static void RefuseAnotherMachinesView(string twinOut, string file, string id)
+    {
+        if (!Directory.Exists(twinOut))
+            return;
+        foreach (var path in Directory.EnumerateFiles(twinOut))
+        {
+            var name = Path.GetFileName(path);
+            if (!name.Equals(file, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var head = string.Join('\n', File.ReadLines(path).Take(3));
+            var other = ViewHeader().Match(head).Groups[1];
+            if (other.Success ? other.Value == id : name == file)
+                continue;
+            throw new InvalidOperationException(
+                $"{name} in {twinOut} is "
+                    + (
+                        other.Success
+                            ? $"the view of the machine '{other.Value}'"
+                            : "not a view this generator wrote"
+                    )
+                    + $", and the machine '{id}' would write {file}, the same file on a disk that ignores case. "
+                    + "Rename one of the machines, or give each view its own --twin-out."
+            );
+        }
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"^// AUTO-GENERATED from (.+)\.ir\.json by generateCSharpView\.",
+        System.Text.RegularExpressions.RegexOptions.Multiline
+    )]
+    private static partial System.Text.RegularExpressions.Regex ViewHeader();
 
     private static string CreateStagingDir()
     {

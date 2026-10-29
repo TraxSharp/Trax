@@ -11,20 +11,22 @@
 //! languages, without locks.
 
 use std::collections::hash_map::RandomState;
-use std::collections::HashSet;
+use std::future::Future;
 use std::hash::{BuildHasher, Hasher};
+use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures_util::FutureExt;
+use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot, watch};
-use trax_state_machine::{canonical_wire, IrError, Machine, Map, Snapshot, Value};
+use trax_state_machine::{canonical_wire, IrError, Machine, Map, PlanAnswer, PlanEvent, PlanInvalid, Snapshot, Value};
 
 use crate::server::{
     DueAt, EventRequest, MachineServer, ServerAnswer, ServerProblem, ServerSnapshot, StreamMessage, Subscription,
     TransportError,
 };
-use crate::unhandled::unpredictable_edges;
 
 /// The codes the client reports of its own, beside the server's refusal codes.
 pub mod codes {
@@ -36,35 +38,48 @@ pub mod codes {
     pub const NOTHING_TO_RETRY: &str = "NOTHING_TO_RETRY";
     /// The controller was disposed before the server answered.
     pub const DISPOSED: &str = "DISPOSED";
+    /// There is no instance to send to: the start was refused or failed, or the first read gave up.
+    pub const NOT_READY: &str = "NOT_READY";
     pub(crate) const CLIENT_OUTDATED: &str = "CLIENT_OUTDATED";
     pub(crate) const SERVER_OUTDATED: &str = "SERVER_OUTDATED";
     pub(crate) const CLIENT_DIVERGENCE: &str = "CLIENT_DIVERGENCE";
     pub(crate) const NOT_FOUND: &str = "NOT_FOUND";
     pub(crate) const UNAUTHENTICATED: &str = "UNAUTHENTICATED";
     pub(crate) const FORBIDDEN: &str = "FORBIDDEN";
+    pub(crate) const INVALID_INPUT: &str = "INVALID_INPUT";
+    pub(crate) const GUARD_FAILED: &str = "GUARD_FAILED";
+    pub(crate) const NO_TRANSITION: &str = "NO_TRANSITION";
+    pub(crate) const CONFLICT: &str = "CONFLICT";
 }
 
 /// Whether a problem is the server's refusal or a request that did not get through.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProblemKind {
+    /// The server, or the client's own engine, refused it.
     Rejected,
+    /// The request did not get through, or its answer did not come back.
     Transport,
 }
 
 /// The last refusal or transport failure, shown until the next event the server confirms.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MachineProblem {
+    /// A refusal or a transport failure.
     pub kind: ProblemKind,
+    /// The code, which is contract: `GUARD_FAILED`, `TRANSPORT_ERROR`.
     pub code: String,
+    /// What went wrong, for people.
     pub message: String,
 }
 
 /// Why a controller stopped for good: the instance is gone, this client is out of date and must reload, or the host
-/// refused the socket.
+/// refused the socket or the stream.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MachineError {
-    /// `GONE`, `CLIENT_OUTDATED`, or `UNAUTHENTICATED` or `FORBIDDEN` for a socket the host refused.
+    /// `GONE`, `CLIENT_OUTDATED`, `UNAUTHENTICATED` or `FORBIDDEN` for a socket or a stream the host refused, or a
+    /// stream error's code the server was told is terminal.
     pub code: String,
+    /// What stopped it, for people.
     pub message: String,
     /// With `GONE`: true when the instance was deleted, false when the server answered `NOT_FOUND`.
     pub deleted: Option<bool>,
@@ -73,14 +88,18 @@ pub struct MachineError {
 /// Where a controller is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MachineStatus {
+    /// Before the first snapshot the server confirmed.
     Loading,
+    /// Holding a snapshot, and taking events.
     Ready,
+    /// Stopped for good: `error` says why.
     Stopped,
 }
 
 /// What a controller holds, as one immutable value: a new one on every change.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MachineView {
+    /// Where the controller is.
     pub status: MachineStatus,
     /// The instance's id, once started or given.
     pub id: Option<String>,
@@ -88,14 +107,20 @@ pub struct MachineView {
     pub snapshot: Option<Snapshot>,
     /// The last snapshot the server confirmed.
     pub confirmed: Option<Snapshot>,
+    /// The row's incarnation: a delete and re-create gives a new one, which restarts `revision`.
     pub row_id: Option<String>,
+    /// The revision of the last snapshot the server confirmed.
     pub revision: Option<i64>,
     /// When the state's timer is due, as the server says; `None` when it has none. The client never fires it.
     pub due_at: Option<String>,
     /// Whether an event is in flight or queued.
     pub pending: bool,
+    /// The last refusal or transport failure, shown until the next event the server confirms.
     pub problem: Option<MachineProblem>,
+    /// Why the controller stopped, once it has.
     pub error: Option<MachineError>,
+    /// Whether a sync is running, or the last one did not settle synced: what a page holds a leave guard on.
+    pub unsaved: bool,
 }
 
 /// What one send came to. Never a panic.
@@ -108,6 +133,32 @@ pub enum SendOutcome {
     /// It did not get through, or the server could not take it yet; `retry` resends it.
     Failed(MachineProblem),
     /// The controller stopped for good before or while it was sent.
+    Stopped(MachineError),
+}
+
+/// What one [`ServerMachineController::sync_to`] came to. Never a panic.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SyncOutcome {
+    /// The server holds the target state with the fields applied: this snapshot, at this revision.
+    Synced {
+        /// What the server holds.
+        snapshot: Snapshot,
+        /// Its revision.
+        revision: Option<i64>,
+    },
+    /// A later sync took over; this one sent nothing after the event it had in flight.
+    Superseded,
+    /// No event the planner may send reaches the target from what the server holds.
+    Unreachable,
+    /// The planner gave up, or the sync sent twice the machine's states in events without getting there.
+    Exceeded,
+    /// The target or a trigger is not one a sync may use.
+    Invalid(PlanInvalid),
+    /// The server refused an event, again after one re-read, or with a code a re-read cannot change.
+    Refused(MachineProblem),
+    /// An event or the re-read did not get through.
+    Failed(MachineProblem),
+    /// The controller stopped for good.
     Stopped(MachineError),
 }
 
@@ -131,6 +182,9 @@ pub struct ServerMachineOptions<S> {
     pub new_request_id: Option<Box<dyn FnMut() -> String + Send>>,
     /// Delays between retries of `SERVER_OUTDATED` and of a read the transport failed. `None` for the default.
     pub retry_delays: Option<Vec<Duration>>,
+    /// The tokio runtime the controller's task and its requests run on. `None` takes the runtime `new` is called
+    /// from; a binding that builds the controller on a thread of its host's passes one it owns.
+    pub runtime: Option<tokio::runtime::Handle>,
 }
 
 impl<S> ServerMachineOptions<S> {
@@ -146,6 +200,7 @@ impl<S> ServerMachineOptions<S> {
             start_request_id: None,
             new_request_id: None,
             retry_delays: None,
+            runtime: None,
         }
     }
 }
@@ -162,19 +217,35 @@ pub const DEFAULT_RETRY_DELAYS: [Duration; 5] = [
 /// Drives one instance of a machine a server owns. The server applies every transition; the client only predicts,
 /// with the machine built from the IR.
 ///
-/// Every operation is total: a refusal or a request that did not get through is a [`SendOutcome`]. It must be built
-/// inside a tokio runtime, which runs its task. Dropping it disposes it.
+/// Every operation is total: a refusal or a request that did not get through is a [`SendOutcome`]. Its task runs on
+/// the runtime [`ServerMachineOptions::runtime`] names, or the one it is built in; once built, it may be called from any
+/// thread. Dropping it disposes it.
 pub struct ServerMachineController {
     commands: mpsc::UnboundedSender<Msg>,
     view: watch::Receiver<Arc<MachineView>>,
     machine: Arc<Machine>,
-    unpredictable: Arc<HashSet<(String, String)>>,
 }
 
 impl ServerMachineController {
     /// Builds the controller and starts its task. It sends nothing until [`start`](Self::start). Refuses an IR the
-    /// machine cannot be built from, and one that does not hash to `ir_hash`.
+    /// machine cannot be built from, one that does not hash to `ir_hash`, a start input that nests deeper than
+    /// [`MAX_DEPTH`](trax_state_machine::MAX_DEPTH), and options with no runtime when it is not built inside one.
     pub fn new<S: MachineServer>(options: ServerMachineOptions<S>) -> Result<Self, IrError> {
+        let Some(runtime) = options.runtime.clone().or_else(|| Handle::try_current().ok()) else {
+            return Err(IrError {
+                message: "The controller was built outside a tokio runtime and its options name none. Build it inside \
+                          one, or pass the runtime's handle as ServerMachineOptions::runtime."
+                    .to_owned(),
+            });
+        };
+        if options.start_input.as_ref().is_some_and(Value::is_too_deep) {
+            return Err(IrError {
+                message: format!(
+                    "The start input nests deeper than {} arrays and objects.",
+                    trax_state_machine::MAX_DEPTH
+                ),
+            });
+        }
         let machine = Arc::new(Machine::from_ir(&options.ir)?);
         let hash = ir_hash(&options.ir);
         if !hash.eq_ignore_ascii_case(options.ir_hash.trim()) {
@@ -188,7 +259,6 @@ impl ServerMachineController {
                 ),
             });
         }
-        let unpredictable = Arc::new(unpredictable_edges(&options.ir));
         let (commands, inbox) = mpsc::unbounded_channel();
         let initial = Arc::new(MachineView {
             status: MachineStatus::Loading,
@@ -201,11 +271,12 @@ impl ServerMachineController {
             pending: false,
             problem: None,
             error: None,
+            unsaved: false,
         });
         let (publish, view) = watch::channel(initial);
         let actor = Actor {
             machine: machine.clone(),
-            unpredictable: unpredictable.clone(),
+            runtime: runtime.clone(),
             server: Arc::new(options.server),
             commands: commands.clone(),
             publish,
@@ -226,6 +297,7 @@ impl ServerMachineController {
             sending: false,
             last_failed: None,
             start_failed: false,
+            creating: false,
             start_waiters: Vec::new(),
             opened: false,
             open_waiters: Vec::new(),
@@ -237,19 +309,24 @@ impl ServerMachineController {
             reloading: false,
             reload_row_id: None,
             reload_again: false,
+            next_row_id: None,
             buffered: None,
+            sync: None,
+            syncs: 0,
+            superseded: Vec::new(),
+            unsaved: false,
         };
-        tokio::spawn(actor.run(inbox));
+        runtime.spawn(actor.run(inbox));
         Ok(ServerMachineController {
             commands,
             view,
             machine,
-            unpredictable,
         })
     }
 
     /// Opens the instance: subscribes first, then reads it, so no write falls between the two. Without an id it starts
-    /// one and subscribes to the id the server minted. Resolves once the start or the first read has been answered.
+    /// one and subscribes to the id the server minted. Resolves once the start or the first read has settled,
+    /// after any retry of `SERVER_OUTDATED` or of a failed read, or the controller has stopped.
     pub fn start(&self) -> impl std::future::Future<Output = ()> + Send + 'static {
         let (reply, answer) = oneshot::channel();
         let _ = self.commands.send(Msg::Start(reply));
@@ -259,23 +336,70 @@ impl ServerMachineController {
     }
 
     /// Sends one event under a fresh request id, after every earlier event of this instance has settled. The event is
-    /// queued when this is called, so two calls send in the order they were made.
+    /// queued when this is called, so two calls send in the order they were made. A trigger the machine does not declare
+    /// as an event is refused here, with the code [`Machine::advance`] gives it (`NO_TRANSITION`, `OUTCOME_BOUND` or
+    /// `TIMER_BOUND`), and sends nothing. Once `start` has settled with no instance to send to (the start was refused or
+    /// failed, or the first read gave up), an event settles failed as `NOT_READY`, and so does one that waited for it.
     pub fn send(
         &self,
         trigger: impl Into<String>,
         input: Option<Value>,
     ) -> impl std::future::Future<Output = SendOutcome> + Send + 'static {
         let (reply, answer) = oneshot::channel();
-        let _ = self.commands.send(Msg::Send {
-            trigger: trigger.into(),
-            input,
-            reply,
-        });
+        let trigger = trigger.into();
+        if input.as_ref().is_some_and(Value::is_too_deep) {
+            // Refused before the task copies or predicts it: both would recurse over it.
+            let _ = reply.send(SendOutcome::Refused(refusal(
+                codes::INVALID_INPUT,
+                "The input nests deeper than 512 arrays and objects.",
+            )));
+        } else if let Some(refused) = self.machine.event_refusal(&trigger) {
+            // A trigger the machine does not declare as an event never reaches the server: it has no document of its
+            // own, and its name may be an operation's.
+            let _ = reply.send(SendOutcome::Refused(refusal(refused.code.as_str(), &refused.detail)));
+        } else {
+            let _ = self.commands.send(Msg::Send { trigger, input, reply });
+        }
         async move { answer.await.unwrap_or_else(|_| disposed_outcome()) }
     }
 
+    /// Brings the server to where a page that ran ahead of it is: the state `target`, with the fields event `fields`
+    /// applied, moving through the triggers in `navigation`. Plans with the engine's planner ([`Machine::plan`]) from
+    /// the snapshot the server last confirmed, sends the first event as [`send`](Self::send) does, and plans again from
+    /// each answer until nothing is left to send. A refusal that a re-read can explain (`GUARD_FAILED`,
+    /// `NO_TRANSITION`, `CLIENT_DIVERGENCE`, `CONFLICT`) reads the instance once and plans again; a second settles the
+    /// sync refused. An undetermined plan sends its events, then its trigger unpredicted. A later sync supersedes this
+    /// one once the event it has in flight answers. No sync sends more than twice the machine's states in events.
+    pub fn sync_to(
+        &self,
+        target: impl Into<String>,
+        fields: Option<PlanEvent>,
+        navigation: Vec<String>,
+    ) -> impl std::future::Future<Output = SyncOutcome> + Send + 'static {
+        let (reply, answer) = oneshot::channel();
+        if fields
+            .as_ref()
+            .and_then(|f| f.input.as_ref())
+            .is_some_and(Value::is_too_deep)
+        {
+            let _ = reply.send(SyncOutcome::Refused(refusal(
+                codes::INVALID_INPUT,
+                "The input nests deeper than 512 arrays and objects.",
+            )));
+        } else {
+            let _ = self.commands.send(Msg::Sync {
+                target: target.into(),
+                fields,
+                navigation,
+                reply,
+            });
+        }
+        async move { answer.await.unwrap_or_else(|_| SyncOutcome::Failed(disposed_problem())) }
+    }
+
     /// Resends what last failed under the same request id: the start while there is no instance, else the last event
-    /// that failed, unless a later event has been confirmed since.
+    /// that failed, unless a later event has been confirmed since, or is queued or in flight now (resending it then would
+    /// apply it out of order, predicted from a state the server has moved past): either answers `NOTHING_TO_RETRY`.
     pub fn retry(&self) -> impl std::future::Future<Output = SendOutcome> + Send + 'static {
         let (reply, answer) = oneshot::channel();
         let _ = self.commands.send(Msg::Retry(reply));
@@ -300,7 +424,7 @@ impl ServerMachineController {
         match (&view.snapshot, view.status) {
             (Some(shown), status) if status != MachineStatus::Stopped => {
                 if self.machine.effect_triggers().iter().any(|t| t == trigger)
-                    || self.unpredictable.contains(&(shown.state.clone(), trigger.to_owned()))
+                    || self.machine.rests_on_unhandled_rule(&shown.state, trigger)
                 {
                     self.machine.available_triggers(shown).iter().any(|t| t == trigger)
                 } else {
@@ -332,11 +456,22 @@ impl Drop for ServerMachineController {
     }
 }
 
-fn disposed_outcome() -> SendOutcome {
-    SendOutcome::Failed(refusal(
+fn disposed_problem() -> MachineProblem {
+    refusal(
         codes::DISPOSED,
         "The controller was disposed before the server answered.",
-    ))
+    )
+}
+
+fn not_ready_problem() -> MachineProblem {
+    refusal(
+        codes::NOT_READY,
+        "There is no instance to send to: the start was refused or failed, or the first read gave up.",
+    )
+}
+
+fn disposed_outcome() -> SendOutcome {
+    SendOutcome::Failed(disposed_problem())
 }
 
 fn refusal(code: &str, message: &str) -> MachineProblem {
@@ -357,6 +492,18 @@ fn transport_failure(error: &TransportError) -> MachineProblem {
             error.0.clone()
         },
     }
+}
+
+// A server's request that panics (a custom server's bug, or a host callback a binding wraps) answers as one that did not
+// get through, so whatever waits on it settles rather than waiting for good. The call itself is made inside it.
+async fn guarded(
+    request: impl Future<Output = Result<ServerAnswer, TransportError>>,
+) -> Result<ServerAnswer, TransportError> {
+    AssertUnwindSafe(request).catch_unwind().await.unwrap_or_else(|_| {
+        Err(TransportError(
+            "The request panicked before it was answered.".to_owned(),
+        ))
+    })
 }
 
 /// The hash a host's manifest gives an IR: the lowercase hex SHA-256 of its canonical JSON.
@@ -392,6 +539,12 @@ enum Msg {
         reply: oneshot::Sender<SendOutcome>,
     },
     Retry(oneshot::Sender<SendOutcome>),
+    Sync {
+        target: String,
+        fields: Option<PlanEvent>,
+        navigation: Vec<String>,
+        reply: oneshot::Sender<SyncOutcome>,
+    },
     Dispose,
     Stream {
         generation: u64,
@@ -416,6 +569,11 @@ enum Msg {
         epoch: u64,
         action: Later,
     },
+    // A sync's plan, from the snapshot it was planned from; `None` when the search panicked.
+    Planned {
+        sync: u64,
+        planned: Option<(Snapshot, PlanAnswer)>,
+    },
 }
 
 enum Later {
@@ -433,6 +591,34 @@ struct Queued {
     reply: Option<oneshot::Sender<SendOutcome>>,
 }
 
+// The sync running: what it brings the server to, and where it is.
+struct SyncRun {
+    target: String,
+    fields: Option<PlanEvent>,
+    navigation: Vec<String>,
+    reply: oneshot::Sender<SyncOutcome>,
+    // The events it has sent, against its budget of twice the machine's states.
+    sent: usize,
+    // Whether it has been refused once, and re-read for it.
+    refused: bool,
+    // The queue entry of its event in flight.
+    in_flight: Option<u64>,
+    // Whether it waits for the read after a refusal.
+    awaiting_read: bool,
+    // Which sync it is, so a plan answered after a later one took over is dropped.
+    id: u64,
+    // Whether its plan is being searched, off the controller's task.
+    planning: bool,
+}
+
+// The refusals a re-read can explain: the server holds something other than the client planned from.
+const REPLANNED: [&str; 4] = [
+    codes::GUARD_FAILED,
+    codes::NO_TRANSITION,
+    codes::CLIENT_DIVERGENCE,
+    codes::CONFLICT,
+];
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Source {
     Push,
@@ -442,8 +628,7 @@ enum Source {
 
 struct Actor<S> {
     machine: Arc<Machine>,
-    // The (state, trigger) pairs whose edge rests on a custom rule the machine holds no handler for.
-    unpredictable: Arc<HashSet<(String, String)>>,
+    runtime: Handle,
     server: Arc<S>,
     commands: mpsc::UnboundedSender<Msg>,
     publish: watch::Sender<Arc<MachineView>>,
@@ -466,6 +651,8 @@ struct Actor<S> {
     sending: bool,
     last_failed: Option<EventRequest>,
     start_failed: bool,
+    // Whether a start is in flight, or waits to be tried again.
+    creating: bool,
     start_waiters: Vec<oneshot::Sender<SendOutcome>>,
     // Whether `start` was called, who waits for the opening to be answered, and whether it still is being answered.
     opened: bool,
@@ -481,7 +668,17 @@ struct Actor<S> {
     reloading: bool,
     reload_row_id: Option<String>,
     reload_again: bool,
+    // The row the read after the one out asks for: a push of another incarnation came while a read without a row id
+    // was out.
+    next_row_id: Option<String>,
     buffered: Option<ServerSnapshot>,
+
+    sync: Option<SyncRun>,
+    // How many syncs have begun: the id of the latest.
+    syncs: u64,
+    // Syncs a later one took over, by the queue entry of the event each still has in flight.
+    superseded: Vec<(u64, oneshot::Sender<SyncOutcome>)>,
+    unsaved: bool,
 }
 
 impl<S: MachineServer> Actor<S> {
@@ -517,11 +714,19 @@ impl<S: MachineServer> Actor<S> {
                     let _ = reply.send(SendOutcome::Stopped(error.clone()));
                 } else if self.disposed {
                     let _ = reply.send(disposed_outcome());
+                } else if self.not_ready() {
+                    let _ = reply.send(SendOutcome::Failed(not_ready_problem()));
                 } else {
-                    self.enqueue(trigger, input, None, reply);
+                    self.enqueue(trigger, input, None, Some(reply));
                 }
             }
             Msg::Retry(reply) => self.retry(reply),
+            Msg::Sync {
+                target,
+                fields,
+                navigation,
+                reply,
+            } => self.begin_sync(target, fields, navigation, reply),
             Msg::Dispose => self.dispose(),
             Msg::Stream { generation, message } => {
                 if generation == self.stream_generation
@@ -537,18 +742,39 @@ impl<S: MachineServer> Actor<S> {
                 attempt,
                 result,
             } => {
-                self.on_created(request_id, attempt, result);
-                self.settle_open();
+                // A start retried under its request id has not settled yet: `start` waits for the last attempt.
+                if self.on_created(request_id, attempt, result) {
+                    self.creating = false;
+                    self.settle_open();
+                    self.settle_not_ready();
+                }
             }
             Msg::Read {
                 row_id,
                 attempt,
                 result,
             } => {
-                self.on_read(row_id, attempt, result);
-                self.settle_open();
+                let failure = match &result {
+                    Err(error) => Some(SyncOutcome::Failed(transport_failure(error))),
+                    Ok(ServerAnswer::Refused(problem)) if problem.code == codes::SERVER_OUTDATED => {
+                        Some(SyncOutcome::Failed(refusal(&problem.code, &problem.message)))
+                    }
+                    Ok(ServerAnswer::Refused(problem)) => {
+                        Some(SyncOutcome::Refused(refusal(&problem.code, &problem.message)))
+                    }
+                    Ok(ServerAnswer::Stored { .. }) => None,
+                };
+                // So does a read retried after a transport failure or SERVER_OUTDATED.
+                if self.on_read(row_id, attempt, result) {
+                    self.settle_open();
+                }
+                if !self.reloading {
+                    self.read_settled(failure);
+                    self.settle_not_ready();
+                }
             }
             Msg::Delivered { entry, attempt, result } => self.on_delivered(entry, attempt, result),
+            Msg::Planned { sync, planned } => self.on_planned(sync, planned),
             Msg::Later { epoch, action } => {
                 if epoch != self.epoch || self.disposed || self.error.is_some() {
                     return;
@@ -569,6 +795,31 @@ impl<S: MachineServer> Actor<S> {
                 }
             }
         }
+    }
+
+    // Whether there is no instance to send to: `start` was called, and nothing is starting or reading one, but the
+    // client holds no snapshot (the start was refused or failed, or the first read gave up). Before `start` is called,
+    // an event waits for it.
+    fn not_ready(&self) -> bool {
+        self.confirmed.is_none() && self.opened && !self.opening && !self.creating && !self.reloading
+    }
+
+    // Settles every event waiting to be sent, and the sync, once there is no instance to send them to.
+    fn settle_not_ready(&mut self) {
+        if self.disposed || self.error.is_some() || !self.not_ready() {
+            return;
+        }
+        let stranded: Vec<Queued> = self.queue.drain(..).collect();
+        if !stranded.is_empty() {
+            self.emit();
+        }
+        for queued in stranded {
+            if let Some(reply) = queued.reply {
+                let _ = reply.send(SendOutcome::Failed(not_ready_problem()));
+            }
+        }
+        self.settle_sync(SyncOutcome::Failed(not_ready_problem()));
+        self.settle_superseded();
     }
 
     // The first answer of the opening (the start or the first read) settles whoever waits on `start`.
@@ -593,6 +844,8 @@ impl<S: MachineServer> Actor<S> {
         }
         self.settle_start(disposed_outcome());
         self.settle_open();
+        self.settle_sync(SyncOutcome::Failed(disposed_problem()));
+        self.settle_superseded();
     }
 
     // ── Opening ─────────────────────────────────────────────────────────────────────────────────
@@ -620,11 +873,12 @@ impl<S: MachineServer> Actor<S> {
         if self.disposed || self.error.is_some() {
             return;
         }
+        self.creating = true;
         let server = self.server.clone();
         let commands = self.commands.clone();
         let input = self.start_input.clone();
-        tokio::spawn(async move {
-            let result = server.start(input, request_id.clone()).await;
+        self.runtime.spawn(async move {
+            let result = guarded(async { server.start(input, request_id.clone()).await }).await;
             let _ = commands.send(Msg::Created {
                 request_id,
                 attempt,
@@ -633,9 +887,10 @@ impl<S: MachineServer> Actor<S> {
         });
     }
 
-    fn on_created(&mut self, request_id: String, attempt: usize, result: Result<ServerAnswer, TransportError>) {
+    // Returns false when the start is tried again, true when it has settled.
+    fn on_created(&mut self, request_id: String, attempt: usize, result: Result<ServerAnswer, TransportError>) -> bool {
         if self.disposed || self.error.is_some() {
-            return;
+            return true;
         }
         match result {
             Err(error) => {
@@ -655,7 +910,7 @@ impl<S: MachineServer> Actor<S> {
                             attempt: attempt + 1,
                         },
                     );
-                    return;
+                    return false;
                 }
                 if problem.code == codes::CLIENT_OUTDATED {
                     self.stop(MachineError {
@@ -665,7 +920,7 @@ impl<S: MachineServer> Actor<S> {
                     });
                     let error = self.error.clone().unwrap();
                     self.settle_start(SendOutcome::Stopped(error));
-                    return;
+                    return true;
                 }
                 let retryable = problem.code == codes::SERVER_OUTDATED;
                 let p = refusal(&problem.code, &problem.message);
@@ -687,7 +942,7 @@ impl<S: MachineServer> Actor<S> {
                     self.start_failed = true;
                     self.emit();
                     self.settle_start(SendOutcome::Failed(problem));
-                    return;
+                    return true;
                 };
                 self.id = Some(id.clone());
                 self.problem = None;
@@ -700,6 +955,7 @@ impl<S: MachineServer> Actor<S> {
                 self.pump();
             }
         }
+        true
     }
 
     fn settle_start(&mut self, outcome: SendOutcome) {
@@ -778,8 +1034,8 @@ impl<S: MachineServer> Actor<S> {
         self.reload_row_id = row_id.clone();
         let server = self.server.clone();
         let commands = self.commands.clone();
-        tokio::spawn(async move {
-            let result = server.get(id).await;
+        self.runtime.spawn(async move {
+            let result = guarded(async { server.get(id).await }).await;
             let _ = commands.send(Msg::Read {
                 row_id,
                 attempt,
@@ -788,9 +1044,15 @@ impl<S: MachineServer> Actor<S> {
         });
     }
 
-    fn on_read(&mut self, row_id: Option<String>, attempt: usize, result: Result<ServerAnswer, TransportError>) {
+    // Returns false when the read is tried again, true when it has settled.
+    fn on_read(
+        &mut self,
+        row_id: Option<String>,
+        attempt: usize,
+        result: Result<ServerAnswer, TransportError>,
+    ) -> bool {
         if self.disposed || self.error.is_some() {
-            return;
+            return true;
         }
         match result {
             Err(error) => {
@@ -804,9 +1066,9 @@ impl<S: MachineServer> Actor<S> {
                             attempt: attempt + 1,
                         },
                     );
-                } else {
-                    self.end_read();
+                    return false;
                 }
+                self.end_read();
             }
             Ok(ServerAnswer::Refused(problem)) => {
                 if problem.code == codes::SERVER_OUTDATED && attempt < self.retry_delays.len() {
@@ -817,7 +1079,7 @@ impl<S: MachineServer> Actor<S> {
                             attempt: attempt + 1,
                         },
                     );
-                    return;
+                    return false;
                 }
                 self.end_read();
                 if problem.code == codes::CLIENT_OUTDATED {
@@ -838,7 +1100,11 @@ impl<S: MachineServer> Actor<S> {
                 }
             }
             Ok(ServerAnswer::Stored { snapshot, .. }) => {
-                let row = snapshot.row_id.clone().or(row_id).or_else(|| self.row_id.clone());
+                let row = snapshot
+                    .row_id
+                    .clone()
+                    .or(row_id.clone())
+                    .or_else(|| self.row_id.clone());
                 let mut changed = self.accept(
                     ServerSnapshot {
                         row_id: row,
@@ -849,6 +1115,10 @@ impl<S: MachineServer> Actor<S> {
                 if let Some(buffered) = self.buffered.take() {
                     if self.error.is_none() && buffered.row_id == self.row_id {
                         changed = self.accept(buffered, Source::Push) || changed;
+                    } else if row_id.is_none() && buffered.row_id.is_some() && buffered.row_id == self.next_row_id {
+                        // A read without a row id cannot answer for the push's incarnation: it waits for the read that
+                        // asks for its row.
+                        self.buffered = Some(buffered);
                     }
                 }
                 self.end_read();
@@ -858,14 +1128,16 @@ impl<S: MachineServer> Actor<S> {
                 self.pump();
             }
         }
+        true
     }
 
     fn end_read(&mut self) {
         self.reloading = false;
         self.reload_row_id = None;
+        let row_id = self.next_row_id.take();
         if self.reload_again && !self.disposed && self.error.is_none() {
             self.reload_again = false;
-            self.reload(None);
+            self.reload(row_id);
         }
     }
 
@@ -881,6 +1153,9 @@ impl<S: MachineServer> Actor<S> {
             if !self.reloading {
                 self.reload(incoming.row_id.clone());
             } else if self.reload_row_id.is_none() {
+                // The read out was asked for without a row id, and its answer carries none: it would be taken as the
+                // incarnation held and dropped as stale. The read after it asks for this row instead.
+                self.next_row_id = incoming.row_id.clone();
                 self.reload_again = true;
             }
             let newer = match &self.buffered {
@@ -973,18 +1248,20 @@ impl<S: MachineServer> Actor<S> {
         trigger: String,
         input: Option<Value>,
         request: Option<EventRequest>,
-        reply: oneshot::Sender<SendOutcome>,
-    ) {
+        reply: Option<oneshot::Sender<SendOutcome>>,
+    ) -> u64 {
         self.next_entry += 1;
+        let entry = self.next_entry;
         self.queue.push(Queued {
-            entry: self.next_entry,
+            entry,
             trigger,
             input,
             request,
-            reply: Some(reply),
+            reply,
         });
         self.emit();
         self.pump();
+        entry
     }
 
     fn retry(&mut self, reply: oneshot::Sender<SendOutcome>) {
@@ -1011,9 +1288,17 @@ impl<S: MachineServer> Actor<S> {
                     "No event has failed since the last one was retried.",
                 )));
             }
+            // Every event in the queue was sent after the one that failed; it would go out behind them.
+            Some(request) if !self.queue.is_empty() => {
+                self.last_failed = Some(request);
+                let _ = reply.send(SendOutcome::Failed(refusal(
+                    codes::NOTHING_TO_RETRY,
+                    "A later event is still being sent; the failed one cannot be resent after it.",
+                )));
+            }
             Some(request) => {
                 let (trigger, input) = (request.trigger.clone(), request.input.clone());
-                self.enqueue(trigger, input, Some(request), reply);
+                self.enqueue(trigger, input, Some(request), Some(reply));
             }
         }
     }
@@ -1023,9 +1308,11 @@ impl<S: MachineServer> Actor<S> {
     }
 
     // Whether the event's outcome from `state` is one the client can tell: not bound to the effect, and with no edge
-    // that rests on a custom rule it holds no handler for (unhandled.rs).
+    // that rests on a custom rule it holds no handler for. It builds its machine from the IR alone, so it binds no
+    // handler, and the engine would count a custom guard as failed and a custom reduction as keeping the context: a
+    // prediction through one would show the wrong state, or be sent and refused as CLIENT_DIVERGENCE.
     fn predicts(&self, state: &str, trigger: &str) -> bool {
-        !self.is_effect(trigger) && !self.unpredictable.contains(&(state.to_owned(), trigger.to_owned()))
+        !self.is_effect(trigger) && !self.machine.rests_on_unhandled_rule(state, trigger)
     }
 
     fn pump(&mut self) {
@@ -1035,7 +1322,11 @@ impl<S: MachineServer> Actor<S> {
         let (Some(id), Some(confirmed)) = (self.id.clone(), self.confirmed.clone()) else {
             return;
         };
-        let Some(next) = self.queue.first() else { return };
+        let Some(next) = self.queue.first() else {
+            // Nothing is being sent: a sync plans its next event from what the server confirmed.
+            self.step_sync(&confirmed);
+            return;
+        };
         self.sending = true;
         let entry = next.entry;
 
@@ -1068,8 +1359,8 @@ impl<S: MachineServer> Actor<S> {
     fn deliver(&mut self, entry: u64, request: EventRequest, attempt: usize) {
         let server = self.server.clone();
         let commands = self.commands.clone();
-        tokio::spawn(async move {
-            let result = server.event(request).await;
+        self.runtime.spawn(async move {
+            let result = guarded(async { server.event(request).await }).await;
             let _ = commands.send(Msg::Delivered { entry, attempt, result });
         });
     }
@@ -1146,10 +1437,203 @@ impl<S: MachineServer> Actor<S> {
             .and_then(|i| self.queue.remove(i).reply);
         self.sending = false;
         self.emit();
+        self.sync_answered(entry, &outcome);
         if let Some(reply) = reply {
             let _ = reply.send(outcome);
         }
         self.pump();
+    }
+
+    // ── Syncing ─────────────────────────────────────────────────────────────────────────────────────
+
+    fn begin_sync(
+        &mut self,
+        target: String,
+        fields: Option<PlanEvent>,
+        navigation: Vec<String>,
+        reply: oneshot::Sender<SyncOutcome>,
+    ) {
+        if let Some(error) = &self.error {
+            let _ = reply.send(SyncOutcome::Stopped(error.clone()));
+            return;
+        }
+        if self.disposed {
+            let _ = reply.send(SyncOutcome::Failed(disposed_problem()));
+            return;
+        }
+        if self.not_ready() {
+            let _ = reply.send(SyncOutcome::Failed(not_ready_problem()));
+            return;
+        }
+        // The sync it takes over from settles once its event in flight answers, and sends nothing more. A read that one
+        // waits for is waited for here too: the server has refused what the client planned from.
+        let mut awaiting_read = false;
+        self.syncs += 1;
+        if let Some(older) = self.sync.take() {
+            awaiting_read = older.awaiting_read && self.reloading;
+            match older.in_flight {
+                Some(entry) => self.superseded.push((entry, older.reply)),
+                None => {
+                    let _ = older.reply.send(SyncOutcome::Superseded);
+                }
+            }
+        }
+        self.sync = Some(SyncRun {
+            target,
+            fields: fields.map(|f| PlanEvent::new(f.trigger, f.input)),
+            navigation,
+            reply,
+            sent: 0,
+            refused: false,
+            in_flight: None,
+            awaiting_read,
+            id: self.syncs,
+            planning: false,
+        });
+        if !self.unsaved {
+            self.unsaved = true;
+            self.emit();
+        }
+        self.pump();
+    }
+
+    // Plans from what the server confirmed, or settles the sync. Runs only while nothing is queued or in flight. The
+    // search runs off the controller's task, on the runtime's blocking threads: a wide one would otherwise hold every
+    // other message, and on a runtime of one thread the socket's pings with it.
+    fn step_sync(&mut self, confirmed: &Snapshot) {
+        let Some(run) = self.sync.as_mut() else { return };
+        if run.in_flight.is_some() || run.awaiting_read || run.planning {
+            return;
+        }
+        run.planning = true;
+        let sync = run.id;
+        let machine = self.machine.clone();
+        let from = confirmed.clone();
+        let (target, fields, navigation) = (run.target.clone(), run.fields.clone(), run.navigation.clone());
+        let search = self.runtime.spawn_blocking(move || {
+            let answer = machine.plan(&from, &target, fields.as_ref(), &navigation, None);
+            (from, answer)
+        });
+        let commands = self.commands.clone();
+        self.runtime.spawn(async move {
+            let planned = search.await.ok();
+            let _ = commands.send(Msg::Planned { sync, planned });
+        });
+    }
+
+    // A sync's plan has been answered: it sends the plan's first event, or settles. A plan from a snapshot the server
+    // has moved past since, or answered while an event went out, is searched again from where things are now.
+    fn on_planned(&mut self, sync: u64, planned: Option<(Snapshot, PlanAnswer)>) {
+        if self.disposed || self.error.is_some() {
+            return;
+        }
+        let Some(run) = self.sync.as_mut().filter(|run| run.id == sync) else {
+            return;
+        };
+        run.planning = false;
+        let Some((confirmed, answer)) = planned else {
+            return self.settle_sync(SyncOutcome::Failed(refusal(
+                trax_state_machine::RefusalCode::InternalError.as_str(),
+                "The planner panicked.",
+            )));
+        };
+        if self.sending || !self.queue.is_empty() || self.confirmed.as_ref() != Some(&confirmed) {
+            return self.pump();
+        }
+        let next = match answer {
+            PlanAnswer::Plan(events) => match events.into_iter().next() {
+                Some(event) => event,
+                None => {
+                    let revision = self.revision;
+                    self.settle_sync(SyncOutcome::Synced {
+                        snapshot: confirmed,
+                        revision,
+                    });
+                    return;
+                }
+            },
+            // The events up to the edge the client cannot evaluate, then that edge, unpredicted: the server decides.
+            PlanAnswer::Undetermined { trigger, events } => match events.into_iter().next() {
+                Some(event) => event,
+                None => {
+                    let input = run
+                        .fields
+                        .as_ref()
+                        .filter(|f| f.trigger == trigger)
+                        .and_then(|f| f.input.clone());
+                    PlanEvent::new(trigger, input)
+                }
+            },
+            PlanAnswer::Unreachable => return self.settle_sync(SyncOutcome::Unreachable),
+            PlanAnswer::Exceeded => return self.settle_sync(SyncOutcome::Exceeded),
+            PlanAnswer::Invalid(invalid) => return self.settle_sync(SyncOutcome::Invalid(invalid)),
+        };
+        if run.sent >= 2 * self.machine.states().len() {
+            return self.settle_sync(SyncOutcome::Exceeded);
+        }
+        let entry = self.enqueue(next.trigger, next.input, None, None);
+        if let Some(run) = self.sync.as_mut() {
+            run.sent += 1;
+            run.in_flight = Some(entry);
+        }
+    }
+
+    // A sync's event, or a superseded sync's last one, has answered.
+    fn sync_answered(&mut self, entry: u64, outcome: &SendOutcome) {
+        if let Some(at) = self.superseded.iter().position(|(e, _)| *e == entry) {
+            let (_, reply) = self.superseded.remove(at);
+            let _ = reply.send(SyncOutcome::Superseded);
+        }
+        let Some(run) = self.sync.as_mut().filter(|run| run.in_flight == Some(entry)) else {
+            return;
+        };
+        run.in_flight = None;
+        match outcome {
+            // The next step plans from the answer once the queue is empty.
+            SendOutcome::Confirmed(_) => {}
+            SendOutcome::Refused(problem) if !run.refused && REPLANNED.contains(&problem.code.as_str()) => {
+                run.refused = true;
+                run.awaiting_read = true;
+                // A divergence has started its read already.
+                if problem.code != codes::CLIENT_DIVERGENCE {
+                    self.reload(None);
+                }
+            }
+            SendOutcome::Refused(problem) => self.settle_sync(SyncOutcome::Refused(problem.clone())),
+            SendOutcome::Failed(problem) => self.settle_sync(SyncOutcome::Failed(problem.clone())),
+            SendOutcome::Stopped(error) => self.settle_sync(SyncOutcome::Stopped(error.clone())),
+        }
+    }
+
+    // The reads have ended: a sync that waited for one plans again from it, or settles with what stopped it.
+    fn read_settled(&mut self, failure: Option<SyncOutcome>) {
+        if self.disposed || self.error.is_some() {
+            return;
+        }
+        let Some(run) = self.sync.as_mut().filter(|run| run.awaiting_read) else {
+            return;
+        };
+        run.awaiting_read = false;
+        match failure {
+            Some(outcome) => self.settle_sync(outcome),
+            None => self.pump(),
+        }
+    }
+
+    fn settle_sync(&mut self, outcome: SyncOutcome) {
+        let Some(run) = self.sync.take() else { return };
+        let unsaved = !matches!(outcome, SyncOutcome::Synced { .. });
+        if unsaved != self.unsaved {
+            self.unsaved = unsaved;
+            self.emit();
+        }
+        let _ = run.reply.send(outcome);
+    }
+
+    fn settle_superseded(&mut self) {
+        for (_, reply) in self.superseded.drain(..) {
+            let _ = reply.send(SyncOutcome::Superseded);
+        }
     }
 
     // ── Stopping and timing ─────────────────────────────────────────────────────────────────────
@@ -1161,7 +1645,9 @@ impl<S: MachineServer> Actor<S> {
         self.error = Some(error.clone());
         self.status = MachineStatus::Stopped;
         self.close();
+        // A retry the opening waits for will not run.
         self.epoch += 1;
+        self.settle_open();
         self.sending = false;
         let stranded: Vec<Queued> = self.queue.drain(..).collect();
         self.emit();
@@ -1170,6 +1656,8 @@ impl<S: MachineServer> Actor<S> {
                 let _ = reply.send(SendOutcome::Stopped(error.clone()));
             }
         }
+        self.settle_sync(SyncOutcome::Stopped(error));
+        self.settle_superseded();
     }
 
     // Runs `action` after the attempt's delay. The caller checked there is one left.
@@ -1177,7 +1665,7 @@ impl<S: MachineServer> Actor<S> {
         let delay = self.retry_delays[attempt];
         let epoch = self.epoch;
         let commands = self.commands.clone();
-        tokio::spawn(async move {
+        self.runtime.spawn(async move {
             tokio::time::sleep(delay).await;
             let _ = commands.send(Msg::Later { epoch, action });
         });
@@ -1198,6 +1686,7 @@ impl<S: MachineServer> Actor<S> {
             pending: !self.queue.is_empty(),
             problem: self.problem.clone(),
             error: self.error.clone(),
+            unsaved: self.unsaved,
         };
         self.publish.send_replace(Arc::new(view));
     }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Nodes;
 
@@ -17,6 +18,12 @@ public static class ClientProblemCodes
 
     /// <summary>The controller was disposed before the server answered.</summary>
     public const string Disposed = "DISPOSED";
+
+    /// <summary>
+    /// There is no instance to send to, and none is being started or read: the start was refused or failed, or the first
+    /// read gave up. <see cref="ServerMachineController.RetryAsync"/> resends a start that failed.
+    /// </summary>
+    public const string NotReady = "NOT_READY";
 }
 
 /// <summary>Whether a problem is the server's refusal or a request that did not get through.</summary>
@@ -40,8 +47,10 @@ public sealed record MachineProblem(MachineProblemKind Kind, string Code, string
 /// refused the socket.
 /// </summary>
 /// <param name="Code">
-/// <see cref="ClientProblemCodes.Gone"/>, <c>CLIENT_OUTDATED</c>, or <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c> for a
-/// socket the host refused (<see cref="StreamMessage.Refused"/>).
+/// <see cref="ClientProblemCodes.Gone"/>, <c>CLIENT_OUTDATED</c>, or the code of a stream that ended for good
+/// (<see cref="StreamMessage.Refused"/>): <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c> for a socket or a stream the host
+/// refused, a code of <see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/>, or
+/// <see cref="ClientProblemCodes.TransportError"/> for a push the client cannot read.
 /// </param>
 /// <param name="Message">What to tell a person.</param>
 /// <param name="Deleted">
@@ -95,6 +104,12 @@ public sealed record MachineView
 
     /// <summary>Why the controller stopped, once it has.</summary>
     public MachineError? Error { get; init; }
+
+    /// <summary>
+    /// Whether a sync (<see cref="ServerMachineController.SyncToAsync"/>) is running, or the last one did not settle
+    /// <see cref="SyncOutcome.Synced"/>: the server is not where the page is. A page holds a leave guard on it.
+    /// </summary>
+    public bool Unsaved { get; init; }
 }
 
 /// <summary>What one send came to. Never an exception.</summary>
@@ -113,6 +128,36 @@ public abstract record SendOutcome
 
     /// <summary>The controller stopped for good before or while it was sent.</summary>
     public sealed record Stopped(MachineError Error) : SendOutcome;
+}
+
+/// <summary>What one sync came to. Never an exception.</summary>
+public abstract record SyncOutcome
+{
+    private SyncOutcome() { }
+
+    /// <summary>The server is at the target with the fields applied, as <see cref="Snapshot"/> holds it.</summary>
+    public sealed record Synced(ServerSnapshot Snapshot) : SyncOutcome;
+
+    /// <summary>A later sync took over; this one sent nothing after the event it had in flight.</summary>
+    public sealed record Superseded : SyncOutcome;
+
+    /// <summary>No events reach the target from what the server holds.</summary>
+    public sealed record Unreachable : SyncOutcome;
+
+    /// <summary>The planner stopped at its depth, or the sync sent as many events as it may (twice the machine's states).</summary>
+    public sealed record Exceeded : SyncOutcome;
+
+    /// <summary>The target is not a state, or <see cref="Trigger"/> is not one a client may move with (<see cref="PlanResult.Invalid"/>).</summary>
+    public sealed record Invalid(string? Trigger, string? Target) : SyncOutcome;
+
+    /// <summary>The server refused an event twice, the second time after the instance was read again.</summary>
+    public sealed record Refused(MachineProblem Problem) : SyncOutcome;
+
+    /// <summary>An event did not get through; syncing again plans from what the server confirmed.</summary>
+    public sealed record Failed(MachineProblem Problem) : SyncOutcome;
+
+    /// <summary>The controller stopped for good before or while it synced.</summary>
+    public sealed record Stopped(MachineError Error) : SyncOutcome;
 }
 
 /// <summary>How a <see cref="ServerMachineController"/> is built.</summary>
@@ -172,10 +217,14 @@ public sealed record ServerMachineOptions
 /// <para><b>Retries.</b> <c>SERVER_OUTDATED</c> is retried under the same request id after each of the retry delays. A
 /// transport failure ends the event as failed; <see cref="RetryAsync"/> resends it under the same request id, so the
 /// server replays it rather than applying it twice.</para>
+/// <para><b>Syncing.</b> <see cref="SyncToAsync"/> brings the server to where a page that ran ahead of it is. It plans
+/// from what the server confirmed once every earlier event has settled, sends the first event of the plan, and plans
+/// again from each answer. A refusal reads the instance once and plans again; a later sync supersedes it.</para>
 /// <para><b>Stopping.</b> A gone instance and <c>CLIENT_OUTDATED</c> stop the controller for good.</para>
 /// <para><b>Threads.</b> The controller does its work on one exclusive scheduler, so it handles one thing at a time
 /// whichever thread calls it. <see cref="Changed"/> is raised there: a handler reads <see cref="View"/> and must not
-/// block on the controller. A UI app marshals to its own thread from the handler.</para>
+/// block on the controller. A UI app marshals to its own thread from the handler. A handler that throws is reported to
+/// <see cref="Trace"/> and does not stop the controller or the handlers after it.</para>
 /// <para>Every operation is total: none throws for a refusal or a failed request.</para>
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/dotnet-client">SDK reference</seealso>
@@ -196,6 +245,15 @@ public sealed class ServerMachineController : IDisposable
     private static readonly string ClientDivergence = RefusalCode.ClientDivergence.ToWire();
     private static readonly string NotFound = RefusalCode.NotFound.ToWire();
 
+    // The refusals a sync reads the instance again after, once: what the server holds is not what the plan was made from.
+    private static readonly HashSet<string> Replans = new(StringComparer.Ordinal)
+    {
+        RefusalCode.GuardFailed.ToWire(),
+        RefusalCode.NoTransition.ToWire(),
+        RefusalCode.ClientDivergence.ToWire(),
+        RefusalCode.Conflict.ToWire(),
+    };
+
     private readonly TaskScheduler _loop =
         new ConcurrentExclusiveSchedulerPair().ExclusiveScheduler;
     private readonly MachineShape _shape;
@@ -205,6 +263,8 @@ public sealed class ServerMachineController : IDisposable
     private readonly Func<string> _newRequestId;
     private readonly IReadOnlyList<TimeSpan> _retryDelays;
     private readonly object _startGate = new();
+    private readonly JsonObject _ir;
+    private IrMachine? _planner;
 
     private string? _id;
     private string? _startRequestId;
@@ -220,6 +280,12 @@ public sealed class ServerMachineController : IDisposable
     private bool _sending;
     private EventRequest? _lastFailed;
     private bool _startFailed;
+
+    // While the start or the first read, or a retried start, is in flight: a send waits for it rather than failing.
+    private bool _opening;
+
+    // Once a start or a first read has begun. A send before it waits for StartAsync, as one during it does.
+    private bool _opened;
     private readonly List<TaskCompletionSource<SendOutcome>> _startWaiters = [];
 
     private bool _disposed;
@@ -229,8 +295,20 @@ public sealed class ServerMachineController : IDisposable
 
     private bool _reloading;
     private string? _reloadRowId;
+
+    // Set by a CLIENT_DIVERGENCE: nothing more is sent, predicted from the snapshot that diverged, until the instance
+    // has been read again.
+    private bool _resyncing;
     private bool _reloadAgain;
+
+    // The incarnation the read after this one asks for: one a push named while a read for another was pending.
+    private string? _reloadNextRowId;
     private ServerSnapshot? _buffered;
+
+    // The sync that runs is the one of this generation; an older one settles superseded at its next step.
+    private long _syncGeneration;
+    private bool _unsaved;
+    private List<TaskCompletionSource> _syncWaiters = [];
 
     private MachineView _view;
 
@@ -240,6 +318,7 @@ public sealed class ServerMachineController : IDisposable
     {
         ArgumentNullException.ThrowIfNull(options);
         _shape = MachineShape.Of(options.Machine);
+        _ir = options.Machine.Ir;
         _server = options.Server;
         _predictor = options.Predictor;
         if (_predictor is not null && _predictor.IrHash != options.Machine.IrHash)
@@ -256,7 +335,10 @@ public sealed class ServerMachineController : IDisposable
         _view = BuildView();
     }
 
-    /// <summary>Raised after every change of <see cref="View"/>, on the controller's scheduler.</summary>
+    /// <summary>
+    /// Raised after every change of <see cref="View"/>, on the controller's scheduler, once the sends the change settled
+    /// are settled. A handler that throws is reported to <see cref="Trace"/>; the other handlers still run.
+    /// </summary>
     public event EventHandler? Changed;
 
     /// <summary>The current view. The same object until something changes.</summary>
@@ -264,8 +346,9 @@ public sealed class ServerMachineController : IDisposable
 
     /// <summary>
     /// Opens the instance: subscribes first, then reads it, so no write falls between the two. Without an id it starts
-    /// one under the start request id and subscribes to the id the server minted. Calling it again returns the same
-    /// task; a start that failed is resent by <see cref="RetryAsync"/>.
+    /// one under the start request id and subscribes to the id the server minted. The task completes once the start or
+    /// the first read has settled, its retries included. Calling it again returns the same task; a start that failed is
+    /// resent by <see cref="RetryAsync"/>.
     /// </summary>
     public Task StartAsync()
     {
@@ -274,6 +357,13 @@ public sealed class ServerMachineController : IDisposable
     }
 
     /// <summary>Sends one event under a fresh request id, after every earlier event of this instance has settled.</summary>
+    /// <remarks>
+    /// A trigger the machine does not declare as an event is refused at once and sent nowhere, with the code the engine's
+    /// advance refuses it with: <c>OUTCOME_BOUND</c> for an invoked train's outcome, <c>TIMER_BOUND</c> for a state's
+    /// timer, <c>NO_TRANSITION</c> for any other. A send made before <see cref="StartAsync"/>, or while the start or the
+    /// first read is in flight, waits for it. Once a start or a first read has ended without an instance (refused, or
+    /// given up), a send fails <see cref="ClientProblemCodes.NotReady"/>, and so does one waiting for it.
+    /// </remarks>
     /// <param name="trigger">The trigger's name, as the machine declares it (<c>Coin</c>).</param>
     /// <param name="input">The trigger's input, or null when it takes none.</param>
     public Task<SendOutcome> SendAsync(string trigger, JsonNode? input = null)
@@ -285,6 +375,15 @@ public sealed class ServerMachineController : IDisposable
                 return Task.FromResult<SendOutcome>(new SendOutcome.Stopped(_error));
             if (_disposed)
                 return Task.FromResult(DisposedOutcome());
+            // Only an event the machine declares is sent; anything else is refused here, as the engine refuses it.
+            if (_shape.Undeclared(trigger) is (var code, var message))
+            {
+                _problem = Refusal(code.ToWire(), message);
+                Emit();
+                return Task.FromResult<SendOutcome>(new SendOutcome.Refused(_problem));
+            }
+            if (Unready())
+                return Task.FromResult<SendOutcome>(new SendOutcome.Failed(NotReadyProblem()));
             return Enqueue(new QueuedEvent(trigger, input?.DeepClone()));
         });
     }
@@ -292,7 +391,8 @@ public sealed class ServerMachineController : IDisposable
     /// <summary>
     /// Resends what last failed under the same request id, so the server replays its recorded result if the first
     /// attempt did arrive: the start while there is no instance, else the last event that failed, unless a later event
-    /// has been confirmed since.
+    /// has been confirmed since, or is queued or in flight now (resending it then would apply it out of order, predicted
+    /// from a state the server has moved past): either answers <c>NOTHING_TO_RETRY</c>.
     /// </summary>
     public Task<SendOutcome> RetryAsync() =>
         Post(() =>
@@ -306,7 +406,8 @@ public sealed class ServerMachineController : IDisposable
                 _startFailed = false;
                 var waiter = NewOutcome();
                 _startWaiters.Add(waiter);
-                _ = CreateAsync(_startRequestId, 0);
+                var requestId = _startRequestId;
+                _ = OpeningAsync(() => CreateAsync(requestId, 0));
                 return waiter.Task;
             }
             var request = _lastFailed;
@@ -319,9 +420,65 @@ public sealed class ServerMachineController : IDisposable
                         )
                     )
                 );
+            // Every event in the queue was sent after the one that failed; it would go out behind them.
+            if (_queue.Count > 0)
+                return Task.FromResult<SendOutcome>(
+                    new SendOutcome.Failed(
+                        Refusal(
+                            ClientProblemCodes.NothingToRetry,
+                            "A later event is still being sent; the failed one cannot be resent after it."
+                        )
+                    )
+                );
             _lastFailed = null;
             return Enqueue(new QueuedEvent(request.Trigger, request.Input) { Request = request });
         });
+
+    /// <summary>
+    /// Brings the server to where a page that ran ahead of it is: the state <paramref name="target"/>, with the fields
+    /// event <paramref name="fields"/> applied, moving through <paramref name="navigation"/>. Once every earlier event has
+    /// settled it plans from what the server confirmed (<see cref="IMachinePredictor.Plan"/>, or the machine built from
+    /// the manifest's IR without a predictor), sends the plan's first event as <see cref="SendAsync"/> does, and plans
+    /// again from each answer until the plan is empty. An undetermined plan sends its events, then its trigger with no
+    /// prediction.
+    /// </summary>
+    /// <remarks>
+    /// A <c>GUARD_FAILED</c>, <c>NO_TRANSITION</c>, <c>CLIENT_DIVERGENCE</c> or <c>CONFLICT</c> reads the instance once
+    /// and plans again; a second settles the sync <see cref="SyncOutcome.Refused"/>. A sync started while another runs
+    /// supersedes it: the older settles <see cref="SyncOutcome.Superseded"/> once the event it has in flight answers,
+    /// and sends nothing more. No sync sends more than twice the machine's states in events. <see cref="MachineView.Unsaved"/>
+    /// holds while a sync runs and after one that did not settle <see cref="SyncOutcome.Synced"/>.
+    /// </remarks>
+    /// <param name="target">The state the page is in.</param>
+    /// <param name="fields">The event that writes the page's fields, with its input, or null when there is none.</param>
+    /// <param name="navigation">The triggers, without input, that move between states.</param>
+    public Task<SyncOutcome> SyncToAsync(
+        string target,
+        PlannedEvent? fields,
+        IReadOnlyList<string> navigation
+    )
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(navigation);
+        var request = new SyncRequest(
+            target,
+            fields is null ? null : fields with { Input = fields.Input?.DeepClone() },
+            navigation.ToList()
+        );
+        return Post(() =>
+        {
+            if (_error is not null)
+                return Task.FromResult<SyncOutcome>(new SyncOutcome.Stopped(_error));
+            if (_disposed)
+                return Task.FromResult<SyncOutcome>(new SyncOutcome.Failed(DisposedProblem()));
+            var generation = ++_syncGeneration;
+            _unsaved = true;
+            // An older sync waiting for its turn hears of this one now.
+            WakeSyncs();
+            Emit();
+            return SyncAsync(generation, request);
+        });
+    }
 
     /// <summary>Whether the predictor allows <paramref name="trigger"/> from what is shown. False before the first snapshot and once stopped.</summary>
     /// <remarks>
@@ -403,23 +560,64 @@ public sealed class ServerMachineController : IDisposable
         foreach (var entry in queued)
             entry.Settle.TrySetResult(DisposedOutcome());
         SettleStart(DisposedOutcome());
+        WakeSyncs();
         Changed = null;
     }
 
     // ── Opening ────────────────────────────────────────────────────────────────────────────────
 
-    private async Task OpenAsync()
+    private Task OpenAsync()
     {
         if (_disposed || _error is not null)
-            return;
+            return Task.CompletedTask;
         if (_id is not null)
         {
-            Listen(_id);
-            await ReadAsync(null);
-            return;
+            var id = _id;
+            return OpeningAsync(() =>
+            {
+                Listen(id);
+                return ReadAsync(null);
+            });
         }
         _startRequestId ??= _newRequestId();
-        await CreateAsync(_startRequestId, 0);
+        var requestId = _startRequestId;
+        return OpeningAsync(() => CreateAsync(requestId, 0));
+    }
+
+    // Runs a start or a first read. A send meanwhile waits for it; once it has settled with no snapshot, every send
+    // waiting fails NOT_READY.
+    private async Task OpeningAsync(Func<Task> open)
+    {
+        _opening = true;
+        _opened = true;
+        try
+        {
+            await open();
+        }
+        finally
+        {
+            _opening = false;
+            FailUnready();
+        }
+    }
+
+    // Whether there is no instance to send to and none is coming: a start or a first read has ended with no snapshot,
+    // and no other is in flight. Before StartAsync one is still coming.
+    private bool Unready() => _opened && _confirmed is null && !_opening && !_reloading;
+
+    // Fails every send waiting for an instance that is not coming, and wakes every sync waiting for one.
+    private void FailUnready()
+    {
+        if (_disposed || _error is not null || !Unready())
+            return;
+        var queued = _queue.ToList();
+        _queue.Clear();
+        Publish();
+        foreach (var entry in queued)
+            entry.Settle.TrySetResult(new SendOutcome.Failed(NotReadyProblem()));
+        WakeSyncs();
+        if (queued.Count > 0)
+            Emit();
     }
 
     private async Task CreateAsync(string requestId, int attempt)
@@ -447,8 +645,13 @@ public sealed class ServerMachineController : IDisposable
         {
             if (problem.Code == ServerOutdated && attempt < _retryDelays.Count)
             {
-                // Another node of a rolling deploy answered: another may run this version.
-                Later(attempt, () => CreateAsync(requestId, attempt + 1), () => Task.CompletedTask);
+                // Another node of a rolling deploy answered: another may run this version. The start settles once the
+                // retry has.
+                await Later(
+                    attempt,
+                    () => CreateAsync(requestId, attempt + 1),
+                    () => Task.CompletedTask
+                );
                 return;
             }
             if (problem.Code == ClientOutdated)
@@ -483,7 +686,14 @@ public sealed class ServerMachineController : IDisposable
         Listen(id);
         // The stream's first event is the instance as it is then, so a write between the answer and the subscription
         // reaches it there; the answer is the snapshot to show until then.
-        Accept(answer.Snapshot!, Source.Answer);
+        Accept(answer.Snapshot!, Source.Answer, out var unreadable);
+        if (unreadable is not null)
+        {
+            _problem = unreadable;
+            Emit();
+            SettleStart(new SendOutcome.Failed(unreadable));
+            return;
+        }
         Emit();
         SettleStart(new SendOutcome.Confirmed(answer.Snapshot!));
         Pump();
@@ -530,7 +740,14 @@ public sealed class ServerMachineController : IDisposable
         switch (message)
         {
             case StreamMessage.Changed changed:
-                if (Accept(changed.Snapshot, Source.Push))
+                var taken = Accept(changed.Snapshot, Source.Push, out var unreadable);
+                if (unreadable is not null)
+                {
+                    // As a push the server cannot read ends the stream: the host would send the same again.
+                    Stop(new MachineError(unreadable.Code, unreadable.Message));
+                    return;
+                }
+                if (taken)
                     Emit();
                 Pump();
                 return;
@@ -574,6 +791,8 @@ public sealed class ServerMachineController : IDisposable
         if (_reloading)
         {
             _reloadAgain = true;
+            if (rowId is not null)
+                _reloadNextRowId = rowId;
             return;
         }
         _reloadRowId = rowId;
@@ -596,17 +815,7 @@ public sealed class ServerMachineController : IDisposable
         {
             if (_disposed || _error is not null)
                 return;
-            _problem = TransportFailure(ex);
-            Emit();
-            Later(
-                attempt,
-                () => ReadAsync(rowId, attempt + 1),
-                () =>
-                {
-                    EndRead();
-                    return Task.CompletedTask;
-                }
-            );
+            await ReadFailedAsync(rowId, attempt, TransportFailure(ex));
             return;
         }
         if (_disposed || _error is not null)
@@ -616,12 +825,13 @@ public sealed class ServerMachineController : IDisposable
         {
             if (problem.Code == ServerOutdated && attempt < _retryDelays.Count)
             {
-                Later(
+                await Later(
                     attempt,
                     () => ReadAsync(rowId, attempt + 1),
                     () =>
                     {
                         EndRead();
+                        Pump();
                         return Task.CompletedTask;
                     }
                 );
@@ -636,19 +846,49 @@ public sealed class ServerMachineController : IDisposable
             {
                 _problem = Refusal(problem.Code, problem.Message);
                 Emit();
+                Pump();
             }
             return;
         }
         var snapshot = answer.Snapshot! with { RowId = answer.Snapshot.RowId ?? rowId ?? _rowId };
-        var changed = Accept(snapshot, Source.Load);
+        var changed = Accept(snapshot, Source.Load, out var unreadable);
+        if (unreadable is not null)
+        {
+            await ReadFailedAsync(rowId, attempt, unreadable);
+            return;
+        }
+        // A push of the incarnation now held is taken after the read; one of another incarnation is kept until a read
+        // of that incarnation answers.
         var buffered = _buffered;
-        _buffered = null;
         if (buffered is not null && _error is null && buffered.RowId == _rowId)
-            changed = Accept(buffered, Source.Push) || changed;
+        {
+            _buffered = null;
+            changed = Accept(buffered, Source.Push, out var unreadablePush) || changed;
+            if (unreadablePush is not null)
+                Stop(new MachineError(unreadablePush.Code, unreadablePush.Message));
+        }
         EndRead();
         if (changed && _error is null)
             Emit();
         Pump();
+    }
+
+    // A read that did not get through, or whose answer this client cannot hold, is read again after the next delay; past
+    // the last, the read ends with the failure shown. The first read settles the start once its retries have.
+    private async Task ReadFailedAsync(string? rowId, int attempt, MachineProblem failure)
+    {
+        _problem = failure;
+        Emit();
+        await Later(
+            attempt,
+            () => ReadAsync(rowId, attempt + 1),
+            () =>
+            {
+                EndRead();
+                Pump();
+                return Task.CompletedTask;
+            }
+        );
     }
 
     private void EndRead()
@@ -658,8 +898,14 @@ public sealed class ServerMachineController : IDisposable
         if (_reloadAgain && !_disposed && _error is null)
         {
             _reloadAgain = false;
-            Reload(null);
+            var next = _reloadNextRowId;
+            _reloadNextRowId = null;
+            Reload(next);
+            return;
         }
+        _resyncing = false;
+        WakeSyncs();
+        FailUnready();
     }
 
     // ── Ordering ───────────────────────────────────────────────────────────────────────────────
@@ -677,19 +923,22 @@ public sealed class ServerMachineController : IDisposable
         incoming is { } i && held is { } h && i <= h;
 
     // Takes a server snapshot if it is newer than the one held; returns whether the view changed. A push of another
-    // incarnation than the one held starts one read instead, and is kept until that read answers.
-    private bool Accept(ServerSnapshot incoming, Source source)
+    // incarnation than the one held starts one read instead, and is kept until that read answers. A snapshot this
+    // client cannot write as canonical wire (a number past a double's range, which no engine stores) is not taken:
+    // `unreadable` says why, and whatever carried it is a failure.
+    private bool Accept(ServerSnapshot incoming, Source source, out MachineProblem? unreadable)
     {
+        unreadable = null;
         var rowId = incoming.RowId;
         var otherIncarnation = rowId is not null && _rowId is not null && rowId != _rowId;
 
         if (otherIncarnation && source != Source.Load)
         {
             // The row was deleted and created again: its revisions restart, so they say nothing against the ones held.
-            if (!_reloading)
+            // A read already pending answers without saying which incarnation it read, so unless it asked for this one,
+            // another read asks for it after.
+            if (!_reloading || _reloadRowId != rowId)
                 Reload(rowId);
-            else if (_reloadRowId is null)
-                _reloadAgain = true;
             if (
                 _buffered is null
                 || _buffered.RowId != rowId
@@ -726,7 +975,20 @@ public sealed class ServerMachineController : IDisposable
         };
         if (_predictor is not null)
         {
-            var parsed = _predictor.Rehydrate(_predictor.Serialize(snapshot));
+            RehydrationResult parsed;
+            try
+            {
+                parsed = _predictor.Rehydrate(_predictor.Serialize(snapshot));
+            }
+            catch (Exception ex)
+            {
+                unreadable = new MachineProblem(
+                    MachineProblemKind.Transport,
+                    ClientProblemCodes.TransportError,
+                    $"The server sent a snapshot this client cannot hold: {ex.Message}"
+                );
+                return false;
+            }
             if (parsed is not RehydrationResult.Ok ok)
             {
                 // The server serves a snapshot this client's machine cannot read: it was built for another version.
@@ -791,14 +1053,21 @@ public sealed class ServerMachineController : IDisposable
     private Task<SendOutcome> Enqueue(QueuedEvent entry)
     {
         _queue.Add(entry);
-        Emit();
         Pump();
+        Emit();
         return entry.Settle.Task;
     }
 
     private void Pump()
     {
-        if (_sending || _disposed || _error is not null || _id is null || _confirmed is null)
+        if (
+            _sending
+            || _resyncing
+            || _disposed
+            || _error is not null
+            || _id is null
+            || _confirmed is null
+        )
             return;
         if (_queue.Count == 0)
             return;
@@ -812,12 +1081,25 @@ public sealed class ServerMachineController : IDisposable
             var predicted = !Predicts(_confirmed.State, next.Trigger)
                 ? null
                 : _predictor.Advance(_confirmed, next.Trigger, next.Input?.DeepClone());
+            string? clientResult = null;
+            if (predicted is AdvanceResult.Transitioned t)
+            {
+                try
+                {
+                    clientResult = _predictor!.Serialize(t.Snapshot);
+                }
+                catch (Exception)
+                {
+                    // A prediction this client cannot write as canonical wire (a number past a double's range) is not
+                    // sent: the server decides alone, as for an event the predictor refuses.
+                }
+            }
             next.Request = new EventRequest(
                 _id,
                 next.Trigger,
                 next.Input,
                 _newRequestId(),
-                predicted is AdvanceResult.Transitioned t ? _predictor!.Serialize(t.Snapshot) : null
+                clientResult
             );
         }
         _ = DeliverAsync(next, next.Request, 0);
@@ -853,7 +1135,15 @@ public sealed class ServerMachineController : IDisposable
         if (answer.Problem is not { } problem)
         {
             var snapshot = answer.Snapshot!;
-            Accept(snapshot, Source.Answer);
+            Accept(snapshot, Source.Answer, out var unreadable);
+            if (unreadable is not null)
+            {
+                // Applied, perhaps, but not an answer this client can hold; a retry replays it under the same request id.
+                _lastFailed = request;
+                _problem = unreadable;
+                Finish(entry, new SendOutcome.Failed(unreadable));
+                return;
+            }
             // A confirmed event supersedes one that failed before it: resending that one now would apply it out of order.
             _lastFailed = null;
             _problem = null;
@@ -870,7 +1160,7 @@ public sealed class ServerMachineController : IDisposable
         {
             if (attempt < _retryDelays.Count)
             {
-                Later(
+                await Later(
                     attempt,
                     () => DeliverAsync(entry, request, attempt + 1),
                     () => Task.CompletedTask
@@ -883,8 +1173,12 @@ public sealed class ServerMachineController : IDisposable
             return;
         }
         if (problem.Code == ClientDivergence)
-            // The predictor and the server disagree about this step: what the client holds cannot be trusted.
+        {
+            // The predictor and the server disagree about this step: what the client holds cannot be trusted, and the
+            // next event would be predicted from it too, so it waits for the read.
+            _resyncing = true;
             Reload(null);
+        }
         _problem = Refusal(problem.Code, problem.Message);
         Finish(entry, new SendOutcome.Refused(_problem));
     }
@@ -893,10 +1187,169 @@ public sealed class ServerMachineController : IDisposable
     {
         _queue.Remove(entry);
         _sending = false;
-        Emit();
+        // The view the outcome is read against goes out first; the handlers hear of it once the queue has moved on.
+        Publish();
         entry.Settle.TrySetResult(outcome);
         Pump();
+        Emit();
     }
+
+    // ── Syncing ────────────────────────────────────────────────────────────────────────────────
+
+    private sealed record SyncRequest(
+        string Target,
+        PlannedEvent? Fields,
+        IReadOnlyList<string> Navigation
+    );
+
+    private async Task<SyncOutcome> SyncAsync(long generation, SyncRequest request)
+    {
+        var outcome = await SyncCoreAsync(generation, request);
+        // Only the newest sync says whether the page is saved; a superseded one leaves it to the one that took over.
+        if (generation == _syncGeneration && !_disposed)
+        {
+            _unsaved = outcome is not SyncOutcome.Synced;
+            Emit();
+        }
+        return outcome;
+    }
+
+    private async Task<SyncOutcome> SyncCoreAsync(long generation, SyncRequest request)
+    {
+        var budget = 2 * _shape.StateCount;
+        var sent = 0;
+        var reread = false;
+        while (true)
+        {
+            // Planned from what the server confirmed once nothing is in flight, queued or being read: when the event is
+            // sent, not when the sync was asked for.
+            while (!Settled())
+            {
+                if (generation != _syncGeneration)
+                    return new SyncOutcome.Superseded();
+                if (_error is not null)
+                    return new SyncOutcome.Stopped(_error);
+                if (_disposed)
+                    return new SyncOutcome.Failed(DisposedProblem());
+                if (Unready())
+                    return new SyncOutcome.Failed(NotReadyProblem());
+                var waiter = new TaskCompletionSource(
+                    TaskCreationOptions.RunContinuationsAsynchronously
+                );
+                _syncWaiters.Add(waiter);
+                await waiter.Task;
+            }
+            if (generation != _syncGeneration)
+                return new SyncOutcome.Superseded();
+
+            PlannedEvent next;
+            switch (Plan(_confirmed!, request))
+            {
+                case PlanResult.Planned { Events.Count: 0 }:
+                    return new SyncOutcome.Synced(ConfirmedSnapshot());
+                case PlanResult.Planned planned:
+                    next = planned.Events[0];
+                    break;
+                case PlanResult.Undetermined undetermined:
+                    // The events up to the edge, then the edge itself, which the controller sends with no prediction: the
+                    // fields event with the fields' input.
+                    next =
+                        undetermined.Events.Count > 0 ? undetermined.Events[0]
+                        : undetermined.Trigger == request.Fields?.Trigger ? request.Fields
+                        : new PlannedEvent(undetermined.Trigger);
+                    break;
+                case PlanResult.Invalid invalid:
+                    return new SyncOutcome.Invalid(invalid.Trigger, invalid.Target);
+                case PlanResult.Unreachable:
+                    return new SyncOutcome.Unreachable();
+                case null:
+                    return new SyncOutcome.Failed(
+                        Refusal(
+                            ClientOutdated,
+                            "This client's engine cannot read the machine's IR, so it cannot plan."
+                        )
+                    );
+                default:
+                    return new SyncOutcome.Exceeded();
+            }
+            if (sent == budget)
+                return new SyncOutcome.Exceeded();
+            sent++;
+
+            var outcome = await Enqueue(new QueuedEvent(next.Trigger, next.Input?.DeepClone()));
+            if (generation != _syncGeneration)
+                return new SyncOutcome.Superseded();
+            switch (outcome)
+            {
+                case SendOutcome.Confirmed:
+                    continue;
+                case SendOutcome.Refused refused when Replans.Contains(refused.Problem.Code):
+                    if (reread)
+                        return new SyncOutcome.Refused(refused.Problem);
+                    reread = true;
+                    // A divergence is read again already, and nothing is sent until it answers.
+                    if (refused.Problem.Code != ClientDivergence)
+                        Reload(null);
+                    continue;
+                case SendOutcome.Refused refused:
+                    return new SyncOutcome.Refused(refused.Problem);
+                case SendOutcome.Failed failed:
+                    return new SyncOutcome.Failed(failed.Problem);
+                case SendOutcome.Stopped stopped:
+                    return new SyncOutcome.Stopped(stopped.Error);
+            }
+        }
+    }
+
+    // Nothing in flight, queued or being read, and a snapshot confirmed to plan from.
+    private bool Settled() =>
+        !_disposed
+        && _error is null
+        && _id is not null
+        && _confirmed is not null
+        && _queue.Count == 0
+        && !_sending
+        && !_reloading
+        && !_resyncing;
+
+    // Every waiting sync looks again at whether it may go on.
+    private void WakeSyncs()
+    {
+        if (_syncWaiters.Count == 0)
+            return;
+        var waiters = _syncWaiters;
+        _syncWaiters = [];
+        foreach (var waiter in waiters)
+            waiter.TrySetResult();
+    }
+
+    // The predictor's planner, or without one the machine built from the manifest's IR; null when this engine cannot read
+    // the IR.
+    private PlanResult? Plan(Snapshot confirmed, SyncRequest request)
+    {
+        if (_predictor is not null)
+            return _predictor.Plan(confirmed, request.Target, request.Fields, request.Navigation);
+        try
+        {
+            _planner ??= new IrMachine((JsonObject)_ir.DeepClone());
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        return _planner.Plan(confirmed, request.Target, request.Fields, request.Navigation);
+    }
+
+    private ServerSnapshot ConfirmedSnapshot() =>
+        new()
+        {
+            RowId = _rowId,
+            Revision = _revision,
+            State = _confirmed!.State,
+            Context = (JsonObject)_confirmed.Context.DeepClone(),
+            DueAtKnown = true,
+            DueAt = _dueAt,
+        };
 
     // ── Stopping and timing ────────────────────────────────────────────────────────────────────
 
@@ -912,21 +1365,20 @@ public sealed class ServerMachineController : IDisposable
         _sending = false;
         var stranded = _queue.ToList();
         _queue.Clear();
-        Emit();
+        Publish();
         foreach (var queued in stranded)
             queued.Settle.TrySetResult(new SendOutcome.Stopped(error));
+        WakeSyncs();
+        Emit();
     }
 
-    // Runs `next` after the attempt's delay, or `exhausted` at once when there is none left.
-    private void Later(int attempt, Func<Task> next, Func<Task> exhausted)
+    // Runs `next` after the attempt's delay, or `exhausted` at once when there is none left. Completes once whichever
+    // ran has, or once the controller stops or is disposed before the delay ends.
+    private Task Later(int attempt, Func<Task> next, Func<Task> exhausted)
     {
         if (attempt >= _retryDelays.Count)
-        {
-            _ = exhausted();
-            return;
-        }
-        var token = _timers.Token;
-        _ = DelayThen(_retryDelays[attempt], token, next);
+            return exhausted();
+        return DelayThen(_retryDelays[attempt], _timers.Token, next);
     }
 
     private async Task DelayThen(TimeSpan delay, CancellationToken token, Func<Task> next)
@@ -951,12 +1403,18 @@ public sealed class ServerMachineController : IDisposable
             )
             : answer;
 
-    private static SendOutcome DisposedOutcome() =>
-        new SendOutcome.Failed(
-            Refusal(
-                ClientProblemCodes.Disposed,
-                "The controller was disposed before the server answered."
-            )
+    private static SendOutcome DisposedOutcome() => new SendOutcome.Failed(DisposedProblem());
+
+    private static MachineProblem DisposedProblem() =>
+        Refusal(
+            ClientProblemCodes.Disposed,
+            "The controller was disposed before the server answered."
+        );
+
+    private static MachineProblem NotReadyProblem() =>
+        Refusal(
+            ClientProblemCodes.NotReady,
+            "There is no instance to send to: the start was refused or failed, or the first read gave up."
         );
 
     private static MachineProblem Refusal(string code, string message) =>
@@ -969,12 +1427,33 @@ public sealed class ServerMachineController : IDisposable
             string.IsNullOrEmpty(ex.Message) ? "The server could not be reached." : ex.Message
         );
 
+    // Publishes the view and tells every handler. Never throws: a handler's exception is its own, and must not leave a
+    // send unsettled or the queue stuck behind it.
     private void Emit()
     {
         if (_disposed)
             return;
-        Volatile.Write(ref _view, BuildView());
-        Changed?.Invoke(this, EventArgs.Empty);
+        Publish();
+        WakeSyncs();
+        if (Changed is not { } changed)
+            return;
+        foreach (var handler in changed.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler)handler)(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError($"A ServerMachineController.Changed handler threw: {ex}");
+            }
+        }
+    }
+
+    private void Publish()
+    {
+        if (!_disposed)
+            Volatile.Write(ref _view, BuildView());
     }
 
     private MachineView BuildView() =>
@@ -990,6 +1469,7 @@ public sealed class ServerMachineController : IDisposable
             Pending = _queue.Count > 0,
             Problem = _problem,
             Error = _error,
+            Unsaved = _unsaved,
         };
 
     // Whether the predictor can tell what `trigger` leads to from `state`: there is one, the trigger is not bound to the

@@ -3,7 +3,8 @@ using Trax.StateMachine.Client;
 
 namespace Trax.StateMachine.Tests.Client;
 
-// A server the test answers by hand: each event and read waits until the test settles it.
+// A server the test answers by hand: each event and read waits until the test settles it. The first read answers what
+// Answer was given; every later one is handed to the test through Reads.
 internal sealed class HandServer : IMachineServer
 {
     public sealed record Sent(string Trigger, JsonNode? Input, string? ClientResult)
@@ -15,9 +16,14 @@ internal sealed class HandServer : IMachineServer
     public System.Threading.Channels.Channel<Sent> Events { get; } =
         System.Threading.Channels.Channel.CreateUnbounded<Sent>();
 
+    public System.Threading.Channels.Channel<TaskCompletionSource<ServerAnswer>> Reads { get; } =
+        System.Threading.Channels.Channel.CreateUnbounded<TaskCompletionSource<ServerAnswer>>();
+
     private readonly TaskCompletionSource<ServerAnswer> _read = new(
         TaskCreationOptions.RunContinuationsAsynchronously
     );
+    private int _reads;
+    private Action<StreamMessage>? _onMessage;
 
     // Opens the controller and answers its first read.
     public async Task Answer(ServerMachineController controller, ServerAnswer read)
@@ -46,10 +52,26 @@ internal sealed class HandServer : IMachineServer
         return sent.Answer.Task;
     }
 
-    public Task<ServerAnswer> GetAsync(string id, CancellationToken cancellationToken = default) =>
-        _read.Task;
+    public Task<ServerAnswer> GetAsync(string id, CancellationToken cancellationToken = default)
+    {
+        if (Interlocked.Increment(ref _reads) == 1)
+            return _read.Task;
+        var read = new TaskCompletionSource<ServerAnswer>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        Reads.Writer.TryWrite(read);
+        return read.Task;
+    }
 
-    public IDisposable Subscribe(string id, Action<StreamMessage> onMessage) => new Nothing();
+    public IDisposable Subscribe(string id, Action<StreamMessage> onMessage)
+    {
+        _onMessage = onMessage;
+        return new Nothing();
+    }
+
+    // Delivers a message on the instance's stream, as a push from the server would arrive.
+    public void Push(StreamMessage message) =>
+        (_onMessage ?? throw new InvalidOperationException("Nothing subscribed."))(message);
 
     private sealed class Nothing : IDisposable
     {

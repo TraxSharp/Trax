@@ -21,9 +21,12 @@
 //! assert_eq!(machine.advance(&next, "Coin", None).unwrap_err().code.as_str(), "NO_TRANSITION");
 //! ```
 
+#![deny(missing_docs)]
+
 mod formats;
 mod ir;
 mod machine;
+mod plan;
 mod refusal;
 mod rules;
 mod stored;
@@ -32,5 +35,6 @@ mod value;
 pub use formats::duration_ticks;
 pub use ir::{IrError, IR_FORMAT_VERSION, OLDEST_IR_FORMAT_READ};
 pub use machine::{canonical_wire, GuardFn, Machine, MigrationFn, ReducerFn, Snapshot, Timer, TimerField};
+pub use plan::{PlanAnswer, PlanEvent, PlanInvalid, MAX_PLAN_EXPANSIONS};
 pub use refusal::{Refusal, RefusalCode};
 pub use value::{number_text, JsString, Map, ParseError, Value, MAX_DEPTH};

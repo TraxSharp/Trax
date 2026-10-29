@@ -354,6 +354,15 @@ describe("generateMachineFactory import styles", () => {
     expect(out).not.toContain(`from "x";`);
   });
 
+  it.each(["2028", "2029"])("keeps a specifier holding U+%s inside the comment it is written into", (code) => {
+    // A line comment ends at U+2028 and U+2029 as it does at a newline, and JSON.stringify leaves both as they are.
+    const separator = String.fromCharCode(parseInt(code, 16));
+    const out = generateMachineFactory(ir, { importStyle: "specifier", specifier: `x${separator}globalThis.pwned = true;//` });
+
+    expect(out).not.toContain(separator);
+    expect(out).toContain(`// Imports the engine from "x\\u${code}globalThis.pwned = true;//" (trax machine generate`);
+  });
+
   it("records the IR format in a specifier twin's IR, where an engine older than the check ignores it", () => {
     const out = generateMachineFactory(ir, { importStyle: "specifier" });
     expect(out).toContain(`const ir = {\n  "irFormat": ${irFormatVersion},\n  "committedStates"`);
@@ -439,12 +448,63 @@ describe("generated names", () => {
     expect(() => generateContextTypes({ ...ir, outcomes })).toThrow(/not <State>.<kind>/);
   });
 
+  it("refuses two outcomes whose output types would take one name", () => {
+    const outcomes = { "a.done": { from: "Locked" }, "A.done": { from: "Locked" } } as unknown as IrDocument["outcomes"];
+    expect(() => generateContextTypes({ ...ir, outcomes })).toThrow(/would both name the type ADoneOutput/);
+    expect(() => generateMachineFactory({ ...ir, outcomes })).toThrow(/would both name the type ADoneOutput/);
+  });
+
   it("refuses an id that is not kebab-case", () => {
     expect(() => generateContextTypes({ ...ir, id: "../escaped" })).toThrow(/kebab-case/);
     expect(() => generateMachineFactory({ ...ir, id: "turnstile\n// x" })).toThrow(/kebab-case/);
   });
 
+  // The twin module declares `ir`, `irHash` and, for a schema several outcomes share, `sharedOutput<n>`, beside the
+  // const named after the machine: a machine named as one of them would redeclare it.
+  it.each(["ir", "ir-hash", "typed-machine-from-ir"])("refuses the id %s, which its twin module declares", (id) => {
+    expect(() => generateMachineFactory({ ...ir, id })).toThrow("a name its twin module already declares");
+    expect(() => generateContextTypes({ ...ir, id })).toThrow("a name its twin module already declares");
+  });
+
+  it("refuses the id shared-output0, which a twin with a shared output schema declares", () => {
+    const output = { fields: [{ name: "n", type: "integer", nullable: false, constraints: [] }] };
+    const outcomes = {
+      "Locked.done": { from: "Locked", outcome: "done", output, edges: [] },
+      "Unlocked.done": { from: "Unlocked", outcome: "done", output, edges: [] },
+    } as unknown as IrDocument["outcomes"];
+
+    expect(generateMachineFactory({ ...ir, outcomes })).toContain("const sharedOutput0 = ");
+    expect(() => generateMachineFactory({ ...ir, id: "shared-output0", outcomes })).toThrow(
+      "The machine id 'shared-output0' is written as 'sharedOutput0', a name its twin module already declares.",
+    );
+  });
+
+  it("refuses a field no engine holds before writing a twin that would throw on import", () => {
+    const marked = JSON.parse(JSON.stringify(ir)) as IrDocument;
+    marked.context.Unlocked!.fields[0]!.name = "constructor";
+
+    expect(() => generateMachineFactory(marked)).toThrow("names the field 'constructor', which no engine holds");
+    expect(() => generateContextTypes(marked)).toThrow("names the field 'constructor', which no engine holds");
+  });
+
   it("writes each state of the union as a string literal", () => {
     expect(generateContextTypes(ir)).toContain('export type TurnstileState = "Locked" | "Unlocked";');
+  });
+
+  // A bidirectional control in a string the IR holds would make the twin read one way to a reviewer and another to
+  // the compiler: it is written as its escape, which is the same string.
+  it("escapes a bidirectional control wherever the IR's strings are written", () => {
+    const bidi = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/;
+    const marked = JSON.parse(JSON.stringify(ir)) as IrDocument;
+    marked.context.Unlocked!.fields[0]!.name = "paid\u202EWith";
+    marked.transitions[0]!.guardMessage = "a\u2066b";
+
+    const types = generateContextTypes(marked);
+    const factory = generateMachineFactory(marked);
+
+    expect(types).not.toMatch(bidi);
+    expect(types).toContain('"paid\\u202EWith": string;');
+    expect(factory).not.toMatch(bidi);
+    expect(factory).toContain('"guardMessage": "a\\u2066b"');
   });
 });

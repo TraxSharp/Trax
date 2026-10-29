@@ -175,6 +175,12 @@ export interface HttpTransportOptions {
   allowInsecureTransport?: boolean;
   /** The most bytes of an answer the transport reads before it refuses it. 16 MiB when not given. */
   maxResponseBytes?: number;
+  /**
+   * How long one request may take, in milliseconds, from sending it to the last byte of its answer; 30 seconds
+   * when not given. A request past it is aborted and fails with a TraxTransportError. `Infinity` waits for as
+   * long as the host takes.
+   */
+  requestTimeout?: number;
 }
 
 /** httpTransport's transport, and a way to drop its socket so the next stream opens a new one. */
@@ -189,8 +195,10 @@ export interface HttpTransport extends TraxTransport {
  * A transport over HTTP POST and one graphql-ws socket. A document goes by its id when `byId` says so: over HTTP
  * the body carries the id and no text, and over the socket the text is left out of the subscribe message. It
  * refuses a url or socketUrl that would travel in cleartext to another host (see requireSecureEndpoint and
- * requireSecureSocket) unless `allowInsecureTransport` is set, follows no redirect, and reads at most
- * `maxResponseBytes` of an answer.
+ * requireSecureSocket) unless `allowInsecureTransport` is set, follows no redirect, reads at most
+ * `maxResponseBytes` of an answer, and gives up on one after `requestTimeout`. A socket the host closes with
+ * 4401 or 4403 is not opened again: the streams over it end with the close event. An `error` message on a
+ * stream is handed on as an answer with those errors, so the stream ends with a TraxOperationError.
  */
 export function httpTransport(options: HttpTransportOptions): HttpTransport {
   requireSecureEndpoint(options.url, options.allowInsecureTransport);
@@ -201,6 +209,8 @@ export function httpTransport(options: HttpTransportOptions): HttpTransport {
     (socket ??= createClient({
       lazy: true,
       retryAttempts: Number.POSITIVE_INFINITY,
+      // A host that turned the caller away (4401, 4403) gives the same answer to a retry.
+      shouldRetry: (error) => isCloseEvent(error) && error.code !== 4401 && error.code !== 4403,
       ...options.socket,
       url: options.socketUrl,
       connectionParams: options.connectionParams,
@@ -212,38 +222,15 @@ export function httpTransport(options: HttpTransportOptions): HttpTransport {
       ? { id: request.document.id, query: "", operationName: request.document.name, variables: request.variables }
       : { query: request.document.text, operationName: request.document.name, variables: request.variables };
   return {
-    async execute(request) {
-      const body = payload(request);
-      const send = options.fetch ?? fetch;
-      let response: Response;
-      try {
-        response = await send(options.url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/graphql-response+json, application/json", ...options.headers?.() },
-          body: JSON.stringify(body.query === "" ? withoutQuery(body) : body),
-          // A redirect would carry the headers to wherever it points.
-          redirect: "error",
-        });
-      } catch (cause) {
-        throw new TraxTransportError(`The host could not be reached: ${String(cause)}`, undefined, { cause });
-      }
-      let answer: unknown;
-      try {
-        answer = await readJson(response, options.maxResponseBytes);
-      } catch (cause) {
-        if (cause instanceof RangeError) throw new TraxTransportError(cause.message, response.status, { cause });
-        throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status, {
-          cause,
-        });
-      }
-      if (!isRecord(answer) || (!("data" in answer) && !("errors" in answer)))
-        throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status);
-      return answer as TraxAnswer;
+    execute(request) {
+      return withRequestTimeout(options.requestTimeout ?? defaultRequestTimeout, (signal) => exchange(request, signal));
     },
     subscribe(request, sink) {
       return open().subscribe(payload(request), {
         next: (frame) => sink.next(frame as TraxAnswer),
-        error: (error) => sink.error(error),
+        // graphql-ws hands on an `error` message's errors as they came: the host refused the stream.
+        error: (error) =>
+          Array.isArray(error) && error.length > 0 ? sink.next({ errors: error as TraxGraphQLError[] }) : sink.error(error),
         complete: () => sink.complete(),
       });
     },
@@ -256,6 +243,72 @@ export function httpTransport(options: HttpTransportOptions): HttpTransport {
       void closing?.dispose();
     },
   };
+
+  async function exchange(request: TraxRequest, signal: AbortSignal): Promise<TraxAnswer> {
+    const body = payload(request);
+    const send = options.fetch ?? fetch;
+    let response: Response;
+    try {
+      response = await send(options.url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/graphql-response+json, application/json", ...options.headers?.() },
+        body: JSON.stringify(body.query === "" ? withoutQuery(body) : body),
+        // A redirect would carry the headers to wherever it points.
+        redirect: "error",
+        signal,
+      });
+    } catch (cause) {
+      throw new TraxTransportError(`The host could not be reached: ${String(cause)}`, undefined, { cause });
+    }
+    try {
+      requireNoRedirect(response);
+    } catch (cause) {
+      throw new TraxTransportError((cause as Error).message, response.status, { cause });
+    }
+    let answer: unknown;
+    try {
+      answer = await readJson(response, options.maxResponseBytes);
+    } catch (cause) {
+      if (cause instanceof RangeError) throw new TraxTransportError(cause.message, response.status, { cause });
+      throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status, {
+        cause,
+      });
+    }
+    if (!isRecord(answer) || (!("data" in answer) && !("errors" in answer)))
+      throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status);
+    // Not 2xx, and no GraphQL error to say why: the request failed, whatever data the body holds.
+    if (!response.ok && !(Array.isArray(answer.errors) && answer.errors.length > 0))
+      throw new TraxTransportError(`The host answered ${response.status} with no GraphQL error.`, response.status);
+    return answer as TraxAnswer;
+  }
+}
+
+/** The request timeout when none is set: 30 seconds. */
+const defaultRequestTimeout = 30_000;
+
+/**
+ * Runs one request under `timeout` milliseconds: past it, the signal `run` was given is aborted and the promise
+ * rejects with a TraxTransportError, whether or not the fetch heeds the signal.
+ */
+async function withRequestTimeout<T>(timeout: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  if (!Number.isFinite(timeout)) return run(controller.signal);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new TraxTransportError(`The host did not answer within ${timeout} ms.`));
+    }, Math.max(0, timeout));
+  });
+  try {
+    return await Promise.race([run(controller.signal), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isCloseEvent(value: unknown): value is { code: number; reason: string } {
+  return isRecord(value) && typeof value.code === "number" && "reason" in value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -273,11 +326,20 @@ function withoutUndefined(values: unknown): Readonly<Record<string, unknown>> {
 
 /**
  * Refuses an absolute `http:` url whose host is not loopback (`localhost`, `127.0.0.0/8`, `::1`), since the
- * headers would travel in cleartext; a relative url is the page's own origin and is accepted. `allowInsecure`
- * lifts the refusal, for a network you trust.
+ * headers would travel in cleartext; a relative path is the page's own origin and is accepted. A url starting
+ * with two slashes either way round (`//host/...`, `\\host\...`) is not a path: fetch sends it to that host
+ * over the page's scheme, so it is refused too. `allowInsecure` lifts the refusals, for a network you trust.
  */
 export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean | undefined): void {
   if (allowInsecure) return;
+  // A URL parser drops leading spaces and controls, and tabs and newlines anywhere, before it reads the slashes.
+  const bare = endpoint.replace(/[\t\n\r]/g, "");
+  let start = 0;
+  while (start < bare.length && bare.charCodeAt(start) <= 0x20) start += 1;
+  if (/^[\\/]{2}/.test(bare.slice(start)))
+    throw new Error(
+      `The endpoint ${JSON.stringify(endpoint)} names a host but no scheme, so it is sent over whatever the page was served on. Use https://, a path on the page's own origin, or set allowInsecureTransport when the network is trusted.`,
+    );
   let url: URL;
   try {
     url = new URL(endpoint);
@@ -319,6 +381,15 @@ export function requireSecureSocket(socketUrl: string, allowInsecure: boolean | 
 
 function isLoopbackHost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+}
+
+/**
+ * Throws unless `response` is the endpoint's own answer. Every request is sent with `redirect: "error"`, but a
+ * `fetch` that followed a redirect anyway, or handed back the redirect itself, must not have its answer read.
+ */
+function requireNoRedirect(response: Response): void {
+  if (response.redirected || response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400))
+    throw new Error(`The host answered with a redirect (${response.status}), which is not followed.`);
 }
 
 /**

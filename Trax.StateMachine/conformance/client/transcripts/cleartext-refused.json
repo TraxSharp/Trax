@@ -1,0 +1,16 @@
+{
+  "about": "A client refuses to open over plain HTTP and ws:// to a host that is not this machine, before it sends anything: the credentials it would carry must not cross the network in the clear.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "open": { "endpoint": "http://example.test/graphql", "socket": "ws://example.test/graphql" },
+  "opened": { "opened": false, "code": "INSECURE_TRANSPORT" },
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": []
+}

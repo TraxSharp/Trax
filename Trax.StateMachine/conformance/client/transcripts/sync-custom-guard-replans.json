@@ -1,0 +1,27 @@
+{
+  "about": "An edge on a custom guard the client cannot evaluate is sent unpredicted when nothing else reaches the target, and the sync plans again from the answer.",
+  "machine": "wizard",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "begin": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "update": "$id: UUID!, $input: UpdateInput!, $requestId: String!, $clientResult: String",
+    "next": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "back": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "skip": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "send": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Details", "context": {} } },
+    { "view": { "status": "ready", "unsaved": false } },
+    { "client": "sync", "target": "Review", "fields": { "trigger": "Update", "input": { "email": "ada@example.com", "name": "Ada" } }, "navigation": ["Skip"], "as": "s" },
+    { "request": "skip", "variables": { "id": "i-1", "requestId": "r1" }, "answer": { "id": "i-1", "revision": 2, "state": "Review", "context": {} } },
+    { "request": "update", "answer": { "id": "i-1", "revision": 3, "state": "Review", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "await": "s", "expect": { "outcome": "synced", "state": "Review", "revision": 3 } }
+  ]
+}

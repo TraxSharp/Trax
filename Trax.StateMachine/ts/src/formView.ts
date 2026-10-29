@@ -11,6 +11,8 @@
  * things only the app can supply: which UI step means which machine state, and how its values project
  * onto the machine's context.
  */
+import type { PlanResult } from './plan';
+import type { SyncOptions, SyncOutcome } from './server/serverController';
 import type {
   MachineSpec,
   StateOf,
@@ -48,6 +50,21 @@ export interface FormViewOptions<
    * they meet. Called with `options` possibly undefined, so give the parameter a default.
    */
   toContext: (values: Values, options?: Options) => Spec['states'][StateOf<Spec>];
+  /**
+   * The event that writes the form's values to the machine, for `plan` and `sync`: its trigger, and its input from the
+   * values (`toContext`'s projection when no `input` is given). Without it, a plan writes no fields.
+   */
+  fieldsEvent?: {
+    trigger: TriggerOf<Spec>;
+    input?: (values: Values, options?: Options) => unknown;
+  };
+  /** The triggers, sent without input, that move between the steps, in the order `plan` and `sync` try them. */
+  navigation?: readonly TriggerOf<Spec>[];
+}
+
+/** What `FormView.sync` drives: a `ServerMachineController`, or anything with its `syncTo`. */
+export interface FormSyncTarget<Spec extends MachineSpec> {
+  syncTo(target: StateOf<Spec>, options: SyncOptions<Spec>): Promise<SyncOutcome>;
 }
 
 export interface FormView<
@@ -91,6 +108,22 @@ export interface FormView<
    * also covers "no draft at all" — a caller that must reset a finished run needs to tell those apart.
    */
   isCommitted(json: string | null | undefined): boolean;
+  /**
+   * The events that bring the server's snapshot to this step with these values (`TypedMachine.plan`, over
+   * `fieldsEvent` and `navigation`), or null when there is no server snapshot or it does not read. The snapshot is read
+   * as one the server sent.
+   */
+  plan(
+    serverSnapshotJson: string | null | undefined,
+    step: Step,
+    values: Values,
+    options?: Options,
+  ): PlanResult<TriggerOf<Spec>> | null;
+  /**
+   * Brings the server to this step with these values through `controller.syncTo`, which plans from what the server
+   * last confirmed and sends one event at a time.
+   */
+  sync(controller: FormSyncTarget<Spec>, step: Step, values: Values, options?: Options): Promise<SyncOutcome>;
 }
 
 /**
@@ -105,7 +138,7 @@ export function createFormView<
   machine: TypedMachine<Spec>,
   options: FormViewOptions<Spec, Step, Values, Options>,
 ): FormView<Spec, Step, Values, Options> {
-  const { steps, toContext } = options;
+  const { steps, toContext, fieldsEvent, navigation = [] } = options;
 
   const inverse = new Map<StateOf<Spec>, Step>();
   for (const [step, state] of Object.entries(steps) as [Step, StateOf<Spec>][]) {
@@ -135,6 +168,14 @@ export function createFormView<
     const result = machine.rehydrate(json);
     return result.result === 'ok' ? result.snapshot : null;
   };
+
+  const fieldsFor = (values: Values, opts?: Options) =>
+    fieldsEvent === undefined
+      ? null
+      : {
+          trigger: fieldsEvent.trigger,
+          input: fieldsEvent.input ? fieldsEvent.input(values, opts) : toContext(values, opts),
+        };
 
   return {
     stateFor,
@@ -168,5 +209,15 @@ export function createFormView<
       const snapshot = rehydrated(json);
       return snapshot !== null && machine.isCommitted(snapshot.state);
     },
+
+    plan(serverSnapshotJson, step, values, opts) {
+      if (!serverSnapshotJson) return null;
+      const read = machine.rehydrate(serverSnapshotJson, { fromServer: true });
+      if (read.result !== 'ok') return null;
+      return machine.plan(read.snapshot, { target: stateFor(step), fields: fieldsFor(values, opts), navigation });
+    },
+
+    sync: (controller, step, values, opts) =>
+      controller.syncTo(stateFor(step), { fields: fieldsFor(values, opts), navigation }),
   };
 }

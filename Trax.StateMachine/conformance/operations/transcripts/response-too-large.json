@@ -1,0 +1,9 @@
+{
+  "about": "An answer larger than the client's cap is a transport failure, read no further than the cap.",
+  "open": {"maxResponseSize": 4096},
+  "steps": [
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "runs"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "data": {"operations": {"runs": [{"id": "1", "state": "FAILED", "name": "nightly"}, {"id": "2", "state": "FAILED", "name": null}]}}, "pad": 8192},
+    {"await": "runs", "expect": {"outcome": "failed", "code": "TRANSPORT_ERROR"}}
+  ]
+}

@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { httpTransport, persistedOperationsAvailableDocument, serverVersionDocument } from "../trax/index.g";
+import {
+  httpTransport,
+  persistedOperationsAvailableDocument,
+  serverVersionDocument,
+  TraxTransportError,
+} from "../trax/index.g";
 import { client } from "./graphql";
 
 afterEach(() => {
@@ -84,6 +89,15 @@ describe("the generated transport's checks", () => {
     (url) => expect(() => httpTransport({ ...options, url })).not.toThrow(),
   );
 
+  // fetch resolves these against the page, keeping its scheme and taking the host they name.
+  test.each(["//ops.example.com/trax/graphql", "\\\\ops.example.com\\trax", "/\\ops.example.com/g", " //ops.example.com/g", "/\t/ops.example.com/g"])(
+    "refuses the url %j, which names a host but no scheme",
+    (url) => expect(() => httpTransport({ ...options, url })).toThrow("names a host but no scheme"),
+  );
+
+  test("allowInsecureTransport accepts a url that names a host but no scheme", () =>
+    expect(() => httpTransport({ ...options, url: "//ops.lan/trax/graphql", allowInsecureTransport: true })).not.toThrow());
+
   test("refuses a cleartext url to another host", () =>
     expect(() => httpTransport({ ...options, url: "http://ops.example.com/trax/graphql" })).toThrow("is not over TLS"));
 
@@ -121,6 +135,46 @@ describe("the generated transport's checks", () => {
     await httpTransport(options).execute({ document: serverVersionDocument, variables: {} });
 
     expect((fetchSpy.mock.calls[0][1] as RequestInit).redirect).toBe("error");
+  });
+
+  // redirect: "error" is a request, not a promise: a polyfill or a stand-in fetch may follow anyway.
+  test("an answer a fetch followed a redirect to is a transport error, not read", async () => {
+    const followed = answer({ operations: { serverVersion: "elsewhere" } });
+    Object.defineProperty(followed, "redirected", { value: true });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(followed);
+
+    const sent = httpTransport(options).execute({ document: serverVersionDocument, variables: {} });
+
+    await expect(sent).rejects.toBeInstanceOf(TraxTransportError);
+    await expect(sent).rejects.toThrow("redirect");
+  });
+
+  test("a redirect handed back as it is, is a transport error", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 302, headers: { Location: "https://x" } }));
+
+    await expect(httpTransport(options).execute({ document: serverVersionDocument, variables: {} })).rejects.toThrow(
+      "redirect (302)",
+    );
+  });
+
+  test("an answer that is not 2xx and names no GraphQL error is a transport error, whatever data it holds", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: { operations: null } }), { status: 500 }),
+    );
+
+    const sent = httpTransport(options).execute({ document: serverVersionDocument, variables: {} });
+
+    await expect(sent).rejects.toBeInstanceOf(TraxTransportError);
+    await expect(sent).rejects.toThrow("The host answered 500 with no GraphQL error.");
+  });
+
+  test("an answer that is not 2xx with a GraphQL error is the host's answer", async () => {
+    const errors = [{ message: "Not authorized.", extensions: { code: "AUTH_NOT_AUTHORIZED" } }];
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ errors }), { status: 401 }));
+
+    await expect(httpTransport(options).execute({ document: serverVersionDocument, variables: {} })).resolves.toEqual({
+      errors,
+    });
   });
 
   test("an answer longer than maxResponseBytes is a transport error, read no further", async () => {

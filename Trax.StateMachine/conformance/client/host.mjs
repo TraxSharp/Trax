@@ -98,6 +98,7 @@ class Connection {
   #acknowledged = false;
   #closed = false;
   #refuse;
+  #pongs = 0;
 
   constructor(socket, refuse, onSubscribe) {
     this.#socket = socket;
@@ -121,8 +122,14 @@ class Connection {
     return this.#closed;
   }
 
-  send(message) {
-    if (!this.#closed) this.#socket.write(frame(0x1, JSON.stringify(message)));
+  /** How many `pong`s the client has answered the host's `ping`s with. */
+  get pongs() {
+    return this.#pongs;
+  }
+
+  /** Sends one message; `pad` spaces after its JSON make the frame that much larger without changing what it says. */
+  send(message, pad = 0) {
+    if (!this.#closed) this.#socket.write(frame(0x1, JSON.stringify(message) + " ".repeat(pad)));
   }
 
   /** Closes the socket with a close frame, as a host that stops or refuses does. */
@@ -149,6 +156,9 @@ class Connection {
         return this.send({ type: "connection_ack" });
       case "ping":
         return this.send({ type: "pong" });
+      case "pong":
+        this.#pongs += 1;
+        return;
       case "subscribe":
         if (!this.#acknowledged) return this.close(4401, "Unauthorized");
         return this.#onSubscribe(this, message);
@@ -168,6 +178,10 @@ export async function startHost() {
   const unknown = [];
   let documents = new Map();
   let refuseConnections = 0;
+  // Status codes to answer the next upgrades with instead of switching protocols, one each.
+  let refuseUpgrades = [];
+  // Requests a step chose not to answer, closed when the next transcript starts.
+  const hanging = new Set();
   const connections = new Set();
   const live = new Map();
   // Every upgraded socket, so closing the host does not wait on a client that has not closed its end.
@@ -199,13 +213,17 @@ export async function startHost() {
       requests.put({
         operation,
         body: parsed,
-        respond: ({ status = 200, json, close }) => {
+        respond: ({ status = 200, json, close, hang, headers = {}, raw, pad = 0 }) => {
           if (close) {
             req.socket.destroy();
             return;
           }
-          res.writeHead(status, { "content-type": "application/json" });
-          res.end(json === undefined ? "" : JSON.stringify(json));
+          if (hang) {
+            hanging.add(req.socket);
+            return;
+          }
+          res.writeHead(status, { "content-type": "application/json", ...headers });
+          res.end((raw ?? (json === undefined ? "" : JSON.stringify(json))) + " ".repeat(pad));
         },
       });
     });
@@ -220,6 +238,11 @@ export async function startHost() {
       .map((p) => p.trim());
     if (!key || !protocols.includes(PROTOCOL)) {
       socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
+      return;
+    }
+    const refusedWith = refuseUpgrades.shift();
+    if (refusedWith !== undefined) {
+      socket.end(`HTTP/1.1 ${refusedWith} Refused\r\nContent-Length: 0\r\n\r\n`);
       return;
     }
     const accept = createHash("sha1").update(key + WS_GUID).digest("base64");
@@ -242,7 +265,11 @@ export async function startHost() {
         get open() {
           return !conn.closed && (live.get(conn)?.has(message.id) ?? false);
         },
-        next: (value) => conn.send({ id: message.id, type: "next", payload: value }),
+        next: (value, pad = 0) => conn.send({ id: message.id, type: "next", payload: value }, pad),
+        ping: () => conn.send({ type: "ping" }),
+        get pongs() {
+          return conn.pongs;
+        },
         error: (errors) => {
           live.get(conn)?.delete(message.id);
           conn.send({ id: message.id, type: "error", payload: errors });
@@ -262,18 +289,37 @@ export async function startHost() {
     connections.add(connection);
   });
 
+  // A second host a redirect points at. Nothing a client sends should ever reach it; it counts what does.
+  let decoyHits = 0;
+  const decoy = createServer((req, res) => {
+    decoyHits += 1;
+    req.resume();
+    req.on("end", () => res.writeHead(200, { "content-type": "application/json" }).end("{}"));
+  });
+
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise((resolve) => decoy.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
 
   return {
     endpoint: `http://127.0.0.1:${port}/graphql`,
     socket: `ws://127.0.0.1:${port}/graphql`,
+    decoy: `http://127.0.0.1:${decoy.address().port}/graphql`,
     requests,
     subscriptions,
-    /** Sets up the host for one transcript: its documents, and how many connections it refuses first. */
-    reset({ documents: docs, refuse = 0 }) {
+    /** How many requests have reached the decoy since the transcript started. */
+    decoyHits: () => decoyHits,
+    /**
+     * Sets up the host for one transcript: its documents, how many connections it refuses first, and the statuses it
+     * answers the first upgrades with.
+     */
+    reset({ documents: docs, refuse = 0, refuseUpgrades: upgrades = [] }) {
       documents = new Map(docs.map((d) => [d.id, d.operation]));
       refuseConnections = refuse;
+      refuseUpgrades = [...upgrades];
+      decoyHits = 0;
+      for (const s of hanging) s.destroy();
+      hanging.clear();
       for (const c of connections) c.close(1001, "Next transcript");
       connections.clear();
       live.clear();
@@ -293,6 +339,9 @@ export async function startHost() {
       new Promise((resolve) => {
         for (const c of connections) c.close(1001, "Done");
         for (const socket of sockets) socket.destroy();
+        for (const s of hanging) s.destroy();
+        decoy.close();
+        decoy.closeAllConnections();
         server.close(() => resolve());
         server.closeAllConnections();
       }),

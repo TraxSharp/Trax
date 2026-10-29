@@ -1,0 +1,9 @@
+{
+  "about": "A redirect is a transport failure: the client never sends the request on, so the host it points at hears nothing.",
+  "steps": [
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "runs"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "redirect": true},
+    {"await": "runs", "expect": {"outcome": "failed", "code": "TRANSPORT_ERROR"}},
+    {"decoy": 0}
+  ]
+}

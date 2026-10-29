@@ -10,8 +10,9 @@ using Trax.StateMachine.Tests.Fakes;
 namespace Trax.StateMachine.Tests.Client;
 
 /// <summary>
-/// An answer from another host than the endpoint's, which is what a client that follows redirects hands back, fails the
-/// request in the transport and in the machine server; a client with redirects off never reaches the other host.
+/// A client whose handler follows redirects is refused before it sends anything, so neither the transport nor the
+/// machine server ever lets a request leave for another host; an answer from another host, through a handler the
+/// transport cannot see into, fails the request.
 /// </summary>
 public class RedirectTests
 {
@@ -27,13 +28,42 @@ public class RedirectTests
     private static TraxHttpTransport Transport(HttpClient http, Uri endpoint) =>
         new(new TraxHttpTransportOptions { Http = http, Endpoint = endpoint });
 
+    private static HttpClient NoRedirects() =>
+        new(new SocketsHttpHandler { AllowAutoRedirect = false });
+
     [Test]
-    public async Task An_answer_after_a_redirect_to_another_host_is_a_failure()
+    public async Task A_default_client_is_refused_and_never_reaches_the_other_host()
     {
         await using var other = LoopbackHttpHost.Answering(Answer);
         await using var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
 
-        var answer = await Transport(new HttpClient(), endpoint.Endpoint)
+        var build = () => Transport(new HttpClient(), endpoint.Endpoint);
+
+        build.Should().Throw<ArgumentException>().WithMessage("*follows redirects*");
+        endpoint.Received.Should().Be(0);
+        other.Received.Should().Be(0);
+    }
+
+    [Test]
+    public void A_handler_that_follows_redirects_behind_a_delegating_handler_is_refused()
+    {
+        using var http = new HttpClient(
+            new PassThrough { InnerHandler = new SocketsHttpHandler() }
+        );
+
+        var build = () => Transport(http, new Uri("https://api.example.com/graphql"));
+
+        build.Should().Throw<ArgumentException>().WithMessage("*follows redirects*");
+    }
+
+    [Test]
+    public async Task An_answer_from_another_host_through_a_handler_that_followed_a_redirect_is_a_failure()
+    {
+        await using var other = LoopbackHttpHost.Answering(Answer);
+        await using var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+        using var http = new HttpClient(new FollowsItself());
+
+        var answer = await Transport(http, endpoint.Endpoint)
             .ExecuteAsync(new TraxRequest(Query, new JsonObject()));
 
         answer.Failure.Should().NotBeNull();
@@ -46,7 +76,7 @@ public class RedirectTests
     {
         await using var other = LoopbackHttpHost.Answering(Answer);
         await using var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
-        using var http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false });
+        using var http = NoRedirects();
 
         var answer = await Transport(http, endpoint.Endpoint)
             .ExecuteAsync(new TraxRequest(Query, new JsonObject()));
@@ -60,12 +90,26 @@ public class RedirectTests
     public async Task An_answer_from_the_endpoints_own_host_is_read()
     {
         await using var endpoint = LoopbackHttpHost.Answering(Answer);
+        using var http = NoRedirects();
 
-        var answer = await Transport(new HttpClient(), endpoint.Endpoint)
+        var answer = await Transport(http, endpoint.Endpoint)
             .ExecuteAsync(new TraxRequest(Query, new JsonObject()));
 
         answer.Failure.Should().BeNull();
         answer.Data!["x"]!.GetValue<int>().Should().Be(1);
+    }
+
+    [Test]
+    public async Task The_machine_server_refuses_a_default_client_and_never_reaches_the_other_host()
+    {
+        await using var other = LoopbackHttpHost.Answering(Answer);
+        await using var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+
+        var build = () => MachineServer(new HttpClient(), endpoint.Endpoint);
+
+        build.Should().Throw<ArgumentException>().WithMessage("*follows redirects*");
+        endpoint.Received.Should().Be(0);
+        other.Received.Should().Be(0);
     }
 
     [Test]
@@ -75,11 +119,20 @@ public class RedirectTests
             """{"data":{"machines":{"turnstile":{"get":{"problem":{"code":"NOT_FOUND","message":"m"}}}}}}"""
         );
         await using var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
-        var server = new GraphQLMachineServer(
+        using var http = new HttpClient(new FollowsItself());
+        var server = MachineServer(http, endpoint.Endpoint);
+
+        var get = () => server.GetAsync("i-1");
+
+        (await get.Should().ThrowAsync<HttpRequestException>()).WithMessage("*redirected*");
+    }
+
+    private static GraphQLMachineServer MachineServer(HttpClient http, Uri endpoint) =>
+        new(
             new GraphQLMachineServerOptions
             {
-                Http = new HttpClient(),
-                Endpoint = endpoint.Endpoint,
+                Http = http,
+                Endpoint = endpoint,
                 Machine = new ClientManifestMachine
                 {
                     Id = "turnstile",
@@ -105,9 +158,41 @@ public class RedirectTests
             }
         );
 
-        var get = () => server.GetAsync("i-1");
+    private sealed class PassThrough : DelegatingHandler { }
 
-        (await get.Should().ThrowAsync<HttpRequestException>()).WithMessage("*redirected*");
+    // Follows a 307 itself, as a platform's own handler might: the transport cannot tell that it does.
+    private sealed class FollowsItself : HttpMessageHandler
+    {
+        private readonly HttpMessageInvoker _inner = new(
+            new SocketsHttpHandler { AllowAutoRedirect = false }
+        );
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            var response = await _inner.SendAsync(request, cancellationToken);
+            if (
+                response.StatusCode != HttpStatusCode.TemporaryRedirect
+                || response.Headers.Location is not { } location
+            )
+                return response;
+            response.Dispose();
+            var body = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
+            var again = new HttpRequestMessage(request.Method, location)
+            {
+                Content = new ByteArrayContent(body),
+            };
+            return await _inner.SendAsync(again, cancellationToken);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                _inner.Dispose();
+            base.Dispose(disposing);
+        }
     }
 
     private sealed class NoSocket : ISubscriptionSocket

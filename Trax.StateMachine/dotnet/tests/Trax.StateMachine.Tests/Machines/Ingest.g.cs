@@ -3,12 +3,6 @@
 // </auto-generated>
 #nullable enable
 
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
-using Trax.StateMachine;
-using Trax.StateMachine.Client;
-
 namespace Trax.StateMachine.Tests.Machines;
 
 /// <summary>The states of the ingest machine.</summary>
@@ -35,58 +29,58 @@ public enum IngestTrigger
 /// <summary>The context of Approved.</summary>
 public sealed record IngestApprovedContext
 {
-    [JsonPropertyName("fingerprint")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("fingerprint")]
     public required string Fingerprint { get; init; }
 
-    [JsonPropertyName("source")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("source")]
     public required string Source { get; init; }
 }
 
 /// <summary>The context of Cancelled.</summary>
 public sealed record IngestCancelledContext
 {
-    [JsonPropertyName("source")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("source")]
     public required string Source { get; init; }
 }
 
 /// <summary>The context of FetchFailed.</summary>
 public sealed record IngestFetchFailedContext
 {
-    [JsonPropertyName("source")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("source")]
     public required string Source { get; init; }
 }
 
 /// <summary>The context of Fetched.</summary>
 public sealed record IngestFetchedContext
 {
-    [JsonPropertyName("fingerprint")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("fingerprint")]
     public required string Fingerprint { get; init; }
 
-    [JsonPropertyName("source")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("source")]
     public required string Source { get; init; }
 }
 
 /// <summary>The context of Fetching.</summary>
 public sealed record IngestFetchingContext
 {
-    [JsonPropertyName("source")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("source")]
     public required string Source { get; init; }
 }
 
 /// <summary>The context of Idle.</summary>
 public sealed record IngestIdleContext
 {
-    [JsonPropertyName("source")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("source")]
     public required string Source { get; init; }
 }
 
 /// <summary>The context of NeedsReview.</summary>
 public sealed record IngestNeedsReviewContext
 {
-    [JsonPropertyName("fingerprint")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("fingerprint")]
     public required string Fingerprint { get; init; }
 
-    [JsonPropertyName("source")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("source")]
     public required string Source { get; init; }
 }
 
@@ -103,48 +97,48 @@ public static class IngestMachine
     public const string Ir = """"{"committedStates":[],"context":{"Approved":{"fields":[{"constraints":[{"field":"fingerprint","rule":"nonEmpty","source":"context"}],"name":"fingerprint","nullable":false,"type":"string"},{"constraints":[{"field":"source","rule":"nonEmpty","source":"context"}],"name":"source","nullable":false,"type":"string"}]},"Cancelled":{"fields":[{"constraints":[{"field":"source","rule":"nonEmpty","source":"context"}],"name":"source","nullable":false,"type":"string"}]},"FetchFailed":{"fields":[{"constraints":[{"field":"source","rule":"nonEmpty","source":"context"}],"name":"source","nullable":false,"type":"string"}]},"Fetched":{"fields":[{"constraints":[{"field":"fingerprint","rule":"nonEmpty","source":"context"}],"name":"fingerprint","nullable":false,"type":"string"},{"constraints":[{"field":"source","rule":"nonEmpty","source":"context"}],"name":"source","nullable":false,"type":"string"}]},"Fetching":{"fields":[{"constraints":[{"field":"source","rule":"nonEmpty","source":"context"}],"name":"source","nullable":false,"type":"string"}]},"Idle":{"fields":[{"constraints":[{"field":"source","rule":"nonEmpty","source":"context"}],"name":"source","nullable":false,"type":"string"}]},"NeedsReview":{"fields":[{"constraints":[{"field":"fingerprint","rule":"nonEmpty","source":"context"}],"name":"fingerprint","nullable":false,"type":"string"},{"constraints":[{"field":"source","rule":"nonEmpty","source":"context"}],"name":"source","nullable":false,"type":"string"}]}},"differential":{"samples":{"Fetching.done":[{"fingerprint":"sha256:abc","unsure":false},{"fingerprint":"sha256:def","unsure":true},{"fingerprint":"","unsure":false}]}},"id":"ingest","initialContext":{"source":"s3://bucket/partition-1"},"initialState":"Idle","inputs":{},"outcomes":{"Fetching.cancelled":{"edges":[{"to":"Cancelled"}],"outcome":"cancelled","state":"Fetching"},"Fetching.done":{"edges":[{"guard":{"field":"unsure","rule":"boolEquals","source":"input","value":true},"reduce":{"reduce":"set","steps":[{"field":"fingerprint","value":{"input":"fingerprint"}}]},"to":"NeedsReview"},{"reduce":{"reduce":"set","steps":[{"field":"fingerprint","value":{"input":"fingerprint"}}]},"to":"Fetched"}],"outcome":"done","output":{"fields":[{"constraints":[],"name":"fingerprint","nullable":false,"type":"string"},{"constraints":[],"name":"unsure","nullable":false,"type":"boolean"}]},"state":"Fetching"},"Fetching.failed":{"edges":[{"to":"FetchFailed"}],"outcome":"failed","state":"Fetching"}},"states":["Approved","Cancelled","FetchFailed","Fetched","Fetching","Idle","NeedsReview"],"transitions":[{"from":"Cancelled","to":"Fetching","trigger":"Retry"},{"from":"FetchFailed","to":"Fetching","trigger":"Retry"},{"from":"Fetching","to":"Idle","trigger":"Abandon"},{"from":"Idle","to":"Fetching","trigger":"Start"},{"from":"NeedsReview","to":"Approved","trigger":"Approve"}],"triggers":["Abandon","Approve","Retry","Start"],"version":1}"""";
 
     /// <summary>The engine built from <see cref="Ir"/>.</summary>
-    public static IrMachine Create() => new(JsonNode.Parse(Ir)!.AsObject());
+    public static global::Trax.StateMachine.IrMachine Create() => new(global::System.Text.Json.Nodes.JsonNode.Parse(Ir)!.AsObject());
 }
 
 /// <summary>
-/// Drives one instance of the ingest machine a host serves: <see cref="ServerMachineController"/> with its states,
+/// Drives one instance of the ingest machine a host serves: <see cref="global::Trax.StateMachine.Client.ServerMachineController"/> with its states,
 /// triggers, contexts and inputs typed, predicting with the machine built from the IR.
 /// </summary>
-public sealed class IngestClient : IDisposable
+public sealed class IngestClient : global::System.IDisposable
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    private static readonly global::System.Text.Json.JsonSerializerOptions Json = new(global::System.Text.Json.JsonSerializerDefaults.Web)
     {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
     /// <summary>Wraps a controller already built for the ingest machine.</summary>
-    public IngestClient(ServerMachineController controller) => Controller = controller;
+    public IngestClient(global::Trax.StateMachine.Client.ServerMachineController controller) => Controller = controller;
 
     /// <summary>
     /// Builds the client for <paramref name="machine"/>, the ingest machine as the host's manifest lists it, which must
     /// be the version this view was generated for.
     /// </summary>
-    /// <exception cref="ArgumentException">The manifest's machine is another machine, or another version of it.</exception>
+    /// <exception cref="global::System.ArgumentException">The manifest's machine is another machine, or another version of it.</exception>
     public static IngestClient Create(
-        ClientManifestMachine machine,
-        IMachineServer server,
+        global::Trax.StateMachine.ClientManifestMachine machine,
+        global::Trax.StateMachine.Client.IMachineServer server,
         string? id = null,
-        Func<string>? newRequestId = null
+        global::System.Func<string>? newRequestId = null
     )
     {
-        ArgumentNullException.ThrowIfNull(machine);
+        global::System.ArgumentNullException.ThrowIfNull(machine);
         if (machine.Id != IngestMachine.Id || machine.IrHash != IngestMachine.IrHash)
-            throw new ArgumentException(
+            throw new global::System.ArgumentException(
                 $"The manifest's machine '{machine.Id}' (IR {machine.IrHash}) is not the version this view was generated for (IR {IngestMachine.IrHash}). Generate the view again from the host's manifest.",
                 nameof(machine)
             );
         return new IngestClient(
-            new ServerMachineController(
-                new ServerMachineOptions
+            new global::Trax.StateMachine.Client.ServerMachineController(
+                new global::Trax.StateMachine.Client.ServerMachineOptions
                 {
                     Machine = machine,
                     Server = server,
-                    Predictor = MachinePredictor.FromIr(machine),
+                    Predictor = global::Trax.StateMachine.Client.MachinePredictor.FromIr(machine),
                     Id = id,
                     NewRequestId = newRequestId,
                 }
@@ -153,30 +147,32 @@ public sealed class IngestClient : IDisposable
     }
 
     /// <summary>The untyped controller underneath.</summary>
-    public ServerMachineController Controller { get; }
+    public global::Trax.StateMachine.Client.ServerMachineController Controller { get; }
 
     /// <summary>What the controller shows now.</summary>
-    public MachineView View => Controller.View;
+    public global::Trax.StateMachine.Client.MachineView View => Controller.View;
 
     /// <summary>The state shown, or null before the first snapshot.</summary>
-    public IngestState? State => View.Snapshot is { } shown ? Enum.Parse<IngestState>(shown.State) : null;
+    public IngestState? State => View.Snapshot is { } shown ? global::System.Enum.Parse<IngestState>(shown.State) : null;
 
     /// <summary>Raised after every change of <see cref="View"/>.</summary>
-    public event EventHandler? Changed
+    public event global::System.EventHandler? Changed
     {
         add => Controller.Changed += value;
         remove => Controller.Changed -= value;
     }
 
     /// <summary>Opens the instance, or starts one.</summary>
-    public Task StartAsync() => Controller.StartAsync();
+    public global::System.Threading.Tasks.Task StartAsync() => Controller.StartAsync();
 
     /// <summary>Resends what last failed, under the same request id.</summary>
-    public Task<SendOutcome> RetryAsync() => Controller.RetryAsync();
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> RetryAsync() => Controller.RetryAsync();
 
     /// <summary>The triggers with an edge out of the shown state.</summary>
-    public IReadOnlyList<IngestTrigger> AvailableTriggers() =>
-        Controller.AvailableTriggers().Select(Enum.Parse<IngestTrigger>).ToList();
+    public global::System.Collections.Generic.IReadOnlyList<IngestTrigger> AvailableTriggers() =>
+        global::System.Linq.Enumerable.ToList(
+            global::System.Linq.Enumerable.Select(Controller.AvailableTriggers(), global::System.Enum.Parse<IngestTrigger>)
+        );
 
     /// <summary>The context shown, while the instance is in Approved; null in any other state.</summary>
     public IngestApprovedContext? ApprovedContext => ContextIn<IngestApprovedContext>(IngestState.Approved);
@@ -200,25 +196,25 @@ public sealed class IngestClient : IDisposable
     public IngestNeedsReviewContext? NeedsReviewContext => ContextIn<IngestNeedsReviewContext>(IngestState.NeedsReview);
 
     /// <summary>Sends Abandon.</summary>
-    public Task<SendOutcome> SendAbandonAsync() => Controller.SendAsync("Abandon");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendAbandonAsync() => Controller.SendAsync("Abandon");
 
     /// <summary>Whether Abandon would fire from what is shown.</summary>
     public bool CanSendAbandon() => Controller.CanSend("Abandon");
 
     /// <summary>Sends Approve.</summary>
-    public Task<SendOutcome> SendApproveAsync() => Controller.SendAsync("Approve");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendApproveAsync() => Controller.SendAsync("Approve");
 
     /// <summary>Whether Approve would fire from what is shown.</summary>
     public bool CanSendApprove() => Controller.CanSend("Approve");
 
     /// <summary>Sends Retry.</summary>
-    public Task<SendOutcome> SendRetryAsync() => Controller.SendAsync("Retry");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendRetryAsync() => Controller.SendAsync("Retry");
 
     /// <summary>Whether Retry would fire from what is shown.</summary>
     public bool CanSendRetry() => Controller.CanSend("Retry");
 
     /// <summary>Sends Start.</summary>
-    public Task<SendOutcome> SendStartAsync() => Controller.SendAsync("Start");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendStartAsync() => Controller.SendAsync("Start");
 
     /// <summary>Whether Start would fire from what is shown.</summary>
     public bool CanSendStart() => Controller.CanSend("Start");
@@ -228,5 +224,5 @@ public sealed class IngestClient : IDisposable
 
     private T? ContextIn<T>(IngestState state)
         where T : class =>
-        State == state ? View.Snapshot!.Context.Deserialize<T>(Json) : null;
+        State == state ? global::System.Text.Json.JsonSerializer.Deserialize<T>(View.Snapshot!.Context, Json) : null;
 }

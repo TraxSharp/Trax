@@ -292,11 +292,8 @@ internal sealed partial class ClientDocumentSet
             return null;
         }
 
-        var variables = (operation.Variables?.Items ?? []).ToDictionary(
-            v => v.Variable.Name.StringValue,
-            v => v,
-            StringComparer.Ordinal
-        );
+        if (Variables(file, name, operation, errors) is not { } variables)
+            return null;
         foreach (var (variable, definition) in variables)
             if (
                 types.NameOf(definition.Type) is { } typeName
@@ -478,6 +475,32 @@ internal sealed partial class ClientDocumentSet
             .GetAwaiter()
             .GetResult();
         return writer.ToString().Replace("\r\n", "\n").Trim();
+    }
+
+    // An operation's variables by name, or null when it declares one twice, which GraphQL refuses: each repeat is
+    // reported where it is declared.
+    private static Dictionary<string, GraphQLVariableDefinition>? Variables(
+        ClientDocumentFile file,
+        string name,
+        GraphQLOperationDefinition operation,
+        List<string> errors
+    )
+    {
+        var variables = new Dictionary<string, GraphQLVariableDefinition>(StringComparer.Ordinal);
+        var unique = true;
+        foreach (var definition in operation.Variables?.Items ?? [])
+            if (!variables.TryAdd(definition.Variable.Name.StringValue, definition))
+            {
+                errors.Add(
+                    At(
+                        file,
+                        definition,
+                        $"'{name}' declares the variable '${definition.Variable.Name.StringValue}' more than once."
+                    )
+                );
+                unique = false;
+            }
+        return unique ? variables : null;
     }
 
     internal static string At(ClientDocumentFile file, ASTNode node, string message)

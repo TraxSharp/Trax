@@ -200,6 +200,7 @@ namespace Trax.Client
     {
         public const string Code = "TRANSPORT_ERROR";
         public TraxTransportFailure(string Message, int? Status = default) { }
+        public int? CloseStatus { get; init; }
         public string Message { get; init; }
         public int? Status { get; init; }
     }

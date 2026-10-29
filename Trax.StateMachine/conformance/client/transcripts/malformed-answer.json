@@ -1,0 +1,23 @@
+{
+  "about": "An answer that is not JSON is a transport failure, a value: the client shows what it showed before and does not stop.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "status": "ready" } },
+    { "client": "send", "trigger": "Push", "as": "push" },
+    { "request": "push", "variables": { "id": "i-1", "requestId": "r1", "clientResult": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}" }, "raw": "<html>not json</html>" },
+    { "await": "push", "expect": { "outcome": "failed", "code": "TRANSPORT_ERROR" } },
+    { "view": { "status": "ready", "state": "Unlocked", "revision": 1, "problem": "TRANSPORT_ERROR", "error": null } }
+  ]
+}

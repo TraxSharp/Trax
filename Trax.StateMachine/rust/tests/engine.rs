@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use trax_state_machine::{Machine, Map, RefusalCode, Snapshot, Value};
+use trax_state_machine::{JsString, Machine, Map, PlanAnswer, PlanEvent, PlanInvalid, RefusalCode, Snapshot, Value};
 
 fn conformance(path: &str) -> Value {
     let file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -210,4 +210,246 @@ fn a_lone_surrogate_is_malformed_as_the_csharp_reader_answers() {
     // A member the reader never reads is not looked at, as there.
     let ignored = r#"{"machine":"turnstile","version":1,"state":"Locked","context":{},"note":"\ud800"}"#;
     assert!(machine.rehydrate(ignored).is_ok());
+}
+
+// A value 100 000 arrays deep, built in memory as a binding would build it, where no parser's depth limit applies.
+fn too_deep() -> Value {
+    let mut value = Value::Null;
+    for _ in 0..100_000 {
+        value = Value::from(vec![value]);
+    }
+    value
+}
+
+fn turnstile() -> Machine {
+    Machine::from_ir(&conformance("machines/turnstile/turnstile.ir.json")).unwrap()
+}
+
+#[test]
+fn an_input_nested_past_the_limit_is_refused_not_overflowed() {
+    let machine = turnstile();
+    let input = too_deep();
+
+    let refused = machine.advance(&machine.initial_snapshot(), "Coin", Some(&input));
+
+    assert_eq!(refused.unwrap_err().code, RefusalCode::InvalidInput);
+    assert!(!machine.can_fire(&machine.initial_snapshot(), "Coin", Some(&input)));
+}
+
+#[test]
+fn a_context_nested_past_the_limit_is_refused_not_overflowed() {
+    let machine = turnstile();
+    let mut snapshot = machine.initial_snapshot();
+    snapshot.context.insert("deep".into(), too_deep());
+
+    assert_eq!(
+        machine.advance(&snapshot, "Coin", None).unwrap_err().code,
+        RefusalCode::InvalidContext
+    );
+    assert!(!machine.can_fire(&snapshot, "Coin", None));
+    let mut stored = Map::new();
+    stored.insert("machine".into(), Value::from("turnstile"));
+    stored.insert("version".into(), Value::Number(1.0));
+    stored.insert("state".into(), Value::from("Locked"));
+    stored.insert("context".into(), Value::Object(snapshot.context));
+    assert!(Snapshot::from_value(&Value::Object(stored)).is_none());
+}
+
+#[test]
+fn a_reducer_that_nests_past_the_limit_is_refused_not_overflowed() {
+    let machine = Machine::from_ir_text(CUSTOM)
+        .unwrap()
+        .with_guard("Open", |_, _| true)
+        .with_guard("Approved", |_, _| true)
+        .with_reducer("Stamp", |_, _| {
+            let mut context = Map::new();
+            context.insert("deep".into(), too_deep());
+            context
+        });
+
+    assert_eq!(
+        machine.advance(&start(), "Go", None).unwrap_err().code,
+        RefusalCode::InvalidContext
+    );
+}
+
+#[test]
+fn an_ir_nested_past_the_limit_is_refused_not_overflowed() {
+    let mut ir = conformance("machines/turnstile/turnstile.ir.json");
+    let Value::Object(map) = &mut ir else { unreachable!() };
+    map.insert("note".into(), too_deep());
+
+    assert!(Machine::from_ir(&ir).is_err());
+}
+
+#[test]
+fn a_value_nested_past_the_limit_is_written_and_dropped_without_overflowing() {
+    let deep = too_deep();
+    let json = deep.to_json();
+    assert_eq!(json, format!("{}null{}", "[".repeat(100_000), "]".repeat(100_000)));
+    drop(deep);
+}
+
+#[test]
+fn an_edge_rests_on_a_custom_rule_until_every_rule_it_names_has_a_handler() {
+    let machine = Machine::from_ir_text(CUSTOM).unwrap();
+    assert!(machine.rests_on_unhandled_rule("A", "Go"));
+    assert!(!machine.rests_on_unhandled_rule("B", "Go"));
+    // The guard and the reduction are bound, but the destination's requirement is not.
+    let partly = Machine::from_ir_text(CUSTOM)
+        .unwrap()
+        .with_guard("Open", |_, _| true)
+        .with_reducer("Stamp", |context, _| context.clone());
+    assert!(partly.rests_on_unhandled_rule("A", "Go"));
+    let bound = partly.with_guard("Approved", |_, _| true);
+    assert!(!bound.rests_on_unhandled_rule("A", "Go"));
+}
+
+fn wizard() -> Machine {
+    Machine::from_ir(&conformance("plan/wizard.ir.json")).unwrap()
+}
+
+fn details() -> Snapshot {
+    Snapshot::from_value(&object(
+        r#"{"machine":"wizard","version":1,"state":"Details","context":{"email":null,"name":null}}"#,
+    ))
+    .unwrap()
+}
+
+fn ada() -> PlanEvent {
+    PlanEvent::new("Update", Some(object(r#"{"email":"ada@example.com","name":"Ada"}"#)))
+}
+
+#[test]
+fn a_custom_guard_with_a_handler_is_planned_through() {
+    let machine = wizard().with_guard("approved", |_, _| true);
+
+    let plan = machine.plan(&details(), "Review", Some(&ada()), &["Skip".to_owned()], None);
+
+    assert_eq!(plan, PlanAnswer::Plan(vec![ada(), PlanEvent::new("Skip", None)]));
+}
+
+#[test]
+fn a_plan_with_no_depth_to_spend_is_exceeded_unless_it_is_already_there() {
+    let machine = wizard();
+    let navigation = ["Next".to_owned()];
+
+    assert_eq!(
+        machine.plan(&details(), "Review", Some(&ada()), &navigation, Some(0)),
+        PlanAnswer::Exceeded
+    );
+    assert_eq!(
+        machine.plan(&details(), "Details", None, &navigation, Some(0)),
+        PlanAnswer::Plan(Vec::new())
+    );
+}
+
+// A machine whose one edge counts up forever: every snapshot is new, so only the expansion limit ends the search.
+const COUNTER: &str = r#"{"id":"n","version":1,"initialState":"A","initialContext":{"n":0},"states":["A","B"],
+  "triggers":["Tick"],"committedStates":[],"inputs":{},
+  "context":{"A":{"fields":[{"name":"n","type":"number","nullable":false,"constraints":[]}]},
+             "B":{"fields":[{"name":"n","type":"number","nullable":false,"constraints":[]}]}},
+  "transitions":[{"from":"A","trigger":"Tick","to":"A","reduce":{"reduce":"custom","name":"Count"}}]}"#;
+
+#[test]
+fn a_search_that_never_ends_is_bounded_by_its_expansions() {
+    let machine = Machine::from_ir_text(COUNTER)
+        .unwrap()
+        .with_reducer("Count", |context, _| {
+            let mut next = context.clone();
+            let n = context.get(&JsString::from("n")).and_then(Value::as_f64).unwrap_or(0.0);
+            next.insert("n".into(), Value::Number(n + 1.0));
+            next
+        });
+
+    let plan = machine.plan(
+        &machine.initial_snapshot(),
+        "B",
+        None,
+        &["Tick".to_owned()],
+        Some(usize::MAX),
+    );
+
+    assert_eq!(plan, PlanAnswer::Exceeded);
+}
+
+#[test]
+fn a_custom_reduction_on_the_fields_event_never_shows_the_fields_applied() {
+    // With no handler the reduction would keep the context, so the start would pass for the goal.
+    let machine = Machine::from_ir_text(COUNTER).unwrap();
+
+    let plan = machine.plan(
+        &machine.initial_snapshot(),
+        "A",
+        Some(&PlanEvent::new("Tick", None)),
+        &[],
+        None,
+    );
+
+    assert_eq!(
+        plan,
+        PlanAnswer::Undetermined {
+            trigger: "Tick".into(),
+            events: Vec::new()
+        }
+    );
+}
+
+// A machine whose one field is nullable and whose Edit sets it from the input.
+const NOTE: &str = r#"{"id":"note","version":1,"initialState":"A","initialContext":{},"states":["A"],
+  "triggers":["Edit"],"committedStates":[],
+  "context":{"A":{"fields":[{"name":"note","type":"string","nullable":true,"constraints":[]}]}},
+  "inputs":{"Edit":{"fields":[{"name":"note","type":"string","nullable":true,"constraints":[]}]}},
+  "transitions":[{"from":"A","trigger":"Edit","to":"A","reduce":{"reduce":"set","steps":[{"field":"note","value":{"input":"note"}}]}}]}"#;
+
+#[test]
+fn a_member_the_host_omits_as_null_counts_as_null() {
+    let machine = Machine::from_ir_text(NOTE).unwrap();
+    // The host answers the context without its null members.
+    let answered = Snapshot::from_value(&object(r#"{"machine":"note","version":1,"state":"A","context":{}}"#)).unwrap();
+    let clear = PlanEvent::new("Edit", Some(object(r#"{"note":null}"#)));
+
+    let plan = machine.plan(&answered, "A", Some(&clear), &[], None);
+
+    assert_eq!(plan, PlanAnswer::Plan(Vec::new()));
+}
+
+#[test]
+fn an_event_the_machine_does_not_declare_is_refused_from_every_state_as_advance_refuses_it() {
+    let machine = Machine::from_ir(&conformance("machines/wait/wait.ir.json")).unwrap();
+    let initial = machine.initial_snapshot();
+
+    for (trigger, code) in [
+        ("Fetching.done", RefusalCode::OutcomeBound),
+        ("Fetching.after", RefusalCode::TimerBound),
+        ("Discard", RefusalCode::NoTransition),
+        ("Nope", RefusalCode::NoTransition),
+    ] {
+        assert_eq!(machine.event_refusal(trigger).map(|r| r.code), Some(code), "{trigger}");
+        assert_eq!(
+            machine.advance(&initial, trigger, None).unwrap_err().code,
+            code,
+            "{trigger}"
+        );
+    }
+    assert!(machine.event_refusal("Retry").is_none());
+    assert!(machine.event_refusal("Start").is_none());
+}
+
+#[test]
+fn a_plan_from_a_context_or_with_an_input_nested_past_the_limit_is_invalid_not_overflowed() {
+    let machine = wizard();
+    let navigation = ["Next".to_owned()];
+    let mut deep = details();
+    deep.context.insert("deep".into(), too_deep());
+    let deep_fields = PlanEvent::new("Update", Some(too_deep()));
+
+    assert_eq!(
+        machine.plan(&deep, "Review", Some(&ada()), &navigation, None),
+        PlanAnswer::Invalid(PlanInvalid::Context)
+    );
+    assert_eq!(
+        machine.plan(&details(), "Review", Some(&deep_fields), &navigation, None),
+        PlanAnswer::Invalid(PlanInvalid::Input)
+    );
 }

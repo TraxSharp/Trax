@@ -33,6 +33,7 @@ export {
   type SnapshotOutput,
   type SnapshotProblem,
   requireSecureEndpoint,
+  DEFAULT_REQUEST_TIMEOUT,
 } from './transport';
 
 export {
@@ -80,4 +81,6 @@ export {
   type ServerSnapshot,
   type StartResponse,
   type StreamMessage,
+  type SyncOptions,
+  type SyncOutcome,
 } from '../server/serverController';

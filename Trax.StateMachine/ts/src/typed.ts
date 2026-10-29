@@ -2,6 +2,7 @@ import type { RefusalCode } from './results';
 import { SnapshotMachine } from './machine';
 import { machineFromIr, type IrDocument } from './rules/irMachine';
 import type { AdvanceResult, RehydrationResult } from './results';
+import type { PlanRequest, PlanResult } from './plan';
 
 /**
  * A compile-time description of a machine: each state's context type and each trigger's input type.
@@ -139,6 +140,17 @@ export class TypedMachine<Spec extends MachineSpec> {
 
   serialize(snapshot: TypedSnapshot<Spec>): string {
     return this.core.serialize(snapshot);
+  }
+
+  /**
+   * The events that take `snapshot` to `request.target` with the fields event applied, over the navigation triggers
+   * given (see `SnapshotMachine.plan`). Never throws.
+   */
+  plan(
+    snapshot: TypedSnapshot<Spec>,
+    request: PlanRequest<StateOf<Spec>, TriggerOf<Spec>>,
+  ): PlanResult<TriggerOf<Spec>> {
+    return this.core.plan(snapshot, request);
   }
 
   can<T extends TriggerOf<Spec>>(snapshot: TypedSnapshot<Spec>, trigger: T, ...input: InputArgs<Spec, T>): boolean {

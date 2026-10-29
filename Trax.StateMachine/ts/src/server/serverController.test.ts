@@ -5,6 +5,7 @@ import { turnstile, type TurnstileSpec } from '../machines/turnstile/turnstile';
 import type { IrDocument } from '../rules/irMachine';
 import { typedMachineFromIr } from '../typed';
 import { checkout, type CheckoutSpec } from '../machines/checkout/checkout';
+import { ingest } from '../machines/ingest/ingest';
 import { ServerMachineController, type ServerMachineOptions } from './serverController';
 import {
   FakeMachineServer,
@@ -19,6 +20,7 @@ import {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 const unlocked = (paidWith: string) => ({ state: 'Unlocked', context: { paidWith } });
@@ -163,6 +165,29 @@ describe('ServerMachineController', () => {
     expect((await opened(['latte'])).can('Pay')).toBe(true);
   });
 
+  it('refuses a trigger the machine does not declare as an event where it is sent, with the code advance gives', async () => {
+    const { server, controller } = await ready();
+
+    const sends = ['Discard', 'Start', 'Get', 'Changed', 'Nope'].map((trigger) => controller.send(trigger as 'Push'));
+    await flushMicrotasks();
+
+    expect(server.events).toHaveLength(0);
+    for (const sent of sends)
+      expect(await sent).toMatchObject({ outcome: 'refused', problem: { code: 'NO_TRANSITION' } });
+    expect(controller.get()).toMatchObject({ status: 'ready', error: null, pending: false });
+
+    const outcomes = new ServerMachineController({ machine: ingest, server: new FakeMachineServer(), id: 'g-1' });
+    expect(await outcomes.send('Fetching.done' as never)).toMatchObject({
+      outcome: 'refused',
+      problem: { code: 'OUTCOME_BOUND' },
+    });
+    const timers = new ServerMachineController({ machine: reminder, server: new FakeMachineServer(), id: 'r-1' });
+    expect(await timers.send('Review.after' as never)).toMatchObject({
+      outcome: 'refused',
+      problem: { code: 'TIMER_BOUND' },
+    });
+  });
+
   it('sends the prediction as clientResult', async () => {
     const { server, controller } = await ready();
 
@@ -214,6 +239,38 @@ describe('ServerMachineController', () => {
     expect(first).not.toBe(second);
   });
 
+  it('a listener that throws on the confirming change does not stop the send settling or the queue draining', async () => {
+    const reported: unknown[] = [];
+    vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => {
+      try {
+        task();
+      } catch (error) {
+        reported.push(error);
+      }
+    });
+    const { server, controller } = await ready();
+    controller.subscribe(() => {
+      if (controller.get().revision === 2) throw new Error('the page broke');
+    });
+    const notified = vi.fn();
+    controller.subscribe(notified);
+
+    const first = controller.send('Coin', { coin: 'quarter' });
+    const second = controller.send('Push');
+    await flushMicrotasks();
+    server.events[0].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2, ...unlocked('quarter') }) });
+
+    expect(await first).toMatchObject({ outcome: 'confirmed' });
+    await flushMicrotasks();
+    expect(server.events).toHaveLength(2);
+    server.events[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 3 }) });
+    expect(await second).toMatchObject({ outcome: 'confirmed' });
+    expect(controller.get()).toMatchObject({ revision: 3, pending: false });
+    expect(reported).toEqual([new Error('the page broke')]);
+    // The listener after the one that threw is still told.
+    expect(notified.mock.calls.length).toBeGreaterThan(2);
+  });
+
   it('a refused first event drops the dependent prediction of the second', async () => {
     const { server, controller } = await ready();
 
@@ -249,6 +306,26 @@ describe('ServerMachineController', () => {
     void controller.send('Push');
     await flushMicrotasks();
     expect(server.events[2].request.requestId).not.toBe(server.events[0].request.requestId);
+  });
+
+  it('retry while a later event is in flight resends nothing, and the failed one is never sent after it', async () => {
+    const { server, controller } = await ready();
+
+    void controller.send('Coin', { coin: 'quarter' });
+    const later = controller.send('Push');
+    await flushMicrotasks();
+    server.events[0].fail();
+    await flushMicrotasks();
+    expect(server.events).toHaveLength(2);
+
+    const retried = await controller.retry();
+    expect(retried).toMatchObject({ outcome: 'failed', problem: { code: 'NOTHING_TO_RETRY' } });
+    server.events[1].resolve({ kind: 'problem', code: 'GUARD_FAILED', message: 'no' });
+    expect(await later).toMatchObject({ outcome: 'refused' });
+    await flushMicrotasks();
+
+    expect(server.events).toHaveLength(2);
+    expect(controller.get().pending).toBe(false);
   });
 
   it('a later confirmed event supersedes a failed one: retry resends nothing', async () => {
@@ -291,6 +368,155 @@ describe('ServerMachineController', () => {
     await flushMicrotasks();
     expect(server.events).toHaveLength(3);
     expect(server.events[2].request).toEqual(server.events[0].request);
+  });
+
+  it('a retried start whose answer the twin cannot read settles stopped, not confirmed', async () => {
+    const server = new FakeMachineServer();
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      startInput: {},
+      newRequestId: sequentialRequestIds(),
+    });
+
+    void controller.start();
+    await flushMicrotasks();
+    server.starts[0].fail();
+    await flushMicrotasks();
+
+    const retried = controller.retry();
+    await flushMicrotasks();
+    server.starts[1].resolve({ kind: 'started', id: 'i-1', snapshot: serverSnapshot({ state: 'Nowhere' }) });
+
+    expect(await retried).toMatchObject({ outcome: 'stopped', error: { code: 'CLIENT_OUTDATED' } });
+    expect(controller.get()).toMatchObject({ status: 'stopped', error: { code: 'CLIENT_OUTDATED' } });
+  });
+
+  it('opening an instance whose every read fails shows the problem, and retry reads it again', async () => {
+    vi.useFakeTimers();
+    const server = new FakeMachineServer();
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      retryDelays: [100],
+      newRequestId: sequentialRequestIds(),
+    });
+
+    const started = controller.start();
+    await flushMicrotasks();
+    server.gets[0].fail();
+    await vi.advanceTimersByTimeAsync(100);
+    server.gets[1].fail();
+    await started;
+    await flushMicrotasks();
+    expect(server.gets).toHaveLength(2);
+    expect(controller.get()).toMatchObject({ status: 'loading', problem: { code: 'TRANSPORT_ERROR' } });
+
+    const retried = controller.retry();
+    await flushMicrotasks();
+    expect(server.gets).toHaveLength(3);
+    server.gets[2].resolve({ kind: 'ok', snapshot: serverSnapshot() });
+
+    expect(await retried).toMatchObject({ outcome: 'confirmed', snapshot: { revision: 1, state: 'Locked' } });
+    expect(controller.get()).toMatchObject({ status: 'ready', revision: 1, problem: null });
+    expect(await controller.retry()).toMatchObject({ outcome: 'failed', problem: { code: 'NOTHING_TO_RETRY' } });
+  });
+
+  it('start settles only once the first read or the start has settled, its retries included', async () => {
+    vi.useFakeTimers();
+    let settled = false;
+    const server = new FakeMachineServer();
+    const opened = new ServerMachineController<TurnstileSpec>({ machine: turnstile, server, id: 'i-1', retryDelays: [100] });
+    void opened.start().then(() => (settled = true));
+    await flushMicrotasks();
+    server.gets[0].fail();
+    await flushMicrotasks();
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(100);
+    server.gets[1].resolve({ kind: 'ok', snapshot: serverSnapshot() });
+    await flushMicrotasks();
+    expect(settled).toBe(true);
+    expect(opened.get().status).toBe('ready');
+
+    settled = false;
+    const starter = new FakeMachineServer();
+    const created = new ServerMachineController<TurnstileSpec>({ machine: turnstile, server: starter, retryDelays: [100] });
+    void created.start().then(() => (settled = true));
+    await flushMicrotasks();
+    starter.starts[0].resolve({ kind: 'problem', code: 'SERVER_OUTDATED', message: 'newer node' });
+    await flushMicrotasks();
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(100);
+    starter.starts[1].resolve({ kind: 'started', id: 'i-1', snapshot: serverSnapshot() });
+    await flushMicrotasks();
+    expect(settled).toBe(true);
+    expect(created.get().status).toBe('ready');
+  });
+
+  it('a send with no instance to send to settles not-ready, queued or new, until retry opens one', async () => {
+    const server = new FakeMachineServer();
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      startInput: {},
+      newRequestId: sequentialRequestIds(),
+    });
+    const started = controller.start();
+    const queued = controller.send('Push');
+    await flushMicrotasks();
+    server.starts[0].fail();
+    await started;
+
+    expect(await queued).toMatchObject({ outcome: 'failed', problem: { code: 'NOT_READY' } });
+    expect(await controller.send('Push')).toMatchObject({ outcome: 'failed', problem: { code: 'NOT_READY' } });
+    expect(controller.get().pending).toBe(false);
+
+    const retried = controller.retry();
+    const waiting = controller.send('Push');
+    await flushMicrotasks();
+    server.starts[1].resolve({ kind: 'started', id: 'i-1', snapshot: serverSnapshot({ ...unlocked('quarter') }) });
+    expect(await retried).toMatchObject({ outcome: 'confirmed' });
+    await flushMicrotasks();
+    expect(server.events).toHaveLength(1);
+    server.events[0].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2 }) });
+    expect(await waiting).toMatchObject({ outcome: 'confirmed' });
+
+    const refused = new FakeMachineServer();
+    const opened = new ServerMachineController<TurnstileSpec>({ machine: turnstile, server: refused, id: 'i-2' });
+    const read = opened.start();
+    await flushMicrotasks();
+    refused.gets[0].resolve({ kind: 'problem', code: 'FORBIDDEN', message: 'Not yours.' });
+    await read;
+    expect(await opened.send('Push')).toMatchObject({ outcome: 'failed', problem: { code: 'NOT_READY' } });
+    expect(refused.events).toHaveLength(0);
+  });
+
+  it('a retried read that fails again settles failed, and can be retried once more', async () => {
+    const server = new FakeMachineServer();
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      retryDelays: [],
+      newRequestId: sequentialRequestIds(),
+    });
+
+    const started = controller.start();
+    await flushMicrotasks();
+    server.gets[0].fail();
+    await started;
+
+    const retried = controller.retry();
+    await flushMicrotasks();
+    server.gets[1].fail();
+    expect(await retried).toMatchObject({ outcome: 'failed', problem: { code: 'TRANSPORT_ERROR' } });
+
+    const again = controller.retry();
+    await flushMicrotasks();
+    expect(server.gets).toHaveLength(3);
+    server.gets[2].resolve({ kind: 'ok', snapshot: serverSnapshot() });
+    expect(await again).toMatchObject({ outcome: 'confirmed' });
   });
 
   it('a start that failed in transport is resent by retry under its requestId, creating one instance', async () => {
@@ -525,7 +751,7 @@ describe('ServerMachineController', () => {
   it('an incarnation change reloads once', async () => {
     const { server, controller } = await ready();
     const stream = server.stream('i-1');
-    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ revision: 5 }) });
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ rowId: 'row-1', revision: 5 }) });
     await flushMicrotasks();
 
     // The row was deleted and re-created: a new rowId, whose revisions restart.
@@ -534,11 +760,57 @@ describe('ServerMachineController', () => {
     await flushMicrotasks();
     expect(server.gets).toHaveLength(2);
 
-    server.gets[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ rowId: 'row-2', revision: 2, ...unlocked('dollar') }) });
+    // A read answers without a rowId: the controller labels it with the incarnation it asked for.
+    server.gets[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2, ...unlocked('dollar') }) });
     await flushMicrotasks();
     expect(server.gets).toHaveLength(2);
     expect(controller.get().rowId).toBe('row-2');
     expect(controller.get().revision).toBe(2);
+    expect(controller.get().snapshot).toEqual(turnstile.snapshotAt('Unlocked', { paidWith: 'dollar' }));
+  });
+
+  it('a new incarnation pushed while a read is pending is read and held, not dropped with the old one', async () => {
+    const { server, controller } = await ready();
+    const stream = server.stream('i-1');
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ rowId: 'row-1', revision: 10 }) });
+    await flushMicrotasks();
+
+    // A reconnect starts a read of whatever the instance is now; the row is deleted and created again meanwhile.
+    stream.push({ type: 'reconnected' });
+    await flushMicrotasks();
+    expect(server.gets).toHaveLength(2);
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ rowId: 'row-2', revision: 1, ...unlocked('quarter') }) });
+    await flushMicrotasks();
+
+    // The read answers the old row as it was before the delete: stale, and dropped.
+    server.gets[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 9 }) });
+    await flushMicrotasks();
+    expect(server.gets).toHaveLength(3);
+    server.gets[2].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 1, ...unlocked('quarter') }) });
+    await flushMicrotasks();
+
+    expect(server.gets).toHaveLength(3);
+    expect(controller.get()).toMatchObject({ rowId: 'row-2', revision: 1 });
+    expect(controller.get().snapshot).toEqual(turnstile.snapshotAt('Unlocked', { paidWith: 'quarter' }));
+  });
+
+  it('a new incarnation pushed while a read is pending is taken from the buffer when its read is older', async () => {
+    const { server, controller } = await ready();
+    const stream = server.stream('i-1');
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ rowId: 'row-1', revision: 10 }) });
+    await flushMicrotasks();
+
+    stream.push({ type: 'reconnected' });
+    await flushMicrotasks();
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ rowId: 'row-2', revision: 2, ...unlocked('dollar') }) });
+    await flushMicrotasks();
+    server.gets[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 10 }) });
+    await flushMicrotasks();
+    // The read of the new row answers a revision the push has passed: the push held meanwhile wins.
+    server.gets[2].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 1, ...unlocked('quarter') }) });
+    await flushMicrotasks();
+
+    expect(controller.get()).toMatchObject({ rowId: 'row-2', revision: 2 });
     expect(controller.get().snapshot).toEqual(turnstile.snapshotAt('Unlocked', { paidWith: 'dollar' }));
   });
 

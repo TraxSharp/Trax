@@ -254,11 +254,14 @@ public class TraxClientTests
         opened.Sink.Error(new SocketClosedException("The socket was closed: 4403 Forbidden", 4403));
 
         var ended = (await events.Take(1)).Single();
-        ended
+        var failure = ended
             .Should()
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
-            .Which.Failure!.Message.Should()
-            .Contain("4403");
+            .Which.Failure!;
+        failure.Message.Should().Contain("4403");
+        failure
+            .CloseStatus.Should()
+            .Be(4403, "a caller tells forbidden from unauthenticated by it");
         opened.Disposed.Should().BeTrue();
     }
 
@@ -395,7 +398,7 @@ public class TraxClientTests
     }
 
     [Test]
-    public async Task The_resubscribe_delays_step_up_and_start_over_once_a_subscription_starts()
+    public async Task The_resubscribe_delays_step_up_and_start_over_once_a_subscription_delivers()
     {
         var socket = new HandSocket();
         var time = new FakeTimeProvider();
@@ -417,11 +420,64 @@ public class TraxClientTests
             current = await socket.Subscriptions.Take(Wait);
         }
 
-        // Started: the next drop waits the first delay again.
+        // Delivered a frame: the next drop waits the first delay again.
         current.Sink.Started();
+        current.Sink.Next(Frame("WORK_QUEUE"));
         current.Sink.Error(new IOException("dropped"));
         time.Advance(TimeSpan.FromSeconds(1));
         (await socket.Subscriptions.Take(Wait)).Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task A_subscription_that_starts_and_drops_before_a_frame_keeps_stepping_up_the_delays()
+    {
+        // A host that accepts every subscribe and drops it at once would otherwise be subscribed again every second.
+        var socket = new HandSocket();
+        var time = new FakeTimeProvider();
+        using var stream = new TraxClient(
+            Transport(socket),
+            new TraxClientOptions { Time = time }
+        ).Subscribe(Changed, TraxNoVariables.Instance, _ => { });
+        var current = await socket.Subscriptions.Take(Wait);
+        current.Sink.Error(new IOException("dropped"));
+        time.Advance(TimeSpan.FromSeconds(1));
+        current = await socket.Subscriptions.Take(Wait);
+
+        current.Sink.Started();
+        current.Sink.Error(new IOException("dropped"));
+
+        time.Advance(TimeSpan.FromSeconds(1));
+        (await socket.Subscriptions.TryTake(TimeSpan.FromMilliseconds(200)))
+            .Should()
+            .BeNull("the two second delay has not passed");
+        time.Advance(TimeSpan.FromSeconds(1));
+        (await socket.Subscriptions.Take(Wait)).Should().NotBeNull();
+    }
+
+    [TestCase(4408)]
+    [TestCase(4429)]
+    [TestCase(4400)]
+    public async Task A_socket_closed_with_a_code_other_than_4401_or_4403_is_subscribed_again(
+        int closeStatus
+    )
+    {
+        var socket = new HandSocket();
+        var time = new FakeTimeProvider();
+        var events = new EventLog<ChangedResult>();
+        using var stream = new TraxClient(
+            Transport(socket),
+            new TraxClientOptions { Time = time }
+        ).Subscribe(Changed, TraxNoVariables.Instance, events.Add);
+        var first = await socket.Subscriptions.Take(Wait);
+
+        first.Sink.Error(new SocketClosedException("The socket was closed.", closeStatus));
+
+        (await events.Take(1))
+            .Single()
+            .Should()
+            .BeOfType<TraxStreamEvent<ChangedResult>.Interrupted>();
+        time.Advance(TimeSpan.FromSeconds(1));
+        (await socket.Subscriptions.Take(Wait)).Should().NotBeSameAs(first);
     }
 
     [Test]
@@ -581,6 +637,41 @@ public class TraxClientTests
             .Select(e => e.GetType().Name)
             .Should()
             .Equal("Interrupted", "Resumed", "Next");
+    }
+
+    [Test]
+    public async Task A_frame_with_a_member_given_twice_ends_the_stream_instead_of_retrying()
+    {
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.AckAsync();
+            var id = await peer.SubscribedAsync();
+            await peer.SendAsync(
+                $"{{\"type\":\"next\",\"id\":\"{id}\",\"payload\":"
+                    + """{"data":null,"data":{"onDataChanged":{"domain":"A"}}}}"""
+            );
+            await peer.GoneAsync();
+        });
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var events = new EventLog<ChangedResult>();
+        var client = new TraxClient(
+            Transport(socket),
+            new TraxClientOptions { ResubscribeDelays = [TimeSpan.FromMilliseconds(10)] }
+        );
+
+        using var stream = client.Subscribe(Changed, TraxNoVariables.Instance, events.Add);
+
+        (await events.Take(1))
+            .Single()
+            .Should()
+            .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
+            .Which.Failure!.Message.Should()
+            .Contain("not a GraphQL result");
+        // negative-wait: a retry would have connected again within the 10 ms delay.
+        await Task.Delay(300);
+        host.Connections.Should().Be(1);
     }
 
     [Test]

@@ -14,7 +14,10 @@ const clientDir = fileURLToPath(new URL(".", import.meta.url));
 const machinesDir = join(clientDir, "..", "machines");
 // Machines only the client kit drives, beside the engine kit's: one IR file each, as the C# machine would export it.
 const clientMachinesDir = join(clientDir, "machines");
+// The planner's machine, which the sync transcripts drive.
+const planDir = join(clientDir, "..", "plan");
 const transcriptsDir = join(clientDir, "transcripts");
+const protocolPath = join(clientDir, "PROTOCOL.md");
 
 // How long a step waits for the client before the transcript fails. Every delay a transcript configures is far
 // shorter, so only a client that never does what the step waits for reaches it.
@@ -37,7 +40,8 @@ export const machineField = (id) =>
  */
 export function machineOf(id) {
   const own = join(clientMachinesDir, `${id}.ir.json`);
-  const path = existsSync(own) ? own : join(machinesDir, id, `${id}.ir.json`);
+  const planned = join(planDir, `${id}.ir.json`);
+  const path = existsSync(own) ? own : existsSync(planned) ? planned : join(machinesDir, id, `${id}.ir.json`);
   const text = readFileSync(path, "utf8").replace(/\n+$/, "");
   const irHash = createHash("sha256").update(text, "utf8").digest("hex");
   return { ir: JSON.parse(text), irHash };
@@ -74,6 +78,35 @@ export function transcripts() {
     .map((f) => ({ name: f.slice(0, -".json".length), ...readJson(join(transcriptsDir, f)) }));
 }
 
+/**
+ * What a client may lack: the `json lacks` block of PROTOCOL.md, one entry per capability and client, each with its
+ * reason. A testee that says its client lacks anything else fails the transcript it said it on, so a client cannot
+ * skip a transcript it fails by claiming it cannot run it.
+ */
+export function allowedLacks(text = readFileSync(protocolPath, "utf8")) {
+  const block = /^```json lacks\n([\s\S]*?)^```$/m.exec(text);
+  if (!block) throw new Error("PROTOCOL.md has no `json lacks` block.");
+  const entries = JSON.parse(block[1]);
+  if (!Array.isArray(entries)) throw new Error("PROTOCOL.md's `json lacks` block is not an array.");
+  for (const e of entries)
+    for (const key of ["capability", "client", "reason"])
+      if (typeof e?.[key] !== "string" || e[key].trim() === "")
+        throw new Error(`An entry of PROTOCOL.md's \`json lacks\` block has no ${key}: ${JSON.stringify(e)}`);
+  return entries;
+}
+
+/** Why an answer to `open` cannot stand, or null: it names no client, or a lack the allowlist does not grant it. */
+export function lacksRefused(opened, allowed) {
+  if (typeof opened?.client !== "string" || opened.client === "")
+    return `open: the answer names no client, so what it lacks cannot be checked: ${canonical(opened)}`;
+  const lacks = opened.lacks ?? [];
+  if (!Array.isArray(lacks)) return `open: lacks is not an array: ${canonical(lacks)}`;
+  const refused = lacks.filter((l) => !allowed.some((a) => a.client === opened.client && a.capability === l));
+  return refused.length === 0
+    ? null
+    : `open: the ${opened.client} client says it lacks ${refused.join(", ")}, which PROTOCOL.md does not allow it`;
+}
+
 // What a real host sends beside an answer's own fields, so a transcript writes only what matters to it.
 const ANSWER_DEFAULTS = { dueAt: null, dueAtKnown: true, problem: null };
 const PROBLEM_DEFAULTS = { id: null, revision: null, state: null, context: null, dueAt: null, dueAtKnown: true };
@@ -103,16 +136,17 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Runs one transcript against the testee through `ask` (request → Promise<answer>). Throws an Error naming the step
- * that failed; returns when every step passed and nothing arrived that no step took.
+ * that failed; returns when every step passed and nothing arrived that no step took, or `{ skipped }` naming what the
+ * transcript needs that the client said it lacks.
  */
-export async function runTranscript(transcript, host, askTestee) {
+export async function runTranscript(transcript, host, askTestee, allowed = allowedLacks()) {
   // Every answer comes within the step timeout, or the transcript fails naming the request it waited on, and no answer
   // may be an `error` or `unsupported`, the ones no step compares included.
   const ask = (request) => withTimeout(askTestee(request), `the testee's answer to ${request.op}`).then(checked(request));
   const { ir, irHash } = machineOf(transcript.machine);
   const documents = documentsOf(transcript.machine, irHash, transcript.documents);
   const field = machineField(transcript.machine);
-  host.reset({ documents, refuse: transcript.refuseConnections ?? 0 });
+  host.reset({ documents, refuse: transcript.refuseConnections ?? 0, refuseUpgrades: transcript.refuseUpgrades ?? [] });
 
   const opened = await ask({
     op: "open",
@@ -127,11 +161,27 @@ export async function runTranscript(transcript, host, askTestee) {
     effectEvent: transcript.effectEvent ?? null,
     retryDelays: transcript.retryDelays ?? [10, 10],
     resubscribeDelays: transcript.resubscribeDelays ?? [10],
+    ...(transcript.open ?? {}),
   });
-  if (!opened.opened) throw new Error(`open: ${opened.error ?? JSON.stringify(opened)}`);
+  const refused = lacksRefused(opened, allowed);
+  if (refused !== null) throw new Error(refused);
+  // A transcript that needs what the client says it cannot do is skipped, and reported as skipped, not passed.
+  const lacking = (transcript.needs ?? []).filter((n) => (opened.lacks ?? []).includes(n));
+  if (lacking.length > 0) {
+    const disposed = await ask({ op: "dispose" });
+    if (disposed.disposed !== true) throw new Error(`dispose: expected { "disposed": true }, got ${canonical(disposed)}`);
+    return { skipped: lacking };
+  }
+  // A transcript that expects the client to refuse to open compares that answer and has no steps to run.
+  if (transcript.opened !== undefined) {
+    if (!matches(transcript.opened, opened)) throw new Error(`open: expected ${canonical(transcript.opened)}, got ${canonical(opened)}`);
+    if (opened.opened !== true) return;
+  } else if (!opened.opened) throw new Error(`open: ${opened.error ?? JSON.stringify(opened)}`);
 
   // Answers a step names to await later, and answers no step looks at, which must still come.
   const pending = new Map();
+  // The names whose answer has come, for a step that checks one has not.
+  const settled = new Set();
   const background = [];
   let subscription = null;
 
@@ -146,7 +196,10 @@ export async function runTranscript(transcript, host, askTestee) {
       const answer = ask({ op, ...args });
       // Held until awaited: the timeout's rejection is not unhandled while the steps between run.
       answer.catch(() => {});
-      if (as !== undefined) pending.set(as, answer);
+      if (as !== undefined) {
+        pending.set(as, answer);
+        answer.then(() => settled.add(as), () => {});
+      }
       else if (expect === undefined) background.push(answer);
       else {
         const got = await answer;
@@ -164,9 +217,17 @@ export async function runTranscript(transcript, host, askTestee) {
       if (step.variables !== undefined && canonical(request.body.variables ?? {}) !== canonical(step.variables))
         fail(`expected variables ${canonical(step.variables)}, got ${canonical(request.body.variables ?? {})}`);
       if (step.drop) request.respond({ close: true });
+      else if (step.hang) request.respond({ hang: true });
+      else if (step.redirect !== undefined)
+        request.respond({ status: step.redirect === true ? 307 : step.redirect, headers: { location: host.decoy } });
+      else if (step.raw !== undefined) request.respond({ raw: step.raw });
       else if (step.status !== undefined) request.respond({ status: step.status, json: step.body });
       else if (step.errors !== undefined) request.respond({ json: { data: null, errors: step.errors } });
-      else request.respond({ json: { data: { machines: { [field]: { [step.request]: answerOf(step.answer ?? null) } } } } });
+      else
+        request.respond({
+          json: { data: { machines: { [field]: { [step.request]: answerOf(step.answer ?? null) } } } },
+          pad: step.pad ?? 0,
+        });
     } else if (step.subscribe !== undefined) {
       subscription = await host.subscriptions.take(STEP_TIMEOUT, "subscription").catch((e) => fail(e.message));
       if (subscription.operation !== "changed") fail(`expected the changed document, got ${subscription.payload.id}`);
@@ -175,7 +236,7 @@ export async function runTranscript(transcript, host, askTestee) {
         fail(`expected variables ${canonical(step.subscribe)}, got ${canonical(subscription.payload.variables ?? {})}`);
     } else if (step.push !== undefined) {
       if (!subscription?.open) fail("no subscription is open to push on");
-      subscription.next({ data: { [`${field}Changed`]: { ...CHANGE_DEFAULTS, ...step.push } } });
+      subscription.next({ data: { [`${field}Changed`]: { ...CHANGE_DEFAULTS, ...step.push } } }, step.pad ?? 0);
     } else if (step.pushErrors !== undefined) {
       if (!subscription?.open) fail("no subscription is open to push on");
       subscription.next({ data: null, errors: step.pushErrors });
@@ -185,6 +246,25 @@ export async function runTranscript(transcript, host, askTestee) {
     } else if (step.dropSocket !== undefined) {
       if (!subscription) fail("no socket to drop");
       subscription.drop(step.dropSocket === true ? undefined : step.dropSocket);
+    } else if (step.unsettled !== undefined) {
+      if (!pending.has(step.unsettled)) fail(`nothing named ${step.unsettled} was sent`);
+      // Long enough for an answer the testee already wrote to arrive, shorter than any retry a transcript configures.
+      await delay(30);
+      if (settled.has(step.unsettled)) fail(`${step.unsettled} was answered before it had settled`);
+    } else if (step.streamError !== undefined) {
+      if (!subscription?.open) fail("no subscription is open to end");
+      subscription.error(step.streamError);
+    } else if (step.ping !== undefined) {
+      if (!subscription) fail("no socket to ping");
+      const before = subscription.pongs;
+      subscription.ping();
+      const deadline = Date.now() + STEP_TIMEOUT;
+      while (subscription.pongs === before) {
+        if (Date.now() > deadline) fail("the client did not answer the host's ping with a pong");
+        await delay(5);
+      }
+    } else if (step.decoy !== undefined) {
+      if (host.decoyHits() !== step.decoy) fail(`expected ${step.decoy} requests at the redirect's target, got ${host.decoyHits()}`);
     } else if (step.view !== undefined) {
       const deadline = Date.now() + STEP_TIMEOUT;
       let got;
@@ -229,7 +309,7 @@ const checked = (request) => (answer) => {
   return answer;
 };
 
-function withTimeout(promise, what) {
+export function withTimeout(promise, what) {
   let timer;
   return Promise.race([
     promise,
@@ -241,19 +321,23 @@ function withTimeout(promise, what) {
 
 /**
  * Runs every transcript through `exchange` (a sender of request lines and a reader of answer lines, matched by id).
- * Returns the failures, each `{ name, error }`.
+ * Returns the failures, each `{ name, error }`; `onResult` hears each transcript, with `skipped` for one the client
+ * cannot run.
  */
 export async function runTranscripts(list, host, ask, onResult = () => {}) {
   const failures = [];
+  const allowed = allowedLacks();
   for (const t of list) {
     try {
-      await runTranscript(t, host, ask);
-      onResult({ name: t.name });
+      const result = await runTranscript(t, host, ask, allowed);
+      onResult({ name: t.name, skipped: result?.skipped });
     } catch (err) {
       failures.push({ name: t.name, error: err.message });
       onResult(failures[failures.length - 1]);
       // A transcript that failed may have left its controller mid-flight: drop it before the next one opens.
       await withTimeout(ask({ op: "dispose" }), "the testee's answer to dispose").catch(() => {});
+      // A request it sent just before reaches the host now, so the next transcript's reset drops it.
+      await delay(50);
     }
   }
   return failures;
@@ -288,7 +372,12 @@ export function readLines(input, onLine, onClose) {
   input.on("close", end);
 }
 
-function lineAsker(input, output) {
+/**
+ * An `ask` over a line-per-request pipe: writes each request as a line on `output` under a fresh id, and resolves it
+ * with the answer line on `input` that carries the same id, without the id. The operations kit asks its testees this way
+ * too.
+ */
+export function lineAsker(input, output) {
   const waiting = new Map();
   let next = 0;
   let closed = false;
@@ -350,16 +439,25 @@ async function main(argv) {
 
   const host = await startHost();
   // Each transcript is reported as it ends, so a testee that hangs still shows how far it got.
-  const failures = await runTranscripts(list, host, ask, (r) =>
-    console.error(r.error === undefined ? `ok   ${r.name}` : `FAIL ${r.name}\n  ${r.error}`),
-  );
+  let skipped = 0;
+  const failures = await runTranscripts(list, host, ask, (r) => {
+    if (r.skipped !== undefined) skipped += 1;
+    console.error(
+      r.error !== undefined
+        ? `FAIL ${r.name}\n  ${r.error}`
+        : r.skipped !== undefined
+          ? `skip ${r.name} (the client lacks ${r.skipped.join(", ")})`
+          : `ok   ${r.name}`,
+    );
+  });
   const ended = await withTimeout(ask({ op: "end" }), "the testee's answer to end").catch((e) => ({ error: e.message }));
   if (child) child.stdin.end();
   await host.close();
 
   const endFailure = testeeFailure(ended);
   if (endFailure !== null) console.error(`FAIL end\n  the testee's answer to end: ${endFailure}`);
-  console.error(`${list.length - failures.length} of ${list.length} transcripts passed.`);
+  const ran = list.length - skipped;
+  console.error(`${ran - failures.length} of ${ran} transcripts passed${skipped > 0 ? `, ${skipped} skipped` : ""}.`);
   return failures.length === 0 && endFailure === null ? 0 : 1;
 }
 

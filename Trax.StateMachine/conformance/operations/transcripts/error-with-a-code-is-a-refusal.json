@@ -1,0 +1,14 @@
+{
+  "about": "A GraphQL error is the client's typed operation error with the first error's extensions.code, whether or not data came with it.",
+  "steps": [
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "refused"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "errors": [{"message": "Not allowed.", "extensions": {"code": "AUTH_NOT_AUTHORIZED"}}, {"message": "And another.", "extensions": {"code": "OTHER"}}]},
+    {"await": "refused", "expect": {"outcome": "refused", "code": "AUTH_NOT_AUTHORIZED"}},
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "partial"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "data": {"operations": {"runs": [{"id": "1", "state": "FAILED", "name": "nightly"}, {"id": "2", "state": "FAILED", "name": null}]}}, "errors": [{"message": "One field failed.", "path": ["operations", "runs"], "extensions": {"code": "PARTIAL"}}]},
+    {"await": "partial", "expect": {"outcome": "refused", "code": "PARTIAL"}},
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "uncoded"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "errors": [{"message": "No code."}]},
+    {"await": "uncoded", "expect": {"outcome": "refused", "code": null}}
+  ]
+}

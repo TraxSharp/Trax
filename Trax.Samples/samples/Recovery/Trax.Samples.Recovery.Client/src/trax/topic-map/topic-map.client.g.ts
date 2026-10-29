@@ -111,6 +111,7 @@ export function topicMapServer(): ReturnType<typeof createMachineServer> {
         return connection.headers?.() ?? {};
       },
       allowInsecureTransport: connection.allowInsecureTransport,
+      maxResponseSize: connection.maxResponseBytes,
       machine: topicMap,
       documents: topicMapDocuments,
       // A stream refused below ends for good: the controller stops with it instead of subscribing again.

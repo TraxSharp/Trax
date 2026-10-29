@@ -8,6 +8,8 @@ import { bundleModule } from "../lib/engine-loader.mjs";
 // exports only.
 
 const MISSING_DEPENDENCIES = 3;
+// The name the kit's allowlist of what a client may lack knows this client by.
+const CLIENT = "ts";
 const clientEntry = fileURLToPath(new URL("./client-entry.ts", import.meta.url));
 
 // A requestId minter that counts: r1, r2, ... from each open, so the host can tell which request is which.
@@ -31,13 +33,21 @@ function viewOf(view) {
     problem: view.problem?.code ?? null,
     error: view.error?.code ?? null,
     deleted: view.error?.deleted ?? null,
+    unsaved: view.unsaved,
   };
 }
 
 function outcomeOf(outcome) {
   switch (outcome.outcome) {
     case "confirmed":
-      return { outcome: "confirmed", state: outcome.snapshot.state, revision: outcome.snapshot.revision };
+    case "synced":
+      return { outcome: outcome.outcome, state: outcome.snapshot.state, revision: outcome.snapshot.revision };
+    case "superseded":
+    case "unreachable":
+    case "exceeded":
+      return { outcome: outcome.outcome };
+    case "invalid":
+      return outcome;
     case "stopped":
       return { outcome: "stopped", code: outcome.error.code };
     default:
@@ -45,15 +55,33 @@ function outcomeOf(outcome) {
   }
 }
 
+/**
+ * What a discard came to. The controller has no discard of its own: a page discards through the server it built, the
+ * public `discard` of `createMachineServer`'s answer, under a request id it mints.
+ */
+async function discardOf(server, id, requestId) {
+  let answer;
+  try {
+    answer = await server.discard(id, requestId);
+  } catch {
+    return { outcome: "failed", code: "TRANSPORT_ERROR" };
+  }
+  if (answer.kind === "discarded") return { outcome: "discarded" };
+  return { outcome: answer.code === "TRANSPORT_ERROR" ? "failed" : "refused", code: answer.code };
+}
+
 /** A handler from one request to a promise of its answer, over `engine`, the package's exports. */
 export function createClientTestee(engine) {
   const { typedMachineFromIr, createMachineServer, persistedMessageReplacer, ServerMachineController } = engine;
   let controller = null;
   let socket = null;
+  let server = null;
+  let newRequestId = null;
 
   const close = () => {
     controller?.dispose();
     controller = null;
+    server = null;
     void socket?.dispose();
     socket = null;
   };
@@ -69,21 +97,32 @@ export function createClientTestee(engine) {
         retryAttempts: 0,
         jsonMessageReplacer: persistedMessageReplacer,
       });
-      const server = createMachineServer(r.endpoint, {
-        machine,
-        documents: r.documents,
-        socket,
-        resubscribeDelays: r.resubscribeDelays,
-      });
+      try {
+        server = createMachineServer(r.endpoint, {
+          machine,
+          documents: r.documents,
+          socket,
+          resubscribeDelays: r.resubscribeDelays,
+          maxResponseSize: r.maxResponseSize,
+          requestTimeout: r.requestTimeout,
+          allowInsecureTransport: r.allowInsecureTransport,
+        });
+      } catch (err) {
+        // A client refusing cleartext to another host refuses to be built, before it sends anything.
+        if (/not over TLS/.test(err.message)) return { opened: false, client: CLIENT, code: "INSECURE_TRANSPORT" };
+        throw err;
+      }
+      newRequestId = counting();
       controller = new ServerMachineController({
         machine,
         server,
         id: r.instance ?? undefined,
         startInput: r.startInput ?? undefined,
-        newRequestId: counting(),
+        newRequestId,
         retryDelays: r.retryDelays,
       });
-      return { opened: true };
+      // A WebSocket in a browser or in node does not say what status an upgrade it failed was answered with.
+      return { opened: true, client: CLIENT, lacks: ["upgrade-status"] };
     },
     start: async () => {
       await controller.start();
@@ -91,7 +130,16 @@ export function createClientTestee(engine) {
     },
     send: async (r) => outcomeOf(await (r.input == null ? controller.send(r.trigger) : controller.send(r.trigger, r.input))),
     retry: async () => outcomeOf(await controller.retry()),
+    sync: async (r) =>
+      outcomeOf(await controller.syncTo(r.target, { fields: r.fields ?? null, navigation: r.navigation })),
     view: async () => viewOf(controller.get()),
+    can: async (r) => ({ can: r.input == null ? controller.can(r.trigger) : controller.can(r.trigger, r.input) }),
+    available: async () => ({ triggers: [...controller.available()].sort() }),
+    discard: async () => {
+      const id = controller.get().id;
+      if (id === null) return { error: "no instance to discard" };
+      return discardOf(server, id, newRequestId());
+    },
     dispose: async () => {
       close();
       return { disposed: true };
