@@ -59,11 +59,11 @@ pub struct GraphQLMachineServerOptions {
     pub machine: String,
     /// The machine's persisted documents, from the host's manifest, the push (`changed`) included.
     pub documents: Vec<ManifestDocument>,
-    /// The client requests go through. When `None`, one that follows no redirect and, for an `https` endpoint, sends
-    /// nothing but `https`. Build a client of your own with `redirect(Policy::none())` too: a redirect would carry the
-    /// request's headers to whatever host it names. An answer from another origin than the endpoint's, or a redirect,
-    /// fails the request as a [`TransportError`] whichever client sent it.
-    pub http: Option<reqwest::Client>,
+    /// The builder of the client requests go through, for a proxy, certificates or timeouts of your own; a default
+    /// one when `None`. The server builds it to follow no redirect, whatever the builder set, and, for an `https`
+    /// endpoint, to send nothing but `https`. A redirect, or an answer from another origin than the endpoint's, fails
+    /// the request as a [`TransportError`].
+    pub http: Option<reqwest::ClientBuilder>,
     /// Headers for each request and each socket's upgrade, asked for every time: how a host authenticates a request.
     pub headers: Option<RequestHeaders>,
     /// The `connection_init` payload, asked for on every connection: how a host authenticates a socket.
@@ -234,14 +234,14 @@ impl GraphQLMachineServer {
         let field = machine_field(&options.machine);
         let endpoint_url = reqwest::Url::parse(&options.endpoint)
             .map_err(|e| ConfigError(format!("The endpoint is not an absolute URL: {e}.")))?;
-        let http = match options.http {
-            Some(http) => http,
-            None => reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .https_only(!options.allow_insecure_transport && endpoint_url.scheme() == "https")
-                .build()
-                .map_err(|e| ConfigError(format!("The HTTP client could not be built: {}", e.without_url())))?,
-        };
+        // Set last, so no builder a caller gives can follow a redirect.
+        let http = options
+            .http
+            .unwrap_or_else(reqwest::Client::builder)
+            .redirect(reqwest::redirect::Policy::none())
+            .https_only(!options.allow_insecure_transport && endpoint_url.scheme() == "https")
+            .build()
+            .map_err(|e| ConfigError(format!("The HTTP client could not be built: {}", e.without_url())))?;
         let delays = match options.resubscribe_delays {
             Some(delays) if !delays.is_empty() => delays,
             _ => DEFAULT_RESUBSCRIBE_DELAYS.to_vec(),
@@ -1321,19 +1321,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_answer_a_client_reached_through_a_redirect_is_a_failure() {
-        let (other, _) = http_host(json_answer(NOT_FOUND)).await;
+    async fn a_builder_of_the_callers_that_follows_redirects_follows_none() {
+        use std::sync::atomic::Ordering;
+
+        let (other, other_received) = http_host(json_answer(NOT_FOUND)).await;
         let (endpoint, _) = http_host(redirect_to(other)).await;
         let mut given = at(format!("http://127.0.0.1:{endpoint}/graphql"));
-        // A client of the caller's own that follows redirects.
-        given.http = Some(reqwest::Client::new());
+        given.http = Some(reqwest::Client::builder().redirect(reqwest::redirect::Policy::limited(10)));
         let server = GraphQLMachineServer::new(given).unwrap();
 
         let Err(error) = server.get("i-1".into()).await else {
-            panic!("the answer from another origin was read");
+            panic!("the redirect was answered");
         };
 
-        assert!(error.0.contains("another origin"), "{}", error.0);
+        assert!(error.0.contains("redirect"), "{}", error.0);
+        assert_eq!(other_received.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

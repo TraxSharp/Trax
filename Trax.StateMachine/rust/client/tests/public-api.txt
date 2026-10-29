@@ -52,7 +52,7 @@ pub struct GraphQLMachineServerOptions {
     pub socket: String,
     pub machine: String,
     pub documents: Vec<ManifestDocument>,
-    pub http: Option<reqwest::Client>,
+    pub http: Option<reqwest::ClientBuilder>,
     pub headers: Option<RequestHeaders>,
     pub connection_params: Option<ConnectionParams>,
     pub resubscribe_delays: Option<Vec<Duration>>,
