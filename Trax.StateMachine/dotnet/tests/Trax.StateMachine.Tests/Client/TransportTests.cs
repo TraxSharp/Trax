@@ -40,6 +40,33 @@ public class TransportTests
         ],
     };
 
+    // A server the controller is built over and never reaches.
+    private sealed class NoServer : IMachineServer
+    {
+        public Task<ServerAnswer> StartAsync(
+            JsonNode? input,
+            string requestId,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<ServerAnswer> EventAsync(
+            string id,
+            string trigger,
+            JsonNode? input,
+            string requestId,
+            string? clientResult,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<ServerAnswer> GetAsync(
+            string id,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public IDisposable Subscribe(string id, Action<StreamMessage> onMessage) =>
+            throw new NotSupportedException();
+    }
+
     private sealed class NoSocket : ISubscriptionSocket
     {
         public IDisposable Subscribe(JsonObject payload, ISubscriptionSink sink) =>
@@ -335,6 +362,83 @@ public class TransportTests
         var build = () => ServerTimingOut(TimeSpan.FromMilliseconds(milliseconds));
 
         build.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*request timeout*");
+    }
+
+    // Below zero (Timeout.InfiniteTimeSpan among them), and past the longest wait a timer can count.
+    [TestCase(-1.0)]
+    [TestCase(-5.0)]
+    [TestCase(50.0 * 24 * 60 * 60 * 1000)]
+    public void A_delay_no_timer_can_wait_is_refused_when_the_client_is_built(double milliseconds)
+    {
+        IReadOnlyList<TimeSpan> delays =
+        [
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromMilliseconds(milliseconds),
+        ];
+        var server = () =>
+            new GraphQLMachineServer(
+                new GraphQLMachineServerOptions
+                {
+                    Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
+                    Endpoint = new Uri("https://h/graphql"),
+                    Machine = Turnstile,
+                    Socket = new NoSocket(),
+                    ResubscribeDelays = delays,
+                }
+            );
+        var controller = () =>
+            new ServerMachineController(
+                new ServerMachineOptions
+                {
+                    Machine = Turnstile,
+                    Server = new NoServer(),
+                    RetryDelays = delays,
+                }
+            );
+        var client = () =>
+            new TraxClient(
+                new TraxHttpTransport(
+                    new TraxHttpTransportOptions
+                    {
+                        Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
+                        Endpoint = new Uri("https://h/graphql"),
+                    }
+                ),
+                new TraxClientOptions { ResubscribeDelays = delays }
+            );
+
+        server.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*resubscribe delay*");
+        controller.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*retry delay*");
+        client.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*resubscribe delay*");
+    }
+
+    [TestCase(0.0)]
+    [TestCase(int.MaxValue)]
+    public void A_delay_from_zero_to_the_longest_a_timer_counts_is_accepted(double milliseconds)
+    {
+        IReadOnlyList<TimeSpan> delays = [TimeSpan.FromMilliseconds(milliseconds)];
+        var build = () =>
+            new ServerMachineController(
+                new ServerMachineOptions
+                {
+                    Machine = Turnstile,
+                    Server = new GraphQLMachineServer(
+                        new GraphQLMachineServerOptions
+                        {
+                            Http = new HttpClient(
+                                new SocketsHttpHandler { AllowAutoRedirect = false }
+                            ),
+                            Endpoint = new Uri("https://h/graphql"),
+                            Machine = Turnstile,
+                            Socket = new NoSocket(),
+                            ResubscribeDelays = delays,
+                        }
+                    ),
+                    RetryDelays = delays,
+                }
+            );
+
+        build.Should().NotThrow();
     }
 
     [TestCase(-1.0)]

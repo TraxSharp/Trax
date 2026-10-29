@@ -321,9 +321,18 @@ public sealed class ServerMachineController : IDisposable
 
     /// <summary>Builds a controller. It sends nothing until <see cref="StartAsync"/>.</summary>
     /// <exception cref="ArgumentException">The predictor is of another version of the machine than the manifest.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// One of <see cref="ServerMachineOptions.RetryDelays"/> is below zero or longer than <see cref="int.MaxValue"/>
+    /// milliseconds.
+    /// </exception>
     public ServerMachineController(ServerMachineOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        Trax.Client.TraxHttpTransport.RequireDelays(
+            options.RetryDelays,
+            "retry delay",
+            nameof(options)
+        );
         _shape = MachineShape.Of(options.Machine);
         _ir = options.Machine.Ir;
         _server = options.Server;

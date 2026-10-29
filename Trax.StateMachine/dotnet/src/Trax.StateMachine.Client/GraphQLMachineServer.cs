@@ -152,11 +152,17 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <see cref="GraphQLMachineServerOptions.RequestTimeout"/> is neither infinite nor between zero, exclusive, and
-    /// <see cref="int.MaxValue"/> milliseconds.
+    /// <see cref="int.MaxValue"/> milliseconds, or one of <see cref="GraphQLMachineServerOptions.ResubscribeDelays"/>
+    /// is below zero or longer than <see cref="int.MaxValue"/> milliseconds.
     /// </exception>
     public GraphQLMachineServer(GraphQLMachineServerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        TraxHttpTransport.RequireDelays(
+            options.ResubscribeDelays,
+            "resubscribe delay",
+            nameof(options)
+        );
         TraxHttpTransport.RequireTimeout(
             options.RequestTimeout,
             "request timeout",

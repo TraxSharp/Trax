@@ -83,9 +83,18 @@ public sealed class TraxClient
     /// <exception cref="ArgumentException">
     /// The app turned reflection-based serialization off, and <see cref="TraxClientOptions.Json"/> names no resolver.
     /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// One of <see cref="TraxClientOptions.ResubscribeDelays"/> is below zero or longer than <see cref="int.MaxValue"/>
+    /// milliseconds.
+    /// </exception>
     public TraxClient(ITraxTransport transport, TraxClientOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(transport);
+        TraxHttpTransport.RequireDelays(
+            options?.ResubscribeDelays,
+            "resubscribe delay",
+            nameof(options)
+        );
         _transport = transport;
         _json = TraxJson.LeavingOutUnset(options?.Json);
         _delays = options?.ResubscribeDelays is { Count: > 0 } delays

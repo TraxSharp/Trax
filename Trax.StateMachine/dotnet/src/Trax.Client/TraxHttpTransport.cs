@@ -279,6 +279,23 @@ public sealed class TraxHttpTransport : ITraxTransport
         );
     }
 
+    // Refuses a delay no timer can wait for: one below zero, Timeout.InfiniteTimeSpan among them, or longer than
+    // MaxTimeout. Zero waits not at all.
+    internal static void RequireDelays(
+        IReadOnlyList<TimeSpan>? delays,
+        string what,
+        string paramName
+    )
+    {
+        foreach (var delay in delays ?? [])
+            if (delay < TimeSpan.Zero || delay > MaxTimeout)
+                throw new ArgumentOutOfRangeException(
+                    paramName,
+                    delay,
+                    $"Each {what} must be from zero to {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days)."
+                );
+    }
+
     // The shorter of two timeouts, either of which may be infinite.
     private static TimeSpan Shorter(TimeSpan a, TimeSpan b) =>
         a == Timeout.InfiniteTimeSpan ? b
