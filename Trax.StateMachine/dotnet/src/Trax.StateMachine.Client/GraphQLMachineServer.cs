@@ -388,7 +388,13 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                     ?? throw new HttpRequestException(
                         "The server answered a snapshot without a state."
                     ),
-                Context = WithoutNulls(answer["context"] as JsonObject),
+                Context = WithoutNulls(
+                    ContextOf(answer["context"], out var context)
+                        ? context
+                        : throw new HttpRequestException(
+                            "The server answered a context that is not an object."
+                        )
+                ),
                 // A due time the server says it cannot know is left unknown, so it is never read as "no timer".
                 DueAtKnown = answer["dueAtKnown"] is not JsonValue known || known.GetValue<bool>(),
                 DueAt = DueAtOf(answer["dueAt"]),
@@ -530,6 +536,8 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             if (
                 Text(change["state"]) is not { } state
                 || change["revision"] is not JsonValue revision
+                // Not a context any store wrote: the push is dropped.
+                || !ContextOf(change["context"], out var context)
             )
                 return (null, false);
             return (
@@ -541,7 +549,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                             : null,
                         Revision = revision.GetValue<long>(),
                         State = state,
-                        Context = WithoutNulls(change["context"] as JsonObject),
+                        Context = WithoutNulls(context),
                         DueAtKnown =
                             change["dueAtKnown"] is not JsonValue known || known.GetValue<bool>(),
                         DueAt = DueAtOf(change["dueAt"]),
@@ -680,6 +688,13 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             timer?.Cancel();
             timer?.Dispose();
         }
+    }
+
+    // A context that is null or left out is empty, and one that is an object is itself; any other is not a context.
+    private static bool ContextOf(JsonNode? node, out JsonObject? context)
+    {
+        context = node as JsonObject;
+        return node is null or JsonObject;
     }
 
     private static ServerProblem ProblemOf(JsonObject problem) =>
