@@ -5,10 +5,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use trax_state_machine::Map;
 use trax_state_machine::Value;
 use trax_state_machine_client::{
-    ir_hash, EventRequest, MachineServer, ServerAnswer, ServerMachineController, ServerMachineOptions, StreamSink,
-    Subscription, TransportError,
+    ir_hash, DueAt, EventRequest, MachineServer, MachineView, ServerAnswer, ServerMachineController,
+    ServerMachineOptions, ServerSnapshot, StreamMessage, StreamSink, Subscription, TransportError,
 };
 
 // The turnstile's IR as the kit commits it, and the hash a host's manifest gives it: the SHA-256 of that text.
@@ -186,4 +187,135 @@ async fn an_input_nested_past_the_limit_is_refused_before_it_is_sent() {
         matches!(&outcome, trax_state_machine_client::SendOutcome::Refused(p) if p.code == "INVALID_INPUT"),
         "{outcome:?}"
     );
+}
+
+type Answer = tokio::sync::oneshot::Sender<Result<ServerAnswer, TransportError>>;
+
+// A server whose every read and event waits for the test to answer it, and whose stream the test pushes into.
+struct Scripted {
+    reads: tokio::sync::mpsc::UnboundedSender<Answer>,
+    sink: Arc<std::sync::Mutex<Option<StreamSink>>>,
+}
+
+struct Script {
+    reads: tokio::sync::mpsc::UnboundedReceiver<Answer>,
+    sink: Arc<std::sync::Mutex<Option<StreamSink>>>,
+}
+
+impl Script {
+    fn push(&self, message: StreamMessage) {
+        let sink = self.sink.lock().unwrap().clone().expect("nothing subscribed");
+        sink(message);
+    }
+
+    async fn read(&mut self) -> Answer {
+        tokio::time::timeout(Duration::from_secs(5), self.reads.recv())
+            .await
+            .expect("no read was sent")
+            .unwrap()
+    }
+}
+
+impl MachineServer for Scripted {
+    async fn start(&self, _: Option<Value>, _: String) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn event(&self, _: EventRequest) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn get(&self, _: String) -> Result<ServerAnswer, TransportError> {
+        let (answer, answered) = tokio::sync::oneshot::channel();
+        let _ = self.reads.send(answer);
+        match answered.await {
+            Ok(result) => result,
+            Err(_) => std::future::pending().await,
+        }
+    }
+
+    fn subscribe(&self, _: String, sink: StreamSink) -> Box<dyn Subscription> {
+        *self.sink.lock().unwrap() = Some(sink);
+        Box::new(Nothing)
+    }
+}
+
+fn scripted() -> (Scripted, Script) {
+    let (reads, read) = tokio::sync::mpsc::unbounded_channel();
+    let sink = Arc::new(std::sync::Mutex::new(None));
+    (
+        Scripted {
+            reads,
+            sink: sink.clone(),
+        },
+        Script { reads: read, sink },
+    )
+}
+
+fn snapshot(row_id: Option<&str>, revision: i64, state: &str) -> ServerSnapshot {
+    ServerSnapshot {
+        row_id: row_id.map(str::to_owned),
+        revision: Some(revision),
+        state: state.into(),
+        context: Map::new(),
+        due_at: DueAt::None,
+    }
+}
+
+fn stored(snapshot: ServerSnapshot) -> Result<ServerAnswer, TransportError> {
+    Ok(ServerAnswer::Stored { id: None, snapshot })
+}
+
+// Waits until the view satisfies `wanted`, or fails with the last one seen.
+async fn view_where(controller: &ServerMachineController, wanted: impl Fn(&MachineView) -> bool) -> Arc<MachineView> {
+    let mut views = controller.watch();
+    let found = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let view = views.borrow_and_update().clone();
+            if wanted(&view) {
+                return view;
+            }
+            if views.changed().await.is_err() {
+                return view;
+            }
+        }
+    })
+    .await;
+    found.unwrap_or_else(|_| panic!("the view never got there: {:?}", controller.view()))
+}
+
+// Opens instance i-1 on a scripted server and has it held at row A, revision 10, Locked.
+async fn opened() -> (ServerMachineController, Script) {
+    let (ir, hash) = turnstile();
+    let (server, mut script) = scripted();
+    let mut options = ServerMachineOptions::new(ir, hash, server);
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+    let started = controller.start();
+    let first = script.read().await;
+    script.push(StreamMessage::Changed(snapshot(Some("row-a"), 10, "Locked")));
+    let _ = first.send(stored(snapshot(None, 10, "Locked")));
+    started.await;
+    view_where(&controller, |v| {
+        v.row_id.as_deref() == Some("row-a") && v.revision == Some(10)
+    })
+    .await;
+    (controller, script)
+}
+
+#[tokio::test]
+async fn a_new_incarnation_pushed_during_a_read_is_taken_once_its_row_is_read() {
+    let (controller, mut script) = opened().await;
+
+    // The host asks for a reload; while that read is out, the instance is deleted and created again.
+    script.push(StreamMessage::Reload);
+    let reload = script.read().await;
+    script.push(StreamMessage::Changed(snapshot(Some("row-b"), 1, "Locked")));
+    // The read was answered by the new row, but its answer carries no row id.
+    let _ = reload.send(stored(snapshot(None, 1, "Locked")));
+    let again = script.read().await;
+    let _ = again.send(stored(snapshot(None, 1, "Locked")));
+
+    let view = view_where(&controller, |v| v.row_id.as_deref() == Some("row-b")).await;
+    assert_eq!(view.revision, Some(1));
 }

@@ -261,6 +261,7 @@ impl ServerMachineController {
             reloading: false,
             reload_row_id: None,
             reload_again: false,
+            next_row_id: None,
             buffered: None,
         };
         runtime.spawn(actor.run(inbox));
@@ -514,6 +515,9 @@ struct Actor<S> {
     reloading: bool,
     reload_row_id: Option<String>,
     reload_again: bool,
+    // The row the read after the one out asks for: a push of another incarnation came while a read without a row id
+    // was out.
+    next_row_id: Option<String>,
     buffered: Option<ServerSnapshot>,
 }
 
@@ -871,7 +875,11 @@ impl<S: MachineServer> Actor<S> {
                 }
             }
             Ok(ServerAnswer::Stored { snapshot, .. }) => {
-                let row = snapshot.row_id.clone().or(row_id).or_else(|| self.row_id.clone());
+                let row = snapshot
+                    .row_id
+                    .clone()
+                    .or(row_id.clone())
+                    .or_else(|| self.row_id.clone());
                 let mut changed = self.accept(
                     ServerSnapshot {
                         row_id: row,
@@ -882,6 +890,10 @@ impl<S: MachineServer> Actor<S> {
                 if let Some(buffered) = self.buffered.take() {
                     if self.error.is_none() && buffered.row_id == self.row_id {
                         changed = self.accept(buffered, Source::Push) || changed;
+                    } else if row_id.is_none() && buffered.row_id.is_some() && buffered.row_id == self.next_row_id {
+                        // A read without a row id cannot answer for the push's incarnation: it waits for the read that
+                        // asks for its row.
+                        self.buffered = Some(buffered);
                     }
                 }
                 self.end_read();
@@ -896,9 +908,10 @@ impl<S: MachineServer> Actor<S> {
     fn end_read(&mut self) {
         self.reloading = false;
         self.reload_row_id = None;
+        let row_id = self.next_row_id.take();
         if self.reload_again && !self.disposed && self.error.is_none() {
             self.reload_again = false;
-            self.reload(None);
+            self.reload(row_id);
         }
     }
 
@@ -914,6 +927,9 @@ impl<S: MachineServer> Actor<S> {
             if !self.reloading {
                 self.reload(incoming.row_id.clone());
             } else if self.reload_row_id.is_none() {
+                // The read out was asked for without a row id, and its answer carries none: it would be taken as the
+                // incarnation held and dropped as stale. The read after it asks for this row instead.
+                self.next_row_id = incoming.row_id.clone();
                 self.reload_again = true;
             }
             let newer = match &self.buffered {
