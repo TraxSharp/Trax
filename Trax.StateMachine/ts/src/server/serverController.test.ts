@@ -525,7 +525,7 @@ describe('ServerMachineController', () => {
   it('an incarnation change reloads once', async () => {
     const { server, controller } = await ready();
     const stream = server.stream('i-1');
-    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ revision: 5 }) });
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ rowId: 'row-1', revision: 5 }) });
     await flushMicrotasks();
 
     // The row was deleted and re-created: a new rowId, whose revisions restart.
@@ -534,11 +534,57 @@ describe('ServerMachineController', () => {
     await flushMicrotasks();
     expect(server.gets).toHaveLength(2);
 
-    server.gets[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ rowId: 'row-2', revision: 2, ...unlocked('dollar') }) });
+    // A read answers without a rowId: the controller labels it with the incarnation it asked for.
+    server.gets[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2, ...unlocked('dollar') }) });
     await flushMicrotasks();
     expect(server.gets).toHaveLength(2);
     expect(controller.get().rowId).toBe('row-2');
     expect(controller.get().revision).toBe(2);
+    expect(controller.get().snapshot).toEqual(turnstile.snapshotAt('Unlocked', { paidWith: 'dollar' }));
+  });
+
+  it('a new incarnation pushed while a read is pending is read and held, not dropped with the old one', async () => {
+    const { server, controller } = await ready();
+    const stream = server.stream('i-1');
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ rowId: 'row-1', revision: 10 }) });
+    await flushMicrotasks();
+
+    // A reconnect starts a read of whatever the instance is now; the row is deleted and created again meanwhile.
+    stream.push({ type: 'reconnected' });
+    await flushMicrotasks();
+    expect(server.gets).toHaveLength(2);
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ rowId: 'row-2', revision: 1, ...unlocked('quarter') }) });
+    await flushMicrotasks();
+
+    // The read answers the old row as it was before the delete: stale, and dropped.
+    server.gets[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 9 }) });
+    await flushMicrotasks();
+    expect(server.gets).toHaveLength(3);
+    server.gets[2].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 1, ...unlocked('quarter') }) });
+    await flushMicrotasks();
+
+    expect(server.gets).toHaveLength(3);
+    expect(controller.get()).toMatchObject({ rowId: 'row-2', revision: 1 });
+    expect(controller.get().snapshot).toEqual(turnstile.snapshotAt('Unlocked', { paidWith: 'quarter' }));
+  });
+
+  it('a new incarnation pushed while a read is pending is taken from the buffer when its read is older', async () => {
+    const { server, controller } = await ready();
+    const stream = server.stream('i-1');
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ rowId: 'row-1', revision: 10 }) });
+    await flushMicrotasks();
+
+    stream.push({ type: 'reconnected' });
+    await flushMicrotasks();
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ rowId: 'row-2', revision: 2, ...unlocked('dollar') }) });
+    await flushMicrotasks();
+    server.gets[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 10 }) });
+    await flushMicrotasks();
+    // The read of the new row answers a revision the push has passed: the push held meanwhile wins.
+    server.gets[2].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 1, ...unlocked('quarter') }) });
+    await flushMicrotasks();
+
+    expect(controller.get()).toMatchObject({ rowId: 'row-2', revision: 2 });
     expect(controller.get().snapshot).toEqual(turnstile.snapshotAt('Unlocked', { paidWith: 'dollar' }));
   });
 

@@ -101,9 +101,8 @@ describe('FakeMachineServer', () => {
   });
 
   it('builds snapshots with defaults and mints distinct request ids', () => {
-    expect(serverSnapshot()).toEqual({ rowId: 'row-1', revision: 1, state: 'Locked', context: {} });
+    expect(serverSnapshot()).toEqual({ revision: 1, state: 'Locked', context: {} });
     expect(serverSnapshot({ state: 'Unlocked', context: { paidWith: 'quarter' }, dueAt: 'x' })).toEqual({
-      rowId: 'row-1',
       revision: 1,
       state: 'Unlocked',
       context: { paidWith: 'quarter' },

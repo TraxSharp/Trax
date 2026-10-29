@@ -134,9 +134,12 @@ export class FakeMachineServer implements MachineServer {
   }
 }
 
-/** A server snapshot with defaults: incarnation `row-1`, revision 1, the turnstile's Locked state. */
+/**
+ * A server snapshot with defaults: revision 1, the turnstile's Locked state. It carries no `rowId` unless given one, as
+ * the typed `start`, `get` and event answers do not; a push carries one.
+ */
 export function serverSnapshot(overrides: Partial<ServerSnapshot> = {}): ServerSnapshot {
-  return { rowId: 'row-1', revision: 1, state: 'Locked', context: {}, ...overrides };
+  return { revision: 1, state: 'Locked', context: {}, ...overrides };
 }
 
 /** Lets every pending promise continuation run. Uses microtasks only, so it works under fake timers too. */

@@ -253,10 +253,11 @@ export class ServerMachineController<Spec extends MachineSpec> {
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
 
   // A read of the instance in flight, the incarnation it was asked for (null: the one held), whether another is
-  // owed once it answers, and the newest push of that new incarnation seen meanwhile.
+  // owed once it answers and the incarnation that one asks for, and the newest push of a new incarnation seen meanwhile.
   private reloading = false;
   private reloadRowId: string | null = null;
   private reloadAgain = false;
+  private reloadAgainRowId: string | null = null;
   private buffered: ServerSnapshot | null = null;
 
   private view: ServerMachineView<Spec>;
@@ -539,6 +540,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
     const buffered = this.buffered;
     this.buffered = null;
     if (buffered && !this.error && buffered.rowId === this.rowId) changed = this.accept(buffered, 'push') || changed;
+    // A push of another incarnation that came during this read is kept for the read owed for it.
+    else if (buffered && this.reloadAgain && buffered.rowId === this.reloadAgainRowId) this.buffered = buffered;
     this.endRead();
     if (changed && !this.error) this.emit();
     this.pump();
@@ -547,9 +550,11 @@ export class ServerMachineController<Spec extends MachineSpec> {
   private endRead(): void {
     this.reloading = false;
     this.reloadRowId = null;
+    const rowId = this.reloadAgainRowId;
+    this.reloadAgainRowId = null;
     if (this.reloadAgain && !this.disposed && !this.error) {
       this.reloadAgain = false;
-      this.reload(null);
+      this.reload(rowId);
     }
   }
 
@@ -564,9 +569,14 @@ export class ServerMachineController<Spec extends MachineSpec> {
     const otherIncarnation = rowId !== null && this.rowId !== null && rowId !== this.rowId;
 
     if (otherIncarnation && source !== 'load') {
-      // The row was deleted and created again: its revisions restart, so they say nothing against the ones held.
+      // The row was deleted and created again: its revisions restart, so they say nothing against the ones held. A read
+      // already in flight for another incarnation (or for whatever the instance is, which answers without a rowId and
+      // is taken for the one held) owes a read of this one once it answers.
       if (!this.reloading) this.reload(rowId);
-      else if (this.reloadRowId === null) this.reloadAgain = true;
+      else if (this.reloadRowId !== rowId) {
+        this.reloadAgain = true;
+        this.reloadAgainRowId = rowId;
+      }
       if (this.buffered === null || this.buffered.rowId !== rowId || !olderOrSame(incoming.revision, this.buffered.revision))
         this.buffered = { ...incoming, rowId };
       return false;
