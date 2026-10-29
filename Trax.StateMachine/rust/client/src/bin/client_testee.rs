@@ -17,6 +17,24 @@ use trax_state_machine_client::{
 
 type Out = Arc<Mutex<tokio::io::Stdout>>;
 
+/// The client one `open` built, with the server it was built over, which a discard goes through, and its request ids.
+struct Opened {
+    controller: ServerMachineController,
+    server: GraphQLMachineServer,
+    count: Arc<AtomicU64>,
+}
+
+impl Opened {
+    fn next_request_id(&self) -> String {
+        next_request_id(&self.count)
+    }
+}
+
+// Request ids count r1, r2, ... from each open, so the host can tell which request is which.
+fn next_request_id(count: &AtomicU64) -> String {
+    format!("r{}", count.fetch_add(1, Ordering::Relaxed) + 1)
+}
+
 /// The name the kit's allowlist of what a client may lack knows this client by.
 const CLIENT: &str = "rust";
 
@@ -24,7 +42,7 @@ const CLIENT: &str = "rust";
 async fn main() {
     let out: Out = Arc::new(Mutex::new(tokio::io::stdout()));
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
-    let mut controller: Option<ServerMachineController> = None;
+    let mut controller: Option<Opened> = None;
 
     while let Ok(Some(line)) = lines.next_line().await {
         let Ok(request) = Value::parse(&line) else { continue };
@@ -61,10 +79,11 @@ async fn main() {
                 }
             }
             _ => {
-                let Some(client) = &controller else {
+                let Some(opened) = &controller else {
                     write(&out, id, object([("error", Value::from("no client is open"))])).await;
                     continue;
                 };
+                let client = &opened.controller;
                 match op.as_str() {
                     "view" => write(&out, id, view_of(&client.view())).await,
                     "start" => {
@@ -110,6 +129,54 @@ async fn main() {
                             write(&out, id, sync_outcome_of(&outcome)).await;
                         });
                     }
+                    "can" => {
+                        let trigger = request.get("trigger").and_then(|t| t.as_str()).unwrap_or("");
+                        let input = request.get("input").filter(|i| !i.is_null());
+                        write(
+                            &out,
+                            id,
+                            object([("can", Value::Bool(client.can_send(trigger, input)))]),
+                        )
+                        .await;
+                    }
+                    "available" => {
+                        let mut triggers = client.available_triggers();
+                        triggers.sort();
+                        let triggers = triggers.into_iter().map(Value::from).collect();
+                        write(&out, id, object([("triggers", Value::Array(triggers))])).await;
+                    }
+                    "discard" => {
+                        // The controller has no discard of its own: an app discards through the server it built, under
+                        // a request id it mints.
+                        let Some(instance) = client.view().id.clone() else {
+                            write(&out, id, object([("error", Value::from("no instance to discard"))])).await;
+                            continue;
+                        };
+                        let server = opened.server.clone();
+                        let request_id = opened.next_request_id();
+                        let out = out.clone();
+                        tokio::spawn(async move {
+                            let answer = match server.discard(&instance, &request_id).await {
+                                Ok(None) => object([("outcome", Value::from("discarded"))]),
+                                Ok(Some(problem)) => object([
+                                    (
+                                        "outcome",
+                                        Value::from(if problem.code == "TRANSPORT_ERROR" {
+                                            "failed"
+                                        } else {
+                                            "refused"
+                                        }),
+                                    ),
+                                    ("code", Value::from(problem.code.as_str())),
+                                ]),
+                                Err(_) => object([
+                                    ("outcome", Value::from("failed")),
+                                    ("code", Value::from("TRANSPORT_ERROR")),
+                                ]),
+                            };
+                            write(&out, id, answer).await;
+                        });
+                    }
                     _ => write(&out, id, object([("unsupported", Value::Bool(true))])).await,
                 }
             }
@@ -117,7 +184,7 @@ async fn main() {
     }
 }
 
-fn open(request: &Value) -> Result<ServerMachineController, String> {
+fn open(request: &Value) -> Result<Opened, String> {
     let text = |key: &str| request.get(key).and_then(|v| v.as_str()).map(str::to_owned);
     let delays = |key: &str| -> Vec<Duration> {
         request
@@ -159,20 +226,23 @@ fn open(request: &Value) -> Result<ServerMachineController, String> {
     server_options.allow_insecure_transport =
         request.get("allowInsecureTransport").and_then(|v| v.as_bool()) == Some(true);
     let server = GraphQLMachineServer::new(server_options).map_err(|e| e.to_string())?;
-    // Request ids count r1, r2, ... from each open, so the host can tell which request is which.
     let count = Arc::new(AtomicU64::new(0));
     let mut options = ServerMachineOptions::new(
         request.get("ir").cloned().ok_or("no ir")?,
         text("irHash").ok_or("no irHash")?,
-        server,
+        server.clone(),
     );
     options.id = text("instance");
     options.start_input = request.get("startInput").filter(|i| !i.is_null()).cloned();
-    options.new_request_id = Some(Box::new(move || {
-        format!("r{}", count.fetch_add(1, Ordering::Relaxed) + 1)
-    }));
+    let minted = count.clone();
+    options.new_request_id = Some(Box::new(move || next_request_id(&minted)));
     options.retry_delays = Some(delays("retryDelays"));
-    ServerMachineController::new(options).map_err(|e| e.to_string())
+    let controller = ServerMachineController::new(options).map_err(|e| e.to_string())?;
+    Ok(Opened {
+        controller,
+        server,
+        count,
+    })
 }
 
 fn view_of(view: &MachineView) -> Map {

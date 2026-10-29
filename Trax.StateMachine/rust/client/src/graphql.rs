@@ -166,7 +166,9 @@ struct Document {
 
 /// The [`MachineServer`] over a host's typed `machines` root. A refusal is an answer, and so is `CLIENT_OUTDATED` or
 /// `SERVER_OUTDATED`, the host's answer to a document of another version; any other GraphQL error, a status that is
-/// not success, or a request that does not complete is a [`TransportError`].
+/// not success, or a request that does not complete is a [`TransportError`]. A clone shares the original's HTTP
+/// client and documents, so an app can keep one to discard through after handing the other to a controller.
+#[derive(Clone)]
 pub struct GraphQLMachineServer {
     inner: Arc<Inner>,
 }

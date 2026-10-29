@@ -1,0 +1,30 @@
+{
+  "about": "An edge that rests on a custom rule the client holds no handler for (a custom guard, a custom reduction, a custom requirement of the state it enters) is the host's to judge: can says only whether the edge leaves the state shown.",
+  "machine": "vault",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "detonate": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "force": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "seal": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "stamp": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Draft", "context": { "title": "memo" } } },
+    { "view": { "status": "ready", "state": "Draft" } },
+    { "client": "can", "trigger": "Seal", "expect": { "can": true } },
+    { "client": "can", "trigger": "Detonate", "expect": { "can": true } },
+    { "client": "can", "trigger": "Stamp", "expect": { "can": true } },
+    { "client": "can", "trigger": "Force", "expect": { "can": true } },
+    { "client": "available", "expect": { "triggers": ["Detonate", "Force", "Seal", "Stamp"] } },
+    { "push": { "revision": 2, "state": "Sealed", "context": { "title": "memo" } } },
+    { "view": { "state": "Sealed", "revision": 2 } },
+    { "client": "can", "trigger": "Seal", "expect": { "can": false } },
+    { "client": "available", "expect": { "triggers": [] } }
+  ]
+}

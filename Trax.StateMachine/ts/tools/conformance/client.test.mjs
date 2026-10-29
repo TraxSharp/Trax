@@ -41,6 +41,7 @@ describe("the client conformance kit", () => {
     for (const kind of ["drop", "status", "errors", "push", "pushErrors", "complete", "dropSocket"])
       expect(steps.some((s) => s[kind] !== undefined), kind).toBe(true);
     expect(list.some((t) => t.refuseConnections > 0)).toBe(true);
+    for (const op of ["can", "available", "discard"]) expect(steps.some((s) => s.client === op), op).toBe(true);
   });
 
   it("passes through the TypeScript client", async () => {

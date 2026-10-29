@@ -135,6 +135,44 @@ did not settle `synced` (a page holds a leave guard on it), and `deleted` whethe
 deletion (true) or a host that holds no such instance for the caller (false). A context holds no member whose value
 is null: a typed answer cannot tell a member stored as null from one the state does not hold.
 
+**`can`** asks whether the client allows `trigger` (with `input`, or absent) from what it shows now, the prediction
+while one is pending: TypeScript's `can`, C#'s `CanSend`, Rust's `can_send`. **`available`** asks for the triggers it
+allows from there, which the testee sorts by code unit. Both are answered at once, from the view:
+
+```json
+{ "id": 7, "op": "can", "trigger": "Coin", "input": { "coin": "quarter" } }
+{ "id": 7, "can": true }
+{ "id": 8, "op": "available" }
+{ "id": 8, "triggers": ["Coin"] }
+```
+
+Before the first snapshot and once stopped, `can` is false and `available` empty. Otherwise `available` lists every
+trigger with an edge out of the shown state, guarded or not, and `can` reads the guard of the edge with the input
+given. An edge that rests on a custom rule the client holds no handler for is the host's to judge, so `can` says only
+whether it leaves the shown state. An event bound to the machine's effect takes an input only the host's effect has,
+so `can` is asked without one and does not read the guard's rules on the input. (TypeScript also reads that guard's
+rules on the context; C# and Rust judge its edge alone. No transcript asks `can` of an effect trigger whose guard's
+context rules fail, until the three agree.)
+
+**`discard`** deletes the instance the client holds, under the next request id. No client discards through its
+controller: each discards through the server it built the controller over (TypeScript's `createMachineServer` answer,
+C#'s `GraphQLMachineServer.DiscardAsync`, Rust's `GraphQLMachineServer::discard`), which is what the testee calls. It
+is answered with what the discard came to, and leaves the view alone: a discarded instance stops the client when the
+stream says it is gone.
+
+```json
+{ "id": 9, "outcome": "discarded" }
+{ "id": 9, "outcome": "refused", "code": "DISCARD_NOT_ALLOWED" }
+{ "id": 9, "outcome": "failed", "code": "TRANSPORT_ERROR" }
+```
+
+An answer that neither says the instance was discarded nor gives a problem does not say it is gone: it is
+`TRANSPORT_ERROR`, as a failed request is.
+
+The kit drives no separate effect send. Each client sends the event bound to the effect as any other, through `send`;
+only TypeScript has a second path, the snapshot transport's `send` (`sendSnapshot`) a draft session uses, which is not
+the controller's and has no C# or Rust counterpart.
+
 **`dispose`** closes the client: its stream, and every request it would still send. It is answered `{ "disposed":
 true }`. **`end`** is the last request; the testee answers `{ "id" }` and exits.
 

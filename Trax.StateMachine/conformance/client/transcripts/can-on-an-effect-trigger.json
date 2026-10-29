@@ -1,0 +1,30 @@
+{
+  "about": "An event bound to the machine's effect takes an input only the host's effect has, so can asks for none: it is true wherever its edge leaves the state shown and its guard's context rules hold, and false where no edge leaves it.",
+  "machine": "checkout",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "next": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "back": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "pay": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "restart": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 4, "state": "Review", "context": { "currency": "USD", "items": ["book"], "receipt": null, "total": 12.5 } } },
+    { "view": { "status": "ready", "state": "Review" } },
+    { "client": "can", "trigger": "Pay", "expect": { "can": true } },
+    { "client": "can", "trigger": "Back", "expect": { "can": true } },
+    { "client": "can", "trigger": "Next", "expect": { "can": false } },
+    { "client": "available", "expect": { "triggers": ["Back", "Pay"] } },
+    { "push": { "revision": 5, "state": "Cart", "context": { "currency": "USD", "items": [], "total": 0 } } },
+    { "view": { "state": "Cart", "revision": 5 } },
+    { "client": "can", "trigger": "Pay", "expect": { "can": false } },
+    { "client": "can", "trigger": "Next", "expect": { "can": false } },
+    { "client": "available", "expect": { "triggers": ["Next"] } }
+  ]
+}

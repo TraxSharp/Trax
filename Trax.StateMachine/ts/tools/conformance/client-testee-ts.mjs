@@ -55,15 +55,33 @@ function outcomeOf(outcome) {
   }
 }
 
+/**
+ * What a discard came to. The controller has no discard of its own: a page discards through the server it built, the
+ * public `discard` of `createMachineServer`'s answer, under a request id it mints.
+ */
+async function discardOf(server, id, requestId) {
+  let answer;
+  try {
+    answer = await server.discard(id, requestId);
+  } catch {
+    return { outcome: "failed", code: "TRANSPORT_ERROR" };
+  }
+  if (answer.kind === "discarded") return { outcome: "discarded" };
+  return { outcome: answer.code === "TRANSPORT_ERROR" ? "failed" : "refused", code: answer.code };
+}
+
 /** A handler from one request to a promise of its answer, over `engine`, the package's exports. */
 export function createClientTestee(engine) {
   const { typedMachineFromIr, createMachineServer, persistedMessageReplacer, ServerMachineController } = engine;
   let controller = null;
   let socket = null;
+  let server = null;
+  let newRequestId = null;
 
   const close = () => {
     controller?.dispose();
     controller = null;
+    server = null;
     void socket?.dispose();
     socket = null;
   };
@@ -79,7 +97,6 @@ export function createClientTestee(engine) {
         retryAttempts: 0,
         jsonMessageReplacer: persistedMessageReplacer,
       });
-      let server;
       try {
         server = createMachineServer(r.endpoint, {
           machine,
@@ -95,12 +112,13 @@ export function createClientTestee(engine) {
         if (/not over TLS/.test(err.message)) return { opened: false, client: CLIENT, code: "INSECURE_TRANSPORT" };
         throw err;
       }
+      newRequestId = counting();
       controller = new ServerMachineController({
         machine,
         server,
         id: r.instance ?? undefined,
         startInput: r.startInput ?? undefined,
-        newRequestId: counting(),
+        newRequestId,
         retryDelays: r.retryDelays,
       });
       // A WebSocket in a browser or in node does not say what status an upgrade it failed was answered with.
@@ -115,6 +133,13 @@ export function createClientTestee(engine) {
     sync: async (r) =>
       outcomeOf(await controller.syncTo(r.target, { fields: r.fields ?? null, navigation: r.navigation })),
     view: async () => viewOf(controller.get()),
+    can: async (r) => ({ can: r.input == null ? controller.can(r.trigger) : controller.can(r.trigger, r.input) }),
+    available: async () => ({ triggers: [...controller.available()].sort() }),
+    discard: async () => {
+      const id = controller.get().id;
+      if (id === null) return { error: "no instance to discard" };
+      return discardOf(server, id, newRequestId());
+    },
     dispose: async () => {
       close();
       return { disposed: true };

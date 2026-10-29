@@ -18,6 +18,8 @@ public sealed class ClientTestee : IAsyncDisposable
 
     private HttpClient _http = NewHttp(null);
     private ServerMachineController? _controller;
+    private GraphQLMachineServer? _server;
+    private Func<string> _newRequestId = () => "r0";
     private GraphQLSubscriptionSocket? _socket;
 
     /// <summary>Answers one request line with one answer line, once the request has settled.</summary>
@@ -77,7 +79,53 @@ public sealed class ClientTestee : IAsyncDisposable
                 )
             ),
             "view" => ViewOf(controller.View),
+            "can" => new JsonObject
+            {
+                ["can"] = controller.CanSend(
+                    request["trigger"]!.GetValue<string>(),
+                    request["input"]?.DeepClone()
+                ),
+            },
+            "available" => new JsonObject
+            {
+                ["triggers"] = new JsonArray(
+                    controller
+                        .AvailableTriggers()
+                        .Order(StringComparer.Ordinal)
+                        .Select(t => (JsonNode?)JsonValue.Create(t))
+                        .ToArray()
+                ),
+            },
+            "discard" => await DiscardAsync(controller.View.Id),
             _ => new JsonObject { ["unsupported"] = true },
+        };
+    }
+
+    // The controller has no discard of its own: an app discards through the server it built, under a request id it
+    // mints. A failed request throws, as every operation of the server does, and is a transport failure.
+    private async Task<JsonObject> DiscardAsync(string? id)
+    {
+        if (id is null || _server is not { } server)
+            return new JsonObject { ["error"] = "no instance to discard" };
+        ServerProblem? problem;
+        try
+        {
+            problem = await server.DiscardAsync(id, _newRequestId());
+        }
+        catch (HttpRequestException)
+        {
+            return new JsonObject
+            {
+                ["outcome"] = "failed",
+                ["code"] = ClientProblemCodes.TransportError,
+            };
+        }
+        if (problem is null)
+            return new JsonObject { ["outcome"] = "discarded" };
+        return new JsonObject
+        {
+            ["outcome"] = problem.Code == ClientProblemCodes.TransportError ? "failed" : "refused",
+            ["code"] = problem.Code,
         };
     }
 
@@ -145,6 +193,8 @@ public sealed class ClientTestee : IAsyncDisposable
             };
         }
         var count = 0;
+        _server = server;
+        _newRequestId = () => $"r{Interlocked.Increment(ref count)}";
         _controller = new ServerMachineController(
             new ServerMachineOptions
             {
@@ -153,7 +203,7 @@ public sealed class ClientTestee : IAsyncDisposable
                 Predictor = MachinePredictor.FromIr(machine),
                 Id = request["instance"]?.GetValue<string>(),
                 StartInput = request["startInput"]?.DeepClone(),
-                NewRequestId = () => $"r{Interlocked.Increment(ref count)}",
+                NewRequestId = _newRequestId,
                 RetryDelays = Delays(request["retryDelays"]),
             }
         );
@@ -261,6 +311,7 @@ public sealed class ClientTestee : IAsyncDisposable
     {
         _controller?.Dispose();
         _controller = null;
+        _server = null;
         if (_socket is { } socket)
             await socket.DisposeAsync();
         _socket = null;
