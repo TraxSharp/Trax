@@ -125,6 +125,60 @@ public class TraxHttpTransportTests
         body.Disposed.Should().BeTrue();
     }
 
+    // The request timeout and the client's own: whichever is shorter fails the request, and says how long it waited.
+    [TestCase(200, 3_600_000)]
+    [TestCase(3_600_000, 200)]
+    [TestCase(-1, 200)]
+    [TestCase(200, -1)]
+    public async Task The_shorter_of_the_clients_timeout_and_the_request_timeout_holds(
+        int clientMilliseconds,
+        int requestMilliseconds
+    )
+    {
+        var http = new HttpClient(new Never())
+        {
+            Timeout = TimeSpan.FromMilliseconds(clientMilliseconds),
+        };
+
+        var answer = await TraxHttpTransport
+            .PostAsync(
+                http,
+                new Uri("https://api.example.com/trax/graphql"),
+                new JsonObject(),
+                requestTimeout: TimeSpan.FromMilliseconds(requestMilliseconds)
+            )
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        answer.Failure!.Message.Should().Be("The host did not answer within 0.2 seconds.");
+    }
+
+    [Test]
+    public async Task With_both_timeouts_infinite_a_slow_answer_is_waited_for()
+    {
+        var answering = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var http = new HttpClient(new AnswersWhen(answering.Task))
+        {
+            Timeout = Timeout.InfiniteTimeSpan,
+        };
+
+        var answer = TraxHttpTransport.PostAsync(
+            http,
+            new Uri("https://api.example.com/trax/graphql"),
+            new JsonObject(),
+            requestTimeout: Timeout.InfiniteTimeSpan
+        );
+        // negative-wait: with no timeout there is no signal that one did not fire; the request waits, then is answered.
+        await Task.Delay(300);
+        answer.IsCompleted.Should().BeFalse();
+        answering.SetResult();
+
+        var answered = await answer.WaitAsync(TimeSpan.FromSeconds(10));
+        answered.Failure.Should().BeNull();
+        answered.Data!["x"]!.GetValue<int>().Should().Be(1);
+    }
+
     [Test]
     public async Task A_body_that_breaks_off_is_a_failure_and_the_response_is_let_go()
     {
@@ -185,6 +239,22 @@ public class TraxHttpTransportTests
             return Task.FromResult(
                 new HttpResponseMessage(HttpStatusCode.OK) { Content = content }
             );
+        }
+    }
+
+    // Answers {"data":{"x":1}} once the test lets it.
+    private sealed class AnswersWhen(Task answer) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            await answer.WaitAsync(cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"data":{"x":1}}"""),
+            };
         }
     }
 
