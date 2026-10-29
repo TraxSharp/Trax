@@ -103,17 +103,19 @@ internal sealed partial class ClientGenerator
     private const string Rename = "Rename one of them.";
 
     /// <summary>
-    /// Whether <paramref name="text"/> is a C# namespace: dotted identifiers, none of them a keyword. Shared with
-    /// <c>trax machine generate --lang csharp</c>, whose view is written in the same <c>--namespace</c>.
+    /// Whether <paramref name="text"/> is a C# namespace: dotted identifiers of ASCII letters, digits and <c>_</c>, none
+    /// of them a keyword or one of the undocumented ones (<c>__arglist</c>). Shared with <c>trax machine generate --lang csharp</c>, whose view is written in the same
+    /// <c>--namespace</c> and whose engine takes the same set.
     /// </summary>
     internal static bool IsNamespace(string text) =>
         text.Length > 0
         && text.Split('.')
             .All(part =>
                 part.Length > 0
-                && (char.IsLetter(part[0]) || part[0] == '_')
-                && part.All(c => char.IsLetterOrDigit(c) || c == '_')
+                && (char.IsAsciiLetter(part[0]) || part[0] == '_')
+                && part.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')
                 && !CSharp.IsKeyword(part)
+                && !CSharp.IsUndocumentedKeyword(part)
             );
 
     // Writes the C# text of the types and the documents.
@@ -639,6 +641,10 @@ internal sealed partial class ClientGenerator
         };
 
         public static bool IsKeyword(string name) => Keywords.Contains(name);
+
+        // Keywords C# does not document, which not even an @ makes a name.
+        public static bool IsUndocumentedKeyword(string name) =>
+            name is "__arglist" or "__makeref" or "__reftype" or "__refvalue";
 
         // A type name: the GraphQL name with its first letter raised and anything that is not a letter, digit or
         // underscore dropped.

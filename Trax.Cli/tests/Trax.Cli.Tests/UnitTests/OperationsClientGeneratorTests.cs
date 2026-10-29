@@ -1565,6 +1565,10 @@ public class OperationsClientGeneratorTests
     [TestCase("A.")]
     [TestCase("A.B-C")]
     [TestCase("My.class")]
+    // The engine's C# view takes ASCII names only, and both are written in one --namespace.
+    [TestCase("Caf\u00e9.Operations")]
+    [TestCase("My.\u0391pp")]
+    [TestCase("My.__arglist")]
     public void A_namespace_that_is_not_one_is_refused(string @namespace)
     {
         var act = () =>
