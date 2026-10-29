@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 268" width="768" height="268" role="img" aria-labelledby="title">
-  <title id="title">The PlaceOrder train runs four junctions in order: PriceCart, ReserveStock, TakePayment and ConfirmOrder. When all succeed the caller gets the order. When ReserveStock fails because an item is out of stock, TakePayment and ConfirmOrder are skipped, no card is charged, and the caller gets the exception.</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 306" width="768" height="306" role="img" aria-labelledby="title">
+  <title id="title">The PlaceOrder train runs four junctions in order: PriceCart, ReserveStock, TakePayment and ConfirmOrder. When all succeed the caller gets the order. When ReserveStock fails because an item is out of stock, TakePayment and ConfirmOrder are skipped, no card is charged, and the caller gets the exception. Each junction is code you write; Trax runs them in order, skips the rest when one fails, and records the run.</title>
   <defs><marker id="a7fb0e0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7fb0e0"/></marker></defs>
-<rect width="768" height="268" fill="#151515"/>
+<rect width="768" height="306" fill="#151515"/>
   <text x="16" y="30" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#7fb0e0;letter-spacing:1px">PLACEORDER TRAIN · EVERY JUNCTION SUCCEEDS</text>
   <rect x="16" y="42" width="128" height="66" rx="8" fill="#2e1a24" stroke="#f2a7c3" stroke-width="1.5"/>
   <text x="30" y="70" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:14px;font-weight:600;fill:#e4e2de">PriceCart</text>
@@ -43,4 +43,7 @@
   <text x="630" y="186" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:14px;font-weight:600;fill:#e8853d">The exception</text>
   <text x="630" y="208" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">back to the caller</text>
   <text x="16" y="254" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">No card is charged for an order that cannot be filled, and the run record names the junction that failed.</text>
+  <rect x="16" y="274" width="176.8" height="22" rx="5" fill="#2f2810" stroke="#f2c94c" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="24" y="289" style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:12px;font-weight:400;fill:#f2c94c">you write: each junction</text>
+  <text x="210" y="289" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#e4e2de">Trax runs them in order, skips the rest when one fails, and records the run.</text>
 </svg>

@@ -32,9 +32,23 @@ instructions in a prompt it may not follow.
 
 Define the process once, on the server. Let anything drive it. Check every move.
 
-Trax is a .NET framework for enforced workflows. You describe the process and the work inside it in
-C#, Trax serves it to whatever clients you have, and the server applies every rule itself, whoever
-is asking.
+Trax is a .NET framework for enforced workflows. It is a set of NuGet packages you add to your own
+ASP.NET Core app, so "the server" on this page is your server, with Trax inside it. You describe the
+process and the work inside it in C#, Trax serves it to whatever clients you have, and Trax applies
+every rule itself, whoever is asking.
+
+The split, which the rest of this page comes back to:
+
+| You write | Trax does |
+|---|---|
+| The states, and the moves allowed from each | Stores the state, and refuses any move you did not list |
+| Who may send each move | Reads the caller from your app's sign-in, and refuses anyone your rule leaves out |
+| The guards, and the reason each one gives back | Runs them against the stored state, and returns your reason when one fails |
+| The trains: the work, as small steps called junctions | Runs them in order, stops at the first failure, and records every run |
+| A few lines in `Program.cs` that register Trax | Serves your machines and trains over GraphQL, and generates a typed TypeScript client |
+| When background work runs, and how often to retry it | Queues it, retries it, dead-letters it, and shows it in the operations console |
+
+The pictures mark the code you write with an amber dashed tag.
 
 ## What a state machine is
 
@@ -65,22 +79,29 @@ Trax already uses railway words, and the picture holds:
 - **Junctions are steps**: the points a train passes on its way. If you know railways, note that
   in Trax a junction is a step on a train's route, not a place where tracks split.
 
+You lay the stations, the track and the signals, and you build the trains and their junctions. Trax
+runs the railway: it keeps every process at exactly one station, lets nothing past a signal that
+says no, and dispatches the trains.
+
 ## A train does the work
 
-![The PlaceOrder train. When every junction succeeds, PriceCart, ReserveStock, TakePayment and ConfirmOrder run in order and the caller gets the order. When ReserveStock fails because an item is out of stock, TakePayment and ConfirmOrder are skipped and the caller gets the exception.](/docs-images/place-order-train.svg)
+![The PlaceOrder train runs four junctions in order: PriceCart, ReserveStock, TakePayment and ConfirmOrder. When all succeed the caller gets the order. When ReserveStock fails because an item is out of stock, TakePayment and ConfirmOrder are skipped, no card is charged, and the caller gets the exception. Each junction is code you write; Trax runs them in order, skips the rest when one fails, and records the run.](/docs-images/place-order-train.svg)
 
 A [train](/docs/core/trains-and-junctions) is one operation written as a short chain of small,
-typed steps called junctions. When every junction succeeds, the caller gets the result. When one
-fails, the rest are skipped and the caller gets the exception. Here no card is charged for an order
-that cannot be filled. Every run of a train is recorded, so the failure can be found and read later.
+typed steps called junctions. Each junction is a class you write, such as the one that charges the
+card. The chaining is Trax's: when every junction succeeds, the caller gets the result, and when one
+fails, Trax skips the rest and the caller gets the exception. Here no card is charged for an order
+that cannot be filled. Trax records every run of a train, so the failure can be found and read
+later.
 
 ## How states and trains work together
 
 ![Reaching the Placing station starts the PlaceOrder train. The train passes its junctions without stopping and returns a result: the checkout arrives at Placed when the train succeeds and at Failed when it does not.](/docs-images/machine-runs-train.svg)
 
-Reaching the Placing station starts the `PlaceOrder` train. The train runs its junctions without
-stopping and returns a result, and the result decides where the checkout arrives: Placed if it
-succeeded, Failed if not.
+You declare that Placing runs the `PlaceOrder` train, and where each outcome leads. Trax does the
+rest: when the checkout reaches Placing it starts the train, the train runs its junctions without
+stopping, and Trax moves the checkout on from the result: to Placed if it succeeded, to Failed if
+not. No code of yours polls for the result or moves the checkout by hand.
 
 A train is also useful on its own, for anything that runs from start to finish: from your own code,
 as a GraphQL mutation, on a schedule, or on a worker in another process. Plenty of applications use
@@ -150,22 +171,32 @@ m.In(CheckoutState.Failed)
   next to the rule.
 - `Invokes` names the train a state runs, and `OnDone` and `OnFailed` where its result leads.
 
+That is all you write for the checkout's rules. From it, Trax serves each move as a GraphQL
+mutation, generates a TypeScript client that knows which moves each state allows, stores each
+checkout's state in your database, and refuses any move the block does not list. There is no
+controller to write, no table for the checkout's state, and no `if` that checks whether the cart was
+paid.
+
 [Author and serve a machine](/docs/statemachine/authoring) goes through every part.
 
 ## How the server checks a move
 
-![A browser, a script and an AI agent each send a move. The server reads the stored state and checks three things: is the move allowed from here, may this caller make it, do the data and evidence hold up. All three pass and the new state is saved; any one fails and the client gets a typed error such as GUARD_FAILED, and nothing changes.](/docs-images/propose-decide.svg)
+![Outside Trax, a browser, a script and an AI agent each send a move, never the new state; the client code is yours or generated by Trax. Everything inside the dashed line is Trax. The move arrives through Trax's API, which knows who is calling. Trax then checks it against the stored state: is the move allowed from here, which Trax decides alone; may this caller make it, by rules you write; and do the data and evidence hold up, by guards you write. All three pass and Trax saves the new state and runs the work you wrote. Any one fails and the client gets a code such as GUARD_FAILED or FORBIDDEN with your reason, and nothing changes.](/docs-images/propose-decide.svg)
 
 A client never tells the server "this order is now paid". It sends a move, such as `PlaceOrder`, and
-the server works out the result from the state it stored, not from anything the client claims. It
-checks three things:
+Trax works out the result from the state it stored, not from anything the client claims. It checks
+three things, each against something you wrote in the C# above:
 
-1. Is this move allowed from the current state? If not, `NO_TRANSITION`.
-2. May this caller make it? Nothing is served until a rule says who may, so if not, `FORBIDDEN`.
-3. Do the data and evidence hold up? If not, `INVALID_INPUT` or `GUARD_FAILED`, with the reason.
+1. Is this move allowed from the current state? Your `In` and `On` lines say which moves each state
+   allows. If not, `NO_TRANSITION`.
+2. May this caller make it? Your `Requires` or `AnyAuthenticated` says who may. A move with no such
+   rule is refused to everyone, so forgetting one locks the move rather than opening it. If not,
+   `FORBIDDEN`.
+3. Do the data and evidence hold up? Your `When` guards decide, and their `Because` is the reason
+   sent back. If not, `INVALID_INPUT` or `GUARD_FAILED`.
 
-If all three pass, the new state is saved. If any one fails, nothing changes and the client gets a
-typed error saying which rule it broke. [Result codes](/docs/sdk-reference/statemachine-api/result-codes)
+If all three pass, Trax saves the new state and starts any train the new state runs. If any one
+fails, nothing changes and the client gets a typed error saying which rule it broke. [Result codes](/docs/sdk-reference/statemachine-api/result-codes)
 lists them all.
 
 ## Every client gets the same rules
@@ -173,29 +204,36 @@ lists them all.
 ![One workflow, defined once on the server, driven by four kinds of client. Web users get steps in order and valid data at each step. Schedules and queues get retries, dead letters and a record of every run. Scripts and services in any language get the same rules. AI agents get only the moves they are allowed, and evidence the server reruns.](/docs-images/many-drivers.svg)
 
 Because the rules live on the server, every kind of client gets the same ones. People in a browser
-get the steps in order and their input checked. Scheduled and queued work gets retries, dead letters
-and a record of every run. Scripts and services call the same API in whatever language they are
-written in, and the rules hold for them too, including the ones their language cannot check. AI
-agents can only make the moves you declared, and the server reruns their evidence.
+get the steps in order and their input checked, through the TypeScript client Trax generates.
+Scheduled and queued work runs when you say; Trax queues it, retries it as often as you allow,
+dead-letters it when it runs out of retries, and records every run. Scripts and services call the
+same GraphQL API Trax serves, in whatever language they are written in, and the rules hold for them
+too, including the ones their language cannot check. AI agents can only make the moves you
+declared, and when a move needs evidence, a check you write as a train reruns it on the server
+before Trax accepts the move.
 
 ## Where Trax sits around an AI agent
 
-![Two layers around an AI agent. The sandbox lets the agent run code, edit files, call tools and read data, but nothing in it reaches real systems. The only way out is through Trax's guards, which check that the move is allowed in this state, allowed for this agent, and that its evidence holds up. Only verified moves reach the real systems.](/docs-images/agent-sandbox.svg)
+![Two layers around an AI agent. The sandbox lets the agent run code, edit files, call tools and read data, but nothing in it reaches real systems. The only way out is through Trax, which checks that the move is allowed in this state, allowed for this agent, and that its evidence holds up, by rules you write. Only verified moves reach the real systems: tickets, orders, data.](/docs-images/agent-sandbox.svg)
 
 AI agents are the most demanding client. Two layers do two different jobs. A sandbox limits what an
 agent can do: it can run code and make a mess, but only in its own box. Trax limits what it can
 change: its only way out is a small set of declared moves, each checked against the state, the
-agent's role, and evidence the server checks itself rather than takes on the agent's word. Most
-agent setups have the first layer and improvise the second with instructions in a prompt.
+agent's role, and evidence the server checks itself rather than takes on the agent's word. The
+sandbox is not Trax; you run it with whatever tool you already use. Inside Trax, you write the rules
+and the evidence checks, and Trax makes sure the agent cannot get around them. Most agent setups
+have the first layer and improvise the second with instructions in a prompt.
 
 ## The Board sample
 
-![The Board sample. A bug ticket moves through five lanes, each owned by one client: Triage by triage-bot, Reproduce by repro-bot, Fix by fix-bot, QA by qa-bot and Review by Sam, a person. An agent submits its evidence, a check train on the server reruns it, and the ticket moves only if the check accepts it.](/docs-images/board-lanes.svg)
+![The Board sample. A bug ticket moves through five lanes, each owned by one client: Triage by triage-bot, Reproduce by repro-bot, Fix by fix-bot, QA by qa-bot and Review by Sam, a person. The ticket is in Fix, held by fix-bot. An agent submits its evidence, a check train the sample's author wrote reruns it on the server, and the ticket moves only if the check accepts it; otherwise it stays put.](/docs-images/board-lanes.svg)
 
 [Board](/docs/samples/board) is a Trax sample where bots move bug tickets through lanes. Four
 scripted bots and one person each own a lane, with keys of their own. A bot never moves a ticket
 itself: it submits evidence for its lane, a check train on the server reruns that evidence against
-the rules, and only the train's verdict moves the ticket. The last lane belongs to a person, so
+the rules, and only the train's verdict moves the ticket. The sample's author wrote one check train
+per lane, as ordinary trains; building your own agent workflow, those are the trains you would
+write. Trax is what makes the verdict the only way a ticket moves. The last lane belongs to a person, so
 human sign-off is just another lane with a role. The bots are scripted, not language models, but
 they talk to the server the way an AI agent would.
 
