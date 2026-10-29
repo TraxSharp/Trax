@@ -227,6 +227,11 @@ export function httpTransport(options: HttpTransportOptions): HttpTransport {
       } catch (cause) {
         throw new TraxTransportError(`The host could not be reached: ${String(cause)}`, undefined, { cause });
       }
+      try {
+        requireNoRedirect(response);
+      } catch (cause) {
+        throw new TraxTransportError((cause as Error).message, response.status, { cause });
+      }
       let answer: unknown;
       try {
         answer = await readJson(response, options.maxResponseBytes);
@@ -238,6 +243,9 @@ export function httpTransport(options: HttpTransportOptions): HttpTransport {
       }
       if (!isRecord(answer) || (!("data" in answer) && !("errors" in answer)))
         throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status);
+      // Not 2xx, and no GraphQL error to say why: the request failed, whatever data the body holds.
+      if (!response.ok && !(Array.isArray(answer.errors) && answer.errors.length > 0))
+        throw new TraxTransportError(`The host answered ${response.status} with no GraphQL error.`, response.status);
       return answer as TraxAnswer;
     },
     subscribe(request, sink) {
@@ -319,6 +327,15 @@ export function requireSecureSocket(socketUrl: string, allowInsecure: boolean | 
 
 function isLoopbackHost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+}
+
+/**
+ * Throws unless `response` is the endpoint's own answer. Every request is sent with `redirect: "error"`, but a
+ * `fetch` that followed a redirect anyway, or handed back the redirect itself, must not have its answer read.
+ */
+function requireNoRedirect(response: Response): void {
+  if (response.redirected || response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400))
+    throw new Error(`The host answered with a redirect (${response.status}), which is not followed.`);
 }
 
 /**

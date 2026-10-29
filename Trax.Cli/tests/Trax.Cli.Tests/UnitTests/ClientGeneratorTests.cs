@@ -320,6 +320,10 @@ public partial class ClientGeneratorTests
             .Contain(
                 "allowInsecureTransport: connection.allowInsecureTransport,",
                 "a machine's server refuses a cleartext url to another host unless the app said the network is trusted"
+            )
+            .And.Contain(
+                "maxResponseSize: connection.maxResponseBytes,",
+                "a machine's server reads no more of an answer than the connection allows"
             );
     }
 
@@ -337,6 +341,14 @@ public partial class ClientGeneratorTests
             )
             .And.Contain("export function requireSecureSocket(")
             .And.Contain("redirect: \"error\",")
+            .And.Contain(
+                "requireNoRedirect(response);",
+                "a fetch that ignores redirect: \"error\" must not have the answer it followed to read"
+            )
+            .And.Contain(
+                "if (!response.ok)\n    throw new TraxOperationError(undefined,",
+                "an answer that is not 2xx and names no GraphQL error is a failed request, not undefined data"
+            )
             .And.Contain("maxResponseBytes?: number;")
             .And.Contain("await readJson(response, maxResponseBytes)")
             .And.NotContain("response.json()");

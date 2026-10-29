@@ -111,6 +111,7 @@ export function assignmentServer(): ReturnType<typeof createMachineServer> {
         return connection.headers?.() ?? {};
       },
       allowInsecureTransport: connection.allowInsecureTransport,
+      maxResponseSize: connection.maxResponseBytes,
       machine: assignment,
       documents: assignmentDocuments,
       // A stream refused below ends for good: the controller stops with it instead of subscribing again.

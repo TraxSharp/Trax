@@ -799,6 +799,15 @@ internal sealed partial class ClientGenerator
         }
 
         /**
+         * Throws unless `response` is the endpoint's own answer. Every request is sent with `redirect: "error"`, but a
+         * `fetch` that followed a redirect anyway, or handed back the redirect itself, must not have its answer read.
+         */
+        function requireNoRedirect(response: Response): void {
+          if (response.redirected || response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400))
+            throw new Error(`The host answered with a redirect (${response.status}), which is not followed.`);
+        }
+
+        /**
          * The answer's body as JSON, read to at most `maxBytes`: a longer one is cancelled and refused with a RangeError
          * rather than held in memory.
          */
@@ -877,7 +886,7 @@ internal sealed partial class ClientGenerator
                * every train function, machine server and socket refuses such a url.
                */
               allowInsecureTransport?: boolean;
-              /** The most bytes of an answer a train function reads before it refuses it. 16 MiB when not given. */
+              /** The most bytes of an answer a train function or machine server reads before it refuses it. 16 MiB when not given. */
               maxResponseBytes?: number;
             }
 
@@ -956,13 +965,22 @@ internal sealed partial class ClientGenerator
                 // A redirect would carry the headers to wherever it points.
                 redirect: "error",
               });
-              const answer = (await readJson(response, maxResponseBytes)) as {
-                data?: Record<string, unknown> | null;
-                errors?: { message: string; extensions?: { code?: string } }[];
-              };
-              const error = answer.errors?.[0];
+              requireNoRedirect(response);
+              type Answer = { data?: Record<string, unknown> | null; errors?: { message: string; extensions?: { code?: string } }[] };
+              let answer: Answer | null;
+              try {
+                answer = (await readJson(response, maxResponseBytes)) as Answer | null;
+              } catch (cause) {
+                // A body that is not JSON is the status's to explain; one past the limit is refused either way.
+                if (response.ok || cause instanceof RangeError) throw cause;
+                answer = null;
+              }
+              const error = answer?.errors?.[0];
               if (error) throw new TraxOperationError(error.extensions?.code, error.message);
-              let value: unknown = answer.data;
+              // Not 2xx, and no GraphQL error to say why: the request failed, whatever data the body holds.
+              if (!response.ok)
+                throw new TraxOperationError(undefined, `The host answered ${[response.status, response.statusText].filter(Boolean).join(" ")}.`);
+              let value: unknown = answer?.data;
               for (const key of path) value = (value as Record<string, unknown> | null | undefined)?.[key];
               return value as T;
             }
@@ -1091,6 +1109,7 @@ internal sealed partial class ClientGenerator
         sb.Append("        return connection.headers?.() ?? {};\n");
         sb.Append("      },\n");
         sb.Append("      allowInsecureTransport: connection.allowInsecureTransport,\n");
+        sb.Append("      maxResponseSize: connection.maxResponseBytes,\n");
         sb.Append($"      machine: {camel},\n");
         sb.Append($"      documents: {camel}Documents,\n");
         sb.Append(

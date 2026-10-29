@@ -159,6 +159,14 @@ public class OperationsClientGeneratorTests
                 "the socket carries the credential in connection_init, so it is held to the same rule"
             )
             .And.Contain("redirect: \"error\",")
+            .And.Contain(
+                "requireNoRedirect(response);",
+                "a fetch that ignores redirect: \"error\" must not have the answer it followed to read"
+            )
+            .And.Contain(
+                "if (!response.ok && !(Array.isArray(answer.errors) && answer.errors.length > 0))",
+                "an answer that is not 2xx and names no GraphQL error is a failed request, whatever data it holds"
+            )
             .And.Contain("answer = await readJson(response, options.maxResponseBytes);")
             .And.Contain("const defaultMaxResponseBytes = 16 * 1024 * 1024;")
             .And.NotContain("response.json()");

@@ -76,6 +76,7 @@ export function turnstileServer(): ReturnType<typeof createMachineServer> {
         return connection.headers?.() ?? {};
       },
       allowInsecureTransport: connection.allowInsecureTransport,
+      maxResponseSize: connection.maxResponseBytes,
       machine: turnstile,
       documents: turnstileDocuments,
       // A stream refused below ends for good: the controller stops with it instead of subscribing again.

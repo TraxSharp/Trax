@@ -76,6 +76,7 @@ export function orderServer(): ReturnType<typeof createMachineServer> {
         return connection.headers?.() ?? {};
       },
       allowInsecureTransport: connection.allowInsecureTransport,
+      maxResponseSize: connection.maxResponseBytes,
       machine: order,
       documents: orderDocuments,
       // A stream refused below ends for good: the controller stops with it instead of subscribing again.
