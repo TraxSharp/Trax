@@ -454,6 +454,44 @@ describe('ServerMachineController', () => {
     expect(created.get().status).toBe('ready');
   });
 
+  it('a send with no instance to send to settles not-ready, queued or new, until retry opens one', async () => {
+    const server = new FakeMachineServer();
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      startInput: {},
+      newRequestId: sequentialRequestIds(),
+    });
+    const started = controller.start();
+    const queued = controller.send('Push');
+    await flushMicrotasks();
+    server.starts[0].fail();
+    await started;
+
+    expect(await queued).toMatchObject({ outcome: 'failed', problem: { code: 'NOT_READY' } });
+    expect(await controller.send('Push')).toMatchObject({ outcome: 'failed', problem: { code: 'NOT_READY' } });
+    expect(controller.get().pending).toBe(false);
+
+    const retried = controller.retry();
+    const waiting = controller.send('Push');
+    await flushMicrotasks();
+    server.starts[1].resolve({ kind: 'started', id: 'i-1', snapshot: serverSnapshot({ ...unlocked('quarter') }) });
+    expect(await retried).toMatchObject({ outcome: 'confirmed' });
+    await flushMicrotasks();
+    expect(server.events).toHaveLength(1);
+    server.events[0].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2 }) });
+    expect(await waiting).toMatchObject({ outcome: 'confirmed' });
+
+    const refused = new FakeMachineServer();
+    const opened = new ServerMachineController<TurnstileSpec>({ machine: turnstile, server: refused, id: 'i-2' });
+    const read = opened.start();
+    await flushMicrotasks();
+    refused.gets[0].resolve({ kind: 'problem', code: 'FORBIDDEN', message: 'Not yours.' });
+    await read;
+    expect(await opened.send('Push')).toMatchObject({ outcome: 'failed', problem: { code: 'NOT_READY' } });
+    expect(refused.events).toHaveLength(0);
+  });
+
   it('a retried read that fails again settles failed, and can be retried once more', async () => {
     const server = new FakeMachineServer();
     const controller = new ServerMachineController<TurnstileSpec>({

@@ -291,6 +291,9 @@ export class ServerMachineController<Spec extends MachineSpec> {
   // a retry resent.
   private startFailed = false;
   private readFailed = false;
+  // Whether the start or the first read gave up (refused, failed, or past every retry) with no instance to send to:
+  // every send settles NOT_READY until a `retry` opens one.
+  private unopened = false;
   private readonly startWaiters: ((outcome: SendOutcome) => void)[] = [];
 
   // The newest sync (an older one stops at its next answer), whether the view is unsaved, and who waits for the queue to
@@ -340,7 +343,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
   /**
    * Sends one event under a fresh requestId, after every earlier event of this instance has settled. A trigger the
    * machine does not declare as an event (an outcome, a timer, or a name it lacks) is refused at once with the code
-   * `advance` gives it, and nothing is sent.
+   * `advance` gives it, and nothing is sent. While the controller holds no instance and is not opening one (its start
+   * was refused or failed, or its first read gave up), a send settles `failed` with `NOT_READY`.
    */
   send<T extends TriggerOf<Spec>>(trigger: T, ...input: InputArgs<Spec, T>): Promise<SendOutcome> {
     if (this.error) return Promise.resolve({ outcome: 'stopped', error: this.error });
@@ -364,6 +368,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
     if (this.disposed) return Promise.resolve(this.disposedOutcome());
     if (this.startFailed && this.id === null && this.startRequestId !== undefined) {
       this.startFailed = false;
+      this.unopened = false;
       const requestId = this.startRequestId;
       return new Promise<SendOutcome>((resolve) => {
         this.startWaiters.push(resolve);
@@ -372,6 +377,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
     }
     if (this.readFailed && this.id !== null && this.confirmed === null) {
       this.readFailed = false;
+      this.unopened = false;
       return new Promise<SendOutcome>((resolve) => {
         this.startWaiters.push(resolve);
         this.reload(null);
@@ -600,6 +606,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
       this.startFailed = true;
       this.emit();
       this.settleStart({ outcome: 'failed', problem: this.problem });
+      this.notOpened();
       return;
     }
     if (this.disposed) return;
@@ -618,6 +625,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
       this.startFailed = retryable;
       this.emit();
       this.settleStart({ outcome: retryable ? 'failed' : 'refused', problem: this.problem });
+      this.notOpened();
       return;
     }
     this.id = answer.id;
@@ -765,6 +773,14 @@ export class ServerMachineController<Spec extends MachineSpec> {
     }
     this.readFailed = outcome === 'failed';
     this.settleStart({ outcome, problem: this.problem! });
+    this.notOpened();
+  }
+
+  // Nothing is opening the instance any more, so no send could ever go out: those queued settle NOT_READY, and so does
+  // every send until a `retry` opens it.
+  private notOpened(): void {
+    this.unopened = true;
+    this.pump();
   }
 
   private endRead(): void {
@@ -872,6 +888,15 @@ export class ServerMachineController<Spec extends MachineSpec> {
   }
 
   private pump(): void {
+    if (this.unopened && this.confirmed === null && !this.disposed && !this.error) {
+      const stranded = this.queue.splice(0);
+      if (stranded.length === 0) return;
+      this.emit();
+      const problem = refusal(ClientProblemCode.NotReady, 'The machine has no instance to send to: its start or first read did not succeed.');
+      for (const queued of stranded) queued.settle({ outcome: 'failed', problem });
+      this.wake(this.idleWaiters);
+      return;
+    }
     if (this.sending || this.disposed || this.error || this.id === null || this.confirmed === null) return;
     const next = this.queue[0];
     if (!next) return;
