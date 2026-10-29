@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Reflection;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
@@ -440,6 +441,39 @@ public class GraphQLSubscriptionSocketTests
 
         (await closed.Task.WaitAsync(Wait)).Should().Be(WebSocketCloseStatus.NormalClosure);
         (await sink.Failed.Task.WaitAsync(Wait)).Should().BeOfType<SocketUnavailableException>();
+    }
+
+    [Test]
+    public async Task Disposing_the_socket_lets_go_of_the_connections_stop_and_send_lock()
+    {
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.AckAsync();
+            await peer.SubscribedAsync();
+            await peer.ClosedWithAsync();
+        });
+        var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var sink = new Sink();
+        using var subscription = socket.Subscribe(Payload, sink);
+        (await sink.Take(1)).Should().Equal("started");
+        // The connection, and what it holds, read from the socket's private fields.
+        var connection = typeof(GraphQLSubscriptionSocket)
+            .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(socket)!;
+        var stop = (CancellationTokenSource)
+            connection
+                .GetType()
+                .GetField("_stop", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .GetValue(connection)!;
+        var sending = (SemaphoreSlim)
+            connection.GetType().GetProperty("Sending")!.GetValue(connection)!;
+
+        await socket.DisposeAsync();
+
+        ((Action)(() => _ = stop.Token)).Should().Throw<ObjectDisposedException>();
+        ((Action)(() => _ = sending.AvailableWaitHandle)).Should().Throw<ObjectDisposedException>();
     }
 
     [Test]

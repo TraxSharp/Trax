@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using AwesomeAssertions;
@@ -340,6 +341,46 @@ public class MachineStreamTests
         (await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait))
             .Should()
             .NotBeSameAs(first);
+    }
+
+    [Test]
+    public async Task A_resubscribe_delay_lets_go_of_its_timer_once_it_ends_and_once_the_stream_is_disposed()
+    {
+        var time = new FakeTimeProvider();
+        var (socket, _, stream) = Follow(delays: [TimeSpan.FromSeconds(1)], time: time);
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Sink.Complete();
+        var ended = PendingTimer(stream)!;
+        time.Advance(TimeSpan.FromSeconds(1));
+        var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        second.Sink.Complete();
+        var pending = PendingTimer(stream)!;
+        stream.Dispose();
+
+        IsDisposed(ended).Should().BeTrue("its delay ended and the stream was subscribed again");
+        IsDisposed(pending).Should().BeTrue("the stream was disposed while it was pending");
+    }
+
+    // The source of the resubscribe delay pending now, read from the stream's private field.
+    private static CancellationTokenSource? PendingTimer(IDisposable stream) =>
+        (CancellationTokenSource?)
+            stream
+                .GetType()
+                .GetField("_timer", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .GetValue(stream);
+
+    private static bool IsDisposed(CancellationTokenSource source)
+    {
+        try
+        {
+            _ = source.Token;
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
     }
 
     // A socket each subscription is handed to the test through.

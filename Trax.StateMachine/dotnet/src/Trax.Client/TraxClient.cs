@@ -222,11 +222,18 @@ public sealed class TraxClient
         private IDisposable? _current;
         private CancellationTokenSource? _timer;
 
-        public void Open()
+        // Subscribes; after a delay, `fired` is the source of the delay that ended.
+        public void Open(CancellationTokenSource? fired = null)
         {
             lock (_gate)
             {
-                _timer = null;
+                // The delay's source is this one's to let go of unless a disposal or a later delay took it, which
+                // cancels and disposes it itself.
+                if (fired is not null && ReferenceEquals(_timer, fired))
+                {
+                    _timer = null;
+                    fired.Dispose();
+                }
                 if (!_wanted || _ended)
                     return;
             }
@@ -361,7 +368,9 @@ public sealed class TraxClient
         {
             IDisposable? close;
             TimeSpan delay;
-            CancellationTokenSource timer;
+            CancellationTokenSource? previous;
+            CancellationTokenSource source;
+            CancellationToken timer;
             bool first;
             lock (_gate)
             {
@@ -373,17 +382,21 @@ public sealed class TraxClient
                 _interrupted = true;
                 delay = Backoff.Delay(client._delays, _attempt, client._random);
                 _attempt++;
-                timer = _timer = new CancellationTokenSource();
+                // A delay already pending is replaced, so the stream is subscribed again once.
+                previous = _timer;
+                source = _timer = new CancellationTokenSource();
+                timer = source.Token;
             }
             close?.Dispose();
             if (first)
                 Deliver(new TraxStreamEvent<TResult>.Interrupted(reason));
-            _ = Task.Delay(delay, client._time, timer.Token)
+            CancelAndDispose(previous);
+            _ = Task.Delay(delay, client._time, timer)
                 .ContinueWith(
                     t =>
                     {
                         if (!t.IsCanceled)
-                            Open();
+                            Open(source);
                     },
                     TaskScheduler.Default
                 );
@@ -401,8 +414,15 @@ public sealed class TraxClient
                 timer = _timer;
                 _timer = null;
             }
-            timer?.Cancel();
+            CancelAndDispose(timer);
             close?.Dispose();
+        }
+
+        // The token was taken before the source is disposed, and is cancelled first: a delay waiting on it ends.
+        private static void CancelAndDispose(CancellationTokenSource? timer)
+        {
+            timer?.Cancel();
+            timer?.Dispose();
         }
     }
 }

@@ -482,6 +482,52 @@ public class TraxClientTests
         (await socket.Subscriptions.Take(Wait)).Should().NotBeNull();
     }
 
+    [Test]
+    public async Task A_resubscribe_delay_lets_go_of_its_timer_once_it_ends_and_once_the_stream_is_disposed()
+    {
+        var socket = new HandSocket();
+        var time = new FakeTimeProvider();
+        var stream = new TraxClient(
+            Transport(socket),
+            new TraxClientOptions { Time = time, Random = () => 1.0 }
+        ).Subscribe(Changed, TraxNoVariables.Instance, _ => { });
+
+        (await socket.Subscriptions.Take(Wait)).Sink.Error(new IOException("dropped"));
+        var ended = PendingTimer(stream)!;
+        time.Advance(TimeSpan.FromSeconds(1));
+        (await socket.Subscriptions.Take(Wait)).Sink.Error(new IOException("dropped"));
+        var pending = PendingTimer(stream)!;
+        stream.Dispose();
+
+        IsDisposed(ended).Should().BeTrue("its delay ended and the stream was subscribed again");
+        IsDisposed(pending).Should().BeTrue("the stream was disposed while it was pending");
+    }
+
+    // The source of the resubscribe delay pending now, read from the stream's private field.
+    private static CancellationTokenSource? PendingTimer(IDisposable stream) =>
+        (CancellationTokenSource?)
+            stream
+                .GetType()
+                .GetField(
+                    "_timer",
+                    System.Reflection.BindingFlags.NonPublic
+                        | System.Reflection.BindingFlags.Instance
+                )!
+                .GetValue(stream);
+
+    private static bool IsDisposed(CancellationTokenSource source)
+    {
+        try
+        {
+            _ = source.Token;
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
+    }
+
     [TestCase(4408)]
     [TestCase(4429)]
     [TestCase(4400)]

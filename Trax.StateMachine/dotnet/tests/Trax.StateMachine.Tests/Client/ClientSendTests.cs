@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using AwesomeAssertions;
@@ -252,6 +253,45 @@ public class ClientSendTests
             .Which.Error.Code.Should()
             .Be("CLIENT_OUTDATED");
         controller.View.Status.Should().Be(MachineStatus.Stopped);
+    }
+
+    [Test]
+    public async Task Stopping_and_disposing_let_go_of_the_retry_timers()
+    {
+        var server = new HandServer();
+        var controller = Open(server, null);
+        await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
+        var running = Timers(controller);
+
+        server.Push(new StreamMessage.Refused("FORBIDDEN", "Not yours."));
+        // Settled on the controller's scheduler after the push, so the stop has run.
+        await controller.SendAsync("Coin").WaitAsync(Wait);
+        var afterStop = Timers(controller);
+        controller.Dispose();
+        await controller.SendAsync("Coin").WaitAsync(Wait);
+
+        IsDisposed(running).Should().BeTrue("the stop replaced them");
+        IsDisposed(afterStop).Should().BeTrue("the controller was disposed");
+    }
+
+    // The source every retry delay waits on, read from the controller's private field.
+    private static CancellationTokenSource Timers(ServerMachineController controller) =>
+        (CancellationTokenSource)
+            typeof(ServerMachineController)
+                .GetField("_timers", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .GetValue(controller)!;
+
+    private static bool IsDisposed(CancellationTokenSource source)
+    {
+        try
+        {
+            _ = source.Token;
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
     }
 
     [Test]

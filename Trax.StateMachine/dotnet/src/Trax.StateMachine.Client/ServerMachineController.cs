@@ -555,6 +555,7 @@ public sealed class ServerMachineController : IDisposable
         _disposed = true;
         Close();
         _timers.Cancel();
+        _timers.Dispose();
         var queued = _queue.ToList();
         _queue.Clear();
         foreach (var entry in queued)
@@ -1363,6 +1364,7 @@ public sealed class ServerMachineController : IDisposable
         _status = MachineStatus.Stopped;
         Close();
         _timers.Cancel();
+        _timers.Dispose();
         _timers = new CancellationTokenSource();
         _sending = false;
         var stranded = _queue.ToList();
@@ -1381,6 +1383,9 @@ public sealed class ServerMachineController : IDisposable
     {
         if (attempt >= _retryDelays.Count)
             return exhausted();
+        // Disposed: the timers are gone, and nothing more is retried.
+        if (_disposed)
+            return Task.CompletedTask;
         return DelayThen(_retryDelays[attempt], _timers.Token, next);
     }
 

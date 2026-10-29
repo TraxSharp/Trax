@@ -153,7 +153,19 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         public HttpMessageInvoker? Invoker { get; init; }
         public required Task Ready { get; init; }
         public Dictionary<string, Subscription> Sinks { get; } = new(StringComparer.Ordinal);
-        public CancellationTokenSource Stop { get; } = new();
+
+        private readonly CancellationTokenSource _stop = new();
+        private readonly object _stopGate = new();
+        private bool _stopDisposed;
+        private Task? _released;
+
+        public Connection() => Stopping = _stop.Token;
+
+        /// <summary>
+        /// Cancelled once the connection is stopped. Taken when it is built, so it can still be read, cancelled, once
+        /// the source behind it is disposed.
+        /// </summary>
+        public CancellationToken Stopping { get; }
 
         /// <summary>
         /// One send at a time, as the socket allows. Each connection has its own, so a send stalled on an old
@@ -161,6 +173,40 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         /// </summary>
         public SemaphoreSlim Sending { get; } = new(1, 1);
         public bool Closed { get; set; }
+
+        /// <summary>Cancels whatever the connection is still doing.</summary>
+        public void Stop()
+        {
+            lock (_stopGate)
+                if (!_stopDisposed)
+                    _stop.Cancel();
+        }
+
+        /// <summary>
+        /// Stops the connection and lets go of everything it holds, once: the socket, the upgrade's handler, and, once
+        /// the send in flight has given the send lock back, the lock and the stop. Every caller awaits the same release.
+        /// </summary>
+        public Task ReleaseAsync()
+        {
+            lock (_stopGate)
+                return _released ??= ReleaseCoreAsync();
+        }
+
+        private async Task ReleaseCoreAsync()
+        {
+            await Task.Yield();
+            Stop();
+            Socket.Dispose();
+            Invoker?.Dispose();
+            // A send in flight is cancelled by the stop, and gives the lock back; one that comes after finds it disposed.
+            await Sending.WaitAsync().ConfigureAwait(false);
+            Sending.Dispose();
+            lock (_stopGate)
+            {
+                _stopDisposed = true;
+                _stop.Dispose();
+            }
+        }
 
         /// <summary>The host sent a message over the limit, whose rest is never read.</summary>
         public bool Overflowed { get; set; }
@@ -315,9 +361,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         {
             // Already closed, or the host did not answer in time; disposing the socket drops it.
         }
-        connection.Stop.Cancel();
-        connection.Socket.Dispose();
-        connection.Invoker?.Dispose();
+        await connection.ReleaseAsync().ConfigureAwait(false);
     }
 
     private Connection Connect()
@@ -351,7 +395,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         try
         {
             using (
-                var timeout = CancellationTokenSource.CreateLinkedTokenSource(connection.Stop.Token)
+                var timeout = CancellationTokenSource.CreateLinkedTokenSource(connection.Stopping)
             )
             {
                 timeout.CancelAfter(_options.ConnectTimeout);
@@ -372,7 +416,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
 
             for (; ; )
             {
-                var message = await ReceiveAsync(connection, connection.Stop.Token)
+                var message = await ReceiveAsync(connection, connection.Stopping)
                     .ConfigureAwait(false);
                 if (message is null)
                     throw Closed(connection.Socket, "while subscribed");
@@ -387,8 +431,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             // racing the abort cannot fail the subscriptions with the aborted socket's error instead.
             if (connection.Overflowed)
                 connection.Socket.Abort();
-            connection.Socket.Dispose();
-            connection.Invoker?.Dispose();
+            await connection.ReleaseAsync().ConfigureAwait(false);
         }
     }
 
@@ -584,7 +627,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             connection.Sinks.Clear();
         }
         if (stop)
-            connection.Stop.Cancel();
+            connection.Stop();
         foreach (var subscription in subscriptions)
             End(subscription, error);
     }
@@ -599,7 +642,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     )
     {
         var bytes = Encoding.UTF8.GetBytes(message.ToJsonString());
-        var cancel = token ?? connection.Stop.Token;
+        var cancel = token ?? connection.Stopping;
         await connection.Sending.WaitAsync(cancel).ConfigureAwait(false);
         try
         {
