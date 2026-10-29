@@ -10,7 +10,12 @@ status: accepted
 enforcement by the `operationName` in the request body, falling back to the `documentId` or `id`
 when there is none. Both are chosen by the caller, and neither says anything about what the
 document selects. That stays the behaviour. The allowlist is documented, at the API and on the
-docs pages, as a convenience for trusted networks and not as a security control.
+docs pages, as a convenience for developer tools and not as a security control.
+
+Because of that, a host that requires persisted operations (`RequirePersisted(true)`) and declares
+an allowlist starts only in Development. In any other environment
+`PersistedOperationsAllowlistEnvironmentValidator` fails it at startup and names the environment.
+With enforcement off the allowlist only keeps names out of the shadow log, and it starts anywhere.
 
 ## Status
 
@@ -30,6 +35,17 @@ developer tool through on a network the host already trusts, and for that a name
 
 ## Considered options
 
+**Bind each entry to the document it was registered with.** An entry would name a document (its
+hash) as well as its name, and only that document would pass. That is a second, unmanaged
+persisted-operation store, as the hash option below says, and it makes the host carry document text
+in its startup code to admit a probe. The persisted store already does this with history and
+invalidation.
+
+**Refuse the allowlist under enforcement outside Development.** Chosen. The docs already showed the
+allowlist declared inside an `IsDevelopment()` check, no sample or Trax host declares one
+elsewhere, and a health probe that selects only `__typename` passes as introspection without it.
+A host that needs a fixed document outside Development persists it.
+
 **Match the name of the operation in the parsed document.** The middleware parses the document
 anyway, so this looks cheap. It changes nothing: the caller writes the document, so the caller
 names its operations too. It would stop only a request whose `operationName` disagrees with its
@@ -45,7 +61,11 @@ fixed document admitted from an untrusted client should persist it.
 
 ## Consequences
 
-**A predicate is only as narrow as the network in front of the endpoint.** `id =>
+**A host that declared an allowlist outside Development under enforcement no longer starts.** The
+message names the environment and the two ways out: persist the documents, or declare the
+allowlist only in Development.
+
+**A predicate is only as narrow as the callers that can reach the endpoint.** `id =>
 id.StartsWith("dev_")` exempts any caller who prefixes a name with `dev_`. The XML docs on both
 methods, `PersistedOperationsOptions`, and the persisted-operations pages say this where a host
 will read it.
@@ -56,12 +76,18 @@ will read it.
   admits a document that selects something else, the same document without the name is refused,
   a predicate is handed the request's `operationName` and never the document, and an unnamed
   request is matched on its caller-supplied id.
+- `AllowlistStartsOnlyInDevelopmentTests` pins the startup rule: a name or a predicate under
+  enforcement fails outside Development and with no host environment, and starts in Development,
+  without an allowlist, and in shadow mode; `UsePersistedOperations` registers the gate.
 - [Persisted operations](/docs/persisted-operations#allowlist-and-dev-carve-outs) is where the
   warning is stated for hosts.
 
-Not covered: nothing checks that a host uses the allowlist only on a trusted network. That is a
-deployment fact the code cannot see.
+Not covered: a host that runs production traffic under the Development environment name gets the
+allowlist. The environment name is the host's claim, and the enforcement reporter logs the posture
+at startup.
 
 ## Changelog
 
+- **2026-10-29**: Under `RequirePersisted(true)` a host with an allowlist starts only in
+  Development.
 - **2026-09-27**: Recorded.

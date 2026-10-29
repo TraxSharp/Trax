@@ -8,7 +8,7 @@ public sealed partial class PersistedOperationsBuilder
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>This is a convenience for trusted networks, not a security control.</b> The name
+    /// <b>This is a convenience for developer tools, not a security control.</b> The name
     /// matched is the <c>operationName</c> the caller puts in the request body, and nothing
     /// ties it to what the document does. <c>AllowOperations("HealthProbe")</c> admits any
     /// inline document containing an operation called <c>HealthProbe</c>, whatever that
@@ -16,9 +16,15 @@ public sealed partial class PersistedOperationsBuilder
     /// which the caller also supplies.
     /// </para>
     /// <para>
+    /// With <c>RequirePersisted(true)</c>, a host that declares an allowlist starts only in
+    /// Development; in any other environment it fails at startup. With enforcement off it only
+    /// keeps these names out of the shadow log. To let a known document run outside Development,
+    /// persist it and have the client send its id. A probe that selects only <c>__typename</c>
+    /// passes as introspection.
+    /// </para>
+    /// <para>
     /// Enforcement shapes which documents run; per-type <c>[TraxAuthorize]</c> still decides who
-    /// may run what, and the allowlist does not weaken that. To admit a known document from an
-    /// untrusted client, persist it and have the client send its id.
+    /// may run what, and the allowlist does not weaken that.
     /// </para>
     /// </remarks>
     public PersistedOperationsBuilder AllowOperations(params string[] operationNames)
@@ -35,12 +41,15 @@ public sealed partial class PersistedOperationsBuilder
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>This is a convenience for trusted networks, not a security control.</b> The predicate
+    /// <b>This is a convenience for developer tools, not a security control.</b> The predicate
     /// sees the <c>operationName</c> (or <c>documentId</c>) the caller puts in the request body,
     /// never the document itself. <c>id =&gt; id.StartsWith("dev_")</c> admits any inline
-    /// document whose caller names its operation with a <c>dev_</c> prefix, so a predicate is
-    /// only as narrow as the network in front of the endpoint. It is not a way to admit a
-    /// second client's catalogue: persist that catalogue instead.
+    /// document whose caller names its operation with a <c>dev_</c> prefix. It is not a way to
+    /// admit a second client's catalogue: persist that catalogue instead.
+    /// </para>
+    /// <para>
+    /// With <c>RequirePersisted(true)</c>, a host that declares a predicate starts only in
+    /// Development; in any other environment it fails at startup.
     /// </para>
     /// <para>
     /// Enforcement shapes which documents run; per-type <c>[TraxAuthorize]</c> still decides who

@@ -72,8 +72,8 @@ public sealed class RabbitMqInvalidationOptions
 |---|---|---|
 | `RequirePersisted(bool require = true)` | `true` | Refuse inline documents. `false` is shadow mode, which needs `LogNonPersistedRequests(true)`. |
 | `LogNonPersistedRequests(bool log = true)` | `false` | Log every inline-document request at Information. |
-| `AllowOperations(params string[] names)` | empty | Operation names that bypass enforcement. Case-sensitive. Matched against the caller-supplied `operationName`, not the document: a convenience for trusted networks, not a security control. |
-| `AllowOperationsMatching(Func<string, bool>)` | empty | Predicate form, such as `id => id.StartsWith("dev_")`. The predicate sees the caller-supplied `operationName` (or `documentId`), never the document, so it is as narrow as the network in front of the endpoint. |
+| `AllowOperations(params string[] names)` | empty | Operation names that bypass enforcement. Case-sensitive. Matched against the caller-supplied `operationName`, not the document: a convenience for developer tools, not a security control. With `RequirePersisted(true)` the host starts only in Development. |
+| `AllowOperationsMatching(Func<string, bool>)` | empty | Predicate form, such as `id => id.StartsWith("dev_")`. The predicate sees the caller-supplied `operationName` (or `documentId`), never the document. With `RequirePersisted(true)` the host starts only in Development. |
 | `DisableIntrospection()` | introspection allowed | Inline introspection requests are refused like any other inline document. |
 | `WithInMemoryCache(Action<CacheOptions>?)` | no cache | Cache the store's lookups in `IMemoryCache`, under the document and prepared-operation caches, which are always on. Without it the database is read when a node first serves an id, after a change empties those caches, and when an entry reaches its maximum age. |
 | `WithCacheMaxAge(TimeSpan maxAge)` | 5 minutes | The longest any cache on a node keeps a persisted operation, counted from when its document was read from the database. The backstop for a change that did not reach the node: it serves what it cached for at most this long, then reads the store again. Must be positive. |
@@ -133,6 +133,7 @@ services.AddTraxGraphQL(graphql => graphql
   `amqp://` to a host that is not loopback without `AllowInsecureTransport`.
 - `UseRabbitMqInvalidation` throws `ArgumentException` for a blank connection string; `WithCacheMaxAge` and `KeepOlderMachineDocumentsFor` throw `ArgumentOutOfRangeException` for a value that is not positive; a second `WithInMemoryCache` throws `InvalidOperationException`.
 - The remaining checks run when `UsePersistedOperations` builds the options and throw `InvalidOperationException`; the [UsePersistedOperations validation table](/docs/sdk-reference/persisted-operations/use-persisted-operations#validation) lists them.
+- With `RequirePersisted(true)`, a host that declares `AllowOperations` or `AllowOperationsMatching` fails at startup outside Development.
 - What the allowlist does and does not protect: [Allowlist and dev carve-outs](/docs/api/persisted-operations#allowlist-and-dev-carve-outs).
 
 ## Example
@@ -142,8 +143,6 @@ services.AddTraxGraphQL(graphql => graphql
     .UsePersistedOperations(opts => opts
         .RequirePersisted(true)
         .LogNonPersistedRequests(true)
-        .AllowOperations("playground_smoke_test")
-        .AllowOperationsMatching(id => id.StartsWith("dev_"))
         .WithCacheMaxAge(TimeSpan.FromMinutes(5))
         .WithInMemoryCache(c => c.WithTtl(TimeSpan.FromMinutes(2)))
         .UseRabbitMqInvalidation(

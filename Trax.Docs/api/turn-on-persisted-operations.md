@@ -164,8 +164,8 @@ builder.Services.AddTraxGraphQL(graphql =>
 );
 ```
 
-The allowlist matches the name the caller sends, not the document, so keep it to networks you
-trust; see [Allowlist and dev carve-outs](/docs/api/persisted-operations#allowlist-and-dev-carve-outs).
+The allowlist matches the name the caller sends, not the document. With `RequirePersisted(true)`
+a host that declares one starts only in Development, so keep the `IsDevelopment()` check; see [Allowlist and dev carve-outs](/docs/api/persisted-operations#allowlist-and-dev-carve-outs).
 
 ## 6. Run more than one node
 

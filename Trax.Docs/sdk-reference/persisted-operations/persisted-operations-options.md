@@ -46,8 +46,8 @@ public sealed class PersistedOperationsOptions
 | `ManagementServed` | `false` | `GateManagement`, `GateManagementToAuthenticatedUsers` | Whether documents are managed through a Trax surface, the `persistedOperations` fields and the dashboard's pages: true once a management gate is declared |
 | `RequirePersisted` | `true` | `RequirePersisted` | Whether inline documents are refused with `PERSISTED_OPERATION_REQUIRED` |
 | `LogNonPersistedRequests` | `false` | `LogNonPersistedRequests` | Whether inline-document requests are logged at Information |
-| `AllowedOperationNames` | empty | `AllowOperations` | Operation names that bypass enforcement, compared ordinally |
-| `AllowOperationPredicates` | empty | `AllowOperationsMatching` | Predicates over the operation name, or the document id when there is no name |
+| `AllowedOperationNames` | empty | `AllowOperations` | Operation names that bypass enforcement, compared ordinally. Under `RequirePersisted` the host starts with them only in Development |
+| `AllowOperationPredicates` | empty | `AllowOperationsMatching` | Predicates over the operation name, or the document id when there is no name. Under `RequirePersisted` the host starts with them only in Development |
 | `AllowIntrospection` | `true` | `DisableIntrospection` | Whether a document selecting only `__schema`, `__type` or `__typename` bypasses enforcement |
 | `CacheEnabled` | `false` | `WithInMemoryCache` | Whether the store's lookups are also cached in memory |
 | `CacheTtl` | `CacheMaxAge` | `CacheOptions.WithTtl` | The lookup cache's entry lifetime; never more than `CacheMaxAge` |
