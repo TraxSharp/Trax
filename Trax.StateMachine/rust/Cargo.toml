@@ -21,6 +21,12 @@ path = "src/bin/testee.rs"
 
 [dependencies]
 
+# The public-surface tests read the crates' source (tests/support/surface.rs); nothing ships with them.
+[dev-dependencies]
+prettyplease = "0.2"
+proc-macro2 = "1"
+syn = { version = "2", features = ["full"] }
+
 # The engine catches a panicking custom handler and refuses with INTERNAL_ERROR, which needs unwinding.
 [profile.release]
 panic = "unwind"

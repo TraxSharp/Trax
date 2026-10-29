@@ -542,6 +542,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "prettyplease"
+version = "0.2.37"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
+dependencies = [
+ "proc-macro2",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1089,15 +1099,23 @@ dependencies = [
 [[package]]
 name = "trax-state-machine"
 version = "0.0.0"
+dependencies = [
+ "prettyplease",
+ "proc-macro2",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "trax-state-machine-client"
 version = "0.0.0"
 dependencies = [
  "futures-util",
+ "prettyplease",
+ "proc-macro2",
  "reqwest",
  "ring",
  "rustls",
+ "syn 2.0.119",
  "tokio",
  "tokio-tungstenite",
  "trax-state-machine",

@@ -1,0 +1,235 @@
+// The public surface of trax-state-machine-client, as tests/support/surface.rs reads it from the source. A test compares
+// it; after a deliberate change, run `TRAX_UPDATE_PUBLIC_API=1 cargo test --workspace` and commit the diff.
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConfigError(pub String);
+impl std::fmt::Display for ConfigError {}
+impl std::error::Error for ConfigError {}
+pub type ConnectionParams = Arc<dyn Fn() -> Provided<Option<Value>> + Send + Sync>;
+pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+pub const DEFAULT_MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
+pub const DEFAULT_RESUBSCRIBE_DELAYS: [Duration; 3] = [
+    Duration::from_secs(1),
+    Duration::from_secs(2),
+    Duration::from_secs(5),
+];
+pub const DEFAULT_RETRY_DELAYS: [Duration; 5] = [
+    Duration::from_millis(250),
+    Duration::from_millis(500),
+    Duration::from_millis(1000),
+    Duration::from_millis(2000),
+    Duration::from_millis(4000),
+];
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DueAt {
+    Unknown,
+    None,
+    At(String),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct EventRequest {
+    pub id: String,
+    pub trigger: String,
+    pub input: Option<Value>,
+    pub request_id: String,
+    pub client_result: Option<String>,
+}
+pub struct GraphQLMachineServer {}
+impl GraphQLMachineServer {
+    pub fn new(options: GraphQLMachineServerOptions) -> Result<Self, ConfigError> {}
+    pub async fn discard(
+        &self,
+        id: &str,
+        request_id: &str,
+    ) -> Result<Option<ServerProblem>, TransportError> {}
+}
+impl MachineServer for GraphQLMachineServer {}
+pub struct GraphQLMachineServerOptions {
+    pub endpoint: String,
+    pub socket: String,
+    pub machine: String,
+    pub documents: Vec<ManifestDocument>,
+    pub http: Option<reqwest::Client>,
+    pub headers: Option<RequestHeaders>,
+    pub connection_params: Option<ConnectionParams>,
+    pub resubscribe_delays: Option<Vec<Duration>>,
+    pub connect_timeout: Duration,
+    pub request_timeout: Duration,
+    pub idle_timeout: Duration,
+    pub max_message_size: usize,
+    pub allow_insecure_transport: bool,
+    pub terminal_stream_errors: Vec<String>,
+    pub runtime: Option<tokio::runtime::Handle>,
+}
+impl GraphQLMachineServerOptions {
+    pub fn new(
+        endpoint: impl Into<String>,
+        socket: impl Into<String>,
+        machine: impl Into<String>,
+        documents: Vec<ManifestDocument>,
+    ) -> Self {}
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MachineError {
+    pub code: String,
+    pub message: String,
+    pub deleted: Option<bool>,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MachineProblem {
+    pub kind: ProblemKind,
+    pub code: String,
+    pub message: String,
+}
+pub trait MachineServer: Send + Sync + 'static {
+    fn start(
+        &self,
+        input: Option<Value>,
+        request_id: String,
+    ) -> impl Future<Output = Result<ServerAnswer, TransportError>> + Send;
+    fn event(
+        &self,
+        request: EventRequest,
+    ) -> impl Future<Output = Result<ServerAnswer, TransportError>> + Send;
+    fn get(
+        &self,
+        id: String,
+    ) -> impl Future<Output = Result<ServerAnswer, TransportError>> + Send;
+    fn subscribe(&self, id: String, sink: StreamSink) -> Box<dyn Subscription>;
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MachineStatus {
+    Loading,
+    Ready,
+    Stopped,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct MachineView {
+    pub status: MachineStatus,
+    pub id: Option<String>,
+    pub snapshot: Option<Snapshot>,
+    pub confirmed: Option<Snapshot>,
+    pub row_id: Option<String>,
+    pub revision: Option<i64>,
+    pub due_at: Option<String>,
+    pub pending: bool,
+    pub problem: Option<MachineProblem>,
+    pub error: Option<MachineError>,
+    pub unsaved: bool,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ManifestDocument {
+    pub id: String,
+    pub operation: String,
+    pub document: String,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProblemKind {
+    Rejected,
+    Transport,
+}
+pub type Provided<T> = Pin<Box<dyn Future<Output = Result<T, TransportError>> + Send>>;
+pub type RequestHeaders = Arc<dyn Fn() -> Provided<HeaderMap> + Send + Sync>;
+#[derive(Clone, Debug, PartialEq)]
+pub enum SendOutcome {
+    Confirmed(ServerSnapshot),
+    Refused(MachineProblem),
+    Failed(MachineProblem),
+    Stopped(MachineError),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum ServerAnswer {
+    Stored { id: Option<String>, snapshot: ServerSnapshot },
+    Refused(ServerProblem),
+}
+pub struct ServerMachineController {}
+impl ServerMachineController {
+    pub fn new<S: MachineServer>(
+        options: ServerMachineOptions<S>,
+    ) -> Result<Self, IrError> {}
+    pub fn start(&self) -> impl std::future::Future<Output = ()> + Send + 'static {}
+    pub fn send(
+        &self,
+        trigger: impl Into<String>,
+        input: Option<Value>,
+    ) -> impl std::future::Future<Output = SendOutcome> + Send + 'static {}
+    pub fn sync_to(
+        &self,
+        target: impl Into<String>,
+        fields: Option<PlanEvent>,
+        navigation: Vec<String>,
+    ) -> impl std::future::Future<Output = SyncOutcome> + Send + 'static {}
+    pub fn retry(
+        &self,
+    ) -> impl std::future::Future<Output = SendOutcome> + Send + 'static {}
+    pub fn view(&self) -> Arc<MachineView> {}
+    pub fn watch(&self) -> watch::Receiver<Arc<MachineView>> {}
+    pub fn can_send(&self, trigger: &str, input: Option<&Value>) -> bool {}
+    pub fn available_triggers(&self) -> Vec<String> {}
+    pub fn dispose(&self) {}
+}
+impl Drop for ServerMachineController {}
+pub struct ServerMachineOptions<S> {
+    pub ir: Value,
+    pub ir_hash: String,
+    pub server: S,
+    pub id: Option<String>,
+    pub start_input: Option<Value>,
+    pub start_request_id: Option<String>,
+    pub new_request_id: Option<Box<dyn FnMut() -> String + Send>>,
+    pub retry_delays: Option<Vec<Duration>>,
+    pub runtime: Option<tokio::runtime::Handle>,
+}
+impl<S> ServerMachineOptions<S> {
+    pub fn new(ir: Value, ir_hash: impl Into<String>, server: S) -> Self {}
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ServerProblem {
+    pub code: String,
+    pub message: String,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct ServerSnapshot {
+    pub row_id: Option<String>,
+    pub revision: Option<i64>,
+    pub state: String,
+    pub context: Map,
+    pub due_at: DueAt,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum StreamMessage {
+    Changed(ServerSnapshot),
+    Gone { not_found: bool },
+    Reload,
+    ClientOutdated,
+    Refused(ServerProblem),
+}
+pub type StreamSink = std::sync::Arc<dyn Fn(StreamMessage) + Send + Sync>;
+pub trait Subscription: Send {}
+#[derive(Clone, Debug, PartialEq)]
+pub enum SyncOutcome {
+    Synced { snapshot: Snapshot, revision: Option<i64> },
+    Superseded,
+    Unreachable,
+    Exceeded,
+    Invalid(PlanInvalid),
+    Refused(MachineProblem),
+    Failed(MachineProblem),
+    Stopped(MachineError),
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransportError(pub String);
+impl fmt::Display for TransportError {}
+impl std::error::Error for TransportError {}
+pub mod codes {
+    pub const GONE: &str = "GONE";
+    pub const TRANSPORT_ERROR: &str = "TRANSPORT_ERROR";
+    pub const NOTHING_TO_RETRY: &str = "NOTHING_TO_RETRY";
+    pub const DISPOSED: &str = "DISPOSED";
+    pub const NOT_READY: &str = "NOT_READY";
+}
+pub fn event_field(trigger: &str) -> String {}
+pub fn ir_hash(ir: &Value) -> String {}
+pub fn machine_field(id: &str) -> String {}
+pub fn without_nulls(context: &Map) -> Map {}
