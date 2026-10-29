@@ -290,6 +290,7 @@ impl ServerMachineController {
             next_row_id: None,
             buffered: None,
             sync: None,
+            syncs: 0,
             superseded: Vec::new(),
             unsaved: false,
         };
@@ -537,6 +538,11 @@ enum Msg {
         epoch: u64,
         action: Later,
     },
+    // A sync's plan, from the snapshot it was planned from; `None` when the search panicked.
+    Planned {
+        sync: u64,
+        planned: Option<(Snapshot, PlanAnswer)>,
+    },
 }
 
 enum Later {
@@ -568,6 +574,10 @@ struct SyncRun {
     in_flight: Option<u64>,
     // Whether it waits for the read after a refusal.
     awaiting_read: bool,
+    // Which sync it is, so a plan answered after a later one took over is dropped.
+    id: u64,
+    // Whether its plan is being searched, off the controller's task.
+    planning: bool,
 }
 
 // The refusals a re-read can explain: the server holds something other than the client planned from.
@@ -631,6 +641,8 @@ struct Actor<S> {
     buffered: Option<ServerSnapshot>,
 
     sync: Option<SyncRun>,
+    // How many syncs have begun: the id of the latest.
+    syncs: u64,
     // Syncs a later one took over, by the queue entry of the event each still has in flight.
     superseded: Vec<(u64, oneshot::Sender<SyncOutcome>)>,
     unsaved: bool,
@@ -720,6 +732,7 @@ impl<S: MachineServer> Actor<S> {
                 }
             }
             Msg::Delivered { entry, attempt, result } => self.on_delivered(entry, attempt, result),
+            Msg::Planned { sync, planned } => self.on_planned(sync, planned),
             Msg::Later { epoch, action } => {
                 if epoch != self.epoch || self.disposed || self.error.is_some() {
                     return;
@@ -1374,6 +1387,7 @@ impl<S: MachineServer> Actor<S> {
         // The sync it takes over from settles once its event in flight answers, and sends nothing more. A read that one
         // waits for is waited for here too: the server has refused what the client planned from.
         let mut awaiting_read = false;
+        self.syncs += 1;
         if let Some(older) = self.sync.take() {
             awaiting_read = older.awaiting_read && self.reloading;
             match older.in_flight {
@@ -1392,6 +1406,8 @@ impl<S: MachineServer> Actor<S> {
             refused: false,
             in_flight: None,
             awaiting_read,
+            id: self.syncs,
+            planning: false,
         });
         if !self.unsaved {
             self.unsaved = true;
@@ -1400,23 +1416,58 @@ impl<S: MachineServer> Actor<S> {
         self.pump();
     }
 
-    // Plans from what the server confirmed and sends the plan's first event, or settles the sync. Runs only while
-    // nothing is queued or in flight.
+    // Plans from what the server confirmed, or settles the sync. Runs only while nothing is queued or in flight. The
+    // search runs off the controller's task, on the runtime's blocking threads: a wide one would otherwise hold every
+    // other message, and on a runtime of one thread the socket's pings with it.
     fn step_sync(&mut self, confirmed: &Snapshot) {
-        let Some(run) = &self.sync else { return };
-        if run.in_flight.is_some() || run.awaiting_read {
+        let Some(run) = self.sync.as_mut() else { return };
+        if run.in_flight.is_some() || run.awaiting_read || run.planning {
             return;
         }
-        let next = match self
-            .machine
-            .plan(confirmed, &run.target, run.fields.as_ref(), &run.navigation, None)
-        {
+        run.planning = true;
+        let sync = run.id;
+        let machine = self.machine.clone();
+        let from = confirmed.clone();
+        let (target, fields, navigation) = (run.target.clone(), run.fields.clone(), run.navigation.clone());
+        let search = self.runtime.spawn_blocking(move || {
+            let answer = machine.plan(&from, &target, fields.as_ref(), &navigation, None);
+            (from, answer)
+        });
+        let commands = self.commands.clone();
+        self.runtime.spawn(async move {
+            let planned = search.await.ok();
+            let _ = commands.send(Msg::Planned { sync, planned });
+        });
+    }
+
+    // A sync's plan has been answered: it sends the plan's first event, or settles. A plan from a snapshot the server
+    // has moved past since, or answered while an event went out, is searched again from where things are now.
+    fn on_planned(&mut self, sync: u64, planned: Option<(Snapshot, PlanAnswer)>) {
+        if self.disposed || self.error.is_some() {
+            return;
+        }
+        let Some(run) = self.sync.as_mut().filter(|run| run.id == sync) else {
+            return;
+        };
+        run.planning = false;
+        let Some((confirmed, answer)) = planned else {
+            return self.settle_sync(SyncOutcome::Failed(refusal(
+                trax_state_machine::RefusalCode::InternalError.as_str(),
+                "The planner panicked.",
+            )));
+        };
+        if self.sending || !self.queue.is_empty() || self.confirmed.as_ref() != Some(&confirmed) {
+            return self.pump();
+        }
+        let next = match answer {
             PlanAnswer::Plan(events) => match events.into_iter().next() {
                 Some(event) => event,
                 None => {
-                    let snapshot = confirmed.clone();
                     let revision = self.revision;
-                    self.settle_sync(SyncOutcome::Synced { snapshot, revision });
+                    self.settle_sync(SyncOutcome::Synced {
+                        snapshot: confirmed,
+                        revision,
+                    });
                     return;
                 }
             },

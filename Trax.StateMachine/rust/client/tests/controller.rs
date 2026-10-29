@@ -553,3 +553,101 @@ async fn an_event_whose_request_panics_settles_failed_as_a_transport_error() {
     );
     assert!(!controller.view().pending);
 }
+
+// A machine whose plans search widely: ten states any of them moves to, and three numbers each of them sets to one of
+// four values, so a plan to the state nothing reaches expands hundreds of snapshots before it is answered.
+fn sprawl() -> (Value, String) {
+    let states: Vec<String> = (0..10).map(|i| format!("S{i}")).chain(["T".to_owned()]).collect();
+    let mut triggers = Vec::new();
+    let mut transitions = Vec::new();
+    for to in 0..10 {
+        triggers.push(format!("\"Go{to}\""));
+        for from in 0..10 {
+            transitions.push(format!(r#"{{"from":"S{from}","trigger":"Go{to}","to":"S{to}"}}"#));
+        }
+    }
+    for field in 0..3 {
+        for value in 0..4 {
+            triggers.push(format!("\"F{field}v{value}\""));
+            for at in 0..10 {
+                transitions.push(format!(
+                    r#"{{"from":"S{at}","trigger":"F{field}v{value}","to":"S{at}","reduce":{{"reduce":"set","steps":[{{"field":"f{field}","value":{{"const":{value}}}}}]}}}}"#
+                ));
+            }
+        }
+    }
+    let fields = (0..3)
+        .map(|f| format!(r#"{{"name":"f{f}","type":"number","nullable":false,"constraints":[]}}"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    let context = states
+        .iter()
+        .map(|s| format!(r#""{s}":{{"fields":[{fields}]}}"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    let text = format!(
+        r#"{{"id":"sprawl","version":1,"initialState":"S0","initialContext":{{"f0":0,"f1":0,"f2":0}},"states":[{}],"triggers":[{}],"committedStates":[],"inputs":{{}},"context":{{{context}}},"transitions":[{}]}}"#,
+        states.iter().map(|s| format!("\"{s}\"")).collect::<Vec<_>>().join(","),
+        triggers.join(","),
+        transitions.join(",")
+    );
+    let ir = Value::parse(&text).unwrap();
+    let hash = ir_hash(&ir);
+    (ir, hash)
+}
+
+// A server that answers every read with the sprawl's start and never answers anything else.
+struct Reading;
+
+impl MachineServer for Reading {
+    async fn start(&self, _: Option<Value>, _: String) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn event(&self, _: EventRequest) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn get(&self, _: String) -> Result<ServerAnswer, TransportError> {
+        let mut at = snapshot(None, 1, "S0");
+        for f in 0..3 {
+            at.context.insert(format!("f{f}").as_str().into(), Value::Number(0.0));
+        }
+        stored(at)
+    }
+
+    fn subscribe(&self, _: String, _: StreamSink) -> Box<dyn Subscription> {
+        Box::new(Nothing)
+    }
+}
+
+// On a runtime of one thread, the controller's own task answers a call made while a sync plans, before the plan is done.
+#[tokio::test(flavor = "current_thread")]
+async fn a_sync_plans_off_the_controllers_task() {
+    let (ir, hash) = sprawl();
+    let mut options = ServerMachineOptions::new(ir, hash, Reading);
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+    controller.start().await;
+    let navigation: Vec<String> = (0..10)
+        .map(|i| format!("Go{i}"))
+        .chain((0..3).flat_map(|f| (0..4).map(move |v| format!("F{f}v{v}"))))
+        .collect();
+
+    let synced = controller.sync_to("T", None, navigation);
+    let retried = controller.retry();
+    tokio::pin!(synced);
+
+    tokio::select! {
+        biased;
+        outcome = &mut synced => panic!("the sync planned on the controller's task: {outcome:?}"),
+        outcome = retried => assert!(matches!(&outcome, SendOutcome::Failed(p) if p.code == "NOTHING_TO_RETRY"), "{outcome:?}"),
+    }
+    let outcome = tokio::time::timeout(Duration::from_secs(60), synced)
+        .await
+        .expect("the plan never answered");
+    assert!(
+        matches!(outcome, SyncOutcome::Unreachable | SyncOutcome::Exceeded),
+        "{outcome:?}"
+    );
+}
