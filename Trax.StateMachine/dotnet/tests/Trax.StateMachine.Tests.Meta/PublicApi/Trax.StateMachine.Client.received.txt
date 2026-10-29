@@ -212,6 +212,7 @@ namespace Trax.StateMachine.Client
         public sealed class Invalid : Trax.StateMachine.Client.SyncOutcome, System.IEquatable<Trax.StateMachine.Client.SyncOutcome.Invalid>
         {
             public Invalid(string? Trigger, string? Target) { }
+            public Trax.StateMachine.RefusalCode? Code { get; init; }
             public string? Target { get; init; }
             public string? Trigger { get; init; }
         }

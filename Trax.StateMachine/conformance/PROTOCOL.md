@@ -99,7 +99,9 @@ string no JSON parser carries (a lone surrogate), as UTF-16 code units: `stringU
 **`plan`** finds the events that take `snapshot` of `machine` to the state `target` with the page's fields applied:
 what a client sends to bring the server to where a page that ran ahead of it is. `fields` is the event that writes the
 page's fields (`trigger` and its `input`), or null; `navigation` is the triggers, without input, that move between
-states; `maxDepth` is the longest plan to look for, twice the machine's states when absent.
+states; `maxDepth` is the longest plan to look for, twice the machine's states when absent. `tooDeep`, when given, is
+`input` or `context`: the testee builds 600 arrays nested one in another, in memory, and plans with them as the fields
+input, or as the context member `deep`. No reader need take a text nested that deep, so the kit cannot send one.
 
 ```json
 { "id": 6, "op": "plan", "machine": "wizard", "snapshot": { ... }, "target": "Review",
@@ -114,9 +116,10 @@ states; `maxDepth` is the longest plan to look for, twice the machine's states w
 
 Every engine answers the same plan, so the search is fixed:
 
-- **Invalid first.** A fields input or a snapshot's context past the engine's nesting limit answers `invalid` with
-  `code` `INVALID_INPUT` or `INVALID_CONTEXT`, input first, as `advance` would refuse it. Then a `target` that is not
-  a state answers `invalid` with `target`. Then the fields trigger, then each
+- **Invalid first.** A fields input or a snapshot's context whose arrays and objects nest more than 512 deep (the
+  outermost counting as one, so a context's members start at two) answers `invalid` with `code` `INVALID_INPUT` or
+  `INVALID_CONTEXT`, input first, before anything copies or compares it. Then a `target` that is not a state answers
+  `invalid` with `target`. Then the fields trigger, then each
   navigation trigger in order: one no transition of the machine fires on (one the IR declares and no transition uses
   among them), one bound to the effect, an outcome, a timer, or a navigation trigger equal to the fields trigger
   answers `invalid` with that `trigger`.

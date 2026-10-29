@@ -56,13 +56,19 @@ export function createTestee(engine) {
         : { result: "error", code: result.code };
     },
     serialize: (r, core) => ({ wire: core.serialize(r.snapshot) }),
-    plan: (r, core) =>
-      core.plan(r.snapshot, {
+    plan: (r, core) => {
+      // A value nested deeper than any reader takes, built here (PROTOCOL.md, plan, tooDeep).
+      let deep = [];
+      for (let i = 1; i < 600; i++) deep = [deep];
+      const fields = r.fields ?? null;
+      const snapshot = r.tooDeep === "context" ? { ...r.snapshot, context: { ...r.snapshot.context, deep } } : r.snapshot;
+      return core.plan(snapshot, {
         target: r.target,
-        fields: r.fields ?? null,
+        fields: r.tooDeep === "input" && fields !== null ? { ...fields, input: deep } : fields,
         navigation: r.navigation,
         ...(r.maxDepth === undefined ? {} : { maxDepth: r.maxDepth }),
-      }),
+      });
+    },
     canonical: (r) => {
       const context = r.context !== undefined
         ? JSON.parse(r.context)

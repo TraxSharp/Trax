@@ -147,8 +147,15 @@ public abstract record SyncOutcome
     /// <summary>The planner stopped at its depth, or the sync sent as many events as it may (twice the machine's states).</summary>
     public sealed record Exceeded : SyncOutcome;
 
-    /// <summary>The target is not a state, or <see cref="Trigger"/> is not one a client may move with (<see cref="PlanResult.Invalid"/>).</summary>
-    public sealed record Invalid(string? Trigger, string? Target) : SyncOutcome;
+    /// <summary>
+    /// The target is not a state, <see cref="Trigger"/> is not one a client may move with, or <see cref="Code"/> says
+    /// the fields input or the confirmed context nests too deep (<see cref="PlanResult.Invalid"/>).
+    /// </summary>
+    public sealed record Invalid(string? Trigger, string? Target) : SyncOutcome
+    {
+        /// <summary><c>INVALID_INPUT</c> or <c>INVALID_CONTEXT</c> for a value nested too deep to plan with, or null.</summary>
+        public RefusalCode? Code { get; init; }
+    }
 
     /// <summary>The server refused an event twice, the second time after the instance was read again.</summary>
     public sealed record Refused(MachineProblem Problem) : SyncOutcome;
@@ -1262,7 +1269,10 @@ public sealed class ServerMachineController : IDisposable
                         : new PlannedEvent(undetermined.Trigger);
                     break;
                 case PlanResult.Invalid invalid:
-                    return new SyncOutcome.Invalid(invalid.Trigger, invalid.Target);
+                    return new SyncOutcome.Invalid(invalid.Trigger, invalid.Target)
+                    {
+                        Code = invalid.Code,
+                    };
                 case PlanResult.Unreachable:
                     return new SyncOutcome.Unreachable();
                 case null:

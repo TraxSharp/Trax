@@ -266,6 +266,11 @@ public sealed class ClientTestee : IAsyncDisposable
             SyncOutcome.Superseded => new JsonObject { ["outcome"] = "superseded" },
             SyncOutcome.Unreachable => new JsonObject { ["outcome"] = "unreachable" },
             SyncOutcome.Exceeded => new JsonObject { ["outcome"] = "exceeded" },
+            SyncOutcome.Invalid { Code: { } code } => new JsonObject
+            {
+                ["outcome"] = "invalid",
+                ["code"] = code.ToWire(),
+            },
             SyncOutcome.Invalid => new JsonObject { ["outcome"] = "invalid" },
             SyncOutcome.Refused r => new JsonObject
             {

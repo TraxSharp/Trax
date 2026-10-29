@@ -177,7 +177,8 @@ export interface SyncOptions<Spec extends MachineSpec> {
 
 /**
  * What one `syncTo` came to. `synced`: the server holds the target with the fields applied, and `snapshot` is what it
- * confirmed. `superseded`: a later `syncTo` took over. `unreachable`, `exceeded` and `invalid` are the planner's answers
+ * confirmed. `superseded`: a later `syncTo` took over. `unreachable`, `exceeded` and `invalid` (with the `trigger`,
+ * the `target`, or the `code` of a fields input or a context nested too deep) are the planner's answers
  * (`SnapshotMachine.plan`); `exceeded` is also a sync that would send more than twice the machine's states in events.
  * `refused`, `failed` and `stopped` are what the event that ended it came to, as for `send`.
  */
@@ -188,6 +189,7 @@ export type SyncOutcome =
   | { outcome: 'exceeded' }
   | { outcome: 'invalid'; trigger: string }
   | { outcome: 'invalid'; target: string }
+  | { outcome: 'invalid'; code: 'INVALID_INPUT' | 'INVALID_CONTEXT' }
   | { outcome: 'refused'; problem: Problem }
   | { outcome: 'failed'; problem: Problem }
   | { outcome: 'stopped'; error: ServerMachineError };
@@ -459,6 +461,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
           ];
           break;
         case 'invalid':
+          if ('code' in plan) return { outcome: 'invalid', code: plan.code };
           return 'target' in plan ? { outcome: 'invalid', target: plan.target } : { outcome: 'invalid', trigger: plan.trigger };
         default:
           return { outcome: plan.result };

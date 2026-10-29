@@ -391,6 +391,7 @@ namespace Trax.StateMachine
         public sealed class Invalid : Trax.StateMachine.PlanResult, System.IEquatable<Trax.StateMachine.PlanResult.Invalid>
         {
             public Invalid(string? Trigger = null, string? Target = null) { }
+            public Trax.StateMachine.RefusalCode? Code { get; init; }
             public string? Target { get; init; }
             public string? Trigger { get; init; }
         }

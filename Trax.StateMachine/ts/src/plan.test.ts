@@ -19,7 +19,15 @@ type Case = {
   fields: PlanRequest["fields"];
   navigation: string[];
   maxDepth?: number;
+  tooDeep?: "input" | "context";
   expect: PlanResult;
+};
+
+// 600 arrays nested one in another, which a case's tooDeep puts in place (conformance/PROTOCOL.md, plan).
+const nested = (): unknown[] => {
+  let deep: unknown[] = [];
+  for (let i = 1; i < 600; i++) deep = [deep];
+  return deep;
 };
 
 const golden = JSON.parse(fs.readFileSync(conformanceFile("plan", "cases.json"), "utf8")) as { cases: Case[] };
@@ -35,9 +43,9 @@ const planMachine = (name: string | undefined) =>
 describe("plan conformance", () => {
   it.each(golden.cases.map((c) => [c.name, c] as const))("%s", (_, c) => {
     expect(
-      planMachine(c.machine).plan(c.given, {
+      planMachine(c.machine).plan(c.tooDeep === "context" ? { ...c.given, context: { ...c.given.context, deep: nested() } } : c.given, {
         target: c.target,
-        fields: c.fields,
+        fields: c.tooDeep === "input" && c.fields ? { ...c.fields, input: nested() } : c.fields,
         navigation: c.navigation,
         ...(c.maxDepth === undefined ? {} : { maxDepth: c.maxDepth }),
       }),

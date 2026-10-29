@@ -1,4 +1,5 @@
 import type { SnapshotMachine } from './machine';
+import { RefusalCode } from './results';
 import type { Snapshot } from './types';
 
 /** One event of a plan: a trigger, and its input when it takes one (the fields event's). */
@@ -24,8 +25,9 @@ export interface PlanRequest<S extends string = string, T extends string = strin
  * What a plan came to. `plan` holds the events to send, none when the snapshot is already there. `unreachable`: no
  * events reach the target. `exceeded`: none within `maxDepth` events, or within the search's limit. `undetermined`:
  * nothing else reaches it, and an edge on a custom rule this machine holds no handler for might; send `events`, then
- * `trigger` without a prediction, and plan again from the answer. `invalid`: the target is not a state, or a trigger
- * cannot be planned with (unknown, effect-bound, an outcome, a timer, or the fields trigger in `navigation`).
+ * `trigger` without a prediction, and plan again from the answer. `invalid`: the fields input or the snapshot's context
+ * nests deeper than 512 arrays and objects (`code`), the target is not a state, or a trigger cannot be planned with
+ * (unknown, effect-bound, an outcome, a timer, or the fields trigger in `navigation`).
  */
 export type PlanResult<T extends string = string> =
   | { result: 'plan'; events: PlannedEvent<T>[] }
@@ -33,19 +35,37 @@ export type PlanResult<T extends string = string> =
   | { result: 'exceeded' }
   | { result: 'undetermined'; trigger: T; events: PlannedEvent<T>[] }
   | { result: 'invalid'; trigger: string }
-  | { result: 'invalid'; target: string };
+  | { result: 'invalid'; target: string }
+  | { result: 'invalid'; code: typeof RefusalCode.InvalidInput | typeof RefusalCode.InvalidContext };
+
+// How deep the arrays and objects of a fields input or a context may nest, the outermost counting as one: the Rust
+// engine's limit, which every engine's planner holds a plan to, so they refuse the same values.
+const MAX_NESTING = 512;
+
+// Whether `value` nests deeper than MAX_NESTING. Never recurses, so a value built in memory cannot exhaust the stack.
+const nestsTooDeep = (value: unknown): boolean => {
+  const pending: [unknown, number][] = [[value, 0]];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    const [member, depth] = next;
+    if (member === null || typeof member !== 'object') continue;
+    if (depth >= MAX_NESTING) return true;
+    for (const inner of Array.isArray(member) ? member : Object.values(member)) pending.push([inner, depth + 1]);
+  }
+  return false;
+};
 
 // A value with every null member left out, at every depth, as a host answers it (the client's own copy is in
-// client/machines.ts, which the engine does not import).
-const withoutNulls = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(withoutNulls);
-  if (value !== null && typeof value === 'object')
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .filter(([, v]) => v !== null && v !== undefined)
-        .map(([k, v]) => [k, withoutNulls(v)]),
-    );
-  return value;
+// client/machines.ts, which the engine does not import). Past MAX_NESTING it throws rather than recurse further: the
+// start was checked, so only a successor a reduction nested deeper gets there, and the search reaches nothing through it.
+const withoutNulls = (value: unknown, depth = 0): unknown => {
+  if (value === null || typeof value !== 'object') return value;
+  if (depth > MAX_NESTING) throw new RangeError('The context nests too deep to compare.');
+  if (Array.isArray(value)) return value.map((v) => withoutNulls(v, depth + 1));
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== null && v !== undefined)
+      .map(([k, v]) => [k, withoutNulls(v, depth + 1)]),
+  );
 };
 
 // The most snapshots one search expands, whatever its depth.
@@ -72,6 +92,9 @@ export function searchPlan(
   const fields = request.fields ?? null;
   const navigation = [...request.navigation];
 
+  // Checked first, as advance would refuse them: the search copies and compares both.
+  if (fields !== null && nestsTooDeep(fields.input)) return { result: 'invalid', code: RefusalCode.InvalidInput };
+  if (nestsTooDeep(snapshot.context)) return { result: 'invalid', code: RefusalCode.InvalidContext };
   if (!def.states.includes(target)) return { result: 'invalid', target };
 
   const outcomes = new Set<string>(def.outcomeTriggers ?? []);

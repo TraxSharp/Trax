@@ -76,7 +76,12 @@ public sealed class ConformanceTestee(bool fromIr = false)
                 request["fromServer"]?.GetValue<bool>() == true
             ),
             "serialize" => new JsonObject { ["wire"] = machine.Serialize(SnapshotOf(request)) },
-            "plan" => Planned(machine.Plan(SnapshotOf(request), PlanOf(request))),
+            "plan" => Planned(
+                machine.Plan(
+                    Deepened(request, SnapshotOf(request)),
+                    Deepened(request, PlanOf(request))
+                )
+            ),
             _ => new JsonObject { ["unsupported"] = true },
         };
     }
@@ -138,6 +143,40 @@ public sealed class ConformanceTestee(bool fromIr = false)
             request["maxDepth"]?.GetValue<int>()
         );
 
+    // A value nested deeper than any reader takes, built here (conformance/PROTOCOL.md, plan, tooDeep): 600 arrays.
+    private static JsonArray Nested()
+    {
+        var deep = new JsonArray();
+        for (var i = 1; i < 600; i++)
+            deep = new JsonArray(deep);
+        return deep;
+    }
+
+    private static Snapshot Deepened(JsonObject request, Snapshot snapshot)
+    {
+        if (request["tooDeep"]?.GetValue<string>() != "context")
+            return snapshot;
+        var context = (JsonObject)snapshot.Context.DeepClone();
+        context["deep"] = Nested();
+        return snapshot with { Context = context };
+    }
+
+    private static (
+        string Target,
+        PlannedEvent? Fields,
+        IReadOnlyList<string> Navigation,
+        int? MaxDepth
+    ) Deepened(
+        JsonObject request,
+        (string Target, PlannedEvent? Fields, IReadOnlyList<string> Navigation, int? MaxDepth) plan
+    ) =>
+        request["tooDeep"]?.GetValue<string>() == "input" && plan.Fields is { } fields
+            ? plan with
+            {
+                Fields = fields with { Input = Nested() },
+            }
+            : plan;
+
     private static JsonObject Planned(PlanResult result) =>
         result switch
         {
@@ -153,6 +192,11 @@ public sealed class ConformanceTestee(bool fromIr = false)
                 ["result"] = "undetermined",
                 ["trigger"] = u.Trigger,
                 ["events"] = Events(u.Events),
+            },
+            PlanResult.Invalid { Code: { } code } => new JsonObject
+            {
+                ["result"] = "invalid",
+                ["code"] = code.ToWire(),
             },
             PlanResult.Invalid { Target: { } target } => new JsonObject
             {

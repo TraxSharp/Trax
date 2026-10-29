@@ -31,11 +31,18 @@ public abstract record PlanResult
         : PlanResult;
 
     /// <summary>
-    /// The request cannot be planned: <see cref="Target"/> is not a state, or <see cref="Trigger"/> is not one a client
-    /// may send to move (one no transition fires on, one bound to the effect, an outcome, a timer, or a navigation
-    /// trigger that is also the fields event). Exactly one of the two is set.
+    /// The request cannot be planned: <see cref="Code"/> is <see cref="RefusalCode.InvalidInput"/> or
+    /// <see cref="RefusalCode.InvalidContext"/> when the
+    /// fields input or the snapshot's context nests more than 512 arrays and objects deep, <see cref="Target"/> is not
+    /// a state, or <see cref="Trigger"/> is not one a client may send to move (one no transition fires on, one bound to
+    /// the effect, an outcome, a timer, or a navigation trigger that is also the fields event). Exactly one of the three
+    /// is set.
     /// </summary>
-    public sealed record Invalid(string? Trigger = null, string? Target = null) : PlanResult;
+    public sealed record Invalid(string? Trigger = null, string? Target = null) : PlanResult
+    {
+        /// <summary>The refusal code of a fields input or a context nested too deep, or null.</summary>
+        public RefusalCode? Code { get; init; }
+    }
 
     private PlanResult() { }
 }
@@ -57,6 +64,10 @@ internal static class EventPlanner
 {
     internal const int MaxExpansions = 10_000;
 
+    // How deep the arrays and objects of a fields input or a context may nest, the outermost counting as one: the Rust
+    // engine's limit, which every engine's planner holds a plan to, so they refuse the same values.
+    internal const int MaxNesting = 512;
+
     private sealed record Node(Snapshot Snapshot, Node? Parent, PlannedEvent? Event, int Depth);
 
     public static PlanResult Plan(
@@ -72,6 +83,11 @@ internal static class EventPlanner
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(navigation);
 
+        // Checked first, as advance would refuse them: the search copies and compares both.
+        if (NestsTooDeep(fields?.Input))
+            return new PlanResult.Invalid { Code = RefusalCode.InvalidInput };
+        if (NestsTooDeep(snapshot.Context))
+            return new PlanResult.Invalid { Code = RefusalCode.InvalidContext };
         if (!graph.IsState(target))
             return new PlanResult.Invalid(Target: target);
         if (fields is not null && !graph.Navigable(fields.Trigger))
@@ -156,6 +172,29 @@ internal static class EventPlanner
         if (undetermined is { } u)
             return new PlanResult.Undetermined(u.Trigger, PathTo(u.From));
         return cut ? new PlanResult.Exceeded() : new PlanResult.Unreachable();
+    }
+
+    // Whether a value nests deeper than MaxNesting. Never recurses, so a value built in memory cannot exhaust the stack.
+    private static bool NestsTooDeep(JsonNode? value)
+    {
+        var pending = new Stack<(JsonNode? Node, int Depth)>();
+        pending.Push((value, 0));
+        while (pending.TryPop(out var next))
+        {
+            var members = next.Node switch
+            {
+                JsonObject o => o.Select(m => m.Value),
+                JsonArray a => a,
+                _ => null,
+            };
+            if (members is null)
+                continue;
+            if (next.Depth >= MaxNesting)
+                return true;
+            foreach (var member in members)
+                pending.Push((member, next.Depth + 1));
+        }
+        return false;
     }
 
     // The object with every member whose value is null left out, at every depth, as the client reads a host's answer.

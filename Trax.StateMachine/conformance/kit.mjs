@@ -141,6 +141,7 @@ function planCases() {
         fields: c.fields,
         navigation: c.navigation,
         ...(c.maxDepth === undefined ? {} : { maxDepth: c.maxDepth }),
+        ...(c.tooDeep === undefined ? {} : { tooDeep: c.tooDeep }),
       },
       expect: c.expect,
     })),
