@@ -9,9 +9,9 @@ use trax_state_machine::Map;
 use trax_state_machine::Value;
 use trax_state_machine::{PlanEvent, PlanInvalid};
 use trax_state_machine_client::{
-    ir_hash, DueAt, EventRequest, GraphQLMachineServerOptions, MachineServer, MachineView, SendOutcome, ServerAnswer,
-    ServerMachineController, ServerMachineOptions, ServerProblem, ServerSnapshot, StreamMessage, StreamSink,
-    Subscription, SyncOutcome, TransportError, DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_REQUEST_TIMEOUT,
+    ir_hash, without_nulls, DueAt, EventRequest, GraphQLMachineServerOptions, MachineServer, MachineView, SendOutcome,
+    ServerAnswer, ServerMachineController, ServerMachineOptions, ServerProblem, ServerSnapshot, StreamMessage,
+    StreamSink, Subscription, SyncOutcome, TransportError, DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_REQUEST_TIMEOUT,
     DEFAULT_RESUBSCRIBE_DELAYS, DEFAULT_RETRY_DELAYS,
 };
 
@@ -382,6 +382,114 @@ async fn an_observer_that_panics_does_not_stop_the_controller() {
     assert!(matches!(push.await, SendOutcome::Confirmed(s) if s.state == "Locked"));
     let view = view_where(&controller, |v| v.revision == Some(12)).await;
     assert!(!view.pending);
+}
+
+// A context whose one member nests `depth` objects deep under it, built without recursion.
+fn nested(depth: usize) -> Map {
+    let mut value = Value::Bool(true);
+    for _ in 0..depth {
+        let mut member = Map::new();
+        member.insert("a".into(), value);
+        value = Value::Object(member);
+    }
+    let mut context = Map::new();
+    context.insert("a".into(), value);
+    context
+}
+
+// A machine of one state, Open, whose context holds one object, `a`, and one trigger, Touch, that stays in it.
+fn nest() -> (Value, String) {
+    let ir = Value::parse(
+        r#"{"id":"nest","version":1,"initialState":"Open","initialContext":{},"states":["Open"],"triggers":["Touch"],"committedStates":[],"inputs":{},"context":{"Open":{"fields":[{"name":"a","type":"object","nullable":true,"constraints":[]}]}},"transitions":[{"from":"Open","trigger":"Touch","to":"Open"}]}"#,
+    )
+    .unwrap();
+    let hash = ir_hash(&ir);
+    (ir, hash)
+}
+
+// Opens instance i-1 of the nest on a scripted server, read at revision 10.
+async fn opened_nest() -> (ServerMachineController, Script) {
+    let (ir, hash) = nest();
+    let (server, mut script) = scripted();
+    let mut options = ServerMachineOptions::new(ir, hash, server);
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+    let started = controller.start();
+    let first = script.read().await;
+    let _ = first.send(stored(snapshot(Some("row-a"), 10, "Open")));
+    started.await;
+    view_where(&controller, |v| v.revision == Some(10)).await;
+    (controller, script)
+}
+
+// The nest at `revision`, with a context nested `depth` objects deep.
+fn open_nested(revision: i64, depth: usize) -> ServerSnapshot {
+    let mut open = snapshot(Some("row-a"), revision, "Open");
+    open.context = nested(depth);
+    open
+}
+
+// The context's member nests `depth` objects under it; the snapshot and the context count as two levels of 64.
+#[tokio::test]
+async fn an_answer_nested_deeper_than_a_store_writes_fails_as_a_transport_error() {
+    for depth in [63, 1_000_000] {
+        let (controller, mut script) = opened_nest().await;
+
+        let touched = controller.send("Touch", None);
+        let (_, answer) = script.event().await;
+        let _ = answer.send(stored(open_nested(11, depth)));
+
+        let outcome = tokio::time::timeout(Duration::from_secs(5), touched)
+            .await
+            .expect("the send never settled");
+        assert!(
+            matches!(&outcome, SendOutcome::Failed(p) if p.code == "TRANSPORT_ERROR"),
+            "depth {depth}: the answer was not refused"
+        );
+        let view = controller.view();
+        assert_eq!((view.revision, view.error.is_none()), (Some(10), true), "depth {depth}");
+    }
+}
+
+#[tokio::test]
+async fn a_push_nested_deeper_than_a_store_writes_is_dropped() {
+    for depth in [63, 1_000_000] {
+        let (controller, script) = opened_nest().await;
+
+        script.push(StreamMessage::Changed(open_nested(11, depth)));
+        script.push(StreamMessage::Changed(snapshot(Some("row-a"), 12, "Open")));
+
+        let view = view_where(&controller, |v| v.revision == Some(12)).await;
+        assert_eq!(view.revision, Some(12), "depth {depth}");
+        assert!(view.error.is_none(), "depth {depth}");
+        assert!(
+            view.snapshot.as_ref().is_some_and(|s| s.context.is_empty()),
+            "depth {depth}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_answer_as_deep_as_a_store_writes_is_taken() {
+    let (controller, mut script) = opened_nest().await;
+
+    let touched = controller.send("Touch", None);
+    let (_, answer) = script.event().await;
+    let _ = answer.send(stored(open_nested(11, 62)));
+
+    assert!(matches!(touched.await, SendOutcome::Confirmed(s) if s.revision == Some(11)));
+    assert!(controller.view().error.is_none());
+}
+
+#[test]
+fn a_context_of_any_depth_has_its_nulls_left_out_without_exhausting_the_stack() {
+    let mut context = nested(1_000_000);
+    context.insert("gone".into(), Value::Null);
+
+    let stripped = without_nulls(&context);
+
+    assert!(!stripped.contains_key(&"gone".into()));
+    assert!(stripped.contains_key(&"a".into()));
 }
 
 // Opens instance i-1 of the wizard on a scripted server, read as `state` with Ada's fields, or none.

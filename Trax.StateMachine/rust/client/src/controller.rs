@@ -21,7 +21,9 @@ use std::time::Duration;
 use futures_util::FutureExt;
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot, watch};
-use trax_state_machine::{canonical_wire, IrError, Machine, Map, PlanAnswer, PlanEvent, PlanInvalid, Snapshot, Value};
+use trax_state_machine::{
+    canonical_wire, IrError, JsString, Machine, Map, PlanAnswer, PlanEvent, PlanInvalid, Snapshot, Value,
+};
 
 use crate::server::{
     DueAt, EventRequest, MachineServer, ServerAnswer, ServerProblem, ServerSnapshot, StreamMessage, Subscription,
@@ -506,6 +508,43 @@ async fn guarded(
     })
 }
 
+// An answer whose context nests deeper than a store writes a snapshot is not one any store wrote: it fails as a
+// transport error, checked where it arrives, before the controller copies it.
+fn held_to_store(result: Result<ServerAnswer, TransportError>) -> Result<ServerAnswer, TransportError> {
+    match result {
+        Ok(ServerAnswer::Stored { snapshot, .. }) if deeper_than_stored(&snapshot.context) => {
+            Err(TransportError(too_deep_message()))
+        }
+        other => other,
+    }
+}
+
+// The deepest a stored snapshot nests, in arrays and objects, the snapshot itself counting as one: past it no store
+// wrote the snapshot, and every engine refuses to read it.
+const MAX_STORED_DEPTH: usize = 64;
+
+pub(crate) fn too_deep_message() -> String {
+    format!("The server's answer holds a context nested deeper than {MAX_STORED_DEPTH} levels.")
+}
+
+// Whether a context nests deeper than a stored snapshot may, the snapshot and the context counting as two levels.
+// Never recurses, so it is safe on a context built in memory at any depth.
+pub(crate) fn deeper_than_stored(context: &Map) -> bool {
+    let mut pending: Vec<(&Value, usize)> = context.values().map(|v| (v, 3)).collect();
+    while let Some((value, level)) = pending.pop() {
+        let members: Box<dyn Iterator<Item = &Value>> = match value {
+            Value::Array(items) => Box::new(items.iter()),
+            Value::Object(map) => Box::new(map.values()),
+            _ => continue,
+        };
+        if level > MAX_STORED_DEPTH {
+            return true;
+        }
+        pending.extend(members.map(|v| (v, level + 1)));
+    }
+    false
+}
+
 /// The hash a host's manifest gives an IR: the lowercase hex SHA-256 of its canonical JSON.
 pub fn ir_hash(ir: &Value) -> String {
     ring::digest::digest(&ring::digest::SHA256, ir.to_json().as_bytes())
@@ -883,7 +922,7 @@ impl<S: MachineServer> Actor<S> {
         let commands = self.commands.clone();
         let input = self.start_input.clone();
         self.runtime.spawn(async move {
-            let result = guarded(async { server.start(input, request_id.clone()).await }).await;
+            let result = held_to_store(guarded(async { server.start(input, request_id.clone()).await }).await);
             let _ = commands.send(Msg::Created {
                 request_id,
                 attempt,
@@ -975,6 +1014,10 @@ impl<S: MachineServer> Actor<S> {
         let commands = self.commands.clone();
         let refused = commands.clone();
         let sink: crate::server::StreamSink = Arc::new(move |message| {
+            // A push no store could have written is dropped here, on the server's task, before the controller copies it.
+            if matches!(&message, StreamMessage::Changed(s) if deeper_than_stored(&s.context)) {
+                return;
+            }
             let _ = commands.send(Msg::Stream { generation, message });
         });
         let server = &self.server;
@@ -1057,7 +1100,7 @@ impl<S: MachineServer> Actor<S> {
         let server = self.server.clone();
         let commands = self.commands.clone();
         self.runtime.spawn(async move {
-            let result = guarded(async { server.get(id).await }).await;
+            let result = held_to_store(guarded(async { server.get(id).await }).await);
             let _ = commands.send(Msg::Read {
                 row_id,
                 attempt,
@@ -1382,7 +1425,7 @@ impl<S: MachineServer> Actor<S> {
         let server = self.server.clone();
         let commands = self.commands.clone();
         self.runtime.spawn(async move {
-            let result = guarded(async { server.event(request).await }).await;
+            let result = held_to_store(guarded(async { server.event(request).await }).await);
             let _ = commands.send(Msg::Delivered { entry, attempt, result });
         });
     }
@@ -1740,19 +1783,68 @@ fn older_or_same(incoming: Option<i64>, held: Option<i64>) -> bool {
 }
 
 /// The context with every null member left out, at every depth: a typed answer cannot tell a member stored as null
-/// from one the state does not hold, and the server compares a prediction with null and absent equal.
+/// from one the state does not hold, and the server compares a prediction with null and absent equal. A null in an
+/// array is kept: it holds a place. Copies without recursion, so a context of any depth is safe to pass.
 pub fn without_nulls(context: &Map) -> Map {
-    context
-        .iter()
-        .filter(|(_, v)| !v.is_null())
-        .map(|(k, v)| (k.clone(), strip(v)))
-        .collect()
-}
-
-fn strip(value: &Value) -> Value {
-    match value {
-        Value::Object(map) => Value::Object(without_nulls(map)),
-        Value::Array(items) => Value::Array(items.iter().map(strip).collect()),
-        other => other.clone(),
+    // One frame per container being copied: what is left to read of it, what has been copied, and, for an object, the
+    // key the member being copied below it goes under.
+    enum Frame<'a> {
+        Object {
+            members: std::collections::btree_map::Iter<'a, JsString, Value>,
+            copied: Map,
+            key: Option<JsString>,
+        },
+        Array {
+            items: std::slice::Iter<'a, Value>,
+            copied: Vec<Value>,
+        },
+    }
+    let mut frames = vec![Frame::Object {
+        members: context.iter(),
+        copied: Map::new(),
+        key: None,
+    }];
+    loop {
+        let next = match frames.last_mut() {
+            Some(Frame::Object { members, key, .. }) => members.find(|(_, v)| !v.is_null()).map(|(k, v)| {
+                *key = Some(k.clone());
+                v
+            }),
+            Some(Frame::Array { items, .. }) => items.next(),
+            None => unreachable!("the context's own frame is the last one taken off"),
+        };
+        let copied = match next {
+            Some(Value::Object(map)) => {
+                frames.push(Frame::Object {
+                    members: map.iter(),
+                    copied: Map::new(),
+                    key: None,
+                });
+                continue;
+            }
+            Some(Value::Array(items)) => {
+                frames.push(Frame::Array {
+                    items: items.iter(),
+                    copied: Vec::new(),
+                });
+                continue;
+            }
+            Some(other) => other.clone(),
+            None => match frames.pop() {
+                Some(Frame::Object { copied, .. }) if frames.is_empty() => return copied,
+                Some(Frame::Object { copied, .. }) => Value::Object(copied),
+                Some(Frame::Array { copied, .. }) => Value::Array(copied),
+                None => unreachable!("a frame was read above"),
+            },
+        };
+        match frames.last_mut() {
+            Some(Frame::Object { copied: into, key, .. }) => {
+                if let Some(key) = key.take() {
+                    into.insert(key, copied);
+                }
+            }
+            Some(Frame::Array { copied: into, .. }) => into.push(copied),
+            None => unreachable!("only the context's own frame is returned"),
+        }
     }
 }

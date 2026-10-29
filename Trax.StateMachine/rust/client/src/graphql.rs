@@ -19,7 +19,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use trax_state_machine::{Map, Value};
 
-use crate::controller::{codes, without_nulls};
+use crate::controller::{codes, deeper_than_stored, too_deep_message, without_nulls};
 use crate::server::{
     DueAt, EventRequest, MachineServer, ServerAnswer, ServerProblem, ServerSnapshot, StreamMessage, StreamSink,
     Subscription, TransportError,
@@ -481,6 +481,7 @@ fn snapshot_of(value: &Value) -> Result<ServerSnapshot, TransportError> {
     // answer that holds it fails, and a push that holds it is dropped.
     let context = match value.get("context") {
         None | Some(Value::Null) => Map::new(),
+        Some(Value::Object(context)) if deeper_than_stored(context) => return Err(TransportError(too_deep_message())),
         Some(Value::Object(context)) => without_nulls(context),
         Some(_) => {
             return Err(TransportError(
@@ -1057,6 +1058,25 @@ mod tests {
 
             assert!(snapshot.context.is_empty());
         }
+    }
+
+    #[test]
+    fn an_answer_whose_context_nests_deeper_than_a_store_writes_fails() {
+        // The context's member nests `depth` objects under it; the snapshot and the context count as two levels of 64.
+        let read = |depth: usize| {
+            let context = format!(r#"{{"a":{}true{}}}"#, r#"{"a":"#.repeat(depth), "}".repeat(depth));
+            let answer = Value::parse(&format!(
+                r#"{{"id":"i-1","revision":1,"state":"Locked","context":{context}}}"#
+            ))
+            .unwrap();
+            answer_of(&answer).map(|_| ())
+        };
+
+        assert_eq!(read(62), Ok(()));
+        let Err(error) = read(63) else {
+            panic!("a context past the limit was read");
+        };
+        assert!(error.0.contains("deeper"), "{}", error.0);
     }
 
     // What `on_next` does with one `next` payload: the messages it delivered, how many pushes it counted, and whether
