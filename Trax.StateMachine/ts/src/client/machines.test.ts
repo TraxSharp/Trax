@@ -319,6 +319,31 @@ describe('createMachineExecutor and a host that does not answer', () => {
     expect(signal?.aborted).toBe(true);
   });
 
+  it('refuses a request timeout that is not a positive number of milliseconds when it is built', () => {
+    const fetch = (async () => new Response('{}')) as unknown as typeof globalThis.fetch;
+    for (const requestTimeout of [Number.NaN, 0, -1, -Infinity])
+      expect(
+        () => createMachineExecutor('/graphql', { fetch, requestTimeout, machines: [{ machine: checkout, documents }] }),
+        String(requestTimeout),
+      ).toThrow(RangeError);
+  });
+
+  it('waits as long as the host takes on a request timeout past the longest a timer counts', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const fetch = ((_url: string, init: RequestInit) => {
+      signal = init.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    }) as unknown as typeof globalThis.fetch;
+
+    // setTimeout fires at once for a delay past 2^31 - 1 ms: a timeout that long sets no timer, as Infinity does.
+    void load(fetch, 2 ** 31);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(signal?.aborted).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('fails a request whose body never ends within the timeout given', async () => {
     vi.useFakeTimers();
     const fetch = (async () =>
