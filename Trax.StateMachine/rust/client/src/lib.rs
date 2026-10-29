@@ -13,7 +13,7 @@ mod server;
 
 pub use controller::{
     codes, ir_hash, without_nulls, MachineError, MachineProblem, MachineStatus, MachineView, ProblemKind, SendOutcome,
-    ServerMachineController, ServerMachineOptions, DEFAULT_RETRY_DELAYS,
+    ServerMachineController, ServerMachineOptions, SyncOutcome, DEFAULT_RETRY_DELAYS,
 };
 pub use graphql::{
     event_field, machine_field, ConfigError, ConnectionParams, GraphQLMachineServer, GraphQLMachineServerOptions,

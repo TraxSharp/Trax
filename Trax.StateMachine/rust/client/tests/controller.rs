@@ -7,14 +7,27 @@ use std::time::Duration;
 
 use trax_state_machine::Map;
 use trax_state_machine::Value;
+use trax_state_machine::{PlanEvent, PlanInvalid};
 use trax_state_machine_client::{
     ir_hash, DueAt, EventRequest, MachineServer, MachineView, SendOutcome, ServerAnswer, ServerMachineController,
-    ServerMachineOptions, ServerSnapshot, StreamMessage, StreamSink, Subscription, TransportError,
+    ServerMachineOptions, ServerProblem, ServerSnapshot, StreamMessage, StreamSink, Subscription, SyncOutcome,
+    TransportError,
 };
 
 // The turnstile's IR as the kit commits it, and the hash a host's manifest gives it: the SHA-256 of that text.
 fn turnstile() -> (Value, String) {
-    let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../conformance/machines/turnstile/turnstile.ir.json");
+    ir_of("machines/turnstile/turnstile.ir.json")
+}
+
+// The planner's wizard, which the sync transcripts drive.
+fn wizard() -> (Value, String) {
+    ir_of("plan/wizard.ir.json")
+}
+
+fn ir_of(path: &str) -> (Value, String) {
+    let file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../conformance")
+        .join(path);
     let text = std::fs::read_to_string(&file).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
     let text = text.trim_end_matches('\n');
     let digest = ring::digest::digest(&ring::digest::SHA256, text.as_bytes());
@@ -368,4 +381,99 @@ async fn an_observer_that_panics_does_not_stop_the_controller() {
     assert!(matches!(push.await, SendOutcome::Confirmed(s) if s.state == "Locked"));
     let view = view_where(&controller, |v| v.revision == Some(12)).await;
     assert!(!view.pending);
+}
+
+// Opens instance i-1 of the wizard on a scripted server, read as `state` with Ada's fields, or none.
+async fn opened_wizard(state: &str, filled: bool) -> (ServerMachineController, Script) {
+    let (ir, hash) = wizard();
+    let (server, mut script) = scripted();
+    let mut options = ServerMachineOptions::new(ir, hash, server);
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+    let started = controller.start();
+    let first = script.read().await;
+    let _ = first.send(stored(wizard_at(1, state, filled)));
+    started.await;
+    view_where(&controller, |v| v.revision == Some(1)).await;
+    (controller, script)
+}
+
+fn wizard_at(revision: i64, state: &str, filled: bool) -> ServerSnapshot {
+    let mut snapshot = snapshot(None, revision, state);
+    if filled {
+        snapshot.context = ada().input.unwrap().as_object().unwrap().clone();
+    }
+    snapshot
+}
+
+fn ada() -> PlanEvent {
+    PlanEvent::new(
+        "Update",
+        Some(Value::parse(r#"{"email":"ada@example.com","name":"Ada"}"#).unwrap()),
+    )
+}
+
+fn navigation() -> Vec<String> {
+    ["Begin", "Next", "Back"].map(str::to_owned).to_vec()
+}
+
+#[tokio::test]
+async fn a_sync_the_host_never_follows_stops_at_twice_the_states_in_events() {
+    let (controller, mut script) = opened_wizard("Start", false).await;
+
+    let synced = controller.sync_to("Review", Some(ada()), navigation());
+    // The host takes every Begin and stays where it was, so every plan starts over.
+    for revision in 2..10 {
+        let (request, answer) = script.event().await;
+        assert_eq!(request.trigger, "Begin");
+        let _ = answer.send(stored(wizard_at(revision, "Start", false)));
+    }
+
+    assert_eq!(synced.await, SyncOutcome::Exceeded);
+    assert!(script.events.try_recv().is_err(), "the sync sent past its budget");
+    assert!(controller.view().unsaved);
+}
+
+#[tokio::test]
+async fn a_divergence_is_read_once_and_planned_again() {
+    let (controller, mut script) = opened_wizard("Details", true).await;
+
+    let synced = controller.sync_to("Review", Some(ada()), navigation());
+    let (request, answer) = script.event().await;
+    assert_eq!(request.trigger, "Next");
+    let _ = answer.send(Ok(ServerAnswer::Refused(ServerProblem {
+        code: "CLIENT_DIVERGENCE".into(),
+        message: "No.".into(),
+    })));
+    let read = script.read().await;
+    let _ = read.send(stored(wizard_at(2, "Details", true)));
+    let (request, answer) = script.event().await;
+    assert_eq!(request.trigger, "Next");
+    let _ = answer.send(stored(wizard_at(3, "Review", true)));
+
+    assert!(matches!(synced.await, SyncOutcome::Synced { snapshot, revision: Some(3) } if snapshot.state == "Review"));
+    assert!(script.reads.try_recv().is_err(), "the divergence was read twice");
+    assert!(!controller.view().unsaved);
+}
+
+#[tokio::test]
+async fn a_sync_over_a_trigger_bound_to_the_effect_is_invalid_and_sends_nothing() {
+    let (controller, mut script) = opened_wizard("Review", true).await;
+
+    let synced = controller.sync_to("Sent", None, vec!["Send".to_owned()]);
+
+    assert_eq!(synced.await, SyncOutcome::Invalid(PlanInvalid::Trigger("Send".into())));
+    assert!(script.events.try_recv().is_err());
+    assert!(controller.view().unsaved);
+}
+
+#[tokio::test]
+async fn a_disposed_controller_settles_its_sync_as_disposed() {
+    let (controller, mut script) = opened_wizard("Start", false).await;
+
+    let synced = controller.sync_to("Review", Some(ada()), navigation());
+    let _in_flight = script.event().await;
+    controller.dispose();
+
+    assert!(matches!(synced.await, SyncOutcome::Failed(p) if p.code == "DISPOSED"));
 }

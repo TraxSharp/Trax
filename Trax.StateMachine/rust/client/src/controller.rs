@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot, watch};
-use trax_state_machine::{canonical_wire, IrError, Machine, Map, Snapshot, Value};
+use trax_state_machine::{canonical_wire, IrError, Machine, Map, PlanAnswer, PlanEvent, PlanInvalid, Snapshot, Value};
 
 use crate::server::{
     DueAt, EventRequest, MachineServer, ServerAnswer, ServerProblem, ServerSnapshot, StreamMessage, Subscription,
@@ -42,6 +42,9 @@ pub mod codes {
     pub(crate) const UNAUTHENTICATED: &str = "UNAUTHENTICATED";
     pub(crate) const FORBIDDEN: &str = "FORBIDDEN";
     pub(crate) const INVALID_INPUT: &str = "INVALID_INPUT";
+    pub(crate) const GUARD_FAILED: &str = "GUARD_FAILED";
+    pub(crate) const NO_TRANSITION: &str = "NO_TRANSITION";
+    pub(crate) const CONFLICT: &str = "CONFLICT";
 }
 
 /// Whether a problem is the server's refusal or a request that did not get through.
@@ -97,6 +100,8 @@ pub struct MachineView {
     pub pending: bool,
     pub problem: Option<MachineProblem>,
     pub error: Option<MachineError>,
+    /// Whether a sync is running, or the last one did not settle synced: what a page holds a leave guard on.
+    pub unsaved: bool,
 }
 
 /// What one send came to. Never a panic.
@@ -109,6 +114,27 @@ pub enum SendOutcome {
     /// It did not get through, or the server could not take it yet; `retry` resends it.
     Failed(MachineProblem),
     /// The controller stopped for good before or while it was sent.
+    Stopped(MachineError),
+}
+
+/// What one [`ServerMachineController::sync_to`] came to. Never a panic.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SyncOutcome {
+    /// The server holds the target state with the fields applied: this snapshot, at this revision.
+    Synced { snapshot: Snapshot, revision: Option<i64> },
+    /// A later sync took over; this one sent nothing after the event it had in flight.
+    Superseded,
+    /// No event the planner may send reaches the target from what the server holds.
+    Unreachable,
+    /// The planner gave up, or the sync sent twice the machine's states in events without getting there.
+    Exceeded,
+    /// The target or a trigger is not one a sync may use.
+    Invalid(PlanInvalid),
+    /// The server refused an event, again after one re-read, or with a code a re-read cannot change.
+    Refused(MachineProblem),
+    /// An event or the re-read did not get through.
+    Failed(MachineProblem),
+    /// The controller stopped for good.
     Stopped(MachineError),
 }
 
@@ -221,6 +247,7 @@ impl ServerMachineController {
             pending: false,
             problem: None,
             error: None,
+            unsaved: false,
         });
         let (publish, view) = watch::channel(initial);
         let actor = Actor {
@@ -259,6 +286,9 @@ impl ServerMachineController {
             reload_again: false,
             next_row_id: None,
             buffered: None,
+            sync: None,
+            superseded: Vec::new(),
+            unsaved: false,
         };
         runtime.spawn(actor.run(inbox));
         Ok(ServerMachineController {
@@ -300,6 +330,40 @@ impl ServerMachineController {
             });
         }
         async move { answer.await.unwrap_or_else(|_| disposed_outcome()) }
+    }
+
+    /// Brings the server to where a page that ran ahead of it is: the state `target`, with the fields event `fields`
+    /// applied, moving through the triggers in `navigation`. Plans with the engine's planner ([`Machine::plan`]) from
+    /// the snapshot the server last confirmed, sends the first event as [`send`](Self::send) does, and plans again from
+    /// each answer until nothing is left to send. A refusal that a re-read can explain (`GUARD_FAILED`,
+    /// `NO_TRANSITION`, `CLIENT_DIVERGENCE`, `CONFLICT`) reads the instance once and plans again; a second settles the
+    /// sync refused. An undetermined plan sends its events, then its trigger unpredicted. A later sync supersedes this
+    /// one once the event it has in flight answers. No sync sends more than twice the machine's states in events.
+    pub fn sync_to(
+        &self,
+        target: impl Into<String>,
+        fields: Option<PlanEvent>,
+        navigation: Vec<String>,
+    ) -> impl std::future::Future<Output = SyncOutcome> + Send + 'static {
+        let (reply, answer) = oneshot::channel();
+        if fields
+            .as_ref()
+            .and_then(|f| f.input.as_ref())
+            .is_some_and(Value::is_too_deep)
+        {
+            let _ = reply.send(SyncOutcome::Refused(refusal(
+                codes::INVALID_INPUT,
+                "The input nests deeper than 512 arrays and objects.",
+            )));
+        } else {
+            let _ = self.commands.send(Msg::Sync {
+                target: target.into(),
+                fields,
+                navigation,
+                reply,
+            });
+        }
+        async move { answer.await.unwrap_or_else(|_| SyncOutcome::Failed(disposed_problem())) }
     }
 
     /// Resends what last failed under the same request id: the start while there is no instance, else the last event
@@ -361,11 +425,15 @@ impl Drop for ServerMachineController {
     }
 }
 
-fn disposed_outcome() -> SendOutcome {
-    SendOutcome::Failed(refusal(
+fn disposed_problem() -> MachineProblem {
+    refusal(
         codes::DISPOSED,
         "The controller was disposed before the server answered.",
-    ))
+    )
+}
+
+fn disposed_outcome() -> SendOutcome {
+    SendOutcome::Failed(disposed_problem())
 }
 
 fn refusal(code: &str, message: &str) -> MachineProblem {
@@ -421,6 +489,12 @@ enum Msg {
         reply: oneshot::Sender<SendOutcome>,
     },
     Retry(oneshot::Sender<SendOutcome>),
+    Sync {
+        target: String,
+        fields: Option<PlanEvent>,
+        navigation: Vec<String>,
+        reply: oneshot::Sender<SyncOutcome>,
+    },
     Dispose,
     Stream {
         generation: u64,
@@ -461,6 +535,30 @@ struct Queued {
     request: Option<EventRequest>,
     reply: Option<oneshot::Sender<SendOutcome>>,
 }
+
+// The sync running: what it brings the server to, and where it is.
+struct SyncRun {
+    target: String,
+    fields: Option<PlanEvent>,
+    navigation: Vec<String>,
+    reply: oneshot::Sender<SyncOutcome>,
+    // The events it has sent, against its budget of twice the machine's states.
+    sent: usize,
+    // Whether it has been refused once, and re-read for it.
+    refused: bool,
+    // The queue entry of its event in flight.
+    in_flight: Option<u64>,
+    // Whether it waits for the read after a refusal.
+    awaiting_read: bool,
+}
+
+// The refusals a re-read can explain: the server holds something other than the client planned from.
+const REPLANNED: [&str; 4] = [
+    codes::GUARD_FAILED,
+    codes::NO_TRANSITION,
+    codes::CLIENT_DIVERGENCE,
+    codes::CONFLICT,
+];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Source {
@@ -513,6 +611,11 @@ struct Actor<S> {
     // was out.
     next_row_id: Option<String>,
     buffered: Option<ServerSnapshot>,
+
+    sync: Option<SyncRun>,
+    // Syncs a later one took over, by the queue entry of the event each still has in flight.
+    superseded: Vec<(u64, oneshot::Sender<SyncOutcome>)>,
+    unsaved: bool,
 }
 
 impl<S: MachineServer> Actor<S> {
@@ -549,10 +652,16 @@ impl<S: MachineServer> Actor<S> {
                 } else if self.disposed {
                     let _ = reply.send(disposed_outcome());
                 } else {
-                    self.enqueue(trigger, input, None, reply);
+                    self.enqueue(trigger, input, None, Some(reply));
                 }
             }
             Msg::Retry(reply) => self.retry(reply),
+            Msg::Sync {
+                target,
+                fields,
+                navigation,
+                reply,
+            } => self.begin_sync(target, fields, navigation, reply),
             Msg::Dispose => self.dispose(),
             Msg::Stream { generation, message } => {
                 if generation == self.stream_generation
@@ -576,8 +685,21 @@ impl<S: MachineServer> Actor<S> {
                 attempt,
                 result,
             } => {
+                let failure = match &result {
+                    Err(error) => Some(SyncOutcome::Failed(transport_failure(error))),
+                    Ok(ServerAnswer::Refused(problem)) if problem.code == codes::SERVER_OUTDATED => {
+                        Some(SyncOutcome::Failed(refusal(&problem.code, &problem.message)))
+                    }
+                    Ok(ServerAnswer::Refused(problem)) => {
+                        Some(SyncOutcome::Refused(refusal(&problem.code, &problem.message)))
+                    }
+                    Ok(ServerAnswer::Stored { .. }) => None,
+                };
                 self.on_read(row_id, attempt, result);
                 self.settle_open();
+                if !self.reloading {
+                    self.read_settled(failure);
+                }
             }
             Msg::Delivered { entry, attempt, result } => self.on_delivered(entry, attempt, result),
             Msg::Later { epoch, action } => {
@@ -624,6 +746,8 @@ impl<S: MachineServer> Actor<S> {
         }
         self.settle_start(disposed_outcome());
         self.settle_open();
+        self.settle_sync(SyncOutcome::Failed(disposed_problem()));
+        self.settle_superseded();
     }
 
     // ── Opening ─────────────────────────────────────────────────────────────────────────────────
@@ -1016,18 +1140,20 @@ impl<S: MachineServer> Actor<S> {
         trigger: String,
         input: Option<Value>,
         request: Option<EventRequest>,
-        reply: oneshot::Sender<SendOutcome>,
-    ) {
+        reply: Option<oneshot::Sender<SendOutcome>>,
+    ) -> u64 {
         self.next_entry += 1;
+        let entry = self.next_entry;
         self.queue.push(Queued {
-            entry: self.next_entry,
+            entry,
             trigger,
             input,
             request,
-            reply: Some(reply),
+            reply,
         });
         self.emit();
         self.pump();
+        entry
     }
 
     fn retry(&mut self, reply: oneshot::Sender<SendOutcome>) {
@@ -1064,7 +1190,7 @@ impl<S: MachineServer> Actor<S> {
             }
             Some(request) => {
                 let (trigger, input) = (request.trigger.clone(), request.input.clone());
-                self.enqueue(trigger, input, Some(request), reply);
+                self.enqueue(trigger, input, Some(request), Some(reply));
             }
         }
     }
@@ -1088,7 +1214,11 @@ impl<S: MachineServer> Actor<S> {
         let (Some(id), Some(confirmed)) = (self.id.clone(), self.confirmed.clone()) else {
             return;
         };
-        let Some(next) = self.queue.first() else { return };
+        let Some(next) = self.queue.first() else {
+            // Nothing is being sent: a sync plans its next event from what the server confirmed.
+            self.step_sync(&confirmed);
+            return;
+        };
         self.sending = true;
         let entry = next.entry;
 
@@ -1199,10 +1329,161 @@ impl<S: MachineServer> Actor<S> {
             .and_then(|i| self.queue.remove(i).reply);
         self.sending = false;
         self.emit();
+        self.sync_answered(entry, &outcome);
         if let Some(reply) = reply {
             let _ = reply.send(outcome);
         }
         self.pump();
+    }
+
+    // ── Syncing ─────────────────────────────────────────────────────────────────────────────────────
+
+    fn begin_sync(
+        &mut self,
+        target: String,
+        fields: Option<PlanEvent>,
+        navigation: Vec<String>,
+        reply: oneshot::Sender<SyncOutcome>,
+    ) {
+        if let Some(error) = &self.error {
+            let _ = reply.send(SyncOutcome::Stopped(error.clone()));
+            return;
+        }
+        if self.disposed {
+            let _ = reply.send(SyncOutcome::Failed(disposed_problem()));
+            return;
+        }
+        // The sync it takes over from settles once its event in flight answers, and sends nothing more. A read that one
+        // waits for is waited for here too: the server has refused what the client planned from.
+        let mut awaiting_read = false;
+        if let Some(older) = self.sync.take() {
+            awaiting_read = older.awaiting_read && self.reloading;
+            match older.in_flight {
+                Some(entry) => self.superseded.push((entry, older.reply)),
+                None => {
+                    let _ = older.reply.send(SyncOutcome::Superseded);
+                }
+            }
+        }
+        self.sync = Some(SyncRun {
+            target,
+            fields: fields.map(|f| PlanEvent::new(f.trigger, f.input)),
+            navigation,
+            reply,
+            sent: 0,
+            refused: false,
+            in_flight: None,
+            awaiting_read,
+        });
+        if !self.unsaved {
+            self.unsaved = true;
+            self.emit();
+        }
+        self.pump();
+    }
+
+    // Plans from what the server confirmed and sends the plan's first event, or settles the sync. Runs only while
+    // nothing is queued or in flight.
+    fn step_sync(&mut self, confirmed: &Snapshot) {
+        let Some(run) = &self.sync else { return };
+        if run.in_flight.is_some() || run.awaiting_read {
+            return;
+        }
+        let next = match self
+            .machine
+            .plan(confirmed, &run.target, run.fields.as_ref(), &run.navigation, None)
+        {
+            PlanAnswer::Plan(events) => match events.into_iter().next() {
+                Some(event) => event,
+                None => {
+                    let snapshot = confirmed.clone();
+                    let revision = self.revision;
+                    self.settle_sync(SyncOutcome::Synced { snapshot, revision });
+                    return;
+                }
+            },
+            // The events up to the edge the client cannot evaluate, then that edge, unpredicted: the server decides.
+            PlanAnswer::Undetermined { trigger, events } => match events.into_iter().next() {
+                Some(event) => event,
+                None => {
+                    let input = run
+                        .fields
+                        .as_ref()
+                        .filter(|f| f.trigger == trigger)
+                        .and_then(|f| f.input.clone());
+                    PlanEvent::new(trigger, input)
+                }
+            },
+            PlanAnswer::Unreachable => return self.settle_sync(SyncOutcome::Unreachable),
+            PlanAnswer::Exceeded => return self.settle_sync(SyncOutcome::Exceeded),
+            PlanAnswer::Invalid(invalid) => return self.settle_sync(SyncOutcome::Invalid(invalid)),
+        };
+        if run.sent >= 2 * self.machine.states().len() {
+            return self.settle_sync(SyncOutcome::Exceeded);
+        }
+        let entry = self.enqueue(next.trigger, next.input, None, None);
+        if let Some(run) = self.sync.as_mut() {
+            run.sent += 1;
+            run.in_flight = Some(entry);
+        }
+    }
+
+    // A sync's event, or a superseded sync's last one, has answered.
+    fn sync_answered(&mut self, entry: u64, outcome: &SendOutcome) {
+        if let Some(at) = self.superseded.iter().position(|(e, _)| *e == entry) {
+            let (_, reply) = self.superseded.remove(at);
+            let _ = reply.send(SyncOutcome::Superseded);
+        }
+        let Some(run) = self.sync.as_mut().filter(|run| run.in_flight == Some(entry)) else {
+            return;
+        };
+        run.in_flight = None;
+        match outcome {
+            // The next step plans from the answer once the queue is empty.
+            SendOutcome::Confirmed(_) => {}
+            SendOutcome::Refused(problem) if !run.refused && REPLANNED.contains(&problem.code.as_str()) => {
+                run.refused = true;
+                run.awaiting_read = true;
+                // A divergence has started its read already.
+                if problem.code != codes::CLIENT_DIVERGENCE {
+                    self.reload(None);
+                }
+            }
+            SendOutcome::Refused(problem) => self.settle_sync(SyncOutcome::Refused(problem.clone())),
+            SendOutcome::Failed(problem) => self.settle_sync(SyncOutcome::Failed(problem.clone())),
+            SendOutcome::Stopped(error) => self.settle_sync(SyncOutcome::Stopped(error.clone())),
+        }
+    }
+
+    // The reads have ended: a sync that waited for one plans again from it, or settles with what stopped it.
+    fn read_settled(&mut self, failure: Option<SyncOutcome>) {
+        if self.disposed || self.error.is_some() {
+            return;
+        }
+        let Some(run) = self.sync.as_mut().filter(|run| run.awaiting_read) else {
+            return;
+        };
+        run.awaiting_read = false;
+        match failure {
+            Some(outcome) => self.settle_sync(outcome),
+            None => self.pump(),
+        }
+    }
+
+    fn settle_sync(&mut self, outcome: SyncOutcome) {
+        let Some(run) = self.sync.take() else { return };
+        let unsaved = !matches!(outcome, SyncOutcome::Synced { .. });
+        if unsaved != self.unsaved {
+            self.unsaved = unsaved;
+            self.emit();
+        }
+        let _ = run.reply.send(outcome);
+    }
+
+    fn settle_superseded(&mut self) {
+        for (_, reply) in self.superseded.drain(..) {
+            let _ = reply.send(SyncOutcome::Superseded);
+        }
     }
 
     // ── Stopping and timing ─────────────────────────────────────────────────────────────────────
@@ -1223,6 +1504,8 @@ impl<S: MachineServer> Actor<S> {
                 let _ = reply.send(SendOutcome::Stopped(error.clone()));
             }
         }
+        self.settle_sync(SyncOutcome::Stopped(error));
+        self.settle_superseded();
     }
 
     // Runs `action` after the attempt's delay. The caller checked there is one left.
@@ -1251,6 +1534,7 @@ impl<S: MachineServer> Actor<S> {
             pending: !self.queue.is_empty(),
             problem: self.problem.clone(),
             error: self.error.clone(),
+            unsaved: self.unsaved,
         };
         self.publish.send_replace(Arc::new(view));
     }

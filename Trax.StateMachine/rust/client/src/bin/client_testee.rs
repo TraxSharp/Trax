@@ -9,10 +9,10 @@ use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
-use trax_state_machine::{Map, Value};
+use trax_state_machine::{Map, PlanEvent, PlanInvalid, Value};
 use trax_state_machine_client::{
     GraphQLMachineServer, GraphQLMachineServerOptions, MachineStatus, MachineView, ManifestDocument, SendOutcome,
-    ServerMachineController, ServerMachineOptions,
+    ServerMachineController, ServerMachineOptions, SyncOutcome,
 };
 
 type Out = Arc<Mutex<tokio::io::Stdout>>;
@@ -84,6 +84,26 @@ async fn main() {
                         tokio::spawn(async move {
                             let outcome = settled.await;
                             write(&out, id, outcome_of(&outcome)).await;
+                        });
+                    }
+                    "sync" => {
+                        let target = request.get("target").and_then(|t| t.as_str()).unwrap_or("").to_owned();
+                        let fields = request.get("fields").filter(|f| !f.is_null()).map(|f| {
+                            PlanEvent::new(
+                                f.get("trigger").and_then(|t| t.as_str()).unwrap_or(""),
+                                f.get("input").cloned(),
+                            )
+                        });
+                        let navigation = request
+                            .get("navigation")
+                            .and_then(|n| n.as_array())
+                            .map(|n| n.iter().filter_map(|t| t.as_str().map(str::to_owned)).collect())
+                            .unwrap_or_default();
+                        let settled = client.sync_to(target, fields, navigation);
+                        let out = out.clone();
+                        tokio::spawn(async move {
+                            let outcome = settled.await;
+                            write(&out, id, sync_outcome_of(&outcome)).await;
                         });
                     }
                     _ => write(&out, id, object([("unsupported", Value::Bool(true))])).await,
@@ -218,6 +238,7 @@ fn view_of(view: &MachineView) -> Map {
                 .map(Value::Bool)
                 .unwrap_or(Value::Null),
         ),
+        ("unsaved", Value::Bool(view.unsaved)),
     ])
 }
 
@@ -243,6 +264,35 @@ fn outcome_of(outcome: &SendOutcome) -> Map {
             ("outcome", Value::from("stopped")),
             ("code", Value::from(e.code.as_str())),
         ]),
+    }
+}
+
+fn sync_outcome_of(outcome: &SyncOutcome) -> Map {
+    let named = |name: &str| object([("outcome", Value::from(name))]);
+    let coded = |name: &str, code: &str| object([("outcome", Value::from(name)), ("code", Value::from(code))]);
+    match outcome {
+        SyncOutcome::Synced { snapshot, revision } => object([
+            ("outcome", Value::from("synced")),
+            ("state", Value::from(snapshot.state.as_str())),
+            (
+                "revision",
+                revision.map(|r| Value::Number(r as f64)).unwrap_or(Value::Null),
+            ),
+        ]),
+        SyncOutcome::Superseded => named("superseded"),
+        SyncOutcome::Unreachable => named("unreachable"),
+        SyncOutcome::Exceeded => named("exceeded"),
+        SyncOutcome::Invalid(PlanInvalid::Target(target)) => object([
+            ("outcome", Value::from("invalid")),
+            ("target", Value::from(target.as_str())),
+        ]),
+        SyncOutcome::Invalid(PlanInvalid::Trigger(trigger)) => object([
+            ("outcome", Value::from("invalid")),
+            ("trigger", Value::from(trigger.as_str())),
+        ]),
+        SyncOutcome::Refused(p) => coded("refused", &p.code),
+        SyncOutcome::Failed(p) => coded("failed", &p.code),
+        SyncOutcome::Stopped(e) => coded("stopped", &e.code),
     }
 }
 

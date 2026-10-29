@@ -46,6 +46,12 @@ one of the caller's `terminal_stream_errors`, with its own code. The controller'
 on the tokio runtime `ServerMachineOptions::runtime` names, or the one it is built in, and may be called from any
 thread once built. It is held to the client conformance kit, as the TypeScript and C# clients are.
 
+`sync_to` brings the host to where a page that ran ahead of it is: a target state, the fields event, and the
+navigation triggers. It plans with the engine's `plan` from what the host last confirmed, sends one event at a time and
+plans again from each answer, reads the instance once and plans again on a refusal a re-read can explain, and sends
+no more than twice the machine's states in events. A later sync supersedes it. `MachineView::unsaved` is true while a
+sync runs or after one that did not settle synced, for a page's leave guard.
+
 `advance` takes the triggers a client sends, `apply_outcome` an invoked train's outcome and `apply_timer` a state's
 timer. A custom rule is bound by name with `with_guard` or `with_reducer`; one with no handler fails, so the engine
 leaves that step to the server.
