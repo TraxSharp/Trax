@@ -45,9 +45,15 @@ public sealed record GraphQLMachineServerOptions
     /// second push, since every stream's first is the instance as it is. A socket the host refused (4401, 4403, or an
     /// upgrade answered 401 or 403), or a stream it refused with a GraphQL error coded <c>TRAX_AUTHORIZATION</c>,
     /// <c>AUTH_NOT_AUTHENTICATED</c> or <c>AUTH_NOT_AUTHORIZED</c>, is not subscribed again: it stops the controller as
-    /// <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c>.
+    /// <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c>. Each is a step: the wait is drawn at random between half of it and
+    /// the whole, so the instances a host dropped together do not all come back together.
     /// </summary>
     public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
+
+    // The clock the resubscribe delays run on, and where each wait is drawn from (a number from 0 to 1); the system's
+    // clock and Random.Shared when null. A test pins them.
+    internal TimeProvider? Time { get; init; }
+    internal Func<double>? Random { get; init; }
 
     /// <summary>
     /// The codes of a stream error that ends the controller for good, beside the refusals above. A stream event or error
@@ -120,6 +126,8 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     private readonly Document _changed;
     private readonly IReadOnlyList<TimeSpan> _resubscribeDelays;
     private readonly IReadOnlySet<string> _terminal;
+    private readonly TimeProvider _time;
+    private readonly Func<double> _random;
 
     private sealed record Document(string Id, IReadOnlySet<string> Variables);
 
@@ -181,6 +189,8 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             ? delays
             : DefaultResubscribeDelays;
         _terminal = (options.TerminalStreamErrors ?? []).ToHashSet(StringComparer.Ordinal);
+        _time = options.Time ?? TimeProvider.System;
+        _random = options.Random ?? System.Random.Shared.NextDouble;
     }
 
     /// <inheritdoc/>
@@ -600,13 +610,12 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 _ended = true;
                 close = _current;
                 _current = null;
-                var delays = server._resubscribeDelays;
-                delay = delays[Math.Min(_attempt, delays.Count - 1)];
+                delay = Backoff.Delay(server._resubscribeDelays, _attempt, server._random);
                 _attempt++;
                 timer = _timer = new CancellationTokenSource();
             }
             close?.Dispose();
-            _ = Task.Delay(delay, timer.Token)
+            _ = Task.Delay(delay, server._time, timer.Token)
                 .ContinueWith(
                     t =>
                     {

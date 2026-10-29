@@ -18,12 +18,16 @@ public sealed record TraxClientOptions
     /// <summary>
     /// Delays before subscribing again after the socket dropped a stream. The last repeats for as long as the stream
     /// is followed; they start over once a subscription delivers a frame. <see cref="TraxClient.DefaultResubscribeDelays"/>
-    /// when null or empty.
+    /// when null or empty. Each is a step: the wait is drawn at random between half of it and the whole, so the
+    /// streams a host dropped together do not all come back together.
     /// </summary>
     public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
 
     /// <summary>The clock the resubscribe delays run on; the system's when null.</summary>
     public TimeProvider? Time { get; init; }
+
+    // Where each resubscribe wait is drawn from, a number from 0 to 1; Random.Shared when null. A test pins it.
+    internal Func<double>? Random { get; init; }
 }
 
 /// <summary>What a followed stream delivers.</summary>
@@ -73,6 +77,7 @@ public sealed class TraxClient
     private readonly JsonSerializerOptions _json;
     private readonly IReadOnlyList<TimeSpan> _delays;
     private readonly TimeProvider _time;
+    private readonly Func<double> _random;
 
     /// <summary>Builds the client over <paramref name="transport"/>.</summary>
     /// <exception cref="ArgumentException">
@@ -87,6 +92,7 @@ public sealed class TraxClient
             ? delays
             : DefaultResubscribeDelays;
         _time = options?.Time ?? TimeProvider.System;
+        _random = options?.Random ?? System.Random.Shared.NextDouble;
     }
 
     /// <summary>The transport the client sends through.</summary>
@@ -365,7 +371,7 @@ public sealed class TraxClient
                 _current = null;
                 first = !_interrupted;
                 _interrupted = true;
-                delay = client._delays[Math.Min(_attempt, client._delays.Count - 1)];
+                delay = Backoff.Delay(client._delays, _attempt, client._random);
                 _attempt++;
                 timer = _timer = new CancellationTokenSource();
             }
@@ -399,4 +405,16 @@ public sealed class TraxClient
             close?.Dispose();
         }
     }
+}
+
+// The resubscribe backoff the three clients share (conformance/client/PROTOCOL.md): the step is the attempt's delay, the
+// last repeating, and the wait is drawn uniformly between half the step and the whole of it, so the streams a host
+// dropped together do not all come back together.
+internal static class Backoff
+{
+    internal static TimeSpan Delay(
+        IReadOnlyList<TimeSpan> steps,
+        int attempt,
+        Func<double> random
+    ) => steps[Math.Min(attempt, steps.Count - 1)] * (0.5 + 0.5 * Math.Clamp(random(), 0.0, 1.0));
 }

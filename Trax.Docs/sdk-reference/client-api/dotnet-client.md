@@ -93,7 +93,7 @@ public readonly record struct Optional<T>
 | `Subscribe(document, variables, onEvent)` | Follows a subscription until the returned handle is disposed, and calls `onEvent` with each `TraxStreamEvent<TResult>`, one call at a time. Throws `ArgumentException` for a document that is not a subscription, or for variables that do not serialize to a JSON object. An `onEvent` that throws ends its stream: the last call it gets is `Ended`, whose `Failure` names the exception. Other streams go on. |
 | `Transport` | The transport the client sends through. |
 | `DefaultResubscribeDelays` | 1, 2, then 5 seconds: the delays before subscribing again after the socket dropped a stream. |
-| `TraxClientOptions` | `Json`, the serializer options (`TraxJson.Options` when null), which the client reads through a copy that leaves every unset `Optional<T>` out, whatever their resolver; `ResubscribeDelays`, whose last delay repeats for as long as the stream is followed and which start over once a subscription delivers a frame (`DefaultResubscribeDelays` when null or empty); `Time`, the `TimeProvider` the delays run on (the system's when null). |
+| `TraxClientOptions` | `Json`, the serializer options (`TraxJson.Options` when null), which the client reads through a copy that leaves every unset `Optional<T>` out, whatever their resolver; `ResubscribeDelays`, whose last delay repeats for as long as the stream is followed and which start over once a subscription delivers a frame (`DefaultResubscribeDelays` when null or empty), each a step the wait is drawn at random from, between half of it and the whole, so streams a host dropped together do not all come back together; `Time`, the `TimeProvider` the delays run on (the system's when null). |
 
 ### Documents
 

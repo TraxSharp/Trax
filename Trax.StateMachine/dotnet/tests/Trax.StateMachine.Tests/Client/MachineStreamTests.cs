@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using AwesomeAssertions;
+using Microsoft.Extensions.Time.Testing;
 using Trax.Client;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
@@ -33,7 +34,9 @@ public class MachineStreamTests
 
     private static (HandSocket Socket, Channel<StreamMessage> Messages, IDisposable Stream) Follow(
         IReadOnlyCollection<string>? terminal = null,
-        IReadOnlyList<TimeSpan>? delays = null
+        IReadOnlyList<TimeSpan>? delays = null,
+        TimeProvider? time = null,
+        Func<double>? random = null
     )
     {
         var socket = new HandSocket();
@@ -46,6 +49,8 @@ public class MachineStreamTests
                 Socket = socket,
                 ResubscribeDelays = delays ?? [TimeSpan.FromMilliseconds(10)],
                 TerminalStreamErrors = terminal,
+                Time = time,
+                Random = random,
             }
         );
         var messages = Channel.CreateUnbounded<StreamMessage>();
@@ -304,6 +309,37 @@ public class MachineStreamTests
         (await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait))
             .Should()
             .NotBeSameAs(second);
+    }
+
+    // Each wait is drawn uniformly between half the step and the whole of it, so instances a host dropped together do
+    // not all come back together.
+    [TestCase(0.0, 500)]
+    [TestCase(0.5, 750)]
+    [TestCase(1.0, 1000)]
+    public async Task Each_resubscribe_delay_is_drawn_between_half_its_step_and_the_whole(
+        double drawn,
+        int milliseconds
+    )
+    {
+        var time = new FakeTimeProvider();
+        var (socket, _, stream) = Follow(
+            delays: [TimeSpan.FromSeconds(1)],
+            time: time,
+            random: () => drawn
+        );
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Sink.Complete();
+        time.Advance(TimeSpan.FromMilliseconds(milliseconds - 1));
+        // negative-wait: the fake clock has not reached the wait, so nothing should subscribe again.
+        await Task.Delay(100);
+        socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
+        time.Advance(TimeSpan.FromMilliseconds(1));
+
+        (await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+            .Should()
+            .NotBeSameAs(first);
     }
 
     // A socket each subscription is handed to the test through.
