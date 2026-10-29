@@ -43,7 +43,8 @@ is refused where it is sent, with the code `advance` gives it, and never reaches
 subscribed again after `resubscribe_delays`; a socket or a stream the host refused (closed with 4401 or 4403, an
 upgrade answered 401 or 403, or a stream error coded `AUTH_NOT_AUTHENTICATED`, `TRAX_AUTHORIZATION` or
 `AUTH_NOT_AUTHORIZED`) is not, and stops the controller as `UNAUTHENTICATED` or `FORBIDDEN`, as does a stream error with
-one of the caller's `terminal_stream_errors`, with its own code. The controller's task runs
+one of the caller's `terminal_stream_errors`, with its own code. A push, or a stream error in a `next` or an `error`,
+coded `CLIENT_OUTDATED` stops it as `CLIENT_OUTDATED`. The controller's task runs
 on the tokio runtime `ServerMachineOptions::runtime` names, or the one it is built in, and may be called from any
 thread once built. It is held to the client conformance kit, as the TypeScript and C# clients are.
 

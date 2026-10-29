@@ -76,7 +76,8 @@ pub enum StreamMessage {
     Gone { not_found: bool },
     /// The server asks for the instance to be read again: anything may have been missed.
     Reload,
-    /// The server no longer serves this client's version of the machine.
+    /// The server no longer serves this client's version of the machine: a push, or a `next` or `error` coded
+    /// `CLIENT_OUTDATED`.
     ClientOutdated,
     /// The host refused the socket or the stream: it closed the socket with 4401 or 4403, answered its upgrade 401 or
     /// 403, or answered the stream with an error whose code is `AUTH_NOT_AUTHENTICATED`, `TRAX_AUTHORIZATION` or

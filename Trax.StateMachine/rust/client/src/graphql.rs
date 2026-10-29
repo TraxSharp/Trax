@@ -757,6 +757,15 @@ impl Inner {
                         .get("payload")
                         .and_then(|p| p.as_array())
                         .and_then(|e| e.first());
+                    let code = first
+                        .and_then(|error| error.get("extensions"))
+                        .and_then(|x| x.get("code"))
+                        .and_then(|c| c.as_str());
+                    // The same codes end the stream as in a `next`: CLIENT_OUTDATED, and the refusals.
+                    if code == Some(codes::CLIENT_OUTDATED) {
+                        sink(StreamMessage::ClientOutdated);
+                        break Ended::ForGood;
+                    }
                     break match first.and_then(|error| self.refused_by(error)) {
                         Some(refusal) => {
                             sink(StreamMessage::Refused(refusal));
@@ -1873,6 +1882,20 @@ mod tests {
             "{delivered:?}"
         );
         assert!(again.is_err(), "the stream was subscribed again");
+    }
+
+    #[tokio::test]
+    async fn a_stream_error_coded_client_outdated_ends_for_good_as_a_next_does() {
+        for reply in [(|_| Reply::ErrorMessage("CLIENT_OUTDATED")) as Replies, |_| {
+            Reply::NextError("CLIENT_OUTDATED")
+        }] {
+            let (port, mut heard) = recording_host(reply).await;
+
+            let (delivered, again) = follow(port, Vec::new(), &mut heard).await;
+
+            assert_eq!(delivered, Some(StreamMessage::ClientOutdated));
+            assert!(again.is_err(), "the outdated stream was subscribed again");
+        }
     }
 
     #[tokio::test]
