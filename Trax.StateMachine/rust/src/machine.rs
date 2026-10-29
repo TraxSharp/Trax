@@ -791,6 +791,11 @@ impl Machine {
         })
     }
 
+    // Whether any transition fires on `trigger`: a trigger the IR declares and no transition uses has none.
+    pub(crate) fn has_transition_on(&self, trigger: &str) -> bool {
+        self.edges.iter().any(|e| e.trigger == trigger)
+    }
+
     // Whether a rule is, or holds, a custom rule with no handler bound.
     fn names_unhandled(&self, rule: &Rule) -> bool {
         match rule {

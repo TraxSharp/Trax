@@ -60,8 +60,12 @@ public sealed record BuiltMachine<TState, TTrigger>(
     )
     {
         var states = Enum.GetNames<TState>().ToHashSet(StringComparer.Ordinal);
+        // A trigger no transition fires on is not one to move with, as in every engine's planner.
+        var fired = Definition
+            .Transitions.Select(t => t.Trigger.ToString()!)
+            .ToHashSet(StringComparer.Ordinal);
         var clientTriggers = Triggers
-            .Where(t => t.Kind == TriggerKind.Client)
+            .Where(t => t.Kind == TriggerKind.Client && fired.Contains(t.Name))
             .Select(t => t.Name)
             .ToHashSet(StringComparer.Ordinal);
         return EventPlanner.Plan(

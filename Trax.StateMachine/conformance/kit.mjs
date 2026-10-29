@@ -119,18 +119,23 @@ function strictInputCases() {
   ];
 }
 
-// The planner over the wizard machine: a load, then one plan per case, compared exactly.
+// The planner over the machines in plan/: a load of each, the wizard first, then one plan per case, compared exactly. A
+// case plans over the wizard unless it names another machine.
 function planCases() {
   const dir = join(conformanceDir, "plan");
   const doc = readJson(join(dir, "cases.json"));
-  const machine = doc.machine;
+  const machines = [...new Set([doc.machine, ...doc.cases.map((c) => c.machine ?? doc.machine)])];
   return [
-    { name: "plan/load", request: { op: "load", machine, ir: readJson(join(dir, `${machine}.ir.json`)) }, expect: { loaded: true } },
+    ...machines.map((machine) => ({
+      name: machine === doc.machine ? "plan/load" : `plan/load-${machine}`,
+      request: { op: "load", machine, ir: readJson(join(dir, `${machine}.ir.json`)) },
+      expect: { loaded: true },
+    })),
     ...doc.cases.map((c) => ({
       name: `plan/${c.name}`,
       request: {
         op: "plan",
-        machine,
+        machine: c.machine ?? doc.machine,
         snapshot: c.given,
         target: c.target,
         fields: c.fields,

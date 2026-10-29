@@ -100,8 +100,9 @@ that bring the host to where the page is: the state `target`, with `fields` (the
 with its input) applied, moving through the `navigation` triggers. Every engine searches the same way, so they answer
 the same plan, and the conformance kit's `plan` cases hold them to it:
 
-- A `target` that is not a state, or a fields or navigation trigger the machine does not have, one bound to the
-  effect, an outcome, a timer, or a navigation trigger that is also the fields event, answers `Invalid`.
+- A `target` that is not a state, or a fields or navigation trigger no transition fires on (one the IR declares and
+  no transition uses among them), one bound to the effect, an outcome, a timer, or a navigation trigger that is also
+  the fields event, answers `Invalid`.
 - The goal is a snapshot in `target` that the fields event leaves as it is. A fields event the target refuses never
   reaches it. Contexts are compared without their null members, at any depth, since a host omits them.
 - The search is breadth first, and from each snapshot it tries the fields event, then `navigation` in the order given.

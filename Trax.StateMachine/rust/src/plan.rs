@@ -36,8 +36,9 @@ impl PlanEvent {
 pub enum PlanInvalid {
     /// The target is not a state of the machine.
     Target(String),
-    /// The fields trigger or a navigation trigger is not one a caller may plan with: one the machine does not have,
-    /// one bound to the effect, an outcome, a timer, or a navigation trigger equal to the fields trigger.
+    /// The fields trigger or a navigation trigger is not one a caller may plan with: one no transition fires on (one
+    /// the IR declares and no transition uses among them), one bound to the effect, an outcome, a timer, or a
+    /// navigation trigger equal to the fields trigger.
     Trigger(String),
     /// The snapshot's context nests deeper than [`MAX_DEPTH`](crate::MAX_DEPTH), which [`Machine::advance`] refuses as
     /// `INVALID_CONTEXT`.
@@ -192,10 +193,10 @@ impl Machine {
         }
     }
 
-    // Whether a caller may plan with `trigger`: one the machine declares, not bound to the effect, not an outcome and
-    // not a timer.
+    // Whether a caller may plan with `trigger`: one a transition fires on, not bound to the effect, not an outcome and
+    // not a timer. A trigger the IR declares and no transition uses is not one, as in the other engines.
     fn plannable(&self, trigger: &str) -> bool {
-        self.triggers.contains(trigger)
+        self.has_transition_on(trigger)
             && !self.effect_triggers().iter().any(|t| t == trigger)
             && !self.outcome_triggers.contains(trigger)
             && !self.timer_triggers.contains(trigger)

@@ -32,7 +32,7 @@ public abstract record PlanResult
 
     /// <summary>
     /// The request cannot be planned: <see cref="Target"/> is not a state, or <see cref="Trigger"/> is not one a client
-    /// may send to move (one the machine does not have, one bound to the effect, an outcome, a timer, or a navigation
+    /// may send to move (one no transition fires on, one bound to the effect, an outcome, a timer, or a navigation
     /// trigger that is also the fields event). Exactly one of the two is set.
     /// </summary>
     public sealed record Invalid(string? Trigger = null, string? Target = null) : PlanResult;

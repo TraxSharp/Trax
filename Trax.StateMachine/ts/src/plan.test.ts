@@ -7,11 +7,13 @@ import { machineFromIr, type IrDocument } from "./rules/irMachine";
 import { typedMachineFromIr } from "./typed";
 import type { Snapshot } from "./types";
 
-// conformance/plan/ holds the planner's cases over the wizard machine; every engine answers them the same. The cases
-// below them are this engine's own: the limits a case file cannot reach cheaply, and the typed view.
+// conformance/plan/ holds the planner's cases over the wizard machine and the others beside it; every engine answers
+// them the same. The cases below them are this engine's own: the limits a case file cannot reach cheaply, and the typed
+// view.
 
 type Case = {
   name: string;
+  machine?: string;
   given: Snapshot;
   target: string;
   fields: PlanRequest["fields"];
@@ -23,11 +25,17 @@ type Case = {
 const golden = JSON.parse(fs.readFileSync(conformanceFile("plan", "cases.json"), "utf8")) as { cases: Case[] };
 const wizardIr = JSON.parse(fs.readFileSync(conformanceFile("plan", "wizard.ir.json"), "utf8")) as IrDocument;
 const wizard = new SnapshotMachine(machineFromIr(wizardIr));
+const planMachine = (name: string | undefined) =>
+  name === undefined
+    ? wizard
+    : new SnapshotMachine(
+        machineFromIr(JSON.parse(fs.readFileSync(conformanceFile("plan", `${name}.ir.json`), "utf8")) as IrDocument),
+      );
 
 describe("plan conformance", () => {
   it.each(golden.cases.map((c) => [c.name, c] as const))("%s", (_, c) => {
     expect(
-      wizard.plan(c.given, {
+      planMachine(c.machine).plan(c.given, {
         target: c.target,
         fields: c.fields,
         navigation: c.navigation,

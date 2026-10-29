@@ -117,8 +117,9 @@ Every engine answers the same plan, so the search is fixed:
 - **Invalid first.** A fields input or a snapshot's context past the engine's nesting limit answers `invalid` with
   `code` `INVALID_INPUT` or `INVALID_CONTEXT`, input first, as `advance` would refuse it. Then a `target` that is not
   a state answers `invalid` with `target`. Then the fields trigger, then each
-  navigation trigger in order: one the machine does not have, one bound to the effect, an outcome, a timer, or a
-  navigation trigger equal to the fields trigger answers `invalid` with that `trigger`.
+  navigation trigger in order: one no transition of the machine fires on (one the IR declares and no transition uses
+  among them), one bound to the effect, an outcome, a timer, or a navigation trigger equal to the fields trigger
+  answers `invalid` with that `trigger`.
 - **Wires without nulls.** Wherever the search compares wires, it compares them with every context member whose value is
   null removed, at every depth: a host omits such members, so a snapshot it confirmed never carries them.
 - **The goal.** A snapshot is the goal when its state is `target` and, with `fields` given, advancing it by the fields
@@ -150,7 +151,7 @@ Every engine answers the same plan, so the search is fixed:
 | `machines/<m>/fixtures/rehydrate/*.json` | `rehydrate`, with the fixture's `fromServer` |
 | `machines/<m>/wire-handoff.json` | `serialize` |
 | `conformance/strict-input/` | `load`, then one `advance` per case |
-| `conformance/plan/` | `load` of `wizard.ir.json`, then one `plan` per case in `cases.json` |
+| `conformance/plan/` | `load` of each machine its cases plan over, `wizard.ir.json` first, then one `plan` per case in `cases.json` |
 | `conformance/unreadable-ir/cases.json` | one `load` per case, which must be refused |
 | `conformance/canonical-wire.json` | `canonical` |
 

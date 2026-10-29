@@ -424,9 +424,10 @@ public sealed class IrMachine
     internal bool Determines(string state, string trigger) =>
         !_undetermined.Contains((state, trigger));
 
-    // A trigger a client may move with: one the machine has, not bound to the effect, an outcome or a timer.
+    // A trigger a client may move with: one a transition fires on, not bound to the effect, an outcome or a timer. A
+    // trigger the IR declares and no transition uses is not one, as in the other engines.
     private bool Navigable(string trigger) =>
-        _triggers.Contains(trigger)
+        _transitions.Any(t => t.Trigger == trigger)
         && !EffectTriggers.Contains(trigger)
         && !_outcomes.ContainsKey(trigger)
         && !_timers.Values.Any(t => t.Trigger == trigger);

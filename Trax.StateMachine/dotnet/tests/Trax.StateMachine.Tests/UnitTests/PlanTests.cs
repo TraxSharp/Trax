@@ -207,6 +207,31 @@ public class PlanTests
             .Be(new PlanResult.Invalid(Trigger: "Pay"));
     }
 
+    public enum DoorState
+    {
+        Open,
+        Shut,
+    }
+
+    public enum DoorTrigger
+    {
+        Close,
+        Lock,
+    }
+
+    [Test]
+    public void The_compiled_machine_refuses_a_trigger_no_transition_fires_on()
+    {
+        var m = new MachineBuilder<DoorState, DoorTrigger>();
+        m.Id("door").Version(1).StartsAt(DoorState.Open, () => new JsonObject());
+        m.In(DoorState.Open).On(DoorTrigger.Close).To(DoorState.Shut);
+        var door = m.Build();
+
+        door.Plan(door.Definition.CreateInitialSnapshot(), "Shut", null, ["Close", "Lock"])
+            .Should()
+            .Be(new PlanResult.Invalid(Trigger: "Lock"));
+    }
+
     [Test]
     public void A_compiled_and_an_IR_machine_plan_alike()
     {
