@@ -320,6 +320,7 @@ public class TransportTests
             CancellationToken cancellationToken
         )
         {
+            // determinism: not a fixed delay, a wait only the request's cancellation ends.
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             throw new InvalidOperationException("unreachable");
         }
