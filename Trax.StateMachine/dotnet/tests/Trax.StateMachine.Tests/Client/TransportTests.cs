@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Microsoft.Extensions.Time.Testing;
 using Trax.Client;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
@@ -253,6 +254,48 @@ public class TransportTests
         }
             .MaxResponseSize.Should()
             .Be(16 * 1024 * 1024);
+    }
+
+    // Built without a request timeout, a server gives a request up after the default 30 seconds, on a clock the test
+    // holds: the default is the one in force, not only the one declared.
+    [Test]
+    public async Task A_server_built_without_a_request_timeout_gives_a_request_up_after_thirty_seconds()
+    {
+        var time = new FakeTimeProvider();
+        var server = new GraphQLMachineServer(
+            new GraphQLMachineServerOptions
+            {
+                Http = new HttpClient(new Unanswered()),
+                HandlerFollowsNoRedirects = true,
+                Endpoint = new Uri("https://h/graphql"),
+                Machine = Turnstile,
+                Socket = new NoSocket(),
+                Time = time,
+            }
+        );
+
+        var read = server.GetAsync("i-1");
+        time.Advance(GraphQLMachineServer.DefaultRequestTimeout - TimeSpan.FromMilliseconds(1));
+        read.IsCompleted.Should().BeFalse();
+        time.Advance(TimeSpan.FromMilliseconds(1));
+
+        var answered = () => read.WaitAsync(TimeSpan.FromSeconds(10));
+        (await answered.Should().ThrowAsync<HttpRequestException>()).WithMessage(
+            "*within 30 seconds*"
+        );
+    }
+
+    // A host that never answers: every request waits until it is cancelled.
+    private sealed class Unanswered : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("unreachable");
+        }
     }
 
     // The time-based defaults every client of the kit shares (conformance/client/PROTOCOL.md, "Defaults").

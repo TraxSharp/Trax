@@ -2005,6 +2005,22 @@ mod tests {
         }
     }
 
+    // A server built without a request timeout gives a request up after the default, on a clock the test holds.
+    #[tokio::test(start_paused = true)]
+    async fn a_server_built_without_a_request_timeout_gives_a_request_up_after_thirty_seconds() {
+        let mut given = with_get(options("http://127.0.0.1:9/graphql", "ws://127.0.0.1:9/graphql"));
+        given.headers = Some(Arc::new(|| Box::pin(std::future::pending())));
+        let server = GraphQLMachineServer::new(given).unwrap();
+        let started = tokio::time::Instant::now();
+
+        let Err(error) = server.get("i-1".into()).await else {
+            panic!("the request was answered");
+        };
+
+        assert_eq!(started.elapsed(), DEFAULT_REQUEST_TIMEOUT);
+        assert!(error.0.contains("did not answer within 30000 ms"), "{}", error.0);
+    }
+
     #[tokio::test]
     async fn a_headers_provider_that_never_answers_fails_the_request_within_the_request_timeout() {
         let mut given = with_get(options("http://127.0.0.1:9/graphql", "ws://127.0.0.1:9/graphql"));

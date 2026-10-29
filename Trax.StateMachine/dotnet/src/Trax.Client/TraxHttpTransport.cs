@@ -185,7 +185,8 @@ public sealed class TraxHttpTransport : ITraxTransport
         JsonObject body,
         long maxResponseSize = TraxHttpTransportOptions.DefaultMaxResponseSize,
         TimeSpan? requestTimeout = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        TimeProvider? time = null
     )
     {
         ArgumentNullException.ThrowIfNull(http);
@@ -204,11 +205,14 @@ public sealed class TraxHttpTransport : ITraxTransport
             : http.BaseAddress is { } baseAddress ? new Uri(baseAddress, endpoint)
             : null;
 
-        // With ResponseHeadersRead the client's timeout stops at the headers; this one runs on through the body.
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // With ResponseHeadersRead the client's timeout stops at the headers; this one runs on through the body, on the
+        // clock given.
         var limit = Shorter(http.Timeout, requestTimeout ?? Timeout.InfiniteTimeSpan);
-        if (limit != Timeout.InfiniteTimeSpan)
-            timeout.CancelAfter(limit);
+        using var timed = new CancellationTokenSource(limit, time ?? TimeProvider.System);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timed.Token
+        );
         try
         {
             using var response = await http.SendAsync(
