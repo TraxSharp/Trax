@@ -37,7 +37,8 @@ public class MachineStreamTests
         IReadOnlyCollection<string>? terminal = null,
         IReadOnlyList<TimeSpan>? delays = null,
         TimeProvider? time = null,
-        Func<double>? random = null
+        Func<double>? random = null,
+        Func<StreamMessage, bool>? throwOn = null
     )
     {
         var socket = new HandSocket();
@@ -55,7 +56,15 @@ public class MachineStreamTests
             }
         );
         var messages = Channel.CreateUnbounded<StreamMessage>();
-        var stream = server.Subscribe("i-1", m => messages.Writer.TryWrite(m));
+        var stream = server.Subscribe(
+            "i-1",
+            m =>
+            {
+                messages.Writer.TryWrite(m);
+                if (throwOn?.Invoke(m) == true)
+                    throw new InvalidOperationException("handler bug");
+            }
+        );
         return (socket, messages, stream);
     }
 
@@ -243,6 +252,32 @@ public class MachineStreamTests
         var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
         message.Should().Be(new StreamMessage.Refused("CONNECTION_CHANGED", "Not allowed."));
         // Subscribing again would wait on a timer first: none was started.
+        time.Delays.Should().BeEmpty();
+        socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task A_handler_that_throws_ends_the_stream_with_a_failure_and_is_not_subscribed_again()
+    {
+        var time = new TimerLog();
+        var (socket, messages, stream) = Follow(
+            time: time,
+            throwOn: m => m is StreamMessage.Changed
+        );
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Push(Changed(1));
+
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+            .Should()
+            .BeOfType<StreamMessage.Changed>();
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+            .Should()
+            .BeOfType<StreamMessage.Refused>()
+            .Which.Message.Should()
+            .Contain("handler bug");
+        first.Disposed.Should().BeTrue();
         time.Delays.Should().BeEmpty();
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
     }

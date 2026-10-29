@@ -412,10 +412,10 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// is a stream the host refused with a GraphQL error coded <c>TRAX_AUTHORIZATION</c> or <c>AUTH_NOT_AUTHORIZED</c>
     /// (<c>FORBIDDEN</c>) or <c>AUTH_NOT_AUTHENTICATED</c> (<c>UNAUTHENTICATED</c>), one whose error code is among
     /// <see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/> (with that code), and a push the client cannot
-    /// read (a member of the wrong type, or one given twice), or a socket that follows no more subscriptions (a
-    /// <see cref="SocketUnavailableException"/>: it was disposed), as <see cref="ClientProblemCodes.TransportError"/>. A
-    /// stream that ends any other way is subscribed again after the resubscribe delays; the new stream's first event
-    /// is the instance as it is then.
+    /// read (a member of the wrong type, or one given twice), a socket that follows no more subscriptions (a
+    /// <see cref="SocketUnavailableException"/>: it was disposed), or a message <paramref name="onMessage"/> threw on,
+    /// as <see cref="ClientProblemCodes.TransportError"/>. A stream that ends any other way is subscribed again after
+    /// the resubscribe delays; the new stream's first event is the instance as it is then.
     /// </remarks>
     public IDisposable Subscribe(string id, Action<StreamMessage> onMessage)
     {
@@ -628,7 +628,45 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 )
                     _ended = true;
             }
-            onMessage(message);
+            try
+            {
+                onMessage(message);
+            }
+            catch (Exception ex)
+            {
+                HandlerThrew(ex, message);
+            }
+        }
+
+        // The handler threw on a message: the stream ends, is not subscribed again, and, unless the message already
+        // ended it, ends with that failure, as a TraxClient stream whose handler throws does.
+        private void HandlerThrew(Exception thrown, StreamMessage on)
+        {
+            IDisposable? close;
+            lock (_gate)
+            {
+                if (!_wanted)
+                    return;
+                _ended = true;
+                close = _current;
+                _current = null;
+            }
+            close?.Dispose();
+            if (on is StreamMessage.Gone or StreamMessage.ClientOutdated or StreamMessage.Refused)
+                return;
+            try
+            {
+                onMessage(
+                    new StreamMessage.Refused(
+                        ClientProblemCodes.TransportError,
+                        $"The stream's handler threw: {thrown.Message}"
+                    )
+                );
+            }
+            catch (Exception)
+            {
+                // The handler threw on the failure too: the stream has ended either way.
+            }
         }
 
         // The stream ended without a reason: close it and subscribe again after the next delay.
