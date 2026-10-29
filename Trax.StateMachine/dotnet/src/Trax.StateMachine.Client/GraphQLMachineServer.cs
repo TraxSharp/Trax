@@ -52,9 +52,10 @@ public sealed record GraphQLMachineServerOptions
     /// <summary>
     /// Delays before subscribing again after a stream that ended without saying why (its host stopped, or the socket
     /// closed). The last repeats for as long as the stream is wanted; they start over once a stream has delivered a
-    /// second push, since every stream's first is the instance as it is. A socket the host refused (4401, 4403, or an
-    /// upgrade answered 401 or 403), or a stream it refused with a GraphQL error coded <c>TRAX_AUTHORIZATION</c>,
-    /// <c>AUTH_NOT_AUTHENTICATED</c> or <c>AUTH_NOT_AUTHORIZED</c>, is not subscribed again: it stops the controller as
+    /// second snapshot (a reload push is not one), since every stream's first is the instance as it is. A socket the
+    /// host refused (4401, 4403, or an upgrade answered 401 or 403), or a stream it refused with a GraphQL error coded
+    /// <c>TRAX_AUTHORIZATION</c>, <c>AUTH_NOT_AUTHENTICATED</c> or <c>AUTH_NOT_AUTHORIZED</c>, is not subscribed
+    /// again: it stops the controller as
     /// <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c>. Each is a step: the wait is drawn at random between half of it and
     /// the whole, so the instances a host dropped together do not all come back together.
     /// </summary>
@@ -426,8 +427,8 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         private bool _wanted = true;
         private int _attempt;
 
-        // The pushes the current stream delivered. Every stream's first push is the instance as it is, so only a second
-        // says the stream held: the resubscribe delays start over then.
+        // The snapshots the current stream delivered. Every stream's first push is the instance as it is, so only a
+        // second says the stream held: the resubscribe delays start over then. A reload push is not one.
         private int _pushes;
         private bool _ended;
         private IDisposable? _current;
@@ -493,9 +494,10 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 Again();
             else if (message is not null)
             {
-                lock (_gate)
-                    if (++_pushes == 2)
-                        _attempt = 0;
+                if (message is StreamMessage.Changed)
+                    lock (_gate)
+                        if (++_pushes == 2)
+                            _attempt = 0;
                 Deliver(message);
             }
         }

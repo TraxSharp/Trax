@@ -1,0 +1,36 @@
+{
+  "about": "The waits before subscribing again grow through the resubscribe delays, the last repeating, and start over once a stream has delivered its second snapshot; a reload push is not one. Each wait is drawn between half its step and the whole, so the bounds are half a step: at least 750 ms on the 1500 ms step, under 750 ms on the 10 ms one.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "resubscribeDelays": [10, 1500],
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "view": { "status": "ready" } },
+    { "complete": true },
+    { "subscribe": { "id": "i-1" }, "before": 750 },
+    { "complete": true },
+    { "subscribe": { "id": "i-1" }, "notBefore": 750 },
+    { "push": { "revision": 2, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "push": { "reload": true } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 2, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "state": "Unlocked", "revision": 2, "pending": false } },
+    { "complete": true },
+    { "subscribe": { "id": "i-1" }, "notBefore": 750 },
+    { "push": { "revision": 3, "state": "Locked", "context": {} } },
+    { "push": { "revision": 4, "state": "Unlocked", "context": { "paidWith": "quarter" } } },
+    { "view": { "state": "Unlocked", "revision": 4 } },
+    { "complete": true },
+    { "subscribe": { "id": "i-1" }, "before": 750 },
+    { "push": { "revision": 4, "state": "Unlocked", "context": { "paidWith": "quarter" } } }
+  ]
+}
