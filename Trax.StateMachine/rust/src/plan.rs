@@ -71,11 +71,16 @@ pub enum PlanAnswer {
     Invalid(PlanInvalid),
 }
 
+// A step and the wire it leads to, or `None` for one the machine refused.
+type Step = Option<(Snapshot, String)>;
+
 struct Node {
     snapshot: Snapshot,
     // The node this one was reached from, and the index of the edge that reached it.
     parent: Option<(usize, usize)>,
     depth: usize,
+    // The fields event's step from this snapshot, when the goal test already took it: the expansion reuses it.
+    applied: Option<Step>,
 }
 
 impl Machine {
@@ -129,26 +134,36 @@ impl Machine {
             }
         }
         let max_depth = max_depth.unwrap_or(2 * self.states().len());
-        let is_goal = |s: &Snapshot| {
-            s.state == target
-                && fields.is_none_or(|f| {
-                    // A fields event the engine cannot evaluate here cannot show the fields are applied.
-                    !self.rests_on_unhandled_rule(&s.state, &f.trigger)
-                        && self
-                            .advance(s, &f.trigger, f.input.as_ref())
-                            .is_ok_and(|next| wire(&next) == wire(s))
-                })
+        let step = |s: &Snapshot, edge: &PlanEvent| -> Step {
+            let next = self.advance(s, &edge.trigger, edge.input.as_ref()).ok()?;
+            let at = wire(&next);
+            Some((next, at))
+        };
+        // Whether `s`, whose wire is `at`, is the goal, and the fields event's step from it when the test took one.
+        let goal = |s: &Snapshot, at: &str| -> (bool, Option<Step>) {
+            let Some(f) = fields else {
+                return (s.state == target, None);
+            };
+            // A fields event the engine cannot evaluate here cannot show the fields are applied.
+            if s.state != target || self.rests_on_unhandled_rule(&s.state, &f.trigger) {
+                return (false, None);
+            }
+            let applied = step(s, f);
+            (applied.as_ref().is_some_and(|(_, w)| w == at), Some(applied))
         };
 
-        if is_goal(from) {
+        let start = wire(from);
+        let (reached, applied) = goal(from, &start);
+        if reached {
             return PlanAnswer::Plan(Vec::new());
         }
         let mut nodes = vec![Node {
             snapshot: from.clone(),
             parent: None,
             depth: 0,
+            applied,
         }];
-        let mut seen: HashSet<String> = HashSet::from([wire(from)]);
+        let mut seen: HashSet<String> = HashSet::from([start]);
         let mut queue = VecDeque::from([0usize]);
         let mut undetermined: Option<(String, usize)> = None;
         let mut left_unexpanded = false;
@@ -164,29 +179,38 @@ impl Machine {
                 break;
             }
             expanded += 1;
+            // Taken once: nothing reads it after this expansion.
+            let mut applied = nodes[at].applied.take();
             for (k, edge) in edges.iter().enumerate() {
-                let snapshot = &nodes[at].snapshot;
-                if self.rests_on_unhandled_rule(&snapshot.state, &edge.trigger) {
+                if self.rests_on_unhandled_rule(&nodes[at].snapshot.state, &edge.trigger) {
                     undetermined.get_or_insert_with(|| (edge.trigger.clone(), at));
                     continue;
                 }
-                let Ok(next) = self.advance(snapshot, &edge.trigger, edge.input.as_ref()) else {
+                // The fields event is the first edge, and the goal test may have taken its step already.
+                let reused = if k == 0 && fields.is_some() {
+                    applied.take()
+                } else {
+                    None
+                };
+                let Some((next, next_wire)) = reused.unwrap_or_else(|| step(&nodes[at].snapshot, edge)) else {
                     continue;
                 };
-                if !seen.insert(wire(&next)) {
+                if seen.contains(&next_wire) {
                     continue;
                 }
-                let goal = is_goal(&next);
+                let (reached, next_applied) = goal(&next, &next_wire);
+                seen.insert(next_wire);
                 nodes.push(Node {
                     snapshot: next,
                     parent: Some((at, k)),
                     depth: nodes[at].depth + 1,
+                    applied: next_applied,
                 });
-                let reached = nodes.len() - 1;
-                if goal {
-                    return PlanAnswer::Plan(path(&nodes, &edges, reached));
+                let index = nodes.len() - 1;
+                if reached {
+                    return PlanAnswer::Plan(path(&nodes, &edges, index));
                 }
-                queue.push_back(reached);
+                queue.push_back(index);
             }
         }
 
@@ -225,8 +249,10 @@ fn path(nodes: &[Node], edges: &[PlanEvent], mut at: usize) -> Vec<PlanEvent> {
 // the host answers a context without its null members.
 fn wire(snapshot: &Snapshot) -> String {
     canonical_wire(&Snapshot {
+        machine: snapshot.machine.clone(),
+        version: snapshot.version,
+        state: snapshot.state.clone(),
         context: without_nulls(&snapshot.context),
-        ..snapshot.clone()
     })
 }
 

@@ -474,3 +474,44 @@ fn a_navigation_trigger_listed_twice_is_tried_once_from_each_snapshot() {
     assert_eq!(thrice, once);
     assert_eq!(asked.load(Ordering::SeqCst), once_asked);
 }
+
+#[test]
+fn a_plan_takes_each_step_once_the_goal_tests_fields_event_included() {
+    use std::sync::{Arc, Mutex};
+
+    let from: Arc<Mutex<Vec<String>>> = Arc::default();
+    let seen = from.clone();
+    let machine = Machine::from_ir(&conformance("plan/notebook.ir.json"))
+        .unwrap()
+        .with_reducer("notebook:add-note", move |context, _| {
+            seen.lock().unwrap().push(format!("{context:?}"));
+            let notes = context
+                .get(&JsString::from("notes"))
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0);
+            let mut next = context.clone();
+            next.insert("notes".into(), Value::Number(notes + 1.0));
+            next
+        });
+    let draft = Snapshot::from_value(&object(
+        r#"{"machine":"notebook","version":1,"state":"Draft","context":{"notes":0}}"#,
+    ))
+    .unwrap();
+
+    let plan = machine.plan(
+        &draft,
+        "Draft",
+        Some(&PlanEvent::new("Note", None)),
+        &["File".to_owned(), "Reopen".to_owned()],
+        None,
+    );
+
+    assert_eq!(plan, PlanAnswer::Exceeded);
+    let from = from.lock().unwrap();
+    let distinct: std::collections::HashSet<&String> = from.iter().collect();
+    assert_eq!(
+        distinct.len(),
+        from.len(),
+        "a snapshot was advanced by the fields event twice: {from:?}"
+    );
+}

@@ -779,16 +779,20 @@ impl Machine {
     /// one. The engine counts such a guard as failed and such a reduction as keeping the context, which is not what the
     /// server does, so a prediction or a plan through that edge would be a guess.
     pub fn rests_on_unhandled_rule(&self, state: &str, trigger: &str) -> bool {
-        self.matches(state, trigger).iter().any(|e| {
-            let reduction =
-                matches!(&e.reduce, Some(Reduction::Custom(name)) if !self.custom.reducers.contains_key(name));
-            let requirement = self
-                .context_validators
-                .get(&e.to)
-                .and_then(|v| v.invariant.as_ref())
-                .is_some_and(|r| self.names_unhandled(r));
-            e.guard.as_ref().is_some_and(|g| self.names_unhandled(g)) || reduction || requirement
-        })
+        // Asked for every edge of every snapshot a plan expands, so it walks the edges without collecting them.
+        self.edges
+            .iter()
+            .filter(|e| e.from == state && e.trigger == trigger)
+            .any(|e| {
+                let reduction =
+                    matches!(&e.reduce, Some(Reduction::Custom(name)) if !self.custom.reducers.contains_key(name));
+                let requirement = self
+                    .context_validators
+                    .get(&e.to)
+                    .and_then(|v| v.invariant.as_ref())
+                    .is_some_and(|r| self.names_unhandled(r));
+                e.guard.as_ref().is_some_and(|g| self.names_unhandled(g)) || reduction || requirement
+            })
     }
 
     // Whether any transition fires on `trigger`: a trigger the IR declares and no transition uses has none.

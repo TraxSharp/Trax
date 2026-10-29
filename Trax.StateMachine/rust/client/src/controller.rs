@@ -1381,44 +1381,45 @@ impl<S: MachineServer> Actor<S> {
     }
 
     fn pump(&mut self) {
-        if self.sending || self.disposed || self.error.is_some() {
+        if self.sending || self.disposed || self.error.is_some() || self.id.is_none() || self.confirmed.is_none() {
             return;
         }
-        let (Some(id), Some(confirmed)) = (self.id.clone(), self.confirmed.clone()) else {
-            return;
-        };
         let Some(next) = self.queue.first() else {
             // Nothing is being sent: a sync plans its next event from what the server confirmed.
-            self.step_sync(&confirmed);
+            self.step_sync();
             return;
         };
-        self.sending = true;
         let entry = next.entry;
-
         let request = match &next.request {
             Some(request) => request.clone(),
             None => {
-                // An event bound to the effect is sent without a prediction: what it leads to depends on the effect. So is
-                // one that rests on a custom rule the client cannot evaluate, rather than a guess the server would refuse.
-                let predicted = if !self.predicts(&confirmed.state, &next.trigger) {
-                    None
-                } else {
-                    self.machine
-                        .advance(&confirmed, &next.trigger, next.input.as_ref())
-                        .ok()
-                };
-                let request = EventRequest {
-                    id,
-                    trigger: next.trigger.clone(),
-                    input: next.input.clone(),
-                    request_id: (self.new_request_id)(),
-                    client_result: predicted.as_ref().map(|s| self.machine.serialize(s)),
-                };
+                let request = self.first_request();
                 self.queue[0].request = Some(request.clone());
                 request
             }
         };
+        self.sending = true;
         self.deliver(entry, request, 0);
+    }
+
+    // The request that first sends the event at the head of the queue, with its prediction from what the server
+    // confirmed. An event bound to the effect is sent without one: what it leads to depends on the effect. So is one
+    // that rests on a custom rule the client cannot evaluate, rather than a guess the server would refuse.
+    fn first_request(&mut self) -> EventRequest {
+        let request_id = (self.new_request_id)();
+        let next = &self.queue[0];
+        let predicted = self.confirmed.as_ref().and_then(|confirmed| {
+            self.predicts(&confirmed.state, &next.trigger)
+                .then(|| self.machine.advance(confirmed, &next.trigger, next.input.as_ref()).ok())
+                .flatten()
+        });
+        EventRequest {
+            id: self.id.clone().unwrap_or_default(),
+            trigger: next.trigger.clone(),
+            input: next.input.clone(),
+            request_id,
+            client_result: predicted.as_ref().map(|s| self.machine.serialize(s)),
+        }
     }
 
     fn deliver(&mut self, entry: u64, request: EventRequest, attempt: usize) {
@@ -1565,8 +1566,10 @@ impl<S: MachineServer> Actor<S> {
     // Plans from what the server confirmed, or settles the sync. Runs only while nothing is queued or in flight. The
     // search runs off the controller's task, on the runtime's blocking threads: a wide one would otherwise hold every
     // other message, and on a runtime of one thread the socket's pings with it.
-    fn step_sync(&mut self, confirmed: &Snapshot) {
-        let Some(run) = self.sync.as_mut() else { return };
+    fn step_sync(&mut self) {
+        let (Some(run), Some(confirmed)) = (self.sync.as_mut(), self.confirmed.as_ref()) else {
+            return;
+        };
         if run.in_flight.is_some() || run.awaiting_read || run.planning {
             return;
         }
