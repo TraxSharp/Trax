@@ -64,11 +64,15 @@ that reads as a deferral is not.
 dotnet test
 ```
 
-The machine unit tests drive a fake `INodeRunner` and spawn no process at all. Only the
+The machine unit tests drive a fake `INodeRunner` and spawn no process at all. The
 byte-parity integration test and `MachineGenerateFromPackedToolTests` spawn real node, and they
 skip themselves at runtime when node is not on PATH, which is what lets the suite run without
 node installed. The second packs this folder's tool, which bundles the engine's generators
 into it, so it also skips until `npm ci --ignore-scripts` has run in `Trax.StateMachine/ts`.
 Under CI (`CI` set) both fail instead of skipping, since CI installs node and the engine.
+`OperationsConformanceTests` spawns node too, to run the C# operations client through
+`Trax.StateMachine/conformance/operations/`, and skips or fails the same way; it also fails when the operations
+clients committed for that kit are not what `trax client --operations` generates today, so a change to either
+emitter regenerates them (the kit's `PROTOCOL.md` has the commands).
 Packing (`dotnet pack`, and CI's pack step) needs both, and fails saying so. `NodeRunnerTests` does
 spawn a real process, using `dotnet` as a stand-in executable.
