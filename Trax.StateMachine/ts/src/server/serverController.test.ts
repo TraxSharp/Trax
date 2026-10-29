@@ -284,6 +284,26 @@ describe('ServerMachineController', () => {
     expect(server.events[2].request.requestId).not.toBe(server.events[0].request.requestId);
   });
 
+  it('retry while a later event is in flight resends nothing, and the failed one is never sent after it', async () => {
+    const { server, controller } = await ready();
+
+    void controller.send('Coin', { coin: 'quarter' });
+    const later = controller.send('Push');
+    await flushMicrotasks();
+    server.events[0].fail();
+    await flushMicrotasks();
+    expect(server.events).toHaveLength(2);
+
+    const retried = await controller.retry();
+    expect(retried).toMatchObject({ outcome: 'failed', problem: { code: 'NOTHING_TO_RETRY' } });
+    server.events[1].resolve({ kind: 'problem', code: 'GUARD_FAILED', message: 'no' });
+    expect(await later).toMatchObject({ outcome: 'refused' });
+    await flushMicrotasks();
+
+    expect(server.events).toHaveLength(2);
+    expect(controller.get().pending).toBe(false);
+  });
+
   it('a later confirmed event supersedes a failed one: retry resends nothing', async () => {
     const { server, controller } = await ready();
 

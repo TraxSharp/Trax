@@ -71,8 +71,9 @@ input, or absent. The client sends its prediction as `clientResult`, except for 
 effect or one with an edge out of the state it fires from that rests on a custom rule it holds no handler for (a custom
 guard, a custom reduction, or a custom requirement of the state it enters): it sends those with none, predicts nothing
 after them until they answer, and sends one even when its own engine would refuse it. **`retry`** resends what last
-failed under the same request id. Both are answered with what the send
-came to:
+failed under the same request id. It resends nothing, and answers `NOTHING_TO_RETRY`, once a later event has been
+confirmed or while one is queued or in flight: the failed event would reach the host after it. Both are answered with
+what the send came to:
 
 ```json
 { "id": 4, "outcome": "confirmed", "state": "Unlocked", "revision": 4 }

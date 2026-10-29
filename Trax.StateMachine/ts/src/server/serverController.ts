@@ -294,7 +294,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
    * Resends what last failed (a transport failure, or `SERVER_OUTDATED` past every retry) under the same requestId,
    * so the server replays its recorded result if the first attempt did arrive: the `start` that creates the instance
    * while it has none, else the last event that failed, unless a later event has been confirmed since, which
-   * supersedes it (resending it then would apply it out of order). A retried start settles `confirmed` with the
+   * supersedes it, or is queued or in flight now (resending it then would apply it out of order, predicted from a state
+   * the server has moved past): either answers `NOTHING_TO_RETRY`. A retried start settles `confirmed` with the
    * instance's first snapshot.
    */
   retry(): Promise<SendOutcome> {
@@ -313,6 +314,15 @@ export class ServerMachineController<Spec extends MachineSpec> {
       return Promise.resolve({
         outcome: 'failed',
         problem: refusal(ClientProblemCode.NothingToRetry, 'No event has failed since the last one was retried.'),
+      });
+    // Every event in the queue was sent after the one that failed; it would go out behind them.
+    if (this.queue.length > 0)
+      return Promise.resolve({
+        outcome: 'failed',
+        problem: refusal(
+          ClientProblemCode.NothingToRetry,
+          'A later event is still being sent; the failed one cannot be resent after it.',
+        ),
       });
     this.lastFailed = null;
     return this.enqueue({ trigger: request.trigger, input: request.input === undefined ? [] : [request.input], request });
