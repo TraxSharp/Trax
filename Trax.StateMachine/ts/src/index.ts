@@ -38,6 +38,8 @@ export {
 // SnapshotMachine. Illegal (state, context) pairs are rejected rather than represented.
 
 export { SnapshotMachine } from './machine';
+// The planner: the events that bring a snapshot to a target state with a page's fields applied.
+export type { PlannedEvent, PlanRequest, PlanResult } from './plan';
 
 // ── 3. The typed view ─────────────────────────────────────────────────────────────────────────────
 // The same engine with one machine's alphabet as types: `context` is discriminated by `state`, and a

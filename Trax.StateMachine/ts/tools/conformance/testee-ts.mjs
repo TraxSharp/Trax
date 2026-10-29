@@ -56,6 +56,13 @@ export function createTestee(engine) {
         : { result: "error", code: result.code };
     },
     serialize: (r, core) => ({ wire: core.serialize(r.snapshot) }),
+    plan: (r, core) =>
+      core.plan(r.snapshot, {
+        target: r.target,
+        fields: r.fields ?? null,
+        navigation: r.navigation,
+        ...(r.maxDepth === undefined ? {} : { maxDepth: r.maxDepth }),
+      }),
     canonical: (r) => {
       const context = r.context !== undefined
         ? JSON.parse(r.context)

@@ -11,6 +11,7 @@ import type {
   TransitionDefinition,
 } from "./types";
 import { storedTextProblems, unstorable } from "./storedText";
+import { searchPlan, type PlanRequest, type PlanResult } from "./plan";
 
 /**
  * Interprets a {@link MachineDefinition} over {@link Snapshot}s — the TypeScript half of the
@@ -437,6 +438,21 @@ export class SnapshotMachine<S extends string, T extends string> {
       if (t.from === snapshot.state && !this.outcomeTriggers.has(t.trigger))
         seen.add(t.trigger);
     return [...seen];
+  }
+
+  /**
+   * The events that take `snapshot` to the state `target` with the fields event applied: what a client sends to bring
+   * the server to where a page that ran ahead of it is. Breadth first, the fields event first and then `navigation` in
+   * the order given, each through `advance`, never visiting a canonical wire twice, so every engine answers the same
+   * plan. An edge on a custom rule this machine holds no handler for is not tried; when nothing else reaches the target,
+   * the answer is `undetermined` with the first such edge. Never throws.
+   */
+  plan(snapshot: Snapshot, request: PlanRequest<S, T>): PlanResult<T> {
+    return searchPlan(
+      this as unknown as SnapshotMachine<string, string>,
+      snapshot,
+      request,
+    ) as PlanResult<T>;
   }
 
   /** The language-neutral structure (sorted ordinally) — the value the cross-language golden compares. */
