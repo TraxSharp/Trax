@@ -225,6 +225,36 @@ public class ClientSendTests
     }
 
     [Test]
+    public async Task A_retried_start_whose_answer_stops_the_controller_settles_as_stopped()
+    {
+        var server = new StepServer();
+        using var controller = Open(
+            server,
+            id: null,
+            retryDelays: [],
+            predictor: MachinePredictor.FromIr(Turnstile)
+        );
+        var start = controller.StartAsync();
+        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetException(
+            new HttpRequestException("dropped")
+        );
+        await start.WaitAsync(Wait);
+
+        var retry = controller.RetryAsync();
+        // A state this client's machine does not have: the answer stops the controller as CLIENT_OUTDATED.
+        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(At(1, "Nowhere"), "i-1")
+        );
+
+        (await retry.WaitAsync(Wait))
+            .Should()
+            .BeOfType<SendOutcome.Stopped>()
+            .Which.Error.Code.Should()
+            .Be("CLIENT_OUTDATED");
+        controller.View.Status.Should().Be(MachineStatus.Stopped);
+    }
+
+    [Test]
     public async Task A_send_and_a_sync_before_start_wait_for_it_and_then_go_out()
     {
         var server = new StepServer();

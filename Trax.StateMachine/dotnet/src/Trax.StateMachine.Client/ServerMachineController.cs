@@ -657,7 +657,6 @@ public sealed class ServerMachineController : IDisposable
             if (problem.Code == ClientOutdated)
             {
                 Stop(new MachineError(ClientOutdated, problem.Message));
-                SettleStart(new SendOutcome.Stopped(_error!));
                 return;
             }
             _problem = Refusal(problem.Code, problem.Message);
@@ -687,6 +686,9 @@ public sealed class ServerMachineController : IDisposable
         // The stream's first event is the instance as it is then, so a write between the answer and the subscription
         // reaches it there; the answer is the snapshot to show until then.
         Accept(answer.Snapshot!, Source.Answer, out var unreadable);
+        // A snapshot this client's machine cannot read stopped the controller, and settled the start with it.
+        if (_error is not null)
+            return;
         if (unreadable is not null)
         {
             _problem = unreadable;
@@ -1368,6 +1370,7 @@ public sealed class ServerMachineController : IDisposable
         Publish();
         foreach (var queued in stranded)
             queued.Settle.TrySetResult(new SendOutcome.Stopped(error));
+        SettleStart(new SendOutcome.Stopped(error));
         WakeSyncs();
         Emit();
     }
