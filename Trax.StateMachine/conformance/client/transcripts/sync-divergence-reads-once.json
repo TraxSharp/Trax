@@ -1,0 +1,29 @@
+{
+  "about": "A CLIENT_DIVERGENCE starts a read of its own, and the sync plans again from that read rather than reading a second time: the request after the read is the next event.",
+  "machine": "wizard",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "begin": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "update": "$id: UUID!, $input: UpdateInput!, $requestId: String!, $clientResult: String",
+    "next": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "back": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "skip": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "send": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Details", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "view": { "status": "ready", "unsaved": false } },
+    { "client": "sync", "target": "Review", "fields": { "trigger": "Update", "input": { "email": "ada@example.com", "name": "Ada" } }, "navigation": ["Begin", "Next", "Back"], "as": "s" },
+    { "request": "next", "answer": { "problem": { "code": "CLIENT_DIVERGENCE", "message": "The engines disagree." } } },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 2, "state": "Details", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "request": "next", "answer": { "id": "i-1", "revision": 3, "state": "Review", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "await": "s", "expect": { "outcome": "synced", "state": "Review", "revision": 3 } },
+    { "view": { "unsaved": false, "state": "Review", "revision": 3 } }
+  ]
+}

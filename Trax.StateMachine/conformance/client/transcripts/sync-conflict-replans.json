@@ -1,0 +1,29 @@
+{
+  "about": "A CONFLICT says the host holds something else: the sync reads the instance once and plans again from what it holds, here sending the fields the host lost before Next.",
+  "machine": "wizard",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "begin": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "update": "$id: UUID!, $input: UpdateInput!, $requestId: String!, $clientResult: String",
+    "next": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "back": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "skip": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "send": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Details", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "view": { "status": "ready", "unsaved": false } },
+    { "client": "sync", "target": "Review", "fields": { "trigger": "Update", "input": { "email": "ada@example.com", "name": "Ada" } }, "navigation": ["Begin", "Next", "Back"], "as": "s" },
+    { "request": "next", "answer": { "problem": { "code": "CONFLICT", "message": "Another write came first." } } },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 3, "state": "Details", "context": {} } },
+    { "request": "update", "answer": { "id": "i-1", "revision": 4, "state": "Details", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "request": "next", "answer": { "id": "i-1", "revision": 5, "state": "Review", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "await": "s", "expect": { "outcome": "synced", "state": "Review", "revision": 5 } }
+  ]
+}

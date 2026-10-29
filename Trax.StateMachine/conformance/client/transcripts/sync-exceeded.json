@@ -1,0 +1,37 @@
+{
+  "about": "A host that never keeps the fields makes every plan start with Update again: the sync sends twice the machine's states in events, eight, and settles exceeded without sending a ninth.",
+  "machine": "wizard",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "begin": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "update": "$id: UUID!, $input: UpdateInput!, $requestId: String!, $clientResult: String",
+    "next": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "back": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "skip": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "send": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Details", "context": {} } },
+    { "view": { "status": "ready", "unsaved": false } },
+    { "client": "sync", "target": "Review", "fields": { "trigger": "Update", "input": { "email": "ada@example.com", "name": "Ada" } }, "navigation": ["Begin", "Next", "Back"], "as": "s" },
+    { "request": "update", "answer": { "id": "i-1", "revision": 2, "state": "Details", "context": {} } },
+    { "request": "update", "answer": { "id": "i-1", "revision": 3, "state": "Details", "context": {} } },
+    { "request": "update", "answer": { "id": "i-1", "revision": 4, "state": "Details", "context": {} } },
+    { "request": "update", "answer": { "id": "i-1", "revision": 5, "state": "Details", "context": {} } },
+    { "request": "update", "answer": { "id": "i-1", "revision": 6, "state": "Details", "context": {} } },
+    { "request": "update", "answer": { "id": "i-1", "revision": 7, "state": "Details", "context": {} } },
+    { "request": "update", "answer": { "id": "i-1", "revision": 8, "state": "Details", "context": {} } },
+    { "request": "update", "answer": { "id": "i-1", "revision": 9, "state": "Details", "context": {} } },
+    { "await": "s", "expect": { "outcome": "exceeded" } },
+    { "view": { "unsaved": true, "pending": false } },
+    { "client": "send", "trigger": "Update", "input": { "email": "ada@example.com", "name": "Ada" }, "as": "u" },
+    { "request": "update", "answer": { "id": "i-1", "revision": 10, "state": "Details", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "await": "u", "expect": { "outcome": "confirmed", "revision": 10 } }
+  ]
+}
