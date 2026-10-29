@@ -9,7 +9,7 @@ import type {
   RuleSource,
   ValueSchema,
 } from "../rules/interpreter";
-import type { IrDocument } from "../rules/irMachine";
+import { checkIr, type IrDocument } from "../rules/irMachine";
 
 /** A value's type, as far as the IR describes it. */
 export type TypeRef =
@@ -201,6 +201,15 @@ export const own = <T>(map: Readonly<Record<string, T>> | undefined, key: string
   map !== undefined && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
 
 /**
+ * The names a machine's TypeScript twin module declares or imports beside the const named after the machine (its id
+ * in camelCase): a machine whose id is one of them would redeclare it. `sharedOutput<n>` is a schema several of its
+ * outcomes share. Trax.Cli's `trax client` refuses the same names for the modules it writes around the twin
+ * (`MachineModuleNames` in ClientGenerator.cs).
+ */
+export const TWIN_MODULE_NAMES: readonly string[] = ["ir", "irHash", "typedMachineFromIr"];
+const SHARED_OUTPUT = /^sharedOutput\d+$/;
+
+/**
  * Refuses an IR whose names cannot be written as code: the id names files and every type, a state or trigger names a
  * type and a key, and an outcome is `<State>.<kind>`, each half a part of a type name. The IR is data a host
  * exported, so it is checked before any of it is written.
@@ -210,6 +219,7 @@ export function checkNames(ir: IrDocument): void {
     throw new Error(
       `The machine id ${JSON.stringify(ir.id)} is not kebab-case (lowercase letters and digits in words joined by '-'), so it cannot name generated code.`,
     );
+
   const names: [string, unknown[]][] = [
     ["state", ir.states],
     ["trigger", ir.triggers],
@@ -252,6 +262,19 @@ export function checkNames(ir: IrDocument): void {
   if (hasProtoKey(ir))
     throw new Error(
       `The machine '${ir.id}' has a key "__proto__", which the twin's object literal would read as its prototype.`,
+    );
+  // What no engine reads is refused as the engine refuses it: a field `constructor` would write a view that throws
+  // when it is loaded.
+  checkIr(ir);
+}
+
+/** Refuses a machine whose id the TypeScript twin cannot name its const after: {@link checkNames}, then this. */
+export function checkTwinNames(ir: IrDocument): void {
+  checkNames(ir);
+  const name = camel(ir.id);
+  if (TWIN_MODULE_NAMES.includes(name) || SHARED_OUTPUT.test(name))
+    throw new Error(
+      `The machine id '${ir.id}' is written as '${name}', a name its twin module already declares. Rename the machine.`,
     );
 }
 

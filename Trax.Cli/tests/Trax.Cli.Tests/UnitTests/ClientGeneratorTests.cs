@@ -199,6 +199,8 @@ public partial class ClientGeneratorTests
     [TestCase("trax-socket")]
     [TestCase("use-server-machine")]
     [TestCase("ir")]
+    [TestCase("ir-hash")]
+    [TestCase("shared-output0")]
     [TestCase("queue-microtask")]
     public void A_machine_named_as_a_name_its_client_module_uses_is_refused(string id)
     {

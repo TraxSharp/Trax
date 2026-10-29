@@ -444,6 +444,34 @@ describe("generated names", () => {
     expect(() => generateMachineFactory({ ...ir, id: "turnstile\n// x" })).toThrow(/kebab-case/);
   });
 
+  // The twin module declares `ir`, `irHash` and, for a schema several outcomes share, `sharedOutput<n>`, beside the
+  // const named after the machine: a machine named as one of them would redeclare it.
+  it.each(["ir", "ir-hash", "typed-machine-from-ir"])("refuses the id %s, which its twin module declares", (id) => {
+    expect(() => generateMachineFactory({ ...ir, id })).toThrow("a name its twin module already declares");
+    expect(() => generateContextTypes({ ...ir, id })).toThrow("a name its twin module already declares");
+  });
+
+  it("refuses the id shared-output0, which a twin with a shared output schema declares", () => {
+    const output = { fields: [{ name: "n", type: "integer", nullable: false, constraints: [] }] };
+    const outcomes = {
+      "Locked.done": { from: "Locked", outcome: "done", output, edges: [] },
+      "Unlocked.done": { from: "Unlocked", outcome: "done", output, edges: [] },
+    } as unknown as IrDocument["outcomes"];
+
+    expect(generateMachineFactory({ ...ir, outcomes })).toContain("const sharedOutput0 = ");
+    expect(() => generateMachineFactory({ ...ir, id: "shared-output0", outcomes })).toThrow(
+      "The machine id 'shared-output0' is written as 'sharedOutput0', a name its twin module already declares.",
+    );
+  });
+
+  it("refuses a field no engine holds before writing a twin that would throw on import", () => {
+    const marked = JSON.parse(JSON.stringify(ir)) as IrDocument;
+    marked.context.Unlocked!.fields[0]!.name = "constructor";
+
+    expect(() => generateMachineFactory(marked)).toThrow("names the field 'constructor', which no engine holds");
+    expect(() => generateContextTypes(marked)).toThrow("names the field 'constructor', which no engine holds");
+  });
+
   it("writes each state of the union as a string literal", () => {
     expect(generateContextTypes(ir)).toContain('export type TurnstileState = "Locked" | "Unlocked";');
   });

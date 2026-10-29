@@ -92,7 +92,7 @@ internal sealed partial class ClientGenerator
                 TypeScript.Identifier(TypeScript.Camel(machine.Id), "machine"),
                 machine.Id
             );
-            if (MachineModuleNames.Contains(camel))
+            if (MachineModuleNames.Contains(camel) || SharedOutput().IsMatch(camel))
                 throw new InvalidOperationException(
                     $"The machine '{machine.Id}' is written as '{camel}', a name its generated modules use. "
                         + "Rename it on the host."
@@ -577,7 +577,8 @@ internal sealed partial class ClientGenerator
     }
 
     // The names a machine's client module and its twin declare or import beside the machine's own, which its camel id
-    // would hide or redeclare.
+    // would hide or redeclare. The twin's (ir, irHash, typedMachineFromIr, sharedOutput<n>) are the engine's
+    // TWIN_MODULE_NAMES, which trax machine generate refuses through the engine.
     private static readonly HashSet<string> MachineModuleNames = new(StringComparer.Ordinal)
     {
         "server",
@@ -604,6 +605,10 @@ internal sealed partial class ClientGenerator
         "irHash",
         "typedMachineFromIr",
     };
+
+    // A schema several of a twin's outcomes share is declared as sharedOutput0, sharedOutput1, ...
+    [System.Text.RegularExpressions.GeneratedRegex(@"\AsharedOutput[0-9]+\z")]
+    private static partial System.Text.RegularExpressions.Regex SharedOutput();
 
     // The names the client's own modules export from the index, which no machine, train or type may take.
     private static readonly string[] RuntimeNames =

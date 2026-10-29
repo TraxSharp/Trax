@@ -6,11 +6,12 @@
 // Object shapes are emitted as `type` aliases, not `interface`, so they carry the implicit index signature
 // that `MachineSpec` (Record<string, ...>) requires.
 
-import { checkNames, camel, escapeBidi, machineModel, pascal, type FieldModel, type TypeRef, type ValueRef } from "../codegen/model";
+import { checkTwinNames, camel, escapeBidi, machineModel, pascal, type FieldModel, type TypeRef, type ValueRef } from "../codegen/model";
 import { irFormatVersion } from "./irFormat";
 import type { IrDocument } from "./irMachine";
 
 export function generateContextTypes(ir: IrDocument): string {
+  checkTwinNames(ir);
   const model = machineModel(ir);
   const machine = model.pascal;
   const lines: string[] = [
@@ -97,7 +98,7 @@ export function generateMachineFactory(
   ir: IrDocument,
   options: MachineFactoryOptions = {},
 ): string {
-  checkNames(ir);
+  checkTwinNames(ir);
   const machine = pascal(ir.id);
   const importStyle = options.importStyle ?? "relative";
   const specifier = options.specifier ?? "@traxsharp/state-machine";
