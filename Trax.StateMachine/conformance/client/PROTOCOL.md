@@ -94,10 +94,12 @@ what the send came to:
 `fields` (`trigger` and `input`, or null) applied, moving through the triggers in `navigation`. It plans with the
 engine's planner (`../PROTOCOL.md`, `plan`) from the snapshot the host last confirmed, sends the first event of the
 plan as `send` does, and plans again from each answer until the plan is empty. A refusal (`GUARD_FAILED`,
-`NO_TRANSITION`, `CLIENT_DIVERGENCE`, `CONFLICT`) reads the instance once and plans again; a second one settles the sync
-`refused`. An `undetermined` plan sends its `events`, then its `trigger` unpredicted. A sync started while another
-runs supersedes it: the older settles `superseded` once the event it has in flight answers, and sends nothing more.
-No sync sends more than twice the machine's states in events; past that it settles `exceeded`.
+`NO_TRANSITION`, `CLIENT_DIVERGENCE`, `CONFLICT`) reads the instance once and plans again (a `CLIENT_DIVERGENCE`
+starts that read itself); a second refusal in the same sync settles it `refused`. A sync plans only when nothing is
+queued, so an event sent meanwhile goes out first. An `undetermined` plan sends its `events`, then its `trigger` unpredicted. A sync started while another
+runs supersedes it: the older settles `superseded` once the event it has in flight answers, and sends nothing more;
+one still waiting when the client stops or is disposed settles `superseded` too. No sync sends more than twice the
+machine's states in events, the unpredicted ones counted; past that it settles `exceeded`.
 
 ```json
 { "id": 6, "op": "sync", "target": "Review", "fields": { "trigger": "Update", "input": { ... } }, "navigation": ["Begin", "Next", "Back"] }

@@ -116,20 +116,24 @@ Every engine answers the same plan, so the search is fixed:
 - **Invalid first.** A `target` that is not a state answers `invalid` with `target`. Then the fields trigger, then each
   navigation trigger in order: one the machine does not have, one bound to the effect, an outcome, a timer, or a
   navigation trigger equal to the fields trigger answers `invalid` with that `trigger`.
+- **Wires without nulls.** Wherever the search compares wires, it compares them with every context member whose value is
+  null removed: a host omits such members, so a snapshot it confirmed never carries them.
 - **The goal.** A snapshot is the goal when its state is `target` and, with `fields` given, advancing it by the fields
-  event transitions to the same wire. A fields event the target state refuses never reaches the goal.
+  event transitions to the same wire. A fields event the target state refuses, or one that rests there on a custom rule
+  the engine holds no handler for, never reaches the goal.
 - **Breadth first, in the caller's order.** From each snapshot the edges are tried in a fixed order: the fields event
   first, then `navigation` as given, each through `advance`. A refused edge is skipped. A snapshot whose wire was seen
   is not visited again. The start is the goal test's first case; after it, each new snapshot is tested as it is
   reached, and the first that is the goal ends the search with the events on its path. A plan never depends on the
   order an engine lists its transitions in.
 - **Depth.** A snapshot reached by `maxDepth` events is not expanded, and the search answers `exceeded` rather than
-  `unreachable` when it ends without a plan after leaving one unexpanded, or after expanding 10 000 snapshots.
+  `unreachable` when it ends without a plan after leaving one unexpanded, or with a snapshot still waiting after 10 000
+  expansions (one that runs out of snapshots at exactly 10 000 is `unreachable`).
 - **Custom rules.** An edge whose transition rests on a custom rule the engine holds no handler for (a custom guard, a
   custom reduction, or a custom requirement of the state it enters) is not tried. The first such edge the search meets
   is kept: when the search ends without a plan, the answer is `undetermined` with that `trigger` and `events`, the
-  path to the snapshot it leaves from. A client sends those, then that event unpredicted, and plans again from the
-  answer.
+  path to the snapshot it leaves from, even when a limit was also reached. A client sends those, then that event
+  unpredicted (with the fields input when it is the fields trigger), and plans again from the answer.
 
 **`end`** is the last request. The testee answers `{ "id" }` and exits.
 
