@@ -78,7 +78,8 @@ export interface UseServerMachineResult<Spec extends MachineSpec> {
   unsaved: boolean;
   /**
    * Brings the server to `target` with the fields event applied, moving through `navigation`, one planned event at a
-   * time (`ServerMachineController.syncTo`). Never throws.
+   * time (`ServerMachineController.syncTo`). One that fails in transport runs once more when the browser says it is
+   * back online, unless another `syncTo` was called since. Never throws.
    */
   syncTo(target: StateOf<Spec>, options: SyncOptions<Spec>): Promise<SyncOutcome>;
   /** Whether the twin allows the event from what is shown. False while loading and once stopped. */
@@ -255,11 +256,40 @@ export function useServerMachine<Spec extends MachineSpec>(
     (): Promise<SendOutcome> => (controller ? controller.retry() : Promise.resolve(NOT_READY)),
     [controller],
   );
+  // The last sync that failed in transport, run again once the browser is back online; any later sync replaces it.
+  const offlineSync = useRef<{
+    controller: ServerMachineController<Spec>;
+    target: StateOf<Spec>;
+    options: SyncOptions<Spec>;
+  } | null>(null);
+  const runSync = useCallback(
+    (on: ServerMachineController<Spec>, target: StateOf<Spec>, syncOptions: SyncOptions<Spec>): Promise<SyncOutcome> => {
+      const run = { controller: on, target, options: syncOptions };
+      offlineSync.current = null;
+      return on.syncTo(target, syncOptions).then((outcome) => {
+        if (outcome.outcome === 'failed' && outcome.problem.kind === 'transport' && offlineSync.current === null)
+          offlineSync.current = run;
+        return outcome;
+      });
+    },
+    [],
+  );
   const syncTo = useCallback(
     (target: StateOf<Spec>, syncOptions: SyncOptions<Spec>): Promise<SyncOutcome> =>
-      controller ? controller.syncTo(target, syncOptions) : Promise.resolve(NOT_READY),
-    [controller],
+      controller ? runSync(controller, target, syncOptions) : Promise.resolve(NOT_READY),
+    [controller, runSync],
   );
+  useEffect(() => {
+    const events = globalThis as Partial<Pick<Window, 'addEventListener' | 'removeEventListener'>>;
+    if (!controller || typeof events.addEventListener !== 'function') return;
+    const online = () => {
+      const failed = offlineSync.current;
+      if (failed === null || failed.controller !== controller) return;
+      void runSync(controller, failed.target, failed.options);
+    };
+    events.addEventListener('online', online);
+    return () => events.removeEventListener?.('online', online);
+  }, [controller, runSync]);
   const can = useCallback(
     <T extends TriggerOf<Spec>>(trigger: T, ...input: InputArgs<Spec, T>): boolean =>
       controller ? controller.can(trigger, ...input) : false,

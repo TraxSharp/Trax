@@ -37,6 +37,8 @@ function Gate(props: UseServerMachineOptions & { onRender?: () => void }) {
       <button onClick={() => void m.send('Coin', { coin: 'quarter' })}>coin</button>
       <button onClick={() => void m.send('Push')}>push</button>
       <button onClick={() => void m.retry()}>retry</button>
+      <button onClick={() => void m.syncTo('Locked', { navigation: ['Push'] })}>sync</button>
+      <p data-testid="unsaved">{String(m.unsaved)}</p>
       {m.problem && <p role="alert">{m.problem.code}</p>}
     </div>
   );
@@ -235,6 +237,35 @@ describe('useServerMachine', () => {
     );
     expect(text('state')).toBe('Unlocked');
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('a sync that failed in transport runs again when the browser is back online', async () => {
+    const server = new FakeMachineServer();
+    render(<Gate server={server} id="i-1" newRequestId={sequentialRequestIds()} />);
+    await settle();
+    await settle(() =>
+      server.gets[0].resolve({
+        kind: 'ok',
+        snapshot: serverSnapshot({ state: 'Unlocked', context: { paidWith: 'quarter' } }),
+      }),
+    );
+    await settle(() => screen.getByText('sync').click());
+    expect(server.events).toHaveLength(1);
+    await settle(() => server.events[0].fail());
+    expect(text('unsaved')).toBe('true');
+
+    await settle(() => window.dispatchEvent(new Event('online')));
+    expect(server.events).toHaveLength(2);
+    expect(server.events[1].request.trigger).toBe('Push');
+    await settle(() =>
+      server.events[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2, state: 'Locked', context: {} }) }),
+    );
+    expect(text('state')).toBe('Locked');
+    expect(text('unsaved')).toBe('false');
+
+    // Once it has gone through, coming back online again sends nothing.
+    await settle(() => window.dispatchEvent(new Event('online')));
+    expect(server.events).toHaveLength(2);
   });
 
   it('keeps an unanswered start requestId across a reload, and forgets it once the start answers', async () => {
