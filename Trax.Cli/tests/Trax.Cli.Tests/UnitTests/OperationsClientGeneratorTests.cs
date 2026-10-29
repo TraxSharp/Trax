@@ -169,6 +169,10 @@ public class OperationsClientGeneratorTests
             )
             .And.Contain("answer = await readJson(response, options.maxResponseBytes);")
             .And.Contain("const defaultMaxResponseBytes = 16 * 1024 * 1024;")
+            .And.Contain(
+                "if (/^[\\\\/]{2}/.test(bare.slice(start)))",
+                "a url starting with two slashes either way round names another host on the page's scheme, not a path"
+            )
             .And.NotContain("response.json()");
         Text(files, "index.g.ts")
             .Should()

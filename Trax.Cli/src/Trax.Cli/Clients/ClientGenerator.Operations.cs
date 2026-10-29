@@ -577,11 +577,20 @@ internal sealed partial class ClientGenerator
 
         /**
          * Refuses an absolute `http:` url whose host is not loopback (`localhost`, `127.0.0.0/8`, `::1`), since the
-         * headers would travel in cleartext; a relative url is the page's own origin and is accepted. `allowInsecure`
-         * lifts the refusal, for a network you trust.
+         * headers would travel in cleartext; a relative path is the page's own origin and is accepted. A url starting
+         * with two slashes either way round (`//host/...`, `\\host\...`) is not a path: fetch sends it to that host
+         * over the page's scheme, so it is refused too. `allowInsecure` lifts the refusals, for a network you trust.
          */
         export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean | undefined): void {
           if (allowInsecure) return;
+          // A URL parser drops leading spaces and controls, and tabs and newlines anywhere, before it reads the slashes.
+          const bare = endpoint.replace(/[\t\n\r]/g, "");
+          let start = 0;
+          while (start < bare.length && bare.charCodeAt(start) <= 0x20) start += 1;
+          if (/^[\\/]{2}/.test(bare.slice(start)))
+            throw new Error(
+              `The endpoint ${JSON.stringify(endpoint)} names a host but no scheme, so it is sent over whatever the page was served on. Use https://, a path on the page's own origin, or set allowInsecureTransport when the network is trusted.`,
+            );
           let url: URL;
           try {
             url = new URL(endpoint);

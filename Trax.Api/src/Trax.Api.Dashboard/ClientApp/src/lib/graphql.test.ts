@@ -89,6 +89,15 @@ describe("the generated transport's checks", () => {
     (url) => expect(() => httpTransport({ ...options, url })).not.toThrow(),
   );
 
+  // fetch resolves these against the page, keeping its scheme and taking the host they name.
+  test.each(["//ops.example.com/trax/graphql", "\\\\ops.example.com\\trax", "/\\ops.example.com/g", " //ops.example.com/g", "/\t/ops.example.com/g"])(
+    "refuses the url %j, which names a host but no scheme",
+    (url) => expect(() => httpTransport({ ...options, url })).toThrow("names a host but no scheme"),
+  );
+
+  test("allowInsecureTransport accepts a url that names a host but no scheme", () =>
+    expect(() => httpTransport({ ...options, url: "//ops.lan/trax/graphql", allowInsecureTransport: true })).not.toThrow());
+
   test("refuses a cleartext url to another host", () =>
     expect(() => httpTransport({ ...options, url: "http://ops.example.com/trax/graphql" })).toThrow("is not over TLS"));
 
