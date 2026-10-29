@@ -17,7 +17,8 @@ public sealed record TraxClientOptions
 
     /// <summary>
     /// Delays before subscribing again after the socket dropped a stream. The last repeats for as long as the stream
-    /// is followed. <see cref="TraxClient.DefaultResubscribeDelays"/> when null or empty.
+    /// is followed; they start over once a subscription delivers a frame. <see cref="TraxClient.DefaultResubscribeDelays"/>
+    /// when null or empty.
     /// </summary>
     public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
 
@@ -244,7 +245,6 @@ public sealed class TraxClient
                     return;
                 resumed = _interrupted;
                 _interrupted = false;
-                _attempt = 0;
             }
             if (resumed)
                 Deliver(new TraxStreamEvent<TResult>.Resumed());
@@ -270,6 +270,10 @@ public sealed class TraxClient
                 End(answer.Errors, answer.Failure);
                 return;
             }
+            // A host that accepts the subscribe and drops it at once has not settled down; one that delivered a frame has,
+            // and the resubscribe delays start over.
+            lock (_gate)
+                _attempt = 0;
             Deliver(new TraxStreamEvent<TResult>.Next(answer.Data!));
         }
 

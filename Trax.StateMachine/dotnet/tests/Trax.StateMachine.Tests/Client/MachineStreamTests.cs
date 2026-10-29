@@ -32,7 +32,8 @@ public class MachineStreamTests
     };
 
     private static (HandSocket Socket, Channel<StreamMessage> Messages, IDisposable Stream) Follow(
-        IReadOnlyCollection<string>? terminal = null
+        IReadOnlyCollection<string>? terminal = null,
+        IReadOnlyList<TimeSpan>? delays = null
     )
     {
         var socket = new HandSocket();
@@ -43,7 +44,7 @@ public class MachineStreamTests
                 Endpoint = new Uri("https://host/trax/graphql"),
                 Machine = Turnstile,
                 Socket = socket,
-                ResubscribeDelays = [TimeSpan.FromMilliseconds(10)],
+                ResubscribeDelays = delays ?? [TimeSpan.FromMilliseconds(10)],
                 TerminalStreamErrors = terminal,
             }
         );
@@ -224,6 +225,64 @@ public class MachineStreamTests
         var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
         second.Should().NotBeSameAs(first);
         messages.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    private static JsonObject Changed(long revision) =>
+        new()
+        {
+            ["data"] = new JsonObject
+            {
+                ["turnstileChanged"] = new JsonObject
+                {
+                    ["state"] = "Locked",
+                    ["revision"] = revision,
+                    ["context"] = new JsonObject(),
+                },
+            },
+        };
+
+    [Test]
+    public async Task A_stream_that_ends_after_its_first_push_waits_the_next_delay_before_subscribing_again()
+    {
+        // Every new stream's first push is the instance as it is: one that ends after it has not settled down.
+        var (socket, messages, stream) = Follow(
+            delays: [TimeSpan.FromMilliseconds(10), TimeSpan.FromHours(1)]
+        );
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        first.Push(Changed(1));
+        first.Sink.Complete();
+        var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        second.Push(Changed(1));
+        second.Sink.Complete();
+
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+            .Should()
+            .BeOfType<StreamMessage.Changed>();
+        // negative-wait: the second delay is an hour, so nothing should subscribe again; ten first delays pass.
+        await Task.Delay(100);
+        socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task A_stream_that_delivered_a_second_push_starts_the_delays_over()
+    {
+        var (socket, _, stream) = Follow(
+            delays: [TimeSpan.FromMilliseconds(10), TimeSpan.FromHours(1)]
+        );
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        first.Sink.Complete();
+        var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        second.Push(Changed(1));
+        second.Push(Changed(2));
+        second.Sink.Complete();
+
+        (await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+            .Should()
+            .NotBeSameAs(second);
     }
 
     // A socket each subscription is handed to the test through.

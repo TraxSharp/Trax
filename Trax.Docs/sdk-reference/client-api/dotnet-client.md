@@ -93,7 +93,7 @@ public readonly record struct Optional<T>
 | `Subscribe(document, variables, onEvent)` | Follows a subscription until the returned handle is disposed, and calls `onEvent` with each `TraxStreamEvent<TResult>`, one call at a time. Throws `ArgumentException` for a document that is not a subscription, or for variables that do not serialize to a JSON object. An `onEvent` that throws ends its stream: the last call it gets is `Ended`, whose `Failure` names the exception. Other streams go on. |
 | `Transport` | The transport the client sends through. |
 | `DefaultResubscribeDelays` | 1, 2, then 5 seconds: the delays before subscribing again after the socket dropped a stream. |
-| `TraxClientOptions` | `Json`, the serializer options (`TraxJson.Options` when null), which the client reads through a copy that leaves every unset `Optional<T>` out, whatever their resolver; `ResubscribeDelays`, whose last delay repeats for as long as the stream is followed (`DefaultResubscribeDelays` when null or empty); `Time`, the `TimeProvider` the delays run on (the system's when null). |
+| `TraxClientOptions` | `Json`, the serializer options (`TraxJson.Options` when null), which the client reads through a copy that leaves every unset `Optional<T>` out, whatever their resolver; `ResubscribeDelays`, whose last delay repeats for as long as the stream is followed and which start over once a subscription delivers a frame (`DefaultResubscribeDelays` when null or empty); `Time`, the `TimeProvider` the delays run on (the system's when null). |
 
 ### Documents
 
@@ -157,7 +157,7 @@ public readonly record struct Optional<T>
   the result, when the transport has no socket or the socket was disposed, or when `onEvent` throws. Anything else that
   drops the stream, a close, a broken connection, an unanswered ping or a malformed message, is `Interrupted`, said
   once, and the stream is subscribed again after the next of `ResubscribeDelays`, starting over at the first once a
-  subscription starts. `Resumed` follows, before the new subscription's first `Next`; frames sent meanwhile are lost,
+  subscription delivers a frame. `Resumed` follows, before the new subscription's first `Next`; frames sent meanwhile are lost,
   so read again what the stream may have missed. Disposing the handle ends the stream and cancels a pending
   resubscribe.
 - **Optional fields.** A generated variables or input record types a field the host may leave as it is as an

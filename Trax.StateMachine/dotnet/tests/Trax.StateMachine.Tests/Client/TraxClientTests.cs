@@ -395,7 +395,7 @@ public class TraxClientTests
     }
 
     [Test]
-    public async Task The_resubscribe_delays_step_up_and_start_over_once_a_subscription_starts()
+    public async Task The_resubscribe_delays_step_up_and_start_over_once_a_subscription_delivers()
     {
         var socket = new HandSocket();
         var time = new FakeTimeProvider();
@@ -417,9 +417,36 @@ public class TraxClientTests
             current = await socket.Subscriptions.Take(Wait);
         }
 
-        // Started: the next drop waits the first delay again.
+        // Delivered a frame: the next drop waits the first delay again.
+        current.Sink.Started();
+        current.Sink.Next(Frame("WORK_QUEUE"));
+        current.Sink.Error(new IOException("dropped"));
+        time.Advance(TimeSpan.FromSeconds(1));
+        (await socket.Subscriptions.Take(Wait)).Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task A_subscription_that_starts_and_drops_before_a_frame_keeps_stepping_up_the_delays()
+    {
+        // A host that accepts every subscribe and drops it at once would otherwise be subscribed again every second.
+        var socket = new HandSocket();
+        var time = new FakeTimeProvider();
+        using var stream = new TraxClient(
+            Transport(socket),
+            new TraxClientOptions { Time = time }
+        ).Subscribe(Changed, TraxNoVariables.Instance, _ => { });
+        var current = await socket.Subscriptions.Take(Wait);
+        current.Sink.Error(new IOException("dropped"));
+        time.Advance(TimeSpan.FromSeconds(1));
+        current = await socket.Subscriptions.Take(Wait);
+
         current.Sink.Started();
         current.Sink.Error(new IOException("dropped"));
+
+        time.Advance(TimeSpan.FromSeconds(1));
+        (await socket.Subscriptions.TryTake(TimeSpan.FromMilliseconds(200)))
+            .Should()
+            .BeNull("the two second delay has not passed");
         time.Advance(TimeSpan.FromSeconds(1));
         (await socket.Subscriptions.Take(Wait)).Should().NotBeNull();
     }
