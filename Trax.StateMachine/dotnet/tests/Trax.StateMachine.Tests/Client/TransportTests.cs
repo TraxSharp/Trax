@@ -53,7 +53,7 @@ public class TransportTests
         new(
             new GraphQLMachineServerOptions
             {
-                Http = http ?? new HttpClient(),
+                Http = http ?? new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
                 Endpoint = new Uri(endpoint, UriKind.RelativeOrAbsolute),
                 Machine = Turnstile,
                 Socket = new NoSocket(),
@@ -135,12 +135,18 @@ public class TransportTests
         var cleartext = () =>
             Server(
                 "trax/graphql",
-                http: new HttpClient { BaseAddress = new Uri("http://api.example.com/") }
+                http: new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })
+                {
+                    BaseAddress = new Uri("http://api.example.com/"),
+                }
             );
         var tls = () =>
             Server(
                 "trax/graphql",
-                http: new HttpClient { BaseAddress = new Uri("https://api.example.com/") }
+                http: new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })
+                {
+                    BaseAddress = new Uri("https://api.example.com/"),
+                }
             );
 
         cleartext.Should().Throw<ArgumentException>();
@@ -220,7 +226,7 @@ public class TransportTests
             .Be(16 * 1024 * 1024);
         new GraphQLMachineServerOptions
         {
-            Http = new HttpClient(),
+            Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
             Endpoint = new Uri("https://h/graphql"),
             Machine = Turnstile,
             Socket = new NoSocket(),

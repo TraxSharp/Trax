@@ -38,8 +38,11 @@ public sealed record TraxHttpTransportOptions
     /// The client the requests go through. Set its authentication on it, a default header (<c>X-Api-Key</c>,
     /// <c>Authorization</c>) or a delegating handler, as for any other <see cref="System.Net.Http.HttpClient"/>. Its
     /// <see cref="HttpClient.Timeout"/> bounds each request, its body included. Build it on a handler with automatic
-    /// redirects off: a redirect drops only <c>Authorization</c>, so any other header would follow it to the new host.
-    /// An answer from another host than <see cref="Endpoint"/>'s is a <see cref="TraxAnswer.Failure"/>.
+    /// redirects off: a redirect drops only <c>Authorization</c>, so the body and any other header would follow it to
+    /// the new host. A client on an <see cref="HttpClientHandler"/> or <see cref="SocketsHttpHandler"/> that follows
+    /// redirects, <c>new HttpClient()</c> among them, is refused when the transport is built. An answer from another
+    /// host than <see cref="Endpoint"/>'s, through a handler of another kind that followed one, is a
+    /// <see cref="TraxAnswer.Failure"/>.
     /// </summary>
     public required HttpClient Http { get; init; }
 
@@ -90,11 +93,12 @@ public sealed class TraxHttpTransport : ITraxTransport
     /// <summary>Builds the transport.</summary>
     /// <exception cref="ArgumentException">
     /// The endpoint is not <c>https</c> on a host that is not loopback, and
-    /// <see cref="TraxHttpTransportOptions.AllowInsecureTransport"/> is not set.
+    /// <see cref="TraxHttpTransportOptions.AllowInsecureTransport"/> is not set; or the client follows redirects.
     /// </exception>
     public TraxHttpTransport(TraxHttpTransportOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        TransportSecurity.RequireNoRedirects(options.Http, nameof(options));
         TransportSecurity.RequireSecure(
             options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
                 ? options.Endpoint
@@ -195,7 +199,8 @@ public sealed class TraxHttpTransport : ITraxTransport
                     timeout.Token
                 )
                 .ConfigureAwait(false);
-            // A client that follows redirects has already sent the request on; its answer is not the endpoint's.
+            // A handler the transport could not see into followed a redirect: it has already sent the request on,
+            // and its answer is not the endpoint's.
             if (
                 asked is not null
                 && response.RequestMessage?.RequestUri is { IsAbsoluteUri: true } answeredBy

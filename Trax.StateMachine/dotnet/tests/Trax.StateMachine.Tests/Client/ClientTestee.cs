@@ -13,7 +13,7 @@ namespace Trax.StateMachine.Tests.Client;
 /// </summary>
 public sealed class ClientTestee : IAsyncDisposable
 {
-    private readonly HttpClient _http = new();
+    private readonly HttpClient _http = new(new SocketsHttpHandler { AllowAutoRedirect = false });
     private ServerMachineController? _controller;
     private GraphQLSubscriptionSocket? _socket;
 

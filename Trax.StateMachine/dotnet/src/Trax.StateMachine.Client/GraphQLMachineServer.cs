@@ -11,8 +11,10 @@ public sealed record GraphQLMachineServerOptions
     /// <summary>
     /// The client the requests go through. Set its authentication on it, a default header or a delegating handler, as
     /// for any other <see cref="System.Net.Http.HttpClient"/>. Build it on a handler with automatic redirects off: a
-    /// redirect drops only <c>Authorization</c>, so any other header would follow it to the new host. An answer from
-    /// another host than <see cref="Endpoint"/>'s fails the request.
+    /// redirect drops only <c>Authorization</c>, so the body and any other header would follow it to the new host. A
+    /// client on an <see cref="HttpClientHandler"/> or <see cref="SocketsHttpHandler"/> that follows redirects,
+    /// <c>new HttpClient()</c> among them, is refused when the server is built. An answer from another host than
+    /// <see cref="Endpoint"/>'s, through a handler of another kind that followed one, fails the request.
     /// </summary>
     public required HttpClient Http { get; init; }
 
@@ -89,11 +91,13 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// <summary>Builds the server for one machine.</summary>
     /// <exception cref="ArgumentException">
     /// The machine lists no documents, or no <c>changed</c> document, or the endpoint is not <c>https</c> on a host that
-    /// is not loopback and <see cref="GraphQLMachineServerOptions.AllowInsecureTransport"/> is not set.
+    /// is not loopback and <see cref="GraphQLMachineServerOptions.AllowInsecureTransport"/> is not set, or the client
+    /// follows redirects.
     /// </exception>
     public GraphQLMachineServer(GraphQLMachineServerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        TransportSecurity.RequireNoRedirects(options.Http, nameof(options));
         TransportSecurity.RequireSecure(
             options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
                 ? options.Endpoint

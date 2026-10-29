@@ -43,7 +43,7 @@ public class TraxHttpTransportTests
             new TraxHttpTransport(
                 new TraxHttpTransportOptions
                 {
-                    Http = new HttpClient(),
+                    Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
                     Endpoint = new Uri(endpoint),
                 }
             );
@@ -58,7 +58,10 @@ public class TraxHttpTransportTests
             new(
                 new TraxHttpTransportOptions
                 {
-                    Http = new HttpClient { BaseAddress = new Uri(baseAddress) },
+                    Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })
+                    {
+                        BaseAddress = new Uri(baseAddress),
+                    },
                     Endpoint = new Uri("trax/graphql", UriKind.Relative),
                 }
             );

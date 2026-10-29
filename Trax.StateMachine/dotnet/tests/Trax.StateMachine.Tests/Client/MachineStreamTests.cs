@@ -37,7 +37,7 @@ public class MachineStreamTests
         var server = new GraphQLMachineServer(
             new GraphQLMachineServerOptions
             {
-                Http = new HttpClient(),
+                Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
                 Endpoint = new Uri("https://host/trax/graphql"),
                 Machine = Turnstile,
                 Socket = socket,
