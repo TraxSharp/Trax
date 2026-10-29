@@ -78,8 +78,10 @@ export interface UseServerMachineResult<Spec extends MachineSpec> {
   unsaved: boolean;
   /**
    * Brings the server to `target` with the fields event applied, moving through `navigation`, one planned event at a
-   * time (`ServerMachineController.syncTo`). One that fails in transport runs once more when the browser says it is
-   * back online, unless another `syncTo` was called since. Never throws.
+   * time (`ServerMachineController.syncTo`). One that fails in transport runs again when the browser says it is back
+   * online, unless `send` or `syncTo` was called since: it first resends the event that failed under its first
+   * requestId (`retry`), so an event that did reach the server is not applied twice, then syncs on from the answer. A
+   * resend that fails in transport again waits for the next time the browser is back online. Never throws.
    */
   syncTo(target: StateOf<Spec>, options: SyncOptions<Spec>): Promise<SyncOutcome>;
   /** Whether the twin allows the event from what is shown. False while loading and once stopped. */
@@ -247,16 +249,8 @@ export function useServerMachine<Spec extends MachineSpec>(
     () => (controller ? controller.get() : (LOADING as unknown as ServerMachineView<Spec>)),
   );
 
-  const send = useCallback(
-    <T extends TriggerOf<Spec>>(trigger: T, ...input: InputArgs<Spec, T>): Promise<SendOutcome> =>
-      controller ? controller.send(trigger, ...input) : Promise.resolve(NOT_READY),
-    [controller],
-  );
-  const retry = useCallback(
-    (): Promise<SendOutcome> => (controller ? controller.retry() : Promise.resolve(NOT_READY)),
-    [controller],
-  );
-  // The last sync that failed in transport, run again once the browser is back online; any later sync replaces it.
+  // The last sync that failed in transport, run again once the browser is back online; any later send or sync drops
+  // it, so the replay never undoes what the page did after it.
   const offlineSync = useRef<{
     controller: ServerMachineController<Spec>;
     target: StateOf<Spec>;
@@ -274,6 +268,18 @@ export function useServerMachine<Spec extends MachineSpec>(
     },
     [],
   );
+  const send = useCallback(
+    <T extends TriggerOf<Spec>>(trigger: T, ...input: InputArgs<Spec, T>): Promise<SendOutcome> => {
+      if (!controller) return Promise.resolve(NOT_READY);
+      offlineSync.current = null;
+      return controller.send(trigger, ...input);
+    },
+    [controller],
+  );
+  const retry = useCallback(
+    (): Promise<SendOutcome> => (controller ? controller.retry() : Promise.resolve(NOT_READY)),
+    [controller],
+  );
   const syncTo = useCallback(
     (target: StateOf<Spec>, syncOptions: SyncOptions<Spec>): Promise<SyncOutcome> =>
       controller ? runSync(controller, target, syncOptions) : Promise.resolve(NOT_READY),
@@ -285,7 +291,18 @@ export function useServerMachine<Spec extends MachineSpec>(
     const online = () => {
       const failed = offlineSync.current;
       if (failed === null || failed.controller !== controller) return;
-      void runSync(controller, failed.target, failed.options);
+      // The event that failed is resent under its first requestId, so one whose first attempt reached the server is
+      // answered with what it recorded rather than applied again; the sync then plans from that answer.
+      void controller.retry().then((retried) => {
+        if (offlineSync.current !== failed) return;
+        if (retried.outcome === 'stopped') {
+          offlineSync.current = null;
+          return;
+        }
+        // Still offline: kept for the next time the browser is back.
+        if (retried.outcome === 'failed' && retried.problem.kind === 'transport') return;
+        void runSync(controller, failed.target, failed.options);
+      });
     };
     events.addEventListener('online', online);
     return () => events.removeEventListener?.('online', online);

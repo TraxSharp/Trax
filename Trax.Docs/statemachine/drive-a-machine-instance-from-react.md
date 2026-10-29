@@ -108,7 +108,9 @@ function Wizard({ id }: { id?: string }) {
 - **Syncs a page that ran ahead.** `syncTo(target, { fields, navigation })` is for a page that moves on the twin and
   saves later: it plans from what the server last confirmed, sends one event at a time and plans again from each
   answer, reads the instance once on a refusal, and gives way to a later `syncTo`. `unsaved` is true while one runs
-  and after one that did not settle `synced`; hold a leave guard on it.
+  and after one that did not settle `synced`; hold a leave guard on it. One that failed in transport runs again when
+  the browser comes back online, unless the page called `send` or `syncTo` since: it resends the failed event under
+  its first request id, so an event that did reach the server is not applied twice, and syncs on from the answer.
 - **Moves with its options.** A new `server`, `machine`, `id` or `startRequestId` closes the old instance's stream
   and opens the new one. From that render on the hook is `loading` and sends nothing, so a page whose server changed
   (another user signed in) never shows the instance before it under the new caller.
