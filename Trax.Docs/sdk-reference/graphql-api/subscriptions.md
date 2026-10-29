@@ -27,7 +27,7 @@ Data-change signals (`onDataChanged`) are unrelated to `[TraxBroadcast]` and fir
 
 ## Who receives what
 
-Each subscription carries the authorization of the data it streams, decided for each subscriber when it subscribes:
+Each subscription carries the authorization of the data it streams, decided for each subscriber when it subscribes and again while it runs ([Re-checked while it runs](#re-checked-while-it-runs)):
 
 - **Operations view.** When the operations surface is exposed, a subscriber that satisfies the operations authorization receives every train, with the same detail `operations.executions` shows. That is the gate the host declared with `GateOperations(...)` or `GateOperationsToAuthenticatedUsers()`, or no further check when the host chose `AllowAnonymousOperations()`. `RequireAuthorization(...)` on the endpoint is not an operations gate, so it grants no subscriber this view.
 - **Broadcast view.** Any other subscriber receives only `[TraxBroadcast]` trains whose own posture admits them: `[TraxAllowAnonymous]` admits everyone who can open a socket (on a host with an API-key or JWT scheme, only a connection that brings a credential; see [Authentication](#authentication)), and `[TraxAuthorize]` an authenticated caller meeting its policies and roles. For these subscribers `failureReason` is shown only when the train failed with a `TrainException` (whose message is written for clients); otherwise it reads `Unexpected Execution Error`. This holds for a train that ran on another node and reached this one over [`UseBroadcaster()`](/docs/sdk-reference/configuration/use-broadcaster): the message carries the exception type, so the reason is shown or masked exactly as for a local run. A message from a publisher older than Trax.Effect 1.57.4 has no exception type, and its reason is masked. `hostName` and `hostEnvironment` are withheld, and so is `output`, unless the host named the train with [`AllowOutputForBroadcastSubscribers<TTrain>()`](/docs/sdk-reference/graphql-api/add-trax-graphql#builder-methods).
@@ -35,6 +35,19 @@ Each subscription carries the authorization of the data it streams, decided for 
 - `onDataChanged` needs the operations authorization when the operations surface is exposed, and an authenticated caller when it is not.
 
 On an open endpoint a `[TraxBroadcast]` train must declare `[TraxAuthorize]` or `[TraxAllowAnonymous]`, or the host does not start. The `output` field carries the train's output as JSON, objects and arrays included, to the operations view, and to a broadcast subscriber only for a train the host named with `AllowOutputForBroadcastSubscribers<TTrain>()`.
+
+### Re-checked while it runs
+
+Every open subscription's authorization is decided again every five minutes, or at the interval set with `RecheckConnectionCredentialsEvery(...)` (the same interval that re-resolves an API-key connection's key; see [Connection lifetime](#connection-lifetime)). The check is the one the subscription was admitted on, for the principal it subscribed with:
+
+| Subscription | Asked again |
+|---|---|
+| `onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`, `onTrainStateChanged`, `onJunctionEvent` | The operations authorization, or the posture of every `[TraxBroadcast]` train the subscriber was admitted to |
+| `onDataChanged` | The operations authorization, or an authenticated caller when the operations surface is not exposed |
+| `onMachineInstanceChanged` | The operations gate |
+| A machine's push (`<machine>Changed`) | The machine's `Watch` rule, for the same instance ([Machines](/docs/sdk-reference/graphql-api/machines)) |
+
+A subscription that no longer passes, or whose check throws, ends. A lifecycle, step, data-change or operator subscription gets the message a refused subscribe gets, `{"id":"1","type":"error","payload":[{"message":"Not authorized.","extensions":{"code":"TRAX_AUTHORIZATION"}}]}`; a machine's push gets its `NOT_FOUND` event and completes. A broadcast subscriber that keeps some of its trains but loses one ends too, rather than seeing fewer. The socket stays open, its other operations go on, and the client may subscribe again. Each check runs once per open subscription per interval, so a host whose policies read a store pays one read per subscription per interval.
 
 ## Lifecycle Subscription Fields
 
@@ -335,7 +348,7 @@ Every connection has an end, however it authenticated. At its maximum lifetime, 
 | Session cookie | the sign-in's `ExpiresUtc` passes (the expiry the cookie had at the upgrade; a sliding renewal over HTTP does not reach an open socket) | `The sign-in has expired.` |
 | API key | a re-check finds the key no longer resolves to the principal it connected as: revoked or rotated, or with other roles or claims, or the resolver fails | `The connection's credential is no longer valid.` |
 
-An API-key connection's key is resolved again every five minutes, or at the interval set with `RecheckConnectionCredentialsEvery(...)`, so a revoked key's sockets close within one interval. Each re-check is one call to your `ITraxPrincipalResolver<string>` per open API-key connection, in a scope of its own. A changed display name does not close the connection. Both settings take a positive duration of at most one day; anything else throws `ArgumentOutOfRangeException`.
+An API-key connection's key is resolved again every five minutes, or at the interval set with `RecheckConnectionCredentialsEvery(...)`, so a revoked key's sockets close within one interval. Each re-check is one call to your `ITraxPrincipalResolver<string>` per open API-key connection, in a scope of its own. A changed display name does not close the connection. The same interval decides each open subscription's authorization again, which ends that subscription rather than the connection ([Re-checked while it runs](#re-checked-while-it-runs)). Both settings take a positive duration of at most one day; anything else throws `ArgumentOutOfRangeException`.
 
 ```csharp compile
 services.AddTraxGraphQL(graphql => graphql

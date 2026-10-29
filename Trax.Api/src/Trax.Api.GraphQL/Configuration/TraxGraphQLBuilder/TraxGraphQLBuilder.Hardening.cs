@@ -161,7 +161,11 @@ public partial class TraxGraphQLBuilder
     /// principal the connection opened as (it was revoked or rotated, or its roles or claims
     /// changed), or the resolver fails, the connection is closed with code 1008 (policy
     /// violation). Each re-check is one call to the host's API-key resolver per open connection.
-    /// See <c>docs/adr/0033-a-socket-connection-has-a-maximum-lifetime-and-re-checks-its-key.md</c>.
+    /// The same interval runs each open subscription's authorization again (the operations gate,
+    /// a broadcast train's posture, a machine's watch rule), and a subscription that no longer
+    /// passes ends while the connection stays open.
+    /// See <c>docs/adr/0033-a-socket-connection-has-a-maximum-lifetime-and-re-checks-its-key.md</c>
+    /// and <c>docs/adr/0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md</c>.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="interval"/> is not positive, or is longer than one day.

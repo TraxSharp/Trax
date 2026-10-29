@@ -148,10 +148,14 @@ machine's state enum, the context as its context type, field for field, with `du
 beside `dueAt`. An event that ends the stream carries no state and no context. Over the socket only, by its persisted
 id when persisted operations are on.
 
-- **Verified once, routed by row.** The user key is the socket's principal (the host's `ISnapshotPrincipal`), never
-  an argument, and the machine's `Watch` rule is checked once, at subscribe. A missing id, another user's, a system
-  instance's and one the rule refuses all get the same answer: one event with the problem `NOT_FOUND`, then the end.
-  The stream then follows the row's `row_id`, so a row deleted and created again under the same id never reaches it.
+- **Verified at subscribe and at every re-check, routed by row.** The user key is the socket's principal (the
+  host's `ISnapshotPrincipal`), never an argument, and the machine's `Watch` rule is checked when the client
+  subscribes. A missing id, another user's, a system instance's and one the rule refuses all get the same answer: one
+  event with the problem `NOT_FOUND`, then the end. The stream then follows the row's `row_id`, so a row deleted and
+  created again under the same id never reaches it. The rule is asked again for the same principal and row every
+  five minutes, or at the interval set with
+  [`RecheckConnectionCredentialsEvery(...)`](/docs/sdk-reference/graphql-api/add-trax-graphql#builder-methods); when
+  it no longer admits the caller, the stream ends with that same `NOT_FOUND` event, and the socket stays open.
 - **Order.** The watch registers before the instance is read, and the first event is the instance as it is then.
   Each later event is a newer revision, whole, migrated and validated as `get` reads it; a burst may arrive as its
   latest revision only. Drop an event, or an answer to your own step, at or below the revision you hold: a skipped

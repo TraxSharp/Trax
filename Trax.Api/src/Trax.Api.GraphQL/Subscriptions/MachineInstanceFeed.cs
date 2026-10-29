@@ -16,7 +16,8 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// <summary>
 /// The operator's live view of state-machine instances, <c>subscription { onMachineInstanceChanged(machine:) }</c>:
 /// each instance whenever any path on any host writes it, with its state, revision and whether it waits on a run,
-/// never its context or its owner's key. Behind the operations gate, and read through
+/// never its context or its owner's key. Behind the operations gate, checked again every connection re-check interval
+/// (a subscriber that no longer passes it is sent a <c>TRAX_AUTHORIZATION</c> error and the stream ends), and read through
 /// <see cref="IOperationsService.WatchMachineInstancesAsync"/>, the feed the dashboard's State machines page reads, so
 /// both views follow the host's one change listener. Registered with the operations queries. See
 /// <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.
@@ -61,7 +62,7 @@ internal static class MachineInstanceFeed
             ctx.ArgumentValue<string?>("machine"),
             stop.Token
         );
-        return new FeedStream(feed, stop);
+        return new FeedStream(feed, stop, access.Recheck(_ => access.OperationsFor(user)));
     }
 
     /// <summary>
@@ -75,6 +76,7 @@ internal static class MachineInstanceFeed
         private const int Capacity = 4096;
 
         private readonly CancellationTokenSource _stop;
+        private readonly SubscriptionRecheck _recheck;
         private readonly Channel<MachineInstanceChange> _buffer =
             Channel.CreateBounded<MachineInstanceChange>(
                 new BoundedChannelOptions(Capacity) { SingleReader = true, SingleWriter = true }
@@ -83,10 +85,12 @@ internal static class MachineInstanceFeed
 
         public FeedStream(
             IAsyncEnumerable<MachineInstanceRecord> feed,
-            CancellationTokenSource stop
+            CancellationTokenSource stop,
+            SubscriptionRecheck recheck
         )
         {
             _stop = stop;
+            _recheck = recheck;
             _ = PumpAsync(feed, stop.Token);
         }
 
@@ -136,7 +140,12 @@ internal static class MachineInstanceFeed
         {
             try
             {
-                await foreach (var change in _buffer.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+                await foreach (
+                    var change in _recheck
+                        .Until(_buffer.Reader.ReadAllAsync(ct), ct: ct)
+                        .WithCancellation(ct)
+                        .ConfigureAwait(false)
+                )
                     yield return (TOut)(object)change;
             }
             finally

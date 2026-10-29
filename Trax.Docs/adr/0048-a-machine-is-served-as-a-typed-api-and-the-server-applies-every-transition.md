@@ -201,8 +201,9 @@ path was the alternative, and misses writes made on hosts without sockets (outco
 or the reconciler swept).
 
 **The topic key comes from `ISnapshotPrincipal`, never from an argument**, because two users can hold the same id. A
-subscription is verified once against the read rule, then routed by `row_id`; a missing id, another user's id and a
-system instance's id get the same answer. Subscriptions are capped per principal and per instance, token expiry ends
+subscription is verified against the watch rule when it subscribes and again at every connection re-check interval,
+and routed by `row_id`; a missing id, another user's id and a system instance's id get the same answer, and a stream
+the rule no longer admits ends with it. Subscriptions are capped per principal and per instance, token expiry ends
 the stream, and the socket rules (origin, operation cap) are unchanged. **Clients never subscribe to system-owned
 instances.** The operator instance view, in GraphQL and Blazor, gets live state, revision and runs from the same feed
 under the operations gate, never the context, and the Blazor view re-checks the operator within a bounded circuit
@@ -384,6 +385,7 @@ In `Trax.Api.Tests.StateMachine.E2E`:
 - `MachineRulesE2ETests`: `A_caller_without_the_events_role_is_forbidden_and_nothing_is_written`, `The_effect_bound_event_checks_its_rule_before_claiming_the_effect`, `The_generic_opt_in_advance_checks_the_same_event_rule`, `Get_of_another_users_id_is_answered_like_an_unknown_id`, `An_operators_role_does_not_unlock_another_users_draft_through_machines`, `Discard_of_an_instance_the_server_moved_is_discard_not_allowed_and_keeps_it`, `Discard_follows_whether_the_server_or_its_owner_put_the_instance_in_its_state`
 - `MachineRunRecordE2ETests`: `A_machine_event_run_row_stores_no_output_and_a_plain_train_still_does`, `The_generic_save_stores_its_snapshot_masked_and_no_output`, `The_operators_execution_detail_reads_a_machine_run_with_no_output`
 - `MachinesRootSchemaTests`: `Machines_root_lists_each_exposed_machine_with_start_events_and_get`, `An_unexposed_declarative_machine_gets_no_field`, `An_event_without_WithInput_has_no_input_argument_and_no_json_scalar`, `Outcome_timer_and_effect_receipt_inputs_never_appear_as_client_arguments`, `Start_takes_its_declared_StartInput_never_the_context_type`, `A_misspelt_event_field_is_a_validation_error_not_a_runtime_problem`
+- `MachineChangedRecheckE2ETests`: `A_stream_whose_caller_no_longer_satisfies_the_watch_rule_ends_not_found`, `A_stream_whose_caller_still_satisfies_the_watch_rule_goes_on`
 - `OperatorMachineFeedE2ETests`: `The_operator_subscription_is_gated_and_shows_state_revision_and_runs`, `A_users_draft_change_appears_to_an_operator_without_its_context`, `Each_host_runs_one_listener_shared_by_the_dashboard_and_GraphQL`, `After_a_listener_reconnect_the_operator_feed_sends_a_reload`
 
 In `Trax.StateMachine.Persistence.Integration`, on Postgres and SQLite:
@@ -550,6 +552,9 @@ to trust it. The twin's prediction is checked against the server only where the 
 
 ## Changelog
 
+- **2026-10-29**: The push asks the watch rule again at every connection re-check interval, for the same caller and
+  row, and a stream the rule no longer admits ends with `not-found`. The operator feed asks the operations gate again
+  at the same interval (api/0011).
 - **2026-10-23**: The generic save counts what an edge or the `start` decides or computes as server-side behaviour: a
   guard, declarative or a delegate, a reducer other than `Keep`, a custom guard or reducer bound by name, and a
   `start` that reduces its input. A saved snapshot stepped around each of them, storing a state a guard would have

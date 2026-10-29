@@ -16,6 +16,10 @@ API-key connection's key is resolved again every five minutes, or the interval s
 as the key no longer resolves to the principal it connected as: the same id, type, roles and
 claims. A resolver that fails during a re-check closes it too.
 
+The same interval runs each subscription's own authorization again
+([0011](./0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md)); that ends one
+subscription, not the connection.
+
 The lifetime close is code 1001 (Going Away); a credential that expired or no longer holds closes
 with 1008 (policy violation). `SocketConnectionLifetime` keeps one timer per connection for all
 of them, and the earliest deadline wins.
@@ -99,4 +103,5 @@ behaviour.
 
 ## Changelog
 
+- **2026-10-29**: The re-check interval also runs each subscription's authorization again (0011).
 - **2026-10-01**: Recorded.

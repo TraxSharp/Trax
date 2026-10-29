@@ -253,7 +253,9 @@ ws.onopen = () => ws.send(JSON.stringify({
 `AddTraxGraphQL` registers the interceptor that reads it, for every scheme registered on the host,
 in whatever order. An OIDC cookie needs nothing: the browser sends it on the upgrade. A connection
 is closed when its token expires, its sign-in expires, or a periodic re-check finds its API key
-revoked.
+revoked. At the same interval each open subscription's authorization is decided again, and one
+whose subscriber no longer passes it ends; see
+[Re-checked while it runs](/docs/sdk-reference/graphql-api/subscriptions#re-checked-while-it-runs).
 
 A browser on another origin is accepted only from an origin the host allows. The default is the
 origins your CORS default policy names; to set them explicitly:

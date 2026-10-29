@@ -25,6 +25,12 @@ it subscribes.
   `AllowOutputForBroadcastSubscribers<TTrain>()`: the posture admits a subscriber to every run,
   not only its own, so an output is withheld until the host says it is meant for all of them.
 - A subscriber who could receive nothing is refused when subscribing.
+- The decision is made again for the same principal at every connection re-check interval
+  ([0033](./0033-a-socket-connection-has-a-maximum-lifetime-and-re-checks-its-key.md)). A
+  subscription whose subscriber no longer receives everything it was admitted to ends with
+  `TRAX_AUTHORIZATION`, and a check that fails counts as one that does not pass. The socket and
+  its other operations stay open. The operator machine feed and a machine's push are asked again
+  the same way, by the operations gate and the machine's watch rule.
 - `onDataChanged` needs the operations authorization when the surface is exposed, and an
   authenticated caller when it is not.
 
@@ -82,14 +88,22 @@ every build.
   needs an authenticated subscriber; a broadcast train without a posture fails at startup; every
   field on the subscription root declares its authorization; and the census accepts Trax's own
   fields.
+- `SubscriptionRecheckTests` pins the re-check: a lifecycle, step, data-change and operator
+  machine subscription ends with `TRAX_AUTHORIZATION` at the re-check after its gate or a
+  broadcast train's posture stops admitting it, or after the check throws, and goes on while it
+  still passes; over a socket the end is one `error` frame and the socket stays open.
 
-Not covered: a subscriber's principal is fixed when it subscribes. A role revoked afterwards is
-not re-checked for that subscription; an API-key socket is closed within one re-check interval of
-its key's roles changing, and every socket at its maximum lifetime
-([0033](./0033-a-socket-connection-has-a-maximum-lifetime-and-re-checks-its-key.md)).
+Not covered: the principal a subscription re-checks is the one it subscribed with. What changes
+between two checks is what the authorization reads (a policy's store, a train's posture); a
+change to the principal itself reaches an API-key socket through its key's re-check, and a JWT or
+cookie socket at its expiry
+([0033](./0033-a-socket-connection-has-a-maximum-lifetime-and-re-checks-its-key.md)). An event
+published between a change and the next check is still delivered.
 
 ## Changelog
 
+- **2026-10-29**: A subscription's authorization is made again at every connection re-check
+  interval, and a subscription that no longer passes ends.
 - **2026-10-23**: The broadcast view withholds `output` unless the host opts the train in.
 - **2026-10-23**: The operations view follows only a declared operations gate, never the endpoint
   gate (api/0004).
