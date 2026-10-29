@@ -393,6 +393,11 @@ internal sealed partial class MachineGenerator
             throw new InvalidOperationException(
                 "--namespace names the C# view's namespace and needs --lang csharp."
             );
+        if (o.Namespace is not null && !Clients.ClientGenerator.IsNamespace(o.Namespace))
+            throw new InvalidOperationException(
+                $"--namespace '{o.Namespace}' is not a C# namespace (dotted identifiers, none of them a keyword, "
+                    + "such as My.App.Machines)."
+            );
         if (o.ImportStyle is not null and not "relative" and not "specifier")
             throw new InvalidOperationException(
                 $"--import-style must be 'relative' or 'specifier', got '{o.ImportStyle}'."

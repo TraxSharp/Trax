@@ -102,7 +102,11 @@ internal sealed partial class ClientGenerator
 
     private const string Rename = "Rename one of them.";
 
-    private static bool IsNamespace(string text) =>
+    /// <summary>
+    /// Whether <paramref name="text"/> is a C# namespace: dotted identifiers, none of them a keyword. Shared with
+    /// <c>trax machine generate --lang csharp</c>, whose view is written in the same <c>--namespace</c>.
+    /// </summary>
+    internal static bool IsNamespace(string text) =>
         text.Length > 0
         && text.Split('.')
             .All(part =>

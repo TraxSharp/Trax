@@ -35,8 +35,11 @@ const TASK = "global::System.Threading.Tasks.Task";
 export function generateCSharpView(ir: IrDocument, options: CSharpViewOptions): string {
   const model = machineModel(ir);
   const ns = options.namespace ?? "Trax.Machines";
-  if (!/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(ns))
-    throw new Error(`The namespace ${JSON.stringify(ns)} is not a C# namespace.`);
+  if (
+    !/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(ns) ||
+    ns.split(".").some((part) => KEYWORDS.has(part) || UNSUPPORTED.has(part))
+  )
+    throw new Error(`The namespace ${JSON.stringify(ns)} is not a C# namespace: dotted identifiers, none of them a keyword.`);
   if (options.irText.includes('""""') || !options.irText.startsWith("{") || !options.irText.endsWith("}"))
     throw new Error("The IR text is not a JSON object the view can embed.");
 

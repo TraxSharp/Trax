@@ -273,6 +273,13 @@ public class MachineGeneratorTests
     [TestCase("rust", null, null, "*--lang must be*")]
     [TestCase("csharp", "specifier", null, "*a C# view imports*")]
     [TestCase(null, null, "Shop.Machines", "*--namespace*needs --lang csharp*")]
+    [TestCase("csharp", null, "My.class", "*--namespace 'My.class' is not a C# namespace*")]
+    [TestCase(
+        "csharp",
+        null,
+        "Shop.Machines-1",
+        "*--namespace 'Shop.Machines-1' is not a C# namespace*"
+    )]
     public void Generate_refuses_options_that_do_not_fit_the_language(
         string? lang,
         string? importStyle,

@@ -1505,6 +1505,7 @@ public class OperationsClientGeneratorTests
     [TestCase(".A")]
     [TestCase("A.")]
     [TestCase("A.B-C")]
+    [TestCase("My.class")]
     public void A_namespace_that_is_not_one_is_refused(string @namespace)
     {
         var act = () =>

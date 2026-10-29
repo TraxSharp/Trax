@@ -33,6 +33,14 @@ describe("the C# view", () => {
 
     expect(view).toContain(`public const string Ir = """"${irText}"""";`);
   });
+
+  it.each(["My.class", "namespace", "A.__arglist", "A..B", "1A"])("refuses the namespace %s, which C# does not take", (namespace) => {
+    const irText = fs.readFileSync(irFile("turnstile"), "utf8").trimEnd();
+
+    expect(() => generateCSharpView(JSON.parse(irText) as IrDocument, { namespace, irText, irHash: "0".repeat(64) })).toThrow(
+      `The namespace ${JSON.stringify(namespace)} is not a C# namespace`,
+    );
+  });
 });
 
 // Each IR below is one the TypeScript twin takes and C# cannot: written as it was, the view would not compile (or
