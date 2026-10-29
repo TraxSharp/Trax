@@ -71,7 +71,19 @@ internal sealed partial class ClientGenerator
             names.Claim(name, "the client's runtime");
         var declared = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var type in types.Declared)
-            declared[type] = names.Claim(CSharp.TypeName(type), $"the GraphQL type {type}");
+        {
+            var name = CSharp.TypeName(type);
+            // An input is a record, which declares these members itself: one of their names would be its own.
+            if (
+                types.Definition(type) is GraphQLInputObjectTypeDefinition
+                && CSharp.IsRecordMember(name)
+            )
+                throw new InvalidOperationException(
+                    $"The GraphQL input {type} would declare the record {name}, a member every C# record has. "
+                        + "Rename it."
+                );
+            declared[type] = names.Claim(name, $"the GraphQL type {type}");
+        }
         var paths = new Names(StringComparer.OrdinalIgnoreCase, Rename);
 
         var writer = new CSharpWriter(types, declared, fragments, names);
@@ -676,6 +688,8 @@ internal sealed partial class ClientGenerator
             "ReferenceEquals",
             "ToString",
         };
+
+        public static bool IsRecordMember(string name) => RecordMembers.Contains(name);
 
         // A property: the type name of the key, with Value after it when it would take its record's own name or one
         // of the members every record has.

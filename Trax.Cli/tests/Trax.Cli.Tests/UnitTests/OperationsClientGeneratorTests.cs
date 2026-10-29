@@ -1415,6 +1415,27 @@ public class OperationsClientGeneratorTests
             .And.Contain($"    public required {name} State {{ get; init; }}");
     }
 
+    // A record declares these itself, so an input record of one of their names would hold a member of its own name.
+    [TestCase("Equals")]
+    [TestCase("ToString")]
+    [TestCase("Deconstruct")]
+    public void An_input_named_like_a_member_every_record_has_is_refused_by_the_csharp_client(
+        string name
+    )
+    {
+        var options = new OperationsGenerateOptions(
+            Schema + $"\ninput {name} {{ x: Int }}\n",
+            [new("src/graphql/Runs.graphql", Runs)]
+        );
+
+        var csharp = () =>
+            ClientGenerator.RenderCSharp(options, ClientGenerator.DefaultOperationsNamespace);
+        csharp
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"The GraphQL input {name} would declare the record {name}*");
+    }
+
     [Test]
     public void Two_enum_values_that_take_one_member_are_refused()
     {

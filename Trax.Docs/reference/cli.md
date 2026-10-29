@@ -582,7 +582,8 @@ is written from `global::`, so a schema type named `Optional` or `TraxClient` ge
 else. A property that would take its record's name, or a member every record has (`Equals`, `ToString`,
 `EqualityContract`, `GetType` and the like), gets `Value` after it (`ToStringValue`). Two names that would still
 collide are refused, naming both: a document named `TraxOperations`, a subscription named `TraxOperationsClient`, a
-schema type named like a document's `<Operation>Variables` or `<Operation>Result`. It writes no `console-documents.json`;
+schema type named like a document's `<Operation>Variables` or `<Operation>Result`, and an input named like a member every
+record has (`Equals`, `ToString`), which its record would declare beside its own name. It writes no `console-documents.json`;
 the host registers the documents from the TypeScript client's. A union or interface selection is refused, since the
 C# client does not type one yet; the console selects none.
 
