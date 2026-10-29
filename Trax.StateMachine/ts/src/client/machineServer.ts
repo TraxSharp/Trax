@@ -257,8 +257,18 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
 
   const get = async (id: string): Promise<GetResponse> => answered(await client.load(machine.id, id));
 
+  // Total, as every operation a page calls itself is: a request the transport failed is a TRANSPORT_ERROR, not a throw.
   const discard = async (id: string, requestId: string): Promise<DiscardResponse> => {
-    const output = await client.discard(machine.id, id, requestId);
+    let output: Awaited<ReturnType<typeof client.discard>>;
+    try {
+      output = await client.discard(machine.id, id, requestId);
+    } catch (error) {
+      return {
+        kind: 'problem',
+        code: ClientProblemCode.TransportError,
+        message: error instanceof Error ? error.message : 'The server could not be reached.',
+      };
+    }
     if (output.problem) return problemOf(output.problem);
     // An answer that is null, or says nothing was discarded and gives no problem, does not say the instance is gone.
     if (output.discarded !== true)

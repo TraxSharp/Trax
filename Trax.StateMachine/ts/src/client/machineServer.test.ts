@@ -215,6 +215,20 @@ describe('createMachineServer operations', () => {
     expect(await server.discard('i-1', 'rq-d')).toMatchObject({ kind: 'problem', code: 'TRANSPORT_ERROR' });
   });
 
+  it('answers a discard the transport failed as a TRANSPORT_ERROR, never by throwing', async () => {
+    const unavailable = (async () =>
+      new Response('{}', { status: 503, statusText: 'Service Unavailable' })) as unknown as typeof globalThis.fetch;
+    const unreachable = (async () => {
+      throw new TypeError('fetch failed');
+    }) as unknown as typeof globalThis.fetch;
+
+    for (const fetch of [unavailable, unreachable])
+      expect(await serverOver(fetch).server.discard('i-1', 'rq-d')).toMatchObject({
+        kind: 'problem',
+        code: 'TRANSPORT_ERROR',
+      });
+  });
+
   it('refuses at creation a document set without the push document', () => {
     expect(() =>
       createMachineServer('/graphql', {

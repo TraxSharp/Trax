@@ -60,12 +60,8 @@ function outcomeOf(outcome) {
  * public `discard` of `createMachineServer`'s answer, under a request id it mints.
  */
 async function discardOf(server, id, requestId) {
-  let answer;
-  try {
-    answer = await server.discard(id, requestId);
-  } catch {
-    return { outcome: "failed", code: "TRANSPORT_ERROR" };
-  }
+  // The discard is total: one that throws is not an outcome, and fails the transcript as the testee's error.
+  const answer = await server.discard(id, requestId);
   if (answer.kind === "discarded") return { outcome: "discarded" };
   return { outcome: answer.code === "TRANSPORT_ERROR" ? "failed" : "refused", code: answer.code };
 }
