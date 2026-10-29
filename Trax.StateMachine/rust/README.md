@@ -8,7 +8,10 @@ machine from that IR and answers what the server would do with a trigger, byte f
 code on a refusal. It is pure (no I/O, no clock, no async) and has no dependencies, so the bindings for other
 languages can be built on it. Every operation is total: a refusal is a value, never a panic. A custom handler
 that panics is caught and refused with `INTERNAL_ERROR`, which needs the build that links the crate to unwind on
-panic (`panic = "unwind"`, Rust's default). Under `panic = "abort"` such a panic ends the process.
+panic (`panic = "unwind"`, Rust's default). Under `panic = "abort"` such a panic ends the process. A `Value` built in
+memory that nests deeper than `MAX_DEPTH` (512) is refused as its text would be, `INVALID_INPUT` for an input and
+`INVALID_CONTEXT` for a context, and is written and dropped without recursion; check `Value::is_too_deep` before
+cloning or comparing one a binding built.
 
 ## Install
 
@@ -37,8 +40,9 @@ serves, predicting each event with the machine built from the manifest's IR, ove
 ids over HTTP, the change stream over graphql-transport-ws, on tokio). An event with an edge that rests on a custom
 rule is sent with no prediction, since the client binds no handler. A stream that ends without saying why is
 subscribed again after `resubscribe_delays`; a socket the host refused (closed with 4401 or 4403, or an upgrade
-answered 401 or 403) is not, and stops the controller as `UNAUTHENTICATED` or `FORBIDDEN`. It is held to the client
-conformance kit, as the TypeScript and C# clients are.
+answered 401 or 403) is not, and stops the controller as `UNAUTHENTICATED` or `FORBIDDEN`. The controller's task runs
+on the tokio runtime `ServerMachineOptions::runtime` names, or the one it is built in, and may be called from any
+thread once built. It is held to the client conformance kit, as the TypeScript and C# clients are.
 
 `advance` takes the triggers a client sends, `apply_outcome` an invoked train's outcome and `apply_timer` a state's
 timer. A custom rule is bound by name with `with_guard` or `with_reducer`; one with no handler fails, so the engine

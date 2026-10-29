@@ -131,3 +131,59 @@ async fn a_disposed_controller_ends_its_task_with_a_request_in_flight() {
     );
     assert!(task_ends(view).await, "the disposed controller's task kept running");
 }
+
+#[test]
+fn a_controller_built_outside_a_runtime_with_none_named_is_refused_not_panicked() {
+    let (ir, hash) = turnstile();
+    let (server, _) = silent();
+
+    let Err(error) = ServerMachineController::new(ServerMachineOptions::new(ir, hash, server)) else {
+        panic!("a controller with no runtime to run on was built");
+    };
+
+    assert!(error.message.contains("runtime"), "{}", error.message);
+}
+
+#[test]
+fn a_controller_runs_on_the_runtime_its_options_name_and_is_called_from_any_thread() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (ir, hash) = turnstile();
+    let (server, _) = silent();
+    let mut options = ServerMachineOptions::new(ir, hash, server);
+    options.runtime = Some(runtime.handle().clone());
+    let controller = ServerMachineController::new(options).unwrap();
+    let view = controller.watch();
+
+    let sent = std::thread::spawn(move || {
+        let sent = controller.send("Coin", None);
+        controller.dispose();
+        sent
+    })
+    .join()
+    .unwrap();
+
+    let outcome = runtime.block_on(sent);
+    assert!(
+        matches!(&outcome, trax_state_machine_client::SendOutcome::Failed(p) if p.code == "DISPOSED"),
+        "{outcome:?}"
+    );
+    assert!(runtime.block_on(task_ends(view)), "the controller's task kept running");
+}
+
+#[tokio::test]
+async fn an_input_nested_past_the_limit_is_refused_before_it_is_sent() {
+    let (ir, hash) = turnstile();
+    let (server, _) = silent();
+    let controller = ServerMachineController::new(ServerMachineOptions::new(ir, hash, server)).unwrap();
+    let mut input = Value::Null;
+    for _ in 0..100_000 {
+        input = Value::from(vec![input]);
+    }
+
+    let outcome = controller.send("Coin", Some(input)).await;
+
+    assert!(
+        matches!(&outcome, trax_state_machine_client::SendOutcome::Refused(p) if p.code == "INVALID_INPUT"),
+        "{outcome:?}"
+    );
+}

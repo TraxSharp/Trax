@@ -12,7 +12,7 @@ use crate::ir::{self, FieldType, IrError, Reduction, Rule, Schema};
 use crate::refusal::{Refusal, RefusalCode};
 use crate::rules::{self, Unhandled};
 use crate::stored::{stored_text_problems, unstorable};
-use crate::value::{json_copy_map, quote, write_object, JsString, Map, Value};
+use crate::value::{json_copy_map, map_too_deep, quote, write_object, JsString, Map, Value};
 
 /// A handler for a custom guard: reads the context and the input, says whether the edge may be taken.
 pub type GuardFn = dyn Fn(&Map, Option<&Value>) -> bool + Send + Sync;
@@ -40,8 +40,12 @@ pub struct Snapshot {
 
 impl Snapshot {
     /// Reads a snapshot object (`machine`, `version`, `state`, `context`) without checking it against a machine.
-    /// `None` when a member is missing or of the wrong type, or the version is not an integer in the int32 range.
+    /// `None` when a member is missing or of the wrong type, the version is not an integer in the int32 range, or the
+    /// value nests deeper than [`MAX_DEPTH`](crate::MAX_DEPTH).
     pub fn from_value(value: &Value) -> Option<Snapshot> {
+        if value.is_too_deep() {
+            return None;
+        }
         Some(Snapshot {
             machine: value.get("machine")?.as_str()?.to_owned(),
             version: as_int(value.get("version")?)?,
@@ -150,6 +154,23 @@ fn refuse<T>(code: RefusalCode, detail: impl Into<String>) -> Result<T, Refusal>
 }
 
 // An integral JSON number in the int32 range, as both other engines read a snapshot's version.
+const TOO_DEEP_CONTEXT: &str = "The context nests deeper than 512 arrays and objects.";
+
+// A snapshot or an input built in memory, where no parser held it to MAX_DEPTH, is refused before anything recurses
+// over it: an input as INVALID_INPUT, a context as INVALID_CONTEXT.
+fn too_deep(snapshot: &Snapshot, input: Option<&Value>) -> Result<(), Refusal> {
+    if input.is_some_and(Value::is_too_deep) {
+        return refuse(
+            RefusalCode::InvalidInput,
+            "The input nests deeper than 512 arrays and objects.",
+        );
+    }
+    if map_too_deep(&snapshot.context) {
+        return refuse(RefusalCode::InvalidContext, TOO_DEEP_CONTEXT);
+    }
+    Ok(())
+}
+
 fn as_int(value: &Value) -> Option<i32> {
     match value {
         Value::Number(n) if n.is_finite() && n.fract() == 0.0 && *n >= i32::MIN as f64 && *n <= i32::MAX as f64 => {
@@ -213,6 +234,11 @@ impl Machine {
     /// Builds a machine from its IR document. Refuses an IR it cannot interpret: a format newer than it reads, a
     /// missing section, a rule or reduction it does not know.
     pub fn from_ir(ir: &Value) -> Result<Machine, IrError> {
+        if ir.is_too_deep() {
+            return Err(IrError {
+                message: format!("The IR nests deeper than {} arrays and objects.", crate::MAX_DEPTH),
+            });
+        }
         let ir = ir::read(ir)?;
 
         // The machine's actual initial context if the IR carries it, else derived from the initial state's schema.
@@ -423,13 +449,15 @@ impl Machine {
         }
     }
 
-    /// Applies a trigger a caller sends. Refusals, first match wins: an unknown state (`NO_TRANSITION`); an outcome
+    /// Applies a trigger a caller sends. Refusals, first match wins: an input or a context that nests deeper than
+    /// [`MAX_DEPTH`](crate::MAX_DEPTH) (`INVALID_INPUT`, `INVALID_CONTEXT`); an unknown state (`NO_TRANSITION`); an outcome
     /// trigger (`OUTCOME_BOUND`); a timer trigger (`TIMER_BOUND`); no edge from the state (`NO_TRANSITION`); an input
     /// that does not match the trigger's schema (`INVALID_INPUT`); a guard that declines (`GUARD_FAILED`); a target
     /// whose timer reads a duration the successor context does not hold within bounds (`INVALID_INPUT`); a successor
     /// context the target refuses (`INVALID_CONTEXT`). An input of `null` is no input.
     pub fn advance(&self, snapshot: &Snapshot, trigger: &str, input: Option<&Value>) -> Result<Snapshot, Refusal> {
         let input = input.filter(|v| !v.is_null());
+        too_deep(snapshot, input)?;
         if !self.state_set.contains(&snapshot.state) {
             return refuse(
                 RefusalCode::NoTransition,
@@ -478,7 +506,8 @@ impl Machine {
     /// Applies an invoked train's outcome (`Fetching.done`, `.failed`, `.cancelled`) with the train's output as its
     /// input. A success tries the state's edges in declaration order and takes the first whose guard accepts the
     /// output; an output no edge accepts, a trigger that is not an outcome, and an outcome of a state the snapshot is
-    /// not in are `NO_TRANSITION`. An output that does not match the train's output schema is `INVALID_INPUT`.
+    /// not in are `NO_TRANSITION`. An output that does not match the train's output schema, or nests deeper than
+    /// [`MAX_DEPTH`](crate::MAX_DEPTH), is `INVALID_INPUT`; a context that nests deeper is `INVALID_CONTEXT`.
     pub fn apply_outcome(
         &self,
         snapshot: &Snapshot,
@@ -486,6 +515,7 @@ impl Machine {
         output: Option<&Value>,
     ) -> Result<Snapshot, Refusal> {
         let output = output.filter(|v| !v.is_null());
+        too_deep(snapshot, output)?;
         if !self.state_set.contains(&snapshot.state) {
             return refuse(
                 RefusalCode::NoTransition,
@@ -526,6 +556,7 @@ impl Machine {
     /// own timer reads a duration the context does not hold within bounds is `INVALID_INPUT`; a target that refuses
     /// the context is `INVALID_CONTEXT`.
     pub fn apply_timer(&self, snapshot: &Snapshot, trigger: &str) -> Result<Snapshot, Refusal> {
+        too_deep(snapshot, None)?;
         if !self.state_set.contains(&snapshot.state) {
             return refuse(
                 RefusalCode::NoTransition,
@@ -636,6 +667,9 @@ impl Machine {
             (state, context) = migrate(&state, context);
             version += 1;
         }
+        if migrated && map_too_deep(&context) {
+            return refuse(RefusalCode::InvalidContext, TOO_DEEP_CONTEXT);
+        }
         if !self.state_set.contains(&state) {
             return refuse(RefusalCode::UnknownState, format!("Unknown state '{state}'."));
         }
@@ -667,7 +701,8 @@ impl Machine {
     /// does not match, or no edge whose guard passes.
     pub fn can_fire(&self, snapshot: &Snapshot, trigger: &str, input: Option<&Value>) -> bool {
         let input = input.filter(|v| !v.is_null());
-        if !self.state_set.contains(&snapshot.state)
+        if too_deep(snapshot, input).is_err()
+            || !self.state_set.contains(&snapshot.state)
             || self.outcome_triggers.contains(trigger)
             || self.timer_triggers.contains(trigger)
             || self.input_problem(trigger, input).is_some()
@@ -729,6 +764,10 @@ impl Machine {
     // The successor of a transition into `state`: the target's timer reads its duration from the context first, so a
     // duration out of bounds is refused as input before the context is validated, as on the server.
     fn enter(&self, state: &str, context: Map) -> Result<Snapshot, Refusal> {
+        // A custom reducer's context is checked as a caller's is: validating it recurses.
+        if map_too_deep(&context) {
+            return refuse(RefusalCode::InvalidContext, TOO_DEEP_CONTEXT);
+        }
         if let Some(problem) = self.timer_problem(state, &context) {
             return refuse(RefusalCode::InvalidInput, problem);
         }

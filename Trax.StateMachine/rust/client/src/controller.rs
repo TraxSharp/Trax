@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot, watch};
 use trax_state_machine::{canonical_wire, IrError, Machine, Map, Snapshot, Value};
 
@@ -42,6 +43,7 @@ pub mod codes {
     pub(crate) const NOT_FOUND: &str = "NOT_FOUND";
     pub(crate) const UNAUTHENTICATED: &str = "UNAUTHENTICATED";
     pub(crate) const FORBIDDEN: &str = "FORBIDDEN";
+    pub(crate) const INVALID_INPUT: &str = "INVALID_INPUT";
 }
 
 /// Whether a problem is the server's refusal or a request that did not get through.
@@ -131,6 +133,9 @@ pub struct ServerMachineOptions<S> {
     pub new_request_id: Option<Box<dyn FnMut() -> String + Send>>,
     /// Delays between retries of `SERVER_OUTDATED` and of a read the transport failed. `None` for the default.
     pub retry_delays: Option<Vec<Duration>>,
+    /// The tokio runtime the controller's task and its requests run on. `None` takes the runtime `new` is called
+    /// from; a binding that builds the controller on a thread of its host's passes one it owns.
+    pub runtime: Option<tokio::runtime::Handle>,
 }
 
 impl<S> ServerMachineOptions<S> {
@@ -146,6 +151,7 @@ impl<S> ServerMachineOptions<S> {
             start_request_id: None,
             new_request_id: None,
             retry_delays: None,
+            runtime: None,
         }
     }
 }
@@ -162,8 +168,9 @@ pub const DEFAULT_RETRY_DELAYS: [Duration; 5] = [
 /// Drives one instance of a machine a server owns. The server applies every transition; the client only predicts,
 /// with the machine built from the IR.
 ///
-/// Every operation is total: a refusal or a request that did not get through is a [`SendOutcome`]. It must be built
-/// inside a tokio runtime, which runs its task. Dropping it disposes it.
+/// Every operation is total: a refusal or a request that did not get through is a [`SendOutcome`]. Its task runs on
+/// the runtime [`ServerMachineOptions::runtime`] names, or the one it is built in; once built, it may be called from any
+/// thread. Dropping it disposes it.
 pub struct ServerMachineController {
     commands: mpsc::UnboundedSender<Msg>,
     view: watch::Receiver<Arc<MachineView>>,
@@ -173,8 +180,24 @@ pub struct ServerMachineController {
 
 impl ServerMachineController {
     /// Builds the controller and starts its task. It sends nothing until [`start`](Self::start). Refuses an IR the
-    /// machine cannot be built from, and one that does not hash to `ir_hash`.
+    /// machine cannot be built from, one that does not hash to `ir_hash`, a start input that nests deeper than
+    /// [`MAX_DEPTH`](trax_state_machine::MAX_DEPTH), and options with no runtime when it is not built inside one.
     pub fn new<S: MachineServer>(options: ServerMachineOptions<S>) -> Result<Self, IrError> {
+        let Some(runtime) = options.runtime.clone().or_else(|| Handle::try_current().ok()) else {
+            return Err(IrError {
+                message: "The controller was built outside a tokio runtime and its options name none. Build it inside \
+                          one, or pass the runtime's handle as ServerMachineOptions::runtime."
+                    .to_owned(),
+            });
+        };
+        if options.start_input.as_ref().is_some_and(Value::is_too_deep) {
+            return Err(IrError {
+                message: format!(
+                    "The start input nests deeper than {} arrays and objects.",
+                    trax_state_machine::MAX_DEPTH
+                ),
+            });
+        }
         let machine = Arc::new(Machine::from_ir(&options.ir)?);
         let hash = ir_hash(&options.ir);
         if !hash.eq_ignore_ascii_case(options.ir_hash.trim()) {
@@ -206,6 +229,7 @@ impl ServerMachineController {
         let actor = Actor {
             machine: machine.clone(),
             unpredictable: unpredictable.clone(),
+            runtime: runtime.clone(),
             server: Arc::new(options.server),
             commands: commands.clone(),
             publish,
@@ -239,7 +263,7 @@ impl ServerMachineController {
             reload_again: false,
             buffered: None,
         };
-        tokio::spawn(actor.run(inbox));
+        runtime.spawn(actor.run(inbox));
         Ok(ServerMachineController {
             commands,
             view,
@@ -266,11 +290,19 @@ impl ServerMachineController {
         input: Option<Value>,
     ) -> impl std::future::Future<Output = SendOutcome> + Send + 'static {
         let (reply, answer) = oneshot::channel();
-        let _ = self.commands.send(Msg::Send {
-            trigger: trigger.into(),
-            input,
-            reply,
-        });
+        if input.as_ref().is_some_and(Value::is_too_deep) {
+            // Refused before the task copies or predicts it: both would recurse over it.
+            let _ = reply.send(SendOutcome::Refused(refusal(
+                codes::INVALID_INPUT,
+                "The input nests deeper than 512 arrays and objects.",
+            )));
+        } else {
+            let _ = self.commands.send(Msg::Send {
+                trigger: trigger.into(),
+                input,
+                reply,
+            });
+        }
         async move { answer.await.unwrap_or_else(|_| disposed_outcome()) }
     }
 
@@ -444,6 +476,7 @@ struct Actor<S> {
     machine: Arc<Machine>,
     // The (state, trigger) pairs whose edge rests on a custom rule the machine holds no handler for.
     unpredictable: Arc<HashSet<(String, String)>>,
+    runtime: Handle,
     server: Arc<S>,
     commands: mpsc::UnboundedSender<Msg>,
     publish: watch::Sender<Arc<MachineView>>,
@@ -623,7 +656,7 @@ impl<S: MachineServer> Actor<S> {
         let server = self.server.clone();
         let commands = self.commands.clone();
         let input = self.start_input.clone();
-        tokio::spawn(async move {
+        self.runtime.spawn(async move {
             let result = server.start(input, request_id.clone()).await;
             let _ = commands.send(Msg::Created {
                 request_id,
@@ -778,7 +811,7 @@ impl<S: MachineServer> Actor<S> {
         self.reload_row_id = row_id.clone();
         let server = self.server.clone();
         let commands = self.commands.clone();
-        tokio::spawn(async move {
+        self.runtime.spawn(async move {
             let result = server.get(id).await;
             let _ = commands.send(Msg::Read {
                 row_id,
@@ -1068,7 +1101,7 @@ impl<S: MachineServer> Actor<S> {
     fn deliver(&mut self, entry: u64, request: EventRequest, attempt: usize) {
         let server = self.server.clone();
         let commands = self.commands.clone();
-        tokio::spawn(async move {
+        self.runtime.spawn(async move {
             let result = server.event(request).await;
             let _ = commands.send(Msg::Delivered { entry, attempt, result });
         });
@@ -1177,7 +1210,7 @@ impl<S: MachineServer> Actor<S> {
         let delay = self.retry_delays[attempt];
         let epoch = self.epoch;
         let commands = self.commands.clone();
-        tokio::spawn(async move {
+        self.runtime.spawn(async move {
             tokio::time::sleep(delay).await;
             let _ = commands.send(Msg::Later { epoch, action });
         });

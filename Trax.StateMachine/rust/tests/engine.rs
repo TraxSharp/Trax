@@ -211,3 +211,81 @@ fn a_lone_surrogate_is_malformed_as_the_csharp_reader_answers() {
     let ignored = r#"{"machine":"turnstile","version":1,"state":"Locked","context":{},"note":"\ud800"}"#;
     assert!(machine.rehydrate(ignored).is_ok());
 }
+
+// A value 100 000 arrays deep, built in memory as a binding would build it, where no parser's depth limit applies.
+fn too_deep() -> Value {
+    let mut value = Value::Null;
+    for _ in 0..100_000 {
+        value = Value::from(vec![value]);
+    }
+    value
+}
+
+fn turnstile() -> Machine {
+    Machine::from_ir(&conformance("machines/turnstile/turnstile.ir.json")).unwrap()
+}
+
+#[test]
+fn an_input_nested_past_the_limit_is_refused_not_overflowed() {
+    let machine = turnstile();
+    let input = too_deep();
+
+    let refused = machine.advance(&machine.initial_snapshot(), "Coin", Some(&input));
+
+    assert_eq!(refused.unwrap_err().code, RefusalCode::InvalidInput);
+    assert!(!machine.can_fire(&machine.initial_snapshot(), "Coin", Some(&input)));
+}
+
+#[test]
+fn a_context_nested_past_the_limit_is_refused_not_overflowed() {
+    let machine = turnstile();
+    let mut snapshot = machine.initial_snapshot();
+    snapshot.context.insert("deep".into(), too_deep());
+
+    assert_eq!(
+        machine.advance(&snapshot, "Coin", None).unwrap_err().code,
+        RefusalCode::InvalidContext
+    );
+    assert!(!machine.can_fire(&snapshot, "Coin", None));
+    let mut stored = Map::new();
+    stored.insert("machine".into(), Value::from("turnstile"));
+    stored.insert("version".into(), Value::Number(1.0));
+    stored.insert("state".into(), Value::from("Locked"));
+    stored.insert("context".into(), Value::Object(snapshot.context));
+    assert!(Snapshot::from_value(&Value::Object(stored)).is_none());
+}
+
+#[test]
+fn a_reducer_that_nests_past_the_limit_is_refused_not_overflowed() {
+    let machine = Machine::from_ir_text(CUSTOM)
+        .unwrap()
+        .with_guard("Open", |_, _| true)
+        .with_guard("Approved", |_, _| true)
+        .with_reducer("Stamp", |_, _| {
+            let mut context = Map::new();
+            context.insert("deep".into(), too_deep());
+            context
+        });
+
+    assert_eq!(
+        machine.advance(&start(), "Go", None).unwrap_err().code,
+        RefusalCode::InvalidContext
+    );
+}
+
+#[test]
+fn an_ir_nested_past_the_limit_is_refused_not_overflowed() {
+    let mut ir = conformance("machines/turnstile/turnstile.ir.json");
+    let Value::Object(map) = &mut ir else { unreachable!() };
+    map.insert("note".into(), too_deep());
+
+    assert!(Machine::from_ir(&ir).is_err());
+}
+
+#[test]
+fn a_value_nested_past_the_limit_is_written_and_dropped_without_overflowing() {
+    let deep = too_deep();
+    let json = deep.to_json();
+    assert_eq!(json, format!("{}null{}", "[".repeat(100_000), "]".repeat(100_000)));
+    drop(deep);
+}

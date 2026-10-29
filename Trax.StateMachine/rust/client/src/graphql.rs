@@ -89,6 +89,9 @@ pub struct GraphQLMachineServerOptions {
     /// Accepts an `http` endpoint or a `ws` socket on a host that is not loopback. Off by default: whatever
     /// authenticates the client would travel in cleartext.
     pub allow_insecure_transport: bool,
+    /// The tokio runtime each subscription's task runs on. `None` takes the runtime `new` is called from, or failing
+    /// that the one `subscribe` is called from; a subscription asked for outside any is refused rather than panicking.
+    pub runtime: Option<tokio::runtime::Handle>,
 }
 
 impl GraphQLMachineServerOptions {
@@ -113,6 +116,7 @@ impl GraphQLMachineServerOptions {
             idle_timeout: DEFAULT_IDLE_TIMEOUT,
             max_message_size: DEFAULT_MAX_MESSAGE_SIZE,
             allow_insecure_transport: false,
+            runtime: None,
         }
     }
 }
@@ -176,6 +180,7 @@ struct Inner {
     request_timeout: Duration,
     idle_timeout: Duration,
     max_message_size: usize,
+    runtime: Option<tokio::runtime::Handle>,
 }
 
 impl GraphQLMachineServer {
@@ -245,6 +250,7 @@ impl GraphQLMachineServer {
                 request_timeout: options.request_timeout,
                 idle_timeout: options.idle_timeout,
                 max_message_size: options.max_message_size,
+                runtime: options.runtime.or_else(|| tokio::runtime::Handle::try_current().ok()),
             }),
         })
     }
@@ -521,19 +527,34 @@ impl MachineServer for GraphQLMachineServer {
     }
 
     fn subscribe(&self, id: String, sink: StreamSink) -> Box<dyn Subscription> {
+        let Some(runtime) = self
+            .inner
+            .runtime
+            .clone()
+            .or_else(|| tokio::runtime::Handle::try_current().ok())
+        else {
+            sink(StreamMessage::Refused(ServerProblem {
+                code: codes::TRANSPORT_ERROR.to_owned(),
+                message: "The stream was asked for outside a tokio runtime, and the server's options name none."
+                    .to_owned(),
+            }));
+            return Box::new(Stream(None));
+        };
         let inner = self.inner.clone();
-        Box::new(Stream(tokio::spawn(async move { inner.stream(id, sink).await })))
+        Box::new(Stream(Some(runtime.spawn(async move { inner.stream(id, sink).await }))))
     }
 }
 
 // The task that follows one instance; dropping the handle stops it and closes its socket.
-struct Stream(JoinHandle<()>);
+struct Stream(Option<JoinHandle<()>>);
 
 impl Subscription for Stream {}
 
 impl Drop for Stream {
     fn drop(&mut self) {
-        self.0.abort();
+        if let Some(task) = &self.0 {
+            task.abort();
+        }
     }
 }
 
@@ -1608,6 +1629,41 @@ mod tests {
         let again = tokio::time::timeout(Duration::from_millis(1000), heard.recv()).await;
 
         assert!(again.is_err(), "a socket that answered every ping was opened again");
+    }
+
+    #[test]
+    fn a_stream_asked_for_outside_a_runtime_is_refused_not_panicked() {
+        let server = GraphQLMachineServer::new(options(
+            "https://api.example.com/graphql",
+            "wss://api.example.com/graphql",
+        ))
+        .unwrap();
+        let delivered = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let into = delivered.clone();
+
+        let stream = server.subscribe("i-1".into(), Arc::new(move |m| into.lock().unwrap().push(m)));
+        drop(stream);
+
+        let delivered = delivered.lock().unwrap();
+        assert!(
+            matches!(&delivered[..], [StreamMessage::Refused(p)] if p.code == codes::TRANSPORT_ERROR),
+            "{delivered:?}"
+        );
+    }
+
+    #[test]
+    fn a_stream_runs_on_the_runtime_the_options_name() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let mut given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
+        given.runtime = Some(runtime.handle().clone());
+        let server = GraphQLMachineServer::new(given).unwrap();
+        let delivered = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let into = delivered.clone();
+
+        let stream = server.subscribe("i-1".into(), Arc::new(move |m| into.lock().unwrap().push(m)));
+        drop(stream);
+
+        assert!(delivered.lock().unwrap().is_empty());
     }
 
     #[test]
