@@ -322,7 +322,9 @@ no row: `ClientSurfaceTests` in `dotnet/tests/Trax.StateMachine.Tests.Meta`, `ts
 what the other two call it, or why they have none.
 
 A cell is one name in backticks, `Type.member` for a member and a bare `Name` for an export of its own (a type, a
-function, a constant), or `—` and the reason that language has none. A type is the name the language exports it
+function, a constant), or `—` and the reason that language has none. A member of a type the first table does not cover
+is named like any other, so it is checked too; a reason is never only a name, which would leave it unchecked. A type's
+members are the ones a caller reaches on it, inherited ones included (C#'s and TypeScript's alike). A type is the name the language exports it
 under, and a member is written as the language spells it, a Rust field or method alike with a dot. The reason is
 for people; the tests only check it is there. Outcomes, problem codes and stream messages are not here: the
 transcripts compare those by value.
@@ -403,12 +405,12 @@ transcripts compare those by value.
 | The HTTP client | `MachineServerOptions.fetch` | `GraphQLMachineServerOptions.Http` | `GraphQLMachineServerOptions.http` |
 | Say the HTTP client's handler follows no redirects | — every request is sent with `redirect: 'error'` | `GraphQLMachineServerOptions.HandlerFollowsNoRedirects` | — the client given as `http` is built with `redirect(Policy::none())` |
 | Headers on every request | `MachineServerOptions.headers` | — set on the `HttpClient` given as `Http` | `GraphQLMachineServerOptions.headers` |
-| The socket's `connection_init` payload | — the page's graphql-ws client given as `socket` sends it | — `GraphQLSubscriptionSocketOptions.ConnectionParams` | `GraphQLMachineServerOptions.connection_params` |
+| The socket's `connection_init` payload | — the page's graphql-ws client given as `socket` sends it | `GraphQLSubscriptionSocketOptions.ConnectionParams` | `GraphQLMachineServerOptions.connection_params` |
 | allowInsecureTransport | `MachineServerOptions.allowInsecureTransport` | `GraphQLMachineServerOptions.AllowInsecureTransport` | `GraphQLMachineServerOptions.allow_insecure_transport` |
 | maxResponseSize | `MachineServerOptions.maxResponseSize` | `GraphQLMachineServerOptions.MaxResponseSize` | `GraphQLMachineServerOptions.max_message_size` |
 | requestTimeout | `MachineServerOptions.requestTimeout` | `GraphQLMachineServerOptions.RequestTimeout` | `GraphQLMachineServerOptions.request_timeout` |
-| How long a socket may take to connect | — the page's graphql-ws client given as `socket` decides | — `GraphQLSubscriptionSocketOptions.ConnectTimeout` | `GraphQLMachineServerOptions.connect_timeout` |
-| How long a socket may stay silent | — the page's graphql-ws client given as `socket` decides | — `GraphQLSubscriptionSocketOptions.KeepAliveTimeout` | `GraphQLMachineServerOptions.idle_timeout` |
+| How long a socket may take to connect | — the page's graphql-ws client given as `socket` decides | `GraphQLSubscriptionSocketOptions.ConnectTimeout` | `GraphQLMachineServerOptions.connect_timeout` |
+| How long a socket may stay silent | — the page's graphql-ws client given as `socket` decides | `GraphQLSubscriptionSocketOptions.KeepAliveTimeout` | `GraphQLMachineServerOptions.idle_timeout` |
 | resubscribeDelays | `MachineServerOptions.resubscribeDelays` | `GraphQLMachineServerOptions.ResubscribeDelays` | `GraphQLMachineServerOptions.resubscribe_delays` |
 | terminalStreamErrors | `MachineServerOptions.terminalStreamErrors` | `GraphQLMachineServerOptions.TerminalStreamErrors` | `GraphQLMachineServerOptions.terminal_stream_errors` |
 | The runtime subscriptions run on | — a page has one event loop | — continuations run on the thread pool | `GraphQLMachineServerOptions.runtime` |

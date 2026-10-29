@@ -119,6 +119,27 @@ public class ClientSurfaceTests
     }
 
     [Test]
+    public void Parse_refuses_a_dash_whose_reason_is_only_a_name()
+    {
+        var act = () =>
+            Parse(
+                [
+                    "## The client surface",
+                    TypesHeader,
+                    Separator,
+                    "| The controller | `A` | `B` | `C` |",
+                    "",
+                    MembersHeader,
+                    Separator,
+                    "| Connect | `A.connect` | — `Options.Connect` | `C.connect` |",
+                ],
+                CSharp
+            );
+
+        act.Should().Throw<AssertionException>().WithMessage("*PROTOCOL.md:8*without the `—`*");
+    }
+
+    [Test]
     public void Parse_refuses_a_dash_without_a_reason()
     {
         var act = () =>
@@ -228,9 +249,17 @@ public class ClientSurfaceTests
     private static string? NameOf(string cell, int number)
     {
         if (cell.StartsWith("— ", StringComparison.Ordinal))
-            return cell[2..].Trim().Length > 0
-                ? null
-                : throw new AssertionException($"PROTOCOL.md:{number}: a `—` gives its reason");
+        {
+            var reason = cell[2..].Trim();
+            if (reason.Length == 0)
+                throw new AssertionException($"PROTOCOL.md:{number}: a `—` gives its reason");
+            // A name behind a dash would go unchecked: it is the cell's name, not its reason.
+            if (Name.IsMatch(reason))
+                throw new AssertionException(
+                    $"PROTOCOL.md:{number}: `{cell}` gives a name as its reason; write the name without the `—`"
+                );
+            return null;
+        }
         if (cell == "—")
             throw new AssertionException($"PROTOCOL.md:{number}: a `—` gives its reason");
         var match = Name.Match(cell);
@@ -246,19 +275,25 @@ public class ClientSurfaceTests
             .SelectMany(a => a.GetExportedTypes())
             .SingleOrDefault(t => !t.IsNested && t.Name == name);
 
-    // A type's public members as a caller names them: methods, properties, events and fields, its own and static ones,
-    // without constructors, accessors, operators, nested types and what the compiler writes for a record.
+    // A type's public members as a caller names them: methods, properties, events and fields, instance and static, its
+    // own and inherited ones (an interface's from the interfaces it extends), as the TypeScript check reads a type's;
+    // without what every object has, constructors, accessors, operators, nested types and what the compiler writes
+    // for a record.
     private static HashSet<string>? Members(string typeName)
     {
         var type = FindType(typeName);
         if (type is null)
             return null;
-        return type.GetMembers(
-                BindingFlags.Public
-                    | BindingFlags.Instance
-                    | BindingFlags.Static
-                    | BindingFlags.DeclaredOnly
+        const BindingFlags flags =
+            BindingFlags.Public
+            | BindingFlags.Instance
+            | BindingFlags.Static
+            | BindingFlags.FlattenHierarchy;
+        return type.GetMembers(flags)
+            .Concat(
+                type.IsInterface ? type.GetInterfaces().SelectMany(i => i.GetMembers(flags)) : []
             )
+            .Where(m => m.DeclaringType != typeof(object))
             .Where(m =>
                 m.MemberType
                     is MemberTypes.Method

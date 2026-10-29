@@ -94,9 +94,16 @@ fn cells(line: &str, number: usize) -> Vec<String> {
 
 fn name(cell: &str, number: usize) -> Option<String> {
     if let Some(reason) = cell.strip_prefix("— ") {
+        let reason = reason.trim();
+        assert!(!reason.is_empty(), "PROTOCOL.md:{number}: a `—` gives its reason");
+        // A name behind a dash would go unchecked: it is the cell's name, not its reason.
+        let only_a_name = reason
+            .strip_prefix('`')
+            .and_then(|r| r.strip_suffix('`'))
+            .is_some_and(is_name);
         assert!(
-            !reason.trim().is_empty(),
-            "PROTOCOL.md:{number}: a `—` gives its reason"
+            !only_a_name,
+            "PROTOCOL.md:{number}: `{cell}` gives a name as its reason; write the name without the `—`"
         );
         return None;
     }

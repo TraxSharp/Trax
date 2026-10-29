@@ -73,11 +73,16 @@ function cellsOf(line: string, number: number): string[] {
 }
 
 function nameOf(cell: string, number: number): string | null {
+  const name = /^`([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)`$/;
   if (cell.startsWith('— ')) {
-    if (cell.slice(2).trim() === '') throw new Error(`PROTOCOL.md:${number}: a \`—\` gives its reason`);
+    const reason = cell.slice(2).trim();
+    if (reason === '') throw new Error(`PROTOCOL.md:${number}: a \`—\` gives its reason`);
+    // A name behind a dash would go unchecked: it is the cell's name, not its reason.
+    if (name.test(reason))
+      throw new Error(`PROTOCOL.md:${number}: \`${cell}\` gives a name as its reason; write the name without the \`—\``);
     return null;
   }
-  const match = /^`([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)`$/.exec(cell);
+  const match = name.exec(cell);
   if (!match)
     throw new Error(
       `PROTOCOL.md:${number}: \`${cell}\` is neither one name in backticks (\`Type.member\` or \`Name\`) nor \`—\` and a reason`,
