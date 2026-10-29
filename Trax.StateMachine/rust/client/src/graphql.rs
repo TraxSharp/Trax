@@ -69,7 +69,8 @@ pub struct GraphQLMachineServerOptions {
     /// The `connection_init` payload, asked for on every connection: how a host authenticates a socket.
     pub connection_params: Option<ConnectionParams>,
     /// Delays before subscribing again after a stream that ended without saying why. The last repeats, and they start
-    /// over once a stream has delivered a second push. A socket the host refused (closed with 4401 or 4403, an upgrade
+    /// over once a stream has delivered a second snapshot. Each wait is drawn uniformly between half of its delay and
+    /// all of it, so clients the host dropped together do not all come back at once. A socket the host refused (closed with 4401 or 4403, an upgrade
     /// answered 401 or 403, or a stream error with an authorization code or one of `terminal_stream_errors`) is not
     /// subscribed again: the stream delivers [`StreamMessage::Refused`] and ends.
     pub resubscribe_delays: Option<Vec<Duration>>,
@@ -192,6 +193,8 @@ struct Inner {
     max_message_size: usize,
     terminal_stream_errors: HashSet<String>,
     runtime: Option<tokio::runtime::Handle>,
+    // Where each resubscribe delay's jitter comes from: a number in [0, 1]. Tests pass one of their own.
+    random: fn() -> f64,
 }
 
 impl GraphQLMachineServer {
@@ -263,8 +266,16 @@ impl GraphQLMachineServer {
                 max_message_size: options.max_message_size,
                 terminal_stream_errors: options.terminal_stream_errors.into_iter().collect(),
                 runtime: options.runtime.or_else(|| tokio::runtime::Handle::try_current().ok()),
+                random: random_unit,
             }),
         })
+    }
+
+    // The server with `random` as the source of the resubscribe delays' jitter.
+    #[cfg(test)]
+    fn with_random(mut self, random: fn() -> f64) -> Self {
+        Arc::get_mut(&mut self.inner).expect("a server not yet shared").random = random;
+        self
     }
 
     /// Deletes one of the caller's instances. One already gone, or never the caller's, is answered discarded too, so
@@ -594,6 +605,22 @@ impl MachineServer for GraphQLMachineServer {
     }
 }
 
+// One wait of the resubscribe schedule: chosen uniformly between half of `step` and all of it, from `random` in [0, 1],
+// so the clients a host dropped together do not all subscribe again at the same moment.
+fn jittered(step: Duration, random: f64) -> Duration {
+    step.mul_f64(0.5 + 0.5 * random.clamp(0.0, 1.0))
+}
+
+static DRAWS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+// A number uniform in [0, 1): the top 53 bits of a counter hashed with the process's random keys.
+fn random_unit() -> f64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    hasher.write_u64(DRAWS.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+    (hasher.finish() >> 11) as f64 / (1u64 << 53) as f64
+}
+
 // The operations a machine serves beside its events. An event's field is never looked up among them.
 const OPERATIONS: [&str; 4] = ["start", "get", "discard", "changed"];
 
@@ -631,7 +658,8 @@ impl Inner {
             match once.await.unwrap_or(Ended::Again) {
                 Ended::ForGood => return,
                 Ended::Again => {
-                    let delay = self.resubscribe_delays[attempt.min(self.resubscribe_delays.len() - 1)];
+                    let step = self.resubscribe_delays[attempt.min(self.resubscribe_delays.len() - 1)];
+                    let delay = jittered(step, (self.random)());
                     attempt += 1;
                     tokio::time::sleep(delay).await;
                 }
@@ -1571,7 +1599,7 @@ mod tests {
             &format!("ws://127.0.0.1:{port}/graphql"),
         );
         given.resubscribe_delays = Some(vec![Duration::from_millis(10), Duration::from_millis(400)]);
-        let server = GraphQLMachineServer::new(given).unwrap();
+        let server = GraphQLMachineServer::new(given).unwrap().with_random(|| 1.0);
 
         let (deliver, mut delivered) = tokio::sync::mpsc::unbounded_channel();
         let _stream = server.subscribe(
@@ -1595,16 +1623,16 @@ mod tests {
         assert!(matches!(delivered.try_recv(), Ok(StreamMessage::Changed(_))));
     }
 
-    // Follows "i-1" on a host that answers every connection as `reply` says, with resubscribe delays of 10 and 400 ms,
-    // and answers how long after the second connection the third came.
-    async fn third_connection_after(reply: Replies) -> Duration {
+    // Follows "i-1" on a host that answers every connection as `reply` says, with resubscribe delays of 10 ms and
+    // `then`, each delay's jitter drawn from `random`, and answers how long after the second connection the third came.
+    async fn third_connection_after(reply: Replies, then: Duration, random: fn() -> f64) -> Duration {
         let (port, mut heard) = recording_host(reply).await;
         let mut given = options(
             &format!("http://127.0.0.1:{port}/graphql"),
             &format!("ws://127.0.0.1:{port}/graphql"),
         );
-        given.resubscribe_delays = Some(vec![Duration::from_millis(10), Duration::from_millis(400)]);
-        let server = GraphQLMachineServer::new(given).unwrap();
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10), then]);
+        let server = GraphQLMachineServer::new(given).unwrap().with_random(random);
 
         let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
         let wait = Duration::from_secs(10);
@@ -1617,16 +1645,42 @@ mod tests {
 
     #[tokio::test]
     async fn a_reload_does_not_count_as_a_push_toward_starting_the_delays_over() {
-        let after = third_connection_after(|_| Reply::PushReloadThenComplete).await;
+        let after = third_connection_after(|_| Reply::PushReloadThenComplete, Duration::from_millis(400), || 1.0).await;
 
         assert!(after >= Duration::from_millis(300), "subscribed again after {after:?}");
     }
 
     #[tokio::test]
     async fn a_stream_that_delivered_a_second_snapshot_starts_the_delays_over() {
-        let after = third_connection_after(|_| Reply::TwoPushesThenComplete).await;
+        let after = third_connection_after(|_| Reply::TwoPushesThenComplete, Duration::from_millis(400), || 1.0).await;
 
         assert!(after < Duration::from_millis(300), "subscribed again after {after:?}");
+    }
+
+    #[tokio::test]
+    async fn a_resubscribe_delay_is_drawn_between_half_its_step_and_all_of_it() {
+        let after = third_connection_after(|_| Reply::PushThenComplete, Duration::from_millis(800), || 0.0).await;
+
+        assert!(
+            after >= Duration::from_millis(350) && after < Duration::from_millis(700),
+            "subscribed again after {after:?}"
+        );
+    }
+
+    #[test]
+    fn the_jitter_spans_half_the_step_to_all_of_it() {
+        let step = Duration::from_millis(400);
+        assert_eq!(jittered(step, 0.0), Duration::from_millis(200));
+        assert_eq!(jittered(step, 0.5), Duration::from_millis(300));
+        assert_eq!(jittered(step, 1.0), step);
+        assert_eq!(jittered(step, 7.0), step);
+
+        let draws: Vec<f64> = (0..200).map(|_| random_unit()).collect();
+        assert!(draws.iter().all(|d| (0.0..1.0).contains(d)), "{draws:?}");
+        assert!(
+            draws.iter().any(|d| *d < 0.5) && draws.iter().any(|d| *d >= 0.5),
+            "{draws:?}"
+        );
     }
 
     #[test]
