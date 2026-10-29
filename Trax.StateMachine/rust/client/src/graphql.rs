@@ -477,11 +477,17 @@ fn snapshot_of(value: &Value) -> Result<ServerSnapshot, TransportError> {
             ))
         })?),
     };
-    let context = value
-        .get("context")
-        .and_then(|c| c.as_object())
-        .map(without_nulls)
-        .unwrap_or_default();
+    // A context that is null or left out is empty. One that is not an object is not a context any store wrote: the
+    // answer that holds it fails, and a push that holds it is dropped.
+    let context = match value.get("context") {
+        None | Some(Value::Null) => Map::new(),
+        Some(Value::Object(context)) => without_nulls(context),
+        Some(_) => {
+            return Err(TransportError(
+                "The server answered a context that is not an object.".to_owned(),
+            ))
+        }
+    };
     // A due time the server says it cannot know, or does not carry, stays unknown, so it is never read as "no timer".
     let due_at = if value.get("dueAtKnown").and_then(|k| k.as_bool()) == Some(false) {
         DueAt::Unknown
@@ -1022,6 +1028,67 @@ mod tests {
             panic!("expected a snapshot");
         };
         assert_eq!(snapshot.revision, None);
+    }
+
+    #[test]
+    fn an_answer_whose_context_is_not_an_object_fails() {
+        for context in [r#""x""#, "[]", "5", "true"] {
+            let answer = Value::parse(&format!(
+                r#"{{"id":"i-1","revision":1,"state":"Locked","context":{context}}}"#
+            ))
+            .unwrap();
+
+            let Err(error) = answer_of(&answer) else {
+                panic!("the context {context} was read");
+            };
+
+            assert!(error.0.contains("context"), "{}", error.0);
+        }
+    }
+
+    #[test]
+    fn an_answer_with_a_null_or_no_context_has_an_empty_one() {
+        for context in [r#","context":null"#, ""] {
+            let answer = Value::parse(&format!(r#"{{"id":"i-1","revision":1,"state":"Locked"{context}}}"#)).unwrap();
+
+            let Ok(ServerAnswer::Stored { snapshot, .. }) = answer_of(&answer) else {
+                panic!("the answer {context:?} was not read");
+            };
+
+            assert!(snapshot.context.is_empty());
+        }
+    }
+
+    // What `on_next` does with one `next` payload: the messages it delivered, how many pushes it counted, and whether
+    // it ended the subscription.
+    fn next_of(payload: &str) -> (Vec<StreamMessage>, usize, bool) {
+        let server = GraphQLMachineServer::new(options(
+            "https://api.example.com/graphql",
+            "wss://api.example.com/graphql",
+        ))
+        .unwrap();
+        let delivered = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let into = delivered.clone();
+        let sink: StreamSink = Arc::new(move |m| into.lock().unwrap().push(m));
+        let mut pushes = 0;
+        let ended = server
+            .inner
+            .on_next(Some(&Value::parse(payload).unwrap()), &sink, &mut pushes)
+            .is_some();
+        let delivered = delivered.lock().unwrap().clone();
+        (delivered, pushes, ended)
+    }
+
+    #[test]
+    fn a_push_whose_context_is_not_an_object_is_dropped() {
+        for context in [r#""x""#, "[]", "5"] {
+            let (delivered, pushes, ended) = next_of(&format!(
+                r#"{{"data":{{"turnstileChanged":{{"state":"Locked","revision":1,"context":{context}}}}}}}"#
+            ));
+
+            assert!(delivered.is_empty(), "{context}: {delivered:?}");
+            assert_eq!((pushes, ended), (0, false), "{context}");
+        }
     }
 
     #[test]
