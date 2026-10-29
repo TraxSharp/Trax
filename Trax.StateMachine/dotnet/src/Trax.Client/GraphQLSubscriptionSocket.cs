@@ -163,6 +163,10 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         public object Gate { get; } = new();
         public bool Started { get; set; }
 
+        // Set under the connection's send lock as the subscribe message goes out: only then is there anything for a
+        // complete to end.
+        public bool Sent { get; set; }
+
         // Set once the sink has had its last callback, or its handle was disposed. Read without Gate by a disposal,
         // which must not wait on a callback that may be waiting on it.
         private volatile bool _ended;
@@ -210,17 +214,21 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         JsonObject payload
     )
     {
+        bool sent;
         try
         {
             await connection.Ready.ConfigureAwait(false);
-            await SendAsync(
+            // A handle disposed while the connection was being acknowledged sends nothing: checked under the send lock,
+            // so its complete, which takes the same lock, never goes out ahead of the subscribe.
+            sent = await SendAsync(
                     connection,
                     new JsonObject
                     {
                         ["id"] = subscription.Id,
                         ["type"] = "subscribe",
                         ["payload"] = payload,
-                    }
+                    },
+                    when: () => subscription.Sent = !subscription.Ended
                 )
                 .ConfigureAwait(false);
         }
@@ -229,7 +237,8 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             Fail(connection, ex);
             return;
         }
-        Deliver(connection, subscription, null);
+        if (sent)
+            Deliver(connection, subscription, null);
     }
 
     private void Unsubscribe(Connection connection, Subscription subscription)
@@ -250,7 +259,11 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             try
             {
                 await connection.Ready.ConfigureAwait(false);
-                await SendAsync(connection, new JsonObject { ["id"] = id, ["type"] = "complete" })
+                await SendAsync(
+                        connection,
+                        new JsonObject { ["id"] = id, ["type"] = "complete" },
+                        when: () => subscription.Sent
+                    )
                     .ConfigureAwait(false);
             }
             catch (Exception)
@@ -564,11 +577,12 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     }
 
     // Sends one message over the connection, until it closes or `token` is cancelled; the connection's own stop when
-    // none is given.
-    private static async Task SendAsync(
+    // none is given. With `when`, sends it only if that holds once the send lock is held, and says whether it did.
+    private static async Task<bool> SendAsync(
         Connection connection,
         JsonObject message,
-        CancellationToken? token = null
+        CancellationToken? token = null,
+        Func<bool>? when = null
     )
     {
         var bytes = Encoding.UTF8.GetBytes(message.ToJsonString());
@@ -576,9 +590,12 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         await connection.Sending.WaitAsync(cancel).ConfigureAwait(false);
         try
         {
+            if (when is not null && !when())
+                return false;
             await connection
                 .Socket.SendAsync(bytes, WebSocketMessageType.Text, true, cancel)
                 .ConfigureAwait(false);
+            return true;
         }
         finally
         {

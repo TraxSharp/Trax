@@ -355,6 +355,54 @@ public class GraphQLSubscriptionSocketTests
     }
 
     [Test]
+    public async Task A_subscription_disposed_before_the_connection_is_acknowledged_is_never_sent()
+    {
+        var acknowledge = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var received = new TaskCompletionSource<IReadOnlyList<JsonObject>>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.UpgradeAsync();
+            await peer.ReceiveAsync();
+            await acknowledge.Task.WaitAsync(peer.Stopping);
+            await peer.SendAsync("""{"type":"connection_ack"}""");
+            var messages = new List<JsonObject>();
+            try
+            {
+                while (await peer.ReceiveAsync() is { } message)
+                    messages.Add(message);
+            }
+            catch (Exception ex) when (ex is WebSocketException or IOException)
+            {
+                // Dropped rather than closed.
+            }
+            received.TrySetResult(messages);
+        });
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var gone = new Sink();
+        var kept = new Sink();
+
+        socket.Subscribe(Payload, gone).Dispose();
+        // A second subscription holds the connection open past the first one's end.
+        var held = socket.Subscribe(Payload, kept);
+        acknowledge.SetResult();
+        (await kept.Take(1)).Should().Equal("started");
+        held.Dispose();
+
+        var messages = await received.Task.WaitAsync(Wait);
+        messages
+            .Where(m => m["type"]!.GetValue<string>() == "subscribe")
+            .Select(m => m["id"]!.GetValue<string>())
+            .Should()
+            .Equal("2");
+    }
+
+    [Test]
     public async Task A_disposed_socket_fails_a_new_subscription_as_unavailable()
     {
         var socket = new GraphQLSubscriptionSocket(
