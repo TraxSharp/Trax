@@ -58,7 +58,9 @@ describe("the client conformance kit", () => {
       }
       return answer;
     });
-    const failures = await runTranscripts(list, host, ask);
+    // The transcripts a host refuses something in are enough: the whole kit already ran above.
+    const refusing = list.filter((t) => JSON.stringify(t.steps).includes('"GUARD_FAILED"'));
+    const failures = await runTranscripts(refusing, host, ask);
     expect(failures.map((f) => f.name)).toEqual(["first-of-two-refused"]);
     expect(failures[0].error).toContain('"code":"INVALID_INPUT"');
   }, 60_000);
@@ -82,19 +84,28 @@ describe("the client conformance kit", () => {
   }, 60_000);
 
   it("reads the allowlist from PROTOCOL.md, and refuses an entry without a reason", () => {
-    expect(allowedLacks().map((a) => `${a.client}:${a.capability}`)).toEqual(["ts:upgrade-status"]);
+    expect(allowedLacks().map((a) => `${a.client}:${a.capability}`)).toEqual([
+      "ts:upgrade-status",
+      "ts:socket-message-limit",
+    ]);
     const block = (entries) => `# x\n\n\`\`\`json lacks\n${JSON.stringify(entries)}\n\`\`\`\n`;
     expect(() => allowedLacks(block([{ capability: "x", client: "ts", reason: " " }]))).toThrow(/no reason/);
     expect(() => allowedLacks("# no block")).toThrow(/no `json lacks` block/);
   });
 
   it("drives a spawned testee over the protocol", () => {
-    const run = spawnSync(process.execPath, [runner, "--testee", process.execPath, here("client-testee-ts.mjs")], {
-      encoding: "utf8",
-      timeout: 120_000,
-    });
-    const ran = list.filter((t) => !(t.needs ?? []).includes("upgrade-status")).length;
-    expect(run.stderr).toContain(`${ran} of ${ran} transcripts passed, ${list.length - ran} skipped.`);
+    // A few transcripts are enough to hold the pipes: the whole kit already ran above, in process.
+    const only = "s";
+    const run = spawnSync(
+      process.execPath,
+      [runner, "--only", only, "--testee", process.execPath, here("client-testee-ts.mjs")],
+      { encoding: "utf8", timeout: 120_000 },
+    );
+    const lacked = new Set(allowedLacks().filter((a) => a.client === "ts").map((a) => a.capability));
+    const some = list.filter((t) => t.name.startsWith(only));
+    const ran = some.filter((t) => !(t.needs ?? []).some((n) => lacked.has(n))).length;
+    expect(ran).toBeLessThan(some.length);
+    expect(run.stderr).toContain(`${ran} of ${ran} transcripts passed, ${some.length - ran} skipped.`);
     expect(run.status).toBe(0);
   }, 120_000);
 });
