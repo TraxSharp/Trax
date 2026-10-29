@@ -254,11 +254,14 @@ public class TraxClientTests
         opened.Sink.Error(new SocketClosedException("The socket was closed: 4403 Forbidden", 4403));
 
         var ended = (await events.Take(1)).Single();
-        ended
+        var failure = ended
             .Should()
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
-            .Which.Failure!.Message.Should()
-            .Contain("4403");
+            .Which.Failure!;
+        failure.Message.Should().Contain("4403");
+        failure
+            .CloseStatus.Should()
+            .Be(4403, "a caller tells forbidden from unauthenticated by it");
         opened.Disposed.Should().BeTrue();
     }
 

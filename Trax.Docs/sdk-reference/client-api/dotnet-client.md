@@ -117,7 +117,7 @@ public readonly record struct Optional<T>
 | `TraxAnswer<T>` | A document's answer: `Data` read into the result, the `Errors` the host answered with, or the `Failure` that kept an answer from arriving. `Succeeded` is true when data arrived with no error. `Code` is `TRANSPORT_ERROR` for a failure, else the first error's code. `Message` is the failure's message or every error's, one per line. |
 | `TraxAnswer` | An answer as it arrived, what an `ITraxTransport` returns: `Data` as JSON, `Errors` and `Failure`. `TraxAnswer.Of(json)` reads an answer's JSON and is null when it holds neither `data` nor `errors`; `TraxAnswer.Failed(message, status)` is one that never arrived. |
 | `TraxGraphQLError` | One error: its `Message`, its `Code` (`extensions.code`, such as `CLIENT_OUTDATED` or `AUTH_NOT_AUTHORIZED`), its `Path` and its `Extensions` as sent. |
-| `TraxTransportFailure` | A request that got no GraphQL answer: its `Message`, and the HTTP `Status` when a response arrived. `TraxTransportFailure.Code` is `TRANSPORT_ERROR`, the code the state-machine clients report a transport failure under. |
+| `TraxTransportFailure` | A request that got no GraphQL answer: its `Message`, the HTTP `Status` when a response arrived, and the `CloseStatus` (4401 or 4403) when the host closed a stream's socket to turn it away. `TraxTransportFailure.Code` is `TRANSPORT_ERROR`, the code the state-machine clients report a transport failure under. |
 | `TraxStreamEvent<T>` | What a followed stream delivers: `Next` with one frame's `Data`; `Interrupted` with the `Reason` the socket dropped it; `Resumed` once it is subscribed again, before its first `Next`; `Ended` with the `Errors` or the `Failure` it ended on, both empty only when the host completed it. |
 
 ### Transports
@@ -153,7 +153,7 @@ public readonly record struct Optional<T>
   `operationName`.
 - **Streams.** A `Subscribe` stream ends for good (`Ended`) when the host completes it (no errors, no failure), answers a
   frame with errors or refuses the subscription (`Errors`, or a `Failure` when the refusal carried none), or with a
-  `Failure` when it closes the socket with 4401 or 4403, answers the upgrade 401 or 403, sends a frame that does not fit
+  `Failure` when it closes the socket with 4401 or 4403 (its `CloseStatus` says which), answers the upgrade 401 or 403, sends a frame that does not fit
   the result, when the transport has no socket or the socket was disposed, or when `onEvent` throws. Anything else that
   drops the stream, a close, a broken connection, an unanswered ping or a malformed message, is `Interrupted`, said
   once, and the stream is subscribed again after the next of `ResubscribeDelays`, starting over at the first once a
