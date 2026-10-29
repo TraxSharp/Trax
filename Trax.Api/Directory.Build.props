@@ -35,6 +35,7 @@
     <!-- Every package carries a README. A project replaces the file packed as README.md by
          setting TraxPackageReadme; the auth and audit packages do, to lead with the disclaimer. -->
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <TraxPackageReadme>$(MSBuildThisFileDirectory)README.md</TraxPackageReadme>
     <!-- No .snupkg: DotNet.ReproducibleBuilds embeds the PDB, SourceLink included, in each DLL. -->
   </PropertyGroup>
@@ -43,6 +44,7 @@
        project file is the one packed here. -->
   <ItemGroup Condition="$([System.String]::Copy('$(MSBuildProjectDirectory)').Replace('\','/').Contains('/src/'))">
     <None Include="$(TraxPackageReadme)" Pack="true" PackagePath="README.md" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)../.github/brand/icon-128.png" Pack="true" PackagePath="icon.png" Visible="false" />
   </ItemGroup>
 
   <!-- Deterministic/reproducible builds. CI source-path normalization

@@ -23,6 +23,7 @@
     <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
     <PackageTags>trax;dotnet</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -32,6 +33,7 @@
       PackagePath="\"
       Visible="false"
     />
+    <None Include="$(MSBuildThisFileDirectory)../.github/brand/icon-128.png" Pack="true" PackagePath="icon.png" Visible="false" />
   </ItemGroup>
 
   <!-- Deterministic/reproducible builds. CI source-path normalization

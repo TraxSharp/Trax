@@ -26,6 +26,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageTags>trax;dotnet;railway-oriented-programming;functional;pipeline;either</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- No .snupkg: DotNet.ReproducibleBuilds (below) sets DebugType=embedded, so the PDB, with its
          SourceLink map to this repository's commit, is already inside the shipped DLL. A symbol
@@ -39,6 +40,7 @@
       PackagePath="\"
       Visible="false"
     />
+    <None Include="$(MSBuildThisFileDirectory)../.github/brand/icon-128.png" Pack="true" PackagePath="icon.png" Visible="false" />
   </ItemGroup>
 
   <!-- Package validation: `dotnet pack` compares each published library with the last release on
