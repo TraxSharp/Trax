@@ -835,6 +835,10 @@ public class ClientDocumentsGeneratorTests
         "query A { discover { findOrder(input: { id: 1 }) { ...Missing } } }",
         "*no file defines the fragment 'Missing'*"
     )]
+    [TestCase(
+        "query A($input: FindInput!, $input: FindInput!) { discover { findOrder(input: $input) { title } } }",
+        "*a.graphql:1:29: 'A' declares the variable '$input' more than once.*"
+    )]
     [TestCase("type X { a: Int }", "*neither an operation nor a fragment*")]
     public void A_document_the_host_would_refuse_is_refused_naming_where(
         string text,

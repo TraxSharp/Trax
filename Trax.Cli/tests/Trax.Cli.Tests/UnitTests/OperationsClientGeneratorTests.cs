@@ -346,6 +346,10 @@ public class OperationsClientGeneratorTests
         "query Unused($id: Long!) { operations { run(id: 1) { id } } }",
         "'Unused' declares the variable '$id' and never uses it."
     )]
+    [TestCase(
+        "query Twice($id: Long!, $id: Long!) { operations { run(id: $id) { id } } }",
+        "1:25: 'Twice' declares the variable '$id' more than once."
+    )]
     public void A_document_a_host_would_not_register_is_refused_naming_its_file(
         string document,
         string reason

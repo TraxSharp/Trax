@@ -182,11 +182,8 @@ internal sealed partial class ClientDocumentSet
             return null;
         }
 
-        var variables = (operation.Variables?.Items ?? []).ToDictionary(
-            v => v.Variable.Name.StringValue,
-            v => v,
-            StringComparer.Ordinal
-        );
+        if (Variables(file, name, operation, errors) is not { } variables)
+            return null;
         var scope = new Scope(file, variables);
         checker.Begin(operation);
         checker.Root(scope, operation.SelectionSet, rootType);
