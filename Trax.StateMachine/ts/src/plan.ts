@@ -71,10 +71,17 @@ const withoutNulls = (value: unknown, depth = 0): unknown => {
 // The most snapshots one search expands, whatever its depth.
 const EXPANSION_LIMIT = 10_000;
 
+type Advanced = ReturnType<SnapshotMachine<string, string>['advance']>;
+
+// A snapshot waiting to be expanded. It holds the node it was reached from and the edge that reached it rather than its
+// whole path, and, when the goal test already applied the fields event to it, that step and its wire, which the
+// expansion reuses instead of advancing it again.
 interface Node {
   snapshot: Snapshot;
-  path: PlannedEvent[];
+  parent: number;
+  edge: number;
   depth: number;
+  applied: { next: Advanced; wire: string | null } | null;
 }
 
 /**
@@ -120,7 +127,6 @@ export function searchPlan(
     ...(fieldsEvent ? [fieldsEvent] : []),
     ...navigation.map((trigger) => ({ trigger })),
   ];
-  const copy = (path: PlannedEvent[]) => path.map((e) => ({ ...e }));
   const unpredictableAt = (state: string): readonly string[] => def.unpredictable?.[state] ?? [];
 
   // Snapshots are compared by their canonical wire without the members that hold null, at every depth: a host leaves
@@ -129,13 +135,17 @@ export function searchPlan(
     machine.serialize({ ...candidate, context: withoutNulls(candidate.context) as Record<string, unknown> });
 
   // The goal: the target state, where the fields event, when there is one, changes nothing. A target that refuses the
-  // fields event, or where it rests on a custom rule this machine cannot evaluate, is never the goal.
+  // fields event, or where it rests on a custom rule this machine cannot evaluate, is never the goal. Answers the
+  // fields event's step as well when it took one, with its wire when it transitioned.
+  let applied: Node['applied'] = null;
   const isGoal = (candidate: Snapshot, wire: string): boolean => {
+    applied = null;
     if (candidate.state !== target) return false;
     if (fieldsEvent === null) return true;
     if (unpredictableAt(candidate.state).includes(fieldsEvent.trigger)) return false;
-    const applied = machine.advance(candidate, fieldsEvent.trigger, fieldsEvent.input);
-    return applied.outcome === 'transitioned' && wireOf(applied.snapshot) === wire;
+    const next = machine.advance(candidate, fieldsEvent.trigger, fieldsEvent.input);
+    applied = { next, wire: next.outcome === 'transitioned' ? wireOf(next.snapshot) : null };
+    return applied.wire === wire;
   };
 
   try {
@@ -145,8 +155,14 @@ export function searchPlan(
     if (maxDepth <= 0) return { result: 'exceeded' };
 
     const seen = new Set<string>([startWire]);
-    const queue: Node[] = [{ snapshot, path: [], depth: 0 }];
-    let undetermined: { trigger: string; events: PlannedEvent[] } | null = null;
+    const queue: Node[] = [{ snapshot, parent: -1, edge: -1, depth: 0, applied }];
+    // The events on the path to the node at `at`, each a copy of its edge.
+    const pathTo = (at: number): PlannedEvent[] => {
+      const events: PlannedEvent[] = [];
+      for (let i = at; queue[i].parent >= 0; i = queue[i].parent) events.push({ ...edges[queue[i].edge] });
+      return events.reverse();
+    };
+    let undetermined: { trigger: string; at: number } | null = null;
     let truncated = false;
     let expanded = 0;
 
@@ -159,30 +175,35 @@ export function searchPlan(
       expanded++;
       const node = queue[head];
       const unpredictable = unpredictableAt(node.snapshot.state);
-      for (const edge of edges) {
+      for (let k = 0; k < edges.length; k++) {
+        const edge = edges[k];
         // An edge on a custom rule this machine cannot evaluate is the server's to decide: not tried, but the first one
         // met is kept, in case nothing else reaches the target.
         if (unpredictable.includes(edge.trigger)) {
-          undetermined ??= { trigger: edge.trigger, events: copy(node.path) };
+          undetermined ??= { trigger: edge.trigger, at: head };
           continue;
         }
-        const next = machine.advance(node.snapshot, edge.trigger, edge.input);
+        // The fields event is the first edge, and the goal test may have taken that step already.
+        const reused = k === 0 && fieldsEvent !== null ? node.applied : null;
+        const next = reused?.next ?? machine.advance(node.snapshot, edge.trigger, edge.input);
         if (next.outcome !== 'transitioned') continue;
-        const wire = wireOf(next.snapshot);
+        const wire = reused?.wire ?? wireOf(next.snapshot);
         if (seen.has(wire)) continue;
         seen.add(wire);
-        const path = [...node.path, edge];
-        if (isGoal(next.snapshot, wire)) return { result: 'plan', events: copy(path) };
+        if (isGoal(next.snapshot, wire)) return { result: 'plan', events: [...pathTo(head), { ...edge }] };
         if (node.depth + 1 >= maxDepth) {
           truncated = true;
           continue;
         }
-        queue.push({ snapshot: next.snapshot, path, depth: node.depth + 1 });
+        queue.push({ snapshot: next.snapshot, parent: head, edge: k, depth: node.depth + 1, applied });
       }
+      // Expanded: what it held is not needed again.
+      node.applied = null;
     }
 
     // A kept custom edge outranks a limit: past it may lie a plan the search could not see.
-    if (undetermined !== null) return { result: 'undetermined', ...undetermined };
+    if (undetermined !== null)
+      return { result: 'undetermined', trigger: undetermined.trigger, events: pathTo(undetermined.at) };
     return truncated ? { result: 'exceeded' } : { result: 'unreachable' };
   } catch {
     // Totality backstop: a snapshot whose context cannot be written as canonical JSON reaches nothing.

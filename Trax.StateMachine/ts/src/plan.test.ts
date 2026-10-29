@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { conformanceFile } from "./fixtures";
 import { SnapshotMachine } from "./machine";
-import type { PlanRequest, PlanResult } from "./plan";
+import { searchPlan, type PlanRequest, type PlanResult } from "./plan";
 import { machineFromIr, type IrDocument } from "./rules/irMachine";
 import { typedMachineFromIr } from "./typed";
 import type { Snapshot } from "./types";
@@ -96,6 +96,31 @@ describe("plan", () => {
       result: "plan",
       events: [{ trigger: "Skip" }],
     });
+  });
+
+  it("advances each snapshot by each edge once, the goal test's fields event included", () => {
+    const asked: string[] = [];
+    const spy = {
+      definition: wizard.definition,
+      serialize: (s: Snapshot) => wizard.serialize(s),
+      advance: (s: Snapshot, trigger: string, input?: unknown) => {
+        asked.push(`${wizard.serialize(s)} ${trigger}`);
+        return wizard.advance(s, trigger, input);
+      },
+    } as unknown as SnapshotMachine<string, string>;
+    const bob = { ...empty, state: "Review", context: { email: "bob@example.com", name: "Bob" } };
+
+    expect(searchPlan(spy, bob, { target: "Review", fields: filled, navigation: ["Begin", "Next", "Back"] })).toEqual({
+      result: "plan",
+      events: [filled],
+    });
+    expect(new Set(asked).size).toBe(asked.length);
+    asked.length = 0;
+    expect(searchPlan(spy, empty, { target: "Review", fields: filled, navigation: ["Begin", "Next", "Back"] })).toEqual({
+      result: "plan",
+      events: [{ trigger: "Begin" }, filled, { trigger: "Next" }],
+    });
+    expect(new Set(asked).size).toBe(asked.length);
   });
 
   it("tries a navigation trigger listed twice once from each snapshot", () => {
