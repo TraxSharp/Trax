@@ -829,6 +829,36 @@ async fn a_sync_plans_off_the_controllers_task() {
     );
 }
 
+// A sync taken over while its plan is still being searched settles superseded at once, and the one that took over is
+// planned and settles on its own.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_sync_superseded_while_its_plan_is_searched_settles_superseded() {
+    let (ir, hash) = sprawl();
+    let mut options = ServerMachineOptions::new(ir, hash, Reading);
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+    controller.start().await;
+    let navigation: Vec<String> = (0..10)
+        .map(|i| format!("Go{i}"))
+        .chain((0..3).flat_map(|f| (0..4).map(move |v| format!("F{f}v{v}"))))
+        .collect();
+
+    let searching = controller.sync_to("T", None, navigation);
+    let taking_over = controller.sync_to("S0", None, Vec::new());
+
+    let within = Duration::from_secs(5);
+    assert_eq!(
+        tokio::time::timeout(within, searching).await.expect("never settled"),
+        SyncOutcome::Superseded
+    );
+    let outcome = tokio::time::timeout(within, taking_over).await.expect("never settled");
+    assert!(
+        matches!(&outcome, SyncOutcome::Synced { snapshot, .. } if snapshot.state == "S0"),
+        "{outcome:?}"
+    );
+    assert!(!controller.view().unsaved);
+}
+
 #[tokio::test]
 async fn start_settles_once_its_first_read_has_settled_not_while_it_is_retried() {
     let (ir, hash) = turnstile();

@@ -5,6 +5,7 @@
 // `MAX_PLAN_EXPANSIONS` snapshots expanded.
 
 use std::collections::{HashSet, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::machine::{canonical_wire, Machine, Snapshot};
 use crate::value::{map_too_deep, Map, Value};
@@ -104,15 +105,33 @@ impl Machine {
         navigation: &[String],
         max_depth: Option<usize>,
     ) -> PlanAnswer {
+        let never = AtomicBool::new(false);
+        // Nothing sets `never`, so the search always answers.
+        self.plan_stoppable(from, target, fields, navigation, max_depth, &never)
+            .unwrap_or(PlanAnswer::Exceeded)
+    }
+
+    /// [`Machine::plan`], given up once `stop` is set: the search reads it before each snapshot it expands and answers
+    /// `None` when it finds it set. A caller that no longer wants the answer, a sync another took over, sets it from
+    /// any thread.
+    pub fn plan_stoppable(
+        &self,
+        from: &Snapshot,
+        target: &str,
+        fields: Option<&PlanEvent>,
+        navigation: &[String],
+        max_depth: Option<usize>,
+        stop: &AtomicBool,
+    ) -> Option<PlanAnswer> {
         // Checked first, as advance checks them: the search copies and compares both, and would recurse over them.
         if fields.and_then(|f| f.input.as_ref()).is_some_and(Value::is_too_deep) {
-            return PlanAnswer::Invalid(PlanInvalid::Input);
+            return Some(PlanAnswer::Invalid(PlanInvalid::Input));
         }
         if map_too_deep(&from.context) {
-            return PlanAnswer::Invalid(PlanInvalid::Context);
+            return Some(PlanAnswer::Invalid(PlanInvalid::Context));
         }
         if !self.state_set.contains(target) {
-            return PlanAnswer::Invalid(PlanInvalid::Target(target.to_owned()));
+            return Some(PlanAnswer::Invalid(PlanInvalid::Target(target.to_owned())));
         }
         // A trigger listed twice is tried once, where it is first listed.
         let mut listed = HashSet::new();
@@ -130,7 +149,7 @@ impl Machine {
         for (i, edge) in edges.iter().enumerate() {
             let navigates = fields.is_none() || i > 0;
             if !self.plannable(&edge.trigger) || (navigates && fields_trigger == Some(edge.trigger.as_str())) {
-                return PlanAnswer::Invalid(PlanInvalid::Trigger(edge.trigger.clone()));
+                return Some(PlanAnswer::Invalid(PlanInvalid::Trigger(edge.trigger.clone())));
             }
         }
         let max_depth = max_depth.unwrap_or(2 * self.states().len());
@@ -155,7 +174,7 @@ impl Machine {
         let start = wire(from);
         let (reached, applied) = goal(from, &start);
         if reached {
-            return PlanAnswer::Plan(Vec::new());
+            return Some(PlanAnswer::Plan(Vec::new()));
         }
         let mut nodes = vec![Node {
             snapshot: from.clone(),
@@ -170,6 +189,9 @@ impl Machine {
         let mut expanded = 0usize;
 
         while let Some(at) = queue.pop_front() {
+            if stop.load(Ordering::Relaxed) {
+                return None;
+            }
             if nodes[at].depth >= max_depth {
                 left_unexpanded = true;
                 continue;
@@ -208,20 +230,20 @@ impl Machine {
                 });
                 let index = nodes.len() - 1;
                 if reached {
-                    return PlanAnswer::Plan(path(&nodes, &edges, index));
+                    return Some(PlanAnswer::Plan(path(&nodes, &edges, index)));
                 }
                 queue.push_back(index);
             }
         }
 
-        match undetermined {
+        Some(match undetermined {
             Some((trigger, at)) => PlanAnswer::Undetermined {
                 trigger,
                 events: path(&nodes, &edges, at),
             },
             None if left_unexpanded => PlanAnswer::Exceeded,
             None => PlanAnswer::Unreachable,
-        }
+        })
     }
 
     // Whether a caller may plan with `trigger`: one a transition fires on, not bound to the effect, not an outcome and

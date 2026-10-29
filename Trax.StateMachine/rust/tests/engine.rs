@@ -515,3 +515,42 @@ fn a_plan_takes_each_step_once_the_goal_tests_fields_event_included() {
         "a snapshot was advanced by the fields event twice: {from:?}"
     );
 }
+
+#[test]
+fn a_stopped_plan_gives_up_before_its_next_expansion() {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let asked = Arc::new(AtomicUsize::new(0));
+    let (stopping, counted) = (stop.clone(), asked.clone());
+    // The guard on Skip stops the search the first time it is asked, during the first expansion.
+    let machine = wizard().with_guard("approved", move |_, _| {
+        counted.fetch_add(1, Ordering::SeqCst);
+        stopping.store(true, Ordering::SeqCst);
+        false
+    });
+    let navigation = ["Skip".to_owned()];
+
+    assert_eq!(
+        machine.plan_stoppable(&details(), "Review", Some(&ada()), &navigation, None, &stop),
+        None
+    );
+    assert_eq!(asked.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        machine.plan_stoppable(
+            &details(),
+            "Review",
+            Some(&ada()),
+            &navigation,
+            None,
+            &AtomicBool::new(true)
+        ),
+        None
+    );
+    assert_eq!(
+        machine.plan_stoppable(&details(), "Nowhere", None, &navigation, None, &AtomicBool::new(true)),
+        Some(machine.plan(&details(), "Nowhere", None, &navigation, None)),
+        "a request refused before any search is answered whatever the stop says"
+    );
+}

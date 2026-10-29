@@ -52,7 +52,8 @@ thread once built. It is held to the client conformance kit, as the TypeScript a
 navigation triggers. It plans with the engine's `plan` from what the host last confirmed, on the runtime's blocking
 threads rather than the controller's task, sends one event at a time and plans again from each answer, reads the
 instance once and plans again on a refusal a re-read can explain, and sends no more than twice the machine's states in
-events. A later sync supersedes it. `MachineView::unsaved` is true while a
+events. A later sync supersedes it, and a search still running for a sync that was superseded or settled gives up
+(`plan_stoppable`). `MachineView::unsaved` is true while a
 sync runs or after one that did not settle synced, for a page's leave guard.
 
 `advance` takes the triggers a client sends, `apply_outcome` an invoked train's outcome and `apply_timer` a state's
@@ -66,6 +67,8 @@ machine's states deep and `MAX_PLAN_EXPANSIONS` snapshots wide, so every engine 
 rests on a custom rule with no handler (`rests_on_unhandled_rule`), which the server has to decide. A snapshot or a
 fields input built in memory that nests deeper than `MAX_DEPTH` is `Invalid` (`PlanInvalid::Context` or
 `PlanInvalid::Input`, what `advance` refuses as `INVALID_CONTEXT` and `INVALID_INPUT`), before the search copies it.
+`plan_stoppable` is `plan` with a flag another thread may set: the search reads it before each snapshot it expands,
+and answers `None` once it is set.
 
 ## Where this fits
 

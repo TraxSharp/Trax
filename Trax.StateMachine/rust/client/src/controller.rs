@@ -14,7 +14,7 @@ use std::collections::hash_map::RandomState;
 use std::future::Future;
 use std::hash::{BuildHasher, Hasher};
 use std::panic::AssertUnwindSafe;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -608,10 +608,10 @@ enum Msg {
         epoch: u64,
         action: Later,
     },
-    // A sync's plan, from the snapshot it was planned from; `None` when the search panicked.
+    // What a sync's search came to.
     Planned {
         sync: u64,
-        planned: Option<(Snapshot, PlanAnswer)>,
+        searched: Searched,
     },
 }
 
@@ -619,6 +619,16 @@ enum Msg {
 struct NoStream;
 
 impl Subscription for NoStream {}
+
+// What a sync's search, off the controller's task, came to.
+enum Searched {
+    // Its plan, from the snapshot it was planned from.
+    Planned(Snapshot, PlanAnswer),
+    // Given up: the sync was taken over or settled, and wants no answer.
+    Stopped,
+    // The search did not finish.
+    Failed,
+}
 
 enum Later {
     Create { request_id: String, attempt: usize },
@@ -653,6 +663,8 @@ struct SyncRun {
     id: u64,
     // Whether its plan is being searched, off the controller's task.
     planning: bool,
+    // Set once the sync is taken over or settles, so a search still running for it gives up.
+    stop: Arc<AtomicBool>,
 }
 
 // The refusals a re-read can explain: the server holds something other than the client planned from.
@@ -818,7 +830,7 @@ impl<S: MachineServer> Actor<S> {
                 }
             }
             Msg::Delivered { entry, attempt, result } => self.on_delivered(entry, attempt, result),
-            Msg::Planned { sync, planned } => self.on_planned(sync, planned),
+            Msg::Planned { sync, searched } => self.on_planned(sync, searched),
             Msg::Later { epoch, action } => {
                 if epoch != self.epoch || self.disposed || self.error.is_some() {
                     return;
@@ -1536,6 +1548,7 @@ impl<S: MachineServer> Actor<S> {
         let mut awaiting_read = false;
         self.syncs += 1;
         if let Some(older) = self.sync.take() {
+            older.stop.store(true, Ordering::Relaxed);
             awaiting_read = older.awaiting_read && self.reloading;
             match older.in_flight {
                 Some(entry) => self.superseded.push((entry, older.reply)),
@@ -1555,6 +1568,7 @@ impl<S: MachineServer> Actor<S> {
             awaiting_read,
             id: self.syncs,
             planning: false,
+            stop: Arc::default(),
         });
         if !self.unsaved {
             self.unsaved = true;
@@ -1578,20 +1592,25 @@ impl<S: MachineServer> Actor<S> {
         let machine = self.machine.clone();
         let from = confirmed.clone();
         let (target, fields, navigation) = (run.target.clone(), run.fields.clone(), run.navigation.clone());
+        let stop = run.stop.clone();
         let search = self.runtime.spawn_blocking(move || {
-            let answer = machine.plan(&from, &target, fields.as_ref(), &navigation, None);
-            (from, answer)
+            let answer = machine.plan_stoppable(&from, &target, fields.as_ref(), &navigation, None, &stop);
+            answer.map(|answer| (from, answer))
         });
         let commands = self.commands.clone();
         self.runtime.spawn(async move {
-            let planned = search.await.ok();
-            let _ = commands.send(Msg::Planned { sync, planned });
+            let searched = match search.await {
+                Ok(Some((from, answer))) => Searched::Planned(from, answer),
+                Ok(None) => Searched::Stopped,
+                Err(_) => Searched::Failed,
+            };
+            let _ = commands.send(Msg::Planned { sync, searched });
         });
     }
 
     // A sync's plan has been answered: it sends the plan's first event, or settles. A plan from a snapshot the server
     // has moved past since, or answered while an event went out, is searched again from where things are now.
-    fn on_planned(&mut self, sync: u64, planned: Option<(Snapshot, PlanAnswer)>) {
+    fn on_planned(&mut self, sync: u64, searched: Searched) {
         if self.disposed || self.error.is_some() {
             return;
         }
@@ -1599,11 +1618,16 @@ impl<S: MachineServer> Actor<S> {
             return;
         };
         run.planning = false;
-        let Some((confirmed, answer)) = planned else {
-            return self.settle_sync(SyncOutcome::Failed(refusal(
-                trax_state_machine::RefusalCode::InternalError.as_str(),
-                "The planner panicked.",
-            )));
+        let (confirmed, answer) = match searched {
+            Searched::Planned(confirmed, answer) => (confirmed, answer),
+            // Only a sync that has gone stops its search, and it is not this one.
+            Searched::Stopped => return,
+            Searched::Failed => {
+                return self.settle_sync(SyncOutcome::Failed(refusal(
+                    trax_state_machine::RefusalCode::InternalError.as_str(),
+                    "The planner panicked.",
+                )))
+            }
         };
         if self.sending || !self.queue.is_empty() || self.confirmed.as_ref() != Some(&confirmed) {
             return self.pump();
@@ -1690,6 +1714,7 @@ impl<S: MachineServer> Actor<S> {
 
     fn settle_sync(&mut self, outcome: SyncOutcome) {
         let Some(run) = self.sync.take() else { return };
+        run.stop.store(true, Ordering::Relaxed);
         let unsaved = !matches!(outcome, SyncOutcome::Synced { .. });
         if unsaved != self.unsaved {
             self.unsaved = unsaved;
