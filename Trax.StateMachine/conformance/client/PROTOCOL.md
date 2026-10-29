@@ -203,3 +203,115 @@ documents from it. The steps run in order:
 A comparison holds when every member the step gives equals the answer's, canonically; members it does not give are
 not compared. After the last step the runner waits briefly, and anything that arrived that no step took fails the
 transcript: a client sends nothing the transcript does not expect.
+
+## The client surface
+
+The transcripts hold what the clients do; this section holds what they are called. Each row is one thing a page or an
+app reaches for, with its name in each client: TypeScript (`@traxsharp/state-machine`, its `client` and `react`
+entry points), C# (`Trax.StateMachine.Client`) and Rust (`trax-state-machine-client`, and the engine
+`trax-state-machine` where the engine is what predicts). A test in each language reads these tables and fails when a
+name a row gives for it is not on its public surface, or when a public member of a type the second table covers is in
+no row: `ClientSurfaceTests` in `dotnet/tests/Trax.StateMachine.Tests.Meta`, `ts/src/clientSurface.test.ts` and
+`rust/client/tests/client_surface.rs`. So a member added to one client fails until it has a row, and the row says
+what the other two call it, or why they have none.
+
+A cell is one name in backticks, `Type.member` for a member and a bare `Name` for an export of its own (a type, a
+function, a constant), or `—` and the reason that language has none. A type is the name the language exports it
+under, and a member is written as the language spells it, a Rust field or method alike with a dot. The reason is
+for people; the tests only check it is there. Outcomes, problem codes and stream messages are not here: the
+transcripts compare those by value.
+
+| Type | TypeScript | C# | Rust |
+| --- | --- | --- | --- |
+| The controller | `ServerMachineController` | `ServerMachineController` | `ServerMachineController` |
+| How it is built | `ServerMachineOptions` | `ServerMachineOptions` | `ServerMachineOptions` |
+| What it shows | `ServerMachineView` | `MachineView` | `MachineView` |
+| Why it stopped | `ServerMachineError` | `MachineError` | `MachineError` |
+| A refusal or a transport failure | `Problem` | `MachineProblem` | `MachineProblem` |
+| The seam to a host | `MachineServer` | `IMachineServer` | `MachineServer` |
+| The host over GraphQL | `TypedMachineServer` | `GraphQLMachineServer` | `GraphQLMachineServer` |
+| How it reaches the host | `MachineServerOptions` | `GraphQLMachineServerOptions` | `GraphQLMachineServerOptions` |
+| What predicts | — the twin given as `machine` predicts, and the engine's surface is its own | `IMachinePredictor` | — the engine's `Machine`, built from `ir`, predicts, and the engine's surface is its own |
+
+| Member | TypeScript | C# | Rust |
+| --- | --- | --- | --- |
+| Build a controller | `ServerMachineController` | `ServerMachineController` | `ServerMachineController.new` |
+| Open the instance, or start one | `ServerMachineController.start` | `ServerMachineController.StartAsync` | `ServerMachineController.start` |
+| Send an event | `ServerMachineController.send` | `ServerMachineController.SendAsync` | `ServerMachineController.send` |
+| Resend what failed | `ServerMachineController.retry` | `ServerMachineController.RetryAsync` | `ServerMachineController.retry` |
+| Bring the host to where the page is | `ServerMachineController.syncTo` | `ServerMachineController.SyncToAsync` | `ServerMachineController.sync_to` |
+| Whether a trigger fires from what is shown | `ServerMachineController.can` | `ServerMachineController.CanSend` | `ServerMachineController.can_send` |
+| The triggers that fire from what is shown | `ServerMachineController.available` | `ServerMachineController.AvailableTriggers` | `ServerMachineController.available_triggers` |
+| The current view | `ServerMachineController.get` | `ServerMachineController.View` | `ServerMachineController.view` |
+| Hear of every change of the view | `ServerMachineController.subscribe` | `ServerMachineController.Changed` | `ServerMachineController.watch` |
+| Close the stream and drop late answers | `ServerMachineController.dispose` | `ServerMachineController.Dispose` | `ServerMachineController.dispose` |
+| The default retry delays | `DEFAULT_RETRY_DELAYS` | `ServerMachineController.DefaultRetryDelays` | `DEFAULT_RETRY_DELAYS` |
+| Options with every choice left to its default | — an object literal | — an object initializer | `ServerMachineOptions.new` |
+| The machine | `ServerMachineOptions.machine` | `ServerMachineOptions.Machine` | `ServerMachineOptions.ir` |
+| The IR's hash | — the generated twin given as `machine` carries it | — the manifest entry given as `Machine` carries it | `ServerMachineOptions.ir_hash` |
+| What predicts | — the twin given as `machine` | `ServerMachineOptions.Predictor` | — the engine built from `ir`, which binds no custom handler |
+| The seam to the host | `ServerMachineOptions.server` | `ServerMachineOptions.Server` | `ServerMachineOptions.server` |
+| An instance to open | `ServerMachineOptions.id` | `ServerMachineOptions.Id` | `ServerMachineOptions.id` |
+| The start's input | `ServerMachineOptions.startInput` | `ServerMachineOptions.StartInput` | `ServerMachineOptions.start_input` |
+| The start's request id | `ServerMachineOptions.startRequestId` | `ServerMachineOptions.StartRequestId` | `ServerMachineOptions.start_request_id` |
+| How request ids are minted | `ServerMachineOptions.newRequestId` | `ServerMachineOptions.NewRequestId` | `ServerMachineOptions.new_request_id` |
+| Retry delays | `ServerMachineOptions.retryDelays` | `ServerMachineOptions.RetryDelays` | `ServerMachineOptions.retry_delays` |
+| The runtime the controller runs on | — a page has one event loop | — continuations run on the thread pool | `ServerMachineOptions.runtime` |
+| Status | `ServerMachineView.status` | `MachineView.Status` | `MachineView.status` |
+| Instance id | `ServerMachineView.id` | `MachineView.Id` | `MachineView.id` |
+| What to show | `ServerMachineView.snapshot` | `MachineView.Snapshot` | `MachineView.snapshot` |
+| What the host last confirmed | `ServerMachineView.confirmed` | `MachineView.Confirmed` | `MachineView.confirmed` |
+| Row incarnation | `ServerMachineView.rowId` | `MachineView.RowId` | `MachineView.row_id` |
+| Revision | `ServerMachineView.revision` | `MachineView.Revision` | `MachineView.revision` |
+| Timer due time | `ServerMachineView.dueAt` | `MachineView.DueAt` | `MachineView.due_at` |
+| An event in flight or queued | `ServerMachineView.pending` | `MachineView.Pending` | `MachineView.pending` |
+| The last refusal or transport failure | `ServerMachineView.problem` | `MachineView.Problem` | `MachineView.problem` |
+| Why it stopped | `ServerMachineView.error` | `MachineView.Error` | `MachineView.error` |
+| A sync running or unsettled, for a leave guard | `ServerMachineView.unsaved` | `MachineView.Unsaved` | `MachineView.unsaved` |
+| Stop code | `ServerMachineError.code` | `MachineError.Code` | `MachineError.code` |
+| Stop message | `ServerMachineError.message` | `MachineError.Message` | `MachineError.message` |
+| Deleted, or not found | `ServerMachineError.deleted` | `MachineError.Deleted` | `MachineError.deleted` |
+| Refusal or transport failure | `Problem.kind` | `MachineProblem.Kind` | `MachineProblem.kind` |
+| Problem code | `Problem.code` | `MachineProblem.Code` | `MachineProblem.code` |
+| Problem message | `Problem.message` | `MachineProblem.Message` | `MachineProblem.message` |
+| Seam: start an instance | `MachineServer.start` | `IMachineServer.StartAsync` | `MachineServer.start` |
+| Seam: send an event | `MachineServer.event` | `IMachineServer.EventAsync` | `MachineServer.event` |
+| Seam: read the instance | `MachineServer.get` | `IMachineServer.GetAsync` | `MachineServer.get` |
+| Seam: follow the instance | `MachineServer.subscribe` | `IMachineServer.Subscribe` | `MachineServer.subscribe` |
+| Seam: a rejected request that ends the controller | `MachineServer.endedBy` | — a request that throws is a transport failure; terminal codes end it through the stream | — a request that fails is a transport failure; terminal codes end it through the stream |
+| Build the host over GraphQL | `createMachineServer` | `GraphQLMachineServer` | `GraphQLMachineServer.new` |
+| Start an instance | `TypedMachineServer.start` | `GraphQLMachineServer.StartAsync` | `GraphQLMachineServer.start` |
+| Send an event | `TypedMachineServer.event` | `GraphQLMachineServer.EventAsync` | `GraphQLMachineServer.event` |
+| Read the instance | `TypedMachineServer.get` | `GraphQLMachineServer.GetAsync` | `GraphQLMachineServer.get` |
+| Follow the instance | `TypedMachineServer.subscribe` | `GraphQLMachineServer.Subscribe` | `GraphQLMachineServer.subscribe` |
+| A rejected request that ends the controller | `TypedMachineServer.endedBy` | — terminal codes end it through the stream | — terminal codes end it through the stream |
+| Discard the instance | `TypedMachineServer.discard` | `GraphQLMachineServer.DiscardAsync` | `GraphQLMachineServer.discard` |
+| The default resubscribe delays | `DEFAULT_RESUBSCRIBE_DELAYS` | `GraphQLMachineServer.DefaultResubscribeDelays` | `DEFAULT_RESUBSCRIBE_DELAYS` |
+| Leave the empty query out of a socket message | `persistedMessageReplacer` | — `GraphQLSubscriptionSocket` writes its own messages | — the server writes its own socket's messages |
+| Options with every choice left to its default | — an object literal | — an object initializer | `GraphQLMachineServerOptions.new` |
+| The machine | `MachineServerOptions.machine` | `GraphQLMachineServerOptions.Machine` | `GraphQLMachineServerOptions.machine` |
+| Its persisted documents | `MachineServerOptions.documents` | — the manifest entry given as `Machine` carries them | `GraphQLMachineServerOptions.documents` |
+| The endpoint | — the first argument of `createMachineServer` | `GraphQLMachineServerOptions.Endpoint` | `GraphQLMachineServerOptions.endpoint` |
+| The socket | `MachineServerOptions.socket` | `GraphQLMachineServerOptions.Socket` | `GraphQLMachineServerOptions.socket` |
+| The HTTP client | `MachineServerOptions.fetch` | `GraphQLMachineServerOptions.Http` | `GraphQLMachineServerOptions.http` |
+| Headers on every request | `MachineServerOptions.headers` | — set on the `HttpClient` given as `Http` | `GraphQLMachineServerOptions.headers` |
+| The socket's `connection_init` payload | — the page's graphql-ws client given as `socket` sends it | — `GraphQLSubscriptionSocketOptions.ConnectionParams` | `GraphQLMachineServerOptions.connection_params` |
+| allowInsecureTransport | `MachineServerOptions.allowInsecureTransport` | `GraphQLMachineServerOptions.AllowInsecureTransport` | `GraphQLMachineServerOptions.allow_insecure_transport` |
+| maxResponseSize | `MachineServerOptions.maxResponseSize` | `GraphQLMachineServerOptions.MaxResponseSize` | `GraphQLMachineServerOptions.max_message_size` |
+| requestTimeout | `MachineServerOptions.requestTimeout` | — the `Timeout` of the `HttpClient` given as `Http` | `GraphQLMachineServerOptions.request_timeout` |
+| How long a socket may take to connect | — the page's graphql-ws client given as `socket` decides | — `GraphQLSubscriptionSocketOptions.ConnectTimeout` | `GraphQLMachineServerOptions.connect_timeout` |
+| How long a socket may stay silent | — the page's graphql-ws client given as `socket` decides | — `GraphQLSubscriptionSocketOptions.KeepAliveTimeout` | `GraphQLMachineServerOptions.idle_timeout` |
+| resubscribeDelays | `MachineServerOptions.resubscribeDelays` | `GraphQLMachineServerOptions.ResubscribeDelays` | `GraphQLMachineServerOptions.resubscribe_delays` |
+| terminalStreamErrors | `MachineServerOptions.terminalStreamErrors` | `GraphQLMachineServerOptions.TerminalStreamErrors` | `GraphQLMachineServerOptions.terminal_stream_errors` |
+| The runtime subscriptions run on | — a page has one event loop | — continuations run on the thread pool | `GraphQLMachineServerOptions.runtime` |
+| A predictor from the IR | — the generated twin is the predictor | `MachinePredictor.FromIr` | `Machine.from_ir` |
+| A predictor from a C# machine | — machines are declared in C# | `MachinePredictor.For` | — machines are declared in C# |
+| The IR's hash | `TypedMachine.schemaHash` | `IMachinePredictor.IrHash` | `ir_hash` |
+| Predict an event | `TypedMachine.advance` | `IMachinePredictor.Advance` | `Machine.advance` |
+| Whether a trigger fires | `TypedMachine.can` | `IMachinePredictor.CanFire` | `Machine.can_fire` |
+| The triggers that fire | `TypedMachine.available` | `IMachinePredictor.AvailableTriggers` | `Machine.available_triggers` |
+| Plan a sync | `TypedMachine.plan` | `IMachinePredictor.Plan` | `Machine.plan` |
+| Read a stored snapshot | `TypedMachine.rehydrate` | `IMachinePredictor.Rehydrate` | `Machine.rehydrate` |
+| Write a snapshot's canonical wire | `TypedMachine.serialize` | `IMachinePredictor.Serialize` | `Machine.serialize` |
+| Drive one instance from a React component | `useServerMachine` | — React hooks are TypeScript only; a .NET page builds the controller and listens to `Changed` | — React hooks are TypeScript only; an app builds the controller and reads `watch` |
+| The same, remembering the instance across reloads | `useRememberedMachine` | — React hooks are TypeScript only | — React hooks are TypeScript only |
