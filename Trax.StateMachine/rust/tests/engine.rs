@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use trax_state_machine::{Machine, Map, RefusalCode, Snapshot, Value};
+use trax_state_machine::{JsString, Machine, Map, PlanAnswer, PlanEvent, RefusalCode, Snapshot, Value};
 
 fn conformance(path: &str) -> Value {
     let file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -288,4 +288,109 @@ fn a_value_nested_past_the_limit_is_written_and_dropped_without_overflowing() {
     let json = deep.to_json();
     assert_eq!(json, format!("{}null{}", "[".repeat(100_000), "]".repeat(100_000)));
     drop(deep);
+}
+
+#[test]
+fn an_edge_rests_on_a_custom_rule_until_every_rule_it_names_has_a_handler() {
+    let machine = Machine::from_ir_text(CUSTOM).unwrap();
+    assert!(machine.rests_on_unhandled_rule("A", "Go"));
+    assert!(!machine.rests_on_unhandled_rule("B", "Go"));
+    // The guard and the reduction are bound, but the destination's requirement is not.
+    let partly = Machine::from_ir_text(CUSTOM)
+        .unwrap()
+        .with_guard("Open", |_, _| true)
+        .with_reducer("Stamp", |context, _| context.clone());
+    assert!(partly.rests_on_unhandled_rule("A", "Go"));
+    let bound = partly.with_guard("Approved", |_, _| true);
+    assert!(!bound.rests_on_unhandled_rule("A", "Go"));
+}
+
+fn wizard() -> Machine {
+    Machine::from_ir(&conformance("plan/wizard.ir.json")).unwrap()
+}
+
+fn details() -> Snapshot {
+    Snapshot::from_value(&object(
+        r#"{"machine":"wizard","version":1,"state":"Details","context":{"email":null,"name":null}}"#,
+    ))
+    .unwrap()
+}
+
+fn ada() -> PlanEvent {
+    PlanEvent::new("Update", Some(object(r#"{"email":"ada@example.com","name":"Ada"}"#)))
+}
+
+#[test]
+fn a_custom_guard_with_a_handler_is_planned_through() {
+    let machine = wizard().with_guard("approved", |_, _| true);
+
+    let plan = machine.plan(&details(), "Review", Some(&ada()), &["Skip".to_owned()], None);
+
+    assert_eq!(plan, PlanAnswer::Plan(vec![ada(), PlanEvent::new("Skip", None)]));
+}
+
+#[test]
+fn a_plan_with_no_depth_to_spend_is_exceeded_unless_it_is_already_there() {
+    let machine = wizard();
+    let navigation = ["Next".to_owned()];
+
+    assert_eq!(
+        machine.plan(&details(), "Review", Some(&ada()), &navigation, Some(0)),
+        PlanAnswer::Exceeded
+    );
+    assert_eq!(
+        machine.plan(&details(), "Details", None, &navigation, Some(0)),
+        PlanAnswer::Plan(Vec::new())
+    );
+}
+
+// A machine whose one edge counts up forever: every snapshot is new, so only the expansion limit ends the search.
+const COUNTER: &str = r#"{"id":"n","version":1,"initialState":"A","initialContext":{"n":0},"states":["A","B"],
+  "triggers":["Tick"],"committedStates":[],"inputs":{},
+  "context":{"A":{"fields":[{"name":"n","type":"number","nullable":false,"constraints":[]}]},
+             "B":{"fields":[{"name":"n","type":"number","nullable":false,"constraints":[]}]}},
+  "transitions":[{"from":"A","trigger":"Tick","to":"A","reduce":{"reduce":"custom","name":"Count"}}]}"#;
+
+#[test]
+fn a_search_that_never_ends_is_bounded_by_its_expansions() {
+    let machine = Machine::from_ir_text(COUNTER)
+        .unwrap()
+        .with_reducer("Count", |context, _| {
+            let mut next = context.clone();
+            let n = context.get(&JsString::from("n")).and_then(Value::as_f64).unwrap_or(0.0);
+            next.insert("n".into(), Value::Number(n + 1.0));
+            next
+        });
+
+    let plan = machine.plan(
+        &machine.initial_snapshot(),
+        "B",
+        None,
+        &["Tick".to_owned()],
+        Some(usize::MAX),
+    );
+
+    assert_eq!(plan, PlanAnswer::Exceeded);
+}
+
+#[test]
+fn a_custom_reduction_on_the_fields_event_never_shows_the_fields_applied() {
+    // With no handler the reduction would keep the context, so the start would pass for the goal.
+    let machine = Machine::from_ir_text(COUNTER).unwrap();
+
+    let plan = machine.plan(
+        &machine.initial_snapshot(),
+        "A",
+        Some(&PlanEvent::new("Tick", None)),
+        &[],
+        None,
+    );
+
+    assert_eq!(
+        plan,
+        PlanAnswer::Undetermined {
+            trigger: "Tick".into(),
+            events: Vec::new()
+        }
+    );
 }

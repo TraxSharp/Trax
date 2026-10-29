@@ -5,7 +5,9 @@
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 
-use trax_state_machine::{canonical_wire, JsString, Machine, Map, Refusal, Snapshot, Value};
+use trax_state_machine::{
+    canonical_wire, JsString, Machine, Map, PlanAnswer, PlanEvent, PlanInvalid, Refusal, Snapshot, Value,
+};
 
 fn main() {
     // The kit's `throws` handler panics on purpose; the engine catches it, so the panic message is noise.
@@ -86,6 +88,45 @@ fn handle(request: &Value, machines: &mut HashMap<String, Machine>) -> Value {
             None => error("a canonical request carries a context object, stringUnits or keyUnits".into()),
         },
         "end" => answer(Vec::new()),
+        "plan" => {
+            let Some(machine) = name.and_then(|n| machines.get(n)) else {
+                return error(format!("no machine {} is loaded", name.unwrap_or_default()));
+            };
+            let Some(snapshot) = request.get("snapshot").and_then(Snapshot::from_value) else {
+                return error("the request's snapshot is not a snapshot".into());
+            };
+            let Some(target) = request.get("target").and_then(Value::as_str) else {
+                return error("a plan names a target".into());
+            };
+            let fields = match request.get("fields") {
+                None | Some(Value::Null) => None,
+                Some(fields) => match fields.get("trigger").and_then(Value::as_str) {
+                    Some(trigger) => Some(PlanEvent::new(trigger, fields.get("input").cloned())),
+                    None => return error("the plan's fields name no trigger".into()),
+                },
+            };
+            let Some(navigation) = request.get("navigation").and_then(Value::as_array).and_then(|n| {
+                n.iter()
+                    .map(|t| t.as_str().map(str::to_owned))
+                    .collect::<Option<Vec<_>>>()
+            }) else {
+                return error("a plan's navigation is a list of triggers".into());
+            };
+            let max_depth = match request.get("maxDepth") {
+                None => None,
+                Some(depth) => match depth.as_f64().filter(|d| d.fract() == 0.0 && *d >= 0.0) {
+                    Some(depth) => Some(depth as usize),
+                    None => return error("a plan's maxDepth is a whole number".into()),
+                },
+            };
+            answer(plan_members(machine.plan(
+                &snapshot,
+                target,
+                fields.as_ref(),
+                &navigation,
+                max_depth,
+            )))
+        }
         "advance" | "outcome" | "timer" | "rehydrate" | "serialize" => {
             let Some(machine) = name.and_then(|n| machines.get(n)) else {
                 return error(format!("no machine {} is loaded", name.unwrap_or_default()));
@@ -129,6 +170,46 @@ fn handle(request: &Value, machines: &mut HashMap<String, Machine>) -> Value {
             step(machine, result, answer)
         }
         _ => answer(vec![("unsupported", Value::Bool(true))]),
+    }
+}
+
+fn plan_members(plan: PlanAnswer) -> Vec<(&'static str, Value)> {
+    let events = |events: Vec<PlanEvent>| {
+        Value::Array(
+            events
+                .into_iter()
+                .map(|e| {
+                    let mut event = Map::new();
+                    event.insert("trigger".into(), Value::from(e.trigger.as_str()));
+                    if let Some(input) = e.input {
+                        event.insert("input".into(), input);
+                    }
+                    Value::Object(event)
+                })
+                .collect(),
+        )
+    };
+    match plan {
+        PlanAnswer::Plan(plan) => vec![("result", Value::from("plan")), ("events", events(plan))],
+        PlanAnswer::Unreachable => vec![("result", Value::from("unreachable"))],
+        PlanAnswer::Exceeded => vec![("result", Value::from("exceeded"))],
+        PlanAnswer::Undetermined { trigger, events: path } => vec![
+            ("result", Value::from("undetermined")),
+            ("trigger", Value::from(trigger.as_str())),
+            ("events", events(path)),
+        ],
+        PlanAnswer::Invalid(PlanInvalid::Target(target)) => {
+            vec![
+                ("result", Value::from("invalid")),
+                ("target", Value::from(target.as_str())),
+            ]
+        }
+        PlanAnswer::Invalid(PlanInvalid::Trigger(trigger)) => {
+            vec![
+                ("result", Value::from("invalid")),
+                ("trigger", Value::from(trigger.as_str())),
+            ]
+        }
     }
 }
 

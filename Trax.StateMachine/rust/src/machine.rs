@@ -122,10 +122,12 @@ pub struct Machine {
     initial_state: String,
     initial_context: Map,
     states: Vec<String>,
-    state_set: HashSet<String>,
+    pub(crate) state_set: HashSet<String>,
+    // The triggers the IR declares, which a caller may send.
+    pub(crate) triggers: HashSet<String>,
     edges: Vec<Edge>,
-    outcome_triggers: BTreeSet<String>,
-    timer_triggers: HashSet<String>,
+    pub(crate) outcome_triggers: BTreeSet<String>,
+    pub(crate) timer_triggers: HashSet<String>,
     timers: HashMap<String, Timer>,
     input_validators: HashMap<String, Schema>,
     context_validators: HashMap<String, ContextValidator>,
@@ -355,6 +357,7 @@ impl Machine {
             initial_context,
             state_set: ir.states.iter().cloned().collect(),
             states: ir.states,
+            triggers: ir.triggers.iter().cloned().collect(),
             edges,
             outcome_triggers: outcomes.iter().map(|o| o.name.clone()).collect(),
             timer_triggers,
@@ -730,6 +733,32 @@ impl Machine {
             }
         }
         seen
+    }
+
+    /// Whether what `trigger` does from `state` rests on a custom rule this machine holds no handler for: an edge out of
+    /// `state` on `trigger` whose guard names one, whose reduction is one, or whose destination's requirement names
+    /// one. The engine counts such a guard as failed and such a reduction as keeping the context, which is not what the
+    /// server does, so a prediction or a plan through that edge would be a guess.
+    pub fn rests_on_unhandled_rule(&self, state: &str, trigger: &str) -> bool {
+        self.matches(state, trigger).iter().any(|e| {
+            let reduction =
+                matches!(&e.reduce, Some(Reduction::Custom(name)) if !self.custom.reducers.contains_key(name));
+            let requirement = self
+                .context_validators
+                .get(&e.to)
+                .and_then(|v| v.invariant.as_ref())
+                .is_some_and(|r| self.names_unhandled(r));
+            e.guard.as_ref().is_some_and(|g| self.names_unhandled(g)) || reduction || requirement
+        })
+    }
+
+    // Whether a rule is, or holds, a custom rule with no handler bound.
+    fn names_unhandled(&self, rule: &Rule) -> bool {
+        match rule {
+            Rule::Custom(name) => !self.custom.guards.contains_key(name),
+            Rule::All(rules) | Rule::Any(rules) => rules.iter().any(|r| self.names_unhandled(r)),
+            Rule::Leaf { .. } => false,
+        }
     }
 
     fn matches(&self, state: &str, trigger: &str) -> Vec<&Edge> {

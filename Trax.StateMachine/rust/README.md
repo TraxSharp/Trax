@@ -50,6 +50,12 @@ thread once built. It is held to the client conformance kit, as the TypeScript a
 timer. A custom rule is bound by name with `with_guard` or `with_reducer`; one with no handler fails, so the engine
 leaves that step to the server.
 
+`plan` finds the events that bring a snapshot to a state with a page's fields applied, for a page that ran ahead of
+the server: breadth first, the fields event before the navigation triggers in the order given, at most twice the
+machine's states deep and `MAX_PLAN_EXPANSIONS` snapshots wide, so every engine answers the same plan. It answers
+`Plan` with the events, `Unreachable`, `Exceeded`, `Invalid`, or `Undetermined` when the only way on is an edge that
+rests on a custom rule with no handler (`rests_on_unhandled_rule`), which the server has to decide.
+
 ## Where this fits
 
 - [The IR format](https://traxsharp.net/docs/sdk-reference/statemachine-api/ir-format) this crate reads.
