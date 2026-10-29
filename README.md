@@ -1,8 +1,9 @@
-<p align="center">
-  <img src="Trax.Website/src/app/icon.png" width="96" height="96" alt="Trax .NET">
-</p>
-
-<h1 align="center">Trax .NET</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/brand/lockup-on-dark.svg">
+    <img src=".github/brand/lockup.svg" width="400" alt="Trax .NET">
+  </picture>
+</h1>
 
 <p align="center">
   <b>The backend that checks the client's work.</b><br>

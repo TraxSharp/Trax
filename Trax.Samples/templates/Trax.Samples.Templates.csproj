@@ -7,6 +7,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/TraxSharp/Trax</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageTags>dotnet-new;templates;trax;workflows;railway-oriented-programming;graphql;api;scheduler;dashboard</PackageTags>
 
     <TargetFramework>net10.0</TargetFramework>
@@ -23,6 +24,7 @@
     <Content Include="content/**" Exclude="**/bin/**;**/obj/**;**/packages.lock.json" />
     <Compile Remove="**/*" />
     <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="../../.github/brand/icon-128.png" Pack="true" PackagePath="icon.png" Visible="false" />
   </ItemGroup>
 
   <!--

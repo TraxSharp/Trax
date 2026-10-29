@@ -1,4 +1,5 @@
 import Link from "next/link";
+import TraxLogo from "./TraxLogo";
 
 export default function Footer() {
   return (
@@ -6,9 +7,7 @@ export default function Footer() {
       <div className="mx-auto max-w-6xl px-6 py-12 sm:px-8">
         <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <span className="font-bold text-accent">
-              Trax <span className="text-text-secondary">.NET</span>
-            </span>
+            <TraxLogo maskId="footer" className="h-7 w-auto text-brand" />
             <p className="mt-1 max-w-xs text-sm text-text-muted">
               The backend that checks the client&apos;s work. MIT licensed.
             </p>

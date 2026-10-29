@@ -17,6 +17,8 @@
   --accent-hover: #2d6b29;
   --accent-muted: #1a2e18;
   --accent-bright: #5cb85c;
+  /* The logo's green on a dark ground (.github/brand) */
+  --brand: #6cc596;
 
   /* Signal amber — warnings, attention */
   --signal: #d4a24c;
@@ -51,6 +53,7 @@
   --color-accent-hover: var(--accent-hover);
   --color-accent-muted: var(--accent-muted);
   --color-accent-bright: var(--accent-bright);
+  --color-brand: var(--brand);
   --color-signal: var(--signal);
   --color-signal-muted: var(--signal-muted);
   --color-derail: var(--derail);
