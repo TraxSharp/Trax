@@ -81,8 +81,8 @@ guard, a custom reduction, or a custom requirement of the state it enters): it s
 after them until they answer, and sends one even when its own engine would refuse it. A trigger the machine does
 not declare as an event is refused where it is sent, with the code its engine's `advance` gives (`NO_TRANSITION` for
 one it lacks, `OUTCOME_BOUND` for an outcome, `TIMER_BOUND` for a timer), and never reaches the host, whatever its name: an event is never sent as the `start`, `get`, `discard` or `changed` operation.
-A send while the client holds no instance and is not starting or reading one (its start was refused, or its first
-read gave up) settles `failed` as `NOT_READY`. **`retry`** resends what last
+A send before `start` waits for it; once a start or a first read has ended without an instance (refused, or past
+every retry), every send waiting and every later one settles `failed` as `NOT_READY`. **`retry`** resends what last
 failed under the same request id. It resends nothing, and answers `NOTHING_TO_RETRY`, once a later event has been
 confirmed or while one is queued or in flight: the failed event would reach the host after it. Both are answered with
 what the send came to:

@@ -109,11 +109,14 @@ states; `maxDepth` is the longest plan to look for, twice the machine's states w
 { "id": 6, "result": "exceeded" }
 { "id": 6, "result": "undetermined", "trigger": "Skip", "events": [] }
 { "id": 6, "result": "invalid", "trigger": "Send" }
+{ "id": 6, "result": "invalid", "code": "INVALID_CONTEXT" }
 ```
 
 Every engine answers the same plan, so the search is fixed:
 
-- **Invalid first.** A `target` that is not a state answers `invalid` with `target`. Then the fields trigger, then each
+- **Invalid first.** A fields input or a snapshot's context past the engine's nesting limit answers `invalid` with
+  `code` `INVALID_INPUT` or `INVALID_CONTEXT`, input first, as `advance` would refuse it. Then a `target` that is not
+  a state answers `invalid` with `target`. Then the fields trigger, then each
   navigation trigger in order: one the machine does not have, one bound to the effect, an outcome, a timer, or a
   navigation trigger equal to the fields trigger answers `invalid` with that `trigger`.
 - **Wires without nulls.** Wherever the search compares wires, it compares them with every context member whose value is
