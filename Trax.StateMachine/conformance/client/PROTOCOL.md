@@ -59,6 +59,14 @@ one.)
 - `instance` is the id of an instance to open, or null to start one on `start`.
 - `retryDelays` and `resubscribeDelays` are in milliseconds: the delays between retries of `SERVER_OUTDATED` and of a
   failed read, and the delays before subscribing again after a stream that ended without saying why.
+- `maxResponseSize` (bytes), `requestTimeout` (milliseconds) and `allowInsecureTransport` are given only when a
+  transcript sets them, and go to the client's own options of those names: the largest answer or socket message it
+  reads, how long it waits for an answer, and whether it may talk cleartext to a host that is not this machine.
+- A client that refuses to be built because its endpoint or socket is cleartext to a host that is not this machine
+  answers `{ "id": 1, "opened": false, "code": "INSECURE_TRANSPORT" }`, having sent nothing.
+- `opened` may carry `lacks`, the capabilities named in transcripts' `needs` that this client cannot have, with the
+  reason in the testee's source: `upgrade-status` for a socket that cannot tell what status a failed upgrade was
+  answered with (a WebSocket in a browser or in node). A transcript that needs one is skipped, and reported as skipped.
 - **Request ids.** The client mints them `r1`, `r2`, … in the order it needs them, counting from each `open`. The
   host compares them, so they must be the ids the client actually sends.
 
@@ -135,11 +143,18 @@ null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a
   "instance": "i-1",
   "documents": { "get": "$id: UUID!", "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String", ... },
   "refuseConnections": 0,
+  "refuseUpgrades": [401],
+  "open": { "maxResponseSize": 4096 },
+  "opened": { "opened": false, "code": "INSECURE_TRANSPORT" },
   "retryDelays": [10, 10],
   "resubscribeDelays": [10],
   "steps": [ ... ]
 }
 ```
+
+`refuseUpgrades` lists the HTTP statuses the first socket upgrades are answered with instead of switching protocols,
+one each. `open` adds members to the `open` request, overriding the runner's (`endpoint` and `socket` among them).
+`opened` compares the answer to `open`; when it is not `opened: true`, the transcript ends there.
 
 `documents` names each operation the host serves and the variables its document declares; the runner writes the
 documents from it. The steps run in order:
@@ -148,9 +163,11 @@ documents from it. The steps run in order:
 | --- | --- |
 | `{ "client": "<op>", ...args }` | Sends the request. With `"expect"`, waits for its answer and compares; with `"as": "<name>"`, goes on and a later `await` compares; with neither, goes on, and the answer must still come before the transcript ends. |
 | `{ "await": "<name>", "expect": { ... } }` | Waits for the answer sent under that name and compares. |
-| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503` (with `"body": {...}`, the JSON it answers with, or none), or `"drop": true` (the connection is closed with no answer). |
+| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503` (with `"body": {...}`, the JSON it answers with, or none), `"drop": true` (the connection is closed with no answer), `"hang": true` (no answer ever comes), `"redirect": true` (a 307, or the status given, whose `Location` is a second host that counts what reaches it) or `"raw": "..."` (a 200 with that text as its body). `"pad": n` adds n bytes of whitespace after an answer's JSON. |
 | `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. |
-| `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription. |
+| `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription; `"pad": n` beside a `push` adds n bytes of whitespace to its frame. |
+| `{ "ping": true }` | Sends a graphql-transport-ws `ping` on the last subscription's socket and waits for the client's `pong`. |
+| `{ "decoy": 0 }` | Checks how many requests reached the second host a redirect points at. |
 | `{ "complete": true }`, `{ "dropSocket": true }` | Completes the last subscription, or closes its socket (with 1011, or with the code given: `{ "dropSocket": 4401 }`). |
 | `{ "view": { ... } }` | Asks for the view until it holds every member given, for up to three seconds. |
 | `{ "quiet": 50 }` | Waits that many milliseconds; nothing may arrive meanwhile. |

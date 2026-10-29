@@ -69,12 +69,22 @@ export function createClientTestee(engine) {
         retryAttempts: 0,
         jsonMessageReplacer: persistedMessageReplacer,
       });
-      const server = createMachineServer(r.endpoint, {
-        machine,
-        documents: r.documents,
-        socket,
-        resubscribeDelays: r.resubscribeDelays,
-      });
+      let server;
+      try {
+        server = createMachineServer(r.endpoint, {
+          machine,
+          documents: r.documents,
+          socket,
+          resubscribeDelays: r.resubscribeDelays,
+          maxResponseSize: r.maxResponseSize,
+          requestTimeout: r.requestTimeout,
+          allowInsecureTransport: r.allowInsecureTransport,
+        });
+      } catch (err) {
+        // A client refusing cleartext to another host refuses to be built, before it sends anything.
+        if (/not over TLS/.test(err.message)) return { opened: false, code: "INSECURE_TRANSPORT" };
+        throw err;
+      }
       controller = new ServerMachineController({
         machine,
         server,
@@ -83,7 +93,8 @@ export function createClientTestee(engine) {
         newRequestId: counting(),
         retryDelays: r.retryDelays,
       });
-      return { opened: true };
+      // A WebSocket in a browser or in node does not say what status an upgrade it failed was answered with.
+      return { opened: true, lacks: ["upgrade-status"] };
     },
     start: async () => {
       await controller.start();

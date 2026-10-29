@@ -58,7 +58,7 @@ describe("the client conformance kit", () => {
       return answer;
     });
     const failures = await runTranscripts(list, host, ask);
-    expect(failures.map((f) => f.name)).toEqual(["refusal-rolls-back"]);
+    expect(failures.map((f) => f.name)).toEqual(["first-of-two-refused"]);
     expect(failures[0].error).toContain('"code":"INVALID_INPUT"');
   }, 60_000);
 
@@ -67,7 +67,8 @@ describe("the client conformance kit", () => {
       encoding: "utf8",
       timeout: 120_000,
     });
-    expect(run.stderr).toContain(`${list.length} of ${list.length} transcripts passed.`);
+    const ran = list.filter((t) => !(t.needs ?? []).includes("upgrade-status")).length;
+    expect(run.stderr).toContain(`${ran} of ${ran} transcripts passed, ${list.length - ran} skipped.`);
     expect(run.status).toBe(0);
   }, 120_000);
 });

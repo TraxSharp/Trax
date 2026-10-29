@@ -2,6 +2,7 @@
   "about": "A socket upgrade the host answers 401 stops the client for good as UNAUTHENTICATED, as a socket closed with 4401 does; nothing is subscribed again.",
   "machine": "turnstile",
   "instance": "i-1",
+  "needs": ["upgrade-status"],
   "refuseUpgrades": [401],
   "documents": {
     "start": "$requestId: String!",

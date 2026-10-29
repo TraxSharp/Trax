@@ -103,7 +103,8 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Runs one transcript against the testee through `ask` (request → Promise<answer>). Throws an Error naming the step
- * that failed; returns when every step passed and nothing arrived that no step took.
+ * that failed; returns when every step passed and nothing arrived that no step took, or `{ skipped }` naming what the
+ * transcript needs that the client said it lacks.
  */
 export async function runTranscript(transcript, host, askTestee) {
   // Every answer comes within the step timeout, or the transcript fails naming the request it waited on, and no answer
@@ -129,6 +130,13 @@ export async function runTranscript(transcript, host, askTestee) {
     resubscribeDelays: transcript.resubscribeDelays ?? [10],
     ...(transcript.open ?? {}),
   });
+  // A transcript that needs what the client says it cannot do is skipped, and reported as skipped, not passed.
+  const lacking = (transcript.needs ?? []).filter((n) => (opened.lacks ?? []).includes(n));
+  if (lacking.length > 0) {
+    const disposed = await ask({ op: "dispose" });
+    if (disposed.disposed !== true) throw new Error(`dispose: expected { "disposed": true }, got ${canonical(disposed)}`);
+    return { skipped: lacking };
+  }
   // A transcript that expects the client to refuse to open compares that answer and has no steps to run.
   if (transcript.opened !== undefined) {
     if (!matches(transcript.opened, opened)) throw new Error(`open: expected ${canonical(transcript.opened)}, got ${canonical(opened)}`);
@@ -265,19 +273,22 @@ function withTimeout(promise, what) {
 
 /**
  * Runs every transcript through `exchange` (a sender of request lines and a reader of answer lines, matched by id).
- * Returns the failures, each `{ name, error }`.
+ * Returns the failures, each `{ name, error }`; `onResult` hears each transcript, with `skipped` for one the client
+ * cannot run.
  */
 export async function runTranscripts(list, host, ask, onResult = () => {}) {
   const failures = [];
   for (const t of list) {
     try {
-      await runTranscript(t, host, ask);
-      onResult({ name: t.name });
+      const result = await runTranscript(t, host, ask);
+      onResult({ name: t.name, skipped: result?.skipped });
     } catch (err) {
       failures.push({ name: t.name, error: err.message });
       onResult(failures[failures.length - 1]);
       // A transcript that failed may have left its controller mid-flight: drop it before the next one opens.
       await withTimeout(ask({ op: "dispose" }), "the testee's answer to dispose").catch(() => {});
+      // A request it sent just before reaches the host now, so the next transcript's reset drops it.
+      await delay(50);
     }
   }
   return failures;
@@ -374,16 +385,25 @@ async function main(argv) {
 
   const host = await startHost();
   // Each transcript is reported as it ends, so a testee that hangs still shows how far it got.
-  const failures = await runTranscripts(list, host, ask, (r) =>
-    console.error(r.error === undefined ? `ok   ${r.name}` : `FAIL ${r.name}\n  ${r.error}`),
-  );
+  let skipped = 0;
+  const failures = await runTranscripts(list, host, ask, (r) => {
+    if (r.skipped !== undefined) skipped += 1;
+    console.error(
+      r.error !== undefined
+        ? `FAIL ${r.name}\n  ${r.error}`
+        : r.skipped !== undefined
+          ? `skip ${r.name} (the client lacks ${r.skipped.join(", ")})`
+          : `ok   ${r.name}`,
+    );
+  });
   const ended = await withTimeout(ask({ op: "end" }), "the testee's answer to end").catch((e) => ({ error: e.message }));
   if (child) child.stdin.end();
   await host.close();
 
   const endFailure = testeeFailure(ended);
   if (endFailure !== null) console.error(`FAIL end\n  the testee's answer to end: ${endFailure}`);
-  console.error(`${list.length - failures.length} of ${list.length} transcripts passed.`);
+  const ran = list.length - skipped;
+  console.error(`${ran - failures.length} of ${ran} transcripts passed${skipped > 0 ? `, ${skipped} skipped` : ""}.`);
   return failures.length === 0 && endFailure === null ? 0 : 1;
 }
 

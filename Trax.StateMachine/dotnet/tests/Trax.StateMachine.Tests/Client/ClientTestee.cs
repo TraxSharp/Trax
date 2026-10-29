@@ -13,7 +13,7 @@ namespace Trax.StateMachine.Tests.Client;
 /// </summary>
 public sealed class ClientTestee : IAsyncDisposable
 {
-    private readonly HttpClient _http = new(new SocketsHttpHandler { AllowAutoRedirect = false });
+    private HttpClient _http = NewHttp(null);
     private ServerMachineController? _controller;
     private GraphQLSubscriptionSocket? _socket;
 
@@ -90,22 +90,40 @@ public sealed class ClientTestee : IAsyncDisposable
                 })
                 .ToList(),
         };
-        _socket = new GraphQLSubscriptionSocket(
-            new GraphQLSubscriptionSocketOptions
-            {
-                Endpoint = new Uri(request["socket"]!.GetValue<string>()),
-            }
-        );
-        var server = new GraphQLMachineServer(
-            new GraphQLMachineServerOptions
-            {
-                Http = _http,
-                Endpoint = new Uri(request["endpoint"]!.GetValue<string>()),
-                Machine = machine,
-                Socket = _socket,
-                ResubscribeDelays = Delays(request["resubscribeDelays"]),
-            }
-        );
+        var insecure = request["allowInsecureTransport"]?.GetValue<bool>() ?? false;
+        var maxResponseSize = request["maxResponseSize"]?.GetValue<long>();
+        _http.Dispose();
+        _http = NewHttp(request["requestTimeout"]?.GetValue<double>());
+        GraphQLMachineServer server;
+        try
+        {
+            _socket = new GraphQLSubscriptionSocket(
+                new GraphQLSubscriptionSocketOptions
+                {
+                    Endpoint = new Uri(request["socket"]!.GetValue<string>()),
+                    AllowInsecureTransport = insecure,
+                    MaxMessageSize = (int?)maxResponseSize ?? 16 * 1024 * 1024,
+                }
+            );
+            server = new GraphQLMachineServer(
+                new GraphQLMachineServerOptions
+                {
+                    Http = _http,
+                    Endpoint = new Uri(request["endpoint"]!.GetValue<string>()),
+                    AllowInsecureTransport = insecure,
+                    Machine = machine,
+                    Socket = _socket,
+                    ResubscribeDelays = Delays(request["resubscribeDelays"]),
+                    MaxResponseSize = maxResponseSize ?? 16 * 1024 * 1024,
+                }
+            );
+        }
+        // A client refusing cleartext to another host refuses to be built, before it sends anything.
+        catch (ArgumentException ex)
+            when (ex.Message.Contains("not over TLS", StringComparison.Ordinal))
+        {
+            return new JsonObject { ["opened"] = false, ["code"] = "INSECURE_TRANSPORT" };
+        }
         var count = 0;
         _controller = new ServerMachineController(
             new ServerMachineOptions
@@ -121,6 +139,15 @@ public sealed class ClientTestee : IAsyncDisposable
         );
         return new JsonObject { ["opened"] = true };
     }
+
+    // Redirects off, as the client requires; a transcript's request timeout is the client's own.
+    private static HttpClient NewHttp(double? timeoutMs) =>
+        new(new SocketsHttpHandler { AllowAutoRedirect = false })
+        {
+            Timeout = timeoutMs is { } ms
+                ? TimeSpan.FromMilliseconds(ms)
+                : TimeSpan.FromSeconds(100),
+        };
 
     private static IReadOnlyList<TimeSpan> Delays(JsonNode? delays) =>
         (delays as JsonArray ?? [])

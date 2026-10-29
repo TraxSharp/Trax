@@ -35,6 +35,11 @@ async fn main() {
                         controller = Some(opened);
                         object([("opened", Value::Bool(true))])
                     }
+                    // A client refusing cleartext to another host refuses to be built, before it sends anything.
+                    Err(error) if error.contains("not over TLS") => object([
+                        ("opened", Value::Bool(false)),
+                        ("code", Value::from("INSECURE_TRANSPORT")),
+                    ]),
                     Err(error) => object([("error", Value::from(error))]),
                 };
                 write(&out, id, answer).await;
@@ -120,6 +125,15 @@ fn open(request: &Value) -> Result<ServerMachineController, String> {
         documents,
     );
     server_options.resubscribe_delays = Some(delays("resubscribeDelays"));
+    if let Some(max) = request.get("maxResponseSize").and_then(|v| v.as_f64()) {
+        // One limit holds an HTTP answer and a socket message alike.
+        server_options.max_message_size = max as usize;
+    }
+    if let Some(ms) = request.get("requestTimeout").and_then(|v| v.as_f64()) {
+        server_options.request_timeout = Duration::from_millis(ms as u64);
+    }
+    server_options.allow_insecure_transport =
+        request.get("allowInsecureTransport").and_then(|v| v.as_bool()) == Some(true);
     let server = GraphQLMachineServer::new(server_options).map_err(|e| e.to_string())?;
     // Request ids count r1, r2, ... from each open, so the host can tell which request is which.
     let count = Arc::new(AtomicU64::new(0));
