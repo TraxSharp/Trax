@@ -329,7 +329,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
   /**
    * Starts the instance (or opens the given one): subscribes first, then reads the current snapshot, so no write
    * can fall between the two. Without an id it calls `start` once, under `startRequestId`, and subscribes to the
-   * instance the server minted. Calling it again returns the same promise; a start that failed is resent by `retry`.
+   * instance the server minted. Settles once the start or the first read has settled, after its retries: answered,
+   * refused, or given up. Calling it again returns the same promise; a start that failed is resent by `retry`.
    */
   start(): Promise<void> {
     this.started ??= this.open();
@@ -569,15 +570,19 @@ export class ServerMachineController<Spec extends MachineSpec> {
 
   // ── Opening ────────────────────────────────────────────────────────────────────────────────────
 
-  private async open(): Promise<void> {
-    if (this.disposed || this.error) return;
-    if (this.id !== null) {
-      this.listen(this.id);
-      await this.read(null);
-      return;
-    }
-    this.startRequestId ??= this.newRequestId();
-    await this.create(this.startRequestId, 0);
+  // Settles once the start or the first read has: answered, been refused, or given up past its retries.
+  private open(): Promise<void> {
+    if (this.disposed || this.error) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      this.startWaiters.push(() => resolve());
+      if (this.id !== null) {
+        this.listen(this.id);
+        void this.read(null);
+        return;
+      }
+      this.startRequestId ??= this.newRequestId();
+      void this.create(this.startRequestId, 0);
+    });
   }
 
   // Calls `start` under one requestId for every attempt, `retry` included, so a retry the server already answered
@@ -752,7 +757,12 @@ export class ServerMachineController<Spec extends MachineSpec> {
   // reads it again: nothing else would, and every send waits for it.
   private readGaveUp(outcome: 'failed' | 'refused'): void {
     this.endRead();
-    if (this.disposed || this.error || this.confirmed !== null) return;
+    if (this.disposed || this.error) return;
+    // A push opened the instance meanwhile: whoever waits for the start has it.
+    if (this.confirmed !== null) {
+      this.settleStart({ outcome: 'confirmed', snapshot: this.confirmedSnapshot() });
+      return;
+    }
     this.readFailed = outcome === 'failed';
     this.settleStart({ outcome, problem: this.problem! });
   }

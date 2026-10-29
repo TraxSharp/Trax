@@ -423,6 +423,37 @@ describe('ServerMachineController', () => {
     expect(await controller.retry()).toMatchObject({ outcome: 'failed', problem: { code: 'NOTHING_TO_RETRY' } });
   });
 
+  it('start settles only once the first read or the start has settled, its retries included', async () => {
+    vi.useFakeTimers();
+    let settled = false;
+    const server = new FakeMachineServer();
+    const opened = new ServerMachineController<TurnstileSpec>({ machine: turnstile, server, id: 'i-1', retryDelays: [100] });
+    void opened.start().then(() => (settled = true));
+    await flushMicrotasks();
+    server.gets[0].fail();
+    await flushMicrotasks();
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(100);
+    server.gets[1].resolve({ kind: 'ok', snapshot: serverSnapshot() });
+    await flushMicrotasks();
+    expect(settled).toBe(true);
+    expect(opened.get().status).toBe('ready');
+
+    settled = false;
+    const starter = new FakeMachineServer();
+    const created = new ServerMachineController<TurnstileSpec>({ machine: turnstile, server: starter, retryDelays: [100] });
+    void created.start().then(() => (settled = true));
+    await flushMicrotasks();
+    starter.starts[0].resolve({ kind: 'problem', code: 'SERVER_OUTDATED', message: 'newer node' });
+    await flushMicrotasks();
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(100);
+    starter.starts[1].resolve({ kind: 'started', id: 'i-1', snapshot: serverSnapshot() });
+    await flushMicrotasks();
+    expect(settled).toBe(true);
+    expect(created.get().status).toBe('ready');
+  });
+
   it('a retried read that fails again settles failed, and can be retried once more', async () => {
     const server = new FakeMachineServer();
     const controller = new ServerMachineController<TurnstileSpec>({
