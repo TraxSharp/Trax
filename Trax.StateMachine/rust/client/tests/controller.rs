@@ -481,6 +481,31 @@ async fn an_answer_as_deep_as_a_store_writes_is_taken() {
     assert!(controller.view().error.is_none());
 }
 
+fn context_of(text: &str) -> Map {
+    Value::parse(text).unwrap().as_object().expect("an object").clone()
+}
+
+#[test]
+fn a_null_in_an_array_holds_its_place() {
+    let with_null = without_nulls(&context_of(r#"{"a":[null]}"#));
+    let empty = without_nulls(&context_of(r#"{"a":[]}"#));
+
+    assert_ne!(with_null, empty);
+    assert_eq!(with_null, context_of(r#"{"a":[null]}"#));
+}
+
+#[test]
+fn a_nested_null_member_is_left_out() {
+    assert_eq!(
+        without_nulls(&context_of(r#"{"a":{"b":null}}"#)),
+        without_nulls(&context_of(r#"{"a":{}}"#))
+    );
+    assert_eq!(
+        without_nulls(&context_of(r#"{"a":{"b":null,"c":[{"d":null,"e":1}]},"f":null}"#)),
+        context_of(r#"{"a":{"c":[{"e":1}]}}"#)
+    );
+}
+
 #[test]
 fn a_context_of_any_depth_has_its_nulls_left_out_without_exhausting_the_stack() {
     let mut context = nested(1_000_000);
