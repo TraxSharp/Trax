@@ -113,9 +113,9 @@ public sealed partial class GraphQLMachineServer : IMachineServer
 
     /// <summary>Builds the server for one machine.</summary>
     /// <exception cref="ArgumentException">
-    /// The machine lists no documents, or no <c>changed</c> document, or the endpoint is not <c>https</c> on a host that
-    /// is not loopback and <see cref="GraphQLMachineServerOptions.AllowInsecureTransport"/> is not set, or the client
-    /// follows redirects.
+    /// The machine lists no documents, or no <c>changed</c> document, or the endpoint is relative and the client has no
+    /// base address, or it is not <c>https</c> on a host that is not loopback and
+    /// <see cref="GraphQLMachineServerOptions.AllowInsecureTransport"/> is not set, or the client follows redirects.
     /// </exception>
     public GraphQLMachineServer(GraphQLMachineServerOptions options)
     {

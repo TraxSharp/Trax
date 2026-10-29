@@ -153,6 +153,24 @@ public class TransportTests
         tls.Should().NotThrow();
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void A_relative_endpoint_with_no_base_address_is_refused(bool allowInsecure)
+    {
+        var server = () => Server("trax/graphql", allowInsecure);
+        var socket = () =>
+            new GraphQLSubscriptionSocket(
+                new GraphQLSubscriptionSocketOptions
+                {
+                    Endpoint = new Uri("trax/graphql", UriKind.Relative),
+                    AllowInsecureTransport = allowInsecure,
+                }
+            );
+
+        server.Should().Throw<ArgumentException>().WithMessage("*relative*base address*");
+        socket.Should().Throw<ArgumentException>().WithMessage("*relative*");
+    }
+
     // Answers every request with a body of `size` bytes, with or without its length up front.
     private sealed class LargeAnswer(int size, bool sayLength) : HttpMessageHandler
     {

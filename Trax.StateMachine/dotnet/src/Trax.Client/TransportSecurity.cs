@@ -7,6 +7,8 @@ namespace Trax.Client;
 // so.
 internal static class TransportSecurity
 {
+    // The endpoint is the one requests go to, resolved against the client's base address when it has one. One that is
+    // still relative has nowhere to go, whether or not cleartext is allowed.
     public static void RequireSecure(
         Uri endpoint,
         bool allowInsecure,
@@ -14,6 +16,11 @@ internal static class TransportSecurity
         string paramName
     )
     {
+        if (!endpoint.IsAbsoluteUri)
+            throw new ArgumentException(
+                $"The endpoint '{endpoint}' is relative, and there is no base address to resolve it against.",
+                paramName
+            );
         if (allowInsecure || IsSecure(endpoint, secureScheme))
             return;
         throw new ArgumentException(

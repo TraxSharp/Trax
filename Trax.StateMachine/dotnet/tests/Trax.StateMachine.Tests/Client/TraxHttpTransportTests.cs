@@ -74,6 +74,23 @@ public class TraxHttpTransportTests
         ((Action)(() => Build("http://localhost:5000/"))).Should().NotThrow();
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void A_relative_endpoint_with_no_base_address_is_refused(bool allowInsecure)
+    {
+        var build = () =>
+            new TraxHttpTransport(
+                new TraxHttpTransportOptions
+                {
+                    Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
+                    Endpoint = new Uri("trax/graphql", UriKind.Relative),
+                    AllowInsecureTransport = allowInsecure,
+                }
+            );
+
+        build.Should().Throw<ArgumentException>().WithMessage("*relative*base address*");
+    }
+
     [Test]
     public async Task A_cancellation_the_caller_asked_for_throws()
     {

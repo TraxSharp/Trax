@@ -118,7 +118,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
 
     /// <summary>Builds the socket. It connects on the first subscription.</summary>
     /// <exception cref="ArgumentException">
-    /// The endpoint is not <c>wss</c> on a host that is not loopback, and
+    /// The endpoint is relative, or it is not <c>wss</c> on a host that is not loopback and
     /// <see cref="GraphQLSubscriptionSocketOptions.AllowInsecureTransport"/> is not set.
     /// </exception>
     public GraphQLSubscriptionSocket(GraphQLSubscriptionSocketOptions options)

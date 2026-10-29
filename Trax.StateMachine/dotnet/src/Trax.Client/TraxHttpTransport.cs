@@ -92,8 +92,9 @@ public sealed class TraxHttpTransport : ITraxTransport
 
     /// <summary>Builds the transport.</summary>
     /// <exception cref="ArgumentException">
-    /// The endpoint is not <c>https</c> on a host that is not loopback, and
-    /// <see cref="TraxHttpTransportOptions.AllowInsecureTransport"/> is not set; or the client follows redirects.
+    /// The endpoint is relative and the client has no base address; or it is not <c>https</c> on a host that is not
+    /// loopback, and <see cref="TraxHttpTransportOptions.AllowInsecureTransport"/> is not set; or the client follows
+    /// redirects.
     /// </exception>
     public TraxHttpTransport(TraxHttpTransportOptions options)
     {
