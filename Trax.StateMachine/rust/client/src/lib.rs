@@ -10,7 +10,6 @@
 mod controller;
 mod graphql;
 mod server;
-mod unhandled;
 
 pub use controller::{
     codes, ir_hash, without_nulls, MachineError, MachineProblem, MachineStatus, MachineView, ProblemKind, SendOutcome,

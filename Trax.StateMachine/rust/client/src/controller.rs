@@ -11,7 +11,6 @@
 //! languages, without locks.
 
 use std::collections::hash_map::RandomState;
-use std::collections::HashSet;
 use std::hash::{BuildHasher, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -25,7 +24,6 @@ use crate::server::{
     DueAt, EventRequest, MachineServer, ServerAnswer, ServerProblem, ServerSnapshot, StreamMessage, Subscription,
     TransportError,
 };
-use crate::unhandled::unpredictable_edges;
 
 /// The codes the client reports of its own, beside the server's refusal codes.
 pub mod codes {
@@ -176,7 +174,6 @@ pub struct ServerMachineController {
     commands: mpsc::UnboundedSender<Msg>,
     view: watch::Receiver<Arc<MachineView>>,
     machine: Arc<Machine>,
-    unpredictable: Arc<HashSet<(String, String)>>,
 }
 
 impl ServerMachineController {
@@ -212,7 +209,6 @@ impl ServerMachineController {
                 ),
             });
         }
-        let unpredictable = Arc::new(unpredictable_edges(&options.ir));
         let (commands, inbox) = mpsc::unbounded_channel();
         let initial = Arc::new(MachineView {
             status: MachineStatus::Loading,
@@ -229,7 +225,6 @@ impl ServerMachineController {
         let (publish, view) = watch::channel(initial);
         let actor = Actor {
             machine: machine.clone(),
-            unpredictable: unpredictable.clone(),
             runtime: runtime.clone(),
             server: Arc::new(options.server),
             commands: commands.clone(),
@@ -270,7 +265,6 @@ impl ServerMachineController {
             commands,
             view,
             machine,
-            unpredictable,
         })
     }
 
@@ -335,7 +329,7 @@ impl ServerMachineController {
         match (&view.snapshot, view.status) {
             (Some(shown), status) if status != MachineStatus::Stopped => {
                 if self.machine.effect_triggers().iter().any(|t| t == trigger)
-                    || self.unpredictable.contains(&(shown.state.clone(), trigger.to_owned()))
+                    || self.machine.rests_on_unhandled_rule(&shown.state, trigger)
                 {
                     self.machine.available_triggers(shown).iter().any(|t| t == trigger)
                 } else {
@@ -477,8 +471,6 @@ enum Source {
 
 struct Actor<S> {
     machine: Arc<Machine>,
-    // The (state, trigger) pairs whose edge rests on a custom rule the machine holds no handler for.
-    unpredictable: Arc<HashSet<(String, String)>>,
     runtime: Handle,
     server: Arc<S>,
     commands: mpsc::UnboundedSender<Msg>,
@@ -1082,9 +1074,11 @@ impl<S: MachineServer> Actor<S> {
     }
 
     // Whether the event's outcome from `state` is one the client can tell: not bound to the effect, and with no edge
-    // that rests on a custom rule it holds no handler for (unhandled.rs).
+    // that rests on a custom rule it holds no handler for. It builds its machine from the IR alone, so it binds no
+    // handler, and the engine would count a custom guard as failed and a custom reduction as keeping the context: a
+    // prediction through one would show the wrong state, or be sent and refused as CLIENT_DIVERGENCE.
     fn predicts(&self, state: &str, trigger: &str) -> bool {
-        !self.is_effect(trigger) && !self.unpredictable.contains(&(state.to_owned(), trigger.to_owned()))
+        !self.is_effect(trigger) && !self.machine.rests_on_unhandled_rule(state, trigger)
     }
 
     fn pump(&mut self) {
