@@ -364,6 +364,7 @@ transcripts compare those by value.
 | A rejected request that ends the controller | `TypedMachineServer.endedBy` | — terminal codes end it through the stream | — terminal codes end it through the stream |
 | Discard the instance | `TypedMachineServer.discard` | `GraphQLMachineServer.DiscardAsync` | `GraphQLMachineServer.discard` |
 | The default resubscribe delays | `DEFAULT_RESUBSCRIBE_DELAYS` | `GraphQLMachineServer.DefaultResubscribeDelays` | `DEFAULT_RESUBSCRIBE_DELAYS` |
+| The default request timeout | `DEFAULT_REQUEST_TIMEOUT` | `GraphQLMachineServer.DefaultRequestTimeout` | `DEFAULT_REQUEST_TIMEOUT` |
 | Leave the empty query out of a socket message | `persistedMessageReplacer` | — `GraphQLSubscriptionSocket` writes its own messages | — the server writes its own socket's messages |
 | Options with every choice left to its default | — an object literal | — an object initializer | `GraphQLMachineServerOptions.new` |
 | The machine | `MachineServerOptions.machine` | `GraphQLMachineServerOptions.Machine` | `GraphQLMachineServerOptions.machine` |
@@ -375,7 +376,7 @@ transcripts compare those by value.
 | The socket's `connection_init` payload | — the page's graphql-ws client given as `socket` sends it | — `GraphQLSubscriptionSocketOptions.ConnectionParams` | `GraphQLMachineServerOptions.connection_params` |
 | allowInsecureTransport | `MachineServerOptions.allowInsecureTransport` | `GraphQLMachineServerOptions.AllowInsecureTransport` | `GraphQLMachineServerOptions.allow_insecure_transport` |
 | maxResponseSize | `MachineServerOptions.maxResponseSize` | `GraphQLMachineServerOptions.MaxResponseSize` | `GraphQLMachineServerOptions.max_message_size` |
-| requestTimeout | `MachineServerOptions.requestTimeout` | — the `Timeout` of the `HttpClient` given as `Http` | `GraphQLMachineServerOptions.request_timeout` |
+| requestTimeout | `MachineServerOptions.requestTimeout` | `GraphQLMachineServerOptions.RequestTimeout` | `GraphQLMachineServerOptions.request_timeout` |
 | How long a socket may take to connect | — the page's graphql-ws client given as `socket` decides | — `GraphQLSubscriptionSocketOptions.ConnectTimeout` | `GraphQLMachineServerOptions.connect_timeout` |
 | How long a socket may stay silent | — the page's graphql-ws client given as `socket` decides | — `GraphQLSubscriptionSocketOptions.KeepAliveTimeout` | `GraphQLMachineServerOptions.idle_timeout` |
 | resubscribeDelays | `MachineServerOptions.resubscribeDelays` | `GraphQLMachineServerOptions.ResubscribeDelays` | `GraphQLMachineServerOptions.resubscribe_delays` |

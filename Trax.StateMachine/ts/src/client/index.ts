@@ -33,6 +33,7 @@ export {
   type SnapshotOutput,
   type SnapshotProblem,
   requireSecureEndpoint,
+  DEFAULT_REQUEST_TIMEOUT,
 } from './transport';
 
 export {
