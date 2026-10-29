@@ -47,7 +47,7 @@ export function generateCSharpView(ir: IrDocument, options: CSharpViewOptions): 
   const refuse = `Rename one of them in the machine '${ir.id}'.`;
   for (const [what, names] of [["state", model.states], ["trigger", model.triggers]] as const)
     for (const name of names)
-      if (name.includes("$") || UNSUPPORTED.has(name))
+      if (name.includes("$") || UNSUPPORTED.has(name) || name === ENUM_VALUE_FIELD)
         throw new Error(
           `The machine '${ir.id}' has the ${what} ${JSON.stringify(name)}, which C# does not take as a member name.`,
         );
@@ -361,6 +361,9 @@ const KEYWORDS = new Set(
 
 // C#'s undocumented keywords: not even an @ makes one a name.
 const UNSUPPORTED = new Set(["__arglist", "__makeref", "__reftype", "__refvalue"]);
+
+// The field every C# enum holds its value in: no member of the states' or triggers' enum may take it (CS0076).
+const ENUM_VALUE_FIELD = "value__";
 
 // A name the IR already holds as an identifier (a state, a trigger), escaped when it is a C# keyword.
 const identifier = (name: string): string => (KEYWORDS.has(name) ? `@${name}` : name);
