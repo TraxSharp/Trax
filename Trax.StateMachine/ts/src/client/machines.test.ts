@@ -162,6 +162,30 @@ describe('createMachineExecutor', () => {
     expect(sent[0]).toEqual({ id: documents[5].id, variables: { id: 'draft-1', requestId: 'req-3' } });
   });
 
+  it('refuses a trigger the machine does not declare as an event, and never sends it as another operation', async () => {
+    const { sent, fetch } = recording();
+    const client = createSnapshotClient(persisted(fetch));
+
+    for (const trigger of ['Start', 'Get', 'Discard', 'Changed', 'Nope'])
+      expect((await client.advance('checkout', 'draft-1', trigger)).problem?.code).toBe('NO_TRANSITION');
+    expect(sent).toEqual([]);
+  });
+
+  it('refuses an operation name as an event even without the machine definition, and an effect named like one', async () => {
+    const { sent, fetch } = recording();
+    const bare = createSnapshotClient(
+      createMachineExecutor('/graphql', {
+        fetch,
+        machines: [{ machine: { id: 'checkout', version: 1 }, documents, effectEvent: 'Discard' }],
+      }),
+    );
+
+    for (const trigger of ['Start', 'Get', 'Discard', 'Changed'])
+      expect((await bare.advance('checkout', 'draft-1', trigger)).problem?.code).toBe('NO_TRANSITION');
+    expect((await bare.send('checkout', 'draft-1')).problem?.code).toBe('NO_TRANSITION');
+    expect(sent).toEqual([]);
+  });
+
   it('throws on a GraphQL error, which a session reports as a transport error', async () => {
     const { fetch } = recording({ errors: [{ message: 'The current user is not authorized.' }] });
     const session = createDraftSession({ executor: persisted(fetch), machine: checkout, id: 'draft-1' });
@@ -176,7 +200,10 @@ describe('createMachineExecutor with persisted documents', () => {
       answer('start', { id: 'draft-1', revision: 1, state: 'Cart', context: { items: [] }, problem: null }),
       answer('addItem', { id: 'draft-1', revision: 2, state: 'Cart', context: { items: ['book'] }, problem: null }),
     );
-    const client = createSnapshotClient(persisted(fetch));
+    // A machine given by its id alone, whose events the executor takes from the documents.
+    const client = createSnapshotClient(
+      createMachineExecutor('/graphql', { fetch, machines: [{ machine: { id: 'checkout', version: 1 }, documents }] }),
+    );
 
     await client.start('checkout', 'req-1');
     await client.advance('checkout', 'draft-1', 'AddItem', {

@@ -5,6 +5,7 @@ import { turnstile, type TurnstileSpec } from '../machines/turnstile/turnstile';
 import type { IrDocument } from '../rules/irMachine';
 import { typedMachineFromIr } from '../typed';
 import { checkout, type CheckoutSpec } from '../machines/checkout/checkout';
+import { ingest } from '../machines/ingest/ingest';
 import { ServerMachineController, type ServerMachineOptions } from './serverController';
 import {
   FakeMachineServer,
@@ -162,6 +163,29 @@ describe('ServerMachineController', () => {
 
     expect((await opened([])).can('Pay')).toBe(false);
     expect((await opened(['latte'])).can('Pay')).toBe(true);
+  });
+
+  it('refuses a trigger the machine does not declare as an event where it is sent, with the code advance gives', async () => {
+    const { server, controller } = await ready();
+
+    const sends = ['Discard', 'Start', 'Get', 'Changed', 'Nope'].map((trigger) => controller.send(trigger as 'Push'));
+    await flushMicrotasks();
+
+    expect(server.events).toHaveLength(0);
+    for (const sent of sends)
+      expect(await sent).toMatchObject({ outcome: 'refused', problem: { code: 'NO_TRANSITION' } });
+    expect(controller.get()).toMatchObject({ status: 'ready', error: null, pending: false });
+
+    const outcomes = new ServerMachineController({ machine: ingest, server: new FakeMachineServer(), id: 'g-1' });
+    expect(await outcomes.send('Fetching.done' as never)).toMatchObject({
+      outcome: 'refused',
+      problem: { code: 'OUTCOME_BOUND' },
+    });
+    const timers = new ServerMachineController({ machine: reminder, server: new FakeMachineServer(), id: 'r-1' });
+    expect(await timers.send('Review.after' as never)).toMatchObject({
+      outcome: 'refused',
+      problem: { code: 'TIMER_BOUND' },
+    });
   });
 
   it('sends the prediction as clientResult', async () => {

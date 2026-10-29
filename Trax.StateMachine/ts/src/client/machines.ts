@@ -19,6 +19,7 @@
  * operations refuses anything else. A document of another version of the machine is answered `CLIENT_OUTDATED` (the
  * page reloads) or `SERVER_OUTDATED` (retry), and the executor returns either as a problem.
  */
+import { eventRefusal } from '../machine';
 import { RefusalCode, type ProblemCode } from '../results';
 import type { MachineSpec, TypedMachine } from '../typed';
 import {
@@ -163,6 +164,9 @@ const documentsOf = (typed: TypedMachineOperations): Map<string, MachineDocument
   return byOperation;
 };
 
+// The operations that are not events: an event is never sent by one of their documents.
+const OPERATIONS: ReadonlySet<string> = new Set(['start', 'get', 'discard', 'changed']);
+
 type Answered = { answer: TypedAnswer | null | undefined } | { refused: SnapshotOutput };
 
 /**
@@ -269,6 +273,16 @@ export function createMachineExecutor(
       return post({ id: document.id, variables }, name);
     };
 
+    // A trigger that is not an event the machine declares has no event document to send it by, and is refused here.
+    // One whose field is another operation's (`Discard` is `discard`) is refused too, whether or not the machine is
+    // known: it would otherwise go out as that operation.
+    const notAnEvent = (trigger: string): SnapshotOutput | null => {
+      if (OPERATIONS.has(eventField(trigger)))
+        return problem(RefusalCode.NoTransition, `'${trigger}' is not an event of '${machineId}'.`);
+      const refused = 'core' in typed.machine ? eventRefusal(typed.machine.core.definition, trigger) : null;
+      return refused ? problem(refused.code, refused.message) : null;
+    };
+
     const answer = async (answered: Promise<Answered>) => {
       const done = await answered;
       return 'refused' in done ? done.refused : output(done.answer);
@@ -278,23 +292,31 @@ export function createMachineExecutor(
       case 'startSnapshot':
         return answer(run('start', { input: parseInput(input.input), requestId: input.requestId }));
 
-      case 'advanceSnapshot':
-        return answer(
-          run(eventField(String(input.trigger)), {
-            id: input.id,
-            input: parseInput(input.input),
-            requestId: input.requestId,
-            clientResult: input.clientResult ?? undefined,
-          }),
+      case 'advanceSnapshot': {
+        const trigger = String(input.trigger);
+        return (
+          notAnEvent(trigger) ??
+          answer(
+            run(eventField(trigger), {
+              id: input.id,
+              input: parseInput(input.input),
+              requestId: input.requestId,
+              clientResult: input.clientResult ?? undefined,
+            }),
+          )
         );
+      }
 
       case 'sendSnapshot':
         if (!typed.effectEvent) return problem(RefusalCode.NoEffect, `Machine '${machineId}' has no effect to send.`);
-        return answer(
-          run(eventField(typed.effectEvent), {
-            id: input.id,
-            requestId: input.requestId ?? `send:${String(input.id)}`,
-          }),
+        return (
+          notAnEvent(typed.effectEvent) ??
+          answer(
+            run(eventField(typed.effectEvent), {
+              id: input.id,
+              requestId: input.requestId ?? `send:${String(input.id)}`,
+            }),
+          )
         );
 
       case 'loadSnapshot': {

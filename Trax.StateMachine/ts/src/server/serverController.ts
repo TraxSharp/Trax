@@ -1,4 +1,5 @@
 import { ClientProblemCode, RefusalCode, type ProblemCode } from '../results';
+import { eventRefusal } from '../machine';
 import type { Problem } from '../problem';
 import type { PlannedEvent } from '../plan';
 import type { InputArgs, MachineSpec, StateOf, TriggerOf, TypedMachine, TypedSnapshot } from '../typed';
@@ -335,10 +336,16 @@ export class ServerMachineController<Spec extends MachineSpec> {
     return this.started;
   }
 
-  /** Sends one event under a fresh requestId, after every earlier event of this instance has settled. */
+  /**
+   * Sends one event under a fresh requestId, after every earlier event of this instance has settled. A trigger the
+   * machine does not declare as an event (an outcome, a timer, or a name it lacks) is refused at once with the code
+   * `advance` gives it, and nothing is sent.
+   */
   send<T extends TriggerOf<Spec>>(trigger: T, ...input: InputArgs<Spec, T>): Promise<SendOutcome> {
     if (this.error) return Promise.resolve({ outcome: 'stopped', error: this.error });
     if (this.disposed) return Promise.resolve(this.disposedOutcome());
+    const undeclared = eventRefusal(this.machine.core.definition, trigger);
+    if (undeclared) return Promise.resolve({ outcome: 'refused', problem: refusal(undeclared.code, undeclared.message) });
     return this.enqueue({ trigger, input: [...input], request: null });
   }
 
