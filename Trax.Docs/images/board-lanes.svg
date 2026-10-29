@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 300" width="768" height="300" role="img" aria-labelledby="title">
-  <title id="title">The Board sample. A bug ticket moves through five lanes, each owned by one client: Triage by triage-bot, Reproduce by repro-bot, Fix by fix-bot, QA by qa-bot and Review by Sam, a person. The ticket is in Fix, held by fix-bot. An agent submits its evidence, a check train on the server reruns it, and the ticket moves only if the check accepts it; otherwise it stays put.</title>
+  <title id="title">The Board sample. A bug ticket moves through five lanes, each owned by one client: Triage by triage-bot, Reproduce by repro-bot, Fix by fix-bot, QA by qa-bot and Review by Sam, a person. The ticket is in Fix, held by fix-bot. An agent submits its evidence, a check train the sample's author wrote reruns it on the server, and the ticket moves only if the check accepts it; otherwise it stays put.</title>
   <defs><marker id="ab4a7f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b4a7f5"/></marker><marker id="a5fc9b5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5fc9b5"/></marker><marker id="ae8853d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e8853d"/></marker></defs>
 <rect width="768" height="300" fill="#151515"/>
   <rect x="16" y="16" width="144" height="132" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
@@ -26,6 +26,8 @@
   <path d="M206,224 L254,224" fill="none" stroke="#b4a7f5" stroke-width="2" marker-end="url(#ab4a7f5)"/>
   <rect x="258" y="198" width="200" height="52" rx="8" fill="#16243a" stroke="#7fb0e0" stroke-width="1.5"/>
   <text x="274" y="229" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#e4e2de">A check train reruns it</text>
+  <rect x="258" y="260" width="150.0" height="22" rx="5" fill="#2f2810" stroke="#f2c94c" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="266" y="275" style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:12px;font-weight:400;fill:#f2c94c">you write: the check</text>
   <path d="M458,214 L506,202" fill="none" stroke="#5fc9b5" stroke-width="1.5" marker-end="url(#a5fc9b5)"/>
   <path d="M458,234 L506,256" fill="none" stroke="#e8853d" stroke-width="1.5" marker-end="url(#ae8853d)"/>
   <rect x="510" y="180" width="242" height="40" rx="8" fill="#12302b" stroke="#5fc9b5" stroke-width="1.5"/>
