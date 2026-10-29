@@ -477,3 +477,24 @@ async fn a_disposed_controller_settles_its_sync_as_disposed() {
 
     assert!(matches!(synced.await, SyncOutcome::Failed(p) if p.code == "DISPOSED"));
 }
+
+#[tokio::test]
+async fn a_trigger_the_machine_does_not_declare_is_refused_and_sends_nothing() {
+    let (controller, mut script) = opened().await;
+
+    for trigger in ["Discard", "Start", "Get", "Changed", "Nope"] {
+        let outcome = tokio::time::timeout(Duration::from_secs(5), controller.send(trigger, None))
+            .await
+            .unwrap_or_else(|_| panic!("{trigger} was sent"));
+
+        assert!(
+            matches!(&outcome, SendOutcome::Refused(p) if p.code == "NO_TRANSITION"),
+            "{trigger}: {outcome:?}"
+        );
+    }
+    assert!(
+        script.events.try_recv().is_err(),
+        "an undeclared trigger reached the server"
+    );
+    assert_eq!(controller.view().error, None);
+}

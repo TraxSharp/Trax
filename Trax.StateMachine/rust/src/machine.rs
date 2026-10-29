@@ -442,6 +442,30 @@ impl Machine {
         self.outcome_triggers.iter().map(String::as_str)
     }
 
+    /// The refusal [`Machine::advance`] gives `trigger` from every state when it is not an event a caller may send: an
+    /// outcome trigger (`OUTCOME_BOUND`), a timer trigger (`TIMER_BOUND`), or one the machine does not declare
+    /// (`NO_TRANSITION`). `None` for an event the machine declares, whatever state it is sent from.
+    pub fn event_refusal(&self, trigger: &str) -> Option<Refusal> {
+        if self.outcome_triggers.contains(trigger) {
+            Some(Refusal::new(
+                RefusalCode::OutcomeBound,
+                "This step is completed by the outcome of its work, not by an action.",
+            ))
+        } else if self.timer_triggers.contains(trigger) {
+            Some(Refusal::new(
+                RefusalCode::TimerBound,
+                "This step moves on by itself when its time is up, not by an action.",
+            ))
+        } else if !self.triggers.contains(trigger) {
+            Some(Refusal::new(
+                RefusalCode::NoTransition,
+                format!("The machine '{}' declares no event '{trigger}'.", self.id),
+            ))
+        } else {
+            None
+        }
+    }
+
     /// A new instance: the initial state and the initial context.
     pub fn initial_snapshot(&self) -> Snapshot {
         Snapshot {

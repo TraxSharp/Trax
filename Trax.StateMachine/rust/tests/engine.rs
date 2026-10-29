@@ -413,3 +413,25 @@ fn a_member_the_host_omits_as_null_counts_as_null() {
 
     assert_eq!(plan, PlanAnswer::Plan(Vec::new()));
 }
+
+#[test]
+fn an_event_the_machine_does_not_declare_is_refused_from_every_state_as_advance_refuses_it() {
+    let machine = Machine::from_ir(&conformance("machines/wait/wait.ir.json")).unwrap();
+    let initial = machine.initial_snapshot();
+
+    for (trigger, code) in [
+        ("Fetching.done", RefusalCode::OutcomeBound),
+        ("Fetching.after", RefusalCode::TimerBound),
+        ("Discard", RefusalCode::NoTransition),
+        ("Nope", RefusalCode::NoTransition),
+    ] {
+        assert_eq!(machine.event_refusal(trigger).map(|r| r.code), Some(code), "{trigger}");
+        assert_eq!(
+            machine.advance(&initial, trigger, None).unwrap_err().code,
+            code,
+            "{trigger}"
+        );
+    }
+    assert!(machine.event_refusal("Retry").is_none());
+    assert!(machine.event_refusal("Start").is_none());
+}

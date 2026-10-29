@@ -309,25 +309,28 @@ impl ServerMachineController {
     }
 
     /// Sends one event under a fresh request id, after every earlier event of this instance has settled. The event is
-    /// queued when this is called, so two calls send in the order they were made.
+    /// queued when this is called, so two calls send in the order they were made. A trigger the machine does not declare
+    /// as an event is refused here, with the code [`Machine::advance`] gives it (`NO_TRANSITION`, `OUTCOME_BOUND` or
+    /// `TIMER_BOUND`), and sends nothing.
     pub fn send(
         &self,
         trigger: impl Into<String>,
         input: Option<Value>,
     ) -> impl std::future::Future<Output = SendOutcome> + Send + 'static {
         let (reply, answer) = oneshot::channel();
+        let trigger = trigger.into();
         if input.as_ref().is_some_and(Value::is_too_deep) {
             // Refused before the task copies or predicts it: both would recurse over it.
             let _ = reply.send(SendOutcome::Refused(refusal(
                 codes::INVALID_INPUT,
                 "The input nests deeper than 512 arrays and objects.",
             )));
+        } else if let Some(refused) = self.machine.event_refusal(&trigger) {
+            // A trigger the machine does not declare as an event never reaches the server: it has no document of its
+            // own, and its name may be an operation's.
+            let _ = reply.send(SendOutcome::Refused(refusal(refused.code.as_str(), &refused.detail)));
         } else {
-            let _ = self.commands.send(Msg::Send {
-                trigger: trigger.into(),
-                input,
-                reply,
-            });
+            let _ = self.commands.send(Msg::Send { trigger, input, reply });
         }
         async move { answer.await.unwrap_or_else(|_| disposed_outcome()) }
     }

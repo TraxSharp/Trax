@@ -511,9 +511,20 @@ impl MachineServer for GraphQLMachineServer {
     }
 
     async fn event(&self, request: EventRequest) -> Result<ServerAnswer, TransportError> {
+        let field = event_field(&request.trigger);
+        // An event is never sent as one of the machine's own operations, whatever its trigger is named.
+        if OPERATIONS.contains(&field.as_str()) {
+            return Ok(ServerAnswer::Refused(ServerProblem {
+                code: codes::NO_TRANSITION.to_owned(),
+                message: format!(
+                    "'{}' names the operation '{field}', not an event of '{}'.",
+                    request.trigger, self.inner.machine
+                ),
+            }));
+        }
         self.inner
             .run(
-                &event_field(&request.trigger),
+                &field,
                 &[
                     ("id", Some(Value::from(request.id))),
                     ("input", request.input),
@@ -553,6 +564,9 @@ impl MachineServer for GraphQLMachineServer {
         Box::new(Stream(Some(runtime.spawn(async move { inner.stream(id, sink).await }))))
     }
 }
+
+// The operations a machine serves beside its events. An event's field is never looked up among them.
+const OPERATIONS: [&str; 4] = ["start", "get", "discard", "changed"];
 
 // The task that follows one instance; dropping the handle stops it and closes its socket.
 struct Stream(Option<JoinHandle<()>>);
@@ -1172,6 +1186,40 @@ mod tests {
         let answer = server.get("i-1".into()).await.unwrap();
 
         assert!(matches!(answer, ServerAnswer::Refused(ServerProblem { code, .. }) if code == "NOT_FOUND"));
+    }
+
+    #[tokio::test]
+    async fn an_event_named_as_an_operation_is_refused_and_sends_nothing() {
+        use std::sync::atomic::Ordering;
+
+        let (port, received) = http_host(json_answer(NOT_FOUND)).await;
+        let mut given = at(format!("http://127.0.0.1:{port}/graphql"));
+        for operation in ["start", "discard"] {
+            given.documents.push(ManifestDocument {
+                id: format!("{operation}-1"),
+                operation: operation.into(),
+                document: "mutation Op($id: UUID!, $requestId: String!) { x }".into(),
+            });
+        }
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        for trigger in ["Discard", "Start", "Get", "Changed", "discard"] {
+            let answer = server
+                .event(EventRequest {
+                    id: "i-1".into(),
+                    trigger: trigger.into(),
+                    input: None,
+                    request_id: "r1".into(),
+                    client_result: None,
+                })
+                .await;
+
+            assert!(
+                matches!(&answer, Ok(ServerAnswer::Refused(p)) if p.code == codes::NO_TRANSITION),
+                "{trigger}: {answer:?}"
+            );
+        }
+        assert_eq!(received.load(Ordering::SeqCst), 0);
     }
 
     #[test]
