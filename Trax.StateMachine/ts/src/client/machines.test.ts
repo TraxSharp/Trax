@@ -74,10 +74,27 @@ describe('createMachineExecutor', () => {
       'http://127.8.9.10/graphql',
       'http://[::1]:5000/graphql',
       '/graphql',
-      '//api.example.com/graphql',
     ])
       expect(build(endpoint)).not.toThrow();
     expect(build('http://api.example.com/graphql', true)).not.toThrow();
+  });
+
+  it('refuses a scheme-relative endpoint, which names another host, unless the caller allowed it', () => {
+    const { fetch } = recording();
+    const build = (endpoint: string, allowInsecureTransport?: boolean) => () =>
+      createMachineExecutor(endpoint, { fetch, allowInsecureTransport, machines: [{ machine: checkout, documents }] });
+
+    for (const endpoint of [
+      '//api.example.com/graphql',
+      '\\\\api.example.com\\graphql',
+      '/\\api.example.com/graphql',
+      '\\/api.example.com/graphql',
+      ' //api.example.com/graphql',
+      '/\t/api.example.com/graphql',
+    ]) {
+      expect(build(endpoint)).toThrow(/another host/);
+      expect(build(endpoint, true)).not.toThrow();
+    }
   });
 
   it('refuses a machine with no documents, naming the manifest', () => {

@@ -286,7 +286,9 @@ const cancel = async (body: unknown): Promise<void> => {
 /**
  * Throws unless `endpoint` may carry credentials: an absolute one must be https unless its host is this machine
  * (localhost, 127.0.0.0/8, ::1) or `allowInsecure` is set. A relative one goes to the page's own origin, whatever its
- * scheme. Every machine executor and server runs it; the generated client runs it before each train request too.
+ * scheme, except a scheme-relative one (`//host/...`, or `\\host\...`, which a browser reads the same way), which goes
+ * to the host it names and is refused unless `allowInsecure` is set. Every machine executor and server runs it; the
+ * generated client runs it before each train request too.
  */
 export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean | undefined): void {
   if (allowInsecure) return;
@@ -294,6 +296,10 @@ export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean |
   try {
     url = new URL(endpoint);
   } catch {
+    if (isSchemeRelative(endpoint))
+      throw new Error(
+        'The endpoint is scheme-relative, so it goes to another host than the page\'s own. Give an absolute https:// endpoint, a path on this origin, or set allowInsecureTransport when the network is trusted.',
+      );
     return;
   }
   if (url.protocol === 'https:' || isLoopback(url.hostname)) return;
@@ -301,6 +307,12 @@ export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean |
     `The endpoint ${url.protocol}//${url.host} is not over TLS, so whatever authenticates the client would travel in cleartext. Use https://, a loopback host, or set allowInsecureTransport when the network is trusted.`,
   );
 }
+
+// Whether a relative URL names a host of its own. A URL parser drops every tab and newline and the spaces and control
+// characters around it, and reads a backslash as a slash in an http or https URL, so `/\t/host` and `\\host` are
+// `//host` too.
+const isSchemeRelative = (endpoint: string): boolean =>
+  /^[\\/]{2}/.test(endpoint.replace(/[\t\n\r]/g, '').replace(/^[\u0000-\u0020]+/, ''));
 
 const isLoopback = (hostname: string): boolean =>
   hostname === 'localhost' || hostname === '[::1]' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
