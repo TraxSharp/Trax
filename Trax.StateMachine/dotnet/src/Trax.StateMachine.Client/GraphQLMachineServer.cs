@@ -228,7 +228,8 @@ public sealed partial class GraphQLMachineServer : IMachineServer
 
     /// <summary>
     /// Deletes one of the caller's instances. An instance already gone, or never the caller's, is answered discarded too,
-    /// so a retry is harmless. Null when it was discarded; otherwise the refusal.
+    /// so a retry is harmless. Null when it was discarded; otherwise the refusal. An answer that neither says the
+    /// instance was discarded nor gives a problem does not say it is gone, and throws as a failed request does.
     /// </summary>
     public async Task<ServerProblem?> DiscardAsync(
         string id,
@@ -244,7 +245,17 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             .ConfigureAwait(false);
         if (refused is not null)
             return refused.Problem;
-        return answer?["problem"] is JsonObject problem ? ProblemOf(problem) : null;
+        if (answer?["problem"] is JsonObject problem)
+            return ProblemOf(problem);
+        if (
+            answer?["discarded"] is not JsonValue discarded
+            || !discarded.TryGetValue(out bool gone)
+            || !gone
+        )
+            throw new HttpRequestException(
+                "The server answered the discard without saying the instance was discarded."
+            );
+        return null;
     }
 
     // One operation, by its persisted id, its values as variables.

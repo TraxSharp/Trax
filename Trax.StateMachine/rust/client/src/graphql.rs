@@ -266,7 +266,8 @@ impl GraphQLMachineServer {
     }
 
     /// Deletes one of the caller's instances. One already gone, or never the caller's, is answered discarded too, so
-    /// a retry is harmless. `Ok(None)` when it is gone; otherwise the refusal.
+    /// a retry is harmless. `Ok(None)` when it is gone; otherwise the refusal. An answer that neither says the instance
+    /// was discarded nor gives a problem does not say it is gone: it is a [`TransportError`].
     pub async fn discard(&self, id: &str, request_id: &str) -> Result<Option<ServerProblem>, TransportError> {
         match self
             .inner
@@ -280,7 +281,21 @@ impl GraphQLMachineServer {
             .await?
         {
             Posted::Refused(problem) => Ok(Some(problem)),
-            Posted::Answer(answer) => Ok(answer.as_ref().and_then(|a| a.get("problem")).and_then(problem_of)),
+            Posted::Answer(answer) => {
+                if let Some(problem) = answer.as_ref().and_then(|a| a.get("problem")).and_then(problem_of) {
+                    return Ok(Some(problem));
+                }
+                match answer
+                    .as_ref()
+                    .and_then(|a| a.get("discarded"))
+                    .and_then(|d| d.as_bool())
+                {
+                    Some(true) => Ok(None),
+                    _ => Err(TransportError(
+                        "The server answered the discard without saying the instance was discarded.".to_owned(),
+                    )),
+                }
+            }
         }
     }
 }
