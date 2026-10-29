@@ -1407,6 +1407,36 @@ public class OperationsClientGeneratorTests
             .WithMessage("The GraphQL enum Empty declares no values*");
     }
 
+    // A type the schema declares is that type, whatever scalar shares its name.
+    [TestCase("Duration")]
+    [TestCase("Date")]
+    [TestCase("Url")]
+    [TestCase("Byte")]
+    public void A_declared_type_named_like_a_known_scalar_is_typed_as_itself_by_both_clients(
+        string name
+    )
+    {
+        var schema = System.Text.RegularExpressions.Regex.Replace(Schema, @"\bRunState\b", name);
+        var runs = Runs.Replace("RunState", name, StringComparison.Ordinal);
+        var options = new OperationsGenerateOptions(
+            schema,
+            [new("src/graphql/Runs.graphql", runs)]
+        );
+
+        Text(ClientGenerator.Render(options), "documents/runs.g.ts")
+            .Should()
+            .Contain($"  state?: {name} | null;")
+            .And.Contain($"      state: {name};")
+            .And.Contain($"import type {{ {name} }} from \"../types.g\";");
+        Text(
+                ClientGenerator.RenderCSharp(options, ClientGenerator.DefaultOperationsNamespace),
+                "Documents/Runs.g.cs"
+            )
+            .Should()
+            .Contain($"{Client}Optional<{name}?> State {{ get; init; }}")
+            .And.Contain($"    public required {name} State {{ get; init; }}");
+    }
+
     [Test]
     public void Two_enum_values_that_take_one_member_are_refused()
     {

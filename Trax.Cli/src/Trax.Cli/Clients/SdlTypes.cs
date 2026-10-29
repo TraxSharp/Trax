@@ -230,9 +230,10 @@ internal sealed class SdlTypes
             _ => "unknown",
         };
 
+    // A type the schema declares is itself, whatever scalar shares its name, as the C# client reads it.
     private string Scalar(string name) =>
-        Scalars.TryGetValue(name, out var ts) ? ts
-        : _definitions.ContainsKey(name) ? name
+        _definitions.ContainsKey(name) ? name
+        : Scalars.TryGetValue(name, out var ts) ? ts
         : "unknown";
 
     private static string Named(GraphQLType type) =>
