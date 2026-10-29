@@ -875,6 +875,40 @@ public partial class ClientGeneratorTests
         render.Should().Throw<InvalidOperationException>().WithMessage($"*'{name}'*");
     }
 
+    // A document's module imports sendDocument and declares <function>DocumentId beside the types it imports.
+    [Test]
+    public void A_document_whose_function_is_a_name_its_module_imports_is_refused()
+    {
+        var document = StartRunFile with
+        {
+            Text = ClientManifests.StartRunDocument.Replace(
+                "mutation StartRun",
+                "mutation SendDocument"
+            ),
+        };
+
+        var render = () => RenderDocuments(ClientManifests.Sample(), document);
+
+        render
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*'sendDocument'*its generated modules use*");
+    }
+
+    [TestCase("startRunDocumentId")]
+    [TestCase("sendDocument")]
+    public void A_type_named_as_a_name_a_document_module_declares_or_imports_is_refused(string name)
+    {
+        var manifest = ClientManifests.Sample() with
+        {
+            Types = ClientManifests.TrainTypes + $"\nenum {name} {{ X }}\n",
+        };
+
+        var render = () => RenderDocuments(manifest, StartRunFile);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage($"*'{name}'*");
+    }
+
     [Test]
     public void A_reserved_word_the_runtime_forbids_is_refused()
     {

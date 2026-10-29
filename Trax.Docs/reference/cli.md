@@ -522,8 +522,8 @@ The generated client is committed, like a twin, so a frontend's build needs no .
 host and runs `--check`, which also catches a HotChocolate change that moved a document's id. Every name from the
 manifest is checked before it is written: a machine id or an operation name that is a word TypeScript reserves, two
 that generate one name (`map-2d` and `map2d`), two documents whose files differ only in case, a train field that is not
-a GraphQL name, and a name the client's runtime exports (`configureTrax`) or a machine's client module declares
-(`server`, `socket`) are refused; a string is
+a GraphQL name, and a name the client's runtime exports (`configureTrax`), a machine's client module declares
+(`server`, `socket`) or a document's module imports or declares (`sendDocument`, `<operation>DocumentId`) are refused; a string is
 written as a literal and a description cannot close its comment. Each machine's IR must name the machine, its states,
 triggers and outcomes must be identifiers and no state or trigger may be named after an `Object.prototype` member
 (`__proto__`, `constructor`), its `context`, `invariants` and `inputs` must be keyed by its own states and triggers,

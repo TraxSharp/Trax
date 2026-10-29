@@ -130,7 +130,14 @@ internal sealed partial class ClientGenerator
             options.Documents is not null || progress is not null ? types.Render() : null;
         if (typesText is not null)
             foreach (var type in types.Declared)
+            {
+                // The document and progress modules import their types beside sendDocument.
+                if (DocumentModuleNames.Contains(type))
+                    throw new InvalidOperationException(
+                        $"The GraphQL type '{type}' takes a name its generated modules use. Rename it on the host."
+                    );
                 names.Claim(type, $"the GraphQL type {type}");
+            }
 
         var clientDocuments = options.Documents is { } documentFiles
             ? ClientDocumentSet.Read(documentFiles, manifest, types)
@@ -152,7 +159,14 @@ internal sealed partial class ClientGenerator
                     TypeScript.Identifier(Lower(operation.Name), "operation"),
                     owner
                 );
+                if (DocumentModuleNames.Contains(function))
+                    throw new InvalidOperationException(
+                        $"{owner} gets a function '{function}', a name its generated modules use. Rename the "
+                            + "operation in the document."
+                    );
                 var result = names.Claim($"{TypeScript.Upper(function)}Result", owner);
+                // Declared in the module beside the types it imports, so no type may take it either.
+                names.Claim($"{function}DocumentId", owner);
                 paths.Claim($"documents/{function}.g.ts", owner);
                 documentModules.Add(
                     (
@@ -664,6 +678,13 @@ internal sealed partial class ClientGenerator
         "UseRememberedMachineOptions",
         "UseServerMachineOptions",
         "TraxOperationError",
+    };
+
+    // The names a client document's module, and the progress module, import from client.g beside the types they use.
+    // The index does not export them, so only a document's function or a type the modules import can collide.
+    private static readonly HashSet<string> DocumentModuleNames = new(StringComparer.Ordinal)
+    {
+        "sendDocument",
     };
 
     // A schema several of a twin's outcomes share is declared as sharedOutput0, sharedOutput1, ...
