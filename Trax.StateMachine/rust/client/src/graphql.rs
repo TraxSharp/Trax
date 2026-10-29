@@ -736,7 +736,7 @@ impl Inner {
 
         // A host that says nothing for half the idle limit is pinged; one that says nothing for the rest of it is gone.
         let mut pinged = false;
-        // What this subscription has delivered. Its first push is the instance as it is now, which every new stream
+        // The snapshots this subscription has delivered. Its first is the instance as it is now, which every new stream
         // sends, so only a second one shows the stream lasted: the resubscribe delays start over then, and a host that
         // drops each stream right after its first push is subscribed again later each time.
         let mut pushes = 0usize;
@@ -850,8 +850,8 @@ impl Inner {
             sink(StreamMessage::Gone { not_found: false });
             return Some(Ended::ForGood);
         }
+        // A reload is not a snapshot: it says nothing of whether the stream lasted, so it is not counted.
         if change.get("reload").and_then(|r| r.as_bool()) == Some(true) {
-            *pushes += 1;
             sink(StreamMessage::Reload);
             return None;
         }
@@ -1362,6 +1362,10 @@ mod tests {
         // Acknowledges it, then answers the subscription with one snapshot and completes it, as a host that drops every
         // stream right after its first push.
         PushThenComplete,
+        // Acknowledges it, then answers the subscription with one snapshot and a reload and completes it.
+        PushReloadThenComplete,
+        // Acknowledges it, then answers the subscription with two snapshots and completes it.
+        TwoPushesThenComplete,
     }
 
     // How the host answers connection n.
@@ -1445,11 +1449,21 @@ mod tests {
                             };
                             let _ = socket.send(Message::text(message)).await;
                         }
-                        Reply::PushThenComplete => {
+                        Reply::PushThenComplete | Reply::PushReloadThenComplete | Reply::TwoPushesThenComplete => {
                             let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
                             let _ = socket.next().await;
                             let push = r#"{"id":"1","type":"next","payload":{"data":{"turnstileChanged":{"state":"Locked","revision":1,"context":{}}}}}"#;
                             let _ = socket.send(Message::text(push)).await;
+                            let then = match reply {
+                                Reply::PushReloadThenComplete => Some(
+                                    r#"{"id":"1","type":"next","payload":{"data":{"turnstileChanged":{"reload":true}}}}"#,
+                                ),
+                                Reply::TwoPushesThenComplete => Some(push),
+                                _ => None,
+                            };
+                            if let Some(then) = then {
+                                let _ = socket.send(Message::text(then)).await;
+                            }
                             let _ = socket.send(Message::text(r#"{"id":"1","type":"complete"}"#)).await;
                         }
                         Reply::Pong => {
@@ -1559,6 +1573,51 @@ mod tests {
             second.elapsed()
         );
         assert!(matches!(delivered.try_recv(), Ok(StreamMessage::Changed(_))));
+    }
+
+    // Follows "i-1" on a host that answers every connection as `reply` says, with resubscribe delays of 10 and 400 ms,
+    // and answers how long after the second connection the third came.
+    async fn third_connection_after(reply: Replies) -> Duration {
+        let (port, mut heard) = recording_host(reply).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10), Duration::from_millis(400)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        let wait = Duration::from_secs(10);
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let second = std::time::Instant::now();
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        second.elapsed()
+    }
+
+    #[tokio::test]
+    async fn a_reload_does_not_count_as_a_push_toward_starting_the_delays_over() {
+        let after = third_connection_after(|_| Reply::PushReloadThenComplete).await;
+
+        assert!(after >= Duration::from_millis(300), "subscribed again after {after:?}");
+    }
+
+    #[tokio::test]
+    async fn a_stream_that_delivered_a_second_snapshot_starts_the_delays_over() {
+        let after = third_connection_after(|_| Reply::TwoPushesThenComplete).await;
+
+        assert!(after < Duration::from_millis(300), "subscribed again after {after:?}");
+    }
+
+    #[test]
+    fn only_a_snapshot_counts_as_a_push() {
+        let (delivered, pushes, _) = next_of(r#"{"data":{"turnstileChanged":{"reload":true}}}"#);
+        assert_eq!((delivered, pushes), (vec![StreamMessage::Reload], 0));
+
+        let (delivered, pushes, _) =
+            next_of(r#"{"data":{"turnstileChanged":{"state":"Locked","revision":1,"context":{}}}}"#);
+        assert!(matches!(&delivered[..], [StreamMessage::Changed(_)]), "{delivered:?}");
+        assert_eq!(pushes, 1);
     }
 
     #[tokio::test]
