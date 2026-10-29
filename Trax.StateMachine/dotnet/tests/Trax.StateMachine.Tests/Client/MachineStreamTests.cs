@@ -69,7 +69,8 @@ public class MachineStreamTests
         string code
     )
     {
-        var (socket, messages, stream) = Follow();
+        var time = new TimerLog();
+        var (socket, messages, stream) = Follow(time: time);
         using var following = stream;
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
         var refusal = new SocketClosedException(
@@ -82,15 +83,16 @@ public class MachineStreamTests
 
         var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
         message.Should().Be(new StreamMessage.Refused(code, refusal.Message));
-        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
-        await Task.Delay(100);
+        // Subscribing again would wait on a timer first: none was started.
+        time.Delays.Should().BeEmpty();
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
     }
 
     [Test]
     public async Task A_socket_that_follows_no_more_subscriptions_ends_the_stream_and_is_not_subscribed_again()
     {
-        var (socket, messages, stream) = Follow();
+        var time = new TimerLog();
+        var (socket, messages, stream) = Follow(time: time);
         using var following = stream;
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
         var disposed = new SocketUnavailableException(
@@ -103,8 +105,8 @@ public class MachineStreamTests
         message
             .Should()
             .Be(new StreamMessage.Refused(ClientProblemCodes.TransportError, disposed.Message));
-        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
-        await Task.Delay(100);
+        // Subscribing again would wait on a timer first: none was started.
+        time.Delays.Should().BeEmpty();
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
     }
 
@@ -133,7 +135,8 @@ public class MachineStreamTests
     )]
     public async Task A_push_the_client_cannot_read_ends_the_stream_once_with_a_failure(string data)
     {
-        var (socket, messages, stream) = Follow();
+        var time = new TimerLog();
+        var (socket, messages, stream) = Follow(time: time);
         using var following = stream;
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
 
@@ -145,15 +148,16 @@ public class MachineStreamTests
             .BeOfType<StreamMessage.Refused>()
             .Which.Code.Should()
             .Be(ClientProblemCodes.TransportError);
-        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
-        await Task.Delay(100);
+        // Subscribing again would wait on a timer first: none was started.
+        time.Delays.Should().BeEmpty();
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
     }
 
     [Test]
     public async Task A_push_with_a_member_given_twice_ends_the_stream_once_with_a_failure()
     {
-        var (socket, messages, stream) = Follow();
+        var time = new TimerLog();
+        var (socket, messages, stream) = Follow(time: time);
         using var following = stream;
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
 
@@ -169,8 +173,8 @@ public class MachineStreamTests
             .BeOfType<StreamMessage.Refused>()
             .Which.Code.Should()
             .Be(ClientProblemCodes.TransportError);
-        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
-        await Task.Delay(100);
+        // Subscribing again would wait on a timer first: none was started.
+        time.Delays.Should().BeEmpty();
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
     }
 
@@ -188,7 +192,8 @@ public class MachineStreamTests
         string code
     )
     {
-        var (socket, messages, stream) = Follow();
+        var time = new TimerLog();
+        var (socket, messages, stream) = Follow(time: time);
         using var following = stream;
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
 
@@ -196,8 +201,8 @@ public class MachineStreamTests
 
         var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
         message.Should().BeOfType<StreamMessage.Refused>().Which.Code.Should().Be(code);
-        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
-        await Task.Delay(100);
+        // Subscribing again would wait on a timer first: none was started.
+        time.Delays.Should().BeEmpty();
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
     }
 
@@ -209,7 +214,8 @@ public class MachineStreamTests
         string code
     )
     {
-        var (socket, messages, stream) = Follow();
+        var time = new TimerLog();
+        var (socket, messages, stream) = Follow(time: time);
         using var following = stream;
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
 
@@ -219,15 +225,16 @@ public class MachineStreamTests
 
         var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
         message.Should().BeOfType<StreamMessage.Refused>().Which.Code.Should().Be(code);
-        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
-        await Task.Delay(100);
+        // Subscribing again would wait on a timer first: none was started.
+        time.Delays.Should().BeEmpty();
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
     }
 
     [Test]
     public async Task A_code_the_caller_named_terminal_ends_the_stream_with_that_code()
     {
-        var (socket, messages, stream) = Follow(terminal: ["CONNECTION_CHANGED"]);
+        var time = new TimerLog();
+        var (socket, messages, stream) = Follow(terminal: ["CONNECTION_CHANGED"], time: time);
         using var following = stream;
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
 
@@ -235,8 +242,8 @@ public class MachineStreamTests
 
         var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
         message.Should().Be(new StreamMessage.Refused("CONNECTION_CHANGED", "Not allowed."));
-        // negative-wait: nothing should subscribe again, so there is no signal to wait on; ten resubscribe delays pass.
-        await Task.Delay(100);
+        // Subscribing again would wait on a timer first: none was started.
+        time.Delays.Should().BeEmpty();
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
     }
 
@@ -272,13 +279,16 @@ public class MachineStreamTests
     public async Task A_stream_that_ends_after_its_first_push_waits_the_next_delay_before_subscribing_again()
     {
         // Every new stream's first push is the instance as it is: one that ends after it has not settled down.
+        var time = new TimerLog();
         var (socket, messages, stream) = Follow(
-            delays: [TimeSpan.FromMilliseconds(10), TimeSpan.FromHours(1)]
+            delays: [TimeSpan.FromMilliseconds(10), TimeSpan.FromHours(1)],
+            time: time
         );
         using var following = stream;
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
         first.Push(Changed(1));
         first.Sink.Complete();
+        time.Advance(TimeSpan.FromMilliseconds(10));
         var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
 
         second.Push(Changed(1));
@@ -287,8 +297,9 @@ public class MachineStreamTests
         (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
             .Should()
             .BeOfType<StreamMessage.Changed>();
-        // negative-wait: the second delay is an hour, so nothing should subscribe again; ten first delays pass.
-        await Task.Delay(100);
+        // The second wait is drawn from the hour's step, at least half of it.
+        time.Delays.Should().HaveCount(2);
+        time.Delays[1].Should().BeGreaterThanOrEqualTo(TimeSpan.FromMinutes(30));
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
     }
 
@@ -322,7 +333,7 @@ public class MachineStreamTests
         int milliseconds
     )
     {
-        var time = new FakeTimeProvider();
+        var time = new TimerLog();
         var (socket, _, stream) = Follow(
             delays: [TimeSpan.FromSeconds(1)],
             time: time,
@@ -332,9 +343,8 @@ public class MachineStreamTests
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
 
         first.Sink.Complete();
+        time.Delays.Should().Equal(TimeSpan.FromMilliseconds(milliseconds));
         time.Advance(TimeSpan.FromMilliseconds(milliseconds - 1));
-        // negative-wait: the fake clock has not reached the wait, so nothing should subscribe again.
-        await Task.Delay(100);
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
         time.Advance(TimeSpan.FromMilliseconds(1));
 
@@ -380,6 +390,34 @@ public class MachineStreamTests
         catch (ObjectDisposedException)
         {
             return true;
+        }
+    }
+
+    // A fake clock that keeps the wait of every timer started on it, so a test reads whether, and how long, the stream
+    // waits before subscribing again without waiting itself.
+    private sealed class TimerLog : FakeTimeProvider
+    {
+        private readonly List<TimeSpan> _delays = [];
+
+        public IReadOnlyList<TimeSpan> Delays
+        {
+            get
+            {
+                lock (_delays)
+                    return [.. _delays];
+            }
+        }
+
+        public override ITimer CreateTimer(
+            TimerCallback callback,
+            object? state,
+            TimeSpan dueTime,
+            TimeSpan period
+        )
+        {
+            lock (_delays)
+                _delays.Add(dueTime);
+            return base.CreateTimer(callback, state, dueTime, period);
         }
     }
 
