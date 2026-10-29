@@ -68,10 +68,10 @@ pub struct GraphQLMachineServerOptions {
     pub headers: Option<RequestHeaders>,
     /// The `connection_init` payload, asked for on every connection: how a host authenticates a socket.
     pub connection_params: Option<ConnectionParams>,
-    /// Delays before subscribing again after a stream that ended without saying why. The last repeats. A socket the
-    /// host refused (closed with 4401 or 4403, an upgrade answered 401 or 403, or a stream error with an authorization
-    /// code or one of `terminal_stream_errors`) is not subscribed again: the stream delivers [`StreamMessage::Refused`]
-    /// and ends.
+    /// Delays before subscribing again after a stream that ended without saying why. The last repeats, and they start
+    /// over once a stream has delivered a second push. A socket the host refused (closed with 4401 or 4403, an upgrade
+    /// answered 401 or 403, or a stream error with an authorization code or one of `terminal_stream_errors`) is not
+    /// subscribed again: the stream delivers [`StreamMessage::Refused`] and ends.
     pub resubscribe_delays: Option<Vec<Duration>>,
     /// How long a socket may take to connect and be acknowledged before the attempt counts as failed and is tried
     /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default.
@@ -713,6 +713,10 @@ impl Inner {
 
         // A host that says nothing for half the idle limit is pinged; one that says nothing for the rest of it is gone.
         let mut pinged = false;
+        // What this subscription has delivered. Its first push is the instance as it is now, which every new stream
+        // sends, so only a second one shows the stream lasted: the resubscribe delays start over then, and a host that
+        // drops each stream right after its first push is subscribed again later each time.
+        let mut pushes = 0usize;
         let ended = loop {
             let next = match tokio::time::timeout(self.idle_timeout / 2, socket.next()).await {
                 Ok(next) => {
@@ -748,7 +752,11 @@ impl Inner {
                     let _ = socket.send(Message::text(r#"{"type":"pong"}"#)).await;
                 }
                 Some("next") => {
-                    if let Some(ended) = self.on_next(message.get("payload"), sink, attempt) {
+                    let ended = self.on_next(message.get("payload"), sink, &mut pushes);
+                    if pushes >= 2 {
+                        *attempt = 0;
+                    }
+                    if let Some(ended) = ended {
                         break ended;
                     }
                 }
@@ -783,7 +791,7 @@ impl Inner {
     }
 
     // One event of the stream: a message for the controller, nothing, or the end of this subscription.
-    fn on_next(&self, payload: Option<&Value>, sink: &StreamSink, attempt: &mut usize) -> Option<Ended> {
+    fn on_next(&self, payload: Option<&Value>, sink: &StreamSink, pushes: &mut usize) -> Option<Ended> {
         let payload = payload?;
         if let Some(error) = payload.get("errors").and_then(|e| e.as_array()).and_then(|e| e.first()) {
             let code = error
@@ -820,11 +828,12 @@ impl Inner {
             return Some(Ended::ForGood);
         }
         if change.get("reload").and_then(|r| r.as_bool()) == Some(true) {
+            *pushes += 1;
             sink(StreamMessage::Reload);
             return None;
         }
         let snapshot = snapshot_of(change).ok().filter(|s| s.revision.is_some())?;
-        *attempt = 0;
+        *pushes += 1;
         sink(StreamMessage::Changed(snapshot));
         None
     }
@@ -1266,6 +1275,9 @@ mod tests {
         NextError(&'static str),
         // Acknowledges it, then answers the subscription with an `error` whose first error has this code.
         ErrorMessage(&'static str),
+        // Acknowledges it, then answers the subscription with one snapshot and completes it, as a host that drops every
+        // stream right after its first push.
+        PushThenComplete,
     }
 
     // How the host answers connection n.
@@ -1349,6 +1361,13 @@ mod tests {
                             };
                             let _ = socket.send(Message::text(message)).await;
                         }
+                        Reply::PushThenComplete => {
+                            let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
+                            let _ = socket.next().await;
+                            let push = r#"{"id":"1","type":"next","payload":{"data":{"turnstileChanged":{"state":"Locked","revision":1,"context":{}}}}}"#;
+                            let _ = socket.send(Message::text(push)).await;
+                            let _ = socket.send(Message::text(r#"{"id":"1","type":"complete"}"#)).await;
+                        }
                         Reply::Pong => {
                             let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
                             while let Some(Ok(message)) = socket.next().await {
@@ -1424,6 +1443,38 @@ mod tests {
         let answered = tokio::spawn(async move { server.get("i-1".into()).await }).await;
 
         assert!(matches!(answered, Ok(Err(_))), "{answered:?}");
+    }
+
+    #[tokio::test]
+    async fn a_stream_dropped_after_its_first_push_backs_off_further_each_time() {
+        let (port, mut heard) = recording_host(|_| Reply::PushThenComplete).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10), Duration::from_millis(400)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let (deliver, mut delivered) = tokio::sync::mpsc::unbounded_channel();
+        let _stream = server.subscribe(
+            "i-1".into(),
+            Arc::new(move |message| {
+                let _ = deliver.send(message);
+            }),
+        );
+        let wait = Duration::from_secs(10);
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let second = std::time::Instant::now();
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+
+        // Every new stream's first push is the instance as it is, so it says nothing of whether the stream will last.
+        assert!(
+            second.elapsed() >= Duration::from_millis(300),
+            "subscribed again after {:?}",
+            second.elapsed()
+        );
+        assert!(matches!(delivered.try_recv(), Ok(StreamMessage::Changed(_))));
     }
 
     #[tokio::test]
