@@ -8,7 +8,7 @@ use std::time::Duration;
 use trax_state_machine::Map;
 use trax_state_machine::Value;
 use trax_state_machine_client::{
-    ir_hash, DueAt, EventRequest, MachineServer, MachineView, ServerAnswer, ServerMachineController,
+    ir_hash, DueAt, EventRequest, MachineServer, MachineView, SendOutcome, ServerAnswer, ServerMachineController,
     ServerMachineOptions, ServerSnapshot, StreamMessage, StreamSink, Subscription, TransportError,
 };
 
@@ -194,11 +194,13 @@ type Answer = tokio::sync::oneshot::Sender<Result<ServerAnswer, TransportError>>
 // A server whose every read and event waits for the test to answer it, and whose stream the test pushes into.
 struct Scripted {
     reads: tokio::sync::mpsc::UnboundedSender<Answer>,
+    events: tokio::sync::mpsc::UnboundedSender<(EventRequest, Answer)>,
     sink: Arc<std::sync::Mutex<Option<StreamSink>>>,
 }
 
 struct Script {
     reads: tokio::sync::mpsc::UnboundedReceiver<Answer>,
+    events: tokio::sync::mpsc::UnboundedReceiver<(EventRequest, Answer)>,
     sink: Arc<std::sync::Mutex<Option<StreamSink>>>,
 }
 
@@ -214,6 +216,13 @@ impl Script {
             .expect("no read was sent")
             .unwrap()
     }
+
+    async fn event(&mut self) -> (EventRequest, Answer) {
+        tokio::time::timeout(Duration::from_secs(5), self.events.recv())
+            .await
+            .expect("no event was sent")
+            .unwrap()
+    }
 }
 
 impl MachineServer for Scripted {
@@ -221,8 +230,13 @@ impl MachineServer for Scripted {
         std::future::pending().await
     }
 
-    async fn event(&self, _: EventRequest) -> Result<ServerAnswer, TransportError> {
-        std::future::pending().await
+    async fn event(&self, request: EventRequest) -> Result<ServerAnswer, TransportError> {
+        let (answer, answered) = tokio::sync::oneshot::channel();
+        let _ = self.events.send((request, answer));
+        match answered.await {
+            Ok(result) => result,
+            Err(_) => std::future::pending().await,
+        }
     }
 
     async fn get(&self, _: String) -> Result<ServerAnswer, TransportError> {
@@ -242,13 +256,19 @@ impl MachineServer for Scripted {
 
 fn scripted() -> (Scripted, Script) {
     let (reads, read) = tokio::sync::mpsc::unbounded_channel();
+    let (events, event) = tokio::sync::mpsc::unbounded_channel();
     let sink = Arc::new(std::sync::Mutex::new(None));
     (
         Scripted {
             reads,
+            events,
             sink: sink.clone(),
         },
-        Script { reads: read, sink },
+        Script {
+            reads: read,
+            events: event,
+            sink,
+        },
     )
 }
 
@@ -318,4 +338,34 @@ async fn a_new_incarnation_pushed_during_a_read_is_taken_once_its_row_is_read() 
 
     let view = view_where(&controller, |v| v.row_id.as_deref() == Some("row-b")).await;
     assert_eq!(view.revision, Some(1));
+}
+
+// The view is published on a watch channel: an observer runs on its own task, never on the controller's, so one that
+// panics, even while it holds the view, stops only itself.
+#[tokio::test]
+async fn an_observer_that_panics_does_not_stop_the_controller() {
+    let (controller, mut script) = opened().await;
+    let mut views = controller.watch();
+    let observer = tokio::spawn(async move {
+        let _ = views.changed().await;
+        let _held = views.borrow();
+        panic!("an observer's bug");
+    });
+
+    let coin = controller.send("Coin", Some(Value::parse(r#"{"coin":"quarter"}"#).unwrap()));
+    let push = controller.send("Push", None);
+    assert!(observer.await.unwrap_err().is_panic());
+    let (request, answer) = script.event().await;
+    assert_eq!(request.trigger, "Coin");
+    let mut unlocked = snapshot(None, 11, "Unlocked");
+    unlocked.context.insert("paidWith".into(), Value::from("quarter"));
+    let _ = answer.send(stored(unlocked));
+    let (request, answer) = script.event().await;
+    assert_eq!(request.trigger, "Push");
+    let _ = answer.send(stored(snapshot(None, 12, "Locked")));
+
+    assert!(matches!(coin.await, SendOutcome::Confirmed(s) if s.state == "Unlocked"));
+    assert!(matches!(push.await, SendOutcome::Confirmed(s) if s.state == "Locked"));
+    let view = view_where(&controller, |v| v.revision == Some(12)).await;
+    assert!(!view.pending);
 }
