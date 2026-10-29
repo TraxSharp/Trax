@@ -316,8 +316,9 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
           },
           error: (error) => {
             // graphql-ws hands an `error` message's errors to the sink as the array itself.
-            const end =
-              refusedOf(error) ?? terminalOf(error) ?? (Array.isArray(error) ? endOfErrors(error as GraphQLErrors) : null);
+            const errors = Array.isArray(error) ? (error as GraphQLErrors) : undefined;
+            if (firstErrorOf(errors)?.code === CLIENT_OUTDATED) return deliver({ type: 'client-outdated' });
+            const end = refusedOf(error) ?? terminalOf(error) ?? endOfErrors(errors);
             if (end) deliver({ type: 'ended', ...end });
             else again();
           },

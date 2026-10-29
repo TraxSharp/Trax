@@ -405,6 +405,17 @@ describe('createMachineServer change stream', () => {
     expect(socket.subscriptions).toHaveLength(1);
   });
 
+  it('an error message coded client-outdated ends the stream as client-outdated, as a stream event does', () => {
+    vi.useFakeTimers();
+    const { socket, messages } = follow([100]);
+
+    socket.last.sink.error([{ message: 'Reload the page.', extensions: { code: 'CLIENT_OUTDATED' } }]);
+    vi.advanceTimersByTime(10_000);
+
+    expect(messages).toEqual([{ type: 'client-outdated' }]);
+    expect(socket.subscriptions).toHaveLength(1);
+  });
+
   it('subscribes again after a stream event whose error has any other code', () => {
     vi.useFakeTimers();
     const { socket, messages } = follow([100]);
