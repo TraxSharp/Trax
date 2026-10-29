@@ -152,8 +152,9 @@ The controller behaves as the TypeScript `ServerMachineController` does, and the
 - **Syncing.** `SyncToAsync` plans with the predictor's [planner](/docs/sdk-reference/statemachine-api/ir-machine#planning),
   or the machine built from the manifest's IR when there is no predictor. It plans from what the server confirmed once
   nothing is queued, in flight or being read, sends the plan's first event as `SendAsync` does, and plans again from
-  each answer until the plan is empty. An `Undetermined` plan sends its events, then its trigger with no prediction. A
-  `GUARD_FAILED`, `NO_TRANSITION`, `CLIENT_DIVERGENCE` or `CONFLICT` reads the instance and plans again once per
+  each answer until the plan is empty. An `Undetermined` plan sends its events, then its trigger with no prediction.
+  Once the server has confirmed the fields event in the target, a plan from there that is `Undetermined` on the fields
+  trigger alone (it rests on a custom rule) settles `Synced`. A `GUARD_FAILED`, `NO_TRANSITION`, `CLIENT_DIVERGENCE` or `CONFLICT` reads the instance and plans again once per
   sync; a second settles it `Refused`. A sync started while another runs supersedes it: the older settles
   `Superseded` once its event in flight answers, and sends nothing more. No sync sends more than twice the machine's
   states in events; past that it settles `Exceeded`.

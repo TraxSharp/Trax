@@ -671,6 +671,10 @@ struct SyncRun {
     refused: bool,
     // The queue entry of its event in flight.
     in_flight: Option<u64>,
+    // Whether the event in flight is the fields event.
+    sending_fields: bool,
+    // The revision the server answered its fields event with, while that is the last event it had confirmed.
+    fields_answered: Option<Option<i64>>,
     // Whether it waits for the read after a refusal.
     awaiting_read: bool,
     // Which sync it is, so a plan answered after a later one took over is dropped.
@@ -1579,6 +1583,8 @@ impl<S: MachineServer> Actor<S> {
             sent: 0,
             refused: false,
             in_flight: None,
+            sending_fields: false,
+            fields_answered: None,
             awaiting_read,
             id: self.syncs,
             planning: false,
@@ -1655,6 +1661,20 @@ impl<S: MachineServer> Actor<S> {
                     return;
                 }
             },
+            // At the target with only the fields event left, which rests on a rule the client cannot evaluate: the
+            // server applied it there when it confirmed it, and nothing has been confirmed since.
+            PlanAnswer::Undetermined { trigger, events }
+                if events.is_empty()
+                    && confirmed.state == run.target
+                    && run.fields.as_ref().is_some_and(|f| f.trigger == trigger)
+                    && run.fields_answered == Some(self.revision) =>
+            {
+                let revision = self.revision;
+                return self.settle_sync(SyncOutcome::Synced {
+                    snapshot: confirmed,
+                    revision,
+                });
+            }
             // The events up to the edge the client cannot evaluate, then that edge, unpredicted: the server decides.
             PlanAnswer::Undetermined { trigger, events } => match events.into_iter().next() {
                 Some(event) => event,
@@ -1674,10 +1694,12 @@ impl<S: MachineServer> Actor<S> {
         if run.sent >= 2 * self.machine.states().len() {
             return self.settle_sync(SyncOutcome::Exceeded);
         }
+        let fields = run.fields.as_ref().is_some_and(|f| f.trigger == next.trigger);
         let entry = self.enqueue(next.trigger, next.input, None, None);
         if let Some(run) = self.sync.as_mut() {
             run.sent += 1;
             run.in_flight = Some(entry);
+            run.sending_fields = fields;
         }
     }
 
@@ -1691,9 +1713,14 @@ impl<S: MachineServer> Actor<S> {
             return;
         };
         run.in_flight = None;
+        run.fields_answered = None;
         match outcome {
             // The next step plans from the answer once the queue is empty.
-            SendOutcome::Confirmed(_) => {}
+            SendOutcome::Confirmed(answer) => {
+                if run.sending_fields {
+                    run.fields_answered = Some(answer.revision);
+                }
+            }
             SendOutcome::Refused(problem) if !run.refused && REPLANNED.contains(&problem.code.as_str()) => {
                 run.refused = true;
                 run.awaiting_read = true;

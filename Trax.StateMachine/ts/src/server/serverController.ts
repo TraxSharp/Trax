@@ -435,6 +435,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
     const fields = options.fields ?? null;
     let sent = 0;
     let refusals = 0;
+    // The revision the host answered this sync's fields event with, while it is the last event the sync had confirmed.
+    let fieldsAnswered: { revision: number | null } | null = null;
     for (;;) {
       // A send made as the last one settled is queued by the time this runs again: wait for it too, so the plan is
       // made from what the server confirmed with nothing queued.
@@ -454,6 +456,17 @@ export class ServerMachineController<Spec extends MachineSpec> {
           events = [plan.events[0]];
           break;
         case 'undetermined':
+          // At the target with only the fields event left, which rests on a rule the twin cannot evaluate: the host
+          // applied it there when it confirmed it, and nothing has been confirmed since.
+          if (
+            fields !== null &&
+            plan.trigger === fields.trigger &&
+            plan.events.length === 0 &&
+            this.confirmed.state === target &&
+            fieldsAnswered !== null &&
+            fieldsAnswered.revision === this.revision
+          )
+            return { outcome: 'synced', snapshot: this.confirmedSnapshot() };
           // Sent without a prediction: the twin cannot evaluate its edge (`pump` sees that too).
           events = [
             ...plan.events,
@@ -478,10 +491,13 @@ export class ServerMachineController<Spec extends MachineSpec> {
         if (generation !== this.syncGeneration) return { outcome: 'superseded' };
         if (answer.outcome === 'stopped' || answer.outcome === 'failed') return answer;
         if (answer.outcome === 'refused') {
+          fieldsAnswered = null;
           if (!REPLANNED.has(answer.problem.code) || ++refusals > 1) return answer;
           await this.readAgain();
           break;
         }
+        fieldsAnswered =
+          fields !== null && event.trigger === fields.trigger ? { revision: answer.snapshot.revision } : null;
       }
     }
   }

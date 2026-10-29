@@ -1229,6 +1229,8 @@ public sealed class ServerMachineController : IDisposable
         var budget = 2 * _shape.StateCount;
         var sent = 0;
         var reread = false;
+        // The revision the server answered this sync's fields event with, while that is the last event it confirmed.
+        (long? Revision, bool Set) fieldsAnswered = default;
         while (true)
         {
             // Planned from what the server confirmed once nothing is in flight, queued or being read: when the event is
@@ -1260,6 +1262,14 @@ public sealed class ServerMachineController : IDisposable
                 case PlanResult.Planned planned:
                     next = planned.Events[0];
                     break;
+                // At the target with only the fields event left, which rests on a rule this client cannot evaluate: the
+                // server applied it there when it confirmed it, and nothing has been confirmed since.
+                case PlanResult.Undetermined { Events.Count: 0 } undetermined
+                    when undetermined.Trigger == request.Fields?.Trigger
+                        && _confirmed!.State == request.Target
+                        && fieldsAnswered.Set
+                        && fieldsAnswered.Revision == _revision:
+                    return new SyncOutcome.Synced(ConfirmedSnapshot());
                 case PlanResult.Undetermined undetermined:
                     // The events up to the edge, then the edge itself, which the controller sends with no prediction: the
                     // fields event with the fields' input.
@@ -1292,6 +1302,11 @@ public sealed class ServerMachineController : IDisposable
             var outcome = await Enqueue(new QueuedEvent(next.Trigger, next.Input?.DeepClone()));
             if (generation != _syncGeneration)
                 return new SyncOutcome.Superseded();
+            fieldsAnswered =
+                outcome is SendOutcome.Confirmed confirmed
+                && next.Trigger == request.Fields?.Trigger
+                    ? (confirmed.Snapshot.Revision, true)
+                    : default;
             switch (outcome)
             {
                 case SendOutcome.Confirmed:

@@ -52,7 +52,8 @@ thread once built. It is held to the client conformance kit, as the TypeScript a
 navigation triggers. It plans with the engine's `plan` from what the host last confirmed, on the runtime's blocking
 threads rather than the controller's task, sends one event at a time and plans again from each answer, reads the
 instance once and plans again on a refusal a re-read can explain, and sends no more than twice the machine's states in
-events. A later sync supersedes it, and a search still running for a sync that was superseded or settled gives up
+events. Once the host has confirmed the fields event in the target, a plan from there that is undetermined on the
+fields trigger alone (it rests on a custom rule) settles synced. A later sync supersedes it, and a search still running for a sync that was superseded or settled gives up
 (`plan_stoppable`). `MachineView::unsaved` is true while a
 sync runs or after one that did not settle synced, for a page's leave guard.
 

@@ -103,7 +103,11 @@ engine's planner (`../PROTOCOL.md`, `plan`) from the snapshot the host last conf
 plan as `send` does, and plans again from each answer until the plan is empty. A refusal (`GUARD_FAILED`,
 `NO_TRANSITION`, `CLIENT_DIVERGENCE`, `CONFLICT`) reads the instance once and plans again (a `CLIENT_DIVERGENCE`
 starts that read itself); a second refusal in the same sync settles it `refused`. A sync plans only when nothing is
-queued, so an event sent meanwhile goes out first. An `undetermined` plan sends its `events`, then its `trigger` unpredicted. A sync started while another
+queued, so an event sent meanwhile goes out first. An `undetermined` plan sends its `events`, then its `trigger` unpredicted.
+One such plan the planner cannot get past: the fields event resting on a custom rule at the target, which makes every
+plan from the target `undetermined` on the fields trigger with no `events`. So when the host has confirmed the fields
+event this sync sent, and the next plan, from a snapshot in `target` with nothing confirmed since (the revision held is
+the one that answer carried), is that one, the sync settles `synced`: the host applied the fields at the target. A sync started while another
 runs supersedes it: the older settles `superseded` once the event it has in flight answers, and sends nothing more;
 one still waiting when the client stops or is disposed settles `superseded` too. No sync sends more than twice the
 machine's states in events, the unpredicted ones counted; past that it settles `exceeded`.

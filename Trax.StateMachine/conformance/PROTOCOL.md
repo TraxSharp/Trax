@@ -141,7 +141,10 @@ Every engine answers the same plan, so the search is fixed:
   custom reduction, or a custom requirement of the state it enters) is not tried. The first such edge the search meets
   is kept: when the search ends without a plan, the answer is `undetermined` with that `trigger` and `events`, the
   path to the snapshot it leaves from, even when a limit was also reached. A client sends those, then that event
-  unpredicted (with the fields input when it is the fields trigger), and plans again from the answer.
+  unpredicted (with the fields input when it is the fields trigger), and plans again from the answer. From a target
+  where the fields event rests on such a rule, the answer is `undetermined` on the fields trigger with no `events` for
+  as long as the client asks; a client that has just had the host confirm that event there is done
+  (`client/PROTOCOL.md`, `sync`).
 
 **`end`** is the last request. The testee answers `{ "id" }` and exits.
 
