@@ -83,7 +83,9 @@ public sealed record GraphQLSubscriptionSocketOptions
 
     /// <summary>
     /// How long a connection may take to be acknowledged, its <c>connection_init</c> included, before it counts as
-    /// failed; and how long a close waits for the host's answer before the connection is dropped.
+    /// failed; and how long a close waits for the host's answer before the connection is dropped. 10 seconds by default;
+    /// <see cref="Timeout.InfiniteTimeSpan"/> waits forever. Any other must be positive and at most
+    /// <see cref="int.MaxValue"/> milliseconds (about 24.8 days).
     /// </summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
@@ -121,9 +123,18 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     /// The endpoint is relative, or it is not <c>wss</c> on a host that is not loopback and
     /// <see cref="GraphQLSubscriptionSocketOptions.AllowInsecureTransport"/> is not set.
     /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="GraphQLSubscriptionSocketOptions.ConnectTimeout"/> is neither infinite nor between zero, exclusive, and
+    /// <see cref="int.MaxValue"/> milliseconds.
+    /// </exception>
     public GraphQLSubscriptionSocket(GraphQLSubscriptionSocketOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        TraxHttpTransport.RequireTimeout(
+            options.ConnectTimeout,
+            "connect timeout",
+            nameof(options)
+        );
         TransportSecurity.RequireSecure(
             options.Endpoint,
             options.AllowInsecureTransport,

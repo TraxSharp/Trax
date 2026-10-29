@@ -281,21 +281,54 @@ public class TransportTests
             );
     }
 
-    [Test]
-    public void A_request_timeout_that_is_neither_positive_nor_infinite_is_refused()
+    // Zero, below infinite, and past the longest wait a timer can count (Int32.MaxValue milliseconds).
+    [TestCase(0.0)]
+    [TestCase(-2.0)]
+    [TestCase(50.0 * 24 * 60 * 60 * 1000)]
+    public void A_request_timeout_the_client_cannot_wait_is_refused(double milliseconds)
+    {
+        var build = () => ServerTimingOut(TimeSpan.FromMilliseconds(milliseconds));
+
+        build.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*request timeout*");
+    }
+
+    [TestCase(-1.0)]
+    [TestCase(1.0)]
+    [TestCase(int.MaxValue)]
+    public void A_request_timeout_the_client_can_wait_is_accepted(double milliseconds)
+    {
+        var build = () => ServerTimingOut(TimeSpan.FromMilliseconds(milliseconds));
+
+        build.Should().NotThrow();
+    }
+
+    private static GraphQLMachineServer ServerTimingOut(TimeSpan timeout) =>
+        new(
+            new GraphQLMachineServerOptions
+            {
+                Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
+                Endpoint = new Uri("https://h/graphql"),
+                Machine = Turnstile,
+                Socket = new NoSocket(),
+                RequestTimeout = timeout,
+            }
+        );
+
+    [TestCase(0.0)]
+    [TestCase(-2.0)]
+    [TestCase(50.0 * 24 * 60 * 60 * 1000)]
+    public void A_connect_timeout_the_socket_cannot_wait_is_refused(double milliseconds)
     {
         var build = () =>
-            new GraphQLMachineServer(
-                new GraphQLMachineServerOptions
+            new GraphQLSubscriptionSocket(
+                new GraphQLSubscriptionSocketOptions
                 {
-                    Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
-                    Endpoint = new Uri("https://h/graphql"),
-                    Machine = Turnstile,
-                    Socket = new NoSocket(),
-                    RequestTimeout = TimeSpan.Zero,
+                    Endpoint = new Uri("wss://h/graphql"),
+                    ConnectTimeout = TimeSpan.FromMilliseconds(milliseconds),
                 }
             );
-        build.Should().Throw<ArgumentOutOfRangeException>();
+
+        build.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*connect timeout*");
     }
 
     private sealed class Sink : ISubscriptionSink

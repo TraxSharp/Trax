@@ -243,6 +243,25 @@ public sealed class TraxHttpTransport : ITraxTransport
         }
     }
 
+    /// <summary>The longest timeout a request or a connection waits for: the longest a timer can count.</summary>
+    internal static readonly TimeSpan MaxTimeout = TimeSpan.FromMilliseconds(int.MaxValue);
+
+    // Refuses a timeout no timer can wait for: zero or less, other than infinite, or longer than MaxTimeout.
+    internal static void RequireTimeout(TimeSpan timeout, string what, string paramName)
+    {
+        if (
+            timeout == Timeout.InfiniteTimeSpan
+            || (timeout > TimeSpan.Zero && timeout <= MaxTimeout)
+        )
+            return;
+        throw new ArgumentOutOfRangeException(
+            paramName,
+            timeout,
+            $"The {what} must be positive and at most {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days), "
+                + "or Timeout.InfiniteTimeSpan."
+        );
+    }
+
     // The shorter of two timeouts, either of which may be infinite.
     private static TimeSpan Shorter(TimeSpan a, TimeSpan b) =>
         a == Timeout.InfiniteTimeSpan ? b

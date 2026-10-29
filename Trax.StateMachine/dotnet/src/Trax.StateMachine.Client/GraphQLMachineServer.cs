@@ -66,7 +66,8 @@ public sealed record GraphQLMachineServerOptions
     /// How long one request may take, from sending it to reading the last byte of its answer, before it fails as a
     /// transport failure; <see cref="GraphQLMachineServer.DefaultRequestTimeout"/> (30 seconds) by default. The
     /// <see cref="Http"/> client's own <see cref="HttpClient.Timeout"/> still applies, so the shorter of the two holds.
-    /// <see cref="Timeout.InfiniteTimeSpan"/> leaves only the client's.
+    /// <see cref="Timeout.InfiniteTimeSpan"/> leaves only the client's. Any other must be positive and at most
+    /// <see cref="int.MaxValue"/> milliseconds (about 24.8 days), as <see cref="HttpClient.Timeout"/> must.
     /// </summary>
     public TimeSpan RequestTimeout { get; init; } = GraphQLMachineServer.DefaultRequestTimeout;
 }
@@ -128,18 +129,18 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// base address, or it is not <c>https</c> on a host that is not loopback and
     /// <see cref="GraphQLMachineServerOptions.AllowInsecureTransport"/> is not set, or the client follows redirects.
     /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="GraphQLMachineServerOptions.RequestTimeout"/> is neither infinite nor between zero, exclusive, and
+    /// <see cref="int.MaxValue"/> milliseconds.
+    /// </exception>
     public GraphQLMachineServer(GraphQLMachineServerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        if (
-            options.RequestTimeout <= TimeSpan.Zero
-            && options.RequestTimeout != Timeout.InfiniteTimeSpan
-        )
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.RequestTimeout,
-                "The request timeout must be positive, or Timeout.InfiniteTimeSpan."
-            );
+        TraxHttpTransport.RequireTimeout(
+            options.RequestTimeout,
+            "request timeout",
+            nameof(options)
+        );
         TransportSecurity.RequireNoRedirects(options.Http, nameof(options));
         TransportSecurity.RequireSecure(
             options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
