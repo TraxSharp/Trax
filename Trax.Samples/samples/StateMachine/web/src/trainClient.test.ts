@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { configureTrax, stateMachineListMachines, TraxOperationError } from "./trax/index.g";
+import { checkoutServer, configureTrax, stateMachineListMachines, TraxOperationError } from "./trax/index.g";
 
 // A train function is the generated sendDocument: it posts the document's id and reads the field it asked for. These
 // pin how it answers a fetch that did not get the endpoint's own 2xx answer.
@@ -64,5 +64,26 @@ describe("a train function", () => {
     );
 
     await expect(stateMachineListMachines()).rejects.toMatchObject({ code: "AUTH_NOT_AUTHORIZED" });
+  });
+});
+
+// What configureTrax is given holds for every train function and every machine server made on it.
+describe("the connection's limits", () => {
+  const connection = { url: "/trax/graphql", socketUrl: "wss://example.test/trax/graphql" };
+  const instance = "00000000-0000-0000-0000-000000000001";
+  const large = () => json({ data: machines, padding: "x".repeat(256) });
+
+  it("a train function reads no more of an answer than maxResponseBytes", async () => {
+    configureTrax({ ...connection, maxResponseBytes: 64 });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => large());
+
+    await expect(stateMachineListMachines()).rejects.toThrow("more than 64 bytes");
+  });
+
+  it("a machine server reads no more of an answer than maxResponseBytes", async () => {
+    configureTrax({ ...connection, maxResponseBytes: 64 });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => large());
+
+    await expect(checkoutServer().get(instance)).rejects.toThrow("larger than 64 bytes");
   });
 });

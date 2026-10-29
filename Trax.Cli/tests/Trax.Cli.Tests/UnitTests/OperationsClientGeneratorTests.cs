@@ -143,43 +143,21 @@ public class OperationsClientGeneratorTests
             );
     }
 
+    // What the transport refuses (a cleartext or scheme-relative url, a redirect, a status with no error, an answer
+    // with no data, an answer past maxResponseBytes, a host past requestTimeout, a socket closed with 4401 or 4403) is
+    // held by the operations kit, which OperationsConformanceTests runs over the client this generator writes for the
+    // kit's fixture. What no transcript can see is pinned here: the limits a transport has when the app names none.
     [Test]
-    public void The_transport_refuses_cleartext_follows_no_redirect_and_caps_an_answer()
+    public void The_transport_has_default_limits_and_exports_its_checks()
     {
         var files = Render(("src/graphql/Runs.graphql", Runs));
 
         Text(files, "client.g.ts")
             .Should()
-            .Contain(
-                "requireSecureEndpoint(options.url, options.allowInsecureTransport);",
-                "a credential is sent over TLS, or to loopback, unless the app said the network is trusted"
-            )
+            .Contain("const defaultMaxResponseBytes = 16 * 1024 * 1024;")
             .And.Contain(
-                "requireSecureSocket(options.socketUrl, options.allowInsecureTransport);",
-                "the socket carries the credential in connection_init, so it is held to the same rule"
-            )
-            .And.Contain("redirect: \"error\",")
-            .And.Contain(
-                "requireNoRedirect(response);",
-                "a fetch that ignores redirect: \"error\" must not have the answer it followed to read"
-            )
-            .And.Contain(
-                "if (!response.ok && !(Array.isArray(answer.errors) && answer.errors.length > 0))",
-                "an answer that is not 2xx and names no GraphQL error is a failed request, whatever data it holds"
-            )
-            .And.Contain("answer = await readJson(response, options.maxResponseBytes);")
-            .And.Contain("const defaultMaxResponseBytes = 16 * 1024 * 1024;")
-            .And.Contain(
-                "if (/^[\\\\/]{2}/.test(bare.slice(start)))",
-                "a url starting with two slashes either way round names another host on the page's scheme, not a path"
-            )
-            .And.Contain(
-                "withRequestTimeout(options.requestTimeout ?? defaultRequestTimeout,",
-                "a host that never answers fails the request, as it does in the C# client"
-            )
-            .And.Contain(
-                "error.code !== 4401 && error.code !== 4403",
-                "a socket the host turned away is not opened again, as in the C# client"
+                "const defaultRequestTimeout = 30_000;",
+                "a host that never answers fails the request after 30 seconds, as in the C# client"
             )
             .And.NotContain("response.json()");
         Text(files, "index.g.ts")
