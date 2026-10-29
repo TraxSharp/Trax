@@ -418,6 +418,31 @@ public class GraphQLSubscriptionSocketTests
     }
 
     [Test]
+    public async Task Disposing_the_socket_closes_the_connection_normally()
+    {
+        var closed = new TaskCompletionSource<WebSocketCloseStatus?>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.AckAsync();
+            await peer.SubscribedAsync();
+            closed.TrySetResult(await peer.ClosedWithAsync());
+        });
+        var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var sink = new Sink();
+        using var subscription = socket.Subscribe(Payload, sink);
+        (await sink.Take(1)).Should().Equal("started");
+
+        await socket.DisposeAsync();
+
+        (await closed.Task.WaitAsync(Wait)).Should().Be(WebSocketCloseStatus.NormalClosure);
+        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeOfType<SocketUnavailableException>();
+    }
+
+    [Test]
     public async Task A_disposed_socket_fails_a_new_subscription_as_unavailable()
     {
         var socket = new GraphQLSubscriptionSocket(

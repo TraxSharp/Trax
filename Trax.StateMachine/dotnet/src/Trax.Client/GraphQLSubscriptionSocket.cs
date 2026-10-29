@@ -571,7 +571,8 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     }
 
     // The connection failed or closed: every subscription over it fails, and the next subscription connects again.
-    private void Fail(Connection connection, Exception error)
+    // Unless `stop` is false, whatever the connection is still doing is cancelled: a close about to be sent is not.
+    private void Fail(Connection connection, Exception error, bool stop = true)
     {
         List<Subscription> subscriptions;
         lock (_gate)
@@ -582,7 +583,8 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             subscriptions = connection.Sinks.Values.ToList();
             connection.Sinks.Clear();
         }
-        connection.Stop.Cancel();
+        if (stop)
+            connection.Stop.Cancel();
         foreach (var subscription in subscriptions)
             End(subscription, error);
     }
@@ -659,11 +661,14 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         }
         if (connection is null)
             return;
+        // The close goes out before the connection is stopped: stopping it aborts the socket, and the host would see
+        // the connection drop rather than close.
         Fail(
             connection,
             new SocketUnavailableException(
                 "The socket was disposed: it follows no more subscriptions."
-            )
+            ),
+            stop: false
         );
         await CloseAsync(connection).ConfigureAwait(false);
     }
