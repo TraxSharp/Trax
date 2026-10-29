@@ -190,6 +190,30 @@ describe('plan', () => {
     });
   });
 
+  it('answers the fields trigger invalid, and does not throw, when its input projection throws', () => {
+    const broken = createFormView<SignupSpec, SignupStep, { name: string }>(signup, {
+      ...signupOptions,
+      fieldsEvent: {
+        trigger: 'Update',
+        input: () => {
+          throw new Error('no name');
+        },
+      },
+    });
+    const brokenContext = createFormView<SignupSpec, SignupStep, { name: string }>(signup, {
+      ...signupOptions,
+      toContext: () => {
+        throw new Error('no name');
+      },
+    });
+
+    expect(broken.plan(server('Name', null), 'done', { name: 'Ada' })).toEqual({ result: 'invalid', trigger: 'Update' });
+    expect(brokenContext.plan(server('Name', null), 'done', { name: 'Ada' })).toEqual({
+      result: 'invalid',
+      trigger: 'Update',
+    });
+  });
+
   it('answers null when there is no server snapshot, or it does not read', () => {
     expect(signupView.plan(null, 'done', { name: 'Ada' })).toBeNull();
     expect(signupView.plan('not json', 'done', { name: 'Ada' })).toBeNull();
@@ -205,5 +229,32 @@ describe('sync', () => {
       fields: { trigger: 'Update', input: { name: 'Ada' } },
       navigation: ['Next', 'Back'],
     });
+  });
+
+  it('settles failed with INVALID_INPUT, and sends nothing, when the fields input projection throws', async () => {
+    const syncTo = vi.fn().mockResolvedValue({ outcome: 'superseded' });
+    const broken = createFormView<SignupSpec, SignupStep, { name: string }>(signup, {
+      ...signupOptions,
+      fieldsEvent: {
+        trigger: 'Update',
+        input: () => {
+          throw new Error('no name');
+        },
+      },
+    });
+
+    let outcome: unknown;
+    expect(() => {
+      outcome = broken.sync({ syncTo }, 'address', { name: 'Ada' });
+    }).not.toThrow();
+    expect(await outcome).toEqual({
+      outcome: 'failed',
+      problem: {
+        kind: 'rejected',
+        code: 'INVALID_INPUT',
+        message: "The input of 'Update' could not be made from the values: no name",
+      },
+    });
+    expect(syncTo).not.toHaveBeenCalled();
   });
 });

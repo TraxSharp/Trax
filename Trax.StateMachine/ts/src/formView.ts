@@ -12,6 +12,7 @@
  * onto the machine's context.
  */
 import type { PlanResult } from './plan';
+import { RefusalCode } from './results';
 import type { SyncOptions, SyncOutcome } from './server/serverController';
 import type {
   MachineSpec,
@@ -111,7 +112,8 @@ export interface FormView<
   /**
    * The events that bring the server's snapshot to this step with these values (`TypedMachine.plan`, over
    * `fieldsEvent` and `navigation`), or null when there is no server snapshot or it does not read. The snapshot is read
-   * as one the server sent.
+   * as one the server sent. A fields input projection that throws answers `invalid` with the fields trigger. Never
+   * throws.
    */
   plan(
     serverSnapshotJson: string | null | undefined,
@@ -121,7 +123,8 @@ export interface FormView<
   ): PlanResult<TriggerOf<Spec>> | null;
   /**
    * Brings the server to this step with these values through `controller.syncTo`, which plans from what the server
-   * last confirmed and sends one event at a time.
+   * last confirmed and sends one event at a time. A fields input projection that throws settles it `failed` with
+   * `INVALID_INPUT`, and nothing is sent. Never throws.
    */
   sync(controller: FormSyncTarget<Spec>, step: Step, values: Values, options?: Options): Promise<SyncOutcome>;
 }
@@ -169,13 +172,19 @@ export function createFormView<
     return result.result === 'ok' ? result.snapshot : null;
   };
 
-  const fieldsFor = (values: Values, opts?: Options) =>
-    fieldsEvent === undefined
-      ? null
-      : {
-          trigger: fieldsEvent.trigger,
-          input: fieldsEvent.input ? fieldsEvent.input(values, opts) : toContext(values, opts),
-        };
+  // The fields event for these values, or the error the app's projection threw making its input.
+  const fieldsFor = (
+    values: Values,
+    opts?: Options,
+  ): { fields: { trigger: TriggerOf<Spec>; input: unknown } | null } | { thrown: unknown } => {
+    if (fieldsEvent === undefined) return { fields: null };
+    try {
+      const input = fieldsEvent.input ? fieldsEvent.input(values, opts) : toContext(values, opts);
+      return { fields: { trigger: fieldsEvent.trigger, input } };
+    } catch (thrown) {
+      return { thrown };
+    }
+  };
 
   return {
     stateFor,
@@ -214,10 +223,25 @@ export function createFormView<
       if (!serverSnapshotJson) return null;
       const read = machine.rehydrate(serverSnapshotJson, { fromServer: true });
       if (read.result !== 'ok') return null;
-      return machine.plan(read.snapshot, { target: stateFor(step), fields: fieldsFor(values, opts), navigation });
+      const made = fieldsFor(values, opts);
+      if ('thrown' in made) return { result: 'invalid', trigger: fieldsEvent!.trigger };
+      return machine.plan(read.snapshot, { target: stateFor(step), fields: made.fields, navigation });
     },
 
-    sync: (controller, step, values, opts) =>
-      controller.syncTo(stateFor(step), { fields: fieldsFor(values, opts), navigation }),
+    sync(controller, step, values, opts) {
+      const made = fieldsFor(values, opts);
+      if ('thrown' in made) {
+        const reason = made.thrown instanceof Error ? made.thrown.message : String(made.thrown);
+        return Promise.resolve({
+          outcome: 'failed',
+          problem: {
+            kind: 'rejected',
+            code: RefusalCode.InvalidInput,
+            message: `The input of '${fieldsEvent!.trigger}' could not be made from the values: ${reason}`,
+          },
+        });
+      }
+      return controller.syncTo(stateFor(step), { fields: made.fields, navigation });
+    },
   };
 }
