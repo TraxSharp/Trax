@@ -86,6 +86,11 @@ podman run --rm -v "$PWD/..":/src:Z -w /src docker.io/library/node:24-bookworm \
 
 Run them from this directory. The testee speaks `../conformance/PROTOCOL.md` through the crate's public API only.
 
+Each crate's public surface is committed (`tests/public-api.txt`, `client/tests/public-api.txt`) and a test compares
+it; after a deliberate change, run the tests with `-e TRAX_UPDATE_PUBLIC_API=1` and commit the new snapshot with the
+change. A new client member also gets its row in the table under "The client surface" in
+`../conformance/client/PROTOCOL.md`.
+
 ## License
 
 MIT. There is no commercial edition, and there will not be one.

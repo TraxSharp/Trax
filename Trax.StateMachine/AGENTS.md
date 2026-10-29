@@ -69,14 +69,23 @@ tagged `statemachine` bind this folder.
   `dotnet/tests/Trax.StateMachine.Tests.Meta/PublicApi/`; the npm package's exports are in
   `ts/src/exports.test.ts`, and each one is documented on
   [the TypeScript package reference](https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package).
-  Adding or removing an export changes both in the same pull request.
+  Adding or removing an export changes both in the same pull request. The Rust crates' are
+  `rust/tests/public-api.txt` and `rust/client/tests/public-api.txt`, read from the source by
+  `rust/tests/support/surface.rs` (`TRAX_UPDATE_PUBLIC_API=1 cargo test --workspace` rewrites them), and both crates
+  build with `#![deny(missing_docs)]`.
+- **The three clients name the same things.** The table under "The client surface" in
+  `conformance/client/PROTOCOL.md` gives each client member its TypeScript, C# and Rust name, or `—` and the reason
+  a language has none. A new public member of a client type the table covers gets its row, with all three
+  languages, in the same pull request: `ClientSurfaceTests` (C#), `ts/src/clientSurface.test.ts` and
+  `rust/client/tests/client_surface.rs` fail on a member the table does not name and on a name the client lacks.
 
 ## Guards
 
 `dotnet/tests/Trax.StateMachine.Tests.Meta/` holds the convention guards every .NET folder runs,
 among them `DependencyDirectionTests`: a machine project may reference Trax.Core and Trax.Effect,
 never the mediator or anything below it, and no Effect project may reference a machine project.
-The census is on, as in every folder.
+The census is on, as in every folder. `ClientSurfaceTests` there holds the C# client to the client surface
+table, as `ts/src/clientSurface.test.ts` and `rust/client/tests/client_surface.rs` hold the other two.
 
 A C# test that runs or reads the TypeScript engine is marked `[Category(Categories.CrossEngine)]`.
 CI runs those apart from the rest (below), so mark any new one, or a change to the TypeScript engine
