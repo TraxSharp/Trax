@@ -238,6 +238,9 @@ public sealed class ServerMachineController : IDisposable
     // has been read again.
     private bool _resyncing;
     private bool _reloadAgain;
+
+    // The incarnation the read after this one asks for: one a push named while a read for another was pending.
+    private string? _reloadNextRowId;
     private ServerSnapshot? _buffered;
 
     private MachineView _view;
@@ -585,6 +588,8 @@ public sealed class ServerMachineController : IDisposable
         if (_reloading)
         {
             _reloadAgain = true;
+            if (rowId is not null)
+                _reloadNextRowId = rowId;
             return;
         }
         _reloadRowId = rowId;
@@ -655,10 +660,14 @@ public sealed class ServerMachineController : IDisposable
         }
         var snapshot = answer.Snapshot! with { RowId = answer.Snapshot.RowId ?? rowId ?? _rowId };
         var changed = Accept(snapshot, Source.Load);
+        // A push of the incarnation now held is taken after the read; one of another incarnation is kept until a read
+        // of that incarnation answers.
         var buffered = _buffered;
-        _buffered = null;
         if (buffered is not null && _error is null && buffered.RowId == _rowId)
+        {
+            _buffered = null;
             changed = Accept(buffered, Source.Push) || changed;
+        }
         EndRead();
         if (changed && _error is null)
             Emit();
@@ -672,7 +681,9 @@ public sealed class ServerMachineController : IDisposable
         if (_reloadAgain && !_disposed && _error is null)
         {
             _reloadAgain = false;
-            Reload(null);
+            var next = _reloadNextRowId;
+            _reloadNextRowId = null;
+            Reload(next);
             return;
         }
         _resyncing = false;
@@ -702,10 +713,10 @@ public sealed class ServerMachineController : IDisposable
         if (otherIncarnation && source != Source.Load)
         {
             // The row was deleted and created again: its revisions restart, so they say nothing against the ones held.
-            if (!_reloading)
+            // A read already pending answers without saying which incarnation it read, so unless it asked for this one,
+            // another read asks for it after.
+            if (!_reloading || _reloadRowId != rowId)
                 Reload(rowId);
-            else if (_reloadRowId is null)
-                _reloadAgain = true;
             if (
                 _buffered is null
                 || _buffered.RowId != rowId

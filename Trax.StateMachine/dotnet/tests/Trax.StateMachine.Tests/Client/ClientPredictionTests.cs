@@ -236,6 +236,31 @@ public class ClientPredictionTests
     }
 
     [Test]
+    public async Task A_new_incarnation_pushed_while_a_read_is_pending_is_read_and_held()
+    {
+        var server = new HandServer();
+        using var controller = Open(server, MachinePredictor.For(DeclarativeTurnstile.Built));
+        await server.Answer(controller, ServerAnswer.Of(At(10, "Locked")));
+        server.Push(new StreamMessage.Changed(At(11, "Locked") with { RowId = "row-a" }));
+        await Until(controller, v => v.RowId == "row-a");
+
+        // The instance is deleted and created again while a reload's read is pending. A read's answer carries no
+        // incarnation, so the pending one cannot say which it read.
+        server.Push(new StreamMessage.Reload());
+        var first = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var recreated = At(1, "Unlocked", new JsonObject { ["paidWith"] = "dollar" });
+        server.Push(new StreamMessage.Changed(recreated with { RowId = "row-b" }));
+        first.SetResult(ServerAnswer.Of(recreated));
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(recreated)
+        );
+
+        await Until(controller, v => v.RowId == "row-b");
+        controller.View.Revision.Should().Be(1);
+        controller.View.Confirmed!.State.Should().Be("Unlocked");
+    }
+
+    [Test]
     public void A_predictor_of_another_version_than_the_manifest_is_refused()
     {
         var other = Turnstile with { IrHash = new string('0', 64) };
