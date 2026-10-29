@@ -176,6 +176,26 @@ describe('ServerMachineController.syncTo', () => {
     expect(await synced).toMatchObject({ outcome: 'synced' });
   });
 
+  it('waits for an event sent while it waited, and plans only once nothing is queued', async () => {
+    const { server, controller } = await ready('Start');
+    const toDetails = { fields: null, navigation: ['Begin', 'Next', 'Back'] as const };
+
+    // Back is sent as Begin settles, before the sync, which waited for Begin, has run again.
+    const back = controller.send('Begin').then(() => controller.send('Back'));
+    const synced = controller.syncTo('Details', toDetails);
+    await flushMicrotasks();
+    server.events[0].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2, state: 'Details' }) });
+    await flushMicrotasks();
+    expect(server.events.map((e) => e.request.trigger)).toEqual(['Begin', 'Back']);
+
+    server.events[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 3, state: 'Start' }) });
+    expect(await back).toMatchObject({ outcome: 'confirmed' });
+    await flushMicrotasks();
+    expect(server.events[2].request.trigger).toBe('Begin');
+    server.events[2].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 4, state: 'Details' }) });
+    expect(await synced).toMatchObject({ outcome: 'synced', snapshot: { state: 'Details', revision: 4 } });
+  });
+
   it('stops after twice the machine\'s states in events', async () => {
     const { server, controller } = await ready('Details');
 

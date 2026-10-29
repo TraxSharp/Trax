@@ -433,7 +433,10 @@ export class ServerMachineController<Spec extends MachineSpec> {
     let sent = 0;
     let refusals = 0;
     for (;;) {
-      await this.idle();
+      // A send made as the last one settled is queued by the time this runs again: wait for it too, so the plan is
+      // made from what the server confirmed with nothing queued.
+      do await this.idle();
+      while (this.queue.length > 0 && !this.error && !this.disposed);
       if (generation !== this.syncGeneration) return { outcome: 'superseded' };
       if (this.error) return { outcome: 'stopped', error: this.error };
       if (this.disposed) return this.disposedOutcome();
