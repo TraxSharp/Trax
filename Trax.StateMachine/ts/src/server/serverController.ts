@@ -8,7 +8,7 @@ import type { InputArgs, MachineSpec, StateOf, TriggerOf, TypedMachine, TypedSna
 // to the server under its own requestId, the server's answer (or a pushed snapshot) replaces the prediction,
 // and snapshots are ordered by `revision` within one incarnation (`rowId`): anything at or below the revision
 // held is dropped, the controller's own answers included. An answer with no revision cannot be ordered: it is taken,
-// and so is whatever comes after it. See
+// and so is whatever comes after it. A push without one is dropped before it gets here (`createMachineServer`). See
 // Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md.
 
 /** One full server snapshot, with the values that travel beside it rather than inside the canonical wire. */
@@ -20,8 +20,9 @@ export interface ServerSnapshot {
    */
   rowId?: string | null;
   /**
-   * Bumped by the database on every write of the row. Null when the store records none: the snapshot cannot be ordered,
-   * so it is never dropped as stale, and whatever comes after it is taken.
+   * Bumped by the database on every write of the row. Null on an answer when the store records none: the snapshot
+   * cannot be ordered, so it is never dropped as stale, and whatever comes after it is taken. A push carries one
+   * always: `createMachineServer` drops a push without one rather than deliver a snapshot it cannot order.
    */
   revision: number | null;
   state: string;

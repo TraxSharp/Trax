@@ -7,7 +7,7 @@
  * graphql-ws socket the page owns. The package does not depend on graphql-ws: any socket with its `subscribe` shape
  * will do, and {@link persistedMessageReplacer} is the `jsonMessageReplacer` that lets it send a persisted id.
  */
-import { RefusalCode, type ProblemCode } from '../results';
+import { ClientProblemCode, RefusalCode, type ProblemCode } from '../results';
 import type { MachineSpec, TypedMachine } from '../typed';
 import type {
   EventResponse,
@@ -70,7 +70,10 @@ export interface MachineServerOptions extends HttpExecutorOptions {
   terminalStreamErrors?: readonly string[];
 }
 
-/** The answer to `discard`. A discard of an instance already gone, or never the caller's, is `discarded` too. */
+/**
+ * The answer to `discard`. A discard of an instance already gone, or never the caller's, is `discarded` too. An answer
+ * that does not say the instance was discarded, and gives no problem, is a `TRANSPORT_ERROR`.
+ */
 export type DiscardResponse = { kind: 'discarded' } | ServerProblem;
 
 /** A {@link MachineServer} that can also discard an instance. */
@@ -250,6 +253,13 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
   const discard = async (id: string, requestId: string): Promise<DiscardResponse> => {
     const output = await client.discard(machine.id, id, requestId);
     if (output.problem) return problemOf(output.problem);
+    // An answer that is null, or says nothing was discarded and gives no problem, does not say the instance is gone.
+    if (output.discarded !== true)
+      return {
+        kind: 'problem',
+        code: ClientProblemCode.TransportError,
+        message: 'The server answered the discard without saying the instance was discarded.',
+      };
     return { kind: 'discarded' };
   };
 

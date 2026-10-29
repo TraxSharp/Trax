@@ -54,7 +54,8 @@ export type SnapshotOperation =
 /**
  * Runs one of the six generic mutations and returns its `output`. This is the seam between the engine and the
  * host's GraphQL stack: an app with generated typed documents (Apollo, urql, …) maps the operation name
- * onto its own document, and an app with none can use {@link createHttpExecutor}.
+ * onto its own document, and an app with none can use `createMachineExecutor`, which sends the typed `machines`
+ * root's persisted documents.
  *
  * It may throw — the transport is allowed to fail. Callers above ({@link SnapshotClient}) turn a throw
  * into a typed problem so no caller has to write a try/catch of its own.

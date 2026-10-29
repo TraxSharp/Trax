@@ -204,6 +204,14 @@ describe('createMachineServer operations', () => {
     expect(sent).toEqual([{ id: `trax_machine_turnstile_discard_${hash}`, variables: { id: 'i-1', requestId: 'rq-d' } }]);
   });
 
+  it('reports a discard answered null, or answered not discarded with no problem, as a failure', async () => {
+    const { fetch } = http(answer('discard', null), answer('discard', { id: 'i-1', discarded: false, problem: null }));
+    const { server } = serverOver(fetch);
+
+    expect(await server.discard('i-1', 'rq-d')).toMatchObject({ kind: 'problem', code: 'TRANSPORT_ERROR' });
+    expect(await server.discard('i-1', 'rq-d')).toMatchObject({ kind: 'problem', code: 'TRANSPORT_ERROR' });
+  });
+
   it('refuses at creation a document set without the push document', () => {
     expect(() =>
       createMachineServer('/graphql', {
