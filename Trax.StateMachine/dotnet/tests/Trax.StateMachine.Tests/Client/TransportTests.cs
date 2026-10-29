@@ -205,6 +205,7 @@ public class TransportTests
             new GraphQLMachineServerOptions
             {
                 Http = new HttpClient(new LargeAnswer(64 * 1024, sayLength)),
+                HandlerFollowsNoRedirects = true,
                 Endpoint = new Uri("https://api.example.com/graphql"),
                 Machine = Turnstile,
                 Socket = new NoSocket(),
@@ -224,6 +225,7 @@ public class TransportTests
             new GraphQLMachineServerOptions
             {
                 Http = new HttpClient(new LargeAnswer(512, sayLength: false)),
+                HandlerFollowsNoRedirects = true,
                 Endpoint = new Uri("https://api.example.com/graphql"),
                 Machine = Turnstile,
                 Socket = new NoSocket(),

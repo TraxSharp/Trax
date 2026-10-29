@@ -37,12 +37,13 @@ public sealed record TraxHttpTransportOptions
     /// <summary>
     /// The client the requests go through. Set its authentication on it, a default header (<c>X-Api-Key</c>,
     /// <c>Authorization</c>) or a delegating handler, as for any other <see cref="System.Net.Http.HttpClient"/>. Its
-    /// <see cref="HttpClient.Timeout"/> bounds each request, its body included. Build it on a handler with automatic
-    /// redirects off: a redirect drops only <c>Authorization</c>, so the body and any other header would follow it to
-    /// the new host. A client on an <see cref="HttpClientHandler"/> or <see cref="SocketsHttpHandler"/> that follows
-    /// redirects, <c>new HttpClient()</c> among them, is refused when the transport is built. An answer from another
-    /// host than <see cref="Endpoint"/>'s, through a handler of another kind that followed one, is a
-    /// <see cref="TraxAnswer.Failure"/>.
+    /// <see cref="HttpClient.Timeout"/> bounds each request, its body included. It must not follow redirects: build it
+    /// on a <see cref="SocketsHttpHandler"/> or <see cref="HttpClientHandler"/> with
+    /// <see cref="SocketsHttpHandler.AllowAutoRedirect"/> off, behind any delegating handlers
+    /// (<c>new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })</c>). A client whose handler follows
+    /// redirects, <c>new HttpClient()</c> among them, is refused when the transport is built, and so is one on a handler
+    /// of another kind unless <see cref="HandlerFollowsNoRedirects"/> is set. An answer from another host than
+    /// <see cref="Endpoint"/>'s is a <see cref="TraxAnswer.Failure"/>.
     /// </summary>
     public required HttpClient Http { get; init; }
 
@@ -57,6 +58,14 @@ public sealed record TraxHttpTransportOptions
     /// requests would travel in cleartext.
     /// </summary>
     public bool AllowInsecureTransport { get; init; }
+
+    /// <summary>
+    /// Says that <see cref="Http"/>'s handler follows no redirects, for a handler the transport cannot check: one at the
+    /// end of its chain that is neither a <see cref="SocketsHttpHandler"/> nor an <see cref="HttpClientHandler"/> (a
+    /// test server's, a platform's own). Off by default, and such a client is refused. It changes nothing for a handler
+    /// the transport can check: one that follows redirects is refused either way.
+    /// </summary>
+    public bool HandlerFollowsNoRedirects { get; init; }
 
     /// <summary>
     /// The largest response body the host may answer with, in bytes; 16 MiB by default. A larger one is a
@@ -94,12 +103,17 @@ public sealed class TraxHttpTransport : ITraxTransport
     /// <exception cref="ArgumentException">
     /// The endpoint is relative and the client has no base address; or it is not <c>https</c> on a host that is not
     /// loopback, and <see cref="TraxHttpTransportOptions.AllowInsecureTransport"/> is not set; or the client follows
-    /// redirects.
+    /// redirects, or its handler is one the transport cannot check and
+    /// <see cref="TraxHttpTransportOptions.HandlerFollowsNoRedirects"/> is not set.
     /// </exception>
     public TraxHttpTransport(TraxHttpTransportOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        TransportSecurity.RequireNoRedirects(options.Http, nameof(options));
+        TransportSecurity.RequireNoRedirects(
+            options.Http,
+            options.HandlerFollowsNoRedirects,
+            nameof(options)
+        );
         TransportSecurity.RequireSecure(
             options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
                 ? options.Endpoint
@@ -203,8 +217,7 @@ public sealed class TraxHttpTransport : ITraxTransport
                     timeout.Token
                 )
                 .ConfigureAwait(false);
-            // A handler the transport could not see into followed a redirect: it has already sent the request on,
-            // and its answer is not the endpoint's.
+            // A handler the caller vouched for followed a redirect anyway: its answer is not the endpoint's.
             if (
                 asked is not null
                 && response.RequestMessage?.RequestUri is { IsAbsoluteUri: true } answeredBy

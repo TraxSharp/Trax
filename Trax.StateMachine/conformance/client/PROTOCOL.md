@@ -378,6 +378,7 @@ transcripts compare those by value.
 | The endpoint | — the first argument of `createMachineServer` | `GraphQLMachineServerOptions.Endpoint` | `GraphQLMachineServerOptions.endpoint` |
 | The socket | `MachineServerOptions.socket` | `GraphQLMachineServerOptions.Socket` | `GraphQLMachineServerOptions.socket` |
 | The HTTP client | `MachineServerOptions.fetch` | `GraphQLMachineServerOptions.Http` | `GraphQLMachineServerOptions.http` |
+| Say the HTTP client's handler follows no redirects | — every request is sent with `redirect: 'error'` | `GraphQLMachineServerOptions.HandlerFollowsNoRedirects` | — the client given as `http` is built with `redirect(Policy::none())` |
 | Headers on every request | `MachineServerOptions.headers` | — set on the `HttpClient` given as `Http` | `GraphQLMachineServerOptions.headers` |
 | The socket's `connection_init` payload | — the page's graphql-ws client given as `socket` sends it | — `GraphQLSubscriptionSocketOptions.ConnectionParams` | `GraphQLMachineServerOptions.connection_params` |
 | allowInsecureTransport | `MachineServerOptions.allowInsecureTransport` | `GraphQLMachineServerOptions.AllowInsecureTransport` | `GraphQLMachineServerOptions.allow_insecure_transport` |

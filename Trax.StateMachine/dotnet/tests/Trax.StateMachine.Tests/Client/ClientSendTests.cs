@@ -118,6 +118,7 @@ public class ClientSendTests
             new GraphQLMachineServerOptions
             {
                 Http = new HttpClient(host),
+                HandlerFollowsNoRedirects = true,
                 Endpoint = new Uri("https://host/trax/graphql"),
                 Machine = Turnstile with
                 {

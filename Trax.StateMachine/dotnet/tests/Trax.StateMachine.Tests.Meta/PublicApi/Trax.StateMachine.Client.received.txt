@@ -24,6 +24,7 @@ namespace Trax.StateMachine.Client
         public GraphQLMachineServerOptions() { }
         public bool AllowInsecureTransport { get; init; }
         public required System.Uri Endpoint { get; init; }
+        public bool HandlerFollowsNoRedirects { get; init; }
         public required System.Net.Http.HttpClient Http { get; init; }
         public required Trax.StateMachine.ClientManifestMachine Machine { get; init; }
         public long MaxResponseSize { get; init; }

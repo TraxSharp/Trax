@@ -30,6 +30,8 @@ public class TraxHttpTransportTests
             new TraxHttpTransportOptions
             {
                 Http = new HttpClient(handler) { Timeout = timeout ?? TimeSpan.FromSeconds(100) },
+                // A test's handler, which follows no redirects.
+                HandlerFollowsNoRedirects = true,
                 Endpoint = new Uri("https://api.example.com/trax/graphql"),
                 MaxResponseSize = max,
             }

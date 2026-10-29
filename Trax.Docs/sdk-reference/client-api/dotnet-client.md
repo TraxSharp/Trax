@@ -127,7 +127,7 @@ public readonly record struct Optional<T>
 | `ITraxTransport` | How a request reaches a host: `ExecuteAsync` for a query or mutation, which answers a refusal or an unreachable host as a `TraxAnswer` and throws only on cancellation, and `Subscribe` for a stream. An app can give `TraxClient` its own: a recording, a fake, a wrapper that counts what is in flight. |
 | `TraxHttpTransport` | The transport over HTTP POST and a socket. `Payload(request)` is the body or subscribe payload it sends: `id` or `query`, with `operationName` and `variables`. `Subscribe` sends it over the `Socket`, or fails the sink at once with a `SocketUnavailableException` when there is none. |
 | `ExecuteAsync(request, cancellationToken)` | POSTs the payload and reads the answer. A body with `errors` is an answer whatever its status, since a host answers a coded refusal with the status it chose, and a success with `data` is one too. Everything else is a `Failure`: a status that is not success with no errors (whatever data came with it), a host that could not be reached, a body that breaks off, a body larger than `MaxResponseSize` (refused as it arrives, never read whole), and a request, body included, that outlasts the `HttpClient`'s `Timeout`. It throws only when `cancellationToken` is cancelled. |
-| `TraxHttpTransportOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, a default header or a delegating handler, and turn its automatic redirects off: a client on an `HttpClientHandler` or `SocketsHttpHandler` that follows them, `new HttpClient()` among them, is refused when the transport is built, so a request never leaves for another host; its `Timeout` bounds each request, body included); the GraphQL `Endpoint`; the `Socket` subscriptions go over; `ById`, which says whether a document goes by its id (by default every document with an id does; a host that registered only some of them, or none, names which); `MaxResponseSize`, the largest body read from an answer (`DefaultMaxResponseSize`, 16 MiB); and `AllowInsecureTransport`. Without it the transport refuses, when it is built, an `http` endpoint whose host is not this machine, since whatever authenticates the requests would cross the network in the clear. A relative `Endpoint` is resolved against the client's `BaseAddress`, and refused when it has none, with `AllowInsecureTransport` or without. |
+| `TraxHttpTransportOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, a default header or a delegating handler; its `Timeout` bounds each request, body included), which must not follow redirects: build it on a `SocketsHttpHandler` or `HttpClientHandler` with `AllowAutoRedirect = false`, behind any delegating handlers, as in `new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })`. A client whose handler follows redirects, `new HttpClient()` among them, is refused when the transport is built, and so is one whose handler at the end of its chain is of another kind, unless `HandlerFollowsNoRedirects` says that handler follows none (a test server's, a platform's own), which changes nothing for a handler the transport can check. The rest are the GraphQL `Endpoint`; the `Socket` subscriptions go over; `ById`, which says whether a document goes by its id (by default every document with an id does; a host that registered only some of them, or none, names which); `MaxResponseSize`, the largest body read from an answer (`DefaultMaxResponseSize`, 16 MiB); and `AllowInsecureTransport`. Without it the transport refuses, when it is built, an `http` endpoint whose host is not this machine, since whatever authenticates the requests would cross the network in the clear. A relative `Endpoint` is resolved against the client's `BaseAddress`, and refused when it has none, with `AllowInsecureTransport` or without. |
 
 ### The socket
 
@@ -164,12 +164,12 @@ public readonly record struct Optional<T>
   `Optional<T>`, so `MaxActiveJobs = null` sends `"maxActiveJobs": null` and leaving it unset sends nothing, with
   `TraxJson.Options` or any options in `TraxClientOptions.Json`. Read back, a member that is absent is unset and one
   that is null is a null that was sent.
-- **Redirects.** An `HttpClient` follows redirects by default and drops only `Authorization` when it does, so a default
-  header such as `X-Api-Key` would follow a redirect to whatever host it names. Build the client on a handler with
-  `AllowAutoRedirect = false`, as the example does; a GraphQL endpoint has no reason to redirect a POST. An answer
-  from another scheme, host or port than the endpoint's, which is what a client that followed a redirect hands back,
-  is a `Failure` rather than an answer, but by then the request has reached that host.
-  `GraphQLSubscriptionSocket` follows no redirect of its upgrade either, since `connection_init` carries the
+- **Redirects.** The `HttpClient` must not follow redirects; a GraphQL endpoint has no reason to redirect a POST. Build
+  it on a handler with `AllowAutoRedirect = false`, as the example does. The transport checks the handler at the end of
+  the client's chain when it is built, and refuses a client it cannot show follows none, unless
+  `HandlerFollowsNoRedirects` says a handler it cannot check follows none. An answer from another scheme, host or port than
+  the endpoint's is a `Failure` rather than an answer. `GraphQLSubscriptionSocket` follows no redirect of its upgrade
+  either, since `connection_init` carries the
   credential: a redirected upgrade fails the connection. Outside a browser it upgrades through its own handler, so a
   proxy, credentials, client certificates, a certificate callback or cookies set in `ConfigureSocket` are moved onto
   that handler.
@@ -200,7 +200,7 @@ var client = new TraxClient(
 using System.Text.Json.Nodes;
 using Trax.Client;
 
-// No automatic redirects: a redirect would carry X-Api-Key to whatever host it names.
+// The client must not follow redirects.
 using var http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false });
 http.DefaultRequestHeaders.Add("X-Api-Key", configuration["Trax:ApiKey"]);
 

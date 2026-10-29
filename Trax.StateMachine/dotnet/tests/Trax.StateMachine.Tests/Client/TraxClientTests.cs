@@ -191,6 +191,7 @@ public class TraxClientTests
                 new TraxHttpTransportOptions
                 {
                     Http = new HttpClient(new Host("{}")),
+                    HandlerFollowsNoRedirects = true,
                     Endpoint = new Uri("https://host/trax/graphql"),
                     Socket = socket,
                 }
@@ -243,6 +244,7 @@ public class TraxClientTests
                 new TraxHttpTransportOptions
                 {
                     Http = new HttpClient(new Host("{}")),
+                    HandlerFollowsNoRedirects = true,
                     Endpoint = new Uri("https://host/trax/graphql"),
                     Socket = socket,
                 }
@@ -275,6 +277,7 @@ public class TraxClientTests
                 new TraxHttpTransportOptions
                 {
                     Http = new HttpClient(new Host("{}")),
+                    HandlerFollowsNoRedirects = true,
                     Endpoint = new Uri("https://host/trax/graphql"),
                     Socket = socket,
                 }
@@ -904,6 +907,7 @@ public class TraxClientTests
                 new TraxHttpTransportOptions
                 {
                     Http = new HttpClient(host),
+                    HandlerFollowsNoRedirects = true,
                     Endpoint = new Uri("https://host/trax/graphql"),
                 }
             ),
@@ -936,6 +940,7 @@ public class TraxClientTests
             new TraxHttpTransportOptions
             {
                 Http = new HttpClient(new Host("{}")),
+                HandlerFollowsNoRedirects = true,
                 Endpoint = new Uri("https://host/trax/graphql"),
                 Socket = socket,
             }
@@ -947,6 +952,7 @@ public class TraxClientTests
                 new TraxHttpTransportOptions
                 {
                     Http = new HttpClient(host),
+                    HandlerFollowsNoRedirects = true,
                     Endpoint = new Uri("https://host/trax/graphql"),
                     ById = byId,
                 }

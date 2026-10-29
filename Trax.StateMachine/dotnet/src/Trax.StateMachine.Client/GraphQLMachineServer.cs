@@ -10,11 +10,13 @@ public sealed record GraphQLMachineServerOptions
 {
     /// <summary>
     /// The client the requests go through. Set its authentication on it, a default header or a delegating handler, as
-    /// for any other <see cref="System.Net.Http.HttpClient"/>. Build it on a handler with automatic redirects off: a
-    /// redirect drops only <c>Authorization</c>, so the body and any other header would follow it to the new host. A
-    /// client on an <see cref="HttpClientHandler"/> or <see cref="SocketsHttpHandler"/> that follows redirects,
-    /// <c>new HttpClient()</c> among them, is refused when the server is built. An answer from another host than
-    /// <see cref="Endpoint"/>'s, through a handler of another kind that followed one, fails the request.
+    /// for any other <see cref="System.Net.Http.HttpClient"/>. It must not follow redirects: build it on a
+    /// <see cref="SocketsHttpHandler"/> or <see cref="HttpClientHandler"/> with
+    /// <see cref="SocketsHttpHandler.AllowAutoRedirect"/> off, behind any delegating handlers
+    /// (<c>new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })</c>). A client whose handler follows
+    /// redirects, <c>new HttpClient()</c> among them, is refused when the server is built, and so is one on a handler of
+    /// another kind unless <see cref="HandlerFollowsNoRedirects"/> is set. An answer from another host than
+    /// <see cref="Endpoint"/>'s fails the request.
     /// </summary>
     public required HttpClient Http { get; init; }
 
@@ -29,6 +31,14 @@ public sealed record GraphQLMachineServerOptions
     /// requests would travel in cleartext.
     /// </summary>
     public bool AllowInsecureTransport { get; init; }
+
+    /// <summary>
+    /// Says that <see cref="Http"/>'s handler follows no redirects, for a handler the server cannot check: one at the end
+    /// of its chain that is neither a <see cref="SocketsHttpHandler"/> nor an <see cref="HttpClientHandler"/> (a test
+    /// server's, a platform's own). Off by default, and such a client is refused. It changes nothing for a handler the
+    /// server can check: one that follows redirects is refused either way.
+    /// </summary>
+    public bool HandlerFollowsNoRedirects { get; init; }
 
     /// <summary>
     /// The machine as the host's client manifest lists it, with its persisted documents, the push (<c>changed</c>)
@@ -135,7 +145,9 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// <exception cref="ArgumentException">
     /// The machine lists no documents, or no <c>changed</c> document, or the endpoint is relative and the client has no
     /// base address, or it is not <c>https</c> on a host that is not loopback and
-    /// <see cref="GraphQLMachineServerOptions.AllowInsecureTransport"/> is not set, or the client follows redirects.
+    /// <see cref="GraphQLMachineServerOptions.AllowInsecureTransport"/> is not set, or the client follows redirects, or
+    /// its handler is one the server cannot check and <see cref="GraphQLMachineServerOptions.HandlerFollowsNoRedirects"/>
+    /// is not set.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <see cref="GraphQLMachineServerOptions.RequestTimeout"/> is neither infinite nor between zero, exclusive, and
@@ -149,7 +161,11 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             "request timeout",
             nameof(options)
         );
-        TransportSecurity.RequireNoRedirects(options.Http, nameof(options));
+        TransportSecurity.RequireNoRedirects(
+            options.Http,
+            options.HandlerFollowsNoRedirects,
+            nameof(options)
+        );
         TransportSecurity.RequireSecure(
             options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
                 ? options.Endpoint

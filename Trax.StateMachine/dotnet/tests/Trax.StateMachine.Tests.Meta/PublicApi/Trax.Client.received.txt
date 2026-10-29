@@ -145,6 +145,7 @@ namespace Trax.Client
         public bool AllowInsecureTransport { get; init; }
         public System.Func<Trax.Client.TraxDocument, bool>? ById { get; init; }
         public required System.Uri Endpoint { get; init; }
+        public bool HandlerFollowsNoRedirects { get; init; }
         public required System.Net.Http.HttpClient Http { get; init; }
         public long MaxResponseSize { get; init; }
         public Trax.Client.ISubscriptionSocket? Socket { get; init; }
