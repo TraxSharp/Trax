@@ -1,0 +1,21 @@
+{
+  "about": "A send after a start the host refused, with no instance to send to, settles failed as NOT_READY instead of waiting for good.",
+  "machine": "turnstile",
+  "instance": null,
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start", "as": "start" },
+    { "request": "start", "variables": { "requestId": "r1" }, "answer": { "problem": { "code": "FORBIDDEN", "message": "Not yours." } } },
+    { "await": "start", "expect": { "settled": true } },
+    { "view": { "problem": "FORBIDDEN" } },
+    { "client": "send", "trigger": "Push", "expect": { "outcome": "failed", "code": "NOT_READY" } },
+    { "quiet": 50 }
+  ]
+}

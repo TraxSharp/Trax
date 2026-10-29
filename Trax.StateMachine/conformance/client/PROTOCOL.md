@@ -78,7 +78,11 @@ once the start or the first read has settled, whatever its result.
 input, or absent. The client sends its prediction as `clientResult`, except for an event bound to the machine's
 effect or one with an edge out of the state it fires from that rests on a custom rule it holds no handler for (a custom
 guard, a custom reduction, or a custom requirement of the state it enters): it sends those with none, predicts nothing
-after them until they answer, and sends one even when its own engine would refuse it. **`retry`** resends what last
+after them until they answer, and sends one even when its own engine would refuse it. A trigger the machine does
+not declare as an event is refused where it is sent, with the code its engine's `advance` gives (`NO_TRANSITION` for
+one it lacks, `OUTCOME_BOUND` for an outcome, `TIMER_BOUND` for a timer), and never reaches the host, whatever its name: an event is never sent as the `start`, `get`, `discard` or `changed` operation.
+A send while the client holds no instance and is not starting or reading one (its start was refused, or its first
+read gave up) settles `failed` as `NOT_READY`. **`retry`** resends what last
 failed under the same request id. It resends nothing, and answers `NOTHING_TO_RETRY`, once a later event has been
 confirmed or while one is queued or in flight: the failed event would reach the host after it. Both are answered with
 what the send came to:
@@ -187,6 +191,8 @@ documents from it. The steps run in order:
 | `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503` (with `"body": {...}`, the JSON it answers with, or none), `"drop": true` (the connection is closed with no answer), `"hang": true` (no answer ever comes), `"redirect": true` (a 307, or the status given, whose `Location` is a second host that counts what reaches it) or `"raw": "..."` (a 200 with that text as its body). `"pad": n` adds n bytes of whitespace after an answer's JSON. |
 | `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. |
 | `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription; `"pad": n` beside a `push` adds n bytes of whitespace to its frame. |
+| `{ "unsettled": "<name>" }` | Checks that the answer sent under that name has not come yet. |
+| `{ "streamError": [...] }` | Ends the last subscription with a graphql-transport-ws `error` message carrying those errors. |
 | `{ "ping": true }` | Sends a graphql-transport-ws `ping` on the last subscription's socket and waits for the client's `pong`. |
 | `{ "decoy": 0 }` | Checks how many requests reached the second host a redirect points at. |
 | `{ "complete": true }`, `{ "dropSocket": true }` | Completes the last subscription, or closes its socket (with 1011, or with the code given: `{ "dropSocket": 4401 }`). |

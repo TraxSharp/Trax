@@ -1,0 +1,22 @@
+{
+  "about": "A subscription the host ends with an error message coded CLIENT_OUTDATED stops the client for good as CLIENT_OUTDATED, as the same code in a next message does; nothing is subscribed again.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "status": "ready" } },
+    { "streamError": [{ "message": "Reload the page.", "extensions": { "code": "CLIENT_OUTDATED" } }] },
+    { "view": { "status": "stopped", "error": "CLIENT_OUTDATED" } },
+    { "quiet": 50 }
+  ]
+}

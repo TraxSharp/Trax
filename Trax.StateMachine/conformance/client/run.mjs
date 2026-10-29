@@ -148,6 +148,8 @@ export async function runTranscript(transcript, host, askTestee) {
 
   // Answers a step names to await later, and answers no step looks at, which must still come.
   const pending = new Map();
+  // The names whose answer has come, for a step that checks one has not.
+  const settled = new Set();
   const background = [];
   let subscription = null;
 
@@ -162,7 +164,10 @@ export async function runTranscript(transcript, host, askTestee) {
       const answer = ask({ op, ...args });
       // Held until awaited: the timeout's rejection is not unhandled while the steps between run.
       answer.catch(() => {});
-      if (as !== undefined) pending.set(as, answer);
+      if (as !== undefined) {
+        pending.set(as, answer);
+        answer.then(() => settled.add(as), () => {});
+      }
       else if (expect === undefined) background.push(answer);
       else {
         const got = await answer;
@@ -209,6 +214,14 @@ export async function runTranscript(transcript, host, askTestee) {
     } else if (step.dropSocket !== undefined) {
       if (!subscription) fail("no socket to drop");
       subscription.drop(step.dropSocket === true ? undefined : step.dropSocket);
+    } else if (step.unsettled !== undefined) {
+      if (!pending.has(step.unsettled)) fail(`nothing named ${step.unsettled} was sent`);
+      // Long enough for an answer the testee already wrote to arrive, shorter than any retry a transcript configures.
+      await delay(30);
+      if (settled.has(step.unsettled)) fail(`${step.unsettled} was answered before it had settled`);
+    } else if (step.streamError !== undefined) {
+      if (!subscription?.open) fail("no subscription is open to end");
+      subscription.error(step.streamError);
     } else if (step.ping !== undefined) {
       if (!subscription) fail("no socket to ping");
       const before = subscription.pongs;

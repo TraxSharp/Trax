@@ -1,0 +1,23 @@
+{
+  "about": "start is answered once the first read has settled, not while it is still being retried: a read that failed in transport is read again first.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "retryDelays": [100],
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start", "as": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "drop": true },
+    { "unsettled": "start" },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "await": "start", "expect": { "settled": true } },
+    { "view": { "status": "ready" } }
+  ]
+}
