@@ -150,7 +150,8 @@ pub enum SyncOutcome {
     },
     /// A later sync took over; this one sent nothing after the event it had in flight.
     Superseded,
-    /// No event the planner may send reaches the target from what the server holds.
+    /// No event the planner may send reaches the target from what the server holds, or the search broke, as the
+    /// TypeScript planner answers one that throws.
     Unreachable,
     /// The planner gave up, or the sync sent twice the machine's states in events without getting there.
     Exceeded,
@@ -158,7 +159,7 @@ pub enum SyncOutcome {
     Invalid(PlanInvalid),
     /// The server refused an event, again after one re-read, or with a code a re-read cannot change.
     Refused(MachineProblem),
-    /// An event or the re-read did not get through.
+    /// An event or the re-read did not get through, or the controller went away (`DISPOSED`), its runtime with it.
     Failed(MachineProblem),
     /// The controller stopped for good.
     Stopped(MachineError),
@@ -626,8 +627,21 @@ enum Searched {
     Planned(Snapshot, PlanAnswer),
     // Given up: the sync was taken over or settled, and wants no answer.
     Stopped,
-    // The search did not finish.
-    Failed,
+    // The search panicked: a bug in the engine, since a custom handler's panic is caught where it is called.
+    Panicked,
+    // The runtime shut down before the search ran.
+    Cancelled,
+}
+
+impl Searched {
+    fn of(joined: Result<Option<(Snapshot, PlanAnswer)>, tokio::task::JoinError>) -> Searched {
+        match joined {
+            Ok(Some((from, answer))) => Searched::Planned(from, answer),
+            Ok(None) => Searched::Stopped,
+            Err(error) if error.is_panic() => Searched::Panicked,
+            Err(_) => Searched::Cancelled,
+        }
+    }
 }
 
 enum Later {
@@ -1599,12 +1613,10 @@ impl<S: MachineServer> Actor<S> {
         });
         let commands = self.commands.clone();
         self.runtime.spawn(async move {
-            let searched = match search.await {
-                Ok(Some((from, answer))) => Searched::Planned(from, answer),
-                Ok(None) => Searched::Stopped,
-                Err(_) => Searched::Failed,
-            };
-            let _ = commands.send(Msg::Planned { sync, searched });
+            let _ = commands.send(Msg::Planned {
+                sync,
+                searched: Searched::of(search.await),
+            });
         });
     }
 
@@ -1622,12 +1634,11 @@ impl<S: MachineServer> Actor<S> {
             Searched::Planned(confirmed, answer) => (confirmed, answer),
             // Only a sync that has gone stops its search, and it is not this one.
             Searched::Stopped => return,
-            Searched::Failed => {
-                return self.settle_sync(SyncOutcome::Failed(refusal(
-                    trax_state_machine::RefusalCode::InternalError.as_str(),
-                    "The planner panicked.",
-                )))
-            }
+            // A search that breaks reaches nothing, as the TypeScript planner answers one that throws. The server
+            // refused nothing and nothing failed to reach it, so it is neither a refusal nor a failure.
+            Searched::Panicked => return self.settle_sync(SyncOutcome::Unreachable),
+            // The runtime is going away, and the controller with it.
+            Searched::Cancelled => return self.settle_sync(SyncOutcome::Failed(disposed_problem())),
         };
         if self.sending || !self.queue.is_empty() || self.confirmed.as_ref() != Some(&confirmed) {
             return self.pump();
@@ -1874,5 +1885,90 @@ pub fn without_nulls(context: &Map) -> Map {
             Some(Frame::Array { copied: into, .. }) => into.push(copied),
             None => unreachable!("only the context's own frame is returned"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::StreamSink;
+
+    struct Reads(Snapshot);
+
+    struct Quiet;
+
+    impl Subscription for Quiet {}
+
+    impl MachineServer for Reads {
+        async fn start(&self, _: Option<Value>, _: String) -> Result<ServerAnswer, TransportError> {
+            std::future::pending().await
+        }
+
+        async fn event(&self, _: EventRequest) -> Result<ServerAnswer, TransportError> {
+            std::future::pending().await
+        }
+
+        async fn get(&self, _: String) -> Result<ServerAnswer, TransportError> {
+            Ok(ServerAnswer::Stored {
+                id: None,
+                snapshot: ServerSnapshot {
+                    row_id: None,
+                    revision: Some(1),
+                    state: self.0.state.clone(),
+                    context: self.0.context.clone(),
+                    due_at: DueAt::None,
+                },
+            })
+        }
+
+        fn subscribe(&self, _: String, _: StreamSink) -> Box<dyn Subscription> {
+            Box::new(Quiet)
+        }
+    }
+
+    fn wizard() -> Value {
+        let file = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../conformance/plan/wizard.ir.json");
+        Value::parse(std::fs::read_to_string(file).unwrap().trim_end_matches('\n')).unwrap()
+    }
+
+    // Opens the wizard at Start and asks for a sync, whose search a message sent behind it answers first: on a runtime of
+    // one thread the controller's task takes both before the search's own answer can be sent. The search itself would
+    // plan Begin, which the server never answers.
+    async fn sync_answered_by(searched: Searched) -> SyncOutcome {
+        let ir = wizard();
+        let hash = ir_hash(&ir);
+        let machine = Machine::from_ir(&ir).unwrap();
+        let start = machine.initial_snapshot();
+        let mut options = ServerMachineOptions::new(ir, hash, Reads(start));
+        options.id = Some("i-1".into());
+        let controller = ServerMachineController::new(options).unwrap();
+        controller.start().await;
+
+        let synced = controller.sync_to("Details", None, vec!["Begin".to_owned()]);
+        let _ = controller.commands.send(Msg::Planned { sync: 1, searched });
+        synced.await
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_search_that_panicked_settles_unreachable_not_as_a_refusal() {
+        assert_eq!(sync_answered_by(Searched::Panicked).await, SyncOutcome::Unreachable);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_search_the_runtime_cancelled_settles_as_disposed() {
+        let outcome = sync_answered_by(Searched::Cancelled).await;
+        assert!(
+            matches!(&outcome, SyncOutcome::Failed(p) if p.code == codes::DISPOSED),
+            "{outcome:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_join_error_is_told_apart_as_a_panic_or_a_cancellation() {
+        let panicked = tokio::task::spawn_blocking(|| -> Option<(Snapshot, PlanAnswer)> { panic!("a bug") }).await;
+        assert!(matches!(Searched::of(panicked), Searched::Panicked));
+        let pending = tokio::spawn(std::future::pending::<Option<(Snapshot, PlanAnswer)>>());
+        pending.abort();
+        assert!(matches!(Searched::of(pending.await), Searched::Cancelled));
     }
 }
