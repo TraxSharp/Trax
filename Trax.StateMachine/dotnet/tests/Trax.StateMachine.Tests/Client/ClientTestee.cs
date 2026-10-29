@@ -172,29 +172,32 @@ public sealed class ClientTestee : IAsyncDisposable
         GraphQLMachineServer server;
         try
         {
-            _socket = new GraphQLSubscriptionSocket(
-                new GraphQLSubscriptionSocketOptions
+            // Only what the transcript sets is set: every other option keeps the client's default, as an app's would.
+            var socketOptions = new GraphQLSubscriptionSocketOptions
+            {
+                Endpoint = new Uri(request["socket"]!.GetValue<string>()),
+                AllowInsecureTransport = insecure,
+            };
+            if (maxResponseSize is { } socketMax)
+                socketOptions = socketOptions with { MaxMessageSize = (int)socketMax };
+            _socket = new GraphQLSubscriptionSocket(socketOptions);
+            var serverOptions = new GraphQLMachineServerOptions
+            {
+                Http = _http,
+                Endpoint = new Uri(request["endpoint"]!.GetValue<string>()),
+                AllowInsecureTransport = insecure,
+                Machine = machine,
+                Socket = _socket,
+                ResubscribeDelays = Delays(request["resubscribeDelays"]),
+            };
+            if (maxResponseSize is { } max)
+                serverOptions = serverOptions with { MaxResponseSize = max };
+            if (requestTimeout is { } ms)
+                serverOptions = serverOptions with
                 {
-                    Endpoint = new Uri(request["socket"]!.GetValue<string>()),
-                    AllowInsecureTransport = insecure,
-                    MaxMessageSize = (int?)maxResponseSize ?? 16 * 1024 * 1024,
-                }
-            );
-            server = new GraphQLMachineServer(
-                new GraphQLMachineServerOptions
-                {
-                    Http = _http,
-                    Endpoint = new Uri(request["endpoint"]!.GetValue<string>()),
-                    AllowInsecureTransport = insecure,
-                    Machine = machine,
-                    Socket = _socket,
-                    ResubscribeDelays = Delays(request["resubscribeDelays"]),
-                    MaxResponseSize = maxResponseSize ?? 16 * 1024 * 1024,
-                    RequestTimeout = requestTimeout is { } ms
-                        ? TimeSpan.FromMilliseconds(ms)
-                        : GraphQLMachineServer.DefaultRequestTimeout,
-                }
-            );
+                    RequestTimeout = TimeSpan.FromMilliseconds(ms),
+                };
+            server = new GraphQLMachineServer(serverOptions);
         }
         // A client refusing cleartext to another host refuses to be built, before it sends anything.
         catch (ArgumentException ex)
@@ -225,13 +228,10 @@ public sealed class ClientTestee : IAsyncDisposable
         return new JsonObject { ["opened"] = true, ["client"] = Client };
     }
 
-    // Redirects off, as the client requires, and no timeout of its own: a transcript's request timeout is the server's
-    // RequestTimeout.
+    // As an app builds one: redirects off, which the client requires, and every other setting, its timeout among
+    // them, left as HttpClient has it.
     private static HttpClient NewHttp() =>
-        new(new SocketsHttpHandler { AllowAutoRedirect = false })
-        {
-            Timeout = Timeout.InfiniteTimeSpan,
-        };
+        new(new SocketsHttpHandler { AllowAutoRedirect = false });
 
     private static IReadOnlyList<TimeSpan> Delays(JsonNode? delays) =>
         (delays as JsonArray ?? [])
