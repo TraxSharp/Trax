@@ -110,6 +110,10 @@ with delegates only.
 | `Effects` | `IReadOnlyList<EffectBinding<TState, TTrigger>>` | the `RunsOnce` binding: `From`, `Trigger`, `To`, `EffectType` (the `TEffect` resolved from the container) and `KeyPrefix` |
 | `Declarative` | `DeclarativeModel<TState, TTrigger>?` | the declarative layer above |
 
+`Plan(snapshot, target, fields, navigation, maxDepth)` finds the events that take a snapshot to a target state with a
+page's fields applied, as [`IrMachine.Plan`](/docs/sdk-reference/statemachine-api/ir-machine#planning) does. A
+compiled machine has every custom handler bound, so it never answers `Undetermined`.
+
 `MachineDefinition<TState, TTrigger>` is what `SnapshotMachine` runs:
 
 | Member | Type | Holds |

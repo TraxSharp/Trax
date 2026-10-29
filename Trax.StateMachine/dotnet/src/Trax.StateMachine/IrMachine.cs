@@ -39,6 +39,7 @@ public sealed class IrMachine
     private readonly Dictionary<string, Timer> _timers;
     private readonly Dictionary<string, ContextSchema> _contexts;
     private readonly Dictionary<string, Rule> _invariants;
+    private readonly HashSet<(string State, string Trigger)> _undetermined;
 
     private sealed record Edge(
         string From,
@@ -171,6 +172,15 @@ public sealed class IrMachine
         foreach (var rule in _invariants.Values)
             TrustUnhandled(rule, trusted);
         _serverGuards = trusted;
+
+        _undetermined = _transitions
+            .Where(t =>
+                NamesUnhandled(t.Guard)
+                || (t.Reduce is Reduction.Custom r && !_reducers.ContainsKey(r.Name))
+                || NamesUnhandled(_invariants.GetValueOrDefault(t.To))
+            )
+            .Select(t => (t.From, t.Trigger))
+            .ToHashSet();
     }
 
     /// <summary>The machine's id (<c>checkout</c>).</summary>
@@ -372,6 +382,63 @@ public sealed class IrMachine
             .Distinct()
             .ToList();
     }
+
+    /// <summary>
+    /// Finds the events that take <paramref name="snapshot"/> to the state <paramref name="target"/> with the page's
+    /// fields applied: what a client sends to bring the server to where a page that ran ahead of it is. Breadth first,
+    /// trying the fields event and then <paramref name="navigation"/> in the order given from each snapshot, so every
+    /// engine answers the same plan. An edge that rests on a custom rule this machine holds no handler for is not tried,
+    /// and answers <see cref="PlanResult.Undetermined"/> when nothing else reaches the target. Never throws.
+    /// </summary>
+    /// <param name="snapshot">Where the server is.</param>
+    /// <param name="target">The state the page is in.</param>
+    /// <param name="fields">The event that writes the page's fields, or null when there is none.</param>
+    /// <param name="navigation">The triggers, without input, that move between states.</param>
+    /// <param name="maxDepth">The longest plan to look for; twice the machine's states when null.</param>
+    public PlanResult Plan(
+        Snapshot snapshot,
+        string target,
+        PlannedEvent? fields,
+        IReadOnlyList<string> navigation,
+        int? maxDepth = null
+    ) =>
+        EventPlanner.Plan(
+            new PlanGraph(
+                _states.Count,
+                _states.Contains,
+                Navigable,
+                Determines,
+                Advance,
+                Serialize
+            ),
+            snapshot,
+            target,
+            fields,
+            navigation,
+            maxDepth
+        );
+
+    // Whether every edge out of `state` on `trigger` can be evaluated here: none rests on a custom guard, a custom
+    // reduction, or a custom requirement of the state it enters, that this machine holds no handler for. A client sends
+    // an event on such an edge with no prediction.
+    internal bool Determines(string state, string trigger) =>
+        !_undetermined.Contains((state, trigger));
+
+    // A trigger a client may move with: one the machine has, not bound to the effect, an outcome or a timer.
+    private bool Navigable(string trigger) =>
+        _triggers.Contains(trigger)
+        && !EffectTriggers.Contains(trigger)
+        && !_outcomes.ContainsKey(trigger)
+        && !_timers.Values.Any(t => t.Trigger == trigger);
+
+    private bool NamesUnhandled(Rule? rule) =>
+        rule switch
+        {
+            Rule.Custom c => !_guards.ContainsKey(c.Name),
+            Rule.All a => a.Rules.Any(NamesUnhandled),
+            Rule.Any a => a.Rules.Any(NamesUnhandled),
+            _ => false,
+        };
 
     // ── The engine ─────────────────────────────────────────────────────────────────────────────
 

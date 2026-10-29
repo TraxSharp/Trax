@@ -41,6 +41,46 @@ public sealed record BuiltMachine<TState, TTrigger>(
     /// </summary>
     public SnapshotMachine<TState, TTrigger> Engine { get; } = new(Definition);
 
+    /// <summary>
+    /// Finds the events that take <paramref name="snapshot"/> to the state <paramref name="target"/> with the page's
+    /// fields applied, as <see cref="IrMachine.Plan"/> does for the machine built from this one's IR. Every custom rule
+    /// of a compiled machine has its handler, so it never answers <see cref="PlanResult.Undetermined"/>. Never throws.
+    /// </summary>
+    /// <param name="snapshot">Where the server is.</param>
+    /// <param name="target">The state the page is in.</param>
+    /// <param name="fields">The event that writes the page's fields, or null when there is none.</param>
+    /// <param name="navigation">The triggers, without input, that move between states.</param>
+    /// <param name="maxDepth">The longest plan to look for; twice the machine's states when null.</param>
+    public PlanResult Plan(
+        Snapshot snapshot,
+        string target,
+        PlannedEvent? fields,
+        IReadOnlyList<string> navigation,
+        int? maxDepth = null
+    )
+    {
+        var states = Enum.GetNames<TState>().ToHashSet(StringComparer.Ordinal);
+        var clientTriggers = Triggers
+            .Where(t => t.Kind == TriggerKind.Client)
+            .Select(t => t.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        return EventPlanner.Plan(
+            new PlanGraph(
+                states.Count,
+                states.Contains,
+                clientTriggers.Contains,
+                static (_, _) => true,
+                Engine.Advance,
+                Engine.Serialize
+            ),
+            snapshot,
+            target,
+            fields,
+            navigation,
+            maxDepth
+        );
+    }
+
     /// <summary>The states that invoke a train, keyed by state. Empty for a machine that invokes nothing.</summary>
     internal IReadOnlyDictionary<TState, InvokeDefinition<TState>> Invokes => Definition.Invokes;
 
