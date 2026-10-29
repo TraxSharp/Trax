@@ -3,12 +3,6 @@
 // </auto-generated>
 #nullable enable
 
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
-using Trax.StateMachine;
-using Trax.StateMachine.Client;
-
 namespace Trax.StateMachine.Tests.Machines;
 
 /// <summary>The states of the checkout machine.</summary>
@@ -31,48 +25,48 @@ public enum CheckoutTrigger
 /// <summary>The context of Cart.</summary>
 public sealed record CheckoutCartContext
 {
-    [JsonPropertyName("currency")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("currency")]
     public required string Currency { get; init; }
 
-    [JsonPropertyName("items")]
-    public required IReadOnlyList<string> Items { get; init; }
+    [global::System.Text.Json.Serialization.JsonPropertyName("items")]
+    public required global::System.Collections.Generic.IReadOnlyList<string> Items { get; init; }
 
-    [JsonPropertyName("receipt")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("receipt")]
     public string? Receipt { get; init; }
 
-    [JsonPropertyName("total")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("total")]
     public required double Total { get; init; }
 }
 
 /// <summary>The context of Paid.</summary>
 public sealed record CheckoutPaidContext
 {
-    [JsonPropertyName("currency")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("currency")]
     public required string Currency { get; init; }
 
-    [JsonPropertyName("items")]
-    public required IReadOnlyList<string> Items { get; init; }
+    [global::System.Text.Json.Serialization.JsonPropertyName("items")]
+    public required global::System.Collections.Generic.IReadOnlyList<string> Items { get; init; }
 
-    [JsonPropertyName("receipt")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("receipt")]
     public required string Receipt { get; init; }
 
-    [JsonPropertyName("total")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("total")]
     public required double Total { get; init; }
 }
 
 /// <summary>The context of Review.</summary>
 public sealed record CheckoutReviewContext
 {
-    [JsonPropertyName("currency")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("currency")]
     public required string Currency { get; init; }
 
-    [JsonPropertyName("items")]
-    public required IReadOnlyList<string> Items { get; init; }
+    [global::System.Text.Json.Serialization.JsonPropertyName("items")]
+    public required global::System.Collections.Generic.IReadOnlyList<string> Items { get; init; }
 
-    [JsonPropertyName("receipt")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("receipt")]
     public string? Receipt { get; init; }
 
-    [JsonPropertyName("total")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("total")]
     public required double Total { get; init; }
 }
 
@@ -89,48 +83,48 @@ public static class CheckoutMachine
     public const string Ir = """"{"committedStates":["Paid"],"context":{"Cart":{"fields":[{"constraints":[],"name":"currency","nullable":false,"type":"string"},{"constraints":[{"field":"items","rule":"arrayOf","source":"context","type":"string"}],"name":"items","nullable":false,"type":"array","values":{"nullable":false,"type":"string"}},{"constraints":[],"name":"receipt","nullable":true,"type":"string"},{"constraints":[],"name":"total","nullable":false,"type":"number"}]},"Paid":{"fields":[{"constraints":[],"name":"currency","nullable":false,"type":"string"},{"constraints":[{"field":"items","rule":"arrayOf","source":"context","type":"string"}],"name":"items","nullable":false,"type":"array","values":{"nullable":false,"type":"string"}},{"constraints":[],"name":"receipt","nullable":false,"type":"string"},{"constraints":[],"name":"total","nullable":false,"type":"number"}]},"Review":{"fields":[{"constraints":[],"name":"currency","nullable":false,"type":"string"},{"constraints":[{"field":"items","rule":"arrayOf","source":"context","type":"string"}],"name":"items","nullable":false,"type":"array","values":{"nullable":false,"type":"string"}},{"constraints":[],"name":"receipt","nullable":true,"type":"string"},{"constraints":[],"name":"total","nullable":false,"type":"number"}]}},"differential":{"samples":{"Pay":[{"receipt":"rcpt_1"},{}]},"seeds":{"Paid":{"currency":"USD","items":["book"],"receipt":"rcpt_seed","total":5},"Review":{"currency":"USD","items":["book"],"receipt":null,"total":5}}},"id":"checkout","initialContext":{"currency":"USD","items":[],"receipt":null,"total":0},"initialState":"Cart","inputs":{"Pay":{"fields":[{"constraints":[],"name":"receipt","nullable":false,"type":"string"}]}},"invariants":{"Cart":{"field":"receipt","rule":"absent","source":"context"},"Paid":{"field":"items","op":"gt","rule":"count","source":"context","value":0},"Review":{"rule":"all","rules":[{"field":"items","op":"gt","rule":"count","source":"context","value":0},{"field":"total","op":"gt","rule":"compare","source":"context","value":0},{"field":"receipt","rule":"absent","source":"context"}]}},"states":["Cart","Paid","Review"],"transitions":[{"from":"Cart","guard":{"field":"items","op":"gt","rule":"count","source":"context","value":0},"guardMessage":"Add an item before reviewing.","to":"Review","trigger":"Next"},{"from":"Paid","reduce":{"reduce":"reset"},"to":"Cart","trigger":"Restart"},{"from":"Review","to":"Cart","trigger":"Back"},{"effect":{"keyPrefix":"checkout:charge"},"from":"Review","guard":{"rule":"all","rules":[{"field":"items","op":"gt","rule":"count","source":"context","value":0},{"field":"total","op":"gt","rule":"compare","source":"context","value":0},{"field":"receipt","rule":"present","source":"input"}]},"guardMessage":"A payable order needs items, a positive total, and a receipt.","reduce":{"reduce":"set","steps":[{"field":"receipt","value":{"input":"receipt"}}]},"to":"Paid","trigger":"Pay"}],"triggers":["Back","Next","Pay","Restart"],"version":1}"""";
 
     /// <summary>The engine built from <see cref="Ir"/>.</summary>
-    public static IrMachine Create() => new(JsonNode.Parse(Ir)!.AsObject());
+    public static global::Trax.StateMachine.IrMachine Create() => new(global::System.Text.Json.Nodes.JsonNode.Parse(Ir)!.AsObject());
 }
 
 /// <summary>
-/// Drives one instance of the checkout machine a host serves: <see cref="ServerMachineController"/> with its states,
+/// Drives one instance of the checkout machine a host serves: <see cref="global::Trax.StateMachine.Client.ServerMachineController"/> with its states,
 /// triggers, contexts and inputs typed, predicting with the machine built from the IR.
 /// </summary>
-public sealed class CheckoutClient : IDisposable
+public sealed class CheckoutClient : global::System.IDisposable
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    private static readonly global::System.Text.Json.JsonSerializerOptions Json = new(global::System.Text.Json.JsonSerializerDefaults.Web)
     {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
     /// <summary>Wraps a controller already built for the checkout machine.</summary>
-    public CheckoutClient(ServerMachineController controller) => Controller = controller;
+    public CheckoutClient(global::Trax.StateMachine.Client.ServerMachineController controller) => Controller = controller;
 
     /// <summary>
     /// Builds the client for <paramref name="machine"/>, the checkout machine as the host's manifest lists it, which must
     /// be the version this view was generated for.
     /// </summary>
-    /// <exception cref="ArgumentException">The manifest's machine is another machine, or another version of it.</exception>
+    /// <exception cref="global::System.ArgumentException">The manifest's machine is another machine, or another version of it.</exception>
     public static CheckoutClient Create(
-        ClientManifestMachine machine,
-        IMachineServer server,
+        global::Trax.StateMachine.ClientManifestMachine machine,
+        global::Trax.StateMachine.Client.IMachineServer server,
         string? id = null,
-        Func<string>? newRequestId = null
+        global::System.Func<string>? newRequestId = null
     )
     {
-        ArgumentNullException.ThrowIfNull(machine);
+        global::System.ArgumentNullException.ThrowIfNull(machine);
         if (machine.Id != CheckoutMachine.Id || machine.IrHash != CheckoutMachine.IrHash)
-            throw new ArgumentException(
+            throw new global::System.ArgumentException(
                 $"The manifest's machine '{machine.Id}' (IR {machine.IrHash}) is not the version this view was generated for (IR {CheckoutMachine.IrHash}). Generate the view again from the host's manifest.",
                 nameof(machine)
             );
         return new CheckoutClient(
-            new ServerMachineController(
-                new ServerMachineOptions
+            new global::Trax.StateMachine.Client.ServerMachineController(
+                new global::Trax.StateMachine.Client.ServerMachineOptions
                 {
                     Machine = machine,
                     Server = server,
-                    Predictor = MachinePredictor.FromIr(machine),
+                    Predictor = global::Trax.StateMachine.Client.MachinePredictor.FromIr(machine),
                     Id = id,
                     NewRequestId = newRequestId,
                 }
@@ -139,30 +133,32 @@ public sealed class CheckoutClient : IDisposable
     }
 
     /// <summary>The untyped controller underneath.</summary>
-    public ServerMachineController Controller { get; }
+    public global::Trax.StateMachine.Client.ServerMachineController Controller { get; }
 
     /// <summary>What the controller shows now.</summary>
-    public MachineView View => Controller.View;
+    public global::Trax.StateMachine.Client.MachineView View => Controller.View;
 
     /// <summary>The state shown, or null before the first snapshot.</summary>
-    public CheckoutState? State => View.Snapshot is { } shown ? Enum.Parse<CheckoutState>(shown.State) : null;
+    public CheckoutState? State => View.Snapshot is { } shown ? global::System.Enum.Parse<CheckoutState>(shown.State) : null;
 
     /// <summary>Raised after every change of <see cref="View"/>.</summary>
-    public event EventHandler? Changed
+    public event global::System.EventHandler? Changed
     {
         add => Controller.Changed += value;
         remove => Controller.Changed -= value;
     }
 
     /// <summary>Opens the instance, or starts one.</summary>
-    public Task StartAsync() => Controller.StartAsync();
+    public global::System.Threading.Tasks.Task StartAsync() => Controller.StartAsync();
 
     /// <summary>Resends what last failed, under the same request id.</summary>
-    public Task<SendOutcome> RetryAsync() => Controller.RetryAsync();
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> RetryAsync() => Controller.RetryAsync();
 
     /// <summary>The triggers with an edge out of the shown state.</summary>
-    public IReadOnlyList<CheckoutTrigger> AvailableTriggers() =>
-        Controller.AvailableTriggers().Select(Enum.Parse<CheckoutTrigger>).ToList();
+    public global::System.Collections.Generic.IReadOnlyList<CheckoutTrigger> AvailableTriggers() =>
+        global::System.Linq.Enumerable.ToList(
+            global::System.Linq.Enumerable.Select(Controller.AvailableTriggers(), global::System.Enum.Parse<CheckoutTrigger>)
+        );
 
     /// <summary>The context shown, while the instance is in Cart; null in any other state.</summary>
     public CheckoutCartContext? CartContext => ContextIn<CheckoutCartContext>(CheckoutState.Cart);
@@ -174,25 +170,25 @@ public sealed class CheckoutClient : IDisposable
     public CheckoutReviewContext? ReviewContext => ContextIn<CheckoutReviewContext>(CheckoutState.Review);
 
     /// <summary>Sends Back.</summary>
-    public Task<SendOutcome> SendBackAsync() => Controller.SendAsync("Back");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendBackAsync() => Controller.SendAsync("Back");
 
     /// <summary>Whether Back would fire from what is shown.</summary>
     public bool CanSendBack() => Controller.CanSend("Back");
 
     /// <summary>Sends Next.</summary>
-    public Task<SendOutcome> SendNextAsync() => Controller.SendAsync("Next");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendNextAsync() => Controller.SendAsync("Next");
 
     /// <summary>Whether Next would fire from what is shown.</summary>
     public bool CanSendNext() => Controller.CanSend("Next");
 
     /// <summary>Sends Pay.</summary>
-    public Task<SendOutcome> SendPayAsync() => Controller.SendAsync("Pay");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendPayAsync() => Controller.SendAsync("Pay");
 
     /// <summary>Whether Pay would fire from what is shown.</summary>
     public bool CanSendPay() => Controller.CanSend("Pay");
 
     /// <summary>Sends Restart.</summary>
-    public Task<SendOutcome> SendRestartAsync() => Controller.SendAsync("Restart");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendRestartAsync() => Controller.SendAsync("Restart");
 
     /// <summary>Whether Restart would fire from what is shown.</summary>
     public bool CanSendRestart() => Controller.CanSend("Restart");
@@ -202,5 +198,5 @@ public sealed class CheckoutClient : IDisposable
 
     private T? ContextIn<T>(CheckoutState state)
         where T : class =>
-        State == state ? View.Snapshot!.Context.Deserialize<T>(Json) : null;
+        State == state ? global::System.Text.Json.JsonSerializer.Deserialize<T>(View.Snapshot!.Context, Json) : null;
 }

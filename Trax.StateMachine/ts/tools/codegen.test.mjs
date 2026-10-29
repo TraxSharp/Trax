@@ -160,6 +160,34 @@ describe("generate-twin entrypoint", () => {
     expect(existsSync(join(out, "escaped.machine.g.ts"))).toBe(false);
   });
 
+  it("refuses an IR whose id would write its C# view outside the out dir", async () => {
+    const engine = join(out, "engine");
+    mkdirSync(engine);
+    writeFileSync(join(engine, "index.ts"), 'export const generateCSharpView = () => "";\n');
+    const ir = JSON.parse(read(turnstileIr));
+    const escaping = join(out, "escaping.ir.json");
+    writeFileSync(escaping, JSON.stringify({ ...ir, id: "../escaped" }));
+
+    await expect(
+      generateTwin({ irPath: escaping, engineSrc: engine, outDir: join(out, "inside"), lang: "csharp" }),
+    ).rejects.toThrow(/would write outside/);
+    expect(existsSync(join(out, "escaped.g.cs"))).toBe(false);
+  });
+
+  // turnstile writes Turnstile.g.cs and turn-stile TurnStile.g.cs: one file on a disk that ignores case.
+  it("refuses a C# view whose file another machine's view holds, ignoring case", async () => {
+    await generateTwin({ irPath: turnstileIr, engineSrc, outDir: out, lang: "csharp" });
+    const other = join(out, "turn-stile.ir.json");
+    writeFileSync(other, JSON.stringify({ ...JSON.parse(read(turnstileIr)), id: "turn-stile" }));
+
+    await expect(generateTwin({ irPath: other, engineSrc, outDir: out, lang: "csharp" })).rejects.toThrow(
+      "Turnstile.g.cs in " + out + " is the view of the machine 'turnstile', and the machine 'turn-stile' would write TurnStile.g.cs",
+    );
+    expect(existsSync(join(out, "TurnStile.g.cs"))).toBe(false);
+    // The machine's own view is replaced, as it always was.
+    await expect(generateTwin({ irPath: turnstileIr, engineSrc, outDir: out, lang: "csharp" })).resolves.toBeDefined();
+  });
+
   it("rejects an unknown import style", async () => {
     await expect(
       generateTwin({

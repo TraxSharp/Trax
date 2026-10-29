@@ -3,12 +3,6 @@
 // </auto-generated>
 #nullable enable
 
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
-using Trax.StateMachine;
-using Trax.StateMachine.Client;
-
 namespace Trax.StateMachine.Tests.Machines;
 
 /// <summary>The states of the gauge machine.</summary>
@@ -34,21 +28,21 @@ public sealed record GaugeIdleContext
 /// <summary>The context of Reading.</summary>
 public sealed record GaugeReadingContext
 {
-    [JsonPropertyName("reading")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("reading")]
     public required long Reading { get; init; }
 }
 
 /// <summary>The input of Lower.</summary>
 public sealed record GaugeLowerInput
 {
-    [JsonPropertyName("value")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("value")]
     public required long Value { get; init; }
 }
 
 /// <summary>The input of Raise.</summary>
 public sealed record GaugeRaiseInput
 {
-    [JsonPropertyName("value")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("value")]
     public required long Value { get; init; }
 }
 
@@ -65,48 +59,48 @@ public static class GaugeMachine
     public const string Ir = """"{"committedStates":[],"context":{"Idle":{"fields":[]},"Reading":{"fields":[{"constraints":[],"maximum":2147483647,"minimum":-2147483648,"name":"reading","nullable":false,"type":"integer"}]}},"differential":{"contexts":[{"reading":10},{"reading":11}],"samples":{"Lower":[{"value":12},{"value":13},{"value":14}],"Raise":[{"value":1},{"value":2},{"value":3}]}},"id":"gauge","initialContext":{},"initialState":"Idle","inputs":{"Lower":{"fields":[{"constraints":[],"maximum":2147483647,"minimum":-2147483648,"name":"value","nullable":false,"type":"integer"}]},"Raise":{"fields":[{"constraints":[],"maximum":2147483647,"minimum":-2147483648,"name":"value","nullable":false,"type":"integer"}]}},"states":["Idle","Reading"],"transitions":[{"from":"Idle","guard":{"field":"value","op":"lt","rule":"compare","source":"input","value":13},"guardMessage":"A lowered reading is below 13.","reduce":{"reduce":"set","steps":[{"field":"reading","value":{"input":"value"}}]},"to":"Reading","trigger":"Lower"},{"from":"Idle","guard":{"field":"value","op":"gte","rule":"compare","source":"input","value":2},"guardMessage":"A raised reading is at least 2.","reduce":{"reduce":"set","steps":[{"field":"reading","value":{"input":"value"}}]},"to":"Reading","trigger":"Raise"},{"from":"Reading","guard":{"field":"reading","op":"lte","rule":"compare","source":"context","value":10},"guardMessage":"Only a reading of at most 10 settles.","reduce":{"reduce":"clear"},"to":"Idle","trigger":"Settle"}],"triggers":["Lower","Raise","Settle"],"version":1}"""";
 
     /// <summary>The engine built from <see cref="Ir"/>.</summary>
-    public static IrMachine Create() => new(JsonNode.Parse(Ir)!.AsObject());
+    public static global::Trax.StateMachine.IrMachine Create() => new(global::System.Text.Json.Nodes.JsonNode.Parse(Ir)!.AsObject());
 }
 
 /// <summary>
-/// Drives one instance of the gauge machine a host serves: <see cref="ServerMachineController"/> with its states,
+/// Drives one instance of the gauge machine a host serves: <see cref="global::Trax.StateMachine.Client.ServerMachineController"/> with its states,
 /// triggers, contexts and inputs typed, predicting with the machine built from the IR.
 /// </summary>
-public sealed class GaugeClient : IDisposable
+public sealed class GaugeClient : global::System.IDisposable
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    private static readonly global::System.Text.Json.JsonSerializerOptions Json = new(global::System.Text.Json.JsonSerializerDefaults.Web)
     {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
     /// <summary>Wraps a controller already built for the gauge machine.</summary>
-    public GaugeClient(ServerMachineController controller) => Controller = controller;
+    public GaugeClient(global::Trax.StateMachine.Client.ServerMachineController controller) => Controller = controller;
 
     /// <summary>
     /// Builds the client for <paramref name="machine"/>, the gauge machine as the host's manifest lists it, which must
     /// be the version this view was generated for.
     /// </summary>
-    /// <exception cref="ArgumentException">The manifest's machine is another machine, or another version of it.</exception>
+    /// <exception cref="global::System.ArgumentException">The manifest's machine is another machine, or another version of it.</exception>
     public static GaugeClient Create(
-        ClientManifestMachine machine,
-        IMachineServer server,
+        global::Trax.StateMachine.ClientManifestMachine machine,
+        global::Trax.StateMachine.Client.IMachineServer server,
         string? id = null,
-        Func<string>? newRequestId = null
+        global::System.Func<string>? newRequestId = null
     )
     {
-        ArgumentNullException.ThrowIfNull(machine);
+        global::System.ArgumentNullException.ThrowIfNull(machine);
         if (machine.Id != GaugeMachine.Id || machine.IrHash != GaugeMachine.IrHash)
-            throw new ArgumentException(
+            throw new global::System.ArgumentException(
                 $"The manifest's machine '{machine.Id}' (IR {machine.IrHash}) is not the version this view was generated for (IR {GaugeMachine.IrHash}). Generate the view again from the host's manifest.",
                 nameof(machine)
             );
         return new GaugeClient(
-            new ServerMachineController(
-                new ServerMachineOptions
+            new global::Trax.StateMachine.Client.ServerMachineController(
+                new global::Trax.StateMachine.Client.ServerMachineOptions
                 {
                     Machine = machine,
                     Server = server,
-                    Predictor = MachinePredictor.FromIr(machine),
+                    Predictor = global::Trax.StateMachine.Client.MachinePredictor.FromIr(machine),
                     Id = id,
                     NewRequestId = newRequestId,
                 }
@@ -115,30 +109,32 @@ public sealed class GaugeClient : IDisposable
     }
 
     /// <summary>The untyped controller underneath.</summary>
-    public ServerMachineController Controller { get; }
+    public global::Trax.StateMachine.Client.ServerMachineController Controller { get; }
 
     /// <summary>What the controller shows now.</summary>
-    public MachineView View => Controller.View;
+    public global::Trax.StateMachine.Client.MachineView View => Controller.View;
 
     /// <summary>The state shown, or null before the first snapshot.</summary>
-    public GaugeState? State => View.Snapshot is { } shown ? Enum.Parse<GaugeState>(shown.State) : null;
+    public GaugeState? State => View.Snapshot is { } shown ? global::System.Enum.Parse<GaugeState>(shown.State) : null;
 
     /// <summary>Raised after every change of <see cref="View"/>.</summary>
-    public event EventHandler? Changed
+    public event global::System.EventHandler? Changed
     {
         add => Controller.Changed += value;
         remove => Controller.Changed -= value;
     }
 
     /// <summary>Opens the instance, or starts one.</summary>
-    public Task StartAsync() => Controller.StartAsync();
+    public global::System.Threading.Tasks.Task StartAsync() => Controller.StartAsync();
 
     /// <summary>Resends what last failed, under the same request id.</summary>
-    public Task<SendOutcome> RetryAsync() => Controller.RetryAsync();
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> RetryAsync() => Controller.RetryAsync();
 
     /// <summary>The triggers with an edge out of the shown state.</summary>
-    public IReadOnlyList<GaugeTrigger> AvailableTriggers() =>
-        Controller.AvailableTriggers().Select(Enum.Parse<GaugeTrigger>).ToList();
+    public global::System.Collections.Generic.IReadOnlyList<GaugeTrigger> AvailableTriggers() =>
+        global::System.Linq.Enumerable.ToList(
+            global::System.Linq.Enumerable.Select(Controller.AvailableTriggers(), global::System.Enum.Parse<GaugeTrigger>)
+        );
 
     /// <summary>The context shown, while the instance is in Idle; null in any other state.</summary>
     public GaugeIdleContext? IdleContext => ContextIn<GaugeIdleContext>(GaugeState.Idle);
@@ -147,19 +143,19 @@ public sealed class GaugeClient : IDisposable
     public GaugeReadingContext? ReadingContext => ContextIn<GaugeReadingContext>(GaugeState.Reading);
 
     /// <summary>Sends Lower.</summary>
-    public Task<SendOutcome> SendLowerAsync(GaugeLowerInput input) => Controller.SendAsync("Lower", JsonSerializer.SerializeToNode(input, Json));
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendLowerAsync(GaugeLowerInput input) => Controller.SendAsync("Lower", global::System.Text.Json.JsonSerializer.SerializeToNode(input, Json));
 
     /// <summary>Whether Lower would fire from what is shown.</summary>
-    public bool CanSendLower(GaugeLowerInput input) => Controller.CanSend("Lower", JsonSerializer.SerializeToNode(input, Json));
+    public bool CanSendLower(GaugeLowerInput input) => Controller.CanSend("Lower", global::System.Text.Json.JsonSerializer.SerializeToNode(input, Json));
 
     /// <summary>Sends Raise.</summary>
-    public Task<SendOutcome> SendRaiseAsync(GaugeRaiseInput input) => Controller.SendAsync("Raise", JsonSerializer.SerializeToNode(input, Json));
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendRaiseAsync(GaugeRaiseInput input) => Controller.SendAsync("Raise", global::System.Text.Json.JsonSerializer.SerializeToNode(input, Json));
 
     /// <summary>Whether Raise would fire from what is shown.</summary>
-    public bool CanSendRaise(GaugeRaiseInput input) => Controller.CanSend("Raise", JsonSerializer.SerializeToNode(input, Json));
+    public bool CanSendRaise(GaugeRaiseInput input) => Controller.CanSend("Raise", global::System.Text.Json.JsonSerializer.SerializeToNode(input, Json));
 
     /// <summary>Sends Settle.</summary>
-    public Task<SendOutcome> SendSettleAsync() => Controller.SendAsync("Settle");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendSettleAsync() => Controller.SendAsync("Settle");
 
     /// <summary>Whether Settle would fire from what is shown.</summary>
     public bool CanSendSettle() => Controller.CanSend("Settle");
@@ -169,5 +165,5 @@ public sealed class GaugeClient : IDisposable
 
     private T? ContextIn<T>(GaugeState state)
         where T : class =>
-        State == state ? View.Snapshot!.Context.Deserialize<T>(Json) : null;
+        State == state ? global::System.Text.Json.JsonSerializer.Deserialize<T>(View.Snapshot!.Context, Json) : null;
 }

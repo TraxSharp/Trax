@@ -412,6 +412,32 @@ public class MachineGeneratorTests
         result.Checks.Should().ContainSingle().Which.Status.Should().Be(DriftStatus.UpToDate);
     }
 
+    // A checkout with core.autocrlf holds the committed artifacts with CRLF; the generators write LF.
+    [Test]
+    public void Check_reports_up_to_date_when_the_committed_artifacts_differ_only_in_line_endings()
+    {
+        var irOut = Dir("ir");
+        var twinOut = Dir("twin");
+        File.WriteAllText(Path.Combine(irOut, "turnstile.ir.json"), Turnstile.ExportIr() + "\r\n");
+        var node = new FakeNodeRunner
+        {
+            ContextsContent = "// generated\ncontexts\n",
+            MachineContent = "// generated\nmachine\n",
+        };
+        File.WriteAllText(
+            Path.Combine(twinOut, "turnstile.contexts.g.ts"),
+            "// generated\r\ncontexts\r\n"
+        );
+        File.WriteAllText(
+            Path.Combine(twinOut, "turnstile.machine.g.ts"),
+            "// generated\r\nmachine\r\n"
+        );
+
+        var result = new MachineGenerator(node).Check(Options(irOut: irOut, twinOut: twinOut));
+
+        result.Checks.Select(c => c.Status).Should().AllBeEquivalentTo(DriftStatus.UpToDate);
+    }
+
     [Test]
     public void Check_reports_drift_when_the_committed_ir_differs()
     {

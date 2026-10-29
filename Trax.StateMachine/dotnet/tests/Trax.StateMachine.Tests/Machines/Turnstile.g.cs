@@ -3,12 +3,6 @@
 // </auto-generated>
 #nullable enable
 
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
-using Trax.StateMachine;
-using Trax.StateMachine.Client;
-
 namespace Trax.StateMachine.Tests.Machines;
 
 /// <summary>The states of the turnstile machine.</summary>
@@ -33,14 +27,14 @@ public sealed record TurnstileLockedContext
 /// <summary>The context of Unlocked.</summary>
 public sealed record TurnstileUnlockedContext
 {
-    [JsonPropertyName("paidWith")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("paidWith")]
     public required string PaidWith { get; init; }
 }
 
 /// <summary>The input of Coin.</summary>
 public sealed record TurnstileCoinInput
 {
-    [JsonPropertyName("coin")]
+    [global::System.Text.Json.Serialization.JsonPropertyName("coin")]
     public required string Coin { get; init; }
 }
 
@@ -57,48 +51,48 @@ public static class TurnstileMachine
     public const string Ir = """"{"committedStates":[],"context":{"Locked":{"fields":[]},"Unlocked":{"fields":[{"constraints":[{"field":"paidWith","rule":"nonEmpty","source":"context"}],"name":"paidWith","nullable":false,"type":"string"}]}},"differential":{"samples":{"Coin":[{"coin":"quarter"},{"coin":"dollar"},{"coin":"penny"},{}]}},"id":"turnstile","initialContext":{},"initialState":"Locked","inputs":{"Coin":{"fields":[{"constraints":[],"name":"coin","nullable":false,"type":"string"}]}},"states":["Locked","Unlocked"],"transitions":[{"from":"Locked","guard":{"field":"coin","rule":"oneOf","source":"input","values":["quarter","dollar"]},"guardMessage":"Only a quarter or a dollar is accepted.","reduce":{"reduce":"set","steps":[{"field":"paidWith","value":{"input":"coin"}}]},"to":"Unlocked","trigger":"Coin"},{"from":"Unlocked","reduce":{"reduce":"clear"},"to":"Locked","trigger":"Push"}],"triggers":["Coin","Push"],"version":1}"""";
 
     /// <summary>The engine built from <see cref="Ir"/>.</summary>
-    public static IrMachine Create() => new(JsonNode.Parse(Ir)!.AsObject());
+    public static global::Trax.StateMachine.IrMachine Create() => new(global::System.Text.Json.Nodes.JsonNode.Parse(Ir)!.AsObject());
 }
 
 /// <summary>
-/// Drives one instance of the turnstile machine a host serves: <see cref="ServerMachineController"/> with its states,
+/// Drives one instance of the turnstile machine a host serves: <see cref="global::Trax.StateMachine.Client.ServerMachineController"/> with its states,
 /// triggers, contexts and inputs typed, predicting with the machine built from the IR.
 /// </summary>
-public sealed class TurnstileClient : IDisposable
+public sealed class TurnstileClient : global::System.IDisposable
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    private static readonly global::System.Text.Json.JsonSerializerOptions Json = new(global::System.Text.Json.JsonSerializerDefaults.Web)
     {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
     /// <summary>Wraps a controller already built for the turnstile machine.</summary>
-    public TurnstileClient(ServerMachineController controller) => Controller = controller;
+    public TurnstileClient(global::Trax.StateMachine.Client.ServerMachineController controller) => Controller = controller;
 
     /// <summary>
     /// Builds the client for <paramref name="machine"/>, the turnstile machine as the host's manifest lists it, which must
     /// be the version this view was generated for.
     /// </summary>
-    /// <exception cref="ArgumentException">The manifest's machine is another machine, or another version of it.</exception>
+    /// <exception cref="global::System.ArgumentException">The manifest's machine is another machine, or another version of it.</exception>
     public static TurnstileClient Create(
-        ClientManifestMachine machine,
-        IMachineServer server,
+        global::Trax.StateMachine.ClientManifestMachine machine,
+        global::Trax.StateMachine.Client.IMachineServer server,
         string? id = null,
-        Func<string>? newRequestId = null
+        global::System.Func<string>? newRequestId = null
     )
     {
-        ArgumentNullException.ThrowIfNull(machine);
+        global::System.ArgumentNullException.ThrowIfNull(machine);
         if (machine.Id != TurnstileMachine.Id || machine.IrHash != TurnstileMachine.IrHash)
-            throw new ArgumentException(
+            throw new global::System.ArgumentException(
                 $"The manifest's machine '{machine.Id}' (IR {machine.IrHash}) is not the version this view was generated for (IR {TurnstileMachine.IrHash}). Generate the view again from the host's manifest.",
                 nameof(machine)
             );
         return new TurnstileClient(
-            new ServerMachineController(
-                new ServerMachineOptions
+            new global::Trax.StateMachine.Client.ServerMachineController(
+                new global::Trax.StateMachine.Client.ServerMachineOptions
                 {
                     Machine = machine,
                     Server = server,
-                    Predictor = MachinePredictor.FromIr(machine),
+                    Predictor = global::Trax.StateMachine.Client.MachinePredictor.FromIr(machine),
                     Id = id,
                     NewRequestId = newRequestId,
                 }
@@ -107,30 +101,32 @@ public sealed class TurnstileClient : IDisposable
     }
 
     /// <summary>The untyped controller underneath.</summary>
-    public ServerMachineController Controller { get; }
+    public global::Trax.StateMachine.Client.ServerMachineController Controller { get; }
 
     /// <summary>What the controller shows now.</summary>
-    public MachineView View => Controller.View;
+    public global::Trax.StateMachine.Client.MachineView View => Controller.View;
 
     /// <summary>The state shown, or null before the first snapshot.</summary>
-    public TurnstileState? State => View.Snapshot is { } shown ? Enum.Parse<TurnstileState>(shown.State) : null;
+    public TurnstileState? State => View.Snapshot is { } shown ? global::System.Enum.Parse<TurnstileState>(shown.State) : null;
 
     /// <summary>Raised after every change of <see cref="View"/>.</summary>
-    public event EventHandler? Changed
+    public event global::System.EventHandler? Changed
     {
         add => Controller.Changed += value;
         remove => Controller.Changed -= value;
     }
 
     /// <summary>Opens the instance, or starts one.</summary>
-    public Task StartAsync() => Controller.StartAsync();
+    public global::System.Threading.Tasks.Task StartAsync() => Controller.StartAsync();
 
     /// <summary>Resends what last failed, under the same request id.</summary>
-    public Task<SendOutcome> RetryAsync() => Controller.RetryAsync();
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> RetryAsync() => Controller.RetryAsync();
 
     /// <summary>The triggers with an edge out of the shown state.</summary>
-    public IReadOnlyList<TurnstileTrigger> AvailableTriggers() =>
-        Controller.AvailableTriggers().Select(Enum.Parse<TurnstileTrigger>).ToList();
+    public global::System.Collections.Generic.IReadOnlyList<TurnstileTrigger> AvailableTriggers() =>
+        global::System.Linq.Enumerable.ToList(
+            global::System.Linq.Enumerable.Select(Controller.AvailableTriggers(), global::System.Enum.Parse<TurnstileTrigger>)
+        );
 
     /// <summary>The context shown, while the instance is in Locked; null in any other state.</summary>
     public TurnstileLockedContext? LockedContext => ContextIn<TurnstileLockedContext>(TurnstileState.Locked);
@@ -139,13 +135,13 @@ public sealed class TurnstileClient : IDisposable
     public TurnstileUnlockedContext? UnlockedContext => ContextIn<TurnstileUnlockedContext>(TurnstileState.Unlocked);
 
     /// <summary>Sends Coin.</summary>
-    public Task<SendOutcome> SendCoinAsync(TurnstileCoinInput input) => Controller.SendAsync("Coin", JsonSerializer.SerializeToNode(input, Json));
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendCoinAsync(TurnstileCoinInput input) => Controller.SendAsync("Coin", global::System.Text.Json.JsonSerializer.SerializeToNode(input, Json));
 
     /// <summary>Whether Coin would fire from what is shown.</summary>
-    public bool CanSendCoin(TurnstileCoinInput input) => Controller.CanSend("Coin", JsonSerializer.SerializeToNode(input, Json));
+    public bool CanSendCoin(TurnstileCoinInput input) => Controller.CanSend("Coin", global::System.Text.Json.JsonSerializer.SerializeToNode(input, Json));
 
     /// <summary>Sends Push.</summary>
-    public Task<SendOutcome> SendPushAsync() => Controller.SendAsync("Push");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendPushAsync() => Controller.SendAsync("Push");
 
     /// <summary>Whether Push would fire from what is shown.</summary>
     public bool CanSendPush() => Controller.CanSend("Push");
@@ -155,5 +151,5 @@ public sealed class TurnstileClient : IDisposable
 
     private T? ContextIn<T>(TurnstileState state)
         where T : class =>
-        State == state ? View.Snapshot!.Context.Deserialize<T>(Json) : null;
+        State == state ? global::System.Text.Json.JsonSerializer.Deserialize<T>(View.Snapshot!.Context, Json) : null;
 }

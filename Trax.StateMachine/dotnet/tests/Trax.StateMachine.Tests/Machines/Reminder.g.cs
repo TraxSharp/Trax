@@ -3,12 +3,6 @@
 // </auto-generated>
 #nullable enable
 
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
-using Trax.StateMachine;
-using Trax.StateMachine.Client;
-
 namespace Trax.StateMachine.Tests.Machines;
 
 /// <summary>The states of the reminder machine.</summary>
@@ -61,48 +55,48 @@ public static class ReminderMachine
     public const string Ir = """"{"committedStates":[],"context":{"Done":{"fields":[]},"Expired":{"fields":[]},"Idle":{"fields":[]},"Review":{"fields":[]}},"id":"reminder","initialContext":{},"initialState":"Idle","inputs":{},"states":["Done","Expired","Idle","Review"],"timers":[{"after":"PT10M","rules":["AnyAuthenticated","Requires(Editor)"],"state":"Review","target":"Expired","trigger":"Review.after"}],"transitions":[{"from":"Idle","to":"Review","trigger":"Open"},{"from":"Review","to":"Done","trigger":"Approve"},{"from":"Review","to":"Review","trigger":"Extend"}],"triggers":["Approve","Extend","Open"],"version":1}"""";
 
     /// <summary>The engine built from <see cref="Ir"/>.</summary>
-    public static IrMachine Create() => new(JsonNode.Parse(Ir)!.AsObject());
+    public static global::Trax.StateMachine.IrMachine Create() => new(global::System.Text.Json.Nodes.JsonNode.Parse(Ir)!.AsObject());
 }
 
 /// <summary>
-/// Drives one instance of the reminder machine a host serves: <see cref="ServerMachineController"/> with its states,
+/// Drives one instance of the reminder machine a host serves: <see cref="global::Trax.StateMachine.Client.ServerMachineController"/> with its states,
 /// triggers, contexts and inputs typed, predicting with the machine built from the IR.
 /// </summary>
-public sealed class ReminderClient : IDisposable
+public sealed class ReminderClient : global::System.IDisposable
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    private static readonly global::System.Text.Json.JsonSerializerOptions Json = new(global::System.Text.Json.JsonSerializerDefaults.Web)
     {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
     /// <summary>Wraps a controller already built for the reminder machine.</summary>
-    public ReminderClient(ServerMachineController controller) => Controller = controller;
+    public ReminderClient(global::Trax.StateMachine.Client.ServerMachineController controller) => Controller = controller;
 
     /// <summary>
     /// Builds the client for <paramref name="machine"/>, the reminder machine as the host's manifest lists it, which must
     /// be the version this view was generated for.
     /// </summary>
-    /// <exception cref="ArgumentException">The manifest's machine is another machine, or another version of it.</exception>
+    /// <exception cref="global::System.ArgumentException">The manifest's machine is another machine, or another version of it.</exception>
     public static ReminderClient Create(
-        ClientManifestMachine machine,
-        IMachineServer server,
+        global::Trax.StateMachine.ClientManifestMachine machine,
+        global::Trax.StateMachine.Client.IMachineServer server,
         string? id = null,
-        Func<string>? newRequestId = null
+        global::System.Func<string>? newRequestId = null
     )
     {
-        ArgumentNullException.ThrowIfNull(machine);
+        global::System.ArgumentNullException.ThrowIfNull(machine);
         if (machine.Id != ReminderMachine.Id || machine.IrHash != ReminderMachine.IrHash)
-            throw new ArgumentException(
+            throw new global::System.ArgumentException(
                 $"The manifest's machine '{machine.Id}' (IR {machine.IrHash}) is not the version this view was generated for (IR {ReminderMachine.IrHash}). Generate the view again from the host's manifest.",
                 nameof(machine)
             );
         return new ReminderClient(
-            new ServerMachineController(
-                new ServerMachineOptions
+            new global::Trax.StateMachine.Client.ServerMachineController(
+                new global::Trax.StateMachine.Client.ServerMachineOptions
                 {
                     Machine = machine,
                     Server = server,
-                    Predictor = MachinePredictor.FromIr(machine),
+                    Predictor = global::Trax.StateMachine.Client.MachinePredictor.FromIr(machine),
                     Id = id,
                     NewRequestId = newRequestId,
                 }
@@ -111,30 +105,32 @@ public sealed class ReminderClient : IDisposable
     }
 
     /// <summary>The untyped controller underneath.</summary>
-    public ServerMachineController Controller { get; }
+    public global::Trax.StateMachine.Client.ServerMachineController Controller { get; }
 
     /// <summary>What the controller shows now.</summary>
-    public MachineView View => Controller.View;
+    public global::Trax.StateMachine.Client.MachineView View => Controller.View;
 
     /// <summary>The state shown, or null before the first snapshot.</summary>
-    public ReminderState? State => View.Snapshot is { } shown ? Enum.Parse<ReminderState>(shown.State) : null;
+    public ReminderState? State => View.Snapshot is { } shown ? global::System.Enum.Parse<ReminderState>(shown.State) : null;
 
     /// <summary>Raised after every change of <see cref="View"/>.</summary>
-    public event EventHandler? Changed
+    public event global::System.EventHandler? Changed
     {
         add => Controller.Changed += value;
         remove => Controller.Changed -= value;
     }
 
     /// <summary>Opens the instance, or starts one.</summary>
-    public Task StartAsync() => Controller.StartAsync();
+    public global::System.Threading.Tasks.Task StartAsync() => Controller.StartAsync();
 
     /// <summary>Resends what last failed, under the same request id.</summary>
-    public Task<SendOutcome> RetryAsync() => Controller.RetryAsync();
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> RetryAsync() => Controller.RetryAsync();
 
     /// <summary>The triggers with an edge out of the shown state.</summary>
-    public IReadOnlyList<ReminderTrigger> AvailableTriggers() =>
-        Controller.AvailableTriggers().Select(Enum.Parse<ReminderTrigger>).ToList();
+    public global::System.Collections.Generic.IReadOnlyList<ReminderTrigger> AvailableTriggers() =>
+        global::System.Linq.Enumerable.ToList(
+            global::System.Linq.Enumerable.Select(Controller.AvailableTriggers(), global::System.Enum.Parse<ReminderTrigger>)
+        );
 
     /// <summary>The context shown, while the instance is in Done; null in any other state.</summary>
     public ReminderDoneContext? DoneContext => ContextIn<ReminderDoneContext>(ReminderState.Done);
@@ -149,19 +145,19 @@ public sealed class ReminderClient : IDisposable
     public ReminderReviewContext? ReviewContext => ContextIn<ReminderReviewContext>(ReminderState.Review);
 
     /// <summary>Sends Approve.</summary>
-    public Task<SendOutcome> SendApproveAsync() => Controller.SendAsync("Approve");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendApproveAsync() => Controller.SendAsync("Approve");
 
     /// <summary>Whether Approve would fire from what is shown.</summary>
     public bool CanSendApprove() => Controller.CanSend("Approve");
 
     /// <summary>Sends Extend.</summary>
-    public Task<SendOutcome> SendExtendAsync() => Controller.SendAsync("Extend");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendExtendAsync() => Controller.SendAsync("Extend");
 
     /// <summary>Whether Extend would fire from what is shown.</summary>
     public bool CanSendExtend() => Controller.CanSend("Extend");
 
     /// <summary>Sends Open.</summary>
-    public Task<SendOutcome> SendOpenAsync() => Controller.SendAsync("Open");
+    public global::System.Threading.Tasks.Task<global::Trax.StateMachine.Client.SendOutcome> SendOpenAsync() => Controller.SendAsync("Open");
 
     /// <summary>Whether Open would fire from what is shown.</summary>
     public bool CanSendOpen() => Controller.CanSend("Open");
@@ -171,5 +167,5 @@ public sealed class ReminderClient : IDisposable
 
     private T? ContextIn<T>(ReminderState state)
         where T : class =>
-        State == state ? View.Snapshot!.Context.Deserialize<T>(Json) : null;
+        State == state ? global::System.Text.Json.JsonSerializer.Deserialize<T>(View.Snapshot!.Context, Json) : null;
 }

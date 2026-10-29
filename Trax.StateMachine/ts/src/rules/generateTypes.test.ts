@@ -447,4 +447,21 @@ describe("generated names", () => {
   it("writes each state of the union as a string literal", () => {
     expect(generateContextTypes(ir)).toContain('export type TurnstileState = "Locked" | "Unlocked";');
   });
+
+  // A bidirectional control in a string the IR holds would make the twin read one way to a reviewer and another to
+  // the compiler: it is written as its escape, which is the same string.
+  it("escapes a bidirectional control wherever the IR's strings are written", () => {
+    const bidi = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/;
+    const marked = JSON.parse(JSON.stringify(ir)) as IrDocument;
+    marked.context.Unlocked!.fields[0]!.name = "paid\u202EWith";
+    marked.transitions[0]!.guardMessage = "a\u2066b";
+
+    const types = generateContextTypes(marked);
+    const factory = generateMachineFactory(marked);
+
+    expect(types).not.toMatch(bidi);
+    expect(types).toContain('"paid\\u202EWith": string;');
+    expect(factory).not.toMatch(bidi);
+    expect(factory).toContain('"guardMessage": "a\\u2066b"');
+  });
 });

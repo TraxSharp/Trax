@@ -180,6 +180,18 @@ function baseType(type: JsonFieldType): TypeRef {
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
+// The characters that reorder how a line of source reads (the bidirectional embeddings, overrides, isolates and
+// marks). The IR's strings are written into generated code, where one of these would show a reviewer something other
+// than what the compiler reads.
+const BIDI = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+
+/**
+ * `text` with every bidirectional control written as a `\uXXXX` escape. Only for generated text whose IR strings sit
+ * in string literals that read the escape as the character, which both TypeScript's and C#'s regular literals do.
+ */
+export const escapeBidi = (text: string): string =>
+  text.replace(BIDI, (c) => `\\u${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}`);
+
 // The names every object has (`__proto__`, `constructor`, `toString`): a state or trigger named so is found on every
 // map a lookup reads it from, and a `"__proto__"` key in the twin's IR literal sets its prototype instead.
 const PROTOTYPE_MEMBERS = new Set(Object.getOwnPropertyNames(Object.prototype));

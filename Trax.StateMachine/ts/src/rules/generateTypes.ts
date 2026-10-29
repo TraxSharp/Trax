@@ -6,7 +6,7 @@
 // Object shapes are emitted as `type` aliases, not `interface`, so they carry the implicit index signature
 // that `MachineSpec` (Record<string, ...>) requires.
 
-import { checkNames, camel, machineModel, pascal, type FieldModel, type TypeRef, type ValueRef } from "../codegen/model";
+import { checkNames, camel, escapeBidi, machineModel, pascal, type FieldModel, type TypeRef, type ValueRef } from "../codegen/model";
 import { irFormatVersion } from "./irFormat";
 import type { IrDocument } from "./irMachine";
 
@@ -56,7 +56,8 @@ export function generateContextTypes(ir: IrDocument): string {
     "",
   );
 
-  return lines.join("\n");
+  // A field name or a value the IR holds is written into a string literal, where a bidirectional control is escaped.
+  return escapeBidi(lines.join("\n"));
 }
 
 /**
@@ -123,7 +124,7 @@ export function generateMachineFactory(
   // The IR format rides in the IR rather than in a call, so an engine older than the check ignores it.
   const twinIr = specifierStyle ? { irFormat: irFormatVersion, ...runtimeIr } : runtimeIr;
   const { text: irText, shared } = shareOutputSchemas(twinIr);
-  return [
+  const source = [
     `// AUTO-GENERATED from ${ir.id}.ir.json by generateMachineFactory. Do not edit by hand.`,
     ...importNote,
     "",
@@ -140,6 +141,9 @@ export function generateMachineFactory(
     `export const ${camel(ir.id)} = typedMachineFromIr<${machine}Spec>(ir, irHash);`,
     "",
   ].join("\n");
+  // The IR's strings sit in string literals, where a bidirectional control is escaped; the import note's specifier is
+  // in a comment, where the escape is shown as text, which is what a reviewer should see.
+  return escapeBidi(source);
 }
 
 // An output schema two or more outcomes share (invoking states whose trains answer with one type) is written once,
