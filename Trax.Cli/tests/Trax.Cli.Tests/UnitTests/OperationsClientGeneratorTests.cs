@@ -173,6 +173,14 @@ public class OperationsClientGeneratorTests
                 "if (/^[\\\\/]{2}/.test(bare.slice(start)))",
                 "a url starting with two slashes either way round names another host on the page's scheme, not a path"
             )
+            .And.Contain(
+                "withRequestTimeout(options.requestTimeout ?? defaultRequestTimeout,",
+                "a host that never answers fails the request, as it does in the C# client"
+            )
+            .And.Contain(
+                "error.code !== 4401 && error.code !== 4403",
+                "a socket the host turned away is not opened again, as in the C# client"
+            )
             .And.NotContain("response.json()");
         Text(files, "index.g.ts")
             .Should()
