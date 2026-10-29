@@ -798,35 +798,57 @@ impl MachineServer for Reading {
     }
 }
 
-// On a runtime of one thread, the controller's own task answers a call made while a sync plans, before the plan is done.
-#[tokio::test(flavor = "current_thread")]
-async fn a_sync_plans_off_the_controllers_task() {
-    let (ir, hash) = sprawl();
-    let mut options = ServerMachineOptions::new(ir, hash, Reading);
-    options.id = Some("i-1".into());
-    let controller = ServerMachineController::new(options).unwrap();
-    controller.start().await;
-    let navigation: Vec<String> = (0..10)
-        .map(|i| format!("Go{i}"))
-        .chain((0..3).flat_map(|f| (0..4).map(move |v| format!("F{f}v{v}"))))
-        .collect();
+// The controller's own task answers a call made while a sync plans, before the plan is done. The runtime has one
+// blocking thread and the test holds it, so the plan, which runs there, cannot start until the test lets it: a
+// controller that planned on its own task would have settled the sync before it answered the retry.
+#[test]
+fn a_sync_plans_off_the_controllers_task() {
+    use futures_util::FutureExt;
 
-    let synced = controller.sync_to("T", None, navigation);
-    let retried = controller.retry();
-    tokio::pin!(synced);
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .max_blocking_threads(1)
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let (ir, hash) = sprawl();
+        let mut options = ServerMachineOptions::new(ir, hash, Reading);
+        options.id = Some("i-1".into());
+        let controller = ServerMachineController::new(options).unwrap();
+        controller.start().await;
+        let navigation: Vec<String> = (0..10)
+            .map(|i| format!("Go{i}"))
+            .chain((0..3).flat_map(|f| (0..4).map(move |v| format!("F{f}v{v}"))))
+            .collect();
+        let (held, holding) = tokio::sync::oneshot::channel();
+        let (release, released) = std::sync::mpsc::channel::<()>();
+        let blocker = tokio::task::spawn_blocking(move || {
+            let _ = held.send(());
+            let _ = released.recv();
+        });
+        holding.await.unwrap();
 
-    tokio::select! {
-        biased;
-        outcome = &mut synced => panic!("the sync planned on the controller's task: {outcome:?}"),
-        outcome = retried => assert!(matches!(&outcome, SendOutcome::Failed(p) if p.code == "NOTHING_TO_RETRY"), "{outcome:?}"),
-    }
-    let outcome = tokio::time::timeout(Duration::from_secs(60), synced)
-        .await
-        .expect("the plan never answered");
-    assert!(
-        matches!(outcome, SyncOutcome::Unreachable | SyncOutcome::Exceeded),
-        "{outcome:?}"
-    );
+        let mut synced = Box::pin(controller.sync_to("T", None, navigation));
+        let retried = controller.retry().await;
+
+        assert!(
+            matches!(&retried, SendOutcome::Failed(p) if p.code == "NOTHING_TO_RETRY"),
+            "{retried:?}"
+        );
+        assert!(
+            (&mut synced).now_or_never().is_none(),
+            "the sync planned on the controller's task"
+        );
+        release.send(()).unwrap();
+        blocker.await.unwrap();
+        let outcome = tokio::time::timeout(Duration::from_secs(60), synced)
+            .await
+            .expect("the plan never answered");
+        assert!(
+            matches!(outcome, SyncOutcome::Unreachable | SyncOutcome::Exceeded),
+            "{outcome:?}"
+        );
+    });
 }
 
 // A sync taken over while its plan is still being searched settles superseded at once, and the one that took over is
