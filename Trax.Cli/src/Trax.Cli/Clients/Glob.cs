@@ -17,7 +17,7 @@ internal static class Glob
             return File.Exists(baseDir) && rest.Length == 0 ? [baseDir] : [];
         if (rest.Length == 0)
             return [];
-        var regex = new Regex("^" + ToRegex(rest) + "$", RegexOptions.CultureInvariant);
+        var regex = new Regex(@"\A" + ToRegex(rest) + @"\z", RegexOptions.CultureInvariant);
         var enumeration = new EnumerationOptions
         {
             RecurseSubdirectories = true,
@@ -41,13 +41,20 @@ internal static class Glob
             : $"{relative}/{rest}";
     }
 
-    // The folder before the first segment holding a wildcard, and the pattern from there.
+    // The folder before the first segment holding a wildcard, and the pattern from there. The folder's part of the
+    // pattern is combined with the root as one path, so one that is rooted (/home/..., C:/...) is read from where it
+    // points rather than as folders under the root.
     private static (string Base, string Remainder) Split(string root, string pattern)
     {
         var segments = pattern.Replace('\\', '/').Split('/');
         var at = Array.FindIndex(segments, s => s.IndexOfAny(['*', '?']) >= 0);
-        var fixedPart = at < 0 ? segments : segments[..at];
-        var baseDir = Path.GetFullPath(Path.Combine([root, .. fixedPart]));
+        var fixedPart =
+            at < 0 ? string.Join('/', segments)
+            : at == 0 ? ""
+            : string.Join('/', segments[..at]) + '/';
+        var baseDir = Path.TrimEndingDirectorySeparator(
+            Path.GetFullPath(Path.Combine(root, fixedPart))
+        );
         return (baseDir, at < 0 ? "" : string.Join('/', segments[at..]));
     }
 

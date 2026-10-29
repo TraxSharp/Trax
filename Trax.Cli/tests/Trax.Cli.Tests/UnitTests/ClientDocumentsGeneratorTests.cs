@@ -1075,6 +1075,72 @@ public class ClientDocumentsGeneratorTests
         }
     }
 
+    [Test]
+    public void An_absolute_glob_names_the_files_where_it_points_and_the_editor_is_told_so()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"trax-glob-{Guid.NewGuid():N}");
+        var cwd = Path.Combine(Path.GetTempPath(), $"trax-glob-cwd-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(dir, "src"));
+        Directory.CreateDirectory(cwd);
+        File.WriteAllText(Path.Combine(dir, "src", "a.graphql"), "");
+        var pattern = Path.Combine(dir, "src").Replace('\\', '/') + "/*.graphql";
+        try
+        {
+            Glob.Files(cwd, pattern).Should().Equal(Path.Combine(dir, "src", "a.graphql"));
+            Glob.RelativeTo(cwd, Path.Combine(cwd, "out"), pattern)
+                .Should()
+                .Be(
+                    Path.GetRelativePath(Path.Combine(cwd, "out"), Path.Combine(dir, "src"))
+                        .Replace('\\', '/') + "/*.graphql",
+                    "graphql.config.yml names the folder the glob points at, not one under the working directory"
+                );
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+            Directory.Delete(cwd, recursive: true);
+        }
+    }
+
+    // A drive-relative path (C:x) is read against the drive's current folder, not the root of C:.
+    [Test]
+    [Platform("Win")]
+    public void A_glob_with_a_drive_is_read_from_that_drives_root()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"trax-glob-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "a.graphql"), "");
+        try
+        {
+            Glob.Files(Path.GetTempPath(), Path.Combine(dir, "*.graphql"))
+                .Should()
+                .Equal(Path.Combine(dir, "a.graphql"));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    // `$` would also match before a newline that ends the name.
+    [Test]
+    [Platform(Exclude = "Win")]
+    public void A_glob_does_not_match_a_name_with_more_after_a_newline()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"trax-glob-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "a.graphql"), "");
+        File.WriteAllText(Path.Combine(dir, "b.graphql\n"), "");
+        try
+        {
+            Glob.Files(dir, "*.graphql").Should().Equal(Path.Combine(dir, "a.graphql"));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
     #endregion
 
     #region Query models refused
