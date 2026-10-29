@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { checkout } from '../machines/checkout/checkout';
 import { createDraftSession, startDraft } from './draftSession';
@@ -243,5 +243,48 @@ describe('createMachineExecutor with persisted documents', () => {
     const { fetch } = recording();
     expect(() => persisted(fetch, [{ ...documents[0], machine: 'other' }])).toThrow(/machine 'other'/);
     expect(() => persisted(fetch, [document('start', 'x', 'f'.repeat(64))])).toThrow(/another version/);
+  });
+});
+
+describe('createMachineExecutor and a host that does not answer', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const load = (fetch: typeof globalThis.fetch, requestTimeout?: number) =>
+    createDraftSession({
+      executor: createMachineExecutor('/graphql', { fetch, requestTimeout, machines: [{ machine: checkout, documents }] }),
+      machine: checkout,
+      id: 'draft-1',
+    }).load();
+
+  it('fails a request whose answer never comes after 30 seconds, and aborts it', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const fetch = ((_url: string, init: RequestInit) => {
+      signal = init.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    }) as unknown as typeof globalThis.fetch;
+
+    const loaded = load(fetch);
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(await loaded).toMatchObject({ ok: false, code: 'TRANSPORT_ERROR' });
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('fails a request whose body never ends within the timeout given', async () => {
+    vi.useFakeTimers();
+    const fetch = (async () =>
+      new Response(new ReadableStream<Uint8Array>({ pull: () => new Promise(() => {}) }), {
+        status: 200,
+      })) as unknown as typeof globalThis.fetch;
+
+    const loaded = load(fetch, 1000);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(await loaded).toMatchObject({ ok: false, code: 'TRANSPORT_ERROR' });
   });
 });

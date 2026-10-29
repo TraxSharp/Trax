@@ -580,6 +580,46 @@ describe('ServerMachineController over createMachineServer', () => {
     expect(sent).toHaveLength(1);
   });
 
+  it('an event whose answer never comes fails as a transport error, and retry resends it under the same requestId', async () => {
+    vi.useFakeTimers();
+    const sent: Sent[] = [];
+    const bodies = [
+      answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, dueAt: null, problem: null }),
+      null,
+      answer('coin', { id: 'i-1', revision: 2, state: 'Unlocked', context: { paidWith: 'dollar' }, problem: null }),
+    ];
+    const fetch = ((_url: string, init: { body: string }) => {
+      sent.push(JSON.parse(init.body) as Sent);
+      const body = bodies.shift();
+      return body === null
+        ? new Promise<Response>(() => {})
+        : Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    }) as unknown as typeof globalThis.fetch;
+    const socket = new FakeSocket();
+    const server = createMachineServer('/graphql', {
+      fetch,
+      machine: turnstile,
+      documents: DOCUMENTS,
+      socket,
+      requestTimeout: 5000,
+    });
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      newRequestId: sequentialRequestIds(),
+    });
+    await controller.start();
+
+    const sending = controller.send('Coin', { coin: 'dollar' });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(await sending).toMatchObject({ outcome: 'failed', problem: { code: 'TRANSPORT_ERROR' } });
+    expect(controller.get().pending).toBe(false);
+
+    expect(await controller.retry()).toMatchObject({ outcome: 'confirmed' });
+    expect(sent.map((s) => s.variables.requestId)).toEqual([undefined, 'rq-1', 'rq-1']);
+  });
+
   it('a request rejected with a code not marked terminal is still a transport failure', async () => {
     const { fetch } = http();
     const server = createMachineServer('/graphql', {

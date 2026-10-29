@@ -23,12 +23,14 @@ import { RefusalCode, type ProblemCode } from '../results';
 import type { MachineSpec, TypedMachine } from '../typed';
 import {
   DEFAULT_MAX_RESPONSE_SIZE,
+  DEFAULT_REQUEST_TIMEOUT,
   readBounded,
   requireNoRedirect,
   requireSecureEndpoint,
   type HttpExecutorOptions,
   type SnapshotExecutor,
   type SnapshotOutput,
+  withRequestTimeout,
 } from './transport';
 
 /**
@@ -169,7 +171,8 @@ type Answered = { answer: TypedAnswer | null | undefined } | { refused: Snapshot
  * which the session reports as a transport error; a refusal is a problem, as data, and so is `CLIENT_OUTDATED` or
  * `SERVER_OUTDATED`, the host's answer to a persisted document of another version of the machine. An absolute
  * `http:` endpoint on a host that is not loopback throws unless `allowInsecureTransport` is set. A redirect is not
- * followed, and a body larger than `maxResponseSize` (16 MiB by default) is not read: either fails the request.
+ * followed, and a body larger than `maxResponseSize` (16 MiB by default) is not read: either fails the request, as
+ * does one that takes longer than `requestTimeout` (30 seconds by default), which is aborted.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function createMachineExecutor(
@@ -179,22 +182,30 @@ export function createMachineExecutor(
   requireSecureEndpoint(endpoint, options.allowInsecureTransport);
   const doFetch = options.fetch ?? globalThis.fetch;
   const maxResponseSize = options.maxResponseSize ?? DEFAULT_MAX_RESPONSE_SIZE;
+  const requestTimeout = options.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT;
   const machines = new Map(options.machines.map((m) => [m.machine.id, { ...m, byOperation: documentsOf(m) }]));
 
-  const post = async (body: Record<string, unknown>, name: string): Promise<Answered> => {
-    const response = await doFetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...options.headers?.() },
-      body: JSON.stringify(body),
-      // A redirect would carry the request, and whatever authenticates it, to another host.
-      redirect: 'error',
+  // The answer's status and its body as text, the whole of it under the request timeout.
+  const exchange = (body: Record<string, unknown>) =>
+    withRequestTimeout(requestTimeout, async (signal) => {
+      const response = await doFetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...options.headers?.() },
+        body: JSON.stringify(body),
+        // A redirect would carry the request, and whatever authenticates it, to another host.
+        redirect: 'error',
+        signal,
+      });
+      requireNoRedirect(response);
+      return { response, text: await readBounded(response, maxResponseSize) };
     });
-    requireNoRedirect(response);
+
+  const post = async (body: Record<string, unknown>, name: string): Promise<Answered> => {
     type Body = {
       data?: { machines?: Record<string, Record<string, unknown>> } | null;
       errors?: { message: string; extensions?: { code?: string } }[];
     };
-    const text = await readBounded(response, maxResponseSize);
+    const { response, text } = await exchange(body);
     let answered: Body | null;
     try {
       answered = JSON.parse(text) as Body;

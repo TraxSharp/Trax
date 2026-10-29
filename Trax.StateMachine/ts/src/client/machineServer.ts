@@ -220,6 +220,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
       headers: options.headers,
       allowInsecureTransport: options.allowInsecureTransport,
       maxResponseSize: options.maxResponseSize,
+      requestTimeout: options.requestTimeout,
       machines: [{ machine, documents }],
     }),
   );

@@ -171,10 +171,40 @@ export interface HttpExecutorOptions {
    * which the session reports as a transport error, and is not read past the limit.
    */
   maxResponseSize?: number;
+  /**
+   * How long one request may take, in milliseconds, from sending it to the last byte of its answer; 30 seconds by
+   * default. A request past it is aborted and fails as a transport error, which `retry` resends under the same request
+   * id. `Infinity` waits for as long as the host takes.
+   */
+  requestTimeout?: number;
 }
 
 /** The response body limit when none is set: 16 MiB. */
 export const DEFAULT_MAX_RESPONSE_SIZE = 16 * 1024 * 1024;
+
+/** The request timeout when none is set: 30 seconds. */
+export const DEFAULT_REQUEST_TIMEOUT = 30_000;
+
+/**
+ * Runs one request under `timeout` milliseconds: past it, the signal `run` was given is aborted and the promise rejects,
+ * whether or not the `fetch` heeds the signal.
+ */
+export async function withRequestTimeout<T>(timeout: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  if (!Number.isFinite(timeout)) return run(controller.signal);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`The server did not answer within ${timeout} ms.`));
+    }, Math.max(0, timeout));
+  });
+  try {
+    return await Promise.race([run(controller.signal), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * Throws unless `response` is the endpoint's own answer: a redirect is never followed (the request is sent with
