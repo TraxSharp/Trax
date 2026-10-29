@@ -89,7 +89,7 @@ public readonly record struct Optional<T>
 | Member | What it is |
 | --- | --- |
 | `TraxClient` | Sends documents through an `ITraxTransport`, writing variables and reading data with `TraxJson.Options` unless `TraxClientOptions.Json` says otherwise. It never talks to the network itself. Built in an app that turned reflection-based serialization off, it throws `ArgumentException` unless `TraxClientOptions.Json` names a resolver. |
-| `SendAsync(document, variables, cancellationToken)` | Sends a query or mutation and reads the answer into a `TraxAnswer<TResult>`. It throws only when `cancellationToken` is cancelled, and, before anything is sent, `ArgumentException` for a subscription document (which `Subscribe` follows) or for variables that do not serialize to a JSON object. Data that does not fit `TResult`, or that the options cannot read at all, is a `Failure`, not a throw. |
+| `SendAsync(document, variables, cancellationToken)` | Sends a query or mutation and reads the answer into a `TraxAnswer<TResult>`. It throws only when `cancellationToken` is cancelled, and, before anything is sent, `ArgumentException` for a subscription document (which `Subscribe` follows) or for variables that do not serialize to a JSON object. Data that does not fit `TResult`, or that the options cannot read at all, is a `Failure`, not a throw, and so is an answer with neither data nor an error (`{"data": null}`, `{"errors": []}`). |
 | `Subscribe(document, variables, onEvent)` | Follows a subscription until the returned handle is disposed, and calls `onEvent` with each `TraxStreamEvent<TResult>`, one call at a time. Throws `ArgumentException` for a document that is not a subscription, or for variables that do not serialize to a JSON object. An `onEvent` that throws ends its stream: the last call it gets is `Ended`, whose `Failure` names the exception. Other streams go on. |
 | `Transport` | The transport the client sends through. |
 | `DefaultResubscribeDelays` | 1, 2, then 5 seconds: the delays before subscribing again after the socket dropped a stream. |
@@ -154,7 +154,7 @@ public readonly record struct Optional<T>
 - **Streams.** A `Subscribe` stream ends for good (`Ended`) when the host completes it (no errors, no failure), answers a
   frame with errors or refuses the subscription (`Errors`, or a `Failure` when the refusal carried none), or with a
   `Failure` when it closes the socket with 4401 or 4403 (its `CloseStatus` says which), answers the upgrade 401 or 403, sends a frame that does not fit
-  the result, when the transport has no socket or the socket was disposed, or when `onEvent` throws. Anything else that
+  the result or holds neither data nor an error, when the transport has no socket or the socket was disposed, or when `onEvent` throws. Anything else that
   drops the stream, a close, a broken connection, an unanswered ping or a malformed message, is `Interrupted`, said
   once, and the stream is subscribed again after the next of `ResubscribeDelays`, starting over at the first once a
   subscription delivers a frame. `Resumed` follows, before the new subscription's first `Next`; frames sent meanwhile are lost,

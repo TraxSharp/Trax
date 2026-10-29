@@ -182,6 +182,14 @@ public sealed class TraxClient
     {
         if (answer.Failure is not null)
             return new TraxAnswer<TResult> { Failure = answer.Failure };
+        // No data and no error (`data: null`, `errors: []`): neither a result nor a refusal.
+        if (answer.Data is null && answer.Errors.Count == 0)
+            return new TraxAnswer<TResult>
+            {
+                Failure = new TraxTransportFailure(
+                    "The host answered with neither data nor an error."
+                ),
+            };
         try
         {
             return new TraxAnswer<TResult>

@@ -1,0 +1,14 @@
+{
+  "about": "A 2xx whose answer holds neither data nor a GraphQL error (data null, an empty errors list, or both) is a transport failure, not a result.",
+  "steps": [
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "null"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "status": 200, "body": {"data": null}},
+    {"await": "null", "expect": {"outcome": "failed", "code": "TRANSPORT_ERROR"}},
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "empty"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "status": 200, "body": {"errors": []}},
+    {"await": "empty", "expect": {"outcome": "failed", "code": "TRANSPORT_ERROR"}},
+    {"client": "send", "operation": "Runs", "variables": {"state": "FAILED", "take": 2}, "as": "both"},
+    {"request": "Runs", "variables": {"state": "FAILED", "take": 2}, "status": 200, "body": {"data": null, "errors": []}},
+    {"await": "both", "expect": {"outcome": "failed", "code": "TRANSPORT_ERROR"}}
+  ]
+}

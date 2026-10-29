@@ -1,0 +1,10 @@
+{
+  "about": "A push with an empty errors list and no data names no refusal: it ends the stream as a failure.",
+  "steps": [
+    {"client": "subscribe", "operation": "Changes", "variables": {"domain": "RUN"}, "expect": {"subscribed": true}},
+    {"subscribe": "Changes", "variables": {"domain": "RUN"}},
+    {"pushErrors": []},
+    {"events": [{"ended": "failed"}]},
+    {"quiet": 100}
+  ]
+}

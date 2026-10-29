@@ -160,6 +160,20 @@ public class TraxClientTests
         answer.Data.Should().BeNull();
     }
 
+    // A 2xx with no data and no error is neither a result nor a refusal.
+    [TestCase("""{"data":null}""")]
+    [TestCase("""{"errors":[]}""")]
+    [TestCase("""{"data":null,"errors":[]}""")]
+    public async Task A_success_with_no_data_and_no_errors_is_a_transport_failure(string body)
+    {
+        var host = new Host(body);
+
+        var answer = await Client(host).SendAsync(Runs, new RunsVariables { Take = 1 });
+
+        answer.Failure.Should().NotBeNull();
+        answer.Code.Should().Be(TraxTransportFailure.Code);
+    }
+
     [Test]
     public async Task A_host_that_cannot_be_reached_is_a_transport_failure_not_an_exception()
     {
@@ -301,6 +315,38 @@ public class TraxClientTests
             .ContainSingle()
             .Which.Code.Should()
             .Be("AUTH_NOT_AUTHORIZED");
+        opened.Disposed.Should().BeTrue();
+    }
+
+    [TestCase("""{"data":null}""")]
+    [TestCase("""{"data":null,"errors":[]}""")]
+    public async Task A_frame_with_no_data_and_no_errors_ends_the_stream_with_a_failure(
+        string frame
+    )
+    {
+        var socket = new HandSocket();
+        var events = new EventLog<ChangedResult>();
+        var client = new TraxClient(
+            new TraxHttpTransport(
+                new TraxHttpTransportOptions
+                {
+                    Http = new HttpClient(new Host("{}")),
+                    Endpoint = new Uri("https://host/trax/graphql"),
+                    Socket = socket,
+                }
+            )
+        );
+
+        using var stream = client.Subscribe(Changed, TraxNoVariables.Instance, events.Add);
+        var opened = await socket.Subscriptions.Take(Wait);
+        opened.Sink.Next((JsonObject)JsonNode.Parse(frame)!);
+
+        var ended = (await events.Take(1)).Single();
+        ended
+            .Should()
+            .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
+            .Which.Failure.Should()
+            .NotBeNull();
         opened.Disposed.Should().BeTrue();
     }
 
