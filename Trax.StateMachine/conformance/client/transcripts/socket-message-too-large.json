@@ -1,0 +1,26 @@
+{
+  "about": "A socket message larger than the client's cap is not taken: the socket fails, the client subscribes again on a new one, and the push it did not read changed nothing. The new subscription is the fence: it comes only once the client has given up on the message.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "needs": ["socket-message-limit"],
+  "open": { "maxResponseSize": 4096 },
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "view": { "status": "ready" } },
+    { "push": { "revision": 2, "state": "Unlocked", "context": { "paidWith": "dollar" } }, "pad": 8192 },
+    { "subscribe": { "id": "i-1" } },
+    { "view": { "state": "Locked", "revision": 1 }, "once": true },
+    { "push": { "revision": 3, "state": "Unlocked", "context": { "paidWith": "quarter" } } },
+    { "view": { "state": "Unlocked", "revision": 3, "error": null } }
+  ]
+}

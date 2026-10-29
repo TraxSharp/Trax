@@ -124,8 +124,9 @@ export function createClientTestee(engine) {
         newRequestId,
         retryDelays: r.retryDelays,
       });
-      // A WebSocket in a browser or in node does not say what status an upgrade it failed was answered with.
-      return { opened: true, client: CLIENT, lacks: ["upgrade-status"] };
+      // A WebSocket in a browser or in node does not say what status an upgrade it failed was answered with, and the
+      // page's graphql-ws client, not this one, reads the socket's messages.
+      return { opened: true, client: CLIENT, lacks: ["upgrade-status", "socket-message-limit"] };
     },
     start: async () => {
       await controller.start();
