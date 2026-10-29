@@ -323,7 +323,10 @@ export class ServerMachineController<Spec extends MachineSpec> {
     return this.view;
   }
 
-  /** Calls `listener` after every change of the view; the returned function removes it. */
+  /**
+   * Calls `listener` after every change of the view; the returned function removes it. A listener that throws does not
+   * stop the controller or the other listeners: the error is rethrown on a microtask.
+   */
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => {
@@ -778,10 +781,20 @@ export class ServerMachineController<Spec extends MachineSpec> {
     return { outcome: 'failed', problem: refusal(ClientProblemCode.Disposed, 'The controller was disposed before the server answered.') };
   }
 
+  // A listener that throws is the page's bug, not the controller's: it must not leave a send unsettled or the queue
+  // stuck, so each is called on its own and a throw is rethrown on a microtask, where the page's error handler sees it.
   private emit(): void {
     if (this.disposed) return;
     this.view = this.buildView();
-    for (const listener of [...this.listeners]) listener();
+    for (const listener of [...this.listeners]) {
+      try {
+        listener();
+      } catch (error) {
+        queueMicrotask(() => {
+          throw error;
+        });
+      }
+    }
   }
 
   private buildView(): ServerMachineView<Spec> {

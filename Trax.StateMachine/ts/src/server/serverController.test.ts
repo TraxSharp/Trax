@@ -19,6 +19,7 @@ import {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 const unlocked = (paidWith: string) => ({ state: 'Unlocked', context: { paidWith } });
@@ -212,6 +213,38 @@ describe('ServerMachineController', () => {
     expect(first).toMatch(/^rq-\d+$/);
     expect(second).toMatch(/^rq-\d+$/);
     expect(first).not.toBe(second);
+  });
+
+  it('a listener that throws on the confirming change does not stop the send settling or the queue draining', async () => {
+    const reported: unknown[] = [];
+    vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => {
+      try {
+        task();
+      } catch (error) {
+        reported.push(error);
+      }
+    });
+    const { server, controller } = await ready();
+    controller.subscribe(() => {
+      if (controller.get().revision === 2) throw new Error('the page broke');
+    });
+    const notified = vi.fn();
+    controller.subscribe(notified);
+
+    const first = controller.send('Coin', { coin: 'quarter' });
+    const second = controller.send('Push');
+    await flushMicrotasks();
+    server.events[0].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2, ...unlocked('quarter') }) });
+
+    expect(await first).toMatchObject({ outcome: 'confirmed' });
+    await flushMicrotasks();
+    expect(server.events).toHaveLength(2);
+    server.events[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 3 }) });
+    expect(await second).toMatchObject({ outcome: 'confirmed' });
+    expect(controller.get()).toMatchObject({ revision: 3, pending: false });
+    expect(reported).toEqual([new Error('the page broke')]);
+    // The listener after the one that threw is still told.
+    expect(notified.mock.calls.length).toBeGreaterThan(2);
   });
 
   it('a refused first event drops the dependent prediction of the second', async () => {
