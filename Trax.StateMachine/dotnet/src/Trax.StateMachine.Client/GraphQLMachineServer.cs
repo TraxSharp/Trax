@@ -174,6 +174,12 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         );
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// A trigger the machine does not declare as an event is refused without a request, with the code the engine's
+    /// advance refuses it with (<c>NO_TRANSITION</c>, <c>OUTCOME_BOUND</c> or <c>TIMER_BOUND</c>), and so is one whose
+    /// field is named like one of the machine's own operations (<c>start</c>, <c>get</c>, <c>discard</c>,
+    /// <c>changed</c>), which no host serves as an event (<c>NO_TRANSITION</c>).
+    /// </remarks>
     public Task<ServerAnswer> EventAsync(
         string id,
         string trigger,
@@ -181,9 +187,20 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         string requestId,
         string? clientResult,
         CancellationToken cancellationToken = default
-    ) =>
-        RunAsync(
-            EventField(trigger),
+    )
+    {
+        if (_shape.Undeclared(trigger) is (var code, var message))
+            return Task.FromResult(ServerAnswer.Refused(code.ToWire(), message));
+        var field = EventField(trigger);
+        if (MachineShape.Operations.Contains(field))
+            return Task.FromResult(
+                ServerAnswer.Refused(
+                    RefusalCode.NoTransition.ToWire(),
+                    $"'{trigger}' is named like the machine's {field} operation, which is never sent as an event."
+                )
+            );
+        return RunAsync(
+            field,
             new JsonObject
             {
                 ["id"] = id,
@@ -193,6 +210,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             },
             cancellationToken
         );
+    }
 
     /// <inheritdoc/>
     public async Task<ServerAnswer> GetAsync(

@@ -344,6 +344,11 @@ public sealed class ServerMachineController : IDisposable
     }
 
     /// <summary>Sends one event under a fresh request id, after every earlier event of this instance has settled.</summary>
+    /// <remarks>
+    /// A trigger the machine does not declare as an event is refused at once and sent nowhere, with the code the engine's
+    /// advance refuses it with: <c>OUTCOME_BOUND</c> for an invoked train's outcome, <c>TIMER_BOUND</c> for a state's
+    /// timer, <c>NO_TRANSITION</c> for any other.
+    /// </remarks>
     /// <param name="trigger">The trigger's name, as the machine declares it (<c>Coin</c>).</param>
     /// <param name="input">The trigger's input, or null when it takes none.</param>
     public Task<SendOutcome> SendAsync(string trigger, JsonNode? input = null)
@@ -355,6 +360,13 @@ public sealed class ServerMachineController : IDisposable
                 return Task.FromResult<SendOutcome>(new SendOutcome.Stopped(_error));
             if (_disposed)
                 return Task.FromResult(DisposedOutcome());
+            // Only an event the machine declares is sent; anything else is refused here, as the engine refuses it.
+            if (_shape.Undeclared(trigger) is (var code, var message))
+            {
+                _problem = Refusal(code.ToWire(), message);
+                Emit();
+                return Task.FromResult<SendOutcome>(new SendOutcome.Refused(_problem));
+            }
             return Enqueue(new QueuedEvent(trigger, input?.DeepClone()));
         });
     }
