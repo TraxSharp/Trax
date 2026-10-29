@@ -4,6 +4,7 @@ namespace Trax.StateMachine.Client
     {
         public const string Disposed = "DISPOSED";
         public const string Gone = "GONE";
+        public const string NotReady = "NOT_READY";
         public const string NothingToRetry = "NOTHING_TO_RETRY";
         public const string TransportError = "TRANSPORT_ERROR";
     }

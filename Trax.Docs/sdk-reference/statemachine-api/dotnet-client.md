@@ -91,7 +91,7 @@ public static class MachinePredictor
 | `SyncOutcome` | What one sync came to: `Synced` with the server's `Snapshot`, `Superseded` by a later sync, `Unreachable`, `Exceeded`, `Invalid` with the `Trigger` or `Target`, `Refused` or `Failed` with the `Problem`, or `Stopped` with the `Error`. |
 | `MachineProblem`, `MachineProblemKind` | The last refusal or transport failure: its `Kind` (`Rejected` or `Transport`), its `Code` and its `Message`. |
 | `MachineError` | Why the controller stopped for good: its `Code` (`GONE`, `CLIENT_OUTDATED`, or `UNAUTHENTICATED` or `FORBIDDEN` for a socket the host refused), `Message`, and with `GONE`, `Deleted`: true when the instance was deleted, false when the server answered `NOT_FOUND`, which it answers alike for a missing instance and another caller's. |
-| `ClientProblemCodes` | The codes the client reports itself: `Gone`, `TransportError`, `NothingToRetry`, `Disposed` (`GONE`, `TRANSPORT_ERROR`, `NOTHING_TO_RETRY`, `DISPOSED`). Every other code is a [result code](/docs/sdk-reference/statemachine-api/result-codes). |
+| `ClientProblemCodes` | The codes the client reports itself: `Gone`, `TransportError`, `NothingToRetry`, `Disposed`, `NotReady` (`GONE`, `TRANSPORT_ERROR`, `NOTHING_TO_RETRY`, `DISPOSED`, `NOT_READY`). `NOT_READY` fails a send or a sync while there is no instance to send to and none is being started or read: the start was refused or failed, or the first read gave up. Every other code is a [result code](/docs/sdk-reference/statemachine-api/result-codes). |
 
 ### Predicting
 

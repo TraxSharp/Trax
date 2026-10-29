@@ -18,6 +18,12 @@ public static class ClientProblemCodes
 
     /// <summary>The controller was disposed before the server answered.</summary>
     public const string Disposed = "DISPOSED";
+
+    /// <summary>
+    /// There is no instance to send to, and none is being started or read: the start was refused or failed, or the first
+    /// read gave up. <see cref="ServerMachineController.RetryAsync"/> resends a start that failed.
+    /// </summary>
+    public const string NotReady = "NOT_READY";
 }
 
 /// <summary>Whether a problem is the server's refusal or a request that did not get through.</summary>
@@ -274,6 +280,9 @@ public sealed class ServerMachineController : IDisposable
     private bool _sending;
     private EventRequest? _lastFailed;
     private bool _startFailed;
+
+    // While the start or the first read, or a retried start, is in flight: a send waits for it rather than failing.
+    private bool _opening;
     private readonly List<TaskCompletionSource<SendOutcome>> _startWaiters = [];
 
     private bool _disposed;
@@ -348,7 +357,9 @@ public sealed class ServerMachineController : IDisposable
     /// <remarks>
     /// A trigger the machine does not declare as an event is refused at once and sent nowhere, with the code the engine's
     /// advance refuses it with: <c>OUTCOME_BOUND</c> for an invoked train's outcome, <c>TIMER_BOUND</c> for a state's
-    /// timer, <c>NO_TRANSITION</c> for any other.
+    /// timer, <c>NO_TRANSITION</c> for any other. A send while there is no instance to send to, and none is being
+    /// started or read, fails <see cref="ClientProblemCodes.NotReady"/>; one sent while the start or the first read is in
+    /// flight waits for it.
     /// </remarks>
     /// <param name="trigger">The trigger's name, as the machine declares it (<c>Coin</c>).</param>
     /// <param name="input">The trigger's input, or null when it takes none.</param>
@@ -368,6 +379,8 @@ public sealed class ServerMachineController : IDisposable
                 Emit();
                 return Task.FromResult<SendOutcome>(new SendOutcome.Refused(_problem));
             }
+            if (Unready())
+                return Task.FromResult<SendOutcome>(new SendOutcome.Failed(NotReadyProblem()));
             return Enqueue(new QueuedEvent(trigger, input?.DeepClone()));
         });
     }
@@ -390,7 +403,8 @@ public sealed class ServerMachineController : IDisposable
                 _startFailed = false;
                 var waiter = NewOutcome();
                 _startWaiters.Add(waiter);
-                _ = CreateAsync(_startRequestId, 0);
+                var requestId = _startRequestId;
+                _ = OpeningAsync(() => CreateAsync(requestId, 0));
                 return waiter.Task;
             }
             var request = _lastFailed;
@@ -549,18 +563,56 @@ public sealed class ServerMachineController : IDisposable
 
     // ── Opening ────────────────────────────────────────────────────────────────────────────────
 
-    private async Task OpenAsync()
+    private Task OpenAsync()
     {
         if (_disposed || _error is not null)
-            return;
+            return Task.CompletedTask;
         if (_id is not null)
         {
-            Listen(_id);
-            await ReadAsync(null);
-            return;
+            var id = _id;
+            return OpeningAsync(() =>
+            {
+                Listen(id);
+                return ReadAsync(null);
+            });
         }
         _startRequestId ??= _newRequestId();
-        await CreateAsync(_startRequestId, 0);
+        var requestId = _startRequestId;
+        return OpeningAsync(() => CreateAsync(requestId, 0));
+    }
+
+    // Runs a start or a first read. A send meanwhile waits for it; once it has settled with no snapshot, every send
+    // waiting fails NOT_READY.
+    private async Task OpeningAsync(Func<Task> open)
+    {
+        _opening = true;
+        try
+        {
+            await open();
+        }
+        finally
+        {
+            _opening = false;
+            FailUnready();
+        }
+    }
+
+    // Whether there is no instance to send to and none is coming: no snapshot, and no start or read in flight.
+    private bool Unready() => _confirmed is null && !_opening && !_reloading;
+
+    // Fails every send waiting for an instance that is not coming, and wakes every sync waiting for one.
+    private void FailUnready()
+    {
+        if (_disposed || _error is not null || !Unready())
+            return;
+        var queued = _queue.ToList();
+        _queue.Clear();
+        Publish();
+        foreach (var entry in queued)
+            entry.Settle.TrySetResult(new SendOutcome.Failed(NotReadyProblem()));
+        WakeSyncs();
+        if (queued.Count > 0)
+            Emit();
     }
 
     private async Task CreateAsync(string requestId, int attempt)
@@ -821,6 +873,7 @@ public sealed class ServerMachineController : IDisposable
         }
         _resyncing = false;
         WakeSyncs();
+        FailUnready();
     }
 
     // ── Ordering ───────────────────────────────────────────────────────────────────────────────
@@ -1109,6 +1162,8 @@ public sealed class ServerMachineController : IDisposable
                     return new SyncOutcome.Stopped(_error);
                 if (_disposed)
                     return new SyncOutcome.Failed(DisposedProblem());
+                if (Unready())
+                    return new SyncOutcome.Failed(NotReadyProblem());
                 var waiter = new TaskCompletionSource(
                     TaskCreationOptions.RunContinuationsAsynchronously
                 );
@@ -1285,6 +1340,12 @@ public sealed class ServerMachineController : IDisposable
         Refusal(
             ClientProblemCodes.Disposed,
             "The controller was disposed before the server answered."
+        );
+
+    private static MachineProblem NotReadyProblem() =>
+        Refusal(
+            ClientProblemCodes.NotReady,
+            "There is no instance to send to: the start was refused or failed, or the first read gave up."
         );
 
     private static MachineProblem Refusal(string code, string message) =>

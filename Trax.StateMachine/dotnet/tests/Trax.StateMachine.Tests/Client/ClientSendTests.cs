@@ -224,6 +224,50 @@ public class ClientSendTests
         controller.View.Status.Should().Be(MachineStatus.Ready);
     }
 
+    [Test]
+    public async Task A_send_after_a_refused_start_fails_NOT_READY()
+    {
+        var server = new StepServer();
+        using var controller = Open(server, id: null, retryDelays: []);
+        var start = controller.StartAsync();
+        // Sent while the start is in flight, it waits for it, and settles once the start is refused.
+        var early = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
+        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Refused("FORBIDDEN", "Not yours.")
+        );
+        await start.WaitAsync(Wait);
+
+        var late = await controller.SendAsync("Push").WaitAsync(Wait);
+
+        late.Should().BeOfType<SendOutcome.Failed>().Which.Problem.Code.Should().Be("NOT_READY");
+        (await early.WaitAsync(Wait))
+            .Should()
+            .BeOfType<SendOutcome.Failed>()
+            .Which.Problem.Code.Should()
+            .Be("NOT_READY");
+        server.Events.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    [TestCase("FORBIDDEN")]
+    [TestCase("TRANSPORT")]
+    public async Task A_send_after_a_first_read_that_gave_up_fails_NOT_READY(string answer)
+    {
+        var server = new StepServer();
+        using var controller = Open(server, id: "i-1", retryDelays: []);
+        var start = controller.StartAsync();
+        var read = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        if (answer == "TRANSPORT")
+            read.SetException(new HttpRequestException("dropped"));
+        else
+            read.SetResult(ServerAnswer.Refused(answer, "No."));
+        await start.WaitAsync(Wait);
+
+        var send = await controller.SendAsync("Push").WaitAsync(Wait);
+
+        send.Should().BeOfType<SendOutcome.Failed>().Which.Problem.Code.Should().Be("NOT_READY");
+        server.Events.Reader.TryRead(out _).Should().BeFalse();
+    }
+
     // A server whose every start, event and read the test answers by hand, as each arrives.
     private sealed class StepServer : IMachineServer
     {
