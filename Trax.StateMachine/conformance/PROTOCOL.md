@@ -117,7 +117,7 @@ Every engine answers the same plan, so the search is fixed:
   navigation trigger in order: one the machine does not have, one bound to the effect, an outcome, a timer, or a
   navigation trigger equal to the fields trigger answers `invalid` with that `trigger`.
 - **Wires without nulls.** Wherever the search compares wires, it compares them with every context member whose value is
-  null removed: a host omits such members, so a snapshot it confirmed never carries them.
+  null removed, at every depth: a host omits such members, so a snapshot it confirmed never carries them.
 - **The goal.** A snapshot is the goal when its state is `target` and, with `fields` given, advancing it by the fields
   event transitions to the same wire. A fields event the target state refuses, or one that rests there on a custom rule
   the engine holds no handler for, never reaches the goal.
