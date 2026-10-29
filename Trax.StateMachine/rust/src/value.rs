@@ -13,12 +13,17 @@ pub type Map = BTreeMap<JsString, Value>;
 /// A JSON value.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
+    /// `null`.
     Null,
+    /// `true` or `false`.
     Bool(bool),
     /// Every number is a double, as in the TypeScript engine; `1`, `1.0` and `1e0` are one value.
     Number(f64),
+    /// A string, as JavaScript holds it.
     String(JsString),
+    /// An array.
     Array(Vec<Value>),
+    /// An object, its members ordered by key as RFC 8785 sorts them.
     Object(Map),
 }
 
@@ -124,7 +129,9 @@ impl fmt::Debug for JsString {
 /// Why a text is not JSON. The byte offset is where the parser stopped.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParseError {
+    /// The byte offset the parser stopped at.
     pub offset: usize,
+    /// What it found there, for people.
     pub message: &'static str,
 }
 
@@ -235,6 +242,7 @@ impl Value {
         }
     }
 
+    /// The string, or `None` when this is not a string or not a well-formed one.
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Value::String(s) => s.as_str(),
@@ -242,6 +250,7 @@ impl Value {
         }
     }
 
+    /// The number, or `None` when this is not one.
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Value::Number(n) => Some(*n),
@@ -249,6 +258,7 @@ impl Value {
         }
     }
 
+    /// The boolean, or `None` when this is not one.
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Value::Bool(b) => Some(*b),
@@ -256,6 +266,7 @@ impl Value {
         }
     }
 
+    /// The array's items, or `None` when this is not an array.
     pub fn as_array(&self) -> Option<&Vec<Value>> {
         match self {
             Value::Array(items) => Some(items),
@@ -263,6 +274,7 @@ impl Value {
         }
     }
 
+    /// The object's members, or `None` when this is not an object.
     pub fn as_object(&self) -> Option<&Map> {
         match self {
             Value::Object(map) => Some(map),
@@ -270,6 +282,7 @@ impl Value {
         }
     }
 
+    /// Whether this is `null`.
     pub fn is_null(&self) -> bool {
         matches!(self, Value::Null)
     }

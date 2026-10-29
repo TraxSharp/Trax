@@ -32,9 +32,13 @@ pub(crate) struct CustomRules {
 /// The language-neutral state of an instance, the only thing that crosses the wire or lands in a row.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Snapshot {
+    /// The id of the machine that wrote it.
     pub machine: String,
+    /// The version of the definition that wrote it.
     pub version: i32,
+    /// The state the instance is in.
     pub state: String,
+    /// The state's context.
     pub context: Map,
 }
 
@@ -84,17 +88,24 @@ pub fn canonical_wire(snapshot: &Snapshot) -> String {
 /// no entry time, so it reports no due time.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Timer {
+    /// The trigger the timer fires.
     pub trigger: String,
+    /// The state it moves to.
     pub target: String,
+    /// The fixed duration, as ISO-8601, when the timer has one.
     pub after: Option<String>,
+    /// The context field the duration is read from, when it is not fixed.
     pub field: Option<TimerField>,
 }
 
 /// The context field a timer reads its duration from, and the ISO-8601 bounds the duration must be within.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TimerField {
+    /// The field's name.
     pub name: String,
+    /// The shortest duration it may hold, as ISO-8601.
     pub min: String,
+    /// The longest duration it may hold, as ISO-8601.
     pub max: String,
 }
 
@@ -410,18 +421,22 @@ impl Machine {
         self
     }
 
+    /// The machine's id.
     pub fn id(&self) -> &str {
         &self.id
     }
 
+    /// The definition's version, which every snapshot this machine writes carries.
     pub fn version(&self) -> i32 {
         self.version
     }
 
+    /// The state a new instance starts in.
     pub fn initial_state(&self) -> &str {
         &self.initial_state
     }
 
+    /// The machine's states, in the order the IR lists them.
     pub fn states(&self) -> &[String] {
         &self.states
     }

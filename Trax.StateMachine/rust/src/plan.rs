@@ -15,7 +15,9 @@ pub const MAX_PLAN_EXPANSIONS: usize = 10_000;
 /// One event of a plan: a trigger and its input. A navigation trigger carries none.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlanEvent {
+    /// The trigger to send.
     pub trigger: String,
+    /// Its input, or `None` for one that takes none.
     pub input: Option<Value>,
 }
 
@@ -58,7 +60,12 @@ pub enum PlanAnswer {
     /// No plan was found, and an edge on a custom rule the machine holds no handler for was not tried: `trigger`, from
     /// the snapshot `events` lead to. A client sends `events`, then `trigger` unpredicted, and plans again from the
     /// answer.
-    Undetermined { trigger: String, events: Vec<PlanEvent> },
+    Undetermined {
+        /// The trigger to send unpredicted once `events` have been sent.
+        trigger: String,
+        /// The events to send first.
+        events: Vec<PlanEvent>,
+    },
     /// The request was refused before any search.
     Invalid(PlanInvalid),
 }

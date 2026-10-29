@@ -37,7 +37,9 @@ pub enum DueAt {
 /// A refusal, as a value. `code` is the contract (`GUARD_FAILED`); the message is for a person.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ServerProblem {
+    /// The code, which is contract.
     pub code: String,
+    /// What went wrong, for people.
     pub message: String,
 }
 
@@ -46,7 +48,9 @@ pub struct ServerProblem {
 pub enum ServerAnswer {
     /// What the server stored, and the instance's id on a start's answer.
     Stored {
+        /// The instance's id, on a start's answer.
         id: Option<String>,
+        /// What the server stored.
         snapshot: ServerSnapshot,
     },
     /// The server refused.
@@ -73,7 +77,10 @@ pub enum StreamMessage {
     Changed(ServerSnapshot),
     /// The instance is gone. `not_found` when the server answered `NOT_FOUND`, which it answers alike for an
     /// instance that is missing and one that is not the caller's; false when it was deleted.
-    Gone { not_found: bool },
+    Gone {
+        /// Whether the server answered `NOT_FOUND` rather than saying the instance was deleted.
+        not_found: bool,
+    },
     /// The server asks for the instance to be read again: anything may have been missed.
     Reload,
     /// The server no longer serves this client's version of the machine: a push, or a `next` or `error` coded
@@ -90,9 +97,13 @@ pub enum StreamMessage {
 /// One event, as the controller sends it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EventRequest {
+    /// The instance's id.
     pub id: String,
+    /// The event's trigger.
     pub trigger: String,
+    /// Its input, when it takes one.
     pub input: Option<Value>,
+    /// The request id it is sent under, which a retry sends again.
     pub request_id: String,
     /// The canonical wire of the snapshot the client predicted, which the server compares with its own.
     pub client_result: Option<String>,

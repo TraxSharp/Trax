@@ -55,15 +55,20 @@ pub mod codes {
 /// Whether a problem is the server's refusal or a request that did not get through.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProblemKind {
+    /// The server, or the client's own engine, refused it.
     Rejected,
+    /// The request did not get through, or its answer did not come back.
     Transport,
 }
 
 /// The last refusal or transport failure, shown until the next event the server confirms.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MachineProblem {
+    /// A refusal or a transport failure.
     pub kind: ProblemKind,
+    /// The code, which is contract: `GUARD_FAILED`, `TRANSPORT_ERROR`.
     pub code: String,
+    /// What went wrong, for people.
     pub message: String,
 }
 
@@ -74,6 +79,7 @@ pub struct MachineError {
     /// `GONE`, `CLIENT_OUTDATED`, `UNAUTHENTICATED` or `FORBIDDEN` for a socket or a stream the host refused, or a
     /// stream error's code the server was told is terminal.
     pub code: String,
+    /// What stopped it, for people.
     pub message: String,
     /// With `GONE`: true when the instance was deleted, false when the server answered `NOT_FOUND`.
     pub deleted: Option<bool>,
@@ -82,14 +88,18 @@ pub struct MachineError {
 /// Where a controller is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MachineStatus {
+    /// Before the first snapshot the server confirmed.
     Loading,
+    /// Holding a snapshot, and taking events.
     Ready,
+    /// Stopped for good: `error` says why.
     Stopped,
 }
 
 /// What a controller holds, as one immutable value: a new one on every change.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MachineView {
+    /// Where the controller is.
     pub status: MachineStatus,
     /// The instance's id, once started or given.
     pub id: Option<String>,
@@ -97,13 +107,17 @@ pub struct MachineView {
     pub snapshot: Option<Snapshot>,
     /// The last snapshot the server confirmed.
     pub confirmed: Option<Snapshot>,
+    /// The row's incarnation: a delete and re-create gives a new one, which restarts `revision`.
     pub row_id: Option<String>,
+    /// The revision of the last snapshot the server confirmed.
     pub revision: Option<i64>,
     /// When the state's timer is due, as the server says; `None` when it has none. The client never fires it.
     pub due_at: Option<String>,
     /// Whether an event is in flight or queued.
     pub pending: bool,
+    /// The last refusal or transport failure, shown until the next event the server confirms.
     pub problem: Option<MachineProblem>,
+    /// Why the controller stopped, once it has.
     pub error: Option<MachineError>,
     /// Whether a sync is running, or the last one did not settle synced: what a page holds a leave guard on.
     pub unsaved: bool,
@@ -126,7 +140,12 @@ pub enum SendOutcome {
 #[derive(Clone, Debug, PartialEq)]
 pub enum SyncOutcome {
     /// The server holds the target state with the fields applied: this snapshot, at this revision.
-    Synced { snapshot: Snapshot, revision: Option<i64> },
+    Synced {
+        /// What the server holds.
+        snapshot: Snapshot,
+        /// Its revision.
+        revision: Option<i64>,
+    },
     /// A later sync took over; this one sent nothing after the event it had in flight.
     Superseded,
     /// No event the planner may send reaches the target from what the server holds.

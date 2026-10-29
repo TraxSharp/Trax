@@ -7,6 +7,8 @@
 //! persisted id the manifest lists and follows the instance over graphql-transport-ws. Every operation is total: a
 //! refusal or a request that did not get through is a value.
 
+#![deny(missing_docs)]
+
 mod controller;
 mod graphql;
 mod server;

@@ -21,6 +21,8 @@
 //! assert_eq!(machine.advance(&next, "Coin", None).unwrap_err().code.as_str(), "NO_TRANSITION");
 //! ```
 
+#![deny(missing_docs)]
+
 mod formats;
 mod ir;
 mod machine;
