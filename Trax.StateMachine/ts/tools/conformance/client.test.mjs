@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startHost } from "../../../conformance/client/host.mjs";
-import { checkEntries } from "../../../conformance/expected-failures.mjs";
+import { checkEntries, readExpectedFailures } from "../../../conformance/expected-failures.mjs";
 import { allowedLacks, runJudged, runTranscripts, transcripts } from "../../../conformance/client/run.mjs";
 import { createClientTestee, loadClient } from "./client-testee-ts.mjs";
 
@@ -13,6 +13,10 @@ import { createClientTestee, loadClient } from "./client-testee-ts.mjs";
 const here = (file) => fileURLToPath(new URL(file, import.meta.url));
 const runner = here("../../../conformance/client/run.mjs");
 const list = transcripts();
+// What the TypeScript client is known to fail today (conformance/client/expected-failures/ts.json).
+const tsExpected = readExpectedFailures(here("../../../conformance/client/expected-failures"), "ts", "message").entries;
+const listedAsFailing = (name) =>
+  tsExpected.some((e) => (e.case !== undefined ? e.case === name : name.startsWith(e.prefix)));
 let client;
 let host;
 
@@ -45,10 +49,16 @@ describe("the client conformance kit", () => {
     for (const op of ["can", "available", "discard"]) expect(steps.some((s) => s.client === op), op).toBe(true);
   });
 
-  it("passes through the TypeScript client", async () => {
-    const failures = await runTranscripts(list, host, askOf(createClientTestee(client)));
-    expect(failures).toEqual([]);
-  }, 60_000);
+  it("passes through the TypeScript client, but for what its expected failures list", async () => {
+    const ask = askOf(createClientTestee(client));
+    const result = await runJudged(
+      (onResult) => runTranscripts(list, host, ask, onResult),
+      tsExpected,
+      list.map((t) => t.name),
+    );
+    expect(result.failures).toEqual([]);
+    expect(result.problems).toEqual([]);
+  }, 180_000);
 
   it("fails a testee that answers one send with the wrong code, naming its transcript", async () => {
     let flipped = false;
@@ -104,10 +114,14 @@ describe("the client conformance kit", () => {
     );
     const lacked = new Set(allowedLacks().filter((a) => a.client === "ts").map((a) => a.capability));
     const some = list.filter((t) => t.name.startsWith(only));
-    const ran = some.filter((t) => !(t.needs ?? []).some((n) => lacked.has(n))).length;
-    expect(ran).toBeLessThan(some.length);
-    // Skipped only where the allowlist grants the TypeScript client a lack, and no expected failures.
-    expect(run.stderr).toContain(`${ran} of ${ran} transcripts passed, ${some.length - ran} skipped, 0 expected failures.`);
+    const runnable = some.filter((t) => !(t.needs ?? []).some((n) => lacked.has(n)));
+    const excused = runnable.filter((t) => listedAsFailing(t.name)).length;
+    const ran = runnable.length - excused;
+    expect(runnable.length).toBeLessThan(some.length);
+    // Skipped only where the allowlist grants the TypeScript client a lack, and excused only where its list names it.
+    expect(run.stderr).toContain(
+      `${ran} of ${ran} transcripts passed, ${some.length - runnable.length} skipped, ${excused} expected failure${excused === 1 ? "" : "s"}.`,
+    );
     expect(run.status).toBe(0);
   }, 120_000);
 

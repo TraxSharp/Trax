@@ -12,11 +12,35 @@ const MISSING_DEPENDENCIES = 3;
 const CLIENT = "ts";
 const clientEntry = fileURLToPath(new URL("./client-entry.ts", import.meta.url));
 
-// A requestId minter that counts: r1, r2, ... from each open, so the host can tell which request is which.
-const counting = () => {
+// A requestId minter that counts: r1, r2, ... from each open, so the host can tell which request is which. With
+// `throwingAt`, its call of that number throws and mints nothing (PROTOCOL.md, open, throwingRequestId).
+const counting = (throwingAt) => {
   let n = 0;
-  return () => `r${++n}`;
+  let calls = 0;
+  return () => {
+    calls += 1;
+    if (calls === throwingAt) throw new Error("the request id minter threw");
+    return `r${++n}`;
+  };
 };
+
+// The controller rethrows a listener's throw on a microtask, where a page's error handler would see it. The testee's
+// throwing listener throws this one error, which is let go there: the transcript checks the controller carried on.
+const LISTENER_THREW = new Error("the change listener threw");
+let swallowing = false;
+function swallowListenerThrows() {
+  if (swallowing) return;
+  swallowing = true;
+  const queue = globalThis.queueMicrotask;
+  globalThis.queueMicrotask = (task) =>
+    queue(() => {
+      try {
+        task();
+      } catch (err) {
+        if (err !== LISTENER_THREW) throw err;
+      }
+    });
+}
 
 /** What the controller's view shows, in the protocol's shape. */
 function viewOf(view) {
@@ -55,7 +79,7 @@ function outcomeOf(outcome) {
   }
 }
 
-/** 600 arrays nested one in another, built in memory (PROTOCOL.md, sync, tooDeep). */
+/** 600 arrays nested one in another, built in memory (PROTOCOL.md, send and sync, tooDeep). */
 function tooDeep() {
   let deep = [];
   for (let i = 1; i < 600; i++) deep = [deep];
@@ -80,6 +104,9 @@ export function createClientTestee(engine) {
   let socket = null;
   let server = null;
   let newRequestId = null;
+  // The open request the client was built from, which a build overrides, and whether its headers throw.
+  let opened = null;
+  let headersThrow = false;
 
   const close = () => {
     controller?.dispose();
@@ -89,50 +116,88 @@ export function createClientTestee(engine) {
     socket = null;
   };
 
+  // A server and controller from an open request, or the code it was refused with.
+  const build = (r) => {
+    const machine = typedMachineFromIr(r.ir, r.irHash);
+    const builtSocket = createClient({
+      url: r.socket,
+      webSocketImpl: WebSocket,
+      lazy: true,
+      retryAttempts: 0,
+      jsonMessageReplacer: persistedMessageReplacer,
+    });
+    try {
+      const builtServer = createMachineServer(r.endpoint, {
+        machine,
+        documents: r.documents,
+        socket: builtSocket,
+        resubscribeDelays: r.resubscribeDelays,
+        maxResponseSize: r.maxResponseSize,
+        requestTimeout: r.requestTimeout,
+        allowInsecureTransport: r.allowInsecureTransport,
+        headers: () => {
+          if (headersThrow) throw new Error("the headers provider threw");
+          return {};
+        },
+      });
+      const minter = counting(r.throwingRequestId);
+      const built = new ServerMachineController({
+        machine,
+        server: builtServer,
+        id: r.instance ?? undefined,
+        startInput: r.startInput ?? undefined,
+        newRequestId: minter,
+        retryDelays: r.retryDelays,
+      });
+      return { socket: builtSocket, server: builtServer, controller: built, newRequestId: minter };
+    } catch (err) {
+      void builtSocket.dispose();
+      // A client refusing cleartext to another host refuses to be built, before it sends anything; one refusing an
+      // option out of range throws a RangeError.
+      if (/not over TLS/.test(err.message)) return { code: "INSECURE_TRANSPORT" };
+      if (err instanceof RangeError) return { code: "INVALID_OPTION" };
+      throw err;
+    }
+  };
+
   const handlers = {
     open: async (r) => {
       close();
-      const machine = typedMachineFromIr(r.ir, r.irHash);
-      socket = createClient({
-        url: r.socket,
-        webSocketImpl: WebSocket,
-        lazy: true,
-        retryAttempts: 0,
-        jsonMessageReplacer: persistedMessageReplacer,
-      });
-      try {
-        server = createMachineServer(r.endpoint, {
-          machine,
-          documents: r.documents,
-          socket,
-          resubscribeDelays: r.resubscribeDelays,
-          maxResponseSize: r.maxResponseSize,
-          requestTimeout: r.requestTimeout,
-          allowInsecureTransport: r.allowInsecureTransport,
+      headersThrow = false;
+      const built = build(r);
+      if (built.code !== undefined) return { opened: false, client: CLIENT, code: built.code };
+      ({ socket, server, controller, newRequestId } = built);
+      opened = r;
+      if (r.throwingListener) {
+        swallowListenerThrows();
+        controller.subscribe(() => {
+          throw LISTENER_THREW;
         });
-      } catch (err) {
-        // A client refusing cleartext to another host refuses to be built, before it sends anything.
-        if (/not over TLS/.test(err.message)) return { opened: false, client: CLIENT, code: "INSECURE_TRANSPORT" };
-        throw err;
       }
-      newRequestId = counting();
-      controller = new ServerMachineController({
-        machine,
-        server,
-        id: r.instance ?? undefined,
-        startInput: r.startInput ?? undefined,
-        newRequestId,
-        retryDelays: r.retryDelays,
-      });
       // A WebSocket in a browser or in node does not say what status an upgrade it failed was answered with, and the
-      // page's graphql-ws client, not this one, reads the socket's messages.
+      // page's graphql-ws client, not this one, reads the socket's messages, closes it, and times it.
       return { opened: true, client: CLIENT, lacks: ["upgrade-status", "socket-message-limit"] };
+    },
+    build: async (r) => {
+      const { id: _, op: __, ...options } = r;
+      const built = build({ ...opened, ...options });
+      if (built.code !== undefined) return { built: false, code: built.code };
+      built.controller.dispose();
+      void built.socket.dispose();
+      return { built: true };
+    },
+    headers: async (r) => {
+      headersThrow = r.throws === true;
+      return { throws: headersThrow };
     },
     start: async () => {
       await controller.start();
       return { settled: true };
     },
-    send: async (r) => outcomeOf(await (r.input == null ? controller.send(r.trigger) : controller.send(r.trigger, r.input))),
+    send: async (r) => {
+      const input = r.tooDeep === "input" ? tooDeep() : r.input;
+      return outcomeOf(await (input == null ? controller.send(r.trigger) : controller.send(r.trigger, input)));
+    },
     retry: async () => outcomeOf(await controller.retry()),
     sync: async (r) => {
       const fields = r.fields ?? null;

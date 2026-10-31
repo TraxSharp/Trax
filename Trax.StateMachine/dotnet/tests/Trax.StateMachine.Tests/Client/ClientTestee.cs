@@ -16,11 +16,18 @@ public sealed class ClientTestee : IAsyncDisposable
     // The name the kit's allowlist of what a client may lack knows this client by.
     internal const string Client = "dotnet";
 
-    private HttpClient _http = NewHttp();
+    private HttpClient _http;
     private ServerMachineController? _controller;
     private GraphQLMachineServer? _server;
     private Func<string> _newRequestId = () => "r0";
     private GraphQLSubscriptionSocket? _socket;
+
+    // The open request the client was built from, which a build overrides, and whether the headers its requests are
+    // given throw (PROTOCOL.md, headers).
+    private JsonObject? _opened;
+    private volatile bool _headersThrow;
+
+    public ClientTestee() => _http = NewHttp();
 
     /// <summary>Answers one request line with one answer line, once the request has settled.</summary>
     public async Task<string> AnswerAsync(string line)
@@ -62,9 +69,13 @@ public sealed class ClientTestee : IAsyncDisposable
             "send" => OutcomeOf(
                 await controller.SendAsync(
                     request["trigger"]!.GetValue<string>(),
-                    request["input"]?.DeepClone()
+                    request["tooDeep"]?.GetValue<string>() == "input"
+                        ? TooDeep()
+                        : request["input"]?.DeepClone()
                 )
             ),
+            "build" => await BuildAsync(request),
+            "headers" => Headers(request),
             "retry" => OutcomeOf(await controller.RetryAsync()),
             "sync" => SyncOf(
                 await controller.SyncToAsync(
@@ -148,6 +159,62 @@ public sealed class ClientTestee : IAsyncDisposable
 
     private JsonObject Open(JsonObject request)
     {
+        _headersThrow = false;
+        _http.Dispose();
+        _http = NewHttp();
+        var built = Build(request);
+        if (built.Code is { } code)
+            return new JsonObject
+            {
+                ["opened"] = false,
+                ["client"] = Client,
+                ["code"] = code,
+            };
+        (_socket, _server, _controller, _newRequestId) = (
+            built.Socket,
+            built.Server,
+            built.Controller,
+            built.NewRequestId!
+        );
+        _opened = request;
+        if (request["throwingListener"]?.GetValue<bool>() == true)
+            _controller!.Changed += (_, _) =>
+                throw new InvalidOperationException("the change listener threw");
+        return new JsonObject { ["opened"] = true, ["client"] = Client };
+    }
+
+    // Builds a client from the open request with the build's members over it, reports whether it was built, and
+    // disposes it unstarted.
+    private async Task<JsonObject> BuildAsync(JsonObject request)
+    {
+        var merged = (JsonObject)_opened!.DeepClone();
+        foreach (var (key, value) in request)
+            if (key is not "id" and not "op")
+                merged[key] = value?.DeepClone();
+        var built = Build(merged);
+        if (built.Code is { } code)
+            return new JsonObject { ["built"] = false, ["code"] = code };
+        built.Controller!.Dispose();
+        await built.Socket!.DisposeAsync();
+        return new JsonObject { ["built"] = true };
+    }
+
+    private JsonObject Headers(JsonObject request)
+    {
+        _headersThrow = request["throws"]?.GetValue<bool>() == true;
+        return new JsonObject { ["throws"] = _headersThrow };
+    }
+
+    private sealed record Built(
+        GraphQLSubscriptionSocket? Socket,
+        GraphQLMachineServer? Server,
+        ServerMachineController? Controller,
+        Func<string>? NewRequestId,
+        string? Code
+    );
+
+    private Built Build(JsonObject request)
+    {
         var name = request["machine"]!.GetValue<string>();
         var machine = new ClientManifestMachine
         {
@@ -167,9 +234,9 @@ public sealed class ClientTestee : IAsyncDisposable
         var insecure = request["allowInsecureTransport"]?.GetValue<bool>() ?? false;
         var maxResponseSize = request["maxResponseSize"]?.GetValue<long>();
         var requestTimeout = request["requestTimeout"]?.GetValue<double>();
-        _http.Dispose();
-        _http = NewHttp();
-        GraphQLMachineServer server;
+        var connectTimeout = request["connectTimeout"]?.GetValue<double>();
+        var idleTimeout = request["idleTimeout"]?.GetValue<double>();
+        GraphQLSubscriptionSocket? socket = null;
         try
         {
             // Only what the transcript sets is set: every other option keeps the client's default, as an app's would.
@@ -180,14 +247,24 @@ public sealed class ClientTestee : IAsyncDisposable
             };
             if (maxResponseSize is { } socketMax)
                 socketOptions = socketOptions with { MaxMessageSize = (int)socketMax };
-            _socket = new GraphQLSubscriptionSocket(socketOptions);
+            if (connectTimeout is { } connect)
+                socketOptions = socketOptions with
+                {
+                    ConnectTimeout = TimeSpan.FromMilliseconds(connect),
+                };
+            if (idleTimeout is { } idle)
+                socketOptions = socketOptions with
+                {
+                    KeepAliveTimeout = TimeSpan.FromMilliseconds(idle),
+                };
+            socket = new GraphQLSubscriptionSocket(socketOptions);
             var serverOptions = new GraphQLMachineServerOptions
             {
                 Http = _http,
                 Endpoint = new Uri(request["endpoint"]!.GetValue<string>()),
                 AllowInsecureTransport = insecure,
                 Machine = machine,
-                Socket = _socket,
+                Socket = socket,
                 ResubscribeDelays = Delays(request["resubscribeDelays"]),
             };
             if (maxResponseSize is { } max)
@@ -197,41 +274,71 @@ public sealed class ClientTestee : IAsyncDisposable
                 {
                     RequestTimeout = TimeSpan.FromMilliseconds(ms),
                 };
-            server = new GraphQLMachineServer(serverOptions);
-        }
-        // A client refusing cleartext to another host refuses to be built, before it sends anything.
-        catch (ArgumentException ex)
-            when (ex.Message.Contains("not over TLS", StringComparison.Ordinal))
-        {
-            return new JsonObject
+            var server = new GraphQLMachineServer(serverOptions);
+            var minted = 0;
+            var calls = 0;
+            var throwingAt = request["throwingRequestId"]?.GetValue<int>();
+            // Counts r1, r2, ... from each open; the call numbered throwingRequestId throws and mints nothing.
+            Func<string> newRequestId = () =>
             {
-                ["opened"] = false,
-                ["client"] = Client,
-                ["code"] = "INSECURE_TRANSPORT",
+                if (Interlocked.Increment(ref calls) == throwingAt)
+                    throw new InvalidOperationException("the request id minter threw");
+                return $"r{Interlocked.Increment(ref minted)}";
             };
+            var controller = new ServerMachineController(
+                new ServerMachineOptions
+                {
+                    Machine = machine,
+                    Server = server,
+                    Predictor = MachinePredictor.FromIr(machine),
+                    Id = request["instance"]?.GetValue<string>(),
+                    StartInput = request["startInput"]?.DeepClone(),
+                    NewRequestId = newRequestId,
+                    RetryDelays = Delays(request["retryDelays"]),
+                }
+            );
+            return new Built(socket, server, controller, newRequestId, null);
         }
-        var count = 0;
-        _server = server;
-        _newRequestId = () => $"r{Interlocked.Increment(ref count)}";
-        _controller = new ServerMachineController(
-            new ServerMachineOptions
-            {
-                Machine = machine,
-                Server = server,
-                Predictor = MachinePredictor.FromIr(machine),
-                Id = request["instance"]?.GetValue<string>(),
-                StartInput = request["startInput"]?.DeepClone(),
-                NewRequestId = _newRequestId,
-                RetryDelays = Delays(request["retryDelays"]),
-            }
-        );
-        return new JsonObject { ["opened"] = true, ["client"] = Client };
+        // A client refusing cleartext to another host refuses to be built, before it sends anything, and so does one
+        // given an option out of range.
+        catch (ArgumentException ex)
+        {
+            if (socket is not null)
+                _ = socket.DisposeAsync().AsTask();
+            return new Built(
+                null,
+                null,
+                null,
+                null,
+                ex.Message.Contains("not over TLS", StringComparison.Ordinal)
+                    ? "INSECURE_TRANSPORT"
+                    : "INVALID_OPTION"
+            );
+        }
     }
 
     // As an app builds one: redirects off, which the client requires, and every other setting, its timeout among
     // them, left as HttpClient has it.
-    private static HttpClient NewHttp() =>
-        new(new SocketsHttpHandler { AllowAutoRedirect = false });
+    // A delegating handler before it stands for the headers an app sets on each request, a token it refreshes: while
+    // the transcript has them throw, it throws before the request is sent.
+    private HttpClient NewHttp() =>
+        new(
+            new HeadersHandler(this)
+            {
+                InnerHandler = new SocketsHttpHandler { AllowAutoRedirect = false },
+            }
+        );
+
+    private sealed class HeadersHandler(ClientTestee testee) : DelegatingHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        ) =>
+            testee._headersThrow
+                ? throw new InvalidOperationException("the headers provider threw")
+                : base.SendAsync(request, cancellationToken);
+    }
 
     // Delays the open request does not give are left unset, so the client's defaults are in force.
     private static IReadOnlyList<TimeSpan>? Delays(JsonNode? delays) =>

@@ -215,7 +215,9 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
     else if (step.status !== undefined) request.respond({ status: step.status, json: step.body });
     else if (step.errors !== undefined) request.respond({ json: { data: null, errors: step.errors } });
     else {
-      const json = { data: { machines: { [field]: { [request.operation]: answerOf(step.answer ?? null) } } } };
+      // `bare` sends the answer as given, without the fields a host fills in.
+      const answer = step.bare ? step.answer : answerOf(step.answer ?? null);
+      const json = { data: { machines: { [field]: { [request.operation]: answer } } } };
       // `padTo` pads the body to exactly that many bytes, for a step on either side of a size limit.
       const pad = step.padTo !== undefined ? step.padTo - Buffer.byteLength(JSON.stringify(json)) : (step.pad ?? 0);
       if (pad < 0) fail(`the answer is already larger than padTo ${step.padTo}`);
@@ -277,7 +279,21 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
       }
     } else if (step.push !== undefined) {
       if (!subscription?.open) fail("no subscription is open to push on");
-      subscription.next({ data: { [`${field}Changed`]: { ...CHANGE_DEFAULTS, ...step.push } } }, step.pad ?? 0);
+      const change = step.bare ? step.push : { ...CHANGE_DEFAULTS, ...step.push };
+      subscription.next({ data: { [`${field}Changed`]: change } }, step.pad ?? 0);
+    } else if (step.pushRaw !== undefined) {
+      if (!subscription?.open) fail("no subscription is open to push on");
+      subscription.raw(step.pushRaw);
+      ended = Date.now();
+    } else if (step.clientClosed !== undefined) {
+      if (!subscription) fail("no socket to watch");
+      const deadline = Date.now() + STEP_TIMEOUT;
+      while (subscription.closedWith === null) {
+        if (Date.now() > deadline) fail("the client did not close the socket");
+        await delay(5);
+      }
+      if (subscription.closedWith !== step.clientClosed)
+        fail(`the client closed the socket with ${subscription.closedWith}, not ${step.clientClosed}`);
     } else if (step.pushErrors !== undefined) {
       if (!subscription?.open) fail("no subscription is open to push on");
       subscription.next({ data: null, errors: step.pushErrors });

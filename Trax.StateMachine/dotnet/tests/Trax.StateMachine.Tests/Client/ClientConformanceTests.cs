@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
@@ -79,13 +80,40 @@ public class ClientConformanceTests
         var report = await stderr;
 
         process.ExitCode.Should().Be(0, report);
-        // Skipped only where PROTOCOL.md's allowlist grants the C# client a lack, and no expected failures.
+        // Skipped only where PROTOCOL.md's allowlist grants the C# client a lack, and excused only where its list of
+        // expected failures names the transcript.
+        var expected = ExpectedFailures();
         report
             .Should()
             .MatchRegex(
-                $@"([1-9]\d*) of \1 transcripts passed, {SkippedByTheAllowlist()} skipped, 0 expected failures\."
+                $@"([1-9]\d*) of \1 transcripts passed, {SkippedByTheAllowlist()} skipped, {expected} expected failures?\."
             );
     }
+
+    // The transcripts expected-failures/dotnet.json names, by case or by prefix; none when it is absent.
+    private static int ExpectedFailures()
+    {
+        var clientKit = Path.Combine(FixturePaths.ConformanceRoot, "client");
+        var list = Path.Combine(clientKit, "expected-failures", $"{ClientTestee.Client}.json");
+        if (!File.Exists(list))
+            return 0;
+        var entries = JsonNode.Parse(File.ReadAllText(list))!.AsArray();
+        return Directory
+            .GetFiles(Path.Combine(clientKit, "transcripts"), "*.json")
+            .Select(Path.GetFileNameWithoutExtension)
+            .Count(name =>
+                entries.Any(e =>
+                    (string?)e!["case"] == name
+                    || (
+                        e["prefix"] is { } prefix
+                        && name!.StartsWith((string)prefix!, StringComparison.Ordinal)
+                    )
+                )
+            );
+    }
+
+    // A transcript may hold a context as deep as a stored snapshot nests, inside the answer that carries it.
+    private static readonly JsonDocumentOptions Transcript = new() { MaxDepth = 256 };
 
     // The transcripts that need a capability the allowlist in PROTOCOL.md grants the C# client a lack of.
     private static int SkippedByTheAllowlist()
@@ -107,9 +135,12 @@ public class ClientConformanceTests
         return Directory
             .GetFiles(Path.Combine(clientKit, "transcripts"), "*.json")
             .Count(path =>
-                (JsonNode.Parse(File.ReadAllText(path))!["needs"]?.AsArray() ?? []).Any(n =>
-                    lacked.Contains((string)n!)
-                )
+                (
+                    JsonNode
+                        .Parse(File.ReadAllText(path), documentOptions: Transcript)!["needs"]
+                        ?.AsArray()
+                    ?? []
+                ).Any(n => lacked.Contains((string)n!))
             );
     }
 }

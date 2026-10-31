@@ -66,6 +66,14 @@ one.)
 - `maxResponseSize` (bytes), `requestTimeout` (milliseconds) and `allowInsecureTransport` are given only when a
   transcript sets them, and go to the client's own options of those names: the largest answer or socket message it
   reads, how long it waits for an answer, and whether it may talk cleartext to a host that is not this machine.
+- `connectTimeout` and `idleTimeout` (milliseconds) are given only when a transcript sets them, and go to the
+  socket's options: how long a socket may take to connect, and to stay silent (C#'s `ConnectTimeout` and
+  `KeepAliveTimeout`, Rust's `connect_timeout` and `idle_timeout`). A client whose page builds its socket lacks them
+  (`socket-timeouts`).
+- `throwingRequestId: n`, when given, has the testee build the client with a request id minter whose call numbered
+  `n` (from 1) throws (panics, in Rust) and mints nothing; the ids it does mint still count `r1`, `r2`, ….
+  `throwingListener: true` has it subscribe a change listener that throws on every change; a client with no listener
+  to call lacks it (`change-listener`).
 - Every answer to `open` names its client in `client`: `ts`, `dotnet` or `rust`, or the name a new client is given
   in [the allowlist](#what-a-client-may-lack).
 - A client that refuses to be built because its endpoint or socket is cleartext to a host that is not this machine
@@ -185,7 +193,18 @@ only TypeScript has a second path, the snapshot transport's `send` (`sendSnapsho
 the controller's and has no C# or Rust counterpart.
 
 **`dispose`** closes the client: its stream, and every request it would still send. It is answered `{ "disposed":
-true }`. **`end`** is the last request; the testee answers `{ "id" }` and exits.
+true }`.
+
+**`build`** builds a client from the last `open` with the members given over it (`requestTimeout`,
+`maxResponseSize`, `retryDelays`, `resubscribeDelays`, `connectTimeout`, `idleTimeout`), and drops it unstarted. It
+sends nothing and leaves the open client alone. It is answered `{ "built": true }`, or `{ "built": false, "code":
+"INVALID_OPTION" }` when the client refused an option ([Defaults](#defaults)), or `"INSECURE_TRANSPORT"` as for
+`open`.
+
+**`headers`** has the headers each HTTP request asks for throw, from now on, with `"throws": true`, and stop
+throwing with `false`: TypeScript's `headers`, Rust's `headers` (a provider that panics), and for C#, which takes its
+headers on the `HttpClient`, a delegating handler before the client's that throws before it sends. It is answered
+`{ "throws": <bool> }`. **`end`** is the last request; the testee answers `{ "id" }` and exits.
 
 ## What a client may lack
 
@@ -283,7 +302,8 @@ again after the resubscribe delay.
 An answer is wrapped the way a host serves it, `{ "data": { "machines": { "<machine>": { "<operation>": … } } } }`,
 and a push as `{ "data": { "<machine>Changed": … } }`, with the fields a host selects that the step does not give
 filled in: `dueAt: null`, `dueAtKnown: true`, `problem: null` on an answer (and `id`, `revision`, `state`, `context`
-null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a push.
+null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a push. A step with `"bare": true` sends its answer or push as
+given, without them.
 
 ## Transcripts
 
@@ -317,10 +337,12 @@ documents from it. The steps run in order:
 | --- | --- |
 | `{ "client": "<op>", ...args }` | Sends the request. With `"expect"`, waits for its answer and compares; with `"as": "<name>"`, goes on and a later `await` compares; with neither, goes on, and the answer must still come before the transcript ends. |
 | `{ "await": "<name>", "expect": { ... } }` | Waits for the answer sent under that name and compares. |
-| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503` (with `"body": {...}`, the JSON it answers with, or none), `"drop": true` (the connection is closed with no answer), `"hang": true` (no answer ever comes), `"redirect": true` (a 307, or the status given, whose `Location` is a second host that counts what reaches it) or `"raw": "..."` (a 200 with that text as its body). `"pad": n` adds n bytes of whitespace after an answer's JSON, and `"padTo": n` pads the body to exactly n bytes. With `"hold": "<name>"` instead of an answer, it answers nothing yet. |
+| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503` (with `"body": {...}`, the JSON it answers with, or none), `"drop": true` (the connection is closed with no answer), `"hang": true` (no answer ever comes), `"redirect": true` (a 307, or the status given, whose `Location` is a second host that counts what reaches it) or `"raw": "..."` (a 200 with that text as its body). `"pad": n` adds n bytes of whitespace after an answer's JSON, and `"padTo": n` pads the body to exactly n bytes; `"bare": true` sends the answer without the fields a host fills in. With `"hold": "<name>"` instead of an answer, it answers nothing yet. |
 | `{ "respond": "<name>", <answer> }` | Answers the request held under that name, as a `request` step would. |
 | `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. `"notBefore": ms` and `"before": ms` bound how long after the host last ended a stream (`complete`, `streamError`, `dropSocket`) it came. |
-| `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription; `"pad": n` beside a `push` adds n bytes of whitespace to its frame. |
+| `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription; `"pad": n` beside a `push` adds n bytes of whitespace to its frame, and `"bare": true` sends it without the fields a host fills in. |
+| `{ "pushRaw": "..." }` | Sends that text as one frame on the last subscription's socket, JSON or not. A later `subscribe` step's bounds count from it. |
+| `{ "clientClosed": 4400 }` | Waits for the client to close the last subscription's socket, and checks the code its close frame carried. |
 | `{ "unsettled": "<name>" }` | Checks that the answer sent under that name has not come yet. It asks for the view first and checks once that answer is in, so an answer the testee wrote before it has been read; put it after a fence (below). |
 | `{ "streamError": [...] }` | Ends the last subscription with a graphql-transport-ws `error` message carrying those errors. |
 | `{ "ping": true }` | Sends a graphql-transport-ws `ping` on the last subscription's socket and waits for the client's `pong`. |

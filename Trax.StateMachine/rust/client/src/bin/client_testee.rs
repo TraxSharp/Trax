@@ -3,7 +3,7 @@
 //! transcript gives, driven through the crate's public API only. Each request is handed to the client as it arrives
 //! and answered when it settles.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,8 +11,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 use trax_state_machine::{Map, PlanEvent, PlanInvalid, Value};
 use trax_state_machine_client::{
-    GraphQLMachineServer, GraphQLMachineServerOptions, MachineStatus, MachineView, ManifestDocument, SendOutcome,
-    ServerMachineController, ServerMachineOptions, SyncOutcome,
+    GraphQLMachineServer, GraphQLMachineServerOptions, MachineStatus, MachineView, ManifestDocument, Provided,
+    SendOutcome, ServerMachineController, ServerMachineOptions, SyncOutcome,
 };
 
 type Out = Arc<Mutex<tokio::io::Stdout>>;
@@ -22,6 +22,8 @@ struct Opened {
     controller: ServerMachineController,
     server: GraphQLMachineServer,
     count: Arc<AtomicU64>,
+    /// The open request, which a `build` overrides.
+    request: Value,
 }
 
 impl Opened {
@@ -38,11 +40,16 @@ fn next_request_id(count: &AtomicU64) -> String {
 /// The name the kit's allowlist of what a client may lack knows this client by.
 const CLIENT: &str = "rust";
 
+/// What the client lacks, from PROTOCOL.md's allowlist.
+const LACKS: [&str; 0] = [];
+
 #[tokio::main]
 async fn main() {
     let out: Out = Arc::new(Mutex::new(tokio::io::stdout()));
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     let mut controller: Option<Opened> = None;
+    // Whether the headers each request is given panic (PROTOCOL.md, headers), shared by every server built.
+    let headers_panic = Arc::new(AtomicBool::new(false));
 
     while let Ok(Some(line)) = lines.next_line().await {
         let Ok(request) = Value::parse(&line) else { continue };
@@ -51,10 +58,15 @@ async fn main() {
         match op.as_str() {
             "open" => {
                 controller = None;
-                let answer = match open(&request) {
+                headers_panic.store(false, Ordering::Relaxed);
+                let answer = match open(&request, &headers_panic) {
                     Ok(opened) => {
                         controller = Some(opened);
-                        object([("opened", Value::Bool(true)), ("client", Value::from(CLIENT))])
+                        object([
+                            ("opened", Value::Bool(true)),
+                            ("client", Value::from(CLIENT)),
+                            ("lacks", Value::Array(LACKS.iter().map(|l| Value::from(*l)).collect())),
+                        ])
                     }
                     // A client refusing cleartext to another host refuses to be built, before it sends anything.
                     Err(error) if error.contains("not over TLS") => object([
@@ -86,6 +98,40 @@ async fn main() {
                 let client = &opened.controller;
                 match op.as_str() {
                     "view" => write(&out, id, view_of(&client.view())).await,
+                    "build" => {
+                        // The open request with the build's members over it, built and dropped unstarted.
+                        let mut merged = opened.request.as_object().cloned().unwrap_or_default();
+                        if let Some(members) = request.as_object() {
+                            for (key, value) in members {
+                                if key != "id" && key != "op" {
+                                    merged.insert(key.clone(), value.clone());
+                                }
+                            }
+                        }
+                        let answer = match open(&Value::Object(merged), &headers_panic) {
+                            Ok(built) => {
+                                built.controller.dispose();
+                                object([("built", Value::Bool(true))])
+                            }
+                            Err(error) => object([
+                                ("built", Value::Bool(false)),
+                                (
+                                    "code",
+                                    Value::from(if error.contains("not over TLS") {
+                                        "INSECURE_TRANSPORT"
+                                    } else {
+                                        "INVALID_OPTION"
+                                    }),
+                                ),
+                            ]),
+                        };
+                        write(&out, id, answer).await;
+                    }
+                    "headers" => {
+                        let throws = request.get("throws").and_then(|t| t.as_bool()) == Some(true);
+                        headers_panic.store(throws, Ordering::Relaxed);
+                        write(&out, id, object([("throws", Value::Bool(throws))])).await;
+                    }
                     "start" => {
                         let started = client.start();
                         let out = out.clone();
@@ -98,7 +144,11 @@ async fn main() {
                         let settled: std::pin::Pin<Box<dyn std::future::Future<Output = SendOutcome> + Send>> =
                             if op == "send" {
                                 let trigger = request.get("trigger").and_then(|t| t.as_str()).unwrap_or("").to_owned();
-                                let input = request.get("input").filter(|i| !i.is_null()).cloned();
+                                let input = if request.get("tooDeep").and_then(|t| t.as_str()) == Some("input") {
+                                    Some(nested_too_deep())
+                                } else {
+                                    request.get("input").filter(|i| !i.is_null()).cloned()
+                                };
                                 Box::pin(client.send(trigger, input))
                             } else {
                                 Box::pin(client.retry())
@@ -198,8 +248,22 @@ fn nested_too_deep() -> Value {
     deep
 }
 
-fn open(request: &Value) -> Result<Opened, String> {
+fn open(request: &Value, headers_panic: &Arc<AtomicBool>) -> Result<Opened, String> {
     let text = |key: &str| request.get(key).and_then(|v| v.as_str()).map(str::to_owned);
+    // A negative number has no Duration or usize: the option's type refuses it before the client is built.
+    let numbers = ["maxResponseSize", "requestTimeout", "connectTimeout", "idleTimeout"]
+        .iter()
+        .filter_map(|key| request.get(key).and_then(|v| v.as_f64()))
+        .chain(
+            ["retryDelays", "resubscribeDelays"]
+                .iter()
+                .filter_map(|key| request.get(key).and_then(|d| d.as_array()))
+                .flatten()
+                .filter_map(|n| n.as_f64()),
+        );
+    if numbers.into_iter().any(|n| n < 0.0) {
+        return Err("a negative option has no value of its type".to_owned());
+    }
     // Delays the open request does not give are left unset, so the client's defaults are in force, as an app's would be.
     let delays = |key: &str| -> Option<Vec<Duration>> {
         request.get(key).and_then(|d| d.as_array()).map(|d| {
@@ -234,6 +298,21 @@ fn open(request: &Value) -> Result<Opened, String> {
     if let Some(ms) = request.get("requestTimeout").and_then(|v| v.as_f64()) {
         server_options.request_timeout = Duration::from_millis(ms as u64);
     }
+    if let Some(ms) = request.get("connectTimeout").and_then(|v| v.as_f64()) {
+        server_options.connect_timeout = Duration::from_millis(ms as u64);
+    }
+    if let Some(ms) = request.get("idleTimeout").and_then(|v| v.as_f64()) {
+        server_options.idle_timeout = Duration::from_millis(ms as u64);
+    }
+    // Stands for the headers an app gives each request, a token it refreshes: while the transcript has them throw,
+    // asking for them panics.
+    let panics = headers_panic.clone();
+    server_options.headers = Some(Arc::new(move || -> Provided<reqwest::header::HeaderMap> {
+        if panics.load(Ordering::Relaxed) {
+            panic!("the headers provider threw");
+        }
+        Box::pin(async { Ok(Default::default()) })
+    }));
     server_options.allow_insecure_transport =
         request.get("allowInsecureTransport").and_then(|v| v.as_bool()) == Some(true);
     let server = GraphQLMachineServer::new(server_options).map_err(|e| e.to_string())?;
@@ -246,13 +325,26 @@ fn open(request: &Value) -> Result<Opened, String> {
     options.id = text("instance");
     options.start_input = request.get("startInput").filter(|i| !i.is_null()).cloned();
     let minted = count.clone();
-    options.new_request_id = Some(Box::new(move || next_request_id(&minted)));
+    // The call numbered throwingRequestId panics and mints nothing.
+    let throwing_at = request
+        .get("throwingRequestId")
+        .and_then(|n| n.as_f64())
+        .map(|n| n as u64);
+    let mut calls = 0u64;
+    options.new_request_id = Some(Box::new(move || {
+        calls += 1;
+        if Some(calls) == throwing_at {
+            panic!("the request id minter threw");
+        }
+        next_request_id(&minted)
+    }));
     options.retry_delays = delays("retryDelays");
     let controller = ServerMachineController::new(options).map_err(|e| e.to_string())?;
     Ok(Opened {
         controller,
         server,
         count,
+        request: request.clone(),
     })
 }
 
