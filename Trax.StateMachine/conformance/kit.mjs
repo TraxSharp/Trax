@@ -173,6 +173,38 @@ export function answers(got, expect) {
   return canonical(got) === canonical(expect);
 }
 
+// Hostile values through each engine's reader and input checks: a load of the machine they are read as, then one
+// rehydrate per stored context and per text, and one advance per input (values/hostile.json).
+function hostileValueCases() {
+  const dir = join(conformanceDir, "values");
+  const doc = readJson(join(dir, "hostile.json"));
+  const machine = doc.machine;
+  const snapshot = (context) => `{"machine":"${machine}","version":1,"state":"S","context":${context}}`;
+  return [
+    { name: "values/load", request: { op: "load", machine, ir: readJson(join(dir, `${machine}.ir.json`)) }, expect: { loaded: true } },
+    ...doc.stored.map((c) => ({
+      name: `values/stored/${c.name}`,
+      request: { op: "rehydrate", machine, text: snapshot(c.stored) },
+      expect:
+        typeof c.expect === "string" ? { result: "ok", wire: snapshot(c.expect) } : { result: "error", code: c.expect.code },
+    })),
+    ...doc.text.map((c) => ({
+      name: `values/text/${c.name}`,
+      request: { op: "rehydrate", machine, text: c.text },
+      expect:
+        typeof c.expect === "string" ? { result: "ok", wire: snapshot(c.expect) } : { result: "error", code: c.expect.code },
+    })),
+    ...doc.input.map((c) => ({
+      name: `values/input/${c.name}`,
+      request: { op: "advance", machine, snapshot: JSON.parse(snapshot("{}")), trigger: c.trigger, input: c.input },
+      expect:
+        typeof c.expect === "string"
+          ? { outcome: "transitioned", wire: snapshot(c.expect) }
+          : { outcome: "rejected", reason: c.expect.reason },
+    })),
+  ];
+}
+
 function canonicalWireCases() {
   const doc = readJson(join(conformanceDir, "canonical-wire.json"));
   return doc.cases.map(({ name, wire, ...context }) => ({
@@ -184,7 +216,7 @@ function canonicalWireCases() {
 
 /**
  * Every case of the kit, in a fixed order: each machine's, then the strict inputs, then the planner's, then the IRs that
- * must be refused, then the wire vectors.
+ * must be refused, then the hostile values, then the wire vectors.
  */
 export function kitCases() {
   const machines = readdirSync(machinesDir, { withFileTypes: true })
@@ -196,6 +228,7 @@ export function kitCases() {
     ...strictInputCases(),
     ...planCases(),
     ...unreadableIrCases(),
+    ...hostileValueCases(),
     ...canonicalWireCases(),
   ];
 }

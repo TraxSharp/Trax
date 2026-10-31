@@ -32,9 +32,16 @@ public sealed class ConformanceTestee(bool fromIr = false)
     private static readonly HashSet<string> ServedWithoutHandlers = ["vault"];
 
     // The machines the kit holds only as an IR, with no C# source to check it against: the planner's wizard,
-    // notebook and odometer, and the nesting limit's deep, whose IRs were written for their cases. Every testee builds
-    // them from the IR.
-    private static readonly HashSet<string> OnlyAnIr = ["wizard", "notebook", "odometer", "deep"];
+    // notebook and odometer, the nesting limit's deep and the hostile values' machine, whose IRs were written for
+    // their cases. Every testee builds them from the IR.
+    private static readonly HashSet<string> OnlyAnIr =
+    [
+        "wizard",
+        "notebook",
+        "odometer",
+        "deep",
+        "hostile",
+    ];
 
     // The handlers every testee binds: a custom guard named `throws`, which throws, and a custom reduction named
     // `nests`, which sets the context's `deep` to 600 arrays nested one in another.
