@@ -290,8 +290,11 @@ public sealed partial class GraphQLMachineServer : IMachineServer
 
     /// <summary>
     /// Deletes one of the caller's instances. An instance already gone, or never the caller's, is answered discarded too,
-    /// so a retry is harmless. Null when it was discarded; otherwise the refusal. An answer that neither says the
-    /// instance was discarded nor gives a problem does not say it is gone, and throws as a failed request does.
+    /// so a retry is harmless. Null when it was discarded; otherwise the refusal, or
+    /// <see cref="ClientProblemCodes.TransportError"/> when the request failed or its answer could not be read. An answer
+    /// that neither says the instance was discarded nor gives a problem does not say it is gone, and is a
+    /// <see cref="ClientProblemCodes.TransportError"/> too. Never throws, unless
+    /// <paramref name="cancellationToken"/> is cancelled.
     /// </summary>
     public async Task<ServerProblem?> DiscardAsync(
         string id,
@@ -299,25 +302,41 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         CancellationToken cancellationToken = default
     )
     {
-        var (answer, refused) = await PostAsync(
-                "discard",
-                new JsonObject { ["id"] = id, ["requestId"] = requestId },
-                cancellationToken
+        try
+        {
+            var (answer, refused) = await PostAsync(
+                    "discard",
+                    new JsonObject { ["id"] = id, ["requestId"] = requestId },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (refused is not null)
+                return refused.Problem;
+            if (answer?["problem"] is JsonObject problem)
+                return ProblemOf(problem);
+            if (
+                answer?["discarded"] is JsonValue discarded
+                && discarded.TryGetValue(out bool gone)
+                && gone
             )
-            .ConfigureAwait(false);
-        if (refused is not null)
-            return refused.Problem;
-        if (answer?["problem"] is JsonObject problem)
-            return ProblemOf(problem);
-        if (
-            answer?["discarded"] is not JsonValue discarded
-            || !discarded.TryGetValue(out bool gone)
-            || !gone
-        )
-            throw new HttpRequestException(
+                return null;
+            return new ServerProblem(
+                ClientProblemCodes.TransportError,
                 "The server answered the discard without saying the instance was discarded."
             );
-        return null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // A request that failed, or an answer that is not one a host wrote (a member given twice among them).
+            return new ServerProblem(
+                ClientProblemCodes.TransportError,
+                string.IsNullOrEmpty(ex.Message) ? "The server could not be reached." : ex.Message
+            );
+        }
     }
 
     // One operation, by its persisted id, its values as variables.
