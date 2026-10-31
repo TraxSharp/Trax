@@ -32,6 +32,54 @@ for `conformance/client/run.mjs`; what neither passes yet goes in its expected f
 `TesteeRosterTests` fails on a folder with no row, a row whose suite or job CI does not run, and a testee command
 `ci.yml` does not run.
 
+## Adding a language
+
+The behaviour is written down; read it before any code. `conformance/PROTOCOL.md` and `conformance/client/PROTOCOL.md`
+are the spec, `conformance/client/defaults.json` and `conformance/limits.json` hold every number, and ADR 0004 says
+what "the same client" means across languages. Where the spec is silent, the answer is not whichever existing client
+you read first: settle it in PROTOCOL.md with a transcript, then build it.
+
+A new language lands in this order, each step in the same pull request as its tests:
+
+1. **The roster row and the expected failures.** Add the folder's row to `conformance/testees.json` and an
+   `expected-failures/<name>.json` in each kit listing every case, each with its reason. The kits then run green from
+   the first commit, and the list is the work left: a case that passes while listed fails the run, so each fix removes
+   its entry.
+2. **The CI job.** A suite in `.github/ci/packages.json` and a job in `ci.yml` that runs both testees with `--name`, in
+   the `CI result` gate's `needs`. `TesteeRosterTests` checks all three.
+3. **The engine testee,** through the language's public API, not the core directly, so marshalling is what is tested.
+   Templates: `rust/src/bin/testee.rs`, `ts/tools/conformance/testee-ts.mjs`.
+4. **The client and its testee.** Template: `rust/client/src/bin/client_testee.rs`. The testee builds the client the
+   way an app would, on the library's defaults; a transcript sets an option only when it is what it tests. A platform
+   that cannot do something (a browser has no upgrade status) gets a `lacks` entry with its reason, never an expected
+   failure.
+5. **The surface.** A column in the client surface tables of `conformance/client/PROTOCOL.md` (the three parsers read
+   columns by header, and the column must match the roster's `surfaceColumn`), a committed public-surface baseline,
+   and a page under `Trax.Docs/sdk-reference/`.
+6. **The parity tests:** the language's defaults and limits read from the two JSON files, and the refusal codes from
+   `refusal-codes.json`, never typed in.
+7. **The typed view,** an emitter on `ts/src/codegen/model.ts`, listed in `ts/tools/twin-languages.json`.
+
+Every client so far has had bugs of the same few kinds, so check a new one for each before review:
+
+- **Numbers.** A float read as an integer truncates (`4.5` to `4`), a huge one saturates or traps (`1e19`), NaN passes
+  every comparison, a timer past 2^31-1 ms throws or fires at once, a bool is an int. `conformance/values/` sends these.
+- **Strings and keys.** Lone surrogates, U+2028, NUL, duplicate keys (refused, not last-wins), `__proto__` and
+  `constructor` as names, comparison and sort order by UTF-16 units as RFC 8785 says, not by the platform's collation.
+- **The platform's defaults.** HTTP stacks follow redirects with the auth headers, accept `ws://`, have no request
+  timeout or a different one, cap socket messages below 16 MiB. Each one has a transcript; turn every one of them off.
+- **Callbacks.** A listener, a headers provider or a request-id minter that throws or panics settles its operation and
+  leaves the controller running.
+- **Ordering.** State read before an await is stale after it; a divergence, a reload or a new incarnation can land
+  between any two steps.
+- **Malformed host answers.** A field of the wrong type is `TRANSPORT_ERROR` on an answer and a dropped push with a
+  read, never a stop and never taken as is.
+- **Bounds.** Every parse and every recursion has a depth or size limit from `limits.json`, checked before the value is
+  copied.
+
+`conformance/fuzz.mjs` sends random cases to every engine testee and fails on any difference; run its long form
+(`conformance/PROTOCOL.md`) against a new engine before calling it done.
+
 ## Architecture decisions
 
 `docs/adr/` records **why** things are the way they are. Read the relevant one before proposing to
