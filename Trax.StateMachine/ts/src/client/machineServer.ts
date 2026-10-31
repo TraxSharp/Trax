@@ -18,7 +18,7 @@ import type {
   StartResponse,
   StreamMessage,
 } from '../server/serverController';
-import { createMachineExecutor, isContext, machineField, withoutNulls, type MachineDocument } from './machines';
+import { createMachineExecutor, isContext, isDueAt, isRevision, machineField, withoutNulls, type MachineDocument } from './machines';
 import { createSnapshotClient, requireDelays, type HttpExecutorOptions, type SnapshotOutput } from './transport';
 
 /** What a subscription delivers: one GraphQL result per event, as graphql-ws hands it to a sink. */
@@ -157,6 +157,16 @@ interface MachineChange {
   problem?: { code: ProblemCode; message: string } | null;
 }
 
+// Whether a push that is neither gone nor a reload carries a snapshot a host wrote: a state, a revision to order it
+// by, a due time and a context that is an object. A push without a revision cannot be ordered against the answers.
+const isPushedSnapshot = (
+  change: MachineChange,
+): change is MachineChange & { state: string; revision: number; context?: Record<string, unknown> | null } =>
+  typeof change.state === 'string' &&
+  isRevision(change.revision) &&
+  isDueAt(change.dueAt) &&
+  (change.context == null || isContext(change.context));
+
 const problemOf = (problem: { code: ProblemCode; message: string }): ServerProblem => ({
   kind: 'problem',
   code: problem.code,
@@ -190,7 +200,9 @@ const answered = (output: SnapshotOutput): { kind: 'ok'; snapshot: ServerSnapsho
  *
  * The stream maps each push event onto the controller's messages: a snapshot (with its incarnation as
  * `rowId`), `gone` for a deleted or expired instance, `gone` with `notFound` for one the server will not let the caller
- * watch (the answer it gives a missing id), `CLIENT_OUTDATED`, and `reconnected` when the server asks for a reload, and `ended` for a socket the host
+ * watch (the answer it gives a missing id), `CLIENT_OUTDATED`, and `reconnected` when the server asks for a reload or
+ * sends a push no host writes (one that is not an object, or whose revision, due time, `gone`, state or context is
+ * malformed), and `ended` for a socket the host
  * refused (closed with 4401, `UNAUTHENTICATED`, or 4403, `FORBIDDEN`), a stream it refused with a GraphQL error coded
  * `TRAX_AUTHORIZATION` or `AUTH_NOT_AUTHORIZED` (`FORBIDDEN`) or `AUTH_NOT_AUTHENTICATED` (`UNAUTHENTICATED`), or a
  * socket error or GraphQL error whose code is one of {@link MachineServerOptions.terminalStreamErrors}; a request rejected with one of those codes is named by `endedBy`, so
@@ -323,24 +335,24 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
               else again();
               return;
             }
-            const change = (value.data as Record<string, MachineChange | undefined> | null | undefined)?.[pushField];
-            if (!change) return;
+            const pushed = (value.data as Record<string, unknown> | null | undefined)?.[pushField];
+            // A push no host wrote is dropped, and the instance read again: whatever the host wrote then is not known.
+            if (!isContext(pushed)) return deliver({ type: 'reconnected' });
+            const change = pushed as MachineChange;
             if (change.problem) {
               if (change.problem.code === CLIENT_OUTDATED) deliver({ type: 'client-outdated' });
               else if (change.problem.code === NOT_FOUND) deliver({ type: 'gone', notFound: true });
               else again();
               return;
             }
+            if (change.gone != null && typeof change.gone !== 'boolean') return deliver({ type: 'reconnected' });
             if (change.gone) return deliver({ type: 'gone' });
-            if (change.reload) return deliver({ type: 'reconnected' });
-            if (change.state == null || change.revision == null) return;
-            // A push whose context no store could have written (nested deeper than a stored snapshot may) is dropped,
-            // and the instance read again: whatever the host wrote then is not known.
+            if (change.reload != null && change.reload !== false) return deliver({ type: 'reconnected' });
+            if (!isPushedSnapshot(change)) return deliver({ type: 'reconnected' });
+            // A context no store could have written (nested deeper than a stored snapshot may) is malformed too.
             let context: Record<string, unknown>;
             try {
-              const given = change.context ?? {};
-              if (!isContext(given)) return;
-              context = withoutNulls(given) as Record<string, unknown>;
+              context = withoutNulls(change.context ?? {}) as Record<string, unknown>;
             } catch {
               return deliver({ type: 'reconnected' });
             }

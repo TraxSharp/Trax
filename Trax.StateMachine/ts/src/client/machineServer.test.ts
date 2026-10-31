@@ -581,12 +581,13 @@ describe('ServerMachineController over createMachineServer', () => {
     expect(socket.last.closed).toBe(true);
   });
 
-  it('fails a send answered malformed as a transport error and keeps running, and drops a malformed push', async () => {
+  it('fails a send answered malformed as a transport error and keeps running, and reads again after a malformed push', async () => {
     const deep = Array.from({ length: 70 }).reduce<unknown>((inner) => ({ inner }), 'x');
-    const { fetch } = http(
+    const { sent, fetch } = http(
       answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, problem: null }),
       answer('coin', { id: 'i-1', revision: 2, state: null, context: null, problem: null }),
       answer('coin', { id: 'i-1', revision: 2, state: 'Unlocked', context: { paidWith: 'dollar', deep }, problem: null }),
+      answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, problem: null }),
     );
     const { server, socket } = serverOver(fetch);
     const controller = new ServerMachineController<TurnstileSpec>({
@@ -606,6 +607,13 @@ describe('ServerMachineController over createMachineServer', () => {
 
     expect(() => socket.push({ rowId: 7, revision: 3, state: 'Locked', context: { deep } })).not.toThrow();
     expect(controller.get()).toMatchObject({ status: 'ready', error: null, revision: 1 });
+    await flushMicrotasks();
+    expect(sent.map((s) => s.id)).toEqual([
+      `trax_machine_turnstile_get_${hash}`,
+      `trax_machine_turnstile_coin_${hash}`,
+      `trax_machine_turnstile_coin_${hash}`,
+      `trax_machine_turnstile_get_${hash}`,
+    ]);
   });
 
   it('stops with the error of a stream refused as CONNECTION_CHANGED, and sends nothing more', async () => {

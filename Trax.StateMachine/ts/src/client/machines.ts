@@ -21,6 +21,7 @@
  */
 import { eventRefusal } from '../machine';
 import { RefusalCode, type ProblemCode } from '../results';
+import { isInstant } from '../rules/formats';
 import { MAX_STORED_DEPTH } from '../storedText';
 import type { MachineSpec, TypedMachine } from '../typed';
 import {
@@ -135,6 +136,13 @@ const stripNulls = (value: unknown, level: number): unknown => {
       .map(([k, v]) => [k, stripNulls(v, level + 1)]),
   );
 };
+
+/** Whether a revision is one a store writes: a whole number from zero that a double holds exactly. */
+export const isRevision = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+
+/** Whether a due time is one a host writes: null (no timer), absent (not known), or an instant with its offset. */
+export const isDueAt = (value: unknown): value is string | null | undefined =>
+  value == null || (typeof value === 'string' && isInstant(value));
 
 // Whether `value` is a context: an object, not an array.
 export const isContext = (value: unknown): value is Record<string, unknown> =>
