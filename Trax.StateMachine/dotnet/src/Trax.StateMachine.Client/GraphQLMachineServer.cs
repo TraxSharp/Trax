@@ -431,8 +431,9 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             Revision = revision,
             State = state,
             Context = WithoutNulls(context),
-            // A due time the server says it cannot know is left unknown, so it is never read as "no timer".
-            DueAtKnown = node["dueAtKnown"] is not JsonValue known || known.GetValue<bool>(),
+            // A due time the server says it cannot know, or does not say at all, is left unknown, so it is never read
+            // as "no timer": absent is not null.
+            DueAtKnown = Flag(node, "dueAtKnown") && node.ContainsKey("dueAt"),
             DueAt = DueAtOf(node["dueAt"]),
         };
     }
@@ -466,13 +467,13 @@ public sealed partial class GraphQLMachineServer : IMachineServer
 
     private const double MaxSafeInteger = 9007199254740991;
 
-    // A member that is true, false, or absent (false); anything else is not a push a host wrote.
+    // A member that is true, false, or absent (false); anything else is not a snapshot a host wrote.
     private static bool Flag(JsonObject node, string name) =>
         node[name] switch
         {
             null => false,
             JsonValue value when value.TryGetValue<bool>(out var flag) => flag,
-            _ => throw new FormatException($"The push's {name} is not a boolean."),
+            _ => throw new FormatException($"The {name} member is not a boolean."),
         };
 
     /// <inheritdoc/>
