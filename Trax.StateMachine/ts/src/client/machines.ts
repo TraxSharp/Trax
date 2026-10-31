@@ -280,6 +280,8 @@ export function createMachineExecutor(
         throw new Error(
           `The server's answer holds a revision that is not a whole number from zero: ${JSON.stringify(answer.revision)}.`,
         );
+      if (!isDueAt(answer.dueAt))
+        throw new Error(`The server's answer holds a dueAt that is not an instant: ${JSON.stringify(answer.dueAt)}.`);
       return {
         snapshot: JSON.stringify({
           machine: machineId,
