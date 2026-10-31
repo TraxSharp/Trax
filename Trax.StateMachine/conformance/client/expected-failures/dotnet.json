@@ -11,5 +11,6 @@
   {"prefix": "malformed-push-", "reason": "The C# client does not drop a malformed push and read the instance again.", "message": "step 6 ({\"request\":\"get\",\"variables\":{\"id\":\"i-1\"},\"hold\":\"fence\"}): no get request arrived"},
   {"case": "request-id-minter-throws", "reason": "A request id minter that throws escapes C#'s SendAsync instead of settling the send failed as INVALID_REQUEST_ID.", "message": "the testee's answer to send: error: threw: the request id minter threw"},
   {"case": "retry-after-a-failed-first-read", "reason": "C#'s RetryAsync answers NOTHING_TO_RETRY after a first read that failed past every retry, instead of reading again.", "message": "step 8 ({\"request\":\"get\""},
+  {"case": "send-input-too-deep", "reason": "The C# controller does not refuse an input nested past the value depth limit where it is sent.", "message": "the testee's answer to send did not come"},
   {"case": "socket-text-not-json-closes-4400", "reason": "The C# socket fails the connection on text that is not JSON without closing it with 4400.", "message": "step 6 ({\"clientClosed\":4400}): the client did not close the socket"}
 ]
