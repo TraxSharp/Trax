@@ -1,0 +1,25 @@
+{
+  "about": "A push that leaves out dueAt and dueAtKnown does not know the due time: entering a timed state it reads the instance once for it, and staying in one it keeps the one held. Absent is not null.",
+  "machine": "reminder",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "open": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "approve": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "extend": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Idle", "context": {} } },
+    { "view": { "status": "ready", "state": "Idle", "dueAt": null } },
+    { "push": { "rowId": null, "revision": 2, "state": "Review", "context": {}, "gone": false, "reload": false, "problem": null }, "bare": true },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 2, "state": "Review", "context": {}, "dueAt": "2026-10-22T10:10:00Z" } },
+    { "view": { "state": "Review", "revision": 2, "dueAt": "2026-10-22T10:10:00Z" } },
+    { "push": { "rowId": null, "revision": 3, "state": "Review", "context": {}, "gone": false, "reload": false, "problem": null }, "bare": true },
+    { "view": { "revision": 3, "dueAt": "2026-10-22T10:10:00Z" } }
+  ]
+}

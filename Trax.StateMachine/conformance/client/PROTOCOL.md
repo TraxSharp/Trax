@@ -307,7 +307,8 @@ An answer is wrapped the way a host serves it, `{ "data": { "machines": { "<mach
 and a push as `{ "data": { "<machine>Changed": … } }`, with the fields a host selects that the step does not give
 filled in: `dueAt: null`, `dueAtKnown: true`, `problem: null` on an answer (and `id`, `revision`, `state`, `context`
 null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a push. A step with `"bare": true` sends its answer or push as
-given, without them.
+given, without them. An answer or push that leaves out `dueAtKnown` or `dueAt` does not know the due time: the
+client reads it as `dueAtKnown: false`, never as a known null.
 
 A context nests at most 64 levels, the snapshot that holds it counting as one: no store writes a snapshot deeper,
 and every engine refuses to read one. One that deep is read, however deep the answer or socket message around it, so
