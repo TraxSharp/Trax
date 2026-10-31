@@ -383,7 +383,8 @@ public sealed class ServerMachineController : IDisposable
     /// advance refuses it with: <c>OUTCOME_BOUND</c> for an invoked train's outcome, <c>TIMER_BOUND</c> for a state's
     /// timer, <c>NO_TRANSITION</c> for any other. A send made before <see cref="StartAsync"/>, or while the start or the
     /// first read is in flight, waits for it. Once a start or a first read has ended without an instance (refused, or
-    /// given up), a send fails <see cref="ClientProblemCodes.NotReady"/>, and so does one waiting for it.
+    /// given up), a send fails <see cref="ClientProblemCodes.NotReady"/>, and so does one waiting for it. An input nested
+    /// deeper than any value may (512 arrays and objects) is refused at once with <c>INVALID_INPUT</c>, and sent nowhere.
     /// </remarks>
     /// <param name="trigger">The trigger's name, as the machine declares it (<c>Coin</c>).</param>
     /// <param name="input">The trigger's input, or null when it takes none.</param>
@@ -400,6 +401,16 @@ public sealed class ServerMachineController : IDisposable
             if (_shape.Undeclared(trigger) is (var code, var message))
             {
                 _problem = Refusal(code.ToWire(), message);
+                Emit();
+                return Task.FromResult<SendOutcome>(new SendOutcome.Refused(_problem));
+            }
+            // No host reads a value nested deeper than any value may, and no engine predicts with one.
+            if (EventPlanner.NestsTooDeep(input))
+            {
+                _problem = Refusal(
+                    RefusalCode.InvalidInput.ToWire(),
+                    $"The input nests deeper than {EventPlanner.MaxNesting} arrays and objects."
+                );
                 Emit();
                 return Task.FromResult<SendOutcome>(new SendOutcome.Refused(_problem));
             }

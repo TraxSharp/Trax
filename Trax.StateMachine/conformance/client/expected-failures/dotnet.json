@@ -1,4 +1,3 @@
 [
-  {"case": "dispose-with-a-read-in-flight", "reason": "Disposing the C# controller while its first read is in flight leaves StartAsync unsettled.", "message": "the testee's answer to start did not come"},
-  {"case": "send-input-too-deep", "reason": "The C# controller does not refuse an input nested past the value depth limit where it is sent.", "message": "the testee's answer to send did not come"}
+  {"case": "dispose-with-a-read-in-flight", "reason": "Disposing the C# controller while its first read is in flight leaves StartAsync unsettled.", "message": "the testee's answer to start did not come"}
 ]
