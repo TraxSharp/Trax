@@ -477,13 +477,13 @@ fn snapshot_of(value: &Value) -> Result<ServerSnapshot, TransportError> {
         .ok_or_else(|| TransportError("The server answered a snapshot without a state.".to_owned()))?
         .to_owned();
     // A revision the store does not record stays `None`: it is not revision 0, which would order every later answer
-    // below it. One that is not an integer a double holds exactly is refused, not rounded: a revision read as larger
-    // than it is would make every later snapshot look stale.
+    // below it. One that is not an integer from zero a double holds exactly is refused, not rounded: a revision read as
+    // larger than it is would make every later snapshot look stale, and no store counts below zero.
     let revision = match value.get("revision") {
         None | Some(Value::Null) => None,
         Some(revision) => Some(revision_of(revision).ok_or_else(|| {
             TransportError(format!(
-                "The server answered a revision that is not an integer: {}.",
+                "The server answered a revision that is not a whole number from zero: {}.",
                 revision.to_json()
             ))
         })?),
@@ -529,7 +529,7 @@ const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
 
 fn revision_of(value: &Value) -> Option<i64> {
     match value {
-        Value::Number(n) if n.fract() == 0.0 && n.abs() <= MAX_SAFE_INTEGER => Some(*n as i64),
+        Value::Number(n) if n.fract() == 0.0 && (0.0..=MAX_SAFE_INTEGER).contains(n) => Some(*n as i64),
         _ => None,
     }
 }
@@ -2094,8 +2094,9 @@ mod tests {
         };
 
         assert_eq!(read("7"), Ok(Some(7)));
+        assert_eq!(read("0"), Ok(Some(0)));
         assert_eq!(read("9007199254740991"), Ok(Some(9_007_199_254_740_991)));
-        for revision in ["4.5", "1e19", "-1e19", "\"7\"", "true"] {
+        for revision in ["4.5", "1e19", "-1e19", "-1", "\"7\"", "true"] {
             let Err(error) = read(revision) else {
                 panic!("the revision {revision} was read");
             };
