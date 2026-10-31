@@ -1,4 +1,3 @@
 [
-  {"case": "request-id-minter-throws", "reason": "A request id minter that throws rejects the TypeScript send's promise instead of settling it failed as INVALID_REQUEST_ID.", "message": "the testee's answer to send: error: threw: the request id minter threw"},
   {"case": "send-input-too-deep", "reason": "The TypeScript controller does not refuse an input nested past the value depth limit where it is sent.", "message": "the testee's answer to send did not come"}
 ]

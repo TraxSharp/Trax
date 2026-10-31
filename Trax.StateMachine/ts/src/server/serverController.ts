@@ -154,7 +154,8 @@ export interface ServerMachineOptions<Spec extends MachineSpec> {
   /**
    * Mints a requestId; defaults to a v4 UUID, from `crypto.randomUUID`, or from `crypto.getRandomValues` where a page that
    * is not a secure context has no `randomUUID`. A custom one must mint 1 to 200 characters, not blank, with no
-   * control character and no unpaired surrogate: the server answers any other id `INVALID_REQUEST_ID`.
+   * control character and no unpaired surrogate: the server answers any other id `INVALID_REQUEST_ID`. One that throws
+   * fails the send (or the start) it was minting for as `INVALID_REQUEST_ID`, which sends nothing, and the queue goes on.
    */
   newRequestId?: () => string;
   /**
@@ -651,7 +652,17 @@ export class ServerMachineController<Spec extends MachineSpec> {
         void this.read(null);
         return;
       }
-      this.startRequestId ??= this.newRequestId();
+      try {
+        this.startRequestId ??= this.newRequestId();
+      } catch (error) {
+        // Nothing can be started without an id to replay it under: the start fails, as a send whose minter threw does.
+        const why = error instanceof Error ? error.message : String(error);
+        this.problem = refusal(RefusalCode.InvalidRequestId, `The request id minter threw: ${why}`);
+        this.emit();
+        this.settleStart({ outcome: 'failed', problem: this.problem });
+        this.notOpened();
+        return;
+      }
       void this.create(this.startRequestId, 0);
     });
   }
@@ -982,7 +993,20 @@ export class ServerMachineController<Spec extends MachineSpec> {
             next.trigger as TriggerOf<Spec>,
             ...(next.input as InputArgs<Spec, TriggerOf<Spec>>),
           );
-      const request: EventRequest = { id: this.id, trigger: next.trigger, requestId: this.newRequestId() };
+      let requestId: string;
+      try {
+        requestId = this.newRequestId();
+      } catch (error) {
+        // The page's minter failed: this event cannot go out under an id of its own, so it fails, sends nothing, and
+        // the queue goes on.
+        const why = error instanceof Error ? error.message : String(error);
+        this.finish(next, {
+          outcome: 'failed',
+          problem: refusal(RefusalCode.InvalidRequestId, `The request id minter threw: ${why}`),
+        });
+        return;
+      }
+      const request: EventRequest = { id: this.id, trigger: next.trigger, requestId };
       if (next.input.length > 0) request.input = next.input[0];
       if (predicted?.outcome === 'transitioned') request.clientResult = this.machine.serialize(predicted.snapshot);
       next.request = request;

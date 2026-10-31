@@ -1280,4 +1280,24 @@ describe('the input a page passes', () => {
     await flushMicrotasks();
     expect(server.events).toHaveLength(0);
   });
+
+  it('settles a start whose request id minter throws as INVALID_REQUEST_ID, and sends nothing', async () => {
+    const server = new FakeMachineServer();
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      newRequestId: () => {
+        throw new Error('no ids today');
+      },
+    });
+
+    await expect(controller.start()).resolves.toBeUndefined();
+    expect(controller.get()).toMatchObject({ status: 'loading', problem: { code: 'INVALID_REQUEST_ID' } });
+    expect(await controller.send('Coin', { coin: 'quarter' })).toMatchObject({
+      outcome: 'failed',
+      problem: { code: 'NOT_READY' },
+    });
+    expect(server.starts).toHaveLength(0);
+    expect(server.events).toHaveLength(0);
+  });
 });
