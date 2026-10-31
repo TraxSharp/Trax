@@ -451,11 +451,14 @@ async fn an_answer_nested_deeper_than_a_store_writes_fails_as_a_transport_error(
 }
 
 #[tokio::test]
-async fn a_push_nested_deeper_than_a_store_writes_is_dropped() {
+async fn a_push_nested_deeper_than_a_store_writes_is_dropped_and_the_instance_read_again() {
     for depth in [63, 1_000_000] {
-        let (controller, script) = opened_nest().await;
+        let (controller, mut script) = opened_nest().await;
 
         script.push(StreamMessage::Changed(open_nested(11, depth)));
+        let read = script.read().await;
+        assert_eq!(controller.view().revision, Some(10), "depth {depth}");
+        let _ = read.send(stored(snapshot(Some("row-a"), 10, "Open")));
         script.push(StreamMessage::Changed(snapshot(Some("row-a"), 12, "Open")));
 
         let view = view_where(&controller, |v| v.revision == Some(12)).await;

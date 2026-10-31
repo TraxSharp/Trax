@@ -919,10 +919,16 @@ impl Inner {
             }
             return Some(Ended::Again);
         }
-        let change = payload
-            .get("data")
-            .and_then(|d| d.get(&self.push_field))
-            .filter(|c| !c.is_null())?;
+        let change = payload.get("data").and_then(|d| d.get(&self.push_field))?;
+        // A push no host wrote (not an object, a gone that is not a boolean, a snapshot that is not one a store wrote) is
+        // dropped, and the instance read again: whatever it stood for may have been missed.
+        let malformed = || {
+            sink(StreamMessage::Reload);
+            None
+        };
+        if !matches!(change, Value::Object(_)) {
+            return malformed();
+        }
         if let Some(problem) = change.get("problem").and_then(problem_of) {
             if problem.code == codes::CLIENT_OUTDATED {
                 sink(StreamMessage::ClientOutdated);
@@ -934,16 +940,22 @@ impl Inner {
             }
             return Some(Ended::Again);
         }
-        if change.get("gone").and_then(|g| g.as_bool()) == Some(true) {
-            sink(StreamMessage::Gone { not_found: false });
-            return Some(Ended::ForGood);
+        match change.get("gone") {
+            None | Some(Value::Bool(false)) => {}
+            Some(Value::Bool(true)) => {
+                sink(StreamMessage::Gone { not_found: false });
+                return Some(Ended::ForGood);
+            }
+            Some(_) => return malformed(),
         }
         // A reload is not a snapshot: it says nothing of whether the stream lasted, so it is not counted.
         if change.get("reload").and_then(|r| r.as_bool()) == Some(true) {
             sink(StreamMessage::Reload);
             return None;
         }
-        let snapshot = snapshot_of(change).ok().filter(|s| s.revision.is_some())?;
+        let Some(snapshot) = snapshot_of(change).ok().filter(|s| s.revision.is_some()) else {
+            return malformed();
+        };
         *pushes += 1;
         sink(StreamMessage::Changed(snapshot));
         None
@@ -1187,14 +1199,24 @@ mod tests {
     }
 
     #[test]
-    fn a_push_whose_context_is_not_an_object_is_dropped() {
-        for context in [r#""x""#, "[]", "5"] {
-            let (delivered, pushes, ended) = next_of(&format!(
-                r#"{{"data":{{"turnstileChanged":{{"state":"Locked","revision":1,"context":{context}}}}}}}"#
-            ));
+    fn a_malformed_push_is_dropped_and_the_instance_read_again() {
+        for change in [
+            r#"{"state":"Locked","revision":1,"context":"x"}"#,
+            r#"{"state":"Locked","revision":1,"context":[]}"#,
+            r#"{"state":"Locked","revision":1,"context":5}"#,
+            r#"{"state":"Locked","revision":-1,"context":{}}"#,
+            r#"{"state":"Locked","revision":1,"context":{},"dueAt":"not a time"}"#,
+            r#"{"state":"Locked","revision":1,"context":{},"gone":"yes"}"#,
+            r#"{"state":5,"revision":1,"context":{}}"#,
+            r#"{"revision":1,"context":{}}"#,
+            r#""Locked""#,
+            r#"["Locked"]"#,
+            "null",
+        ] {
+            let (delivered, pushes, ended) = next_of(&format!(r#"{{"data":{{"turnstileChanged":{change}}}}}"#));
 
-            assert!(delivered.is_empty(), "{context}: {delivered:?}");
-            assert_eq!((pushes, ended), (0, false), "{context}");
+            assert_eq!(delivered, vec![StreamMessage::Reload], "{change}");
+            assert_eq!((pushes, ended), (0, false), "{change}");
         }
     }
 

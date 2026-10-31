@@ -1050,10 +1050,12 @@ impl<S: MachineServer> Actor<S> {
         let commands = self.commands.clone();
         let refused = commands.clone();
         let sink: crate::server::StreamSink = Arc::new(move |message| {
-            // A push no store could have written is dropped here, on the server's task, before the controller copies it.
-            if matches!(&message, StreamMessage::Changed(s) if deeper_than_stored(&s.context)) {
-                return;
-            }
+            // A push no store could have written is dropped here, on the server's task, before the controller copies it,
+            // and the instance read again.
+            let message = match message {
+                StreamMessage::Changed(s) if deeper_than_stored(&s.context) => StreamMessage::Reload,
+                message => message,
+            };
             let _ = commands.send(Msg::Stream { generation, message });
         });
         let server = &self.server;
