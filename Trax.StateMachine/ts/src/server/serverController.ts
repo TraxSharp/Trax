@@ -4,6 +4,7 @@ import type { Problem } from '../problem';
 import type { PlannedEvent } from '../plan';
 import { newRequestId as defaultRequestId } from './requestId';
 import { requireDelays } from '../client/transport';
+import { MAX_NESTING, nestsTooDeep } from '../nesting';
 import type { InputArgs, MachineSpec, StateOf, TriggerOf, TypedMachine, TypedSnapshot } from '../typed';
 
 // The server-authoritative controller: the server owns the instance, the twin only predicts. Every event goes
@@ -367,8 +368,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
    * Sends one event under a fresh requestId, after every earlier event of this instance has settled. A trigger the
    * machine does not declare as an event (an outcome, a timer, or a name it lacks) is refused at once with the code
    * `advance` gives it, and nothing is sent. The input is copied as JSON when it is called, so changing the object
-   * afterwards changes neither the event nor the prediction; one JSON cannot carry is refused with `INVALID_INPUT` and
-   * nothing is sent. While the controller holds no instance and is not opening one (its start was refused or failed, or
+   * afterwards changes neither the event nor the prediction; one JSON cannot carry, or nested deeper than 512 levels, is
+   * refused with `INVALID_INPUT` and nothing is sent. While the controller holds no instance and is not opening one (its start was refused or failed, or
    * its first read gave up), a send settles `failed` with `NOT_READY`.
    */
   send<T extends TriggerOf<Spec>>(trigger: T, ...input: InputArgs<Spec, T>): Promise<SendOutcome> {
@@ -376,6 +377,12 @@ export class ServerMachineController<Spec extends MachineSpec> {
     if (this.disposed) return Promise.resolve(this.disposedOutcome());
     const undeclared = eventRefusal(this.machine.core.definition, trigger);
     if (undeclared) return Promise.resolve({ outcome: 'refused', problem: refusal(undeclared.code, undeclared.message) });
+    // Checked before it is copied: no engine takes a value nested this deep, and copying one could exhaust the stack.
+    if (input.some(nestsTooDeep))
+      return Promise.resolve({
+        outcome: 'refused',
+        problem: refusal(RefusalCode.InvalidInput, `The input of '${trigger}' nests deeper than ${MAX_NESTING} levels.`),
+      });
     let copied: unknown[];
     try {
       copied = input.map(copyOf);

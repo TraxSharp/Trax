@@ -1,3 +1,1 @@
-[
-  {"case": "send-input-too-deep", "reason": "The TypeScript controller does not refuse an input nested past the value depth limit where it is sent.", "message": "the testee's answer to send did not come"}
-]
+[]
