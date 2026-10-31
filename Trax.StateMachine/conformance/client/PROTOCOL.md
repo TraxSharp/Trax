@@ -231,8 +231,9 @@ long as the platform does; an expected failure is what a client has not built ye
 A client built without these options has these values, in every language. A testee sets only the options a transcript
 gives, so a transcript that gives none sees the defaults: `response-size-default` holds the response size. The others
 are too long for a transcript to wait out, and each client's unit tests hold them by what the client does
-(TypeScript's `machineServer.test.ts`, C#'s `TransportTests`, Rust's `tests/controller.rs`). A change to one is a
-change here and in all three.
+(TypeScript's `machineServer.test.ts`, C#'s `DefaultsParityTests`, Rust's `tests/defaults.rs`). The values are written
+down once, in `defaults.json` beside this file: each client's tests hold its constants to it, and TypeScript's
+`defaults.conformance.test.ts` holds this table to it. A change to one is a change there, here and in all three.
 
 | Option | Default | What it bounds |
 | --- | --- | --- |

@@ -69,3 +69,38 @@ describe('the shared limits', () => {
     expect(LONGEST_TIMER).toBe(limits.maxTimerMs);
   });
 });
+
+// PROTOCOL.md's "Defaults" table is what a reader goes by, so it states the same numbers as the file.
+describe('the Defaults table of conformance/client/PROTOCOL.md', () => {
+  const protocol = fs.readFileSync(conformanceFile('client', 'PROTOCOL.md'), 'utf8');
+  const section = protocol.slice(protocol.indexOf('\n## Defaults\n'), protocol.indexOf('\n## ', protocol.indexOf('\n## Defaults\n') + 1));
+  const row = (option: string): string => {
+    const match = new RegExp(`^\\| ${option} \\| ([^|]+) \\|`, 'm').exec(section);
+    if (match === null) throw new Error(`The Defaults table has no ${option} row.`);
+    return match[1].trim();
+  };
+  // "30 s", "250, 500 ms" or "16 MiB", in milliseconds or bytes.
+  const amounts = (cell: string): number[] => {
+    const match = /^([\d, ]+) (ms|s|MiB)$/.exec(cell);
+    if (match === null) throw new Error(`"${cell}" is not a list of numbers with a unit.`);
+    const unit = { ms: 1, s: 1000, MiB: 1024 * 1024 }[match[2]]!;
+    return match[1].split(',').map((n) => Number(n.trim()) * unit);
+  };
+
+  it('states the file\'s values', () => {
+    expect(section).not.toBe('');
+    expect(amounts(row('Request timeout'))).toEqual([defaults.requestTimeoutMs]);
+    expect(amounts(row('Retry delays'))).toEqual(defaults.retryDelaysMs);
+    expect(amounts(row('Resubscribe delays'))).toEqual(defaults.resubscribeDelaysMs);
+    expect(amounts(row('Response size'))).toEqual([defaults.maxResponseBytes]);
+  });
+
+  it('states the file\'s jitter bounds', () => {
+    const match = /drawn uniformly between (\d+)% and (\d+)% of its step/.exec(section);
+    expect(match, 'the section says how a resubscribe wait is drawn').not.toBeNull();
+    expect([Number(match![1]) / 100, Number(match![2]) / 100]).toEqual([
+      defaults.resubscribeJitter.leastFraction,
+      defaults.resubscribeJitter.mostFraction,
+    ]);
+  });
+});
