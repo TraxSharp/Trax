@@ -396,6 +396,31 @@ public class ClientSendTests
     }
 
     [Test]
+    public async Task A_push_whose_numbers_cannot_be_held_is_dropped_and_the_instance_read_again()
+    {
+        var server = new HandServer();
+        using var controller = Open(server, MachinePredictor.FromIr(Turnstile));
+        await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
+
+        server.Push(
+            new StreamMessage.Changed(
+                At(2, "Locked", (JsonObject)JsonNode.Parse("""{"n":1e400}""")!)
+            )
+        );
+
+        var read = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        controller.View.Status.Should().Be(MachineStatus.Ready);
+        controller.View.Revision.Should().Be(1);
+        read.SetResult(ServerAnswer.Of(At(2, "Locked")));
+        var send = controller.SendAsync("Push");
+        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
+            ServerAnswer.Of(At(3, "Locked"))
+        );
+        (await send.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        controller.View.Error.Should().BeNull();
+    }
+
+    [Test]
     public async Task A_first_read_whose_numbers_cannot_be_held_settles_the_start_as_a_failure()
     {
         var server = new StepServer();

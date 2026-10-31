@@ -382,7 +382,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         return (answered.Data?["machines"]?[_field]?[operation] as JsonObject, null);
     }
 
-    private ServerAnswer AnswerOf(JsonObject? answer)
+    private static ServerAnswer AnswerOf(JsonObject? answer)
     {
         if (answer is null)
             return new ServerAnswer();
@@ -417,6 +417,74 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         );
     }
 
+    // The snapshot a push holds, or a FormatException when it is not one a host wrote: a state that is not a string, a
+    // revision that is not a whole number from zero, a context that is not an object, a due time that is not an
+    // instant, a row id that is not a string.
+    private static ServerSnapshot PushedSnapshot(JsonObject node)
+    {
+        var state =
+            Text(node["state"])
+            ?? throw new FormatException("The snapshot has no state, or one that is not a string.");
+        if (!RevisionOf(node["revision"], out var revision) || revision is null)
+            throw new FormatException("The snapshot's revision is not a whole number from zero.");
+        if (!ContextOf(node["context"], out var context))
+            throw new FormatException("The snapshot's context is not an object.");
+        var rowId = node["rowId"] switch
+        {
+            null => null,
+            var row => Text(row)
+                ?? throw new FormatException("The snapshot's rowId is not a string."),
+        };
+        return new ServerSnapshot
+        {
+            RowId = rowId,
+            Revision = revision,
+            State = state,
+            Context = WithoutNulls(context),
+            // A due time the server says it cannot know is left unknown, so it is never read as "no timer".
+            DueAtKnown = node["dueAtKnown"] is not JsonValue known || known.GetValue<bool>(),
+            DueAt = DueAtOf(node["dueAt"]),
+        };
+    }
+
+    // A revision is a whole number from zero, or null for a store that records none.
+    private static bool RevisionOf(JsonNode? node, out long? revision)
+    {
+        revision = null;
+        if (node is null)
+            return true;
+        if (node is not JsonValue value)
+            return false;
+        if (value.TryGetValue<long>(out var whole))
+        {
+            revision = whole;
+            return whole >= 0;
+        }
+        // 2.0 is the whole number a JavaScript host may write for 2.
+        if (
+            value.TryGetValue<double>(out var number)
+            && number >= 0
+            && number <= MaxSafeInteger
+            && Math.Floor(number) == number
+        )
+        {
+            revision = (long)number;
+            return true;
+        }
+        return false;
+    }
+
+    private const double MaxSafeInteger = 9007199254740991;
+
+    // A member that is true, false, or absent (false); anything else is not a push a host wrote.
+    private static bool Flag(JsonObject node, string name) =>
+        node[name] switch
+        {
+            null => false,
+            JsonValue value when value.TryGetValue<bool>(out var flag) => flag,
+            _ => throw new FormatException($"The push's {name} is not a boolean."),
+        };
+
     /// <inheritdoc/>
     /// <remarks>
     /// Each push becomes a message: a snapshot (with its incarnation), <see cref="StreamMessage.Gone"/> for a deleted
@@ -425,11 +493,14 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// 4403, or an upgrade answered 401 or 403) is <see cref="StreamMessage.Refused"/>, and is not subscribed again; so
     /// is a stream the host refused with a GraphQL error coded <c>TRAX_AUTHORIZATION</c> or <c>AUTH_NOT_AUTHORIZED</c>
     /// (<c>FORBIDDEN</c>) or <c>AUTH_NOT_AUTHENTICATED</c> (<c>UNAUTHENTICATED</c>), one whose error code is among
-    /// <see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/> (with that code), and a push the client cannot
-    /// read (a member of the wrong type, or one given twice), a socket that follows no more subscriptions (a
-    /// <see cref="SocketUnavailableException"/>: it was disposed), or a message <paramref name="onMessage"/> threw on,
-    /// as <see cref="ClientProblemCodes.TransportError"/>. A stream that ends any other way is subscribed again after
-    /// the resubscribe delays; the new stream's first event is the instance as it is then.
+    /// <see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/> (with that code), and a socket that follows no
+    /// more subscriptions (a <see cref="SocketUnavailableException"/>: it was disposed), or a message
+    /// <paramref name="onMessage"/> threw on, as <see cref="ClientProblemCodes.TransportError"/>. A push the client
+    /// cannot take as one a host wrote (not an object, a member of the wrong type or given twice, a revision that is not
+    /// a whole number from zero, a due time that is not an instant) is dropped and becomes
+    /// <see cref="StreamMessage.Reload"/>, so the instance is read again and the stream goes on. A stream that ends any
+    /// other way is subscribed again after the resubscribe delays; the new stream's first event is the instance as it
+    /// is then.
     /// </remarks>
     public IDisposable Subscribe(string id, Action<StreamMessage> onMessage)
     {
@@ -499,17 +570,12 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             {
                 (message, again) = Read(value);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // A member of the wrong type, or one given twice: the host would send the same push again, so the
-                // stream ends once rather than being subscribed again.
-                Deliver(
-                    new StreamMessage.Refused(
-                        ClientProblemCodes.TransportError,
-                        $"The host sent a push this client cannot read: {ex.Message}"
-                    )
-                );
-                return;
+                // A member of the wrong type, or one given twice: not a push a host wrote. It is dropped, and the
+                // instance read again, so the client neither stops nor holds what it cannot check.
+                message = new StreamMessage.Reload();
+                again = false;
             }
             if (again)
                 Again();
@@ -523,8 +589,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             }
         }
 
-        // What one push says: a message to deliver, a stream to subscribe again, or nothing. Throws on a push it cannot
-        // read.
+        // What one push says: a message to deliver, or a stream to subscribe again. Throws on a push it cannot read.
         private (StreamMessage? Message, bool Again) Read(JsonObject value)
         {
             if (value["errors"] is JsonArray { Count: > 0 } errors)
@@ -533,44 +598,26 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 return (ended, ended is null);
             }
             if (value["data"]?[server._pushField] is not JsonObject change)
-                return (null, false);
-            if (change["problem"] is JsonObject problem)
+                throw new FormatException("The push is not an object.");
+            switch (change["problem"])
             {
-                var code = Text(problem["code"]);
-                if (code == ClientOutdated)
-                    return (new StreamMessage.ClientOutdated(), false);
-                if (code == RefusalCode.NotFound.ToWire())
-                    return (new StreamMessage.Gone(NotFound: true), false);
-                return (null, true);
+                case JsonObject problem:
+                    var code = Text(problem["code"]);
+                    if (code == ClientOutdated)
+                        return (new StreamMessage.ClientOutdated(), false);
+                    if (code == RefusalCode.NotFound.ToWire())
+                        return (new StreamMessage.Gone(NotFound: true), false);
+                    return (null, true);
+                case null:
+                    break;
+                default:
+                    throw new FormatException("The push's problem is not an object.");
             }
-            if (change["gone"] is JsonValue gone && gone.GetValue<bool>())
+            if (Flag(change, "gone"))
                 return (new StreamMessage.Gone(NotFound: false), false);
-            if (change["reload"] is JsonValue reload && reload.GetValue<bool>())
+            if (Flag(change, "reload"))
                 return (new StreamMessage.Reload(), false);
-            if (
-                Text(change["state"]) is not { } state
-                || change["revision"] is not JsonValue revision
-                // Not a context any store wrote: the push is dropped.
-                || !ContextOf(change["context"], out var context)
-            )
-                return (null, false);
-            return (
-                new StreamMessage.Changed(
-                    new ServerSnapshot
-                    {
-                        RowId = change["rowId"] is JsonValue row
-                            ? row.ToJsonString().Trim('"')
-                            : null,
-                        Revision = revision.GetValue<long>(),
-                        State = state,
-                        Context = WithoutNulls(context),
-                        DueAtKnown =
-                            change["dueAtKnown"] is not JsonValue known || known.GetValue<bool>(),
-                        DueAt = DueAtOf(change["dueAt"]),
-                    }
-                ),
-                false
-            );
+            return (new StreamMessage.Changed(PushedSnapshot(change)), false);
         }
 
         public void Error(Exception error)
@@ -755,10 +802,24 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     private static string? Text(JsonNode? node) =>
         node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
-    private static DateTimeOffset? DueAtOf(JsonNode? node) =>
-        Text(node) is { } text
-            ? DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)
-            : null;
+    // A due time is null, or an instant: a date and a time with its offset. One without an offset names no instant.
+    private static DateTimeOffset? DueAtOf(JsonNode? node)
+    {
+        if (node is null)
+            return null;
+        if (
+            Text(node) is { } text
+            && Instant().IsMatch(text)
+            && DateTimeOffset.TryParse(
+                text,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out var instant
+            )
+        )
+            return instant;
+        throw new FormatException("The snapshot's dueAt is not an instant.");
+    }
 
     /// <summary>
     /// The context with every null member left out, at every depth: a typed answer cannot tell a member stored as null
@@ -809,4 +870,10 @@ public sealed partial class GraphQLMachineServer : IMachineServer
 
     [GeneratedRegex(@"\$(\w+)\s*:")]
     private static partial Regex DeclaredVariable();
+
+    [GeneratedRegex(
+        @"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$",
+        RegexOptions.CultureInvariant
+    )]
+    private static partial Regex Instant();
 }

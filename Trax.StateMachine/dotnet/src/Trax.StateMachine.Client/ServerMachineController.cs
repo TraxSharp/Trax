@@ -50,7 +50,7 @@ public sealed record MachineProblem(MachineProblemKind Kind, string Code, string
 /// <see cref="ClientProblemCodes.Gone"/>, <c>CLIENT_OUTDATED</c>, or the code of a stream that ended for good
 /// (<see cref="StreamMessage.Refused"/>): <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c> for a socket or a stream the host
 /// refused, a code of <see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/>, or
-/// <see cref="ClientProblemCodes.TransportError"/> for a push the client cannot read.
+/// <see cref="ClientProblemCodes.TransportError"/> for a stream that could not be opened or followed.
 /// </param>
 /// <param name="Message">What to tell a person.</param>
 /// <param name="Deleted">
@@ -782,8 +782,8 @@ public sealed class ServerMachineController : IDisposable
                 var taken = Accept(changed.Snapshot, Source.Push, out var unreadable);
                 if (unreadable is not null)
                 {
-                    // As a push the server cannot read ends the stream: the host would send the same again.
-                    Stop(new MachineError(unreadable.Code, unreadable.Message));
+                    // Not a snapshot this client can hold: the push is dropped and the instance read again.
+                    Reload(null);
                     return;
                 }
                 if (taken)
@@ -899,14 +899,17 @@ public sealed class ServerMachineController : IDisposable
         // A push of the incarnation now held is taken after the read; one of another incarnation is kept until a read
         // of that incarnation answers.
         var buffered = _buffered;
+        var dropped = false;
         if (buffered is not null && _error is null && buffered.RowId == _rowId)
         {
             _buffered = null;
             changed = Accept(buffered, Source.Push, out var unreadablePush) || changed;
-            if (unreadablePush is not null)
-                Stop(new MachineError(unreadablePush.Code, unreadablePush.Message));
+            dropped = unreadablePush is not null;
         }
         EndRead();
+        // A kept push this client cannot hold is dropped, as one that came now would be, and the instance read again.
+        if (dropped && !_disposed && _error is null)
+            Reload(null);
         if (changed && _error is null)
             Emit();
         Pump();

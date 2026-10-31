@@ -136,13 +136,29 @@ public class MachineStreamTests
         messages.Reader.TryRead(out _).Should().BeFalse();
     }
 
+    // Each kit transcript malformed-push-* holds one of these through the controller; here the server's own message is
+    // held, and that the stream goes on after it.
     [TestCase("""{"turnstileChanged":{"gone":"yes"}}""")]
     [TestCase("""{"turnstileChanged":{"reload":1}}""")]
+    [TestCase("""{"turnstileChanged":"Locked"}""")]
+    [TestCase("""{"turnstileChanged":null}""")]
     [TestCase("""{"turnstileChanged":{"state":"Locked","revision":"one","context":{}}}""")]
+    [TestCase("""{"turnstileChanged":{"state":"Locked","revision":-1,"context":{}}}""")]
+    [TestCase("""{"turnstileChanged":{"state":"Locked","revision":1.5,"context":{}}}""")]
+    [TestCase("""{"turnstileChanged":{"state":"Locked","context":{}}}""")]
+    [TestCase("""{"turnstileChanged":{"state":"Locked","revision":1,"rowId":7,"context":{}}}""")]
     [TestCase(
         """{"turnstileChanged":{"state":"Locked","revision":1,"dueAt":"soon","context":{}}}"""
     )]
-    public async Task A_push_the_client_cannot_read_ends_the_stream_once_with_a_failure(string data)
+    [TestCase(
+        """{"turnstileChanged":{"state":"Locked","revision":1,"dueAt":"2026-10-22T10:10:00","context":{}}}"""
+    )]
+    [TestCase(
+        """{"turnstileChanged":{"state":"Locked","state":"Unlocked","revision":1,"context":{}}}"""
+    )]
+    public async Task A_push_the_client_cannot_read_is_dropped_and_the_instance_read_again(
+        string data
+    )
     {
         var time = new TimerLog();
         var (socket, messages, stream) = Follow(time: time);
@@ -150,41 +166,44 @@ public class MachineStreamTests
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
 
         first.Push((JsonObject)JsonNode.Parse($$"""{"data":{{data}}}""")!);
+        first.Push(Changed(2));
 
-        var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
-        message
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
             .Should()
-            .BeOfType<StreamMessage.Refused>()
-            .Which.Code.Should()
-            .Be(ClientProblemCodes.TransportError);
-        // Subscribing again would wait on a timer first: none was started.
+            .BeOfType<StreamMessage.Reload>();
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+            .Should()
+            .BeOfType<StreamMessage.Changed>()
+            .Which.Snapshot.Revision.Should()
+            .Be(2);
+        // The stream goes on: it was neither ended nor subscribed again.
+        first.Disposed.Should().BeFalse();
         time.Delays.Should().BeEmpty();
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
     }
 
     [Test]
-    public async Task A_push_with_a_member_given_twice_ends_the_stream_once_with_a_failure()
+    public async Task A_revision_a_javascript_host_writes_as_a_whole_number_with_a_fraction_of_zero_is_read()
     {
-        var time = new TimerLog();
-        var (socket, messages, stream) = Follow(time: time);
+        var (socket, messages, stream) = Follow();
         using var following = stream;
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
 
         first.Push(
             (JsonObject)
                 JsonNode.Parse(
-                    """{"data":{"turnstileChanged":{"state":"Locked","state":"Unlocked","revision":1}}}"""
+                    """{"data":{"turnstileChanged":{"state":"Locked","revision":2.0,"context":{},"dueAt":"2026-10-22T12:10:00.5+02:00"}}}"""
                 )!
         );
 
-        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+        var changed = (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
             .Should()
-            .BeOfType<StreamMessage.Refused>()
-            .Which.Code.Should()
-            .Be(ClientProblemCodes.TransportError);
-        // Subscribing again would wait on a timer first: none was started.
-        time.Delays.Should().BeEmpty();
-        socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
+            .BeOfType<StreamMessage.Changed>()
+            .Which;
+        changed.Snapshot.Revision.Should().Be(2);
+        changed
+            .Snapshot.DueAt.Should()
+            .Be(new DateTimeOffset(2026, 10, 22, 10, 10, 0, 500, TimeSpan.Zero));
     }
 
     private static JsonObject Errors(string code) =>
