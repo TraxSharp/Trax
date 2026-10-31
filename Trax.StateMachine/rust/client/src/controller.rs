@@ -300,6 +300,8 @@ impl ServerMachineController {
             sending: false,
             last_failed: None,
             start_failed: false,
+            read_failed: false,
+            read_waiters: Vec::new(),
             creating: false,
             start_waiters: Vec::new(),
             opened: false,
@@ -401,8 +403,9 @@ impl ServerMachineController {
         async move { answer.await.unwrap_or_else(|_| SyncOutcome::Failed(disposed_problem())) }
     }
 
-    /// Resends what last failed under the same request id: the start while there is no instance, else the last event
-    /// that failed, unless a later event has been confirmed since, or is queued or in flight now (resending it then would
+    /// Resends what last failed under the same request id: the start while there is no instance, the first read of an
+    /// instance opened by id once it has failed past every retry (settled confirmed with what the read says), else the
+    /// last event that failed, unless a later event has been confirmed since, or is queued or in flight now (resending it then would
     /// apply it out of order, predicted from a state the server has moved past): either answers `NOTHING_TO_RETRY`.
     pub fn retry(&self) -> impl std::future::Future<Output = SendOutcome> + Send + 'static {
         let (reply, answer) = oneshot::channel();
@@ -726,6 +729,10 @@ struct Actor<S> {
     sending: bool,
     last_failed: Option<EventRequest>,
     start_failed: bool,
+    // Whether the first read of an instance opened by id failed past every retry, so `retry` reads it again, and who
+    // waits for that read.
+    read_failed: bool,
+    read_waiters: Vec<oneshot::Sender<SendOutcome>>,
     // Whether a start is in flight, or waits to be tried again.
     creating: bool,
     start_waiters: Vec<oneshot::Sender<SendOutcome>>,
@@ -923,6 +930,7 @@ impl<S: MachineServer> Actor<S> {
             }
         }
         self.settle_start(disposed_outcome());
+        self.settle_read(disposed_outcome());
         self.settle_open();
         self.settle_sync(SyncOutcome::Failed(disposed_problem()));
         self.settle_superseded();
@@ -1042,6 +1050,18 @@ impl<S: MachineServer> Actor<S> {
         for waiter in self.start_waiters.drain(..) {
             let _ = waiter.send(outcome.clone());
         }
+    }
+
+    fn settle_read(&mut self, outcome: SendOutcome) {
+        for waiter in self.read_waiters.drain(..) {
+            let _ = waiter.send(outcome.clone());
+        }
+    }
+
+    // A read that failed past every retry: one that was the first leaves `retry` something to resend.
+    fn read_gave_up(&mut self, problem: MachineProblem) {
+        self.read_failed = self.confirmed.is_none();
+        self.settle_read(SendOutcome::Failed(problem));
     }
 
     fn listen(&mut self, id: String) {
@@ -1172,6 +1192,7 @@ impl<S: MachineServer> Actor<S> {
                     return false;
                 }
                 self.end_read();
+                self.read_gave_up(transport_failure(&error));
             }
             Ok(ServerAnswer::Refused(problem)) => {
                 if problem.code == codes::SERVER_OUTDATED && attempt < self.retry_delays.len() {
@@ -1198,8 +1219,14 @@ impl<S: MachineServer> Actor<S> {
                         deleted: Some(false),
                     });
                 } else {
-                    self.problem = Some(refusal(&problem.code, &problem.message));
+                    let p = refusal(&problem.code, &problem.message);
+                    self.problem = Some(p.clone());
                     self.emit();
+                    if problem.code == codes::SERVER_OUTDATED {
+                        self.read_gave_up(p);
+                    } else {
+                        self.settle_read(SendOutcome::Refused(p));
+                    }
                 }
             }
             Ok(ServerAnswer::Stored { snapshot, .. }) => {
@@ -1208,13 +1235,15 @@ impl<S: MachineServer> Actor<S> {
                     .clone()
                     .or(row_id.clone())
                     .or_else(|| self.row_id.clone());
-                let mut changed = self.accept(
-                    ServerSnapshot {
-                        row_id: row,
-                        ..snapshot
-                    },
-                    Source::Load,
-                );
+                let read = ServerSnapshot {
+                    row_id: row,
+                    ..snapshot
+                };
+                let mut changed = self.accept(read.clone(), Source::Load);
+                self.settle_read(match &self.error {
+                    Some(error) => SendOutcome::Stopped(error.clone()),
+                    None => SendOutcome::Confirmed(read),
+                });
                 if let Some(buffered) = self.buffered.take() {
                     if self.error.is_none() && buffered.row_id == self.row_id {
                         changed = self.accept(buffered, Source::Push) || changed;
@@ -1383,6 +1412,13 @@ impl<S: MachineServer> Actor<S> {
                 self.create(request_id, 0);
                 return;
             }
+        }
+        // Opened by id, with a first read that failed past every retry: the read is what failed, so it is read again.
+        if self.read_failed && self.confirmed.is_none() && !self.reloading {
+            self.read_failed = false;
+            self.read_waiters.push(reply);
+            self.read(None, 0);
+            return;
         }
         match self.last_failed.take() {
             None => {
@@ -1803,6 +1839,7 @@ impl<S: MachineServer> Actor<S> {
                 let _ = reply.send(SendOutcome::Stopped(error.clone()));
             }
         }
+        self.settle_read(SendOutcome::Stopped(error.clone()));
         self.settle_sync(SyncOutcome::Stopped(error));
         self.settle_superseded();
     }
