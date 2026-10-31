@@ -21,7 +21,8 @@ public static class ClientProblemCodes
 
     /// <summary>
     /// There is no instance to send to, and none is being started or read: the start was refused or failed, or the first
-    /// read gave up. <see cref="ServerMachineController.RetryAsync"/> resends a start that failed.
+    /// read gave up. <see cref="ServerMachineController.RetryAsync"/> resends a start that failed, and reads again after a
+    /// first read that gave up.
     /// </summary>
     public const string NotReady = "NOT_READY";
 }
@@ -288,6 +289,9 @@ public sealed class ServerMachineController : IDisposable
     private EventRequest? _lastFailed;
     private bool _startFailed;
 
+    // An instance opened by id whose first read failed past every retry: RetryAsync reads it again.
+    private bool _readFailed;
+
     // While the start or the first read, or a retried start, is in flight: a send waits for it rather than failing.
     private bool _opening;
 
@@ -406,7 +410,9 @@ public sealed class ServerMachineController : IDisposable
 
     /// <summary>
     /// Resends what last failed under the same request id, so the server replays its recorded result if the first
-    /// attempt did arrive: the start while there is no instance, else the last event that failed, unless a later event
+    /// attempt did arrive: the start while there is no instance; for an instance opened by id, a first read that failed
+    /// past every retry, which reads it again and settles confirmed with what it read; else the last event that
+    /// failed, unless a later event
     /// has been confirmed since, or is queued or in flight now (resending it then would apply it out of order, predicted
     /// from a state the server has moved past): either answers <c>NOTHING_TO_RETRY</c>.
     /// </summary>
@@ -424,6 +430,14 @@ public sealed class ServerMachineController : IDisposable
                 _startWaiters.Add(waiter);
                 var requestId = _startRequestId;
                 _ = OpeningAsync(() => CreateAsync(requestId, 0));
+                return waiter.Task;
+            }
+            if (_readFailed && _id is not null && _confirmed is null && !_opening && !_reloading)
+            {
+                _readFailed = false;
+                var waiter = NewOutcome();
+                _startWaiters.Add(waiter);
+                _ = OpeningAsync(() => ReadAsync(null));
                 return waiter.Task;
             }
             var request = _lastFailed;
@@ -876,6 +890,7 @@ public sealed class ServerMachineController : IDisposable
                 );
                 return;
             }
+            var first = _confirmed is null;
             EndRead();
             if (problem.Code == ClientOutdated)
                 Stop(new MachineError(ClientOutdated, problem.Message));
@@ -884,7 +899,17 @@ public sealed class ServerMachineController : IDisposable
             else
             {
                 _problem = Refusal(problem.Code, problem.Message);
+                // A first read another version kept answering failed past every retry; any other refusal is the
+                // host's answer, and reading again would get it again.
+                var failed = problem.Code == ServerOutdated;
+                _readFailed = first && failed;
                 Emit();
+                if (first)
+                    SettleStart(
+                        failed
+                            ? new SendOutcome.Failed(_problem)
+                            : new SendOutcome.Refused(_problem)
+                    );
                 Pump();
             }
             return;
@@ -910,7 +935,16 @@ public sealed class ServerMachineController : IDisposable
         // A kept push this client cannot hold is dropped, as one that came now would be, and the instance read again.
         if (dropped && !_disposed && _error is null)
             Reload(null);
-        if (changed && _error is null)
+        if (_error is not null)
+            return;
+        // A first read RetryAsync resent settles with what it read.
+        if (_startWaiters.Count > 0 && _confirmed is not null)
+        {
+            _problem = null;
+            changed = true;
+            SettleStart(new SendOutcome.Confirmed(ConfirmedSnapshot()));
+        }
+        if (changed)
             Emit();
         Pump();
     }
@@ -926,7 +960,14 @@ public sealed class ServerMachineController : IDisposable
             () => ReadAsync(rowId, attempt + 1),
             () =>
             {
+                var first = _confirmed is null;
                 EndRead();
+                // A first read that failed past every retry is RetryAsync's to read again.
+                if (first && !_disposed && _error is null)
+                {
+                    _readFailed = true;
+                    SettleStart(new SendOutcome.Failed(failure));
+                }
                 Pump();
                 return Task.CompletedTask;
             }
