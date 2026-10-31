@@ -275,6 +275,11 @@ export function createMachineExecutor(
       const context = answer.context ?? {};
       if (typeof answer.state !== 'string' || !isContext(context))
         throw new Error("The server's answer holds no state, or a context that is not an object.");
+      // A revision the store does not record is null; any other that is not a whole number from zero is no store's.
+      if (answer.revision != null && !isRevision(answer.revision))
+        throw new Error(
+          `The server's answer holds a revision that is not a whole number from zero: ${JSON.stringify(answer.revision)}.`,
+        );
       return {
         snapshot: JSON.stringify({
           machine: machineId,
