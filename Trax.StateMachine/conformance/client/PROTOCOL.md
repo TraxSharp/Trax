@@ -341,7 +341,9 @@ entry points), C# (`Trax.StateMachine.Client`) and Rust (`trax-state-machine-cli
 name a row gives for it is not on its public surface, or when a public member of a type the second table covers is in
 no row: `ClientSurfaceTests` in `dotnet/tests/Trax.StateMachine.Tests.Meta`, `ts/src/clientSurface.test.ts` and
 `rust/client/tests/client_surface.rs`. So a member added to one client fails until it has a row, and the row says
-what the other two call it, or why they have none.
+what the other two call it, or why they have none. Each test reads the column headed with its language's name, so
+another client is another column and a test of its own, and the headers name the languages the testees in
+`conformance/testees.json` are written in.
 
 A cell is one name in backticks, `Type.member` for a member and a bare `Name` for an export of its own (a type, a
 function, a constant), or `—` and the reason that language has none. A member of a type the first table does not cover

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -12,26 +12,30 @@ import { describe, expect, it } from 'vitest';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const protocol = path.join(here, '..', '..', 'conformance', 'client', 'PROTOCOL.md');
-const TYPESCRIPT = 1;
+const testees = path.join(here, '..', '..', 'conformance', 'testees.json');
 
 interface Named {
   line: number;
   name: string;
 }
 
-// The two tables, read strictly: a header row as written, a separator, then rows of four cells. A language's cell is
-// one name in backticks (`Type.member` or `Name`) or `—` and a reason. Anything else fails, with its line.
-function readTable(column: number): { types: Named[]; members: Named[] } {
-  const lines = readFileSync(protocol, 'utf8').replace(/\r\n/g, '\n').split('\n');
+interface Table {
+  languages: string[];
+  types: Named[];
+  members: Named[];
+}
+
+// The two tables, read strictly: a header row whose first cell is `Type` or `Member` and whose other cells name the
+// languages, a separator, then rows of as many cells. Both tables name the same languages in the same order, and this
+// test reads the column headed with its own. A language's cell is one name in backticks (`Type.member` or `Name`) or
+// `—` and a reason. Anything else fails, with its line.
+function parseTable(lines: string[], language: string): Table {
   const start = lines.indexOf('## The client surface');
   if (start < 0) throw new Error('PROTOCOL.md has no `## The client surface` section');
   const next = lines.findIndex((l, i) => i > start && l.startsWith('## '));
   const end = next < 0 ? lines.length : next;
   const tables: Record<string, Named[] | undefined> = {};
-  const headers: Record<string, string> = {
-    '| Type | TypeScript | C# | Rust |': 'types',
-    '| Member | TypeScript | C# | Rust |': 'members',
-  };
+  let languages: string[] | undefined;
   let i = start + 1;
   while (i < end) {
     const header = lines[i];
@@ -39,15 +43,23 @@ function readTable(column: number): { types: Named[]; members: Named[] } {
       i++;
       continue;
     }
-    const slot = headers[header];
-    if (!slot) throw new Error(`PROTOCOL.md:${i + 1}: a table this test does not know: ${header}`);
-    if (tables[slot]) throw new Error(`PROTOCOL.md:${i + 1}: a second ${header} table`);
-    if (lines[i + 1] !== '| --- | --- | --- | --- |') throw new Error(`PROTOCOL.md:${i + 2}: no separator row`);
+    const [first, ...columns] = cellsOf(header, i + 1, null);
+    const slot = first === 'Type' ? 'types' : first === 'Member' ? 'members' : undefined;
+    if (!slot || columns.length === 0 || columns.some((c) => c === '') || new Set(columns).size !== columns.length)
+      throw new Error(`PROTOCOL.md:${i + 1}: a table this test does not know: ${header}`);
+    if (tables[slot]) throw new Error(`PROTOCOL.md:${i + 1}: a second ${first} table`);
+    if (languages && languages.join(' | ') !== columns.join(' | '))
+      throw new Error(`PROTOCOL.md:${i + 1}: the tables name different languages: ${languages.join(', ')} and ${columns.join(', ')}`);
+    languages = columns;
+    const column = columns.indexOf(language) + 1;
+    if (column === 0) throw new Error(`PROTOCOL.md:${i + 1}: the ${first} table has no ${language} column: ${header}`);
+    if (lines[i + 1] !== `| ${['---', ...columns.map(() => '---')].join(' | ')} |`)
+      throw new Error(`PROTOCOL.md:${i + 2}: no separator row`);
     i += 2;
     const names: Named[] = [];
     const seen = new Set<string>();
     for (; i < end && lines[i].startsWith('|'); i++) {
-      const name = nameOf(cellsOf(lines[i], i + 1)[column], i + 1);
+      const name = nameOf(cellsOf(lines[i], i + 1, columns.length + 1)[column], i + 1);
       if (name === null) continue;
       if (seen.has(name)) throw new Error(`PROTOCOL.md:${i + 1}: \`${name}\` is named twice in this table`);
       seen.add(name);
@@ -55,19 +67,24 @@ function readTable(column: number): { types: Named[]; members: Named[] } {
     }
     tables[slot] = names;
   }
-  if (!tables.types) throw new Error('PROTOCOL.md: no `| Type | TypeScript | C# | Rust |` table');
-  if (!tables.members) throw new Error('PROTOCOL.md: no `| Member | TypeScript | C# | Rust |` table');
-  return { types: tables.types, members: tables.members };
+  if (!tables.types) throw new Error('PROTOCOL.md: no `| Type | ... |` table');
+  if (!tables.members) throw new Error('PROTOCOL.md: no `| Member | ... |` table');
+  return { languages: languages ?? [], types: tables.types, members: tables.members };
 }
 
-function cellsOf(line: string, number: number): string[] {
+function readTable(): Table {
+  return parseTable(readFileSync(protocol, 'utf8').replace(/\r\n/g, '\n').split('\n'), 'TypeScript');
+}
+
+function cellsOf(line: string, number: number, count: number | null): string[] {
   if (!line.startsWith('| ') || !line.endsWith(' |'))
     throw new Error(`PROTOCOL.md:${number}: a row starts with \`| \` and ends with \` |\``);
   const cells = line
     .slice(2, -2)
     .split(' | ')
     .map((c) => c.trim());
-  if (cells.length !== 4) throw new Error(`PROTOCOL.md:${number}: a row has four cells`);
+  if (count !== null && cells.length !== count)
+    throw new Error(`PROTOCOL.md:${number}: a row has ${count} cells, one for what it is and one per language`);
   if (cells[0] === '') throw new Error(`PROTOCOL.md:${number}: the first cell says what the row is`);
   return cells;
 }
@@ -136,7 +153,7 @@ function packageSurface(): { exports: Map<string, ts.Symbol>; members(name: stri
 }
 
 describe('the client surface table', () => {
-  const table = readTable(TYPESCRIPT);
+  const table = readTable();
   let read: ReturnType<typeof packageSurface> | undefined;
   const surface = () => (read ??= packageSurface());
 
@@ -168,4 +185,65 @@ describe('the client surface table', () => {
         'Give each a row with its C# and Rust names, or `—` and the reason a language has none.',
     ).toEqual([]);
   }, 30_000);
+});
+
+// conformance/testees.json has a row per language the kits run, its `language` as the table's header names it. The
+// table has a column for each of those languages and no other.
+function testeeLanguages(): string[] {
+  const read: unknown = JSON.parse(readFileSync(testees, 'utf8'));
+  const list = Array.isArray(read) ? read : (read as { languages?: unknown }).languages;
+  if (!Array.isArray(list)) throw new Error('conformance/testees.json has no `languages` list');
+  const languages = list.map((t: { language?: unknown }) => t.language);
+  if (languages.some((l) => typeof l !== 'string'))
+    throw new Error('conformance/testees.json has a testee without a `language` string');
+  return [...new Set(languages as string[])].sort();
+}
+
+describe('the client surface table, read', () => {
+  const extra = [
+    '## The client surface',
+    '| Type | TypeScript | C# | Rust | Swift |',
+    '| --- | --- | --- | --- | --- |',
+    '| The controller | `A` | `B` | `C` | `D` |',
+    '',
+    '| Member | TypeScript | C# | Rust | Swift |',
+    '| --- | --- | --- | --- | --- |',
+    '| Send | `A.send` | `B.SendAsync` | `C.send` | — not yet |',
+  ];
+
+  it('finds its own column in a table with another language', () => {
+    const table = parseTable(extra, 'TypeScript');
+    expect(table.languages).toEqual(['TypeScript', 'C#', 'Rust', 'Swift']);
+    expect(table.types).toEqual([{ line: 4, name: 'A' }]);
+    expect(table.members).toEqual([{ line: 8, name: 'A.send' }]);
+    expect(parseTable(extra, 'Rust').members).toEqual([{ line: 8, name: 'C.send' }]);
+  });
+
+  it('refuses a table without its column', () => {
+    expect(() => parseTable(extra, 'Python')).toThrow('PROTOCOL.md:2: the Type table has no Python column');
+  });
+
+  it('refuses tables that name different languages', () => {
+    const lines = [...extra];
+    lines[5] = '| Member | TypeScript | C# | Rust |';
+    lines[6] = '| --- | --- | --- | --- |';
+    lines[7] = '| Send | `A.send` | `B.SendAsync` | `C.send` |';
+    expect(() => parseTable(lines, 'TypeScript')).toThrow('PROTOCOL.md:6: the tables name different languages');
+  });
+
+  it('refuses a row with a cell missing', () => {
+    const lines = [...extra];
+    lines[3] = '| The controller | `A` | `B` | `C` |';
+    expect(() => parseTable(lines, 'TypeScript')).toThrow('PROTOCOL.md:4: a row has 5 cells');
+  });
+});
+
+describe('the client surface table, against the testees', () => {
+  it('has a column for each language a testee is in, and no other', (context) => {
+    if (!existsSync(testees)) {
+      context.skip('conformance/testees.json is absent, so there is no testee list to hold the columns to');
+      return;
+    }
+    expect([...readTable().languages].sort()).toEqual(testeeLanguages());
+  });
 });
