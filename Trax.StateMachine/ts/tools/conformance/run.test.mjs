@@ -22,9 +22,10 @@ beforeAll(async () => {
 
 describe("the conformance kit", () => {
   it("draws on every source", () => {
-    for (const source of ["/differential/", "/advance/", "/rehydrate/", "/wire-handoff/", "strict-input/", "plan/", "unreadable-ir/", "values/stored/", "values/text/", "values/input/", "canonical-wire/"])
+    for (const source of ["/differential/", "/advance/", "/rehydrate/", "/wire-handoff/", "strict-input/", "plan/", "unreadable-ir/", "values/stored/", "values/text/", "values/input/", "found/", "canonical-wire/"])
       expect(cases.some((c) => c.name.includes(source)), source).toBe(true);
-    expect(cases.filter((c) => c.expect.loaded).map((c) => c.request.machine)).toEqual([
+    const loaded = cases.filter((c) => c.expect.loaded).map((c) => c.request.machine);
+    expect(loaded.filter((m) => !m.startsWith("found/"))).toEqual([
       "checkout",
       "deep",
       "gauge",

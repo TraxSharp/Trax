@@ -1,6 +1,7 @@
 import type { SnapshotMachine } from './machine';
 import { MAX_NESTING, nestsTooDeep } from './nesting';
 import { RefusalCode } from './results';
+import { ownMember } from './rules/interpreter';
 import type { Snapshot } from './types';
 
 /** One event of a plan: a trigger, and its input when it takes one (the fields event's). */
@@ -112,7 +113,7 @@ export function searchPlan(
     ...(fieldsEvent ? [fieldsEvent] : []),
     ...navigation.map((trigger) => ({ trigger })),
   ];
-  const unpredictableAt = (state: string): readonly string[] => def.unpredictable?.[state] ?? [];
+  const unpredictableAt = (state: string): readonly string[] => ownMember(def.unpredictable, state) ?? [];
 
   // Snapshots are compared by their canonical wire without the members that hold null, at every depth: a host leaves
   // those out, so a snapshot it confirmed never carries them, and a reduction that writes one must not read as a change.

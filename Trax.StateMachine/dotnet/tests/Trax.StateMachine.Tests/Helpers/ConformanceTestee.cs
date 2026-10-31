@@ -111,7 +111,12 @@ public sealed class ConformanceTestee(bool fromIr = false)
     private JsonObject Load(JsonObject request)
     {
         var name = request["machine"]!.GetValue<string>();
-        if (fromIr || OnlyAnIr.Contains(name))
+        // What the fuzzer found (conformance/found/) is a machine of its own per case, kept only as an IR.
+        if (
+            fromIr
+            || OnlyAnIr.Contains(name)
+            || name.StartsWith("found/", StringComparison.Ordinal)
+        )
         {
             try
             {

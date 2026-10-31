@@ -1,0 +1,820 @@
+{
+  "_comment": "Differences conformance/fuzz.mjs found between the engines, each shrunk to a machine and the requests that showed it. The runner loads each case's IR under the machine name found/<name> and sends its requests to it; every testee builds these machines from the IR. Add a difference the fuzzer finds here, with the answer the engines must agree on.",
+  "cases": [
+    {
+      "name": "a trigger named after an Object.prototype member takes no input when it declares none",
+      "ir": {
+        "committedStates": [],
+        "context": {
+          "B": {
+            "fields": []
+          }
+        },
+        "id": "prototype-triggers",
+        "initialContext": {},
+        "initialState": "B",
+        "inputs": {},
+        "states": [
+          "B"
+        ],
+        "transitions": [
+          {
+            "from": "B",
+            "to": "B",
+            "trigger": "__proto__"
+          },
+          {
+            "from": "B",
+            "to": "B",
+            "trigger": "constructor"
+          },
+          {
+            "from": "B",
+            "to": "B",
+            "trigger": "hasOwnProperty"
+          },
+          {
+            "from": "B",
+            "to": "B",
+            "trigger": "toString"
+          },
+          {
+            "from": "B",
+            "to": "B",
+            "trigger": "valueOf"
+          }
+        ],
+        "triggers": [
+          "__proto__",
+          "constructor",
+          "hasOwnProperty",
+          "toString",
+          "valueOf"
+        ],
+        "version": 1
+      },
+      "requests": [
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-triggers",
+              "version": 1,
+              "state": "B",
+              "context": {}
+            },
+            "trigger": "__proto__",
+            "input": null
+          },
+          "expect": {
+            "outcome": "transitioned",
+            "wire": "{\"machine\":\"prototype-triggers\",\"version\":1,\"state\":\"B\",\"context\":{}}"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-triggers",
+              "version": 1,
+              "state": "B",
+              "context": {}
+            },
+            "trigger": "__proto__",
+            "input": {
+              "x": 1
+            }
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "INVALID_INPUT"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-triggers",
+              "version": 1,
+              "state": "B",
+              "context": {}
+            },
+            "trigger": "constructor",
+            "input": null
+          },
+          "expect": {
+            "outcome": "transitioned",
+            "wire": "{\"machine\":\"prototype-triggers\",\"version\":1,\"state\":\"B\",\"context\":{}}"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-triggers",
+              "version": 1,
+              "state": "B",
+              "context": {}
+            },
+            "trigger": "constructor",
+            "input": {
+              "x": 1
+            }
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "INVALID_INPUT"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-triggers",
+              "version": 1,
+              "state": "B",
+              "context": {}
+            },
+            "trigger": "hasOwnProperty",
+            "input": null
+          },
+          "expect": {
+            "outcome": "transitioned",
+            "wire": "{\"machine\":\"prototype-triggers\",\"version\":1,\"state\":\"B\",\"context\":{}}"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-triggers",
+              "version": 1,
+              "state": "B",
+              "context": {}
+            },
+            "trigger": "hasOwnProperty",
+            "input": {
+              "x": 1
+            }
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "INVALID_INPUT"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-triggers",
+              "version": 1,
+              "state": "B",
+              "context": {}
+            },
+            "trigger": "toString",
+            "input": null
+          },
+          "expect": {
+            "outcome": "transitioned",
+            "wire": "{\"machine\":\"prototype-triggers\",\"version\":1,\"state\":\"B\",\"context\":{}}"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-triggers",
+              "version": 1,
+              "state": "B",
+              "context": {}
+            },
+            "trigger": "toString",
+            "input": {
+              "x": 1
+            }
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "INVALID_INPUT"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-triggers",
+              "version": 1,
+              "state": "B",
+              "context": {}
+            },
+            "trigger": "valueOf",
+            "input": null
+          },
+          "expect": {
+            "outcome": "transitioned",
+            "wire": "{\"machine\":\"prototype-triggers\",\"version\":1,\"state\":\"B\",\"context\":{}}"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-triggers",
+              "version": 1,
+              "state": "B",
+              "context": {}
+            },
+            "trigger": "valueOf",
+            "input": {
+              "x": 1
+            }
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "INVALID_INPUT"
+          }
+        }
+      ]
+    },
+    {
+      "name": "states named after Object.prototype members are states like any other",
+      "ir": {
+        "committedStates": [
+          "hasOwnProperty"
+        ],
+        "context": {
+          "B": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "n",
+                "nullable": false,
+                "type": "integer"
+              }
+            ]
+          }
+        },
+        "id": "prototype-states",
+        "initialContext": {
+          "n": 1
+        },
+        "initialState": "B",
+        "inputs": {},
+        "states": [
+          "B",
+          "__proto__",
+          "constructor",
+          "hasOwnProperty",
+          "toString",
+          "valueOf"
+        ],
+        "timers": [
+          {
+            "after": "PT5M",
+            "rules": [],
+            "state": "valueOf",
+            "target": "B",
+            "trigger": "valueOf.after"
+          }
+        ],
+        "transitions": [
+          {
+            "from": "B",
+            "to": "__proto__",
+            "trigger": "Go0"
+          },
+          {
+            "from": "B",
+            "to": "constructor",
+            "trigger": "Go1"
+          },
+          {
+            "from": "B",
+            "to": "hasOwnProperty",
+            "trigger": "Go2"
+          },
+          {
+            "from": "B",
+            "to": "toString",
+            "trigger": "Go3"
+          },
+          {
+            "from": "B",
+            "to": "valueOf",
+            "trigger": "Go4"
+          },
+          {
+            "from": "toString",
+            "to": "B",
+            "trigger": "Back",
+            "guard": {
+              "rule": "custom",
+              "name": "approved"
+            }
+          },
+          {
+            "from": "constructor",
+            "to": "B",
+            "trigger": "Back"
+          }
+        ],
+        "triggers": [
+          "Back",
+          "Go0",
+          "Go1",
+          "Go2",
+          "Go3",
+          "Go4"
+        ],
+        "version": 1
+      },
+      "requests": [
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "B",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "Go0",
+            "input": null
+          },
+          "expect": {
+            "outcome": "transitioned",
+            "wire": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"__proto__\",\"context\":{\"n\":1}}"
+          }
+        },
+        {
+          "request": {
+            "op": "rehydrate",
+            "text": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"__proto__\",\"context\":{\"n\":\"x\"}}"
+          },
+          "expect": {
+            "result": "ok",
+            "wire": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"__proto__\",\"context\":{\"n\":\"x\"}}"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "__proto__",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "Back",
+            "input": null
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "NO_TRANSITION"
+          }
+        },
+        {
+          "request": {
+            "op": "timer",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "__proto__",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "__proto__.after"
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "NO_TRANSITION"
+          }
+        },
+        {
+          "request": {
+            "op": "plan",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "B",
+              "context": {
+                "n": 1
+              }
+            },
+            "target": "__proto__",
+            "fields": null,
+            "navigation": [
+              "Back",
+              "Go0",
+              "Go1",
+              "Go2",
+              "Go3",
+              "Go4"
+            ]
+          },
+          "expect": {
+            "events": [
+              {
+                "trigger": "Go0"
+              }
+            ],
+            "result": "plan"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "B",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "Go1",
+            "input": null
+          },
+          "expect": {
+            "outcome": "transitioned",
+            "wire": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"constructor\",\"context\":{\"n\":1}}"
+          }
+        },
+        {
+          "request": {
+            "op": "rehydrate",
+            "text": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"constructor\",\"context\":{\"n\":\"x\"}}"
+          },
+          "expect": {
+            "result": "ok",
+            "wire": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"constructor\",\"context\":{\"n\":\"x\"}}"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "constructor",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "Back",
+            "input": null
+          },
+          "expect": {
+            "outcome": "transitioned",
+            "wire": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"B\",\"context\":{\"n\":1}}"
+          }
+        },
+        {
+          "request": {
+            "op": "timer",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "constructor",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "constructor.after"
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "NO_TRANSITION"
+          }
+        },
+        {
+          "request": {
+            "op": "plan",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "B",
+              "context": {
+                "n": 1
+              }
+            },
+            "target": "constructor",
+            "fields": null,
+            "navigation": [
+              "Back",
+              "Go0",
+              "Go1",
+              "Go2",
+              "Go3",
+              "Go4"
+            ]
+          },
+          "expect": {
+            "events": [
+              {
+                "trigger": "Go1"
+              }
+            ],
+            "result": "plan"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "B",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "Go2",
+            "input": null
+          },
+          "expect": {
+            "outcome": "transitioned",
+            "wire": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"hasOwnProperty\",\"context\":{\"n\":1}}"
+          }
+        },
+        {
+          "request": {
+            "op": "rehydrate",
+            "text": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"hasOwnProperty\",\"context\":{\"n\":\"x\"}}"
+          },
+          "expect": {
+            "result": "ok",
+            "wire": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"hasOwnProperty\",\"context\":{\"n\":\"x\"}}"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "hasOwnProperty",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "Back",
+            "input": null
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "NO_TRANSITION"
+          }
+        },
+        {
+          "request": {
+            "op": "timer",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "hasOwnProperty",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "hasOwnProperty.after"
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "NO_TRANSITION"
+          }
+        },
+        {
+          "request": {
+            "op": "plan",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "B",
+              "context": {
+                "n": 1
+              }
+            },
+            "target": "hasOwnProperty",
+            "fields": null,
+            "navigation": [
+              "Back",
+              "Go0",
+              "Go1",
+              "Go2",
+              "Go3",
+              "Go4"
+            ]
+          },
+          "expect": {
+            "events": [
+              {
+                "trigger": "Go2"
+              }
+            ],
+            "result": "plan"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "B",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "Go3",
+            "input": null
+          },
+          "expect": {
+            "outcome": "transitioned",
+            "wire": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"toString\",\"context\":{\"n\":1}}"
+          }
+        },
+        {
+          "request": {
+            "op": "rehydrate",
+            "text": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"toString\",\"context\":{\"n\":\"x\"}}"
+          },
+          "expect": {
+            "result": "ok",
+            "wire": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"toString\",\"context\":{\"n\":\"x\"}}"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "toString",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "Back",
+            "input": null
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "GUARD_FAILED"
+          }
+        },
+        {
+          "request": {
+            "op": "timer",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "toString",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "toString.after"
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "NO_TRANSITION"
+          }
+        },
+        {
+          "request": {
+            "op": "plan",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "B",
+              "context": {
+                "n": 1
+              }
+            },
+            "target": "toString",
+            "fields": null,
+            "navigation": [
+              "Back",
+              "Go0",
+              "Go1",
+              "Go2",
+              "Go3",
+              "Go4"
+            ]
+          },
+          "expect": {
+            "events": [
+              {
+                "trigger": "Go3"
+              }
+            ],
+            "result": "plan"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "B",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "Go4",
+            "input": null
+          },
+          "expect": {
+            "outcome": "transitioned",
+            "wire": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"valueOf\",\"context\":{\"n\":1}}"
+          }
+        },
+        {
+          "request": {
+            "op": "rehydrate",
+            "text": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"valueOf\",\"context\":{\"n\":\"x\"}}"
+          },
+          "expect": {
+            "result": "ok",
+            "wire": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"valueOf\",\"context\":{\"n\":\"x\"}}"
+          }
+        },
+        {
+          "request": {
+            "op": "advance",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "valueOf",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "Back",
+            "input": null
+          },
+          "expect": {
+            "outcome": "rejected",
+            "reason": "NO_TRANSITION"
+          }
+        },
+        {
+          "request": {
+            "op": "timer",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "valueOf",
+              "context": {
+                "n": 1
+              }
+            },
+            "trigger": "valueOf.after"
+          },
+          "expect": {
+            "outcome": "transitioned",
+            "wire": "{\"machine\":\"prototype-states\",\"version\":1,\"state\":\"B\",\"context\":{\"n\":1}}"
+          }
+        },
+        {
+          "request": {
+            "op": "plan",
+            "snapshot": {
+              "machine": "prototype-states",
+              "version": 1,
+              "state": "B",
+              "context": {
+                "n": 1
+              }
+            },
+            "target": "valueOf",
+            "fields": null,
+            "navigation": [
+              "Back",
+              "Go0",
+              "Go1",
+              "Go2",
+              "Go3",
+              "Go4"
+            ]
+          },
+          "expect": {
+            "events": [
+              {
+                "trigger": "Go4"
+              }
+            ],
+            "result": "plan"
+          }
+        }
+      ]
+    }
+  ]
+}

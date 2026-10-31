@@ -199,6 +199,7 @@ Every engine answers the same plan, so the search is fixed:
 | `conformance/plan/` | `load` of each machine its cases plan over, `wizard.ir.json` first, then one `plan` per case in `cases.json` |
 | `conformance/unreadable-ir/cases.json` | one `load` per case, which must be refused |
 | `conformance/values/` | `load` of `hostile.ir.json`, then one `rehydrate` per `stored` context and per `text`, and one `advance` per `input`, in `hostile.json` |
+| `conformance/found/cases.json` | per case, a `load` of its IR as `found/<name>`, then its requests to that machine |
 | `conformance/canonical-wire.json` | `canonical` |
 
 `machines/turnstile/migration.json` is not sent: it migrates from a v1 to a v2 machine that has no IR, so each engine

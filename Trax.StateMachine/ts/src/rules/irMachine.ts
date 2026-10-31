@@ -14,6 +14,7 @@ import { nestsTooDeep } from "../nesting";
 import {
   applyReduction,
   evaluateRule,
+  ownMember,
   validateInput,
   validateSchema,
   type ContextSchema,
@@ -123,7 +124,7 @@ export function machineFromIr(
   // The machine's actual initial context (what StartsAt built) if the IR carries it, else derived from the
   // initial state's schema. The IR value is authoritative: it reproduces a constrained default (an enum) that
   // the schema alone would default to "" and reject.
-  const initialSchema = ir.context[ir.initialState] ?? { fields: [] };
+  const initialSchema = ownMember(ir.context, ir.initialState) ?? { fields: [] };
   const createInitialContext = (): Record<string, unknown> =>
     ir.initialContext ? { ...ir.initialContext } : defaultsFor(initialSchema);
 
@@ -174,13 +175,14 @@ export function machineFromIr(
   // it declares, else nothing (only no input or `{}`), except that an effect-bound trigger takes the receipt the
   // server's effect runner hands it. A success outcome's input is the train's output; a failure or a cancel
   // carries none.
-  const inputValidators: Partial<Record<string, InputValidator>> = {};
+  // Every table keyed by a state or trigger has no prototype, so a name such as __proto__ is a member like any other.
+  const inputValidators: Partial<Record<string, InputValidator>> = Object.create(null);
   const effectBound = new Set(
     ir.transitions.filter((t) => t.effect).map((t) => t.trigger),
   );
   for (const trigger of ir.triggers) {
     const schema =
-      ir.inputs[trigger] ??
+      ownMember(ir.inputs, trigger) ??
       (effectBound.has(trigger) ? receiptInput : emptyInput);
     inputValidators[trigger] = (input) => validateInput(schema, input);
   }
@@ -191,14 +193,14 @@ export function machineFromIr(
     inputValidators[name] = (input) => validateInput(schema, input);
   }
 
-  const contextValidators: Partial<Record<string, ContextValidator>> = {};
+  const contextValidators: Partial<Record<string, ContextValidator>> = Object.create(null);
   const validatedStates = new Set([
     ...Object.keys(ir.context),
     ...Object.keys(ir.invariants ?? {}),
   ]);
   for (const state of validatedStates) {
-    const schema = ir.context[state];
-    const invariant = ir.invariants?.[state];
+    const schema = ownMember(ir.context, state);
+    const invariant = ownMember(ir.invariants, state);
     // A snapshot the server sent was checked there, custom rules included, so on that read a custom rule this twin
     // has no handler for counts as passed. Everywhere else (a predicted transition, a stored draft) it is a reject:
     // the twin cannot tell that it holds, so it does not predict past it and waits for the server.
@@ -221,7 +223,7 @@ export function machineFromIr(
 
   // A timer is a trigger kind of its own: it is not an edge a caller fires, so it stays out of `transitions`, and
   // only `applyTimer` takes it. The rules it acts under are the server's concern.
-  const timers: Partial<Record<string, MachineTimer>> = {};
+  const timers: Partial<Record<string, MachineTimer>> = Object.create(null);
   for (const t of ir.timers ?? [])
     timers[t.state] = {
       trigger: t.trigger,
@@ -231,9 +233,9 @@ export function machineFromIr(
     };
 
   // The edges whose outcome rests on a custom rule bound to no handler here: the twin cannot tell what they lead to.
-  const unpredictable: Record<string, string[]> = {};
+  const unpredictable: Record<string, string[]> = Object.create(null);
   for (const t of ir.transitions) {
-    const requirement = ir.invariants?.[t.to];
+    const requirement = ownMember(ir.invariants, t.to);
     if (
       (t.guard !== undefined && namesUnhandled(t.guard, customGuards)) ||
       (t.reduce?.reduce === "custom" && !Object.prototype.hasOwnProperty.call(customReducers, t.reduce.name)) ||

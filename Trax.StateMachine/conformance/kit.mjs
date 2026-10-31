@@ -205,6 +205,18 @@ function hostileValueCases() {
   ];
 }
 
+// What the fuzzer found: each case's IR, loaded as found/<name>, then its requests (found/cases.json).
+function foundCases() {
+  const doc = readJson(join(conformanceDir, "found", "cases.json"));
+  return doc.cases.flatMap((c) => {
+    const machine = `found/${c.name}`;
+    return [
+      { name: `${machine}/load`, request: { op: "load", machine, ir: c.ir }, expect: { loaded: true } },
+      ...c.requests.map((r, i) => ({ name: `${machine}/${i}`, request: { ...r.request, machine }, expect: r.expect })),
+    ];
+  });
+}
+
 function canonicalWireCases() {
   const doc = readJson(join(conformanceDir, "canonical-wire.json"));
   return doc.cases.map(({ name, wire, ...context }) => ({
@@ -216,7 +228,7 @@ function canonicalWireCases() {
 
 /**
  * Every case of the kit, in a fixed order: each machine's, then the strict inputs, then the planner's, then the IRs that
- * must be refused, then the hostile values, then the wire vectors.
+ * must be refused, then the hostile values, then what the fuzzer found, then the wire vectors.
  */
 export function kitCases() {
   const machines = readdirSync(machinesDir, { withFileTypes: true })
@@ -229,6 +241,7 @@ export function kitCases() {
     ...planCases(),
     ...unreadableIrCases(),
     ...hostileValueCases(),
+    ...foundCases(),
     ...canonicalWireCases(),
   ];
 }
