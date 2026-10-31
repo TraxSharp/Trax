@@ -1,0 +1,12 @@
+{
+  "about": "unsubscribe stops a stream the caller follows: it is answered at once, the stream delivers nothing after it, and the client asks the host for nothing more.",
+  "steps": [
+    {"client": "subscribe", "operation": "Changes", "variables": {"domain": "RUN"}, "expect": {"subscribed": true}},
+    {"subscribe": "Changes", "variables": {"domain": "RUN"}},
+    {"push": {"onDataChanged": {"domain": "RUN", "id": "1"}}},
+    {"events": [{"next": {"onDataChanged": {"domain": "RUN", "id": "1"}}}]},
+    {"client": "unsubscribe", "expect": {"unsubscribed": true}},
+    {"quiet": 100},
+    {"events": [{"next": {"onDataChanged": {"domain": "RUN", "id": "1"}}}]}
+  ]
+}

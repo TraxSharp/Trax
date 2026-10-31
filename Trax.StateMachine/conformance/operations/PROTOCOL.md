@@ -102,8 +102,8 @@ which no transcript expects.
 | `{ "ended": "failed" }` | `sink.error` with anything else | `Ended` with any other `Failure` |
 | `{ "interrupted": true }`, `{ "resumed": true }` | | `Interrupted`, `Resumed` |
 
-**`unsubscribe`** stops the stream. **`dispose`** closes the client, answered `{ "disposed": true }`. **`end`** is the
-last request; the testee answers `{ "id" }` and exits.
+**`unsubscribe`** stops the stream, answered `{ "unsubscribed": true }`. **`dispose`** closes the client, answered
+`{ "disposed": true }`. **`end`** is the last request; the testee answers `{ "id" }` and exits.
 
 ## Transcripts
 
