@@ -233,9 +233,10 @@ public sealed class ClientTestee : IAsyncDisposable
     private static HttpClient NewHttp() =>
         new(new SocketsHttpHandler { AllowAutoRedirect = false });
 
-    private static IReadOnlyList<TimeSpan> Delays(JsonNode? delays) =>
-        (delays as JsonArray ?? [])
-            .Select(d => TimeSpan.FromMilliseconds(d!.GetValue<double>()))
+    // Delays the open request does not give are left unset, so the client's defaults are in force.
+    private static IReadOnlyList<TimeSpan>? Delays(JsonNode? delays) =>
+        (delays as JsonArray)
+            ?.Select(d => TimeSpan.FromMilliseconds(d!.GetValue<double>()))
             .ToList();
 
     private static JsonObject OutcomeOf(SendOutcome outcome) =>

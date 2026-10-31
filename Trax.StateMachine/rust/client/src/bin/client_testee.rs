@@ -200,17 +200,14 @@ fn nested_too_deep() -> Value {
 
 fn open(request: &Value) -> Result<Opened, String> {
     let text = |key: &str| request.get(key).and_then(|v| v.as_str()).map(str::to_owned);
-    let delays = |key: &str| -> Vec<Duration> {
-        request
-            .get(key)
-            .and_then(|d| d.as_array())
-            .map(|d| {
-                d.iter()
-                    .filter_map(|n| n.as_f64())
-                    .map(|ms| Duration::from_millis(ms as u64))
-                    .collect()
-            })
-            .unwrap_or_default()
+    // Delays the open request does not give are left unset, so the client's defaults are in force, as an app's would be.
+    let delays = |key: &str| -> Option<Vec<Duration>> {
+        request.get(key).and_then(|d| d.as_array()).map(|d| {
+            d.iter()
+                .filter_map(|n| n.as_f64())
+                .map(|ms| Duration::from_millis(ms as u64))
+                .collect()
+        })
     };
     let documents = request
         .get("documents")
@@ -229,7 +226,7 @@ fn open(request: &Value) -> Result<Opened, String> {
         text("machine").ok_or("no machine")?,
         documents,
     );
-    server_options.resubscribe_delays = Some(delays("resubscribeDelays"));
+    server_options.resubscribe_delays = delays("resubscribeDelays");
     if let Some(max) = request.get("maxResponseSize").and_then(|v| v.as_f64()) {
         // One limit holds an HTTP answer and a socket message alike.
         server_options.max_message_size = max as usize;
@@ -250,7 +247,7 @@ fn open(request: &Value) -> Result<Opened, String> {
     options.start_input = request.get("startInput").filter(|i| !i.is_null()).cloned();
     let minted = count.clone();
     options.new_request_id = Some(Box::new(move || next_request_id(&minted)));
-    options.retry_delays = Some(delays("retryDelays"));
+    options.retry_delays = delays("retryDelays");
     let controller = ServerMachineController::new(options).map_err(|e| e.to_string())?;
     Ok(Opened {
         controller,

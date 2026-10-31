@@ -61,7 +61,8 @@ one.)
   a document's text.
 - `instance` is the id of an instance to open, or null to start one on `start`.
 - `retryDelays` and `resubscribeDelays` are in milliseconds: the delays between retries of `SERVER_OUTDATED` and of a
-  failed read, and the delays before subscribing again after a stream that ended without saying why.
+  failed read, and the delays before subscribing again after a stream that ended without saying why. A request
+  without them leaves the client's own defaults in force.
 - `maxResponseSize` (bytes), `requestTimeout` (milliseconds) and `allowInsecureTransport` are given only when a
   transcript sets them, and go to the client's own options of those names: the largest answer or socket message it
   reads, how long it waits for an answer, and whether it may talk cleartext to a host that is not this machine.
@@ -229,8 +230,10 @@ long as the platform does; an expected failure is what a client has not built ye
 ## Defaults
 
 A client built without these options has these values, in every language. A testee sets only the options a transcript
-gives, so a transcript that gives none sees the defaults: `response-size-default` holds the response size. The others
-are too long for a transcript to wait out, and each client's unit tests hold them by what the client does
+gives, so a transcript that gives none sees the defaults: `response-size-default` holds the response size. The runner
+gives every transcript short retry and resubscribe delays unless it is marked `"defaults": true`, so
+`retry-delays-default` and `resubscribe-delays-default` hold the first of each. The rest are too long for a
+transcript to wait out, and each client's unit tests hold them by what the client does
 (TypeScript's `machineServer.test.ts`, C#'s `DefaultsParityTests`, Rust's `tests/defaults.rs`). The values are written
 down once, in `defaults.json` beside this file: each client's tests hold its constants to it, and TypeScript's
 `defaults.conformance.test.ts` holds this table to it. A change to one is a change there, here and in all three.
@@ -296,12 +299,15 @@ null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a
   "opened": { "opened": false, "code": "INSECURE_TRANSPORT" },
   "retryDelays": [10, 10],
   "resubscribeDelays": [10],
+  "defaults": false,
   "steps": [ ... ]
 }
 ```
 
-`refuseUpgrades` lists the HTTP statuses the first socket upgrades are answered with instead of switching protocols,
-one each. `open` adds members to the `open` request, overriding the runner's (`endpoint` and `socket` among them).
+`retryDelays` and `resubscribeDelays` default to `[10, 10]` and `[10]`, which keep a run fast. `"defaults": true` sends
+neither, so the client's own [defaults](#defaults) are in force; such a transcript may not set them or `open`, and
+keeps to the first few delays so the run stays fast. `refuseUpgrades` lists the HTTP statuses the first socket
+upgrades are answered with instead of switching protocols, one each. `open` adds members to the `open` request, overriding the runner's (`endpoint` and `socket` among them).
 `opened` compares the answer to `open`; when it is not `opened: true`, the transcript ends there.
 
 `documents` names each operation the host serves and the variables its document declares; the runner writes the

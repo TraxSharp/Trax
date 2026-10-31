@@ -147,6 +147,8 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
   // Every answer comes within the step timeout, or the transcript fails naming the request it waited on, and no answer
   // may be an `error` or `unsupported`, the ones no step compares included.
   const ask = (request) => withTimeout(askTestee(request), `the testee's answer to ${request.op}`).then(checked(request));
+  if (transcript.defaults === true && ["retryDelays", "resubscribeDelays", "open"].some((k) => k in transcript))
+    throw new Error("a transcript on the client's defaults sets no delays and no open options");
   const { ir, irHash } = machineOf(transcript.machine);
   const documents = documentsOf(transcript.machine, irHash, transcript.documents);
   const field = machineField(transcript.machine);
@@ -163,8 +165,10 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
     instance: transcript.instance ?? null,
     startInput: transcript.startInput ?? null,
     effectEvent: transcript.effectEvent ?? null,
-    retryDelays: transcript.retryDelays ?? [10, 10],
-    resubscribeDelays: transcript.resubscribeDelays ?? [10],
+    // Tuned delays keep a run fast; a transcript marked `defaults` gets none, so the client's own are in force.
+    ...(transcript.defaults === true
+      ? {}
+      : { retryDelays: transcript.retryDelays ?? [10, 10], resubscribeDelays: transcript.resubscribeDelays ?? [10] }),
     ...(transcript.open ?? {}),
   });
   const refused = lacksRefused(opened, allowed);
