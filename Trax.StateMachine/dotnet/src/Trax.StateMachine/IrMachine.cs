@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -88,7 +89,12 @@ public sealed class IrMachine
             // older, is refused, and so is one that names its format as anything but a number.
             if (ir.TryGetPropertyValue("irFormat", out var format))
             {
-                if (format is not JsonValue value || !value.TryGetValue<int>(out var number))
+                // A format is read by its number, as the other engines read it: 1.0 is format 1, 1.5 is none.
+                var number =
+                    format?.GetValueKind() == JsonValueKind.Number
+                        ? double.Parse(format.ToJsonString(), CultureInfo.InvariantCulture)
+                        : double.NaN;
+                if (!double.IsInteger(number))
                     throw new ArgumentException(
                         $"The IR names its format as {format?.ToJsonString() ?? "null"}, which is not a format number.",
                         nameof(ir)
