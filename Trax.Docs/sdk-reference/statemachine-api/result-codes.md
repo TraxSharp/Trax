@@ -27,6 +27,9 @@ before (`guard-failed`), so a request id an older node recorded still replays. `
 in order, and `RefusalCodeJsonConverter`, which the enum carries, writes and reads the wire spelling in
 `System.Text.Json`. The set is also written as data, `Trax.StateMachine/conformance/refusal-codes.json`, and
 every engine checks itself against that file, so the C# and TypeScript sets are equal member for member and in order.
+Each entry there also names its `scope`: `engine` for a code every engine answers, `client` for one a client
+decides from what the host sent, `host` for one only the host answers. The C# and TypeScript tests fail on an `engine`
+or `client` code no conformance case expects, unless the entry says in `uncovered` why none can.
 
 ## Members
 

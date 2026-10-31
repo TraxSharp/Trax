@@ -91,4 +91,90 @@ public class RefusalCodeParityTests
                 "conformance/refusal-codes.json is the one set every engine and client checks itself against"
             );
     }
+
+    // ts/src/refusalCodes.conformance.test.ts checks the same.
+    [Test]
+    public void Every_engine_or_client_code_is_held_by_a_kit_case_or_says_why_not()
+    {
+        var root = FixturePaths.ConformanceRoot;
+        var engine = CodesIn(
+            new[] { "machines", "strict-input", "plan" }.SelectMany(d =>
+                Directory.EnumerateFiles(
+                    Path.Combine(root, d),
+                    "*.json",
+                    SearchOption.AllDirectories
+                )
+            )
+        );
+        var client = CodesIn(
+            Directory.EnumerateFiles(
+                Path.Combine(root, "client", "transcripts"),
+                "*.json",
+                SearchOption.AllDirectories
+            )
+        );
+
+        var wrong = new List<string>();
+        foreach (
+            var entry in JsonNode.Parse(
+                File.ReadAllText(Path.Combine(root, "refusal-codes.json"))
+            )!["codes"]!.AsArray()
+        )
+        {
+            var code = entry!["code"]!.GetValue<string>();
+            var scope = entry["scope"]?.GetValue<string>();
+            var uncovered = entry["uncovered"] is not null;
+            if (scope is not ("engine" or "client" or "host"))
+                wrong.Add($"{code}: scope '{scope}'");
+            else if (scope == "host")
+            {
+                if (uncovered)
+                    wrong.Add($"{code}: a host code needs no 'uncovered'");
+            }
+            else
+            {
+                var held = (scope == "engine" ? engine : client).Contains(code);
+                if (held && uncovered)
+                    wrong.Add($"{code}: a case holds it, so 'uncovered' is stale");
+                if (!held && !uncovered)
+                    wrong.Add($"{code}: no {scope} case holds it");
+            }
+        }
+
+        wrong
+            .Should()
+            .BeEmpty("an engine or client code is held by a kit case, or says why it is not");
+    }
+
+    // Every string a `reason`, `code` or `error` member holds, at any depth: where a case writes the refusal it
+    // expects.
+    private static HashSet<string> CodesIn(IEnumerable<string> files)
+    {
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        void Walk(JsonNode? node)
+        {
+            switch (node)
+            {
+                case JsonArray array:
+                    foreach (var item in array)
+                        Walk(item);
+                    break;
+                case JsonObject obj:
+                    foreach (var (key, member) in obj)
+                    {
+                        if (
+                            key is "reason" or "code" or "error"
+                            && member is JsonValue value
+                            && value.TryGetValue<string>(out var text)
+                        )
+                            found.Add(text);
+                        Walk(member);
+                    }
+                    break;
+            }
+        }
+        foreach (var file in files)
+            Walk(JsonNode.Parse(File.ReadAllText(file)));
+        return found;
+    }
 }
