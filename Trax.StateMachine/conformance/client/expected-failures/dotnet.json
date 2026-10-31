@@ -2,5 +2,7 @@
   {"case": "context-at-the-depth-limit-in-a-push", "reason": "The C# socket parses each message with JsonNode's default depth of 64, so a push holding a context at the limit fails the socket and is never applied.", "message": "step 6 ({\"view\""},
   {"case": "context-at-the-depth-limit-in-an-answer", "reason": "The C# transport parses each answer with JsonNode's default depth of 64, so an answer holding a context at the limit fails as TRANSPORT_ERROR.", "message": "step 4 ({\"view\""},
   {"case": "context-past-the-depth-limit-in-a-push", "reason": "The C# socket fails on a push whose context nests deeper than a stored snapshot may, and does not read the instance again.", "message": "step 6 ({\"request\":\"get\",\"variables\":{\"id\":\"i-1\"},\"hold\":\"fence\"}): no get request arrived"},
+  {"case": "malformed-answer-revision", "reason": "The C# client takes an answer whose revision is negative.", "message": "step 15 ({\"await\":\"push3\""},
+  {"prefix": "malformed-push-", "reason": "The C# client does not drop a malformed push and read the instance again.", "message": "step 6 ({\"request\":\"get\",\"variables\":{\"id\":\"i-1\"},\"hold\":\"fence\"}): no get request arrived"},
   {"case": "retry-after-a-failed-first-read", "reason": "C#'s RetryAsync answers NOTHING_TO_RETRY after a first read that failed past every retry, instead of reading again.", "message": "step 8 ({\"request\":\"get\""}
 ]

@@ -313,6 +313,12 @@ A context nests at most 64 levels, the snapshot that holds it counting as one: n
 and every engine refuses to read one. One that deep is read, however deep the answer or socket message around it, so
 a client's JSON reader takes the whole envelope; one deeper is not one a store wrote, and is malformed (below).
 
+**Malformed answers and pushes.** An answer the client cannot take as one a host wrote fails its request
+`TRANSPORT_ERROR` and changes nothing: one that is not an object, or whose `revision` is not a whole number from zero
+(a fraction, a string, a negative), whose `dueAt` is not an instant, whose `state` is not a string or is missing
+beside no problem, or whose context is not an object or nests too deep. A push like that, or one whose `gone` is not
+a boolean, is dropped and the instance read again. Neither stops the client, and neither is taken unchecked.
+
 ## Transcripts
 
 ```json

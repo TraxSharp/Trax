@@ -1,5 +1,8 @@
 [
   {"case": "context-past-the-depth-limit-in-a-push", "reason": "The Rust client drops a push whose context nests deeper than a stored snapshot may without reading the instance again.", "message": "step 6 ({\"request\":\"get\",\"variables\":{\"id\":\"i-1\"},\"hold\":\"fence\"}): no get request arrived"},
   {"case": "divergence-holds-the-queue", "reason": "The Rust controller sends the event queued behind a CLIENT_DIVERGENCE answer before the read that answer starts.", "message": "step "},
+  {"case": "malformed-answer-due-at", "reason": "The Rust client takes an answer whose dueAt is not an instant without checking it.", "message": "step 7 ({\"await\":\"push1\""},
+  {"case": "malformed-answer-revision", "reason": "The Rust client takes an answer whose revision is negative.", "message": "step 15 ({\"await\":\"push3\""},
+  {"prefix": "malformed-push-", "reason": "The Rust client drops a malformed push without reading the instance again.", "message": "step 6 ({\"request\":\"get\",\"variables\":{\"id\":\"i-1\"},\"hold\":\"fence\"}): no get request arrived"},
   {"case": "retry-after-a-failed-first-read", "reason": "Rust's retry answers NOTHING_TO_RETRY after a first read that failed past every retry, instead of reading again.", "message": "step 8 ({\"request\":\"get\""}
 ]
