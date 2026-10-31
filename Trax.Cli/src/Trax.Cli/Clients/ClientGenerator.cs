@@ -916,6 +916,16 @@ internal sealed partial class ClientGenerator
           );
         }
 
+        /**
+         * Whether graphql-ws opens a closed socket again: after any close but 4401 or 4403, the host turning the caller
+         * away, which a retry gets again. graphql-ws gives up on 4401 by itself and retries 4403.
+         */
+        function retryClosedSocket(error: unknown): boolean {
+          if (typeof error !== "object" || error === null || !("reason" in error)) return false;
+          const code = (error as { code?: unknown }).code;
+          return typeof code === "number" && code !== 4401 && code !== 4403;
+        }
+
         function isLoopbackHost(hostname: string): boolean {
           return hostname === "localhost" || hostname === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
         }
@@ -1068,6 +1078,8 @@ internal sealed partial class ClientGenerator
                 connectionParams,
                 lazy: true,
                 retryAttempts: Number.POSITIVE_INFINITY,
+                // A 4403 close reaches the stream, which stops as FORBIDDEN, rather than being retried forever.
+                shouldRetry: retryClosedSocket,
                 jsonMessageReplacer: persistedMessageReplacer,
               }));
             }

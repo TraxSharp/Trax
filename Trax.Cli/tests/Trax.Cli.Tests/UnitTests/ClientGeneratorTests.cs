@@ -363,6 +363,11 @@ public partial class ClientGeneratorTests
                 "the socket carries the credential in connection_init, so a ws: socket to another host is refused"
             )
             .And.Contain("export function requireSecureSocket(")
+            .And.Contain(
+                "shouldRetry: retryClosedSocket,",
+                "graphql-ws retries a 4403 by default, so the stream would never see the host turn the caller away"
+            )
+            .And.Contain("return typeof code === \"number\" && code !== 4401 && code !== 4403;")
             .And.Contain("redirect: \"error\",")
             .And.Contain(
                 "requireNoRedirect(response);",

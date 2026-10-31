@@ -512,7 +512,7 @@ internal sealed partial class ClientGenerator
                   lazy: true,
                   retryAttempts: Number.POSITIVE_INFINITY,
                   // A host that turned the caller away (4401, 4403) gives the same answer to a retry.
-                  shouldRetry: (error) => isCloseEvent(error) && error.code !== 4401 && error.code !== 4403,
+                  shouldRetry: retryClosedSocket,
                   ...options.socket,
                   url: options.socketUrl,
                   connectionParams: options.connectionParams,
@@ -591,10 +591,6 @@ internal sealed partial class ClientGenerator
                   throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status);
                 return answer as TraxAnswer;
               }
-            }
-
-            function isCloseEvent(value: unknown): value is { code: number; reason: string } {
-              return isRecord(value) && typeof value.code === "number" && "reason" in value;
             }
 
             function isRecord(value: unknown): value is Record<string, unknown> {

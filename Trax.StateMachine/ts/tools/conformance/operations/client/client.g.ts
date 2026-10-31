@@ -223,7 +223,7 @@ export function httpTransport(options: HttpTransportOptions): HttpTransport {
       lazy: true,
       retryAttempts: Number.POSITIVE_INFINITY,
       // A host that turned the caller away (4401, 4403) gives the same answer to a retry.
-      shouldRetry: (error) => isCloseEvent(error) && error.code !== 4401 && error.code !== 4403,
+      shouldRetry: retryClosedSocket,
       ...options.socket,
       url: options.socketUrl,
       connectionParams: options.connectionParams,
@@ -302,10 +302,6 @@ export function httpTransport(options: HttpTransportOptions): HttpTransport {
       throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status);
     return answer as TraxAnswer;
   }
-}
-
-function isCloseEvent(value: unknown): value is { code: number; reason: string } {
-  return isRecord(value) && typeof value.code === "number" && "reason" in value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -410,6 +406,16 @@ export function requireSecureSocket(socketUrl: string, allowInsecure: boolean | 
   throw new Error(
     `The socket ${url.protocol}//${url.host} is not over TLS, so whatever authenticates the client would travel in cleartext. Use wss://, a loopback host, or set allowInsecureTransport when the network is trusted.`,
   );
+}
+
+/**
+ * Whether graphql-ws opens a closed socket again: after any close but 4401 or 4403, the host turning the caller
+ * away, which a retry gets again. graphql-ws gives up on 4401 by itself and retries 4403.
+ */
+function retryClosedSocket(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("reason" in error)) return false;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "number" && code !== 4401 && code !== 4403;
 }
 
 function isLoopbackHost(hostname: string): boolean {

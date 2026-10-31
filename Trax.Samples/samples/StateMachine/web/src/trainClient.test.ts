@@ -109,3 +109,53 @@ describe("the connection's limits", () => {
     expect(() => configureTrax({ ...connection, requestTimeout })).toThrow(RangeError);
   });
 });
+
+// The socket every machine server shares: a host that turns the caller away with 4403 gives a retry the same answer,
+// so the close reaches the stream, which stops as FORBIDDEN instead of the page waiting on a socket opened forever.
+describe("the shared socket", () => {
+  const instance = "00000000-0000-0000-0000-000000000001";
+
+  it("hands a 4403 close to the stream instead of opening the socket again", async () => {
+    let opened = 0;
+    class RefusingSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      readyState = RefusingSocket.CONNECTING;
+      onopen: (() => void) | null = null;
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onclose: ((event: { code: number; reason: string; wasClean: boolean }) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      constructor() {
+        opened += 1;
+        setTimeout(() => {
+          this.readyState = RefusingSocket.OPEN;
+          this.onopen?.();
+        });
+      }
+      send(data: string) {
+        const { type } = JSON.parse(data) as { type: string };
+        if (type === "connection_init") setTimeout(() => this.onmessage?.({ data: JSON.stringify({ type: "connection_ack" }) }));
+        if (type === "subscribe") setTimeout(() => this.close(4403, "Forbidden"));
+      }
+      close(code = 1000, reason = "") {
+        if (this.readyState === RefusingSocket.CLOSED) return;
+        this.readyState = RefusingSocket.CLOSED;
+        this.onclose?.({ code, reason, wasClean: true });
+      }
+    }
+    vi.stubGlobal("WebSocket", RefusingSocket);
+    configureTrax({ url: "/trax/graphql", socketUrl: "wss://example.test/trax/graphql" });
+    const messages: unknown[] = [];
+
+    const stop = checkoutServer().subscribe(instance, (message) => messages.push(message));
+    try {
+      await vi.waitFor(() => expect(messages).toEqual([expect.objectContaining({ type: "ended", code: "FORBIDDEN" })]));
+      expect(opened).toBe(1);
+    } finally {
+      stop();
+      vi.unstubAllGlobals();
+    }
+  });
+});
