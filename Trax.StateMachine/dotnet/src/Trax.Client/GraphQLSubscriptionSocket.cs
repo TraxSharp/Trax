@@ -447,7 +447,13 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         catch (Exception ex)
         {
             acknowledged.TrySetException(ex);
-            Fail(connection, ex);
+            // A message that is not one of the protocol's closes the socket with 4400, as graphql-transport-ws says:
+            // the close goes out before the connection is stopped, which would drop it instead.
+            var invalid =
+                ex is WebSocketException { WebSocketErrorCode: WebSocketError.InvalidMessageType };
+            Fail(connection, ex, stop: !invalid);
+            if (invalid)
+                await CloseInvalidAsync(connection, ex.Message).ConfigureAwait(false);
             // The rest of a message over the limit is never read. The connection fails first, so a send
             // racing the abort cannot fail the subscriptions with the aborted socket's error instead.
             if (connection.Overflowed)
@@ -455,6 +461,39 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             await connection.ReleaseAsync().ConfigureAwait(false);
         }
     }
+
+    // Sends the close frame for a message the host should not have sent, waiting no longer than a connection may take
+    // to open for a send in flight to give the socket up. Whatever goes wrong, the connection is dropped after.
+    private async Task CloseInvalidAsync(Connection connection, string reason)
+    {
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(
+                connection.Stopping
+            );
+            timeout.CancelAfter(_options.ConnectTimeout);
+            await connection.Sending.WaitAsync(timeout.Token).ConfigureAwait(false);
+            try
+            {
+                // A close reason is at most 123 bytes.
+                var said = reason.Length > 60 ? reason[..60] : reason;
+                await connection
+                    .Socket.CloseOutputAsync(InvalidMessage, said, timeout.Token)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                connection.Sending.Release();
+            }
+        }
+        catch (Exception)
+        {
+            // The socket is gone already, or would not take the close in time; it is dropped either way.
+        }
+    }
+
+    // graphql-transport-ws's close code for a message it does not take.
+    private const WebSocketCloseStatus InvalidMessage = (WebSocketCloseStatus)4400;
 
     // A ClientWebSocket left to itself follows a redirect of its upgrade, and connection_init (the credential) would
     // go to whatever host the redirect names. The upgrade goes through a handler that follows none instead; what
@@ -538,8 +577,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     private async Task OnMessageAsync(Connection connection, JsonObject message)
     {
         var type =
-            Text(message, "type")
-            ?? throw new WebSocketException("The server sent a message with no type.");
+            Text(message, "type") ?? throw Invalid("The server sent a message with no type.");
         var id = Text(message, "id");
         Subscription? subscription = null;
         if (id is not null)
@@ -571,9 +609,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         {
             null => null,
             JsonValue value when value.TryGetValue<string>(out var text) => text,
-            _ => throw new WebSocketException(
-                $"The server sent a message whose {name} is not a string."
-            ),
+            _ => throw Invalid($"The server sent a message whose {name} is not a string."),
         };
 
     // Started, once and first, then the event (none when the subscribe message just went out). A sink that throws
@@ -700,18 +736,25 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             if (result.EndOfMessage)
                 break;
         }
-        JsonNode? parsed;
+        JsonObject? parsed;
         try
         {
-            parsed = JsonNode.Parse(text.ToArray(), documentOptions: TraxHttpTransport.Reading);
+            parsed =
+                JsonNode.Parse(text.ToArray(), documentOptions: TraxHttpTransport.Reading)
+                as JsonObject;
+            // A member given twice is found once the object is read.
+            _ = parsed?.Count;
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
-            throw new WebSocketException("The server sent a message that is not JSON.", ex);
+            throw Invalid("The server sent a message that is not JSON.", ex);
         }
-        return parsed as JsonObject
-            ?? throw new WebSocketException("The server sent a message that is not a JSON object.");
+        return parsed ?? throw Invalid("The server sent a message that is not a JSON object.");
     }
+
+    // A message that is not one graphql-transport-ws sends: the socket is closed with 4400.
+    private static WebSocketException Invalid(string message, Exception? inner = null) =>
+        new(WebSocketError.InvalidMessageType, message, inner);
 
     /// <summary>Closes the socket. Every open subscription fails, and no new one connects.</summary>
     public async ValueTask DisposeAsync()

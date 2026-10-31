@@ -4,6 +4,5 @@
   {"case": "discard-unconfirmed-is-transport", "reason": "C#'s DiscardAsync throws on an answer that does not say the instance was discarded instead of settling TRANSPORT_ERROR.", "message": "the testee's answer to discard: error: threw:"},
   {"case": "dispose-with-a-read-in-flight", "reason": "Disposing the C# controller while its first read is in flight leaves StartAsync unsettled.", "message": "the testee's answer to start did not come"},
   {"case": "request-id-minter-throws", "reason": "A request id minter that throws escapes C#'s SendAsync instead of settling the send failed as INVALID_REQUEST_ID.", "message": "the testee's answer to send: error: threw: the request id minter threw"},
-  {"case": "send-input-too-deep", "reason": "The C# controller does not refuse an input nested past the value depth limit where it is sent.", "message": "the testee's answer to send did not come"},
-  {"case": "socket-text-not-json-closes-4400", "reason": "The C# socket fails the connection on text that is not JSON without closing it with 4400.", "message": "step 6 ({\"clientClosed\":4400}): the client did not close the socket"}
+  {"case": "send-input-too-deep", "reason": "The C# controller does not refuse an input nested past the value depth limit where it is sent.", "message": "the testee's answer to send did not come"}
 ]

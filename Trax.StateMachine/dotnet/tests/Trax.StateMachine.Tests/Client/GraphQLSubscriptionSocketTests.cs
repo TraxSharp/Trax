@@ -264,16 +264,20 @@ public class GraphQLSubscriptionSocketTests
     [TestCase("""{"id":"1"}""")]
     [TestCase("""[]""")]
     [TestCase("""not json""")]
-    public async Task A_malformed_message_fails_the_connection_and_closes_it(string message)
+    [TestCase("""{"type":"next","type":"complete"}""")]
+    public async Task A_malformed_message_fails_the_connection_and_closes_it_with_4400(
+        string message
+    )
     {
-        var gone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closed = new TaskCompletionSource<WebSocketCloseStatus?>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         await using var host = new WireHost(async peer =>
         {
             await peer.AckAsync();
             await peer.SubscribedAsync();
             await peer.SendAsync(message);
-            await peer.GoneAsync();
-            gone.TrySetResult();
+            closed.TrySetResult(await peer.ClosedWithAsync());
         });
         await using var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
@@ -282,8 +286,8 @@ public class GraphQLSubscriptionSocketTests
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeOfType<WebSocketException>();
-        await gone.Task.WaitAsync(Wait);
+        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeAssignableTo<WebSocketException>();
+        (await closed.Task.WaitAsync(Wait)).Should().Be((WebSocketCloseStatus)4400);
     }
 
     [Test]
