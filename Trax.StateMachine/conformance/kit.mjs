@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,19 +57,26 @@ function jsonFiles(dir) {
     .map((f) => [f.replace(/\.json$/, ""), readJson(join(dir, f))]);
 }
 
+/**
+ * One case per case of a machine's differential corpus, named by what it sends: the state, the trigger and the first 12
+ * hex digits of the SHA-256 of the canonical `given` and `when`. Regenerating the corpus with a case added keeps every
+ * other case's name, so an expected failure that names one still names it.
+ */
+export function differentialCases(machine, ir, corpus) {
+  return corpus.map((c) => {
+    const hash = createHash("sha256").update(canonical({ given: c.given, when: c.when }), "utf8").digest("hex").slice(0, 12);
+    const name = `${machine}/differential/${c.given.state} + ${c.when.trigger} ${hash}`;
+    return step(name, machine, opFor(ir, c.when.trigger), c.given, c.when, c.expect);
+  });
+}
+
 function machineCases(machine) {
   const dir = join(machinesDir, machine);
   const ir = readJson(join(dir, `${machine}.ir.json`));
   const cases = [{ name: `${machine}/load`, request: { op: "load", machine, ir }, expect: { loaded: true } }];
 
   const differential = join(dir, "differential.json");
-  if (existsSync(differential))
-    readJson(differential).cases.forEach((c, i) => {
-      const op = opFor(ir, c.when.trigger);
-      cases.push(
-        step(`${machine}/differential/${i} ${c.given.state} + ${c.when.trigger}`, machine, op, c.given, c.when, c.expect),
-      );
-    });
+  if (existsSync(differential)) cases.push(...differentialCases(machine, ir, readJson(differential).cases));
 
   for (const [file, f] of jsonFiles(join(dir, "fixtures", "advance")))
     cases.push(step(`${machine}/advance/${file}`, machine, f.op ?? opFor(ir, f.when.trigger), f.given, f.when, f.expect));

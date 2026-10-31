@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
-import { kitCases } from "../../../conformance/kit.mjs";
+import { differentialCases, kitCases } from "../../../conformance/kit.mjs";
 import { report, runCases } from "../../../conformance/run.mjs";
 import { createTestee, loadEngine } from "./testee-ts.mjs";
 
@@ -36,6 +37,16 @@ describe("the conformance kit", () => {
     ]);
     for (const op of ["advance", "outcome", "timer", "plan"])
       expect(cases.some((c) => c.request.op === op), op).toBe(true);
+  });
+
+  it("names every case once, and a differential case by what it sends, not where it sits", () => {
+    const names = cases.map((c) => c.name);
+    expect(names.filter((n, i) => names.indexOf(n) !== i)).toEqual([]);
+    // An expected failure names a case: inserting a case before it in the corpus must not rename it.
+    const corpus = JSON.parse(readFileSync(here("../../../conformance/machines/gauge/differential.json"), "utf8")).cases;
+    const ir = JSON.parse(readFileSync(here("../../../conformance/machines/gauge/gauge.ir.json"), "utf8"));
+    const byName = (list) => Object.fromEntries(differentialCases("gauge", ir, list).map((c) => [c.name, c.request]));
+    expect(byName([...corpus].reverse())).toEqual(byName(corpus));
   });
 
   it("passes through the TypeScript engine", async () => {
