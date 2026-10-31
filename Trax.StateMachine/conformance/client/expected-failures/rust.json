@@ -4,6 +4,7 @@
   {"case": "malformed-answer-due-at", "reason": "The Rust client takes an answer whose dueAt is not an instant without checking it.", "message": "step 7 ({\"await\":\"push1\""},
   {"case": "malformed-answer-revision", "reason": "The Rust client takes an answer whose revision is negative.", "message": "step 15 ({\"await\":\"push3\""},
   {"prefix": "malformed-push-", "reason": "The Rust client drops a malformed push without reading the instance again.", "message": "step 6 ({\"request\":\"get\",\"variables\":{\"id\":\"i-1\"},\"hold\":\"fence\"}): no get request arrived"},
+  {"case": "request-id-minter-throws", "reason": "A request id minter that panics takes the Rust controller's actor down with it, and the send settles DISPOSED.", "message": "step 5 ({\"client\":\"send\""},
   {"case": "retry-after-a-failed-first-read", "reason": "Rust's retry answers NOTHING_TO_RETRY after a first read that failed past every retry, instead of reading again.", "message": "step 8 ({\"request\":\"get\""},
   {"case": "socket-text-not-json-closes-4400", "reason": "The Rust socket skips text that is not JSON instead of closing with 4400.", "message": "step 6 ({\"clientClosed\":4400}): the client did not close the socket"},
   {"case": "socket-text-not-json-resubscribes", "reason": "The Rust socket skips text that is not JSON, so it never subscribes again on a new socket.", "message": "step 6 ({\"subscribe\""}

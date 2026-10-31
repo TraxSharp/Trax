@@ -3,5 +3,6 @@
   {"case": "divergence-holds-the-queue", "reason": "The TypeScript controller sends the event queued behind a CLIENT_DIVERGENCE answer before the read that answer starts has settled, so it is not predicted from the read.", "message": "step "},
   {"case": "malformed-answer-due-at", "reason": "The TypeScript client takes an answer whose dueAt is not an instant without checking it.", "message": "step 7 ({\"await\":\"push1\""},
   {"case": "malformed-answer-revision", "reason": "The TypeScript client takes an answer whose revision is not a whole number from zero without checking it.", "message": "step 7 ({\"await\":\"push1\""},
-  {"prefix": "malformed-push-", "reason": "The TypeScript client does not drop a malformed push and read the instance again.", "message": "step 6 ({\"request\":\"get\",\"variables\":{\"id\":\"i-1\"},\"hold\":\"fence\"}): no get request arrived"}
+  {"prefix": "malformed-push-", "reason": "The TypeScript client does not drop a malformed push and read the instance again.", "message": "step 6 ({\"request\":\"get\",\"variables\":{\"id\":\"i-1\"},\"hold\":\"fence\"}): no get request arrived"},
+  {"case": "request-id-minter-throws", "reason": "A request id minter that throws rejects the TypeScript send's promise instead of settling it failed as INVALID_REQUEST_ID.", "message": "the testee's answer to send: error: threw: the request id minter threw"}
 ]
