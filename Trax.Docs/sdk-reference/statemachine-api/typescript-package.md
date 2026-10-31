@@ -33,6 +33,11 @@ though: it records the [IR format](/docs/sdk-reference/statemachine-api/ir-forma
 generated for, and loads on any release of the package that reads that format, so a package upgraded without
 regenerating keeps working until the format itself changes.
 
+The client reads every answer and push with the runtime's own `JSON.parse`. Node 24 before 24.22.1, and Chromium
+builds whose V8 lacks the same fix, can misread a one-character escaped key such as `"\t"` as `"\\"` once an earlier
+parse has seen a `"\\"` key ([nodejs/node#66916](https://github.com/nodejs/node/issues/66916)), so a context holding
+such keys can reach the page with the wrong ones. Run node 24.22.1 or later.
+
 ## Members
 
 | Entry point | Holds |
