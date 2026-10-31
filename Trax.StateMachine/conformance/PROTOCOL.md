@@ -84,7 +84,8 @@ the IR, with only `throws` bound, as an IR testee does.
 
 Some loads must be refused: the IRs in `unreadable-ir/cases.json` each name one construct no engine knows (a rule, a
 reduction, a field type, a comparison or a rule source) or one field no engine holds (a field, a rule's path or a set
-step's source named `__proto__`, `constructor` or `prototype` in any segment), and a testee that builds machines from an
+step's source named `__proto__`, `constructor` or `prototype` in any segment), or an `irFormat` past the newest or
+before the oldest format the engines read, and a testee that builds machines from an
 IR answers each with `error`. Any `error` passes, since the message is the engine's own; `loaded` fails. A testee that only has compiled
 machines answers `error` because it has no machine of that name, which passes but proves nothing: a compiled machine's
 rules are types in its language and cannot name an unknown construct, so these cases hold the engines that read IRs.

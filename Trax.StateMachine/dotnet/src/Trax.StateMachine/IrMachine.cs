@@ -84,15 +84,21 @@ public sealed class IrMachine
             customReducers ?? new Dictionary<string, Func<JsonObject, JsonNode?, JsonObject>>();
         try
         {
-            // A twin records the IR format it was generated for; an IR of a newer format than this engine reads is refused.
-            if (
-                ir["irFormat"] is JsonValue format
-                && format.GetValue<int>() > IrExporter.FormatVersion
-            )
-                throw new ArgumentException(
-                    $"The IR is in format {format.GetValue<int>()}, and this engine reads format {IrExporter.FormatVersion}. Update Trax.StateMachine.",
-                    nameof(ir)
-                );
+            // A twin records the IR format it was generated for; an IR of a format this engine does not read, newer or
+            // older, is refused, and so is one that names its format as anything but a number.
+            if (ir.TryGetPropertyValue("irFormat", out var format))
+            {
+                if (format is not JsonValue value || !value.TryGetValue<int>(out var number))
+                    throw new ArgumentException(
+                        $"The IR names its format as {format?.ToJsonString() ?? "null"}, which is not a format number.",
+                        nameof(ir)
+                    );
+                if (number > IrExporter.FormatVersion || number < IrExporter.OldestFormatRead)
+                    throw new ArgumentException(
+                        $"The IR is in format {number}, and this engine reads formats {IrExporter.OldestFormatRead} to {IrExporter.FormatVersion}.",
+                        nameof(ir)
+                    );
+            }
             Id = Text(ir["id"], "id");
             Version = ir["version"]!.GetValue<int>();
             InitialState = Text(ir["initialState"], "initialState");
