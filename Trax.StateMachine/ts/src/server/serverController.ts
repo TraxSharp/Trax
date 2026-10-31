@@ -331,6 +331,9 @@ export class ServerMachineController<Spec extends MachineSpec> {
   private reloadAgain = false;
   private reloadAgainRowId: string | null = null;
   private buffered: ServerSnapshot | null = null;
+  // Whether a `CLIENT_DIVERGENCE` answer started the read in flight: the queue holds until it settles, so the next event
+  // is predicted from what the read says rather than from what the twin got wrong.
+  private diverged = false;
 
   private view: ServerMachineView<Spec>;
 
@@ -826,9 +829,10 @@ export class ServerMachineController<Spec extends MachineSpec> {
   private readGaveUp(outcome: 'failed' | 'refused'): void {
     this.endRead();
     if (this.disposed || this.error) return;
-    // A push opened the instance meanwhile: whoever waits for the start has it.
+    // A push opened the instance meanwhile: whoever waits for the start has it, and a queue a divergence held goes on.
     if (this.confirmed !== null) {
       this.settleStart({ outcome: 'confirmed', snapshot: this.confirmedSnapshot() });
+      this.pump();
       return;
     }
     this.readFailed = outcome === 'failed';
@@ -852,7 +856,10 @@ export class ServerMachineController<Spec extends MachineSpec> {
       this.reloadAgain = false;
       this.reload(rowId);
     }
-    if (!this.reloading) this.wake(this.readWaiters);
+    if (!this.reloading) {
+      this.diverged = false;
+      this.wake(this.readWaiters);
+    }
   }
 
   // ── Ordering ───────────────────────────────────────────────────────────────────────────────────
@@ -958,6 +965,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
       return;
     }
     if (this.sending || this.disposed || this.error || this.id === null || this.confirmed === null) return;
+    if (this.diverged && this.reloading) return;
     const next = this.queue[0];
     if (!next) return;
     this.sending = true;
@@ -1022,8 +1030,10 @@ export class ServerMachineController<Spec extends MachineSpec> {
         this.finish(entry, { outcome: 'failed', problem: this.problem });
         return;
       case CLIENT_DIVERGENCE:
-        // The twin and the server disagree about this step: what the twin holds cannot be trusted, so read it again.
+        // The twin and the server disagree about this step: what the twin holds cannot be trusted, so read it again,
+        // and send nothing more until that read has settled.
         this.reload(null);
+        this.diverged = this.reloading;
         break;
     }
     this.problem = refusal(answer.code, answer.message);
