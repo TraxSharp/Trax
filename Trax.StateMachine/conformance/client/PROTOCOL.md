@@ -308,6 +308,10 @@ filled in: `dueAt: null`, `dueAtKnown: true`, `problem: null` on an answer (and 
 null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a push. A step with `"bare": true` sends its answer or push as
 given, without them.
 
+A context nests at most 64 levels, the snapshot that holds it counting as one: no store writes a snapshot deeper,
+and every engine refuses to read one. One that deep is read, however deep the answer or socket message around it, so
+a client's JSON reader takes the whole envelope; one deeper is not one a store wrote, and is malformed (below).
+
 ## Transcripts
 
 ```json

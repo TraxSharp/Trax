@@ -1,0 +1,24 @@
+{
+  "about": "A context one level deeper than a stored snapshot may nest is not one a store wrote: the push that holds it is dropped and the instance read again. The read is the fence the dropped push is checked behind.",
+  "machine": "nest",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "fill": "$id: UUID!, $input: FillInput!, $requestId: String!, $clientResult: String",
+    "drain": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Empty", "context": {} } },
+    { "view": { "status": "ready" } },
+    { "push": { "revision": 2, "state": "Full", "context": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": true } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } },
+    { "request": "get", "variables": { "id": "i-1" }, "hold": "fence" },
+    { "view": { "status": "ready", "state": "Empty", "revision": 1 }, "once": true },
+    { "respond": "fence", "answer": { "id": "i-1", "revision": 2, "state": "Full", "context": { "a": { "b": true } } } },
+    { "view": { "state": "Full", "revision": 2, "error": null } }
+  ]
+}

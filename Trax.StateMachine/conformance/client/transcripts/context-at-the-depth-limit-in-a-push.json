@@ -1,0 +1,21 @@
+{
+  "about": "A context as deep as a stored snapshot may nest (64 levels, the snapshot counting as one) is one a store wrote: a push that holds one is applied, however deep the socket message it comes in.",
+  "machine": "nest",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "fill": "$id: UUID!, $input: FillInput!, $requestId: String!, $clientResult: String",
+    "drain": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Empty", "context": {} } },
+    { "view": { "status": "ready" } },
+    { "push": { "revision": 2, "state": "Full", "context": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": true } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } },
+    { "view": { "state": "Full", "revision": 2, "error": null } }
+  ]
+}

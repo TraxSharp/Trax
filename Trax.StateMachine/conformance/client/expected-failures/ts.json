@@ -1,3 +1,4 @@
 [
+  {"case": "context-past-the-depth-limit-in-a-push", "reason": "The TypeScript client drops a push whose context nests deeper than a stored snapshot may without reading the instance again.", "message": "step 6 ({\"request\":\"get\",\"variables\":{\"id\":\"i-1\"},\"hold\":\"fence\"}): no get request arrived"},
   {"case": "divergence-holds-the-queue", "reason": "The TypeScript controller sends the event queued behind a CLIENT_DIVERGENCE answer before the read that answer starts has settled, so it is not predicted from the read.", "message": "step "}
 ]
