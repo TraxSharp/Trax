@@ -43,8 +43,15 @@ public sealed class ClientTestee : IAsyncDisposable
             answer = new JsonObject { ["error"] = $"threw: {ex.Message}" };
         }
         answer["id"] = request["id"]?.DeepClone();
-        return answer.ToJsonString();
+        return answer.ToJsonString(Writing);
     }
+
+    // A view holds a context as deep as a stored snapshot may nest (64 levels) inside the answer around it, past
+    // System.Text.Json's default writing depth of 64.
+    private static readonly System.Text.Json.JsonSerializerOptions Writing = new()
+    {
+        MaxDepth = 256,
+    };
 
     private async Task<JsonObject> HandleAsync(JsonObject request)
     {

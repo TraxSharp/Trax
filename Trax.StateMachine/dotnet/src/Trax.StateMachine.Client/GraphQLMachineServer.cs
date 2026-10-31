@@ -417,6 +417,10 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             throw new FormatException("The snapshot's revision is not a whole number from zero.");
         if (!ContextOf(node["context"], out var context))
             throw new FormatException("The snapshot's context is not an object.");
+        if (NestsDeeperThan(context, MaxStoredDepth - 1))
+            throw new FormatException(
+                $"The snapshot's context nests deeper than a stored snapshot may ({MaxStoredDepth} levels, the snapshot counting as one)."
+            );
         var rowId = !push
             ? null
             : node["rowId"] switch
@@ -436,6 +440,33 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             DueAtKnown = Flag(node, "dueAtKnown") && node.ContainsKey("dueAt"),
             DueAt = DueAtOf(node["dueAt"]),
         };
+    }
+
+    // The deepest a stored snapshot nests, itself counting as one (conformance/limits.json, maxStoredDepth): no store
+    // writes one deeper and no engine reads one.
+    private const int MaxStoredDepth = 64;
+
+    // Whether a value nests deeper than `levels` arrays and objects, itself counting as one. Never recurses.
+    private static bool NestsDeeperThan(JsonNode? value, int levels)
+    {
+        var pending = new Stack<(JsonNode? Node, int Depth)>();
+        pending.Push((value, 1));
+        while (pending.TryPop(out var next))
+        {
+            var members = next.Node switch
+            {
+                JsonObject o => o.Select(m => m.Value),
+                JsonArray a => a,
+                _ => null,
+            };
+            if (members is null)
+                continue;
+            if (next.Depth > levels)
+                return true;
+            foreach (var member in members)
+                pending.Push((member, next.Depth + 1));
+        }
+        return false;
     }
 
     // A revision is a whole number from zero, or null for a store that records none.

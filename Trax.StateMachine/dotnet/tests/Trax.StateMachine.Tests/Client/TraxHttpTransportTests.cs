@@ -214,6 +214,23 @@ public class TraxHttpTransportTests
         answer.Failure.Should().NotBeNull();
     }
 
+    // An answer is read as deep as any value may nest (512 levels), the envelope included, and no deeper.
+    [TestCase(512, true)]
+    [TestCase(513, false)]
+    public async Task An_answer_is_read_up_to_the_value_depth_limit(int depth, bool read)
+    {
+        var text = new StringBuilder("{\"data\":");
+        for (var i = 1; i < depth; i++)
+            text.Append("{\"a\":");
+        text.Append("true");
+        text.Append('}', depth);
+        var body = new MemoryStream(Encoding.UTF8.GetBytes(text.ToString()));
+
+        var answer = await Transport(new Answers(body)).ExecuteAsync(Request);
+
+        (answer.Failure is null).Should().Be(read);
+    }
+
     // Never answers: waits for the request to be cancelled.
     private sealed class Never : HttpMessageHandler
     {

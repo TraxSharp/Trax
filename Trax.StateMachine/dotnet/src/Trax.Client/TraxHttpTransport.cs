@@ -267,6 +267,16 @@ public sealed class TraxHttpTransport : ITraxTransport
         }
     }
 
+    /// <summary>
+    /// How deep an answer or a socket message may nest: the deepest any value may (512 levels, the kit's
+    /// <c>conformance/limits.json</c>). System.Text.Json's default of 64 counts the envelope around a value, so it would
+    /// refuse a context a store wrote at its own limit of 64 once wrapped in <c>data</c> and its fields. Whoever reads
+    /// the value inside holds it to its own limit.
+    /// </summary>
+    internal const int MaxReadDepth = 512;
+
+    internal static readonly JsonDocumentOptions Reading = new() { MaxDepth = MaxReadDepth };
+
     /// <summary>The longest timeout a request or a connection waits for: the longest a timer can count.</summary>
     internal static readonly TimeSpan MaxTimeout = TimeSpan.FromMilliseconds(int.MaxValue);
 
@@ -332,7 +342,7 @@ public sealed class TraxHttpTransport : ITraxTransport
         TraxAnswer? answer;
         try
         {
-            answer = TraxAnswer.Of(JsonNode.Parse(text));
+            answer = TraxAnswer.Of(JsonNode.Parse(text, documentOptions: Reading));
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException)
         {

@@ -703,7 +703,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         JsonNode? parsed;
         try
         {
-            parsed = JsonNode.Parse(text.ToArray());
+            parsed = JsonNode.Parse(text.ToArray(), documentOptions: TraxHttpTransport.Reading);
         }
         catch (JsonException ex)
         {
