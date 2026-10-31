@@ -977,6 +977,100 @@
           }
         }
       ]
+    },
+    {
+      "name": "one-letter keys written with an escape are read as written",
+      "ir": {
+        "committedStates": [],
+        "context": {
+          "S": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "d",
+                "nullable": true,
+                "type": "object",
+                "values": {
+                  "nullable": false,
+                  "type": "number"
+                }
+              },
+              {
+                "constraints": [],
+                "name": "e",
+                "nullable": true,
+                "type": "object",
+                "values": {
+                  "nullable": false,
+                  "type": "number"
+                }
+              }
+            ]
+          }
+        },
+        "id": "escaped-keys",
+        "initialContext": {},
+        "initialState": "S",
+        "inputs": {},
+        "states": [
+          "S"
+        ],
+        "transitions": [],
+        "triggers": [],
+        "version": 1
+      },
+      "requests": [
+        {
+          "request": {
+            "op": "rehydrate",
+            "text": "{\"machine\":\"escaped-keys\",\"version\":1,\"state\":\"S\",\"context\":{\"d\":{\"\\\\\":1},\"e\":{\"\\t\":2}}}"
+          },
+          "expect": {
+            "result": "ok",
+            "wire": "{\"machine\":\"escaped-keys\",\"version\":1,\"state\":\"S\",\"context\":{\"d\":{\"\\\\\":1},\"e\":{\"\\t\":2}}}"
+          }
+        },
+        {
+          "request": {
+            "op": "rehydrate",
+            "text": "{\"machine\":\"escaped-keys\",\"version\":1,\"state\":\"S\",\"context\":{\"d\":{\"a\":1},\"e\":{\"\\t\":2}}}"
+          },
+          "expect": {
+            "result": "ok",
+            "wire": "{\"machine\":\"escaped-keys\",\"version\":1,\"state\":\"S\",\"context\":{\"d\":{\"a\":1},\"e\":{\"\\t\":2}}}"
+          }
+        },
+        {
+          "request": {
+            "op": "rehydrate",
+            "text": "{\"machine\":\"escaped-keys\",\"version\":1,\"state\":\"S\",\"context\":{\"d\":{\"\\\\\":1},\"e\":{\"\\u0041\":2}}}"
+          },
+          "expect": {
+            "result": "ok",
+            "wire": "{\"machine\":\"escaped-keys\",\"version\":1,\"state\":\"S\",\"context\":{\"d\":{\"\\\\\":1},\"e\":{\"A\":2}}}"
+          }
+        },
+        {
+          "request": {
+            "op": "rehydrate",
+            "text": "{\"machine\":\"escaped-keys\",\"version\":1,\"state\":\"S\",\"context\":{\"d\":{\"\\\"\":1},\"e\":{\"\\n\":2}}}"
+          },
+          "expect": {
+            "result": "ok",
+            "wire": "{\"machine\":\"escaped-keys\",\"version\":1,\"state\":\"S\",\"context\":{\"d\":{\"\\\"\":1},\"e\":{\"\\n\":2}}}"
+          }
+        },
+        {
+          "request": {
+            "op": "rehydrate",
+            "text": "{\"machine\":\"escaped-keys\",\"version\":1,\"state\":\"S\",\"context\":{\"d\":{\"\\\\\":1},\"e\":{\"\\\"\":2}}}"
+          },
+          "expect": {
+            "result": "ok",
+            "wire": "{\"machine\":\"escaped-keys\",\"version\":1,\"state\":\"S\",\"context\":{\"d\":{\"\\\\\":1},\"e\":{\"\\\"\":2}}}"
+          }
+        }
+      ]
     }
   ]
 }
