@@ -12,7 +12,6 @@ use trax_state_machine_client::{
     ir_hash, without_nulls, DueAt, EventRequest, GraphQLMachineServerOptions, MachineServer, MachineView, SendOutcome,
     ServerAnswer, ServerMachineController, ServerMachineOptions, ServerProblem, ServerSnapshot, StreamMessage,
     StreamSink, Subscription, SyncOutcome, TransportError, DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_REQUEST_TIMEOUT,
-    DEFAULT_RESUBSCRIBE_DELAYS, DEFAULT_RETRY_DELAYS,
 };
 
 // The turnstile's IR as the kit commits it, and the hash a host's manifest gives it: the SHA-256 of that text.
@@ -1006,14 +1005,10 @@ async fn a_send_before_start_waits_for_it() {
     );
 }
 
-// The defaults every client of the kit shares (conformance/client/PROTOCOL.md, "Defaults").
+// Options built without any of the defaults hold the client's constants, which tests/defaults.rs holds to the kit's
+// conformance/client/defaults.json.
 #[test]
-fn the_defaults_are_the_client_kits() {
-    let ms = Duration::from_millis;
-    assert_eq!(DEFAULT_REQUEST_TIMEOUT, ms(30_000));
-    assert_eq!(DEFAULT_RESUBSCRIBE_DELAYS, [ms(1000), ms(2000), ms(5000)]);
-    assert_eq!(DEFAULT_RETRY_DELAYS, [ms(250), ms(500), ms(1000), ms(2000), ms(4000)]);
-    assert_eq!(DEFAULT_MAX_MESSAGE_SIZE, 16 * 1024 * 1024);
+fn options_built_without_the_defaults_hold_them() {
     let options = GraphQLMachineServerOptions::new("https://h/graphql", "wss://h/graphql", "turnstile", Vec::new());
     assert_eq!(options.request_timeout, DEFAULT_REQUEST_TIMEOUT);
     assert_eq!(options.max_message_size, DEFAULT_MAX_MESSAGE_SIZE);

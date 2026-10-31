@@ -1920,6 +1920,17 @@ mod tests {
     use super::*;
     use crate::StreamSink;
 
+    // The kit's limits.json holds the stored depth every engine and client refuses past.
+    #[test]
+    fn the_stored_depth_is_the_kits() {
+        let file = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../conformance/limits.json");
+        let limits = Value::parse(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        assert_eq!(
+            Some(MAX_STORED_DEPTH as f64),
+            limits.get("maxStoredDepth").and_then(Value::as_f64)
+        );
+    }
+
     struct Reads(Snapshot);
 
     struct Quiet;

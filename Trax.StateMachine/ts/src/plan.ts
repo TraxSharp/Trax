@@ -40,7 +40,7 @@ export type PlanResult<T extends string = string> =
 
 // How deep the arrays and objects of a fields input or a context may nest, the outermost counting as one: the Rust
 // engine's limit, which every engine's planner holds a plan to, so they refuse the same values.
-const MAX_NESTING = 512;
+export const MAX_NESTING = 512;
 
 // Whether `value` nests deeper than MAX_NESTING. Never recurses, so a value built in memory cannot exhaust the stack.
 const nestsTooDeep = (value: unknown): boolean => {
@@ -69,7 +69,7 @@ const withoutNulls = (value: unknown, depth = 0): unknown => {
 };
 
 // The most snapshots one search expands, whatever its depth.
-const EXPANSION_LIMIT = 10_000;
+export const EXPANSION_LIMIT = 10_000;
 
 type Advanced = ReturnType<SnapshotMachine<string, string>['advance']>;
 

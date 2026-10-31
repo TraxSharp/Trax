@@ -189,7 +189,7 @@ export const DEFAULT_MAX_RESPONSE_SIZE = 16 * 1024 * 1024;
 export const DEFAULT_REQUEST_TIMEOUT = 30_000;
 
 /** The longest delay `setTimeout` waits for: 2^31 - 1 ms. It fires at once for any longer one. */
-const LONGEST_TIMER = 2_147_483_647;
+export const LONGEST_TIMER = 2_147_483_647;
 
 /** Refuses a request timeout that is not a positive number of milliseconds (`Infinity` waits as long as the host takes). */
 export function requireRequestTimeout(timeout: number): void {

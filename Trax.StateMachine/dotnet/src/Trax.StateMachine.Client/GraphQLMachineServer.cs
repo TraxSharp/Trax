@@ -79,7 +79,7 @@ public sealed record GraphQLMachineServerOptions
     /// The largest response body the host may answer with, in bytes; 16 MiB by default. A larger one fails the request,
     /// which the controller reports as a transport failure, rather than being read into memory.
     /// </summary>
-    public long MaxResponseSize { get; init; } = 16 * 1024 * 1024;
+    public long MaxResponseSize { get; init; } = TraxHttpTransportOptions.DefaultMaxResponseSize;
 
     /// <summary>
     /// How long one request may take, from sending it to reading the last byte of its answer, before it fails as a

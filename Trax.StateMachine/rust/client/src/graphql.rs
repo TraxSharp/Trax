@@ -1813,6 +1813,48 @@ mod tests {
         assert!(delivered.try_recv().is_err(), "a dropped socket delivered a message");
     }
 
+    // The kit's defaults.json, which these hold the private parts of the client to.
+    fn kit_defaults() -> Value {
+        let file = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../conformance/client/defaults.json");
+        Value::parse(&std::fs::read_to_string(&file).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn the_jitter_bounds_are_the_kits() {
+        let jitter = kit_defaults().get("resubscribeJitter").unwrap().clone();
+        let step = Duration::from_millis(1000);
+        assert_eq!(
+            jittered(step, 0.0),
+            step.mul_f64(jitter.get("mostFraction").and_then(Value::as_f64).unwrap())
+        );
+        assert_eq!(
+            jittered(step, 1.0),
+            step.mul_f64(jitter.get("leastFraction").and_then(Value::as_f64).unwrap())
+        );
+    }
+
+    #[test]
+    fn only_the_kits_refused_close_codes_turn_the_caller_away() {
+        use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+        let codes = kit_defaults().get("closeCodes").unwrap().clone();
+        let frame = |code: u16| CloseFrame {
+            code: CloseCode::from(code),
+            reason: "".into(),
+        };
+        for (code, refusal) in codes.get("refused").and_then(Value::as_object).unwrap().iter() {
+            let code: u16 = code.as_str().unwrap().parse().unwrap();
+            assert_eq!(
+                refused_close(Some(&frame(code))).map(|p| p.code).as_deref(),
+                refusal.as_str(),
+                "{code}"
+            );
+        }
+        for code in codes.get("transient").and_then(Value::as_array).unwrap() {
+            let code = code.as_f64().unwrap() as u16;
+            assert_eq!(refused_close(Some(&frame(code))), None, "{code}");
+        }
+    }
+
     #[test]
     fn only_4401_and_4403_are_refusals() {
         use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;

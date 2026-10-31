@@ -1,11 +1,12 @@
+import fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { conformanceFile } from '../fixtures';
 
 import { turnstile, type TurnstileSpec } from '../machines/turnstile/turnstile';
-import { DEFAULT_RETRY_DELAYS, ServerMachineController, type StreamMessage } from '../server/serverController';
+import { ServerMachineController, type StreamMessage } from '../server/serverController';
 import { flushMicrotasks, sequentialRequestIds } from '../server/testing/FakeMachineServer';
 import {
   createMachineServer,
-  DEFAULT_RESUBSCRIBE_DELAYS,
   persistedMessageReplacer,
   type PersistedSubscriptionSocket,
   type SubscriptionSink,
@@ -775,14 +776,13 @@ describe('ServerMachineController over createMachineServer', () => {
   });
 });
 
-// The defaults every client of the kit shares (conformance/client/PROTOCOL.md, "Defaults").
+// The defaults every client of the kit shares (conformance/client/defaults.json), held by what the client does; the
+// constants themselves are held to the file by defaults.conformance.test.ts.
 describe('the time-based defaults', () => {
-  it('are the client kit\'s', () => {
-    expect(DEFAULT_REQUEST_TIMEOUT).toBe(30_000);
-    expect(DEFAULT_RESUBSCRIBE_DELAYS).toEqual([1000, 2000, 5000]);
-    expect(DEFAULT_RETRY_DELAYS).toEqual([250, 500, 1000, 2000, 4000]);
-    expect(DEFAULT_MAX_RESPONSE_SIZE).toBe(16 * 1024 * 1024);
-  });
+  const kit = JSON.parse(fs.readFileSync(conformanceFile('client', 'defaults.json'), 'utf8')) as {
+    retryDelaysMs: number[];
+    resubscribeDelaysMs: number[];
+  };
 
   // A server and a controller built without any of the options, so each default above is the one in force.
   const unconfigured = (fetch: typeof globalThis.fetch, socket = new FakeSocket()) => {
@@ -829,10 +829,10 @@ describe('the time-based defaults', () => {
     expect(await within.get('i-1')).toMatchObject({ kind: 'ok', snapshot: { revision: 1, state: 'Locked' } });
 
     const past = unconfigured(serve(answerOf(DEFAULT_MAX_RESPONSE_SIZE + 1))).server;
-    await expect(past.get('i-1')).rejects.toThrow(/larger than 16777216 bytes/);
+    await expect(past.get('i-1')).rejects.toThrow(`larger than ${DEFAULT_MAX_RESPONSE_SIZE} bytes`);
   });
 
-  it('a controller built without retry delays retries SERVER_OUTDATED after 250, 500, 1000, 2000 and 4000 ms', async () => {
+  it('a controller built without retry delays retries SERVER_OUTDATED after each default delay', async () => {
     vi.useFakeTimers();
     const sent: number[] = [];
     const outdated = { data: { machines: { turnstile: { get: { problem: { code: 'SERVER_OUTDATED', message: 'Rolling.' } } } } } };
@@ -843,21 +843,22 @@ describe('the time-based defaults', () => {
     const { controller } = unconfigured(fetch);
     const begun = Date.now();
 
+    const at = kit.retryDelaysMs.reduce((sum, delay) => [...sum, sum[sum.length - 1] + delay], [0]);
     const started = controller.start();
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(at[at.length - 1] + 1000);
     await started;
 
-    expect(sent.map((at) => at - begun)).toEqual([0, 250, 750, 1750, 3750, 7750]);
+    expect(sent.map((sentAt) => sentAt - begun)).toEqual(at);
   });
 
-  it('a server built without resubscribe delays subscribes again after 1, 2, then 5 seconds', () => {
+  it('a server built without resubscribe delays subscribes again after each default step, the last repeating', () => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);
     const { server, socket } = unconfigured(http().fetch);
     server.subscribe('i-1', () => {});
 
     const waits: number[] = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < kit.resubscribeDelaysMs.length + 1; i++) {
       const before = socket.subscriptions.length;
       socket.last.sink.complete();
       let waited = 0;
@@ -868,7 +869,7 @@ describe('the time-based defaults', () => {
       waits.push(waited);
     }
 
-    expect(waits).toEqual([1000, 2000, 5000, 5000]);
+    expect(waits).toEqual([...kit.resubscribeDelaysMs, kit.resubscribeDelaysMs[kit.resubscribeDelaysMs.length - 1]]);
   });
 });
 

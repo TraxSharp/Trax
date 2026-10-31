@@ -98,7 +98,7 @@ export function persistedMessageReplacer(key: string, value: unknown): unknown {
  * A resubscribe step's wait: drawn uniformly between half the step and the whole of it, so the clients a host restart
  * dropped together do not all subscribe again at the same moment.
  */
-const jittered = (step: number): number => step * (1 - Math.random() / 2);
+export const jittered = (step: number): number => step * (1 - Math.random() / 2);
 
 /** The operation a machine's push document is registered under. */
 const CHANGED = 'changed';
@@ -106,7 +106,7 @@ const CLIENT_OUTDATED = RefusalCode.ClientOutdated;
 const NOT_FOUND = RefusalCode.NotFound;
 
 /** The close codes a host turns a caller away with, and the code the controller stops with for each. */
-const REFUSED_CLOSES: ReadonlyMap<number, string> = new Map([
+export const REFUSED_CLOSES: ReadonlyMap<number, string> = new Map([
   [4401, RefusalCode.Unauthenticated],
   [4403, RefusalCode.Forbidden],
 ]);
