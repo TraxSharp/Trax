@@ -279,6 +279,12 @@ internal sealed partial class MachineGenerator
                 RunNode(twinScript, args, "the C# view");
                 twin = [new("view", Path.Combine(twinStage, file), Path.Combine(o.TwinOut, file))];
             }
+            else if (o.Lang is not null and not "typescript")
+            {
+                throw new InvalidOperationException(
+                    $"--lang '{o.Lang}' is listed in twin-languages.json and this trax does not place it yet."
+                );
+            }
             else
             {
                 args.AddRange(["--import-style", importStyle]);
@@ -380,9 +386,9 @@ internal sealed partial class MachineGenerator
     /// </summary>
     internal static string RefuseConflictingOptions(MachineGenerateOptions o)
     {
-        if (o.Lang is not null and not "typescript" and not "csharp")
+        if (o.Lang is not null && !TwinLanguages.Contains(o.Lang))
             throw new InvalidOperationException(
-                $"--lang must be 'typescript' or 'csharp', got '{o.Lang}'."
+                $"--lang must be {TwinLanguages.OneOf([.. TwinLanguages.All.Select(l => l.Lang)])}, got '{o.Lang}'."
             );
         if (o.Lang == "csharp" && (o.ImportStyle is not null || o.Specifier is not null))
             throw new InvalidOperationException(

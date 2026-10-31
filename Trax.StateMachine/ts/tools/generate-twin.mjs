@@ -3,10 +3,21 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { dirname, resolve } from "node:path";
 import { invokedDirectly, parseFlags, requireFlags } from "./lib/args.mjs";
 import { loadEngine } from "./lib/engine-loader.mjs";
+import twinLanguages from "./twin-languages.json" with { type: "json" };
+
+// The languages --lang takes, the first the default. Trax.Cli embeds the same file, so its validation and --help
+// list what this writes.
+export const TWIN_LANGUAGES = twinLanguages.map((l) => l.lang);
+
+// `'a' or 'b'`, `'a', 'b' or 'c'`: as Trax.Cli's TwinLanguages.OneOf writes it.
+export const oneOf = (names) =>
+  names.length < 2
+    ? names.map((n) => `'${n}'`).join("")
+    : `${names.slice(0, -1).map((n) => `'${n}'`).join(", ")} or '${names.at(-1)}'`;
 
 const USAGE =
   "Usage: node tools/generate-twin.mjs --ir <machine.ir.json> --engine-src <engine/src> --out-dir <dir>\n" +
-  "                                    [--lang typescript|csharp]\n" +
+  `                                    [--lang ${TWIN_LANGUAGES.join("|")}]\n` +
   "                                    [--import-style relative|specifier] [--specifier <module>]  (typescript)\n" +
   "                                    [--namespace <C# namespace>]                               (csharp)\n" +
   "The copy bundled into the trax tool carries its engine and takes no --engine-src.";
@@ -20,13 +31,13 @@ export async function generateTwin({
   irPath,
   engineSrc,
   outDir,
-  lang = "typescript",
+  lang = TWIN_LANGUAGES[0],
   importStyle = "relative",
   specifier,
   namespace,
 }) {
-  if (lang !== "typescript" && lang !== "csharp")
-    throw new Error(`--lang must be 'typescript' or 'csharp', got '${lang}'.`);
+  if (!TWIN_LANGUAGES.includes(lang))
+    throw new Error(`--lang must be ${oneOf(TWIN_LANGUAGES)}, got '${lang}'.`);
   if (importStyle !== "relative" && importStyle !== "specifier")
     throw new Error(
       `--import-style must be 'relative' or 'specifier', got '${importStyle}'.`,
@@ -55,6 +66,8 @@ export async function generateTwin({
     writeFileSync(viewPath, view);
     return { viewPath };
   }
+  if (lang !== "typescript")
+    throw new Error(`--lang '${lang}' is listed in twin-languages.json and nothing writes it yet.`);
 
   const contexts = generateContextTypes(ir);
   const factory = generateMachineFactory(ir, { importStyle, specifier, irHash });
@@ -108,7 +121,7 @@ async function main(argv) {
     irPath: flags.ir,
     engineSrc: flags["engine-src"],
     outDir: flags["out-dir"],
-    lang: flags.lang ?? "typescript",
+    lang: flags.lang ?? TWIN_LANGUAGES[0],
     importStyle: flags["import-style"] ?? "relative",
     specifier:
       typeof flags.specifier === "string" ? flags.specifier : undefined,

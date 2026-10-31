@@ -520,11 +520,7 @@ internal static class MachineCommand
                     Description =
                         "The node executable: an absolute path, or a name looked up on PATH (default: node). Never resolved from the current directory; a relative path is refused, and on Windows so is a .cmd or .bat shim.",
                 },
-                new Option<string?>("--lang")
-                {
-                    Description =
-                        "The typed view --twin-out writes: 'typescript' (default; <id>.contexts.g.ts and <id>.machine.g.ts) or 'csharp' (<Machine>.g.cs, for Trax.StateMachine.Client).",
-                },
+                new Option<string?>("--lang") { Description = TwinLanguages.Help() },
                 new Option<string?>("--namespace")
                 {
                     Description =

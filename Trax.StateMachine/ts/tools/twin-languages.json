@@ -1,0 +1,4 @@
+[
+  { "lang": "typescript", "writes": "<id>.contexts.g.ts and <id>.machine.g.ts" },
+  { "lang": "csharp", "writes": "<Machine>.g.cs, for Trax.StateMachine.Client" }
+]

@@ -270,6 +270,40 @@ public class MachineGeneratorTests
             .WithMessage("*malformed at $.machines: 'checkout' is listed more than once*");
     }
 
+    [Test]
+    public void Generate_places_the_view_of_every_language_lang_takes()
+    {
+        foreach (var lang in TwinLanguages.All.Select(l => l.Lang))
+        {
+            var node = new FakeNodeRunner();
+            var twinOut = Dir($"twin-{lang}");
+
+            var result = new MachineGenerator(node).Generate(
+                Options(twinOut: twinOut) with
+                {
+                    ImportStyle = null,
+                    Lang = lang,
+                }
+            );
+
+            result.Written.Should().NotBeEmpty(lang);
+        }
+    }
+
+    [Test]
+    public void Generate_refuses_a_language_lang_does_not_take_naming_the_ones_it_does()
+    {
+        var options = Options(twinOut: Dir("twin")) with { Lang = "rust" };
+
+        var act = () => new MachineGenerator(new FakeNodeRunner()).Generate(options);
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage(
+                $"--lang must be {TwinLanguages.OneOf([.. TwinLanguages.All.Select(l => l.Lang)])}, got 'rust'."
+            );
+    }
+
     [TestCase("rust", null, null, "*--lang must be*")]
     [TestCase("csharp", "specifier", null, "*a C# view imports*")]
     [TestCase(null, null, "Shop.Machines", "*--namespace*needs --lang csharp*")]

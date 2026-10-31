@@ -28,6 +28,12 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Templates\*.sbn" />
+    <!-- The languages the lang option takes, from the file the twin generator reads (TwinLanguages). -->
+    <EmbeddedResource
+      Include="../../../Trax.StateMachine/ts/tools/twin-languages.json"
+      LogicalName="Trax.Cli.TwinLanguages.json"
+      Link="TwinLanguages.json"
+    />
   </ItemGroup>
 
   <ItemGroup>
