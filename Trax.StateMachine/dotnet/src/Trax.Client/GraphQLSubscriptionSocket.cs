@@ -77,7 +77,8 @@ public sealed record GraphQLSubscriptionSocketOptions
     /// <summary>
     /// How long a ping may go unanswered before the connection counts as broken, and every subscription over it is
     /// failed so its subscriber can subscribe again; 15 seconds by default. A host that drops off the network without
-    /// closing the socket is found this way. <see cref="Timeout.InfiniteTimeSpan"/> waits forever.
+    /// closing the socket is found this way. <see cref="Timeout.InfiniteTimeSpan"/> waits forever. Any other must be
+    /// positive and at most <see cref="int.MaxValue"/> milliseconds.
     /// </summary>
     public TimeSpan KeepAliveTimeout { get; init; } = TimeSpan.FromSeconds(15);
 
@@ -91,7 +92,7 @@ public sealed record GraphQLSubscriptionSocketOptions
 
     /// <summary>
     /// The largest message the server may send, in bytes; 16 MiB by default. A larger one fails the connection, and
-    /// every subscription over it, rather than being read into memory.
+    /// every subscription over it, rather than being read into memory. It must be positive.
     /// </summary>
     public int MaxMessageSize { get; init; } = 16 * 1024 * 1024;
 }
@@ -124,8 +125,11 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     /// <see cref="GraphQLSubscriptionSocketOptions.AllowInsecureTransport"/> is not set.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// <see cref="GraphQLSubscriptionSocketOptions.ConnectTimeout"/> is neither infinite nor between zero, exclusive, and
-    /// <see cref="int.MaxValue"/> milliseconds.
+    /// <see cref="GraphQLSubscriptionSocketOptions.ConnectTimeout"/> or
+    /// <see cref="GraphQLSubscriptionSocketOptions.KeepAliveTimeout"/> is neither infinite nor between zero, exclusive,
+    /// and <see cref="int.MaxValue"/> milliseconds; or <see cref="GraphQLSubscriptionSocketOptions.KeepAliveInterval"/>
+    /// is below zero and not infinite, or longer than that; or
+    /// <see cref="GraphQLSubscriptionSocketOptions.MaxMessageSize"/> is zero or less.
     /// </exception>
     public GraphQLSubscriptionSocket(GraphQLSubscriptionSocketOptions options)
     {
@@ -133,6 +137,23 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         TraxHttpTransport.RequireTimeout(
             options.ConnectTimeout,
             "connect timeout",
+            nameof(options)
+        );
+        TraxHttpTransport.RequireTimeout(
+            options.KeepAliveTimeout,
+            "keep-alive timeout",
+            nameof(options)
+        );
+        // Zero sends no pings, as infinite does.
+        if (options.KeepAliveInterval != TimeSpan.Zero)
+            TraxHttpTransport.RequireTimeout(
+                options.KeepAliveInterval,
+                "keep-alive interval",
+                nameof(options)
+            );
+        TraxHttpTransport.RequireSize(
+            options.MaxMessageSize,
+            "largest message size",
             nameof(options)
         );
         TransportSecurity.RequireSecure(

@@ -72,7 +72,7 @@ public sealed record TraxHttpTransportOptions
 
     /// <summary>
     /// The largest response body the host may answer with, in bytes; 16 MiB by default. A larger one is a
-    /// <see cref="TraxAnswer.Failure"/>, never read into memory.
+    /// <see cref="TraxAnswer.Failure"/>, never read into memory. It must be positive.
     /// </summary>
     public long MaxResponseSize { get; init; } = DefaultMaxResponseSize;
 
@@ -109,9 +109,13 @@ public sealed class TraxHttpTransport : ITraxTransport
     /// redirects, or its handler is one the transport cannot check and
     /// <see cref="TraxHttpTransportOptions.HandlerFollowsNoRedirects"/> is not set.
     /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="TraxHttpTransportOptions.MaxResponseSize"/> is zero or less.
+    /// </exception>
     public TraxHttpTransport(TraxHttpTransportOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        RequireSize(options.MaxResponseSize, "largest response size", nameof(options));
         TransportSecurity.RequireNoRedirects(
             options.Http,
             options.HandlerFollowsNoRedirects,
@@ -280,6 +284,17 @@ public sealed class TraxHttpTransport : ITraxTransport
             $"The {what} must be positive and at most {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days), "
                 + "or Timeout.InfiniteTimeSpan."
         );
+    }
+
+    // Refuses a size limit no answer fits in: zero or less.
+    internal static void RequireSize(long size, string what, string paramName)
+    {
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(
+                paramName,
+                size,
+                $"The {what} must be at least one byte."
+            );
     }
 
     // Refuses a delay no timer can wait for: one below zero, Timeout.InfiniteTimeSpan among them, or longer than

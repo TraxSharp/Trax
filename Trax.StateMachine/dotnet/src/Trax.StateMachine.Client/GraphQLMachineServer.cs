@@ -77,7 +77,7 @@ public sealed record GraphQLMachineServerOptions
 
     /// <summary>
     /// The largest response body the host may answer with, in bytes; 16 MiB by default. A larger one fails the request,
-    /// which the controller reports as a transport failure, rather than being read into memory.
+    /// which the controller reports as a transport failure, rather than being read into memory. It must be positive.
     /// </summary>
     public long MaxResponseSize { get; init; } = TraxHttpTransportOptions.DefaultMaxResponseSize;
 
@@ -155,11 +155,17 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// <exception cref="ArgumentOutOfRangeException">
     /// <see cref="GraphQLMachineServerOptions.RequestTimeout"/> is neither infinite nor between zero, exclusive, and
     /// <see cref="int.MaxValue"/> milliseconds, or one of <see cref="GraphQLMachineServerOptions.ResubscribeDelays"/>
-    /// is below zero or longer than <see cref="int.MaxValue"/> milliseconds.
+    /// is below zero or longer than <see cref="int.MaxValue"/> milliseconds, or
+    /// <see cref="GraphQLMachineServerOptions.MaxResponseSize"/> is zero or less.
     /// </exception>
     public GraphQLMachineServer(GraphQLMachineServerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        TraxHttpTransport.RequireSize(
+            options.MaxResponseSize,
+            "largest response size",
+            nameof(options)
+        );
         TraxHttpTransport.RequireDelays(
             options.ResubscribeDelays,
             "resubscribe delay",

@@ -453,6 +453,60 @@ public class TransportTests
         build.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*connect timeout*");
     }
 
+    // A ping interval below zero, other than infinite, is one ClientWebSocket refuses only once it connects.
+    [TestCase(-2.0)]
+    [TestCase(50.0 * 24 * 60 * 60 * 1000)]
+    public void A_keep_alive_interval_the_socket_cannot_wait_is_refused(double milliseconds)
+    {
+        var build = () =>
+            new GraphQLSubscriptionSocket(
+                new GraphQLSubscriptionSocketOptions
+                {
+                    Endpoint = new Uri("wss://h/graphql"),
+                    KeepAliveInterval = TimeSpan.FromMilliseconds(milliseconds),
+                }
+            );
+
+        build.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*keep-alive interval*");
+    }
+
+    [TestCase(0.0)]
+    [TestCase(-1.0)]
+    public void A_keep_alive_interval_of_zero_or_infinite_sends_no_pings_and_is_accepted(
+        double milliseconds
+    )
+    {
+        var build = () =>
+            new GraphQLSubscriptionSocket(
+                new GraphQLSubscriptionSocketOptions
+                {
+                    Endpoint = new Uri("wss://h/graphql"),
+                    KeepAliveInterval = TimeSpan.FromMilliseconds(milliseconds),
+                }
+            );
+
+        build.Should().NotThrow();
+    }
+
+    // The machine server's and the socket's limits are held by the kit (options-response-size-out-of-range); the
+    // transport a generated client is built on holds the same one.
+    [TestCase(0L)]
+    [TestCase(-5L)]
+    public void A_response_size_limit_of_zero_or_less_is_refused_by_the_transport(long size)
+    {
+        var build = () =>
+            new TraxHttpTransport(
+                new TraxHttpTransportOptions
+                {
+                    Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
+                    Endpoint = new Uri("https://h/graphql"),
+                    MaxResponseSize = size,
+                }
+            );
+
+        build.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*largest response size*");
+    }
+
     private sealed class Sink : ISubscriptionSink
     {
         public TaskCompletionSource<Exception> Failed { get; } =
