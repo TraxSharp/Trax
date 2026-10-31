@@ -452,10 +452,10 @@ public class TraxClientTests
     {
         var socket = new HandSocket();
         var time = new FakeTimeProvider();
-        // Every wait drawn at the top of its range: the whole step.
+        // Every wait drawn as 0: the whole step.
         using var stream = new TraxClient(
             Transport(socket),
-            new TraxClientOptions { Time = time, Random = () => 1.0 }
+            new TraxClientOptions { Time = time, Random = () => 0.0 }
         ).Subscribe(Changed, TraxNoVariables.Instance, _ => { });
         var current = await socket.Subscriptions.Take(Wait);
 
@@ -487,7 +487,7 @@ public class TraxClientTests
         var time = new FakeTimeProvider();
         using var stream = new TraxClient(
             Transport(socket),
-            new TraxClientOptions { Time = time, Random = () => 1.0 }
+            new TraxClientOptions { Time = time, Random = () => 0.0 }
         ).Subscribe(Changed, TraxNoVariables.Instance, _ => { });
         var current = await socket.Subscriptions.Take(Wait);
         current.Sink.Error(new IOException("dropped"));
@@ -507,9 +507,9 @@ public class TraxClientTests
 
     // Each wait is drawn uniformly between half the step and the whole of it, so streams a host dropped together do not
     // all come back together.
-    [TestCase(0.0, 500)]
+    [TestCase(0.0, 1000)]
     [TestCase(0.5, 750)]
-    [TestCase(1.0, 1000)]
+    [TestCase(1.0, 500)]
     public async Task Each_resubscribe_delay_is_drawn_between_half_its_step_and_the_whole(
         double drawn,
         int milliseconds
@@ -539,7 +539,7 @@ public class TraxClientTests
         var time = new FakeTimeProvider();
         var stream = new TraxClient(
             Transport(socket),
-            new TraxClientOptions { Time = time, Random = () => 1.0 }
+            new TraxClientOptions { Time = time, Random = () => 0.0 }
         ).Subscribe(Changed, TraxNoVariables.Instance, _ => { });
 
         (await socket.Subscriptions.Take(Wait)).Sink.Error(new IOException("dropped"));

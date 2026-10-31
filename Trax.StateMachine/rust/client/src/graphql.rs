@@ -606,9 +606,9 @@ impl MachineServer for GraphQLMachineServer {
 }
 
 // One wait of the resubscribe schedule: chosen uniformly between half of `step` and all of it, from `random` in [0, 1],
-// so the clients a host dropped together do not all subscribe again at the same moment.
+// so the clients a host dropped together do not all subscribe again at the same moment. A draw of 0 waits all of it.
 fn jittered(step: Duration, random: f64) -> Duration {
-    step.mul_f64(0.5 + 0.5 * random.clamp(0.0, 1.0))
+    step.mul_f64(1.0 - 0.5 * random.clamp(0.0, 1.0))
 }
 
 static DRAWS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -1601,7 +1601,7 @@ mod tests {
             &format!("ws://127.0.0.1:{port}/graphql"),
         );
         given.resubscribe_delays = Some(vec![Duration::from_millis(10), Duration::from_millis(400)]);
-        let server = GraphQLMachineServer::new(given).unwrap().with_random(|| 1.0);
+        let server = GraphQLMachineServer::new(given).unwrap().with_random(|| 0.0);
 
         let (deliver, mut delivered) = tokio::sync::mpsc::unbounded_channel();
         let _stream = server.subscribe(
@@ -1647,21 +1647,21 @@ mod tests {
 
     #[tokio::test]
     async fn a_reload_does_not_count_as_a_push_toward_starting_the_delays_over() {
-        let after = third_connection_after(|_| Reply::PushReloadThenComplete, Duration::from_millis(400), || 1.0).await;
+        let after = third_connection_after(|_| Reply::PushReloadThenComplete, Duration::from_millis(400), || 0.0).await;
 
         assert!(after >= Duration::from_millis(300), "subscribed again after {after:?}");
     }
 
     #[tokio::test]
     async fn a_stream_that_delivered_a_second_snapshot_starts_the_delays_over() {
-        let after = third_connection_after(|_| Reply::TwoPushesThenComplete, Duration::from_millis(400), || 1.0).await;
+        let after = third_connection_after(|_| Reply::TwoPushesThenComplete, Duration::from_millis(400), || 0.0).await;
 
         assert!(after < Duration::from_millis(300), "subscribed again after {after:?}");
     }
 
     #[tokio::test]
     async fn a_resubscribe_delay_is_drawn_between_half_its_step_and_all_of_it() {
-        let after = third_connection_after(|_| Reply::PushThenComplete, Duration::from_millis(800), || 0.0).await;
+        let after = third_connection_after(|_| Reply::PushThenComplete, Duration::from_millis(800), || 1.0).await;
 
         assert!(
             after >= Duration::from_millis(350) && after < Duration::from_millis(700),
@@ -1672,10 +1672,10 @@ mod tests {
     #[test]
     fn the_jitter_spans_half_the_step_to_all_of_it() {
         let step = Duration::from_millis(400);
-        assert_eq!(jittered(step, 0.0), Duration::from_millis(200));
+        assert_eq!(jittered(step, 0.0), step);
         assert_eq!(jittered(step, 0.5), Duration::from_millis(300));
-        assert_eq!(jittered(step, 1.0), step);
-        assert_eq!(jittered(step, 7.0), step);
+        assert_eq!(jittered(step, 1.0), Duration::from_millis(200));
+        assert_eq!(jittered(step, 7.0), Duration::from_millis(200));
 
         let draws: Vec<f64> = (0..200).map(|_| random_unit()).collect();
         assert!(draws.iter().all(|d| (0.0..1.0).contains(d)), "{draws:?}");
