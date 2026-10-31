@@ -8,7 +8,6 @@
   {"case": "dispose-with-a-read-in-flight", "reason": "Disposing the C# controller while its first read is in flight leaves StartAsync unsettled.", "message": "the testee's answer to start did not come"},
   {"case": "due-at-absent-in-a-push", "reason": "The C# client reads a push without dueAt or dueAtKnown as a known null due time, so it does not read the timed state again.", "message": "step 6 ({\"request\":\"get\""},
   {"case": "due-at-absent-in-an-answer", "reason": "The C# client reads an answer without dueAt or dueAtKnown as a known null due time, so it does not read the timed state again.", "message": "step 8 ({\"request\":\"get\""},
-  {"case": "malformed-answer-revision", "reason": "The C# client takes an answer whose revision is negative.", "message": "step 15 ({\"await\":\"push3\""},
   {"case": "request-id-minter-throws", "reason": "A request id minter that throws escapes C#'s SendAsync instead of settling the send failed as INVALID_REQUEST_ID.", "message": "the testee's answer to send: error: threw: the request id minter threw"},
   {"case": "retry-after-a-failed-first-read", "reason": "C#'s RetryAsync answers NOTHING_TO_RETRY after a first read that failed past every retry, instead of reading again.", "message": "step 8 ({\"request\":\"get\""},
   {"case": "send-input-too-deep", "reason": "The C# controller does not refuse an input nested past the value depth limit where it is sent.", "message": "the testee's answer to send did not come"},

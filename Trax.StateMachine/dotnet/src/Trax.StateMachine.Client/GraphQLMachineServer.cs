@@ -386,55 +386,45 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     {
         if (answer is null)
             return new ServerAnswer();
-        var id = Text(answer["id"]);
-        if (answer["problem"] is JsonObject problem)
-            return new ServerAnswer { Id = id, Problem = ProblemOf(problem) };
-        return ServerAnswer.Of(
-            new ServerSnapshot
-            {
-                // A revision the store does not record stays null: it is not revision 0, which would order every
-                // later answer below it.
-                Revision = answer["revision"] is JsonValue revision
-                    ? revision.GetValue<long>()
-                    : null,
-                State =
-                    Text(answer["state"])
-                    ?? throw new HttpRequestException(
-                        "The server answered a snapshot without a state."
-                    ),
-                Context = WithoutNulls(
-                    ContextOf(answer["context"], out var context)
-                        ? context
-                        : throw new HttpRequestException(
-                            "The server answered a context that is not an object."
-                        )
-                ),
-                // A due time the server says it cannot know is left unknown, so it is never read as "no timer".
-                DueAtKnown = answer["dueAtKnown"] is not JsonValue known || known.GetValue<bool>(),
-                DueAt = DueAtOf(answer["dueAt"]),
-            },
-            id
-        );
+        try
+        {
+            var id = Text(answer["id"]);
+            if (answer["problem"] is JsonObject problem)
+                return new ServerAnswer { Id = id, Problem = ProblemOf(problem) };
+            return ServerAnswer.Of(SnapshotOf(answer, push: false), id);
+        }
+        // A member of the wrong type, or one given twice.
+        catch (Exception ex)
+            when (ex is FormatException or InvalidOperationException or ArgumentException)
+        {
+            throw new HttpRequestException(
+                $"The server answered a snapshot this client cannot read: {ex.Message}",
+                ex
+            );
+        }
     }
 
-    // The snapshot a push holds, or a FormatException when it is not one a host wrote: a state that is not a string, a
-    // revision that is not a whole number from zero, a context that is not an object, a due time that is not an
-    // instant, a row id that is not a string.
-    private static ServerSnapshot PushedSnapshot(JsonObject node)
+    // The snapshot an answer or a push holds, or a FormatException when it is not one a host wrote: a state that is not
+    // a string, a revision that is not a whole number from zero, a context that is not an object, a due time that is
+    // not an instant. A push must carry its revision and may carry its row id; an answer may leave the revision out (a
+    // store that records none, which is not revision 0: that would order every later answer below it).
+    private static ServerSnapshot SnapshotOf(JsonObject node, bool push)
     {
         var state =
             Text(node["state"])
             ?? throw new FormatException("The snapshot has no state, or one that is not a string.");
-        if (!RevisionOf(node["revision"], out var revision) || revision is null)
+        if (!RevisionOf(node["revision"], out var revision) || (push && revision is null))
             throw new FormatException("The snapshot's revision is not a whole number from zero.");
         if (!ContextOf(node["context"], out var context))
             throw new FormatException("The snapshot's context is not an object.");
-        var rowId = node["rowId"] switch
-        {
-            null => null,
-            var row => Text(row)
-                ?? throw new FormatException("The snapshot's rowId is not a string."),
-        };
+        var rowId = !push
+            ? null
+            : node["rowId"] switch
+            {
+                null => null,
+                var row => Text(row)
+                    ?? throw new FormatException("The snapshot's rowId is not a string."),
+            };
         return new ServerSnapshot
         {
             RowId = rowId,
@@ -617,7 +607,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 return (new StreamMessage.Gone(NotFound: false), false);
             if (Flag(change, "reload"))
                 return (new StreamMessage.Reload(), false);
-            return (new StreamMessage.Changed(PushedSnapshot(change)), false);
+            return (new StreamMessage.Changed(SnapshotOf(change, push: true)), false);
         }
 
         public void Error(Exception error)
