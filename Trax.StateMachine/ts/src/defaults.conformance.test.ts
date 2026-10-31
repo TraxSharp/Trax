@@ -55,7 +55,8 @@ describe('the client defaults', () => {
     };
     expect(constant('defaultMaxResponseBytes')).toBe(defaults.maxResponseBytes);
     expect(constant('defaultRequestTimeout')).toBe(defaults.requestTimeoutMs);
-    const retried = /shouldRetry: \(error\) => isCloseEvent\(error\)((?: && error\.code !== \d+)+),/.exec(client);
+    expect(client).toContain('shouldRetry: retryClosedSocket,');
+    const retried = /function retryClosedSocket\([^)]*\): boolean \{[\s\S]*?return typeof code === "number"((?: && code !== \d+)+);/.exec(client);
     expect(retried, 'client.g.ts names the closes it does not retry').not.toBeNull();
     const notRetried = [...retried![1].matchAll(/\d+/g)].map((m) => m[0]);
     expect(notRetried.sort()).toEqual(Object.keys(defaults.closeCodes.refused).sort());
