@@ -98,6 +98,7 @@ describe("the client conformance kit", () => {
     expect(allowedLacks().map((a) => `${a.client}:${a.capability}`)).toEqual([
       "ts:upgrade-status",
       "ts:socket-message-limit",
+      "ts:socket-close-code",
     ]);
     const block = (entries) => `# x\n\n\`\`\`json lacks\n${JSON.stringify(entries)}\n\`\`\`\n`;
     expect(() => allowedLacks(block([{ capability: "x", client: "ts", reason: " " }]))).toThrow(/no reason/);

@@ -226,6 +226,11 @@ and does not yet is a bug in the client, not an entry here.
     "capability": "socket-message-limit",
     "client": "ts",
     "reason": "The page builds the graphql-ws client given as socket and its WebSocket, which read every message whole, so the client never sees a message before it is read and cannot cap its size."
+  },
+  {
+    "capability": "socket-close-code",
+    "client": "ts",
+    "reason": "The page builds the graphql-ws client given as socket, which closes a socket that sent it a message it cannot read with its own code, 4004, not the protocol's 4400."
   }
 ]
 ```
@@ -293,6 +298,10 @@ while subscribed, is the host turning the caller away, and the client stops for 
 subscribes again after any other close, graphql-transport-ws's 4408 (not initialised in time) and 4429 (too many
 initialisation requests) among them. C# and Rust hold a socket message to the response size: one larger fails the
 socket, unread past the limit, and the client subscribes again on a new one.
+
+Socket text that is not JSON is not a graphql-transport-ws message: the client closes that socket with 4400, as the
+protocol says, and subscribes again on a new one after the resubscribe delay. A client whose page builds its socket
+lacks the close code (`socket-close-code`).
 
 A host can also refuse one subscription on a socket it accepted (an expired token, an anonymous socket it
 acknowledged): it answers a `next` whose first GraphQL error carries the refusal in `extensions.code`, or an `error`

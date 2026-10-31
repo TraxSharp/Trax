@@ -176,7 +176,7 @@ export function createClientTestee(engine) {
       }
       // A WebSocket in a browser or in node does not say what status an upgrade it failed was answered with, and the
       // page's graphql-ws client, not this one, reads the socket's messages, closes it, and times it.
-      return { opened: true, client: CLIENT, lacks: ["upgrade-status", "socket-message-limit"] };
+      return { opened: true, client: CLIENT, lacks: ["upgrade-status", "socket-message-limit", "socket-close-code"] };
     },
     build: async (r) => {
       const { id: _, op: __, ...options } = r;

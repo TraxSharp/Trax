@@ -1,0 +1,25 @@
+{
+  "about": "Socket text that is not JSON is not a graphql-transport-ws message, and the protocol closes a socket that sends one with 4400: the client does, then subscribes again on a new socket.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "needs": ["socket-close-code"],
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "view": { "status": "ready" } },
+    { "pushRaw": "<html>not json</html>" },
+    { "clientClosed": 4400 },
+    { "subscribe": { "id": "i-1" } },
+    { "push": { "revision": 2, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "state": "Unlocked", "revision": 2, "error": null } }
+  ]
+}

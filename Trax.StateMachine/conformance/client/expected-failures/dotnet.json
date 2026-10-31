@@ -6,5 +6,6 @@
   {"case": "due-at-absent-in-an-answer", "reason": "The C# client reads an answer without dueAt or dueAtKnown as a known null due time, so it does not read the timed state again.", "message": "step 8 ({\"request\":\"get\""},
   {"case": "malformed-answer-revision", "reason": "The C# client takes an answer whose revision is negative.", "message": "step 15 ({\"await\":\"push3\""},
   {"prefix": "malformed-push-", "reason": "The C# client does not drop a malformed push and read the instance again.", "message": "step 6 ({\"request\":\"get\",\"variables\":{\"id\":\"i-1\"},\"hold\":\"fence\"}): no get request arrived"},
-  {"case": "retry-after-a-failed-first-read", "reason": "C#'s RetryAsync answers NOTHING_TO_RETRY after a first read that failed past every retry, instead of reading again.", "message": "step 8 ({\"request\":\"get\""}
+  {"case": "retry-after-a-failed-first-read", "reason": "C#'s RetryAsync answers NOTHING_TO_RETRY after a first read that failed past every retry, instead of reading again.", "message": "step 8 ({\"request\":\"get\""},
+  {"case": "socket-text-not-json-closes-4400", "reason": "The C# socket fails the connection on text that is not JSON without closing it with 4400.", "message": "step 6 ({\"clientClosed\":4400}): the client did not close the socket"}
 ]
