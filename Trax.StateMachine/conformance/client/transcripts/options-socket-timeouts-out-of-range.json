@@ -1,0 +1,21 @@
+{
+  "about": "A socket connect or idle timeout of zero or less gives the socket no time: the client refuses to be built with one, and builds with positive ones.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "needs": ["socket-timeouts"],
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "build", "connectTimeout": 0, "expect": { "built": false, "code": "INVALID_OPTION" } },
+    { "client": "build", "connectTimeout": -5, "expect": { "built": false, "code": "INVALID_OPTION" } },
+    { "client": "build", "idleTimeout": 0, "expect": { "built": false, "code": "INVALID_OPTION" } },
+    { "client": "build", "idleTimeout": -5, "expect": { "built": false, "code": "INVALID_OPTION" } },
+    { "client": "build", "connectTimeout": 1000, "idleTimeout": 1000, "expect": { "built": true } }
+  ]
+}

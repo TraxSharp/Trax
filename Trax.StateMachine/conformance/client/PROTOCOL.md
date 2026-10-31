@@ -244,6 +244,11 @@ and does not yet is a bug in the client, not an entry here.
     "reason": "The page builds the graphql-ws client given as socket, which closes a socket that sent it a message it cannot read with its own code, 4004, not the protocol's 4400."
   },
   {
+    "capability": "socket-timeouts",
+    "client": "ts",
+    "reason": "The page builds the graphql-ws client given as socket, which decides how long a socket may take to connect and stay silent; the client has no such options."
+  },
+  {
     "capability": "change-listener",
     "client": "rust",
     "reason": "The view is a tokio watch channel the app reads (watch); there is no callback of the app's for the controller to call, so none can throw."
@@ -288,6 +293,11 @@ down once, in `defaults.json` beside this file: each client's tests hold its con
 | Retry delays | 250, 500, 1000, 2000, 4000 ms | The waits before each retry of a `SERVER_OUTDATED` answer and of a read the transport failed: one retry per delay, then the event fails and `retry` resends it. An empty list retries nothing. |
 | Resubscribe delays | 1000, 2000, 5000 ms | The steps of the waits before subscribing again after a stream ended without saying why. The last repeats for as long as the stream is wanted, and the schedule starts over once a stream has delivered its second push, since every stream's first is the instance as it is. An empty list is the default. Each wait is jittered, below. |
 | Response size | 16 MiB | The largest answer body read; a larger one fails its request as `TRANSPORT_ERROR` and is not read past the limit. C# and Rust hold a socket message to the same limit. |
+
+A client refuses to be built with an option no limit or timer can honour: a request, connect or idle timeout of zero
+or less, a response size of zero or less, and a retry or resubscribe delay below zero or past 2^31 - 1 ms. The
+`options-` transcripts hold this through `build`. JSON carries no NaN or infinity, so the kit does not send one; each
+client's unit tests refuse those.
 
 Each resubscribe wait is drawn uniformly between 50% and 100% of its step: `step × (1 − r / 2)`, with `r` uniform in
 [0, 1), drawn afresh for every wait, so the clients a host restart or a refusal like `TOO_MANY_SUBSCRIPTIONS` dropped

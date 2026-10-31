@@ -1,0 +1,18 @@
+{
+  "about": "A resubscribe delay below zero or past 2^31 - 1 ms is one no timer waits for: the client refuses to be built with one, and builds with delays from zero to that.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "build", "resubscribeDelays": [10, -5], "expect": { "built": false, "code": "INVALID_OPTION" } },
+    { "client": "build", "resubscribeDelays": [10, 2147483648], "expect": { "built": false, "code": "INVALID_OPTION" } },
+    { "client": "build", "resubscribeDelays": [0, 2147483647], "expect": { "built": true } }
+  ]
+}
