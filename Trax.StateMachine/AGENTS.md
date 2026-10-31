@@ -25,9 +25,12 @@ The folder is laid out by language, with what spans the languages at its root.
 | `conformance/operations/` | The operations kit: transcripts that hold the operations clients `trax client --operations` writes, TypeScript and C#, to one transport and error behaviour, played on the client kit's host. Its fixture's TypeScript client is committed under `ts/tools/conformance/operations/client/` and run by vitest; the C# one is in Trax.Cli's tests (`OperationsConformanceTests`), which also check both are what the CLI generates. See its `PROTOCOL.md`. |
 | `docs/adr/` | This folder's decisions, for every language. |
 
-Another language's engine gets a directory of its own beside `dotnet/`, `ts/` and `rust/`, and joins the
-kit by implementing a testee for `conformance/run.mjs`; its client joins the client kit with a testee for
-`conformance/client/run.mjs`.
+Another language's engine gets a directory of its own beside `dotnet/`, `ts/` and `rust/`, and a row in
+`conformance/testees.json`, the roster of every language folder and the testee each kit runs it through (or none, and
+why). It joins the kit by implementing a testee for `conformance/run.mjs`, and its client the client kit with a testee
+for `conformance/client/run.mjs`; what neither passes yet goes in its expected failures (`conformance/PROTOCOL.md`).
+`TesteeRosterTests` fails on a folder with no row, a row whose suite or job CI does not run, and a testee command
+`ci.yml` does not run.
 
 ## Architecture decisions
 

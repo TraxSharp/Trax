@@ -1,0 +1,41 @@
+{
+  "about": "One row per language folder under Trax.StateMachine/, naming the testee each kit runs it through. A testee is a command CI runs from Trax.StateMachine/ (it appears in .github/workflows/ci.yml as written), a test that answers the kit in process (a path from the repository's root), or none, with the reason. name is what the testee runs under (--name), so its expected failures are expected-failures/<name>.json in each kit. surfaceColumn is the language's column in the client surface tables of client/PROTOCOL.md. suite is the packages.json suite whose CI job runs the engine and client kits for it. TesteeRosterTests holds this file to the folders, packages.json and ci.yml.",
+  "languages": [
+    {
+      "language": "TypeScript",
+      "surfaceColumn": "TypeScript",
+      "folder": "ts",
+      "name": "ts",
+      "suite": "state-machine-conformance",
+      "engine": { "command": "node conformance/run.mjs --name ts --testee node ts/tools/conformance/testee-ts.mjs" },
+      "client": {
+        "command": "node conformance/client/run.mjs --name ts --testee node ts/tools/conformance/client-testee-ts.mjs"
+      },
+      "operations": { "test": "Trax.StateMachine/ts/tools/conformance/operations.test.mjs" }
+    },
+    {
+      "language": "C#",
+      "surfaceColumn": "C#",
+      "folder": "dotnet",
+      "name": "dotnet",
+      "suite": "state-machine-conformance",
+      "engine": { "test": "Trax.StateMachine/dotnet/tests/Trax.StateMachine.Tests/Conformance/ConformanceRunnerTests.cs" },
+      "client": { "test": "Trax.StateMachine/dotnet/tests/Trax.StateMachine.Tests/Client/ClientConformanceTests.cs" },
+      "operations": {
+        "test": "Trax.Cli/tests/Trax.Cli.Tests/IntegrationTests/OperationsConformance/OperationsConformanceTests.cs"
+      }
+    },
+    {
+      "language": "Rust",
+      "surfaceColumn": "Rust",
+      "folder": "rust",
+      "name": "rust",
+      "suite": "state-machine-rust",
+      "engine": { "command": "node conformance/run.mjs --name rust --testee rust/target/release/trax-state-machine-testee" },
+      "client": {
+        "command": "node conformance/client/run.mjs --name rust --testee rust/target/release/trax-state-machine-client-testee"
+      },
+      "operations": { "none": "trax client --operations generates TypeScript and C# only; there is no Rust operations client to test." }
+    }
+  ]
+}
