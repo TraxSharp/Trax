@@ -73,22 +73,22 @@ pub struct GraphQLMachineServerOptions {
     /// over once a stream has delivered a second snapshot. Each wait is drawn uniformly between half of its delay and
     /// all of it, so clients the host dropped together do not all come back at once. A socket the host refused (closed with 4401 or 4403, an upgrade
     /// answered 401 or 403, or a stream error with an authorization code or one of `terminal_stream_errors`) is not
-    /// subscribed again: the stream delivers [`StreamMessage::Refused`] and ends.
+    /// subscribed again: the stream delivers [`StreamMessage::Refused`] and ends. A delay past 2^31 - 1 ms is refused.
     pub resubscribe_delays: Option<Vec<Duration>>,
     /// How long a socket may take to connect and be acknowledged before the attempt counts as failed and is tried
-    /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default.
+    /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default; zero is refused.
     pub connect_timeout: Duration,
     /// How long one request may take, from sending it to reading the last byte of its answer, before it fails as a
-    /// [`TransportError`]. [`DEFAULT_REQUEST_TIMEOUT`] (30 seconds) by default.
+    /// [`TransportError`]. [`DEFAULT_REQUEST_TIMEOUT`] (30 seconds) by default; zero is refused.
     pub request_timeout: Duration,
     /// How long an acknowledged socket may stay silent before it is given up and subscribed again after the
     /// resubscribe delays, so a connection dropped without a close (a NAT that forgot it) is noticed. Halfway through
     /// the silence the client sends a `ping`, which a live host answers with a `pong`. [`DEFAULT_IDLE_TIMEOUT`] (60
-    /// seconds) by default.
+    /// seconds) by default; zero is refused.
     pub idle_timeout: Duration,
     /// The largest response body, and the largest socket message or frame, the host may send, in bytes. A larger
     /// response fails its request as a [`TransportError`]; a larger message ends the stream, which is subscribed again.
-    /// [`DEFAULT_MAX_MESSAGE_SIZE`] (16 MiB) by default.
+    /// [`DEFAULT_MAX_MESSAGE_SIZE`] (16 MiB) by default; zero is refused.
     pub max_message_size: usize,
     /// Accepts an `http` endpoint or a `ws` socket on a host that is not loopback. Off by default: whatever
     /// authenticates the client would travel in cleartext.
@@ -149,6 +149,9 @@ pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 pub const DEFAULT_RESUBSCRIBE_DELAYS: [Duration; 3] =
     [Duration::from_secs(1), Duration::from_secs(2), Duration::from_secs(5)];
 
+// The longest delay a retry or a resubscribe may wait, 2^31 - 1 ms: the longest a timer waits in every client's language.
+pub(crate) const MAX_DELAY: Duration = Duration::from_millis(2_147_483_647);
+
 /// Why a [`GraphQLMachineServer`] could not be built.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConfigError(pub String);
@@ -199,13 +202,38 @@ struct Inner {
 }
 
 impl GraphQLMachineServer {
-    /// Builds the server for one machine. Refuses a machine with no documents, or none for `changed`, and an endpoint
-    /// or socket that is not over TLS on a host that is not loopback unless `allow_insecure_transport` is set.
+    /// Builds the server for one machine. Refuses a machine with no documents, or none for `changed`, an endpoint or
+    /// socket that is not over TLS on a host that is not loopback unless `allow_insecure_transport` is set, and an
+    /// option no limit or timer can honour: a timeout or a message size of zero, or a resubscribe delay past 2^31 - 1
+    /// ms.
     pub fn new(options: GraphQLMachineServerOptions) -> Result<Self, ConfigError> {
         // The socket's TLS needs a process-wide crypto provider; another one already installed is kept.
         let _ = rustls::crypto::ring::default_provider().install_default();
         require_secure(&options.endpoint, "https", options.allow_insecure_transport)?;
         require_secure(&options.socket, "wss", options.allow_insecure_transport)?;
+        for (name, timeout) in [
+            ("request_timeout", options.request_timeout),
+            ("connect_timeout", options.connect_timeout),
+            ("idle_timeout", options.idle_timeout),
+        ] {
+            if timeout.is_zero() {
+                return Err(ConfigError(format!(
+                    "The {name} is zero, which leaves no time to wait. Give it a positive duration."
+                )));
+            }
+        }
+        if options.max_message_size == 0 {
+            return Err(ConfigError(
+                "The max_message_size is zero, which reads no answer. Give it a positive size.".to_owned(),
+            ));
+        }
+        if let Some(delay) = options.resubscribe_delays.iter().flatten().find(|d| **d > MAX_DELAY) {
+            return Err(ConfigError(format!(
+                "The resubscribe delay {} ms is past {} ms, the longest delay a client waits.",
+                delay.as_millis(),
+                MAX_DELAY.as_millis()
+            )));
+        }
         if options.documents.is_empty() {
             return Err(ConfigError(format!(
                 "The machine '{}' has no persisted documents. Export the host's client manifest and pass its \
@@ -1295,6 +1323,36 @@ mod tests {
                 GraphQLMachineServer::new(options(endpoint, socket)).is_ok(),
                 "{endpoint} {socket}"
             );
+        }
+    }
+
+    #[test]
+    fn an_option_no_limit_or_timer_can_honour_is_refused() {
+        let refused = |change: fn(&mut GraphQLMachineServerOptions)| {
+            let mut given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
+            change(&mut given);
+            GraphQLMachineServer::new(given).err()
+        };
+
+        for change in [
+            (|o| o.request_timeout = Duration::ZERO) as fn(&mut GraphQLMachineServerOptions),
+            |o| o.connect_timeout = Duration::ZERO,
+            |o| o.idle_timeout = Duration::ZERO,
+            |o| o.max_message_size = 0,
+            |o| o.resubscribe_delays = Some(vec![Duration::from_millis(10), MAX_DELAY + Duration::from_millis(1)]),
+            |o| o.resubscribe_delays = Some(vec![Duration::MAX]),
+        ] {
+            assert!(refused(change).is_some());
+        }
+        for change in [
+            (|o| o.request_timeout = Duration::from_millis(1)) as fn(&mut GraphQLMachineServerOptions),
+            |o| o.connect_timeout = Duration::from_millis(1),
+            |o| o.idle_timeout = Duration::from_millis(1),
+            |o| o.max_message_size = 1,
+            |o| o.resubscribe_delays = Some(vec![Duration::ZERO, MAX_DELAY]),
+            |o| o.resubscribe_delays = Some(Vec::new()),
+        ] {
+            assert_eq!(refused(change), None);
         }
     }
 

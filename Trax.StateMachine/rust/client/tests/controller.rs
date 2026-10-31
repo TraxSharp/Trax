@@ -1081,3 +1081,20 @@ async fn a_minter_that_panics_for_the_start_fails_it_and_retry_mints_again() {
     assert!(matches!(retried, SendOutcome::Confirmed(_)), "{retried:?}");
     assert_eq!(starts.recv().await.as_deref(), Some("r2"));
 }
+
+#[tokio::test]
+async fn a_retry_delay_past_the_longest_a_timer_waits_is_refused() {
+    let built = |delays: Vec<Duration>| {
+        let (ir, hash) = turnstile();
+        let (server, _) = silent();
+        let mut options = ServerMachineOptions::new(ir, hash, server);
+        options.retry_delays = Some(delays);
+        ServerMachineController::new(options).map(|_| ())
+    };
+
+    let longest = Duration::from_millis(2_147_483_647);
+    assert!(built(vec![Duration::from_millis(10), longest + Duration::from_millis(1)]).is_err());
+    assert!(built(vec![Duration::MAX]).is_err());
+    assert!(built(vec![Duration::ZERO, longest]).is_ok());
+    assert!(built(Vec::new()).is_ok());
+}

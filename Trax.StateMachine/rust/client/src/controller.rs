@@ -25,6 +25,7 @@ use trax_state_machine::{
     canonical_wire, IrError, JsString, Machine, Map, PlanAnswer, PlanEvent, PlanInvalid, Snapshot, Value,
 };
 
+use crate::graphql::MAX_DELAY;
 use crate::server::{
     DueAt, EventRequest, MachineServer, ServerAnswer, ServerProblem, ServerSnapshot, StreamMessage, Subscription,
     TransportError,
@@ -186,7 +187,8 @@ pub struct ServerMachineOptions<S> {
     /// panics (under `panic = "unwind"`) fails the send it was minting for as `INVALID_REQUEST_ID`, or the start, and
     /// sends nothing for it.
     pub new_request_id: Option<Box<dyn FnMut() -> String + Send>>,
-    /// Delays between retries of `SERVER_OUTDATED` and of a read the transport failed. `None` for the default.
+    /// Delays between retries of `SERVER_OUTDATED` and of a read the transport failed. `None` for the default. A delay
+    /// past 2^31 - 1 ms is refused.
     pub retry_delays: Option<Vec<Duration>>,
     /// The tokio runtime the controller's task and its requests run on. `None` takes the runtime `new` is called
     /// from; a binding that builds the controller on a thread of its host's passes one it owns.
@@ -235,7 +237,8 @@ pub struct ServerMachineController {
 impl ServerMachineController {
     /// Builds the controller and starts its task. It sends nothing until [`start`](Self::start). Refuses an IR the
     /// machine cannot be built from, one that does not hash to `ir_hash`, a start input that nests deeper than
-    /// [`MAX_DEPTH`](trax_state_machine::MAX_DEPTH), and options with no runtime when it is not built inside one.
+    /// [`MAX_DEPTH`](trax_state_machine::MAX_DEPTH), a retry delay past 2^31 - 1 ms, and options with no runtime when it
+    /// is not built inside one.
     pub fn new<S: MachineServer>(options: ServerMachineOptions<S>) -> Result<Self, IrError> {
         let Some(runtime) = options.runtime.clone().or_else(|| Handle::try_current().ok()) else {
             return Err(IrError {
@@ -244,6 +247,15 @@ impl ServerMachineController {
                     .to_owned(),
             });
         };
+        if let Some(delay) = options.retry_delays.iter().flatten().find(|d| **d > MAX_DELAY) {
+            return Err(IrError {
+                message: format!(
+                    "The retry delay {} ms is past {} ms, the longest delay a client waits.",
+                    delay.as_millis(),
+                    MAX_DELAY.as_millis()
+                ),
+            });
+        }
         if options.start_input.as_ref().is_some_and(Value::is_too_deep) {
             return Err(IrError {
                 message: format!(
