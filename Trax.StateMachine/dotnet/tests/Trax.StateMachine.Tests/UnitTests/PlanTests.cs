@@ -8,7 +8,7 @@ namespace Trax.StateMachine.Tests.UnitTests;
 /// <summary>
 /// The planner (<c>conformance/PROTOCOL.md</c>, <c>plan</c>) over the kit's wizard and the test machines, beyond what
 /// the kit's cases hold every engine to: the edge order an IR lists does not matter, a handler makes a custom edge
-/// plannable, the expansion cap, and the compiled machine's planner.
+/// plannable, and the compiled machine's planner. The expansion cap is the kit's odometer cases.
 /// </summary>
 public class PlanTests
 {
@@ -180,44 +180,6 @@ public class PlanTests
         Triggers(machine.Plan(Wizard("Start"), "Review", Fill, Navigation, maxDepth: 3))
             .Should()
             .HaveCount(3);
-    }
-
-    [Test]
-    public void A_search_that_never_runs_out_of_snapshots_stops_at_the_expansion_cap()
-    {
-        // Every Tick writes a new count, so the snapshots never repeat and B is never reached.
-        var ir = new JsonObject
-        {
-            ["id"] = "counter",
-            ["version"] = 1,
-            ["initialState"] = "A",
-            ["states"] = new JsonArray("A", "B"),
-            ["triggers"] = new JsonArray("Tick"),
-            ["committedStates"] = new JsonArray(),
-            ["transitions"] = new JsonArray(
-                new JsonObject
-                {
-                    ["from"] = "A",
-                    ["trigger"] = "Tick",
-                    ["to"] = "A",
-                    ["reduce"] = new JsonObject { ["reduce"] = "custom", ["name"] = "count" },
-                }
-            ),
-        };
-        var machine = new IrMachine(
-            ir,
-            customReducers: new Dictionary<string, Func<JsonObject, JsonNode?, JsonObject>>
-            {
-                ["count"] = (context, _) =>
-                    new JsonObject { ["n"] = (context["n"]?.GetValue<int>() ?? 0) + 1 },
-            }
-        );
-        var start = machine.CreateInitialSnapshot();
-
-        machine
-            .Plan(start, "B", null, ["Tick"], maxDepth: int.MaxValue)
-            .Should()
-            .BeOfType<PlanResult.Exceeded>();
     }
 
     [Test]

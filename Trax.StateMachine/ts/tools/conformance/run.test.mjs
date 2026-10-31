@@ -35,6 +35,7 @@ describe("the conformance kit", () => {
       "strict",
       "wizard",
       "notebook",
+      "odometer",
     ]);
     for (const op of ["advance", "outcome", "timer", "plan"])
       expect(cases.some((c) => c.request.op === op), op).toBe(true);

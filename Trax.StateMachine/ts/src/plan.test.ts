@@ -136,49 +136,7 @@ describe("plan", () => {
     expect(asked).toBe(onceAsked);
   });
 
-  // A counter that counts up to `ceiling`: every Up is a new wire, and Never is never reached.
-  const counter = (ceiling: number) =>
-    new SnapshotMachine(
-      machineFromIr(
-        {
-          id: "counter",
-          version: 1,
-          initialState: "Counting",
-          initialContext: { n: 0 },
-          states: ["Counting", "Never"],
-          triggers: ["Up"],
-          committedStates: [],
-          context: {
-            Counting: { fields: [{ name: "n", type: "integer", nullable: false, constraints: [] }] },
-            Never: { fields: [{ name: "n", type: "integer", nullable: false, constraints: [] }] },
-          },
-          inputs: {},
-          transitions: [
-            {
-              from: "Counting",
-              trigger: "Up",
-              to: "Counting",
-              guard: { rule: "compare", source: "context", field: "n", op: "lt", value: ceiling },
-              reduce: { reduce: "custom", name: "up" },
-            },
-          ],
-        } as IrDocument,
-        {},
-        { up: (context) => ({ n: (context.n as number) + 1 }) },
-      ),
-    );
-  const count = (ceiling: number) => {
-    const machine = counter(ceiling);
-    return machine.plan(machine.createInitialSnapshot(), { target: "Never", navigation: ["Up"], maxDepth: 1_000_000 });
-  };
-
-  it("stops with a snapshot still waiting after ten thousand", () => {
-    expect(count(10_000)).toEqual({ result: "exceeded" });
-  });
-
-  it("is unreachable when it runs out of snapshots at exactly ten thousand", () => {
-    expect(count(9_999)).toEqual({ result: "unreachable" });
-  });
+  // The expansion limit is held by the odometer cases of conformance/plan/, which every engine answers.
 
   it("answers a kept custom edge over a limit it reached", () => {
     const details = { ...empty, state: "Details" };

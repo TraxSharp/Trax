@@ -31,9 +31,9 @@ public sealed class ConformanceTestee(bool fromIr = false)
     // every handler bound, so this testee checks the IR against the compiled machine and then serves it from the IR.
     private static readonly HashSet<string> ServedWithoutHandlers = ["vault"];
 
-    // The machines the kit holds only as an IR, with no C# source to check it against: the planner's wizard and
-    // notebook, whose IRs were written for its cases. Every testee builds them from the IR.
-    private static readonly HashSet<string> OnlyAnIr = ["wizard", "notebook"];
+    // The machines the kit holds only as an IR, with no C# source to check it against: the planner's wizard,
+    // notebook and odometer, whose IRs were written for its cases. Every testee builds them from the IR.
+    private static readonly HashSet<string> OnlyAnIr = ["wizard", "notebook", "odometer"];
 
     // The one handler every testee binds: a custom guard named `throws`, which throws.
     private static readonly Dictionary<string, Func<JsonObject, JsonNode?, bool>> KitGuards = new()

@@ -344,34 +344,13 @@ fn a_plan_with_no_depth_to_spend_is_exceeded_unless_it_is_already_there() {
     );
 }
 
-// A machine whose one edge counts up forever: every snapshot is new, so only the expansion limit ends the search.
+// A machine whose one edge counts up forever, through a custom reduction. The expansion limit itself is held by the
+// odometer cases of conformance/plan/.
 const COUNTER: &str = r#"{"id":"n","version":1,"initialState":"A","initialContext":{"n":0},"states":["A","B"],
   "triggers":["Tick"],"committedStates":[],"inputs":{},
   "context":{"A":{"fields":[{"name":"n","type":"number","nullable":false,"constraints":[]}]},
              "B":{"fields":[{"name":"n","type":"number","nullable":false,"constraints":[]}]}},
   "transitions":[{"from":"A","trigger":"Tick","to":"A","reduce":{"reduce":"custom","name":"Count"}}]}"#;
-
-#[test]
-fn a_search_that_never_ends_is_bounded_by_its_expansions() {
-    let machine = Machine::from_ir_text(COUNTER)
-        .unwrap()
-        .with_reducer("Count", |context, _| {
-            let mut next = context.clone();
-            let n = context.get(&JsString::from("n")).and_then(Value::as_f64).unwrap_or(0.0);
-            next.insert("n".into(), Value::Number(n + 1.0));
-            next
-        });
-
-    let plan = machine.plan(
-        &machine.initial_snapshot(),
-        "B",
-        None,
-        &["Tick".to_owned()],
-        Some(usize::MAX),
-    );
-
-    assert_eq!(plan, PlanAnswer::Exceeded);
-}
 
 #[test]
 fn a_custom_reduction_on_the_fields_event_never_shows_the_fields_applied() {
