@@ -100,7 +100,8 @@ A `CLIENT_DIVERGENCE` answer starts a read of the instance, and the queue holds 
 sent only once that read has settled, and is predicted from what the read says.
 A send before `start` waits for it; once a start or a first read has ended without an instance (refused, or past
 every retry), every send waiting and every later one settles `failed` as `NOT_READY`. **`retry`** resends what last
-failed under the same request id. It resends nothing, and answers `NOTHING_TO_RETRY`, once a later event has been
+failed under the same request id: a start that failed, or, for an instance opened by id, a first read that failed
+past every retry, which it reads again and settles `confirmed` with what the read says. It resends nothing, and answers `NOTHING_TO_RETRY`, once a later event has been
 confirmed or while one is queued or in flight: the failed event would reach the host after it. Both are answered with
 what the send came to:
 
