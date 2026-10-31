@@ -255,32 +255,8 @@ fn a_context_nested_past_the_limit_is_refused_not_overflowed() {
     assert!(Snapshot::from_value(&Value::Object(stored)).is_none());
 }
 
-#[test]
-fn a_reducer_that_nests_past_the_limit_is_refused_not_overflowed() {
-    let machine = Machine::from_ir_text(CUSTOM)
-        .unwrap()
-        .with_guard("Open", |_, _| true)
-        .with_guard("Approved", |_, _| true)
-        .with_reducer("Stamp", |_, _| {
-            let mut context = Map::new();
-            context.insert("deep".into(), too_deep());
-            context
-        });
-
-    assert_eq!(
-        machine.advance(&start(), "Go", None).unwrap_err().code,
-        RefusalCode::InvalidContext
-    );
-}
-
-#[test]
-fn an_ir_nested_past_the_limit_is_refused_not_overflowed() {
-    let mut ir = conformance("machines/turnstile/turnstile.ir.json");
-    let Value::Object(map) = &mut ir else { unreachable!() };
-    map.insert("note".into(), too_deep());
-
-    assert!(Machine::from_ir(&ir).is_err());
-}
+// A reduction or an IR nested past the limit is refused in the kit: conformance/machines/deep and
+// unreadable-ir/nested-past-the-limit.
 
 #[test]
 fn a_value_nested_past_the_limit_is_written_and_dropped_without_overflowing() {

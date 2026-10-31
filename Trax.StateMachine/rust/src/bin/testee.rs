@@ -65,10 +65,35 @@ fn handle(request: &Value, machines: &mut HashMap<String, Machine>) -> Value {
             let (Some(name), Some(ir)) = (name, request.get("ir")) else {
                 return error("a load names a machine and carries its ir".into());
             };
+            // An IR nested deeper than any reader takes, built here (PROTOCOL.md, tooDeep).
+            let mut deep_ir;
+            let ir = if request.get("tooDeep").and_then(Value::as_str) == Some("ir") {
+                deep_ir = ir.clone();
+                if let Value::Object(map) = &mut deep_ir {
+                    let mut initial = match map.get(&"initialContext".into()) {
+                        Some(Value::Object(initial)) => initial.clone(),
+                        _ => Map::new(),
+                    };
+                    initial.insert("deep".into(), nested_arrays(600));
+                    map.insert("initialContext".into(), Value::Object(initial));
+                }
+                &deep_ir
+            } else {
+                ir
+            };
             match Machine::from_ir(ir) {
                 Ok(machine) => {
-                    // The one handler every testee binds (PROTOCOL.md): a custom guard named `throws`, which panics.
-                    let machine = machine.with_guard("throws", |_, _| panic!("throws"));
+                    // The handlers every testee binds (PROTOCOL.md): a custom guard named `throws`, which panics, and a
+                    // custom reduction named `nests`, which sets the context's `deep` to 600 arrays nested one in
+                    // another.
+                    let machine =
+                        machine
+                            .with_guard("throws", |_, _| panic!("throws"))
+                            .with_reducer("nests", |context, _| {
+                                let mut next = context.clone();
+                                next.insert("deep".into(), nested_arrays(600));
+                                next
+                            });
                     machines.insert(name.to_owned(), machine);
                     answer(vec![("loaded", Value::Bool(true))])
                 }

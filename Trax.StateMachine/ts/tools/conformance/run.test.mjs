@@ -26,6 +26,7 @@ describe("the conformance kit", () => {
       expect(cases.some((c) => c.name.includes(source)), source).toBe(true);
     expect(cases.filter((c) => c.expect.loaded).map((c) => c.request.machine)).toEqual([
       "checkout",
+      "deep",
       "gauge",
       "ingest",
       "reminder",

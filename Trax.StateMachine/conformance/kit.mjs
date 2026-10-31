@@ -162,7 +162,7 @@ function unreadableIrCases() {
   const doc = readJson(join(conformanceDir, "unreadable-ir", "cases.json"));
   return doc.cases.map((c) => ({
     name: `unreadable-ir/${c.name}`,
-    request: { op: "load", machine: `unreadable-${c.name}`, ir: c.ir },
+    request: { op: "load", machine: `unreadable-${c.name}`, ir: c.ir, ...(c.tooDeep === undefined ? {} : { tooDeep: c.tooDeep }) },
     expect: { refused: true },
   }));
 }

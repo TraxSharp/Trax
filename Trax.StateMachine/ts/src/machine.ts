@@ -1,4 +1,5 @@
 import { durationTicks } from "./duration";
+import { nestsTooDeep } from "./nesting";
 import {
   RefusalCode,
   type AdvanceResult,
@@ -179,6 +180,10 @@ export class SnapshotMachine<S extends string, T extends string> {
     toState: string,
     newContext: Record<string, unknown>,
   ): AdvanceResult {
+    // A custom reduction's context is checked before anything recurses over it, as the Rust engine checks it.
+    if (nestsTooDeep(newContext))
+      return rejected(RefusalCode.InvalidContext, "The context nests deeper than 512 arrays and objects.");
+
     const timerError = this.timerProblem(toState, newContext);
     if (timerError != null)
       return rejected(RefusalCode.InvalidInput, timerError);

@@ -1,0 +1,22 @@
+{
+  "name": "A reduction that nests the context past 512 arrays and objects is refused, not overflowed",
+  "given": {
+    "machine": "deep",
+    "version": 1,
+    "state": "Open",
+    "context": {
+      "deep": [
+        [
+          []
+        ]
+      ]
+    }
+  },
+  "when": {
+    "trigger": "Nest"
+  },
+  "expect": {
+    "outcome": "rejected",
+    "reason": "INVALID_CONTEXT"
+  }
+}

@@ -1,4 +1,5 @@
 import type { SnapshotMachine } from './machine';
+import { MAX_NESTING, nestsTooDeep } from './nesting';
 import { RefusalCode } from './results';
 import type { Snapshot } from './types';
 
@@ -37,22 +38,6 @@ export type PlanResult<T extends string = string> =
   | { result: 'invalid'; trigger: string }
   | { result: 'invalid'; target: string }
   | { result: 'invalid'; code: typeof RefusalCode.InvalidInput | typeof RefusalCode.InvalidContext };
-
-// How deep the arrays and objects of a fields input or a context may nest, the outermost counting as one: the Rust
-// engine's limit, which every engine's planner holds a plan to, so they refuse the same values.
-export const MAX_NESTING = 512;
-
-// Whether `value` nests deeper than MAX_NESTING. Never recurses, so a value built in memory cannot exhaust the stack.
-const nestsTooDeep = (value: unknown): boolean => {
-  const pending: [unknown, number][] = [[value, 0]];
-  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    const [member, depth] = next;
-    if (member === null || typeof member !== 'object') continue;
-    if (depth >= MAX_NESTING) return true;
-    for (const inner of Array.isArray(member) ? member : Object.values(member)) pending.push([inner, depth + 1]);
-  }
-  return false;
-};
 
 // A value with every null member left out, at every depth, as a host answers it (the client's own copy is in
 // client/machines.ts, which the engine does not import). Past MAX_NESTING it throws rather than recurse further: the

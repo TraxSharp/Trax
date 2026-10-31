@@ -10,6 +10,7 @@ import type {
   TransitionDefinition,
 } from "../types";
 import { requireReadableIrFormat } from "./irFormat";
+import { nestsTooDeep } from "../nesting";
 import {
   applyReduction,
   evaluateRule,
@@ -114,6 +115,8 @@ export function machineFromIr(
   customGuards: CustomGuards = {},
   customReducers: CustomReducers = {},
 ): MachineDefinition<string, string> {
+  // An IR built in memory, where no parser held it to a depth, is refused before anything recurses over it.
+  if (nestsTooDeep(ir)) throw new Error("This state-machine IR nests deeper than 512 arrays and objects.");
   requireReadableIrFormat(ir.irFormat);
   checkIr(ir);
 

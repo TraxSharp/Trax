@@ -203,7 +203,8 @@ internal static class EventPlanner
     }
 
     // Whether a value nests deeper than MaxNesting. Never recurses, so a value built in memory cannot exhaust the stack.
-    private static bool NestsTooDeep(JsonNode? value)
+    // IrMachine holds an IR and a reduction's context to it too.
+    internal static bool NestsTooDeep(JsonNode? value)
     {
         var pending = new Stack<(JsonNode? Node, int Depth)>();
         pending.Push((value, 0));

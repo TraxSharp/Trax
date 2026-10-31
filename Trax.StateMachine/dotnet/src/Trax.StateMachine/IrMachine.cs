@@ -85,6 +85,12 @@ public sealed class IrMachine
             customReducers ?? new Dictionary<string, Func<JsonObject, JsonNode?, JsonObject>>();
         try
         {
+            // An IR built in memory, where no parser held it to a depth, is refused before anything recurses over it.
+            if (EventPlanner.NestsTooDeep(ir))
+                throw new ArgumentException(
+                    $"The IR nests deeper than {EventPlanner.MaxNesting} arrays and objects.",
+                    nameof(ir)
+                );
             // A twin records the IR format it was generated for; an IR of a format this engine does not read, newer or
             // older, is refused, and so is one that names its format as anything but a number.
             if (ir.TryGetPropertyValue("irFormat", out var format))
@@ -531,6 +537,12 @@ public sealed class IrMachine
     // does not hold is refused as input before the context is validated; then the target's validator.
     private AdvanceResult Enter(string state, JsonObject context)
     {
+        // A custom reduction's context is checked before anything recurses over it, as the other engines check it.
+        if (EventPlanner.NestsTooDeep(context))
+            return Rejected(
+                RefusalCode.InvalidContext,
+                $"The context nests deeper than {EventPlanner.MaxNesting} arrays and objects."
+            );
         if (TimerProblem(state, context) is { } timerProblem)
             return Rejected(RefusalCode.InvalidInput, timerProblem);
         if (ValidateContext(state, context, _guards) is { } contextError)

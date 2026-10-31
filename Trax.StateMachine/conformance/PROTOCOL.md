@@ -75,20 +75,24 @@ builds it; one that only has machines compiled in checks that the IR is the one 
 { "id": 1, "error": "the turnstile this engine has exports a different IR" }
 ```
 
-A testee that builds machines from an IR binds one handler to every machine it loads: a custom guard named `throws`,
-which throws (panics, in Rust), so a case can pin `INTERNAL_ERROR`. It binds no other handler, so every other custom
-rule is one the engine cannot evaluate: a guard that does not hold, a reduction that keeps the context, a state
-requirement that fails except on a snapshot the server sent. The `vault` machine pins that. A testee whose machines are
-compiled has every handler bound, so for `vault` it checks the IR against its compiled machine and then serves it from
-the IR, with only `throws` bound, as an IR testee does.
+A testee that builds machines from an IR binds two handlers to every machine it loads: a custom guard named `throws`,
+which throws (panics, in Rust), so a case can pin `INTERNAL_ERROR`, and a custom reduction named `nests`, which sets the
+context member `deep` to 600 arrays nested one in another, built in memory, so the `deep` machine can pin that a
+reduction's context nested more than 512 deep (the planner's limit, below) is refused as `INVALID_CONTEXT`. It binds no
+other handler, so every other custom rule is one the engine cannot evaluate: a guard that does not hold, a reduction
+that keeps the context, a state requirement that fails except on a snapshot the server sent. The `vault` machine pins
+that. A testee whose machines are compiled has every handler bound, so for `vault` it checks the IR against its
+compiled machine and then serves it from the IR, with only the kit's two handlers bound, as an IR testee does.
 
 Some loads must be refused: the IRs in `unreadable-ir/cases.json` each name one construct no engine knows (a rule, a
-reduction, a field type, a comparison or a rule source) or one field no engine holds (a field, a rule's path or a set
+reduction, a field type, a comparison or a rule source), one field no engine holds (a field, a rule's path or a set
 step's source named `__proto__`, `constructor` or `prototype` in any segment), or an `irFormat` past the newest or
-before the oldest format the engines read, and a testee that builds machines from an
-IR answers each with `error`. Any `error` passes, since the message is the engine's own; `loaded` fails. A testee that only has compiled
-machines answers `error` because it has no machine of that name, which passes but proves nothing: a compiled machine's
-rules are types in its language and cannot name an unknown construct, so these cases hold the engines that read IRs.
+before the oldest format the engines read, or nest more than 512 deep: for a case with `"tooDeep": "ir"` the testee
+sets the IR's `initialContext` member `deep` to 600 arrays nested one in another before it builds the machine. A testee
+that builds machines from an IR answers each with `error`. Any `error` passes, since the message is the engine's own;
+`loaded` fails. A testee that only has compiled machines answers `error` because it has no machine of that name, which
+passes but proves nothing: a compiled machine's rules are types in its language and cannot name an unknown construct,
+so these cases hold the engines that read IRs.
 
 **`advance`**, **`outcome`** and **`timer`** apply a trigger to a snapshot through the entry point that owns it: a
 client's trigger through advance, an invoked train's outcome (`Fetching.done`) through the outcome path, a state's

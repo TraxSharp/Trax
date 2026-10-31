@@ -1099,6 +1099,59 @@
         ],
         "version": 1
       }
+    },
+    {
+      "name": "nested-past-the-limit",
+      "description": "An IR that nests past 512 arrays and objects: the testee sets the initial context's deep to 600 arrays nested one in another (tooDeep)",
+      "tooDeep": "ir",
+      "ir": {
+        "committedStates": [],
+        "context": {
+          "Open": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "deep",
+                "nullable": false,
+                "type": "array"
+              }
+            ]
+          }
+        },
+        "id": "deep",
+        "initialContext": {
+          "deep": []
+        },
+        "initialState": "Open",
+        "inputs": {},
+        "states": [
+          "Open"
+        ],
+        "transitions": [
+          {
+            "from": "Open",
+            "reduce": {
+              "reduce": "keep"
+            },
+            "to": "Open",
+            "trigger": "Keep"
+          },
+          {
+            "from": "Open",
+            "reduce": {
+              "name": "nests",
+              "reduce": "custom"
+            },
+            "to": "Open",
+            "trigger": "Nest"
+          }
+        ],
+        "triggers": [
+          "Keep",
+          "Nest"
+        ],
+        "version": 1
+      }
     }
   ]
 }
