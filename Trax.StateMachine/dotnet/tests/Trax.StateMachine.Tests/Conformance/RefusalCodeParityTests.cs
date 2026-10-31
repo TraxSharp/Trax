@@ -174,7 +174,10 @@ public class RefusalCodeParityTests
             }
         }
         foreach (var file in files)
-            Walk(JsonNode.Parse(File.ReadAllText(file)));
+            Walk(JsonNode.Parse(File.ReadAllText(file), documentOptions: KitFile));
         return found;
     }
+
+    // The kit holds contexts at and past the stored depth limit, inside a transcript's own nesting.
+    private static readonly JsonDocumentOptions KitFile = new() { MaxDepth = 256 };
 }
