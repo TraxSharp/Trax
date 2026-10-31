@@ -1,0 +1,3 @@
+[
+  {"case": "divergence-holds-the-queue", "reason": "The Rust controller sends the event queued behind a CLIENT_DIVERGENCE answer before the read that answer starts.", "message": "step "}
+]

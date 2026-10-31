@@ -1,0 +1,3 @@
+[
+  {"case": "divergence-holds-the-queue", "reason": "The TypeScript controller sends the event queued behind a CLIENT_DIVERGENCE answer before the read that answer starts has settled, so it is not predicted from the read.", "message": "step "}
+]

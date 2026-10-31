@@ -96,6 +96,8 @@ guard, a custom reduction, or a custom requirement of the state it enters): it s
 after them until they answer, and sends one even when its own engine would refuse it. A trigger the machine does
 not declare as an event is refused where it is sent, with the code its engine's `advance` gives (`NO_TRANSITION` for
 one it lacks, `OUTCOME_BOUND` for an outcome, `TIMER_BOUND` for a timer), and never reaches the host, whatever its name: an event is never sent as the `start`, `get`, `discard` or `changed` operation.
+A `CLIENT_DIVERGENCE` answer starts a read of the instance, and the queue holds behind it: the next queued event is
+sent only once that read has settled, and is predicted from what the read says.
 A send before `start` waits for it; once a start or a first read has ended without an instance (refused, or past
 every retry), every send waiting and every later one settles `failed` as `NOT_READY`. **`retry`** resends what last
 failed under the same request id. It resends nothing, and answers `NOTHING_TO_RETRY`, once a later event has been
@@ -232,7 +234,8 @@ and does not yet is a bug in the client, not an entry here.
 A client in a new language joins the kit before it passes all of it, as an engine does (`../PROTOCOL.md`, "Expected
 failures"). The transcripts it does not pass yet are listed in `expected-failures/<testee>.json` here, read when the
 runner is run with `--name <testee>`, the name its answer to `open` gives as `client`; an answer that names another
-client fails the transcript, so a testee cannot run under another client's list. `ts`, `dotnet` and `rust` have none.
+client fails the transcript, so a testee cannot run under another client's list. `ts`, `dotnet` and `rust` each list
+what they fail today.
 
 ```json
 [{ "prefix": "sync-", "reason": "syncTo is not built yet", "message": "the testee's answer to sync: unsupported" }]
