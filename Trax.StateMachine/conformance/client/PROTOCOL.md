@@ -191,7 +191,8 @@ stream says it is gone.
 ```
 
 An answer that neither says the instance was discarded nor gives a problem does not say it is gone: it is
-`TRANSPORT_ERROR`, as a failed request is.
+`TRANSPORT_ERROR`, as a failed request is. A discard is total, as every operation is: a request that fails, and an
+answer that is not JSON or that the client cannot read, settle `failed` with `TRANSPORT_ERROR`, never a throw.
 
 The kit drives no separate effect send. Each client sends the event bound to the effect as any other, through `send`;
 only TypeScript has a second path, the snapshot transport's `send` (`sendSnapshot`) a draft session uses, which is not

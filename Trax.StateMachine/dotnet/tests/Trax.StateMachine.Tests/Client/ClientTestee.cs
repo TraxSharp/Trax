@@ -115,24 +115,12 @@ public sealed class ClientTestee : IAsyncDisposable
     }
 
     // The controller has no discard of its own: an app discards through the server it built, under a request id it
-    // mints. A failed request throws, as every operation of the server does, and is a transport failure.
+    // mints. The discard is total: one that throws is not an outcome, and fails the transcript as the testee's error.
     private async Task<JsonObject> DiscardAsync(string? id)
     {
         if (id is null || _server is not { } server)
             return new JsonObject { ["error"] = "no instance to discard" };
-        ServerProblem? problem;
-        try
-        {
-            problem = await server.DiscardAsync(id, _newRequestId());
-        }
-        catch (HttpRequestException)
-        {
-            return new JsonObject
-            {
-                ["outcome"] = "failed",
-                ["code"] = ClientProblemCodes.TransportError,
-            };
-        }
+        var problem = await server.DiscardAsync(id, _newRequestId());
         if (problem is null)
             return new JsonObject { ["outcome"] = "discarded" };
         return new JsonObject
