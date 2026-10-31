@@ -312,6 +312,7 @@ impl ServerMachineController {
             reloading: false,
             reload_row_id: None,
             reload_again: false,
+            held: false,
             next_row_id: None,
             buffered: None,
             sync: None,
@@ -742,6 +743,9 @@ struct Actor<S> {
     reloading: bool,
     reload_row_id: Option<String>,
     reload_again: bool,
+    // Whether the queue waits for the reads a CLIENT_DIVERGENCE answer started: the next event is predicted from what
+    // they say, not from what the server refused.
+    held: bool,
     // The row the read after the one out asks for: a push of another incarnation came while a read without a row id
     // was out.
     next_row_id: Option<String>,
@@ -843,8 +847,10 @@ impl<S: MachineServer> Actor<S> {
                     self.settle_open();
                 }
                 if !self.reloading {
+                    self.held = false;
                     self.read_settled(failure);
                     self.settle_not_ready();
+                    self.pump();
                 }
             }
             Msg::Delivered { entry, attempt, result } => self.on_delivered(entry, attempt, result),
@@ -1411,7 +1417,13 @@ impl<S: MachineServer> Actor<S> {
     }
 
     fn pump(&mut self) {
-        if self.sending || self.disposed || self.error.is_some() || self.id.is_none() || self.confirmed.is_none() {
+        if self.sending
+            || self.held
+            || self.disposed
+            || self.error.is_some()
+            || self.id.is_none()
+            || self.confirmed.is_none()
+        {
             return;
         }
         let Some(next) = self.queue.first() else {
@@ -1515,7 +1527,9 @@ impl<S: MachineServer> Actor<S> {
                     return;
                 }
                 if code == codes::CLIENT_DIVERGENCE {
-                    // The client and the server disagree about this step: what the client holds cannot be trusted.
+                    // The client and the server disagree about this step: what the client holds cannot be trusted, so
+                    // nothing more is sent until it has been read again.
+                    self.held = true;
                     self.reload(None);
                 }
                 let problem = refusal(&code, &message);
