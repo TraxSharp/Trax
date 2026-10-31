@@ -136,8 +136,8 @@ string no JSON parser carries (a lone surrogate), as UTF-16 code units: `stringU
 
 **`plan`** finds the events that take `snapshot` of `machine` to the state `target` with the page's fields applied:
 what a client sends to bring the server to where a page that ran ahead of it is. `fields` is the event that writes the
-page's fields (`trigger` and its `input`), or null; `navigation` is the triggers, without input, that move between
-states; `maxDepth` is the longest plan to look for, twice the machine's states when absent. `tooDeep`, when given, is
+page's fields (`trigger` and its `input`, where a null `input` is none), or null; `navigation` is the triggers,
+without input, that move between states; `maxDepth` is the longest plan to look for, twice the machine's states when absent. `tooDeep`, when given, is
 `input` or `context`: the testee builds 600 arrays nested one in another, in memory, and plans with them as the fields
 input, or as the context member `deep`. No reader need take a text nested that deep, so the kit cannot send one.
 

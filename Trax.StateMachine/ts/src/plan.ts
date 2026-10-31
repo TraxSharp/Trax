@@ -103,10 +103,11 @@ export function searchPlan(
   for (const trigger of navigation)
     if (unusable(trigger) || (fields !== null && trigger === fields.trigger)) return { result: 'invalid', trigger };
 
+  // A null input is no input, as the other engines read it: the planned event carries none.
   const fieldsEvent: PlannedEvent | null =
     fields === null
       ? null
-      : fields.input === undefined
+      : fields.input === undefined || fields.input === null
         ? { trigger: fields.trigger }
         : { trigger: fields.trigger, input: fields.input };
   const edges: PlannedEvent[] = [

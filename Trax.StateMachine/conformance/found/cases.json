@@ -815,6 +815,168 @@
           }
         }
       ]
+    },
+    {
+      "name": "a planned fields event given a null input is written without one",
+      "ir": {
+        "committedStates": [],
+        "context": {
+          "A": {
+            "fields": []
+          },
+          "B": {
+            "fields": []
+          },
+          "C": {
+            "fields": []
+          }
+        },
+        "id": "null-input",
+        "initialContext": {},
+        "initialState": "A",
+        "inputs": {},
+        "states": [
+          "A",
+          "B",
+          "C"
+        ],
+        "transitions": [
+          {
+            "from": "A",
+            "to": "C",
+            "trigger": "Set"
+          },
+          {
+            "from": "C",
+            "to": "B",
+            "trigger": "Go"
+          },
+          {
+            "from": "B",
+            "to": "B",
+            "trigger": "Set"
+          }
+        ],
+        "triggers": [
+          "Go",
+          "Set"
+        ],
+        "version": 1
+      },
+      "requests": [
+        {
+          "request": {
+            "op": "plan",
+            "snapshot": {
+              "machine": "null-input",
+              "version": 1,
+              "state": "A",
+              "context": {}
+            },
+            "target": "B",
+            "fields": {
+              "trigger": "Set",
+              "input": null
+            },
+            "navigation": [
+              "Go"
+            ]
+          },
+          "expect": {
+            "result": "plan",
+            "events": [
+              {
+                "trigger": "Set"
+              },
+              {
+                "trigger": "Go"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "an undetermined plan's fields event given a null input is written without one",
+      "ir": {
+        "committedStates": [],
+        "context": {
+          "A": {
+            "fields": []
+          },
+          "B": {
+            "fields": []
+          },
+          "C": {
+            "fields": []
+          }
+        },
+        "id": "null-input",
+        "initialContext": {},
+        "initialState": "A",
+        "inputs": {},
+        "states": [
+          "A",
+          "B",
+          "C"
+        ],
+        "transitions": [
+          {
+            "from": "A",
+            "to": "C",
+            "trigger": "Set"
+          },
+          {
+            "from": "C",
+            "to": "B",
+            "trigger": "Go",
+            "guard": {
+              "rule": "custom",
+              "name": "approved"
+            }
+          },
+          {
+            "from": "B",
+            "to": "B",
+            "trigger": "Set"
+          }
+        ],
+        "triggers": [
+          "Go",
+          "Set"
+        ],
+        "version": 1
+      },
+      "requests": [
+        {
+          "request": {
+            "op": "plan",
+            "snapshot": {
+              "machine": "null-input",
+              "version": 1,
+              "state": "A",
+              "context": {}
+            },
+            "target": "B",
+            "fields": {
+              "trigger": "Set",
+              "input": null
+            },
+            "navigation": [
+              "Go"
+            ]
+          },
+          "expect": {
+            "result": "undetermined",
+            "trigger": "Go",
+            "events": [
+              {
+                "trigger": "Set"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }
