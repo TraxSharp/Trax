@@ -871,3 +871,31 @@ describe('the time-based defaults', () => {
     expect(waits).toEqual([1000, 2000, 5000, 5000]);
   });
 });
+
+// A numeric option no limit or timer can honour is refused when the server or controller is built: NaN compares false
+// with everything, a negative or infinite delay is not one, and setTimeout fires at once for one past 2^31 - 1 ms.
+describe('the numeric options', () => {
+  const fetch = (async () => new Response('{}')) as unknown as typeof globalThis.fetch;
+  const server = (options: { maxResponseSize?: number; resubscribeDelays?: number[] }) =>
+    createMachineServer('/graphql', { fetch, machine: turnstile, documents: DOCUMENTS, socket: new FakeSocket(), ...options });
+  const badDelays = [Number.NaN, -1, Infinity, 2 ** 31, '5' as unknown as number];
+
+  it('refuses a maxResponseSize that is not a positive whole number of bytes', () => {
+    for (const maxResponseSize of [Number.NaN, 0, -1, 1.5, Infinity, 2 ** 53])
+      expect(() => server({ maxResponseSize }), String(maxResponseSize)).toThrow(RangeError);
+    expect(() => server({ maxResponseSize: 1 })).not.toThrow();
+  });
+
+  it('refuses a resubscribe delay that no timer waits for', () => {
+    for (const delay of badDelays) expect(() => server({ resubscribeDelays: [1000, delay] }), String(delay)).toThrow(RangeError);
+    expect(() => server({ resubscribeDelays: [0, 2 ** 31 - 1] })).not.toThrow();
+  });
+
+  it('refuses a retry delay that no timer waits for', () => {
+    const over = server({});
+    const controller = (retryDelays: number[]) =>
+      new ServerMachineController<TurnstileSpec>({ machine: turnstile, server: over, id: 'i-1', retryDelays });
+    for (const delay of badDelays) expect(() => controller([250, delay]), String(delay)).toThrow(RangeError);
+    expect(() => controller([0, 2 ** 31 - 1])).not.toThrow();
+  });
+});

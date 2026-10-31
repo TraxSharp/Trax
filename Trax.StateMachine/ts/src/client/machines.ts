@@ -32,6 +32,7 @@ import {
   type HttpExecutorOptions,
   type SnapshotExecutor,
   type SnapshotOutput,
+  requireMaxResponseSize,
   requireRequestTimeout,
   withRequestTimeout,
 } from './transport';
@@ -198,6 +199,7 @@ export function createMachineExecutor(
   const maxResponseSize = options.maxResponseSize ?? DEFAULT_MAX_RESPONSE_SIZE;
   const requestTimeout = options.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT;
   requireRequestTimeout(requestTimeout);
+  requireMaxResponseSize(maxResponseSize);
   const machines = new Map(options.machines.map((m) => [m.machine.id, { ...m, byOperation: documentsOf(m) }]));
 
   // The answer's status and its body as text, the whole of it under the request timeout.

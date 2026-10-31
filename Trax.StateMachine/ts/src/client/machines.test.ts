@@ -328,6 +328,16 @@ describe('createMachineExecutor and a host that does not answer', () => {
       ).toThrow(RangeError);
   });
 
+  // Every comparison with NaN is false, so a NaN limit would read an answer of any size.
+  it('refuses a response size that is not a positive whole number of bytes when it is built', () => {
+    const fetch = (async () => new Response('{}')) as unknown as typeof globalThis.fetch;
+    for (const maxResponseSize of [Number.NaN, 0, -1, 1.5, Infinity, 2 ** 53, '1024' as unknown as number])
+      expect(
+        () => createMachineExecutor('/graphql', { fetch, maxResponseSize, machines: [{ machine: checkout, documents }] }),
+        String(maxResponseSize),
+      ).toThrow(RangeError);
+  });
+
   it('waits as long as the host takes on a request timeout past the longest a timer counts', async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;

@@ -19,7 +19,7 @@ import type {
   StreamMessage,
 } from '../server/serverController';
 import { createMachineExecutor, isContext, machineField, withoutNulls, type MachineDocument } from './machines';
-import { createSnapshotClient, type HttpExecutorOptions, type SnapshotOutput } from './transport';
+import { createSnapshotClient, requireDelays, type HttpExecutorOptions, type SnapshotOutput } from './transport';
 
 /** What a subscription delivers: one GraphQL result per event, as graphql-ws hands it to a sink. */
 export interface SubscriptionSink {
@@ -57,7 +57,7 @@ export interface MachineServerOptions extends HttpExecutorOptions {
    * once a stream has delivered a second push: every new stream's first is the instance as it is then. A socket the host refused (a
    * close with 4401 or 4403), or a stream it refused with a GraphQL error coded `TRAX_AUTHORIZATION`,
    * `AUTH_NOT_AUTHENTICATED` or `AUTH_NOT_AUTHORIZED`, is not subscribed again: it ends the controller as
-   * `UNAUTHENTICATED` or `FORBIDDEN`.
+   * `UNAUTHENTICATED` or `FORBIDDEN`. Each is from 0 to 2^31 - 1 ms; any other throws when the server is built.
    */
   resubscribeDelays?: readonly number[];
   /**
@@ -207,6 +207,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
     );
   // The push is the machine's own subscription field: `topic-map` is `topicMapChanged`.
   const pushField = `${machineField(machine.id)}Changed`;
+  requireDelays(options.resubscribeDelays, 'resubscribeDelays');
   const delays = options.resubscribeDelays?.length ? options.resubscribeDelays : DEFAULT_RESUBSCRIBE_DELAYS;
   const terminal = new Set(options.terminalStreamErrors ?? []);
   // The code and message of a socket error the caller marked terminal, or null for one to subscribe again after.

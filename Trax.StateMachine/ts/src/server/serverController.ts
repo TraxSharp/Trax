@@ -3,6 +3,7 @@ import { eventRefusal } from '../machine';
 import type { Problem } from '../problem';
 import type { PlannedEvent } from '../plan';
 import { newRequestId as defaultRequestId } from './requestId';
+import { requireDelays } from '../client/transport';
 import type { InputArgs, MachineSpec, StateOf, TriggerOf, TypedMachine, TypedSnapshot } from '../typed';
 
 // The server-authoritative controller: the server owns the instance, the twin only predicts. Every event goes
@@ -157,6 +158,7 @@ export interface ServerMachineOptions<Spec extends MachineSpec> {
   /**
    * Delays, in milliseconds, between retries of a `SERVER_OUTDATED` answer (another node of a rolling deploy answered)
    * and of a read the transport failed. One retry per delay; after the last, the event fails and `retry` resends it.
+   * Each is from 0 to 2^31 - 1 ms; any other throws when the controller is built.
    */
   retryDelays?: readonly number[];
 }
@@ -328,6 +330,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
     this.startInput = options.startInput;
     this.startRequestId = options.startRequestId;
     this.newRequestId = options.newRequestId ?? defaultRequestId;
+    requireDelays(options.retryDelays, 'retryDelays');
     this.retryDelays = options.retryDelays ?? DEFAULT_RETRY_DELAYS;
     this.view = this.buildView();
   }
