@@ -202,5 +202,34 @@ Every engine answers the same plan, so the search is fixed:
 | `conformance/found/cases.json` | per case, a `load` of its IR as `found/<name>`, then its requests to that machine |
 | `conformance/canonical-wire.json` | `canonical` |
 
+## Fuzzing the engines against each other
+
+`fuzz.mjs`, beside the runner, generates requests from a seed and sends each to two or more testees over this protocol,
+with no expected answers: it fails on the first answer that differs between them, shrinks the request to the smallest
+that still differs, and prints it with the seed and each testee's answer. It loads every machine the kit holds first,
+then steps them from the snapshots every testee agreed on, rehydrates mutated stored text, serializes, plans and writes
+canonical wire, with hostile numbers, number text, strings and keys. `--irs` adds small random machines the IR schema
+accepts, which only testees that build machines from an IR can load. A seed replays the same run for as long as the
+testees agree. Only the answer counts; an `error` counts as one, whatever its message.
+
+```bash
+node conformance/fuzz.mjs --seed 1 --cases 400 --irs \
+  --testee rust/target/release/trax-state-machine-testee --testee node ts/tools/conformance/testee-ts.mjs
+```
+
+`--stdio` makes the process on the fuzzer's own stdin and stdout one more testee, as with `run.mjs`: the C#
+`FuzzTests` answer from inside their process, against the TypeScript testee, with the compiled machines and with
+machines built from random IRs. CI runs a few hundred cases from fixed seeds. A long run takes more cases and other
+seeds, and a difference it finds becomes a case in `found/cases.json`, with the answer the engines must agree on:
+
+```bash
+for seed in 1 2 3 4 5; do
+  node conformance/fuzz.mjs --seed $seed --cases 20000 --irs \
+    --testee rust/target/release/trax-state-machine-testee --testee node ts/tools/conformance/testee-ts.mjs
+done
+# from dotnet/, the C# engine against the TypeScript one
+TRAX_FUZZ_SEED=3 TRAX_FUZZ_CASES=20000 dotnet test tests/Trax.StateMachine.Tests --filter "FullyQualifiedName~FuzzTests"
+```
+
 `machines/turnstile/migration.json` is not sent: it migrates from a v1 to a v2 machine that has no IR, so each engine
 replays it in its own tests.

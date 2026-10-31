@@ -1031,7 +1031,8 @@ jobs:
   # The Rust engine and its client, Trax.StateMachine/rust (packages.json suite state-machine-rust).
   # It runs for a change under Trax.StateMachine/rust or the conformance kits. The runner image has
   # rustup; the engine crate has no dependencies, and the client's come from crates.io at the
-  # versions Cargo.lock pins (--locked), which cargo-deny checks for advisories.
+  # versions Cargo.lock pins (--locked), which cargo-deny checks for advisories. The TypeScript
+  # engine's packages come from npm, for the fuzzer that holds the two engines to each other.
   state-machine-rust:
     needs: changes
     if: contains(fromJSON(needs.changes.outputs.suite-names), 'state-machine-rust')
@@ -1057,6 +1058,7 @@ jobs:
             static.rust-lang.org:443
             index.crates.io:443
             static.crates.io:443
+            registry.npmjs.org:443
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -1097,6 +1099,19 @@ jobs:
       - name: Client conformance kit
         working-directory: Trax.StateMachine
         run: node conformance/client/run.mjs --name rust --testee rust/target/release/trax-state-machine-client-testee
+      - name: Install the TypeScript engine (locked, no install scripts)
+        # The fuzzer below holds the Rust engine to the TypeScript one, whose testee bundles it with esbuild.
+        working-directory: Trax.StateMachine/ts
+        run: npm ci --ignore-scripts
+      - name: Fuzz the Rust engine against the TypeScript one
+        # A short run from fixed seeds, the same every time; conformance/PROTOCOL.md has the long one.
+        working-directory: Trax.StateMachine
+        run: |
+          for seed in 1 2; do
+            node conformance/fuzz.mjs --seed "$seed" --cases 400 --irs \
+              --testee rust/target/release/trax-state-machine-testee \
+              --testee node ts/tools/conformance/testee-ts.mjs
+          done
 
   # The release tooling at the root: semantic-release's config and the plugin in .github/release
   # that adds pull requests' release notes. Its tests take seconds and read no folder, so they

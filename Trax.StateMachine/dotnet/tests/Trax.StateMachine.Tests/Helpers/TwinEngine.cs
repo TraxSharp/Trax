@@ -114,14 +114,32 @@ public static class TwinEngine
     }
 
     /// <summary>
-    /// Runs the conformance runner (<c>conformance/run.mjs --stdio</c>) with <paramref name="answer"/> as its
+    /// Runs the conformance runner (<c>conformance/run.mjs --name dotnet --stdio</c>) with <paramref name="answer"/> as its
     /// testee: each request line the runner writes is answered with the line <paramref name="answer"/> returns.
     /// Returns the runner's exit code (0 when every case passed) and its report.
     /// </summary>
-    public static (int ExitCode, string Report) RunConformance(Func<string, string> answer)
+    public static (int ExitCode, string Report) RunConformance(Func<string, string> answer) =>
+        RunStdio("conformance/run.mjs --name dotnet --stdio", answer, NodeTimeout);
+
+    /// <summary>
+    /// Runs the differential fuzzer (<c>conformance/fuzz.mjs --stdio</c>, with <paramref name="arguments"/>) with
+    /// <paramref name="answer"/> as one of its testees, the others the commands the arguments name. Returns its exit
+    /// code (0 when every testee answered alike) and its report.
+    /// </summary>
+    public static (int ExitCode, string Report) RunFuzzer(
+        string arguments,
+        Func<string, string> answer,
+        TimeSpan timeout
+    ) => RunStdio($"conformance/fuzz.mjs --stdio {arguments}", answer, timeout);
+
+    private static (int ExitCode, string Report) RunStdio(
+        string arguments,
+        Func<string, string> answer,
+        TimeSpan timeout
+    )
     {
         EngineRoot();
-        var start = new ProcessStartInfo("node", "conformance/run.mjs --name dotnet --stdio")
+        var start = new ProcessStartInfo("node", arguments)
         {
             WorkingDirectory = FixturePaths.FolderRoot,
             RedirectStandardInput = true,
@@ -140,11 +158,11 @@ public static class TwinEngine
             }
         });
 
-        // The test owns its wait (ADR 0014): the runner finishes well within it, or the test fails.
-        if (!conversation.Wait(NodeTimeout) || !process.WaitForExit(NodeTimeout))
+        // The test owns its wait (ADR 0014): the script finishes well within it, or the test fails.
+        if (!conversation.Wait(timeout) || !process.WaitForExit(timeout))
         {
             process.Kill(entireProcessTree: true);
-            Assert.Fail($"conformance/run.mjs did not finish within {NodeTimeout}.");
+            Assert.Fail($"node {arguments} did not finish within {timeout}.");
         }
         return (process.ExitCode, stderr.GetAwaiter().GetResult());
     }

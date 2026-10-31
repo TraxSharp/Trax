@@ -131,7 +131,11 @@ node conformance/client/run.mjs --name ts --testee node ts/tools/conformance/cli
 node conformance/run.mjs --name rust --testee rust/target/release/trax-state-machine-testee
 node conformance/client/run.mjs --name rust --testee rust/target/release/trax-state-machine-client-testee
 node conformance/operations/run.mjs --name ts --testee node ts/tools/conformance/operations-testee-ts.mjs
+node conformance/fuzz.mjs --seed 1 --cases 400 --irs --testee rust/target/release/trax-state-machine-testee --testee node ts/tools/conformance/testee-ts.mjs
 ```
+
+The last holds the engines to each other on generated requests rather than to the kit; `conformance/PROTOCOL.md`
+("Fuzzing the engines against each other") has the long run and the C# side.
 
 ## CI
 
@@ -142,8 +146,8 @@ paths:
 | --- | --- | --- |
 | `state-machine-dotnet` | `dotnet/`, `conformance/`, or Trax.Effect | the folder job's checks over `dotnet/Trax.StateMachine.slnx` (format, locks, deprecations, pack with package validation, coverage) and its tests, without the CrossEngine ones |
 | `state-machine-ts` | `ts/`, `conformance/` | typecheck, vitest, build, `npm pack --dry-run`, audit |
-| `state-machine-rust` | `rust/`, `conformance/` | `cargo fmt --check`, clippy with warnings as errors, `cargo test`, then the engine kit and the client kit through the Rust testees |
-| `state-machine-conformance` | anything in the folder, or Trax.Effect | the CrossEngine tests (among them the engine kit through the C# engine and the client kit through the C# client, `ClientConformanceTests`), then the engine kit through the TypeScript engine and the client kit through the TypeScript client |
+| `state-machine-rust` | `rust/`, `conformance/` | `cargo fmt --check`, clippy with warnings as errors, `cargo test`, then the engine kit and the client kit through the Rust testees, and a short fuzz of the Rust engine against the TypeScript one |
+| `state-machine-conformance` | anything in the folder, or Trax.Effect | the CrossEngine tests (among them the engine kit through the C# engine, a short fuzz of it against the TypeScript one, `FuzzTests`, and the client kit through the C# client, `ClientConformanceTests`), then the engine kit through the TypeScript engine and the client kit through the TypeScript client |
 
 The three language suites leave each other alone, but the folder is still one unit to the change
 detector: any change in it runs `state-machine-conformance`, which builds and runs the C# tests, and
