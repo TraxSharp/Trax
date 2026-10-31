@@ -302,6 +302,17 @@ public sealed class ServerMachineController : IDisposable
 
     private bool _disposed;
     private Task? _started;
+
+    // Settles StartAsync's task once the start or the first read has, or once the controller is disposed while either is
+    // in flight.
+    private readonly TaskCompletionSource _startSettled = new(
+        TaskCreationOptions.RunContinuationsAsynchronously
+    );
+
+    // Cancelled on dispose: every request still in flight is let go, and the host hears nothing more. The token is taken
+    // when the controller is built, so it can still be read, cancelled, once the source is disposed.
+    private readonly CancellationTokenSource _lifetime = new();
+    private readonly CancellationToken _alive;
     private IDisposable? _stream;
     private CancellationTokenSource _timers = new();
 
@@ -353,6 +364,7 @@ public sealed class ServerMachineController : IDisposable
         _startRequestId = options.StartRequestId;
         _newRequestId = options.NewRequestId ?? (() => Guid.NewGuid().ToString());
         _retryDelays = options.RetryDelays ?? DefaultRetryDelays;
+        _alive = _lifetime.Token;
         _view = BuildView();
     }
 
@@ -374,7 +386,24 @@ public sealed class ServerMachineController : IDisposable
     public Task StartAsync()
     {
         lock (_startGate)
-            return _started ??= Post(OpenAsync);
+        {
+            if (_started is null)
+            {
+                _started = _startSettled.Task;
+                _ = Post(OpenAsync)
+                    .ContinueWith(
+                        opened =>
+                        {
+                            if (opened.Exception is { } failed)
+                                _startSettled.TrySetException(failed.InnerExceptions);
+                            else
+                                _startSettled.TrySetResult();
+                        },
+                        TaskScheduler.Default
+                    );
+            }
+            return _started;
+        }
     }
 
     /// <summary>Sends one event under a fresh request id, after every earlier event of this instance has settled.</summary>
@@ -554,7 +583,10 @@ public sealed class ServerMachineController : IDisposable
         ?? _shape.TriggersFrom.GetValueOrDefault(shown.State)
         ?? [];
 
-    /// <summary>Closes the stream and drops every late answer. Pending sends settle as failed with <see cref="ClientProblemCodes.Disposed"/>.</summary>
+    /// <summary>
+    /// Closes the stream, lets go of every request in flight and drops every late answer. Pending sends settle as failed
+    /// with <see cref="ClientProblemCodes.Disposed"/>, and a <see cref="StartAsync"/> still waiting completes.
+    /// </summary>
     public void Dispose() => _ = Post(DisposeCore);
 
     // ── The scheduler ──────────────────────────────────────────────────────────────────────────
@@ -600,11 +632,14 @@ public sealed class ServerMachineController : IDisposable
         Close();
         _timers.Cancel();
         _timers.Dispose();
+        _lifetime.Cancel();
+        _lifetime.Dispose();
         var queued = _queue.ToList();
         _queue.Clear();
         foreach (var entry in queued)
             entry.Settle.TrySetResult(DisposedOutcome());
         SettleStart(DisposedOutcome());
+        _startSettled.TrySetResult();
         WakeSyncs();
         Changed = null;
     }
@@ -704,7 +739,9 @@ public sealed class ServerMachineController : IDisposable
         ServerAnswer answer;
         try
         {
-            answer = Answered(await _server.StartAsync(_startInput?.DeepClone(), requestId));
+            answer = Answered(
+                await _server.StartAsync(_startInput?.DeepClone(), requestId, _alive)
+            );
         }
         catch (Exception ex)
         {
@@ -908,7 +945,7 @@ public sealed class ServerMachineController : IDisposable
         ServerAnswer answer;
         try
         {
-            answer = Answered(await _server.GetAsync(id));
+            answer = Answered(await _server.GetAsync(id, _alive));
         }
         catch (Exception ex)
         {
@@ -1245,7 +1282,8 @@ public sealed class ServerMachineController : IDisposable
                     request.Trigger,
                     request.Input?.DeepClone(),
                     request.RequestId,
-                    request.ClientResult
+                    request.ClientResult,
+                    _alive
                 )
             );
         }

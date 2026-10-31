@@ -591,6 +591,68 @@ public class ClientSendTests
         }
     }
 
+    // The kit holds that the start settles (dispose-with-a-read-in-flight); here, that the read itself is let go.
+    [Test]
+    public async Task Disposing_with_the_first_read_in_flight_cancels_it_and_settles_the_start()
+    {
+        var server = new ReadsUntilCancelled();
+        var controller = new ServerMachineController(
+            new ServerMachineOptions
+            {
+                Machine = Turnstile,
+                Server = server,
+                Id = "i-1",
+            }
+        );
+        var start = controller.StartAsync();
+        var token = await server.Read.Task.WaitAsync(Wait);
+
+        controller.Dispose();
+
+        await start.WaitAsync(Wait);
+        token.IsCancellationRequested.Should().BeTrue();
+    }
+
+    // A server whose reads wait until the caller lets them go.
+    private sealed class ReadsUntilCancelled : IMachineServer
+    {
+        public TaskCompletionSource<CancellationToken> Read { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<ServerAnswer> StartAsync(
+            JsonNode? input,
+            string requestId,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<ServerAnswer> EventAsync(
+            string id,
+            string trigger,
+            JsonNode? input,
+            string requestId,
+            string? clientResult,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public async Task<ServerAnswer> GetAsync(
+            string id,
+            CancellationToken cancellationToken = default
+        )
+        {
+            Read.TrySetResult(cancellationToken);
+            // allowed-delay: ends only when the controller cancels the read, which is what the test waits for.
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new InvalidOperationException("Unreachable.");
+        }
+
+        public IDisposable Subscribe(string id, Action<StreamMessage> onMessage) => new Closer();
+
+        private sealed class Closer : IDisposable
+        {
+            public void Dispose() { }
+        }
+    }
+
     [Test]
     public async Task A_subscribe_that_throws_stops_the_controller_with_a_transport_error()
     {
