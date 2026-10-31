@@ -19,10 +19,43 @@ The runner and `kit.mjs` use only node's own modules, so they run without an `np
 With `--testee`, the runner starts the command and talks to it over the command's stdin and stdout. With `--stdio`,
 the roles on the pipes are reversed: the runner writes requests on its own stdout and reads answers on its stdin, so a
 test in another language (the C# `ConformanceRunnerTests`) can start the runner and answer from inside its own
-process. Either way the runner writes its report on stderr and exits 0 when every case passed, 1 when any failed.
+process. Either way the runner writes its report on stderr and exits 0 when every case passed or failed as the
+testee's expected failures list it, 1 otherwise.
 
 `--only <prefix>` runs the cases whose name starts with the prefix, and every `load`. A prefix no case has is an error
 (exit 2), not an empty pass.
+
+`--name <testee>` names the testee, for its expected failures (below): lowercase letters, digits and hyphens, the
+language's folder name (`ts`, `dotnet`, `rust`). The report ends `N of N cases passed, k expected failures.`, where N
+leaves out the cases the list excused.
+
+## Expected failures
+
+An engine in a new language joins the kit before it passes all of it. The cases it does not pass yet are listed in
+`expected-failures/<testee>.json`, which the runner reads when it is run with `--name <testee>`. Without `--name`, or
+with no file of that name, nothing is excused; `ts`, `dotnet` and `rust` have none.
+
+```json
+[
+  { "prefix": "vault/", "reason": "custom rule handlers are not bound yet", "code": "error" },
+  { "case": "plan/a-depth-limit-reached-is-exceeded", "reason": "the planner's depth limit is not built yet" }
+]
+```
+
+An entry names one case (`case`), or every case whose name starts with `prefix`, and says why in `reason`. It may name
+the `code` the case fails with: the answer's `reason` or `code`, `unsupported`, or `error` for an `error` answer, which
+every case of a machine that did not load also counts as. A case's name is the one the report prints after `FAIL`:
+a fixture's or a vector's own name, and for a differential case its state, its trigger and the first 12 hex digits of
+the SHA-256 of what it sends, so a corpus regenerated with a case added keeps every other name.
+
+The list can only shrink. The run fails (exit 1) when a case fails that no entry names, when a listed case passes
+("listed as failing but passed; remove" the entry), when a listed case fails with another code than its entry names,
+when an entry names no case of the kit (one `--only` leaves out included), and when two entries name one case. A file
+that is not an array of such entries, or an entry with no `reason`, stops the run (exit 2).
+
+A list is for what a language has not built yet, and shrinks as it is built. It is not the client kit's allowlist of
+what a client lacks (`client/PROTOCOL.md`, "What a client may lack"), which is for what a platform cannot give a client
+and stays as long as the platform does.
 
 ## The protocol
 

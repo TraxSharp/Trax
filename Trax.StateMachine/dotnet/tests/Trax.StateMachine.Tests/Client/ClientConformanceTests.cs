@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using AwesomeAssertions;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -18,7 +20,10 @@ public class ClientConformanceTests
     public async Task The_CSharp_client_passes_every_transcript_of_the_kit()
     {
         await using var testee = new ClientTestee();
-        var start = new ProcessStartInfo("node", "conformance/client/run.mjs --stdio")
+        var start = new ProcessStartInfo(
+            "node",
+            $"conformance/client/run.mjs --name {ClientTestee.Client} --stdio"
+        )
         {
             WorkingDirectory = FixturePaths.FolderRoot,
             RedirectStandardInput = true,
@@ -74,6 +79,37 @@ public class ClientConformanceTests
         var report = await stderr;
 
         process.ExitCode.Should().Be(0, report);
-        report.Should().MatchRegex(@"([1-9]\d*) of \1 transcripts passed\.");
+        // Skipped only where PROTOCOL.md's allowlist grants the C# client a lack, and no expected failures.
+        report
+            .Should()
+            .MatchRegex(
+                $@"([1-9]\d*) of \1 transcripts passed, {SkippedByTheAllowlist()} skipped, 0 expected failures\."
+            );
+    }
+
+    // The transcripts that need a capability the allowlist in PROTOCOL.md grants the C# client a lack of.
+    private static int SkippedByTheAllowlist()
+    {
+        var clientKit = Path.Combine(FixturePaths.ConformanceRoot, "client");
+        var protocol = File.ReadAllText(Path.Combine(clientKit, "PROTOCOL.md"));
+        var block = Regex.Match(
+            protocol,
+            @"^```json lacks\n(.*?)^```$",
+            RegexOptions.Multiline | RegexOptions.Singleline
+        );
+        block.Success.Should().BeTrue("PROTOCOL.md has a `json lacks` block");
+        var lacked = JsonNode
+            .Parse(block.Groups[1].Value)!
+            .AsArray()
+            .Where(e => (string?)e!["client"] == ClientTestee.Client)
+            .Select(e => (string)e!["capability"]!)
+            .ToHashSet();
+        return Directory
+            .GetFiles(Path.Combine(clientKit, "transcripts"), "*.json")
+            .Count(path =>
+                (JsonNode.Parse(File.ReadAllText(path))!["needs"]?.AsArray() ?? []).Any(n =>
+                    lacked.Contains((string)n!)
+                )
+            );
     }
 }

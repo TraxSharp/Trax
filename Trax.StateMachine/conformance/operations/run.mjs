@@ -3,17 +3,20 @@ import { spawn } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { expectedCount, readExpectedFailures } from "../expected-failures.mjs";
 import { canonical } from "../kit.mjs";
 import { startHost } from "../client/host.mjs";
-import { lineAsker, testeeFailure, withTimeout } from "../client/run.mjs";
+import { lineAsker, resultLine, runJudged, testeeFailure, withTimeout } from "../client/run.mjs";
 
 const USAGE =
-  "Usage: node conformance/operations/run.mjs [--only <prefix>] (--testee <command> [args...] | --stdio)\n" +
+  "Usage: node conformance/operations/run.mjs [--only <prefix>] [--name <testee>] (--testee <command> [args...] | --stdio)\n" +
   "See conformance/operations/PROTOCOL.md.";
 
 const kitDir = fileURLToPath(new URL(".", import.meta.url));
 const fixtureDir = join(kitDir, "fixture");
 const transcriptsDir = join(kitDir, "transcripts");
+// The expected failures of each operations client, by the name its testee is run under (--name).
+const expectedFailuresDir = join(kitDir, "expected-failures");
 
 // How long a step waits for the client before the transcript fails. Every timeout a transcript configures is far
 // shorter, so only a client that never does what the step waits for reaches it.
@@ -201,10 +204,12 @@ export async function runTranscripts(list, host, ask, onResult = () => {}) {
 
 async function main(argv) {
   let only = "";
+  let name;
   let mode;
   let command = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--only") only = argv[++i] ?? "";
+    else if (argv[i] === "--name") name = argv[++i] ?? "";
     else if (argv[i] === "--stdio") mode = "stdio";
     else if (argv[i] === "--testee") {
       mode = "spawn";
@@ -213,7 +218,9 @@ async function main(argv) {
     } else throw new Error(`${USAGE}\nUnknown argument ${argv[i]}.`);
   }
   if (!mode || (mode === "spawn" && command.length === 0)) throw new Error(USAGE);
-  const list = transcripts().filter((t) => t.name.startsWith(only));
+  const { entries } = readExpectedFailures(expectedFailuresDir, name, "message");
+  const all = transcripts();
+  const list = all.filter((t) => t.name.startsWith(only));
   if (list.length === 0) throw new Error(`No transcript's name starts with "${only}".`);
 
   let ask;
@@ -224,8 +231,11 @@ async function main(argv) {
   } else ask = lineAsker(process.stdin, process.stdout);
 
   const host = await startHost();
-  const failures = await runTranscripts(list, host, ask, (r) =>
-    console.error(r.error !== undefined ? `FAIL ${r.name}\n  ${r.error}` : `ok   ${r.name}`),
+  const judged = await runJudged(
+    (onResult) => runTranscripts(list, host, ask, onResult),
+    entries,
+    all.map((t) => t.name),
+    (r) => console.error(resultLine(r)),
   );
   const ended = await withTimeout(ask({ op: "end" }), "the testee's answer to end").catch((e) => ({ error: e.message }));
   if (child) child.stdin.end();
@@ -233,8 +243,10 @@ async function main(argv) {
 
   const endFailure = testeeFailure(ended);
   if (endFailure !== null) console.error(`FAIL end\n  the testee's answer to end: ${endFailure}`);
-  console.error(`${list.length - failures.length} of ${list.length} transcripts passed.`);
-  return failures.length === 0 && endFailure === null ? 0 : 1;
+  for (const p of judged.problems) console.error(`FAIL expected failures: ${p}`);
+  const ran = list.length - judged.expected;
+  console.error(`${ran - judged.failures.length} of ${ran} transcripts passed, ${expectedCount(judged.expected)}.`);
+  return judged.failures.length === 0 && judged.problems.length === 0 && endFailure === null ? 0 : 1;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url))

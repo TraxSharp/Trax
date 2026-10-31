@@ -22,9 +22,12 @@ node conformance/client/run.mjs --stdio                                         
 `--stdio` reverses the pipes as the engine runner's does: the runner writes requests on its stdout and reads answers on
 its stdin, so a test in another language (the C# `ClientConformanceTests`) starts the runner and answers in process. The Rust
 client's testee is a binary, `rust/client/src/bin/client_testee.rs`, which the runner spawns.
-The runner writes its report on stderr and exits 0 when every transcript passed, 1 when any failed or the testee's
-answer to `end` was an `error`, and 2 on a usage error, a `--only <prefix>` that selects no transcript, or anything
-else it could not run. `--only <prefix>` runs the transcripts whose name starts with the prefix. The TypeScript
+The runner writes its report on stderr and exits 0 when every transcript passed, was skipped or failed as the testee's
+expected failures list it, 1 when any other failed, the list did not hold or the testee's answer to `end` was an
+`error`, and 2 on a usage error, a `--only <prefix>` that selects no transcript, or anything else it could not run.
+`--only <prefix>` runs the transcripts whose name starts with the prefix, and `--name <testee>` names the testee for
+its [expected failures](#expected-failures). The report ends `N of N transcripts passed, s skipped, k expected
+failures.`, where N leaves out the transcripts skipped and the ones the list excused. The TypeScript
 client's testee exits 3 when esbuild, which it bundles the client with, is not installed. The runner and the host use
 node's own modules only.
 
@@ -203,6 +206,25 @@ and does not yet is a bug in the client, not an entry here.
   }
 ]
 ```
+
+## Expected failures
+
+A client in a new language joins the kit before it passes all of it, as an engine does (`../PROTOCOL.md`, "Expected
+failures"). The transcripts it does not pass yet are listed in `expected-failures/<testee>.json` here, read when the
+runner is run with `--name <testee>`, the name its answer to `open` gives as `client`; an answer that names another
+client fails the transcript, so a testee cannot run under another client's list. `ts`, `dotnet` and `rust` have none.
+
+```json
+[{ "prefix": "sync-", "reason": "syncTo is not built yet", "message": "the testee's answer to sync: unsupported" }]
+```
+
+An entry names a transcript by its file name without `.json` (`case`), or every transcript whose name starts with
+`prefix`, says why in `reason`, and may give `message`, the start of the text the runner fails the transcript with. The
+rules are the engine kit's: a failing transcript no entry names, a listed one that passes or that the client skips, one
+that fails with another message, an entry that names no transcript, and a transcript two entries name each fail the run.
+
+An expected failure is not a lack. A lack is granted above, for what a client's platform cannot give it, and lasts as
+long as the platform does; an expected failure is what a client has not built yet, and its entry goes when it is built.
 
 ## Defaults
 

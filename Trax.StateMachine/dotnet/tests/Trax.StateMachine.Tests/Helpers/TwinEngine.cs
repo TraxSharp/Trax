@@ -121,7 +121,7 @@ public static class TwinEngine
     public static (int ExitCode, string Report) RunConformance(Func<string, string> answer)
     {
         EngineRoot();
-        var start = new ProcessStartInfo("node", "conformance/run.mjs --stdio")
+        var start = new ProcessStartInfo("node", "conformance/run.mjs --name dotnet --stdio")
         {
             WorkingDirectory = FixturePaths.FolderRoot,
             RedirectStandardInput = true,

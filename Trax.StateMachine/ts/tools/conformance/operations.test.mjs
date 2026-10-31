@@ -53,11 +53,11 @@ describe("the operations kit", () => {
   }, 60_000);
 
   it("drives a spawned testee over the protocol", () => {
-    const run = spawnSync(process.execPath, [runner, "--testee", process.execPath, here("operations-testee-ts.mjs")], {
+    const run = spawnSync(process.execPath, [runner, "--name", "ts", "--testee", process.execPath, here("operations-testee-ts.mjs")], {
       encoding: "utf8",
       timeout: 120_000,
     });
-    expect(run.stderr).toContain(`${list.length} of ${list.length} transcripts passed.`);
+    expect(run.stderr).toContain(`${list.length} of ${list.length} transcripts passed, 0 expected failures.`);
     expect(run.status).toBe(0);
   }, 120_000);
 });

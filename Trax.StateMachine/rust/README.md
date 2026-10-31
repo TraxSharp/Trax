@@ -85,7 +85,7 @@ Read [../AGENTS.md](../AGENTS.md) first. Nothing runs on the host here; the test
 podman run --rm -v "$PWD/..":/src:Z -w /src/rust docker.io/library/rust:1.88.0-bookworm \
   sh -c 'rustup component add rustfmt clippy && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace && cargo build --release --workspace'
 podman run --rm -v "$PWD/..":/src:Z -w /src docker.io/library/node:24-bookworm \
-  sh -c 'node conformance/run.mjs --testee /src/rust/target/release/trax-state-machine-testee && node conformance/client/run.mjs --testee /src/rust/target/release/trax-state-machine-client-testee'
+  sh -c 'node conformance/run.mjs --name rust --testee /src/rust/target/release/trax-state-machine-testee && node conformance/client/run.mjs --name rust --testee /src/rust/target/release/trax-state-machine-client-testee'
 ```
 
 Run them from this directory. The testee speaks `../conformance/PROTOCOL.md` through the crate's public API only.

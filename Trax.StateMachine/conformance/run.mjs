@@ -1,9 +1,14 @@
 import { spawn } from "node:child_process";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { expectedCount, judge, readExpectedFailures } from "./expected-failures.mjs";
 import { answers, canonical, kitCases } from "./kit.mjs";
 
+// The expected failures of each testee, by the name it is run under (--name).
+const expectedFailuresDir = join(fileURLToPath(new URL(".", import.meta.url)), "expected-failures");
+
 const USAGE =
-  "Usage: node conformance/run.mjs [--only <prefix>] (--testee <command> [args...] | --stdio)\n" +
+  "Usage: node conformance/run.mjs [--only <prefix>] [--name <testee>] (--testee <command> [args...] | --stdio)\n" +
   "See conformance/PROTOCOL.md.";
 
 /**
@@ -31,12 +36,52 @@ export async function runCases(cases, exchange) {
   return failures;
 }
 
-/** One line per failure, naming the case, then what it expected and what the testee answered. */
-export function report(failures, total) {
+/**
+ * The code a failed case's answer fails with, for an expected failure that names one: `unsupported`, the answer's
+ * `reason` or `code`, `error` for an `error` answer (a machine that did not load among them), or null for an answer that
+ * carries none (a wrong wire, a wrong plan).
+ */
+export function failureCode(got) {
+  if (got?.unsupported === true) return "unsupported";
+  for (const key of ["reason", "code"]) if (typeof got?.[key] === "string") return got[key];
+  if (typeof got?.error === "string") return "error";
+  return null;
+}
+
+/**
+ * Judges the cases that ran against a testee's expected failures (expected-failures.mjs): `all` is every case of the
+ * kit, `ran` the ones sent, `failures` what runCases answered. Returns the failures that stand, each with a `note` when
+ * it is listed as failing another way, how many the list excused, and the problems with the list itself.
+ */
+export function verdict(entries, all, ran, failures) {
+  const judged = judge(entries, all.map((c) => c.name), {
+    detail: "code",
+    detailOf: (f) => failureCode(f.got),
+    fits: (listed, got) => listed === got,
+  });
+  const failed = new Map(failures.map((f) => [f.name, f]));
+  const standing = [];
+  for (const c of ran) {
+    const failure = failed.get(c.name) ?? null;
+    const { verdict: v, note } = judged.settle(c.name, failure);
+    if (v === "fail") standing.push(note === undefined ? failure : { ...failure, note });
+  }
+  return { failures: standing, expected: judged.expected, problems: judged.problems };
+}
+
+/**
+ * One line per failure, naming the case, then what it expected and what the testee answered; one per problem with the
+ * expected failures; then the count. `expected` cases are left out of it, as they did not pass.
+ */
+export function report(failures, total, { expected = 0, problems = [] } = {}) {
   const lines = failures.map(
-    (f) => `FAIL ${f.name}\n  expected ${canonical(f.expect)}\n  got      ${canonical(f.got)}`,
+    (f) =>
+      `FAIL ${f.name}\n  expected ${canonical(f.expect)}\n  got      ${canonical(f.got)}` +
+      (f.note === undefined ? "" : `\n  ${f.note}`),
   );
-  lines.push(`${total - failures.length} of ${total} cases passed.`);
+  for (const p of problems) lines.push(`FAIL expected failures: ${p}`);
+  const ran = total - expected;
+  lines.push(`${ran - failures.length} of ${ran} cases passed, ${expectedCount(expected)}.`);
   return lines.join("\n");
 }
 
@@ -71,10 +116,12 @@ function lineExchange(input, output) {
 
 async function main(argv) {
   let only = "";
+  let name;
   let mode;
   let command = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--only") only = argv[++i] ?? "";
+    else if (argv[i] === "--name") name = argv[++i] ?? "";
     else if (argv[i] === "--stdio") mode = "stdio";
     else if (argv[i] === "--testee") {
       mode = "spawn";
@@ -84,7 +131,9 @@ async function main(argv) {
   }
   if (!mode || (mode === "spawn" && command.length === 0)) throw new Error(USAGE);
 
-  const cases = kitCases().filter((c) => c.name.startsWith(only) || c.request.op === "load");
+  const { entries } = readExpectedFailures(expectedFailuresDir, name, "code");
+  const all = kitCases();
+  const cases = all.filter((c) => c.name.startsWith(only) || c.request.op === "load");
   // A selection of nothing passes nothing: say so rather than report every case passed.
   if (!cases.some((c) => c.name.startsWith(only)))
     throw new Error(`No case of the kit is named with the prefix "${only}".`);
@@ -95,11 +144,11 @@ async function main(argv) {
     exchange = lineExchange(child.stdout, child.stdin);
   } else exchange = lineExchange(process.stdin, process.stdout);
 
-  const failures = await runCases(cases, exchange);
+  const judged = verdict(entries, all, cases, await runCases(cases, exchange));
   await exchange({ id: cases.length + 1, op: "end" });
   if (child) child.stdin.end();
-  console.error(report(failures, cases.length));
-  return failures.length === 0 ? 0 : 1;
+  console.error(report(judged.failures, cases.length, judged));
+  return judged.failures.length === 0 && judged.problems.length === 0 ? 0 : 1;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url))

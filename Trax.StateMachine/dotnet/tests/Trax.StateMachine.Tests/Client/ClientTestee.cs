@@ -14,7 +14,7 @@ namespace Trax.StateMachine.Tests.Client;
 public sealed class ClientTestee : IAsyncDisposable
 {
     // The name the kit's allowlist of what a client may lack knows this client by.
-    private const string Client = "dotnet";
+    internal const string Client = "dotnet";
 
     private HttpClient _http = NewHttp();
     private ServerMachineController? _controller;

@@ -454,12 +454,12 @@ jobs:
         # The C# engine answers the same kit in its CrossEngine tests above (ConformanceRunnerTests).
         if: matrix.suite.conformance
         working-directory: Trax.StateMachine
-        run: node conformance/run.mjs --testee node ts/tools/conformance/testee-ts.mjs
+        run: node conformance/run.mjs --name ts --testee node ts/tools/conformance/testee-ts.mjs
       - name: Run the client conformance kit through the TypeScript client
         # The C# client answers the same transcripts in its CrossEngine tests above (ClientConformanceTests).
         if: matrix.suite.conformance
         working-directory: Trax.StateMachine
-        run: node conformance/client/run.mjs --testee node ts/tools/conformance/client-testee-ts.mjs
+        run: node conformance/client/run.mjs --name ts --testee node ts/tools/conformance/client-testee-ts.mjs
       - name: Install the web folder (locked, no install scripts)
         if: matrix.suite.web
         working-directory: ${{ matrix.suite.folder }}/${{ matrix.suite.web }}
@@ -1093,10 +1093,10 @@ jobs:
         run: cargo build --locked --release --workspace
       - name: Conformance kit
         working-directory: Trax.StateMachine
-        run: node conformance/run.mjs --testee rust/target/release/trax-state-machine-testee
+        run: node conformance/run.mjs --name rust --testee rust/target/release/trax-state-machine-testee
       - name: Client conformance kit
         working-directory: Trax.StateMachine
-        run: node conformance/client/run.mjs --testee rust/target/release/trax-state-machine-client-testee
+        run: node conformance/client/run.mjs --name rust --testee rust/target/release/trax-state-machine-client-testee
 
   # The release tooling at the root: semantic-release's config and the plugin in .github/release
   # that adds pull requests' release notes. Its tests take seconds and read no folder, so they

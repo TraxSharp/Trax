@@ -96,7 +96,10 @@ public class OperationsConformanceTests
     public async Task The_CSharp_operations_client_passes_every_transcript_of_the_kit()
     {
         var root = RepositoryRoot();
-        var start = new ProcessStartInfo("node", "conformance/operations/run.mjs --stdio")
+        var start = new ProcessStartInfo(
+            "node",
+            "conformance/operations/run.mjs --name dotnet --stdio"
+        )
         {
             WorkingDirectory = Path.Combine(root, "Trax.StateMachine"),
             RedirectStandardInput = true,
@@ -163,7 +166,7 @@ public class OperationsConformanceTests
         var report = await stderr;
 
         process.ExitCode.Should().Be(0, report);
-        report.Should().MatchRegex(@"([1-9]\d*) of \1 transcripts passed\.");
+        report.Should().MatchRegex(@"([1-9]\d*) of \1 transcripts passed, 0 expected failures\.");
     }
 
     // The repository's root: the directory above the test binary that holds global.json and Trax.StateMachine. Under CI,

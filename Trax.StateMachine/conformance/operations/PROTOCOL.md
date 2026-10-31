@@ -25,7 +25,9 @@ node conformance/operations/run.mjs --testee node ts/tools/conformance/operation
 node conformance/operations/run.mjs --stdio                                                      # be spawned by one
 ```
 
-The flags, the exit codes and `--only <prefix>` are the client kit's. The TypeScript testee bundles the generated
+The flags, the exit codes, `--only <prefix>` and `--name <testee>` are the client kit's, and so are its expected failures
+(`../client/PROTOCOL.md`, "Expected failures"), listed here in `expected-failures/<testee>.json`; `ts` and `dotnet` have
+none. The report ends `N of N transcripts passed, k expected failures.` The TypeScript testee bundles the generated
 client with esbuild, so it needs `npm ci --ignore-scripts` in `ts/` first, and exits 3 without it.
 
 ## The fixture
