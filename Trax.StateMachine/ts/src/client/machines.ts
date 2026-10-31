@@ -91,6 +91,12 @@ export const machineField = (machineId: string): string =>
     .map((part, i) => (i === 0 ? part : part[0].toUpperCase() + part.slice(1)))
     .join('');
 
+/** The member `key` of `value` when it is an object that has it as its own, or undefined. */
+const ownField = (value: unknown, key: string): unknown =>
+  typeof value === 'object' && value !== null && Object.prototype.hasOwnProperty.call(value, key)
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
+
 /** An event's field: the trigger in camelCase (`CancelBuild` is `cancelBuild`), as the server names it. */
 export const eventField = (trigger: string): string => {
   // The server's camelCase lowers the leading run of capitals, keeping the last one of a run that a lowercase
@@ -217,7 +223,8 @@ export function createMachineExecutor(
       return { response, text: await readBounded(response, maxResponseSize) };
     });
 
-  const post = async (body: Record<string, unknown>, name: string): Promise<Answered> => {
+  // `field` is the machine's field under `machines` and `name` the operation's under it.
+  const post = async (body: Record<string, unknown>, field: string, name: string): Promise<Answered> => {
     type Body = {
       data?: { machines?: Record<string, Record<string, unknown>> } | null;
       errors?: { message: string; extensions?: { code?: string } }[];
@@ -241,7 +248,8 @@ export function createMachineExecutor(
     if (!response.ok)
       throw new Error(`The server answered ${[response.status, response.statusText].filter(Boolean).join(' ')}.`);
     if (answered === null || typeof answered !== 'object') throw new Error("The server's answer is not JSON.");
-    return { answer: Object.values(answered.data?.machines ?? {})[0]?.[name] as TypedAnswer | null | undefined };
+    // Read by name, as the C# and Rust clients do: an answer may carry another field before the machine's.
+    return { answer: ownField(ownField(answered.data?.machines, field), name) as TypedAnswer | null | undefined };
   };
 
   return async (operation, input) => {
@@ -288,7 +296,7 @@ export function createMachineExecutor(
       const variables = Object.fromEntries(
         Object.entries(values).filter(([k, v]) => v !== undefined && (declared === null || declared.has(k))),
       );
-      return post({ id: document.id, variables }, name);
+      return post({ id: document.id, variables }, machineField(machineId), name);
     };
 
     // A trigger that is not an event the machine declares has no event document to send it by, and is refused here.

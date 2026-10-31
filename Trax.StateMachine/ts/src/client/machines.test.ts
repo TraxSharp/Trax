@@ -132,6 +132,23 @@ describe('createMachineExecutor', () => {
     });
   });
 
+  // The host answers under the machine's own field. One whose first field is another (a gateway that adds a field,
+  // a host that orders them otherwise) is read by name, as the C# and Rust clients read it.
+  it('reads the answer under the machine field, whatever field comes first', async () => {
+    const cart = { id: 'draft-1', revision: 1, state: 'Cart', context: { items: [], total: 0 }, problem: null };
+    const { fetch } = recording(
+      { data: { machines: { other: { start: { ...cart, state: 'Paid' } }, checkout: { start: cart } } } },
+      { data: { machines: { other: { start: cart } } } },
+    );
+    const executor = persisted(fetch);
+
+    expect(await startDraft({ executor, machine: checkout, requestId: 'req-1' })).toMatchObject({
+      ok: true,
+      snapshot: JSON.stringify({ machine: 'checkout', version: checkout.version, state: 'Cart', context: { items: [], total: 0 } }),
+    });
+    expect(await startDraft({ executor, machine: checkout, requestId: 'req-2' })).toMatchObject({ ok: false });
+  });
+
   it('sends the effect through its bound event, with no input', async () => {
     const { sent, fetch } = recording(
       answer('pay', { id: 'draft-1', revision: 3, state: 'Paid', context: { receipt: 'r-1' }, problem: null }),
