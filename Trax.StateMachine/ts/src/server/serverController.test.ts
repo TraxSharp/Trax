@@ -1248,3 +1248,36 @@ describe('ServerMachineController', () => {
     });
   });
 });
+
+// What a page passes to send is copied when it is called: changing the object afterwards changes neither the event
+// queued or in flight nor the prediction shown, as in the C# and Rust clients.
+describe('the input a page passes', () => {
+  it('is copied when send is called, in flight and queued', async () => {
+    const { server, controller } = await ready();
+    const first = { coin: 'quarter' };
+    const second = { coin: 'quarter' };
+
+    void controller.send('Coin', first);
+    void controller.send('Push');
+    void controller.send('Coin', second);
+    first.coin = 'dime';
+    second.coin = 'dime';
+    await flushMicrotasks();
+
+    expect(server.events[0].request.input).toEqual({ coin: 'quarter' });
+    expect(server.events[0].request.clientResult).toContain('quarter');
+    expect(controller.get().snapshot).toEqual(turnstile.snapshotAt('Unlocked', { paidWith: 'quarter' }));
+  });
+
+  it('refuses an input JSON cannot carry when send is called, sending nothing', async () => {
+    const { server, controller } = await ready();
+    const cyclic: Record<string, unknown> = { coin: 'quarter' };
+    cyclic.self = cyclic;
+
+    const sent = await controller.send('Coin', cyclic as never);
+
+    expect(sent).toMatchObject({ outcome: 'refused', problem: { code: 'INVALID_INPUT' } });
+    await flushMicrotasks();
+    expect(server.events).toHaveLength(0);
+  });
+});

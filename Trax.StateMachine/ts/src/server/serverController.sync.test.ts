@@ -63,6 +63,37 @@ describe('ServerMachineController.syncTo', () => {
     expect(server.events).toHaveLength(3);
   });
 
+  // A page that edits its fields object after the call changes neither what the sync sends nor where it goes.
+  it('copies the fields and the navigation when it is called', async () => {
+    const { server, controller } = await ready('Start');
+    const input = { ...ada };
+    const navigation: ('Begin' | 'Next' | 'Back' | 'Skip')[] = ['Begin', 'Next', 'Back'];
+
+    const synced = controller.syncTo('Review', { fields: { trigger: 'Update', input }, navigation });
+    input.name = 'Grace';
+    navigation.splice(0, navigation.length, 'Skip');
+    await flushMicrotasks();
+    server.events[0].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2, state: 'Details' }) });
+    await flushMicrotasks();
+
+    expect(server.events.map((e) => e.request.trigger)).toEqual(['Begin', 'Update']);
+    expect(server.events[1].request.input).toEqual(ada);
+    controller.dispose();
+    await synced;
+  });
+
+  it('settles a fields input JSON cannot carry invalid, sending nothing', async () => {
+    const { server, controller } = await ready('Start');
+    const input: Record<string, unknown> = { ...ada };
+    input.self = input;
+
+    expect(await controller.syncTo('Review', { fields: { trigger: 'Update', input: input as never }, navigation: ['Begin'] })).toEqual({
+      outcome: 'invalid',
+      code: 'INVALID_INPUT',
+    });
+    expect(server.events).toHaveLength(0);
+  });
+
   it('sends nothing when the server already holds the target and the fields', async () => {
     const { server, controller } = await ready('Review', ada);
 

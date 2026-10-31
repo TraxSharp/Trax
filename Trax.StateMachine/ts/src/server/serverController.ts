@@ -235,6 +235,17 @@ const olderOrSame = (incoming: number | null, held: number | null): boolean =>
 
 const refusal = (code: ProblemCode, message: string): Problem => ({ kind: 'rejected', code, message });
 
+/**
+ * A copy of an input a page passed, so that changing its object after the call changes neither the event nor the
+ * prediction. The input is sent as JSON, so its JSON copy is what the server sees. Throws on a value JSON cannot carry.
+ */
+const copyOf = <T>(value: T): T => {
+  if (value === undefined) return value;
+  const text = JSON.stringify(value);
+  if (text === undefined) throw new TypeError('The input is not a JSON value.');
+  return JSON.parse(text) as T;
+};
+
 const transportFailure = (error: unknown): Problem => ({
   kind: 'transport',
   code: TRANSPORT_FAILED,
@@ -349,15 +360,27 @@ export class ServerMachineController<Spec extends MachineSpec> {
   /**
    * Sends one event under a fresh requestId, after every earlier event of this instance has settled. A trigger the
    * machine does not declare as an event (an outcome, a timer, or a name it lacks) is refused at once with the code
-   * `advance` gives it, and nothing is sent. While the controller holds no instance and is not opening one (its start
-   * was refused or failed, or its first read gave up), a send settles `failed` with `NOT_READY`.
+   * `advance` gives it, and nothing is sent. The input is copied as JSON when it is called, so changing the object
+   * afterwards changes neither the event nor the prediction; one JSON cannot carry is refused with `INVALID_INPUT` and
+   * nothing is sent. While the controller holds no instance and is not opening one (its start was refused or failed, or
+   * its first read gave up), a send settles `failed` with `NOT_READY`.
    */
   send<T extends TriggerOf<Spec>>(trigger: T, ...input: InputArgs<Spec, T>): Promise<SendOutcome> {
     if (this.error) return Promise.resolve({ outcome: 'stopped', error: this.error });
     if (this.disposed) return Promise.resolve(this.disposedOutcome());
     const undeclared = eventRefusal(this.machine.core.definition, trigger);
     if (undeclared) return Promise.resolve({ outcome: 'refused', problem: refusal(undeclared.code, undeclared.message) });
-    return this.enqueue({ trigger, input: [...input], request: null });
+    let copied: unknown[];
+    try {
+      copied = input.map(copyOf);
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      return Promise.resolve({
+        outcome: 'refused',
+        problem: refusal(RefusalCode.InvalidInput, `The input of '${trigger}' cannot be sent as JSON: ${why}`),
+      });
+    }
+    return this.enqueue({ trigger, input: copied, request: null });
   }
 
   /**
@@ -417,15 +440,26 @@ export class ServerMachineController<Spec extends MachineSpec> {
    * one settles it `refused`. An `undetermined` plan sends its events, then its trigger without a prediction. A later
    * `syncTo` supersedes this one, which settles `superseded` once its event in flight answers and sends nothing more.
    * No sync sends more than twice the machine's states in events. Before the first snapshot it settles `failed` with
-   * `NOT_READY`. Never throws.
+   * `NOT_READY`. The fields and the navigation are copied when it is called, as `send` copies its input, and a fields
+   * input JSON cannot carry settles `invalid` with `INVALID_INPUT`. Never throws.
    */
   async syncTo(target: StateOf<Spec>, options: SyncOptions<Spec>): Promise<SyncOutcome> {
     if (this.error) return { outcome: 'stopped', error: this.error };
     if (this.disposed) return this.disposedOutcome();
+    let copied: SyncOptions<Spec>;
+    try {
+      const fields = options.fields ?? null;
+      copied = {
+        fields: fields === null ? null : { ...fields, input: copyOf(fields.input) },
+        navigation: [...options.navigation],
+      };
+    } catch {
+      return { outcome: 'invalid', code: RefusalCode.InvalidInput };
+    }
     const generation = ++this.syncGeneration;
     this.unsaved = true;
     this.emit();
-    const outcome = await this.runSync(generation, target, options);
+    const outcome = await this.runSync(generation, target, copied);
     if (generation === this.syncGeneration && !this.disposed) {
       this.unsaved = outcome.outcome !== 'synced';
       this.emit();
