@@ -197,7 +197,8 @@ public sealed record ServerMachineOptions
 
     /// <summary>
     /// Mints a request id; a new GUID by default. A custom one must mint 1 to 200 characters, not blank, with no control
-    /// character: the server answers any other <c>INVALID_REQUEST_ID</c>.
+    /// character: the server answers any other <c>INVALID_REQUEST_ID</c>. One that throws fails what it was minting for
+    /// (a send, or the start) <c>INVALID_REQUEST_ID</c>, sends nothing for it, and the controller carries on.
     /// </summary>
     public Func<string>? NewRequestId { get; init; }
 
@@ -423,12 +424,14 @@ public sealed class ServerMachineController : IDisposable
                 return Task.FromResult<SendOutcome>(new SendOutcome.Stopped(_error));
             if (_disposed)
                 return Task.FromResult(DisposedOutcome());
-            if (_startFailed && _id is null && _startRequestId is not null)
+            if (_startFailed && _id is null)
             {
+                if (_startRequestId is null && !TryMint(out _startRequestId, out var unminted))
+                    return Task.FromResult<SendOutcome>(new SendOutcome.Failed(unminted));
                 _startFailed = false;
                 var waiter = NewOutcome();
                 _startWaiters.Add(waiter);
-                var requestId = _startRequestId;
+                var requestId = _startRequestId!;
                 _ = OpeningAsync(() => CreateAsync(requestId, 0));
                 return waiter.Task;
             }
@@ -610,9 +613,41 @@ public sealed class ServerMachineController : IDisposable
                 return ReadAsync(null);
             });
         }
-        _startRequestId ??= _newRequestId();
-        var requestId = _startRequestId;
+        if (_startRequestId is null && !TryMint(out _startRequestId, out _))
+        {
+            // Nothing was sent: the start has failed, and RetryAsync mints again.
+            _opened = true;
+            _startFailed = true;
+            Emit();
+            FailUnready();
+            return Task.CompletedTask;
+        }
+        var requestId = _startRequestId!;
         return OpeningAsync(() => CreateAsync(requestId, 0));
+    }
+
+    // Mints a request id. A minter that throws is the app's bug: what it was minting for fails INVALID_REQUEST_ID,
+    // shown as the problem, and nothing is sent for it.
+    private bool TryMint(
+        [NotNullWhen(true)] out string? requestId,
+        [NotNullWhen(false)] out MachineProblem? problem
+    )
+    {
+        try
+        {
+            requestId = _newRequestId();
+            problem = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            requestId = null;
+            problem = _problem = Refusal(
+                RefusalCode.InvalidRequestId.ToWire(),
+                $"The request id minter threw: {ex.Message}"
+            );
+            return false;
+        }
     }
 
     // Runs a start or a first read. A send meanwhile waits for it; once it has settled with no snapshot, every send
@@ -1155,10 +1190,15 @@ public sealed class ServerMachineController : IDisposable
         if (_queue.Count == 0)
             return;
         var next = _queue[0];
-        _sending = true;
 
         if (next.Request is null)
         {
+            if (!TryMint(out var requestId, out var unminted))
+            {
+                // The minter's failure fails this event alone; the queue goes on behind it.
+                Finish(next, new SendOutcome.Failed(unminted));
+                return;
+            }
             // An event bound to the effect is sent without a prediction: what it leads to depends on the effect's result. So
             // is one that rests on a custom rule the predictor cannot evaluate, rather than a guess the server would refuse.
             var predicted = !Predicts(_confirmed.State, next.Trigger)
@@ -1177,14 +1217,9 @@ public sealed class ServerMachineController : IDisposable
                     // sent: the server decides alone, as for an event the predictor refuses.
                 }
             }
-            next.Request = new EventRequest(
-                _id,
-                next.Trigger,
-                next.Input,
-                _newRequestId(),
-                clientResult
-            );
+            next.Request = new EventRequest(_id, next.Trigger, next.Input, requestId, clientResult);
         }
+        _sending = true;
         _ = DeliverAsync(next, next.Request, 0);
     }
 

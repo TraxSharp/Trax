@@ -395,6 +395,45 @@ public class ClientSendTests
         (await next.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
     }
 
+    // The kit holds a minter that throws for an event (request-id-minter-throws); no transcript starts an instance with
+    // one, so the start's is held here.
+    [Test]
+    public async Task A_start_whose_request_id_minter_throws_fails_and_retry_mints_again()
+    {
+        var server = new StepServer();
+        var calls = 0;
+        using var controller = new ServerMachineController(
+            new ServerMachineOptions
+            {
+                Machine = Turnstile,
+                Server = server,
+                RetryDelays = [],
+                NewRequestId = () =>
+                    ++calls == 1
+                        ? throw new InvalidOperationException("the minter threw")
+                        : $"r{calls}",
+            }
+        );
+
+        await controller.StartAsync().WaitAsync(Wait);
+        controller.View.Status.Should().Be(MachineStatus.Loading);
+        controller.View.Problem!.Code.Should().Be("INVALID_REQUEST_ID");
+        server.Starts.Reader.TryRead(out _).Should().BeFalse();
+        (await controller.SendAsync("Push").WaitAsync(Wait))
+            .Should()
+            .BeOfType<SendOutcome.Failed>()
+            .Which.Problem.Code.Should()
+            .Be(ClientProblemCodes.NotReady);
+
+        var retry = controller.RetryAsync();
+        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(At(1, "Locked"), "i-1")
+        );
+
+        (await retry.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        controller.View.Id.Should().Be("i-1");
+    }
+
     [Test]
     public async Task A_push_whose_numbers_cannot_be_held_is_dropped_and_the_instance_read_again()
     {
