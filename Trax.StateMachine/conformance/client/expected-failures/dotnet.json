@@ -5,6 +5,7 @@
   {"case": "discard-malformed-is-transport", "reason": "C#'s DiscardAsync throws on an answer it cannot read instead of settling TRANSPORT_ERROR.", "message": "the testee's answer to discard: error: threw:"},
   {"case": "discard-transport-failure", "reason": "C#'s DiscardAsync throws on a failed request instead of settling TRANSPORT_ERROR.", "message": "the testee's answer to discard: error: threw:"},
   {"case": "discard-unconfirmed-is-transport", "reason": "C#'s DiscardAsync throws on an answer that does not say the instance was discarded instead of settling TRANSPORT_ERROR.", "message": "the testee's answer to discard: error: threw:"},
+  {"case": "dispose-with-a-read-in-flight", "reason": "Disposing the C# controller while its first read is in flight leaves StartAsync unsettled.", "message": "the testee's answer to start did not come"},
   {"case": "due-at-absent-in-a-push", "reason": "The C# client reads a push without dueAt or dueAtKnown as a known null due time, so it does not read the timed state again.", "message": "step 6 ({\"request\":\"get\""},
   {"case": "due-at-absent-in-an-answer", "reason": "The C# client reads an answer without dueAt or dueAtKnown as a known null due time, so it does not read the timed state again.", "message": "step 8 ({\"request\":\"get\""},
   {"case": "malformed-answer-revision", "reason": "The C# client takes an answer whose revision is negative.", "message": "step 15 ({\"await\":\"push3\""},

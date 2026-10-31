@@ -1,0 +1,27 @@
+{
+  "about": "Headers that throw when a request asks for them fail that request as TRANSPORT_ERROR before anything is sent, and the controller carries on: retry resends the event once they no longer throw.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "status": "ready" } },
+    { "client": "headers", "throws": true, "expect": { "throws": true } },
+    { "client": "send", "trigger": "Push", "expect": { "outcome": "failed", "code": "TRANSPORT_ERROR" } },
+    { "quiet": 50 },
+    { "view": { "status": "ready", "state": "Unlocked", "pending": false, "problem": "TRANSPORT_ERROR" }, "once": true },
+    { "client": "headers", "throws": false, "expect": { "throws": false } },
+    { "client": "retry", "as": "retry" },
+    { "request": "push", "variables": { "id": "i-1", "requestId": "r1", "clientResult": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}" }, "answer": { "id": "i-1", "revision": 2, "state": "Locked", "context": {} } },
+    { "await": "retry", "expect": { "outcome": "confirmed", "state": "Locked", "revision": 2 } }
+  ]
+}

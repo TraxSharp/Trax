@@ -40,8 +40,9 @@ fn next_request_id(count: &AtomicU64) -> String {
 /// The name the kit's allowlist of what a client may lack knows this client by.
 const CLIENT: &str = "rust";
 
-/// What the client lacks, from PROTOCOL.md's allowlist.
-const LACKS: [&str; 0] = [];
+/// What the client lacks, from PROTOCOL.md's allowlist: its view is a watch channel the caller reads, with no callback
+/// that could throw.
+const LACKS: [&str; 1] = ["change-listener"];
 
 #[tokio::main]
 async fn main() {

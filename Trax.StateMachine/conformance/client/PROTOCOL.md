@@ -201,8 +201,9 @@ The kit drives no separate effect send. Each client sends the event bound to the
 only TypeScript has a second path, the snapshot transport's `send` (`sendSnapshot`) a draft session uses, which is not
 the controller's and has no C# or Rust counterpart.
 
-**`dispose`** closes the client: its stream, and every request it would still send. It is answered `{ "disposed":
-true }`.
+**`dispose`** closes the client: its stream, and every request it would still send. A start or a first read in
+flight settles, and every send in flight or queued settles `failed` with `DISPOSED`; the host hears nothing more. It
+is answered `{ "disposed": true }`.
 
 **`build`** builds a client from the last `open` with the members given over it (`requestTimeout`,
 `maxResponseSize`, `retryDelays`, `resubscribeDelays`, `connectTimeout`, `idleTimeout`), and drops it unstarted. It
@@ -213,7 +214,11 @@ sends nothing and leaves the open client alone. It is answered `{ "built": true 
 **`headers`** has the headers each HTTP request asks for throw, from now on, with `"throws": true`, and stop
 throwing with `false`: TypeScript's `headers`, Rust's `headers` (a provider that panics), and for C#, which takes its
 headers on the `HttpClient`, a delegating handler before the client's that throws before it sends. It is answered
-`{ "throws": <bool> }`. **`end`** is the last request; the testee answers `{ "id" }` and exits.
+`{ "throws": <bool> }`.
+
+A change listener that throws and headers that throw are the app's bugs, not the controller's: the controller settles
+every operation as it would without them, and a request whose headers threw fails `TRANSPORT_ERROR` before anything
+is sent. **`end`** is the last request; the testee answers `{ "id" }` and exits.
 
 ## What a client may lack
 
@@ -237,6 +242,11 @@ and does not yet is a bug in the client, not an entry here.
     "capability": "socket-close-code",
     "client": "ts",
     "reason": "The page builds the graphql-ws client given as socket, which closes a socket that sent it a message it cannot read with its own code, 4004, not the protocol's 4400."
+  },
+  {
+    "capability": "change-listener",
+    "client": "rust",
+    "reason": "The view is a tokio watch channel the app reads (watch); there is no callback of the app's for the controller to call, so none can throw."
   }
 ]
 ```
