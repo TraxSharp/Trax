@@ -334,14 +334,15 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
             if (change.gone) return deliver({ type: 'gone' });
             if (change.reload) return deliver({ type: 'reconnected' });
             if (change.state == null || change.revision == null) return;
-            // A push whose context no store could have written is dropped, as one without a state is.
+            // A push whose context no store could have written (nested deeper than a stored snapshot may) is dropped,
+            // and the instance read again: whatever the host wrote then is not known.
             let context: Record<string, unknown>;
             try {
               const given = change.context ?? {};
               if (!isContext(given)) return;
               context = withoutNulls(given) as Record<string, unknown>;
             } catch {
-              return;
+              return deliver({ type: 'reconnected' });
             }
             if (++pushes === 2) attempt = 0;
             deliver({
