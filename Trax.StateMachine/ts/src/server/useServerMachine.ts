@@ -1,6 +1,7 @@
 import { ClientProblemCode, RefusalCode } from '../results';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Problem } from '../problem';
+import { newRequestId as defaultRequestId } from './requestId';
 import type { InputArgs, MachineSpec, StateOf, TriggerOf, TypedMachine, TypedSnapshot } from '../typed';
 import {
   ServerMachineController,
@@ -35,7 +36,8 @@ export interface UseServerMachineOptions {
    */
   startStorageKey?: string | null;
   /**
-   * Mints a requestId; defaults to `crypto.randomUUID`. A custom one must mint 1 to 200 characters, not blank, with no
+   * Mints a requestId; defaults to a v4 UUID, from `crypto.randomUUID`, or from `crypto.getRandomValues` where a page that
+   * is not a secure context has no `randomUUID`. A custom one must mint 1 to 200 characters, not blank, with no
    * control character and no unpaired surrogate: the server answers any other id `INVALID_REQUEST_ID`.
    */
   newRequestId?: () => string;
@@ -196,7 +198,7 @@ export function useServerMachine<Spec extends MachineSpec>(
         startKey.current = {
           machine,
           server,
-          requestId: kept ?? (newRequestId ?? (() => globalThis.crypto.randomUUID()))(),
+          requestId: kept ?? (newRequestId ?? defaultRequestId)(),
         };
       }
       startRequestId = startKey.current!.requestId;

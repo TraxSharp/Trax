@@ -114,8 +114,9 @@ function Wizard({ id }: { id?: string }) {
 - **Moves with its options.** A new `server`, `machine`, `id` or `startRequestId` closes the old instance's stream
   and opens the new one. From that render on the hook is `loading` and sends nothing, so a page whose server changed
   (another user signed in) never shows the instance before it under the new caller.
-- **Mints request ids** with `newRequestId`, `crypto.randomUUID` by default, which never makes one the server
-  refuses. A custom one must keep to the server's rule: 1 to 200 characters, not blank, with no control character
+- **Mints request ids** with `newRequestId`, by default a v4 UUID from `crypto.randomUUID`, or from
+  `crypto.getRandomValues` on a page that is not a secure context and has no `randomUUID`; neither makes one the
+  server refuses. A custom one must keep to the server's rule: 1 to 200 characters, not blank, with no control character
   and no unpaired surrogate; anything else is answered `INVALID_REQUEST_ID`.
 
 It returns `status`, `id`, `snapshot`, `state`, `context`, `revision`, `dueAt`, `pending`, `problem`, `error`,

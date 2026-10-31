@@ -2,6 +2,7 @@ import { ClientProblemCode, RefusalCode, type ProblemCode } from '../results';
 import { eventRefusal } from '../machine';
 import type { Problem } from '../problem';
 import type { PlannedEvent } from '../plan';
+import { newRequestId as defaultRequestId } from './requestId';
 import type { InputArgs, MachineSpec, StateOf, TriggerOf, TypedMachine, TypedSnapshot } from '../typed';
 
 // The server-authoritative controller: the server owns the instance, the twin only predicts. Every event goes
@@ -148,7 +149,8 @@ export interface ServerMachineOptions<Spec extends MachineSpec> {
    */
   startRequestId?: string;
   /**
-   * Mints a requestId; defaults to `crypto.randomUUID`. A custom one must mint 1 to 200 characters, not blank, with no
+   * Mints a requestId; defaults to a v4 UUID, from `crypto.randomUUID`, or from `crypto.getRandomValues` where a page that
+   * is not a secure context has no `randomUUID`. A custom one must mint 1 to 200 characters, not blank, with no
    * control character and no unpaired surrogate: the server answers any other id `INVALID_REQUEST_ID`.
    */
   newRequestId?: () => string;
@@ -223,8 +225,6 @@ interface QueuedEvent {
   request: EventRequest | null;
   settle: (outcome: SendOutcome) => void;
 }
-
-const defaultRequestId = (): string => globalThis.crypto.randomUUID();
 
 // Whether a snapshot at `incoming` is at or below one at `held`. A missing revision on either side cannot be ordered, so
 // it is never older.
