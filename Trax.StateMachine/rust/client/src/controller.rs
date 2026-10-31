@@ -52,6 +52,7 @@ pub mod codes {
     pub(crate) const GUARD_FAILED: &str = "GUARD_FAILED";
     pub(crate) const NO_TRANSITION: &str = "NO_TRANSITION";
     pub(crate) const CONFLICT: &str = "CONFLICT";
+    pub(crate) const INVALID_REQUEST_ID: &str = "INVALID_REQUEST_ID";
 }
 
 /// Whether a problem is the server's refusal or a request that did not get through.
@@ -181,7 +182,9 @@ pub struct ServerMachineOptions<S> {
     pub start_input: Option<Value>,
     /// The request id of the start, minted when `None`.
     pub start_request_id: Option<String>,
-    /// Mints a request id: 1 to 200 characters, not blank, no control character. A random one by default.
+    /// Mints a request id: 1 to 200 characters, not blank, no control character. A random one by default. One that
+    /// panics (under `panic = "unwind"`) fails the send it was minting for as `INVALID_REQUEST_ID`, or the start, and
+    /// sends nothing for it.
     pub new_request_id: Option<Box<dyn FnMut() -> String + Send>>,
     /// Delays between retries of `SERVER_OUTDATED` and of a read the transport failed. `None` for the default.
     pub retry_delays: Option<Vec<Duration>>,
@@ -474,6 +477,13 @@ fn not_ready_problem() -> MachineProblem {
     refusal(
         codes::NOT_READY,
         "There is no instance to send to: the start was refused or failed, or the first read gave up.",
+    )
+}
+
+fn unminted_problem() -> MachineProblem {
+    refusal(
+        codes::INVALID_REQUEST_ID,
+        "The request id minter panicked, so nothing was sent.",
     )
 }
 
@@ -944,15 +954,39 @@ impl<S: MachineServer> Actor<S> {
             self.read(None, 0);
             return;
         }
-        let request_id = match &self.start_request_id {
-            Some(id) => id.clone(),
-            None => {
-                let id = (self.new_request_id)();
-                self.start_request_id = Some(id.clone());
-                id
-            }
+        self.start_minted();
+    }
+
+    // Starts under the start's request id, minting it first if there is none. A minter that panics fails the start,
+    // which `retry` mints for again.
+    fn start_minted(&mut self) {
+        let request_id = match self.start_request_id.clone() {
+            Some(id) => id,
+            None => match self.mint() {
+                Some(id) => {
+                    self.start_request_id = Some(id.clone());
+                    id
+                }
+                None => {
+                    let problem = unminted_problem();
+                    self.problem = Some(problem.clone());
+                    self.start_failed = true;
+                    self.emit();
+                    self.settle_start(SendOutcome::Failed(problem));
+                    self.settle_open();
+                    self.settle_not_ready();
+                    return;
+                }
+            },
         };
         self.create(request_id, 0);
+    }
+
+    // A request id from the minter, or none when it panicked: the app's bug, which fails the one request it was
+    // minting for rather than the controller's task.
+    fn mint(&mut self) -> Option<String> {
+        let minter = &mut self.new_request_id;
+        std::panic::catch_unwind(AssertUnwindSafe(minter)).ok()
     }
 
     // Calls `start` under one request id for every attempt, `retry` included, so a retry the server already answered
@@ -1406,12 +1440,10 @@ impl<S: MachineServer> Actor<S> {
             return;
         }
         if self.start_failed && self.id.is_none() {
-            if let Some(request_id) = self.start_request_id.clone() {
-                self.start_failed = false;
-                self.start_waiters.push(reply);
-                self.create(request_id, 0);
-                return;
-            }
+            self.start_failed = false;
+            self.start_waiters.push(reply);
+            self.start_minted();
+            return;
         }
         // Opened by id, with a first read that failed past every retry: the read is what failed, so it is read again.
         if self.read_failed && self.confirmed.is_none() && !self.reloading {
@@ -1455,51 +1487,66 @@ impl<S: MachineServer> Actor<S> {
     }
 
     fn pump(&mut self) {
-        if self.sending
-            || self.held
-            || self.disposed
-            || self.error.is_some()
-            || self.id.is_none()
-            || self.confirmed.is_none()
-        {
+        loop {
+            if self.sending
+                || self.held
+                || self.disposed
+                || self.error.is_some()
+                || self.id.is_none()
+                || self.confirmed.is_none()
+            {
+                return;
+            }
+            let Some(next) = self.queue.first() else {
+                // Nothing is being sent: a sync plans its next event from what the server confirmed.
+                self.step_sync();
+                return;
+            };
+            let entry = next.entry;
+            let request = match &next.request {
+                Some(request) => request.clone(),
+                None => match self.first_request() {
+                    Some(request) => {
+                        self.queue[0].request = Some(request.clone());
+                        request
+                    }
+                    None => {
+                        // The minter panicked: that event fails, and the next one is minted for in its turn.
+                        let outcome = SendOutcome::Failed(unminted_problem());
+                        let reply = self.queue.remove(0).reply;
+                        self.emit();
+                        self.sync_answered(entry, &outcome);
+                        if let Some(reply) = reply {
+                            let _ = reply.send(outcome);
+                        }
+                        continue;
+                    }
+                },
+            };
+            self.sending = true;
+            self.deliver(entry, request, 0);
             return;
         }
-        let Some(next) = self.queue.first() else {
-            // Nothing is being sent: a sync plans its next event from what the server confirmed.
-            self.step_sync();
-            return;
-        };
-        let entry = next.entry;
-        let request = match &next.request {
-            Some(request) => request.clone(),
-            None => {
-                let request = self.first_request();
-                self.queue[0].request = Some(request.clone());
-                request
-            }
-        };
-        self.sending = true;
-        self.deliver(entry, request, 0);
     }
 
     // The request that first sends the event at the head of the queue, with its prediction from what the server
     // confirmed. An event bound to the effect is sent without one: what it leads to depends on the effect. So is one
     // that rests on a custom rule the client cannot evaluate, rather than a guess the server would refuse.
-    fn first_request(&mut self) -> EventRequest {
-        let request_id = (self.new_request_id)();
+    fn first_request(&mut self) -> Option<EventRequest> {
+        let request_id = self.mint()?;
         let next = &self.queue[0];
         let predicted = self.confirmed.as_ref().and_then(|confirmed| {
             self.predicts(&confirmed.state, &next.trigger)
                 .then(|| self.machine.advance(confirmed, &next.trigger, next.input.as_ref()).ok())
                 .flatten()
         });
-        EventRequest {
+        Some(EventRequest {
             id: self.id.clone().unwrap_or_default(),
             trigger: next.trigger.clone(),
             input: next.input.clone(),
             request_id,
             client_result: predicted.as_ref().map(|s| self.machine.serialize(s)),
-        }
+        })
     }
 
     fn deliver(&mut self, entry: u64, request: EventRequest, attempt: usize) {

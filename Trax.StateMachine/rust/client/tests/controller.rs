@@ -1022,3 +1022,62 @@ fn options_built_without_the_defaults_hold_them() {
     };
     assert!(ServerMachineOptions::new(ir, hash, server).retry_delays.is_none());
 }
+
+// A server that starts every instance as i-1 at revision 1, Locked, and says under which request id.
+struct Starting {
+    started: tokio::sync::mpsc::UnboundedSender<String>,
+}
+
+impl MachineServer for Starting {
+    async fn start(&self, _: Option<Value>, request_id: String) -> Result<ServerAnswer, TransportError> {
+        let _ = self.started.send(request_id);
+        Ok(ServerAnswer::Stored {
+            id: Some("i-1".into()),
+            snapshot: snapshot(None, 1, "Locked"),
+        })
+    }
+
+    async fn event(&self, _: EventRequest) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn get(&self, _: String) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    fn subscribe(&self, _: String, _: StreamSink) -> Box<dyn Subscription> {
+        Box::new(Nothing)
+    }
+}
+
+#[tokio::test]
+async fn a_minter_that_panics_for_the_start_fails_it_and_retry_mints_again() {
+    let (ir, hash) = turnstile();
+    let (started, mut starts) = tokio::sync::mpsc::unbounded_channel();
+    let mut options = ServerMachineOptions::new(ir, hash, Starting { started });
+    let mut calls = 0;
+    options.new_request_id = Some(Box::new(move || {
+        calls += 1;
+        if calls == 1 {
+            panic!("the minter panicked");
+        }
+        format!("r{calls}")
+    }));
+    let controller = ServerMachineController::new(options).unwrap();
+
+    tokio::time::timeout(Duration::from_secs(5), controller.start())
+        .await
+        .expect("the start never settled");
+    let view = controller.view();
+    assert_eq!(
+        view.problem.as_ref().map(|p| p.code.as_str()),
+        Some("INVALID_REQUEST_ID")
+    );
+    assert!(starts.try_recv().is_err(), "a start was sent with no request id");
+
+    let retried = tokio::time::timeout(Duration::from_secs(5), controller.retry())
+        .await
+        .expect("the retry never settled");
+    assert!(matches!(retried, SendOutcome::Confirmed(_)), "{retried:?}");
+    assert_eq!(starts.recv().await.as_deref(), Some("r2"));
+}
