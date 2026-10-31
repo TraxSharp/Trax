@@ -501,13 +501,20 @@ fn snapshot_of(value: &Value) -> Result<ServerSnapshot, TransportError> {
         }
     };
     // A due time the server says it cannot know, or does not carry, stays unknown, so it is never read as "no timer".
+    // One it does carry is an instant with its offset, or null for no timer; anything else is not one a host wrote.
     let due_at = if value.get("dueAtKnown").and_then(|k| k.as_bool()) == Some(false) {
         DueAt::Unknown
     } else {
         match value.get("dueAt") {
             None => DueAt::Unknown,
-            Some(Value::String(s)) => DueAt::At(s.to_string_lossy()),
-            Some(_) => DueAt::None,
+            Some(Value::Null) => DueAt::None,
+            Some(Value::String(s)) if is_instant(&s.to_string_lossy()) => DueAt::At(s.to_string_lossy()),
+            Some(due) => {
+                return Err(TransportError(format!(
+                    "The server answered a dueAt that is not an instant: {}.",
+                    due.to_json()
+                )))
+            }
         }
     };
     let row_id = match value.get("rowId") {
@@ -522,6 +529,58 @@ fn snapshot_of(value: &Value) -> Result<ServerSnapshot, TransportError> {
         context,
         due_at,
     })
+}
+
+// Whether `text` is an RFC 3339 instant: a date, a time to the second with any fraction, and its offset (`Z` or
+// `+hh:mm`), each field in range. A time without its offset names no instant.
+fn is_instant(text: &str) -> bool {
+    let b = text.as_bytes();
+    let digits = |from: usize, len: usize| -> Option<u32> {
+        let part = b.get(from..from + len)?;
+        part.iter()
+            .all(u8::is_ascii_digit)
+            .then(|| part.iter().fold(0, |n, d| n * 10 + u32::from(d - b'0')))
+    };
+    let at = |i: usize, c: u8| b.get(i).is_some_and(|x| x.eq_ignore_ascii_case(&c));
+    let (Some(year), Some(month), Some(day), Some(hour), Some(minute), Some(second)) = (
+        digits(0, 4),
+        digits(5, 2),
+        digits(8, 2),
+        digits(11, 2),
+        digits(14, 2),
+        digits(17, 2),
+    ) else {
+        return false;
+    };
+    if !(at(4, b'-') && at(7, b'-') && at(10, b'T') && at(13, b':') && at(16, b':')) {
+        return false;
+    }
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return false,
+    };
+    if day == 0 || day > days || hour > 23 || minute > 59 || second > 59 {
+        return false;
+    }
+    let mut i = 19;
+    if at(i, b'.') {
+        let fraction = b[i + 1..].iter().take_while(|d| d.is_ascii_digit()).count();
+        if fraction == 0 {
+            return false;
+        }
+        i += 1 + fraction;
+    }
+    if at(i, b'Z') {
+        return i + 1 == b.len();
+    }
+    if !(at(i, b'+') || at(i, b'-')) || !at(i + 3, b':') || i + 6 != b.len() {
+        return false;
+    }
+    matches!((digits(i + 1, 2), digits(i + 4, 2)), (Some(h), Some(m)) if h <= 23 && m <= 59)
 }
 
 // The largest integer a double holds exactly, 2^53 - 1: past it a revision cannot be told from its neighbours.
@@ -2078,6 +2137,50 @@ mod tests {
             panic!("the request outlived its timeout while the headers were asked for");
         };
         assert!(error.0.contains("did not answer within 200 ms"), "{}", error.0);
+    }
+
+    #[test]
+    fn a_due_time_is_read_only_as_an_instant_with_its_offset() {
+        let read = |due: &str| {
+            let answer = Value::parse(&format!(
+                r#"{{"id":"i-1","revision":1,"state":"Locked","context":{{}},"dueAt":{due}}}"#
+            ))
+            .unwrap();
+            answer_of(&answer).map(|a| match a {
+                ServerAnswer::Stored { snapshot, .. } => snapshot.due_at,
+                ServerAnswer::Refused(p) => panic!("{p:?}"),
+            })
+        };
+
+        for due in [
+            "2026-10-22T10:10:00Z",
+            "2026-10-22T12:10:00.000+02:00",
+            "2026-10-22T05:20:00-05:00",
+            "2024-02-29T23:59:59.1234567z",
+        ] {
+            assert_eq!(read(&format!("\"{due}\"")), Ok(DueAt::At(due.to_owned())), "{due}");
+        }
+        assert_eq!(read("null"), Ok(DueAt::None));
+        for due in [
+            "\"not a time\"",
+            "\"2026-10-22T10:10:00\"",
+            "\"2026-10-22\"",
+            "\"2026-13-01T00:00:00Z\"",
+            "\"2025-02-29T00:00:00Z\"",
+            "\"2026-10-22T24:00:00Z\"",
+            "\"2026-10-22T10:10:00.Z\"",
+            "\"2026-10-22T10:10:00+0200\"",
+            "\"2026-10-22T10:10:00Z \"",
+            "\"2026-10-22T10:10:00+02:00:00\"",
+            "5",
+            "true",
+            "{}",
+        ] {
+            let Err(error) = read(due) else {
+                panic!("the dueAt {due} was read");
+            };
+            assert!(error.0.contains("dueAt"), "{}", error.0);
+        }
     }
 
     #[test]
