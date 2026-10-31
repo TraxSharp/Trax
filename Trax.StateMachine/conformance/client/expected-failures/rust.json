@@ -1,6 +1,4 @@
 [
   {"prefix": "options-", "reason": "The Rust client validates none of its numeric options: a zero timeout or size and a delay past 2^31 - 1 ms are built.", "message": "step "},
-  {"case": "request-id-minter-throws", "reason": "A request id minter that panics takes the Rust controller's actor down with it, and the send settles DISPOSED.", "message": "step 5 ({\"client\":\"send\""},
-  {"case": "socket-text-not-json-closes-4400", "reason": "The Rust socket skips text that is not JSON instead of closing with 4400.", "message": "step 6 ({\"clientClosed\":4400}): the client did not close the socket"},
-  {"case": "socket-text-not-json-resubscribes", "reason": "The Rust socket skips text that is not JSON, so it never subscribes again on a new socket.", "message": "step 6 ({\"subscribe\""}
+  {"case": "request-id-minter-throws", "reason": "A request id minter that panics takes the Rust controller's actor down with it, and the send settles DISPOSED.", "message": "step 5 ({\"client\":\"send\""}
 ]

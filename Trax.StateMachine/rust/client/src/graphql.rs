@@ -14,6 +14,7 @@ use reqwest::header::HeaderMap;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
@@ -774,17 +775,18 @@ impl Inner {
         // Acknowledged, or closed before: a host that turns the caller away closes here.
         loop {
             match socket.next().await {
-                Some(Ok(Message::Text(text))) => match Value::parse(text.as_str())
-                    .ok()
-                    .as_ref()
-                    .and_then(|m| m.get("type"))
-                    .and_then(|t| t.as_str())
-                {
-                    Some("connection_ack") => break,
-                    Some("ping") => {
-                        let _ = socket.send(Message::text(r#"{"type":"pong"}"#)).await;
+                Some(Ok(Message::Text(text))) => match Value::parse(text.as_str()) {
+                    Err(_) => {
+                        close_not_json(&mut socket).await;
+                        return Err(None);
                     }
-                    _ => {}
+                    Ok(message) => match message.get("type").and_then(|t| t.as_str()) {
+                        Some("connection_ack") => break,
+                        Some("ping") => {
+                            let _ = socket.send(Message::text(r#"{"type":"pong"}"#)).await;
+                        }
+                        _ => {}
+                    },
                 },
                 Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Binary(_) | Message::Frame(_))) => {}
                 Some(Ok(Message::Close(frame))) => return Err(refused_close(frame.as_ref())),
@@ -856,7 +858,8 @@ impl Inner {
                 _ => break Ended::Again,
             };
             let Ok(message) = Value::parse(text.as_str()) else {
-                continue;
+                close_not_json(&mut socket).await;
+                return Ended::Again;
             };
             match message.get("type").and_then(|t| t.as_str()) {
                 Some("ping") => {
@@ -986,6 +989,15 @@ impl Inner {
             message,
         })
     }
+}
+
+// Closes a socket that sent text that is not JSON, which is no graphql-transport-ws message, with the protocol's 4400.
+async fn close_not_json(socket: &mut Socket) {
+    let frame = CloseFrame {
+        code: CloseCode::from(4400),
+        reason: "The message is not JSON.".into(),
+    };
+    let _ = socket.close(Some(frame)).await;
 }
 
 // The codes a host refuses a stream's caller with as a GraphQL error: Trax's own, and Hot Chocolate's.
@@ -1482,6 +1494,9 @@ mod tests {
         Acknowledge,
         // Says nothing and holds the connection open.
         Silent,
+        // Answers the connection_init with text that is not JSON, and reports the code the client closes with as the
+        // connection's token (`closed 4400`).
+        NotJson,
         // Acknowledges it, then sends a 64 KiB message.
         Flood,
         // Acknowledges it, then answers every ping with a pong and says nothing else.
@@ -1553,9 +1568,19 @@ mod tests {
                         .and_then(|p| p.get("token"))
                         .and_then(|t| t.as_str())
                         .map(str::to_owned);
+                    if let Reply::NotJson = reply {
+                        let _ = socket.send(Message::text("<html>not json</html>")).await;
+                        let closed = match socket.next().await {
+                            Some(Ok(Message::Close(Some(frame)))) => format!("closed {}", u16::from(frame.code)),
+                            other => format!("not closed: {other:?}"),
+                        };
+                        let _ = seen.send((authorization, Some(closed)));
+                        return;
+                    }
                     let _ = seen.send((authorization, token));
                     match reply {
                         Reply::RejectUpgrade => unreachable!("the upgrade was answered 403"),
+                        Reply::NotJson => unreachable!("answered above"),
                         Reply::Drop => {
                             let _ = socket
                                 .close(Some(CloseFrame {
@@ -1892,6 +1917,20 @@ mod tests {
 
         assert!(again.is_ok(), "the dropped socket was never opened again");
         assert!(delivered.try_recv().is_err(), "a dropped socket delivered a message");
+    }
+
+    #[tokio::test]
+    async fn a_socket_that_sends_text_that_is_not_json_before_its_ack_is_closed_4400_and_opened_again() {
+        let (mut heard, mut delivered, _stream) =
+            follow_refused(|n| if n == 0 { Reply::NotJson } else { Reply::Silent }).await;
+        let wait = Duration::from_secs(10);
+
+        let (_, closed) = tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let again = tokio::time::timeout(wait, heard.recv()).await;
+
+        assert_eq!(closed.as_deref(), Some("closed 4400"));
+        assert!(again.is_ok(), "the socket was never opened again");
+        assert!(delivered.try_recv().is_err(), "the socket delivered a message");
     }
 
     // The kit's defaults.json, which these hold the private parts of the client to.
