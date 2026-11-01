@@ -37,7 +37,12 @@
       PackagePath="\"
       Visible="false"
     />
-    <None Include="$(MSBuildThisFileDirectory)../.github/brand/icon-128.png" Pack="true" PackagePath="icon.png" Visible="false" />
+    <None
+      Include="$(MSBuildThisFileDirectory)../.github/brand/icon-128.png"
+      Pack="true"
+      PackagePath="icon.png"
+      Visible="false"
+    />
   </ItemGroup>
 
   <!-- XML docs for the shipped libraries, so the summaries in source reach IntelliSense for
