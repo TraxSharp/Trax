@@ -49,7 +49,9 @@ A new language lands in this order, each step in the same pull request as its te
    the `CI result` gate's `needs`. `TesteeRosterTests` checks all three.
 3. **The engine testee,** through the language's public API, not the core directly, so marshalling is what is tested.
    Templates: `rust/src/bin/testee.rs`, `ts/tools/conformance/testee-ts.mjs`.
-4. **The client and its testee.** Template: `rust/client/src/bin/client_testee.rs`. The testee builds the client the
+4. **The client and its testee.** A binding wraps the Rust client and implements only its transport on the
+   platform's own stack ([0005](./docs/adr/0005-a-binding-wraps-the-rust-client-over-its-own-transport.md)). Template:
+   `rust/client/src/bin/client_testee.rs`. The testee builds the client the
    way an app would, on the library's defaults; a transcript sets an option only when it is what it tests. A platform
    that cannot do something (a browser has no upgrade status) gets a `lacks` entry with its reason, never an expected
    failure.
@@ -93,6 +95,8 @@ change a rule, and if your work contradicts one, say so rather than silently ove
 | a state that invokes a train, or where its outcome goes | central `docs/0046`, only the entry that started the run receives its outcome |
 | what a client may send, or what the TypeScript twin may decide | central `docs/0048`, a machine is served as a typed API and the server applies every transition; a wrong prediction is a UX bug, not a correctness one |
 | a state that spawns a child machine | central `docs/0052`, a child is spawned the way a train is invoked |
+| a member of one machine client, or the client surface table | [0004](./docs/adr/0004-the-machine-clients-share-one-surface-table.md), the three clients share one surface table and each language is held to it |
+| a client for a new language, or a binding of the Rust client | [0005](./docs/adr/0005-a-binding-wraps-the-rust-client-over-its-own-transport.md), a binding wraps the Rust client and brings only its platform's transport |
 
 The tables the machines are stored in (`SnapshotDraft`, `EffectClaim`, their `Persistent*` pairs and
 migrations 040 to 076) stay in Trax.Effect, with every other table (effect `0003`, central `0036`).
