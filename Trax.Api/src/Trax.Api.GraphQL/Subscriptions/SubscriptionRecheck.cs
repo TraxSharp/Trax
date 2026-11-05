@@ -1,5 +1,8 @@
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Configuration;
 
 namespace Trax.Api.GraphQL.Subscriptions;
@@ -10,10 +13,13 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// GraphQL builder set another with <c>RecheckConnectionCredentialsEvery(...)</c>.
 /// </summary>
 /// <remarks>
-/// A subscription that no longer passes ends: <see cref="Until{T}"/> sends the subscriber its
-/// feed's last event when the feed has one (a machine push ends with a problem), and otherwise a
-/// <c>TRAX_AUTHORIZATION</c> error, after which the operation completes. A check that throws counts
-/// as one that did not pass. The socket stays open, and its other operations go on. See
+/// Each check asks the endpoint policy set with <c>RequireAuthorization(...)</c> first, when there
+/// is one, and then the subscription's own rule (<see cref="For"/>, <see cref="Of"/>). A
+/// subscription that no longer passes ends: <see cref="Until{T}"/> sends the subscriber its feed's
+/// last event when the feed has one (a machine push and a followed run end with <c>NOT_FOUND</c>),
+/// and otherwise a <c>TRAX_AUTHORIZATION</c> error, after which the operation completes. A check
+/// that throws counts as one that did not pass. The socket stays open, and its other operations go
+/// on. See
 /// <c>docs/adr/0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md</c>.
 /// </remarks>
 /// <param name="Interval">How long a subscription runs between two checks.</param>
@@ -26,19 +32,64 @@ internal sealed record SubscriptionRecheck(
 )
 {
     /// <summary>
-    /// A re-check of <paramref name="stillAuthorized"/> at the interval and on the clock the host
-    /// registered in <paramref name="services"/>.
+    /// A re-check of the endpoint policy and <paramref name="stillAuthorized"/> for
+    /// <paramref name="user"/>, at the interval, on the clock and under the endpoint policy the
+    /// host registered in <paramref name="services"/>.
     /// </summary>
     public static SubscriptionRecheck For(
         IServiceProvider services,
+        ClaimsPrincipal? user,
+        Func<CancellationToken, ValueTask<bool>> stillAuthorized
+    ) =>
+        Of(
+            services.GetService<GraphQLConfiguration>(),
+            services.GetService<TimeProvider>() ?? TimeProvider.System,
+            services.GetRequiredService<IServiceScopeFactory>(),
+            user,
+            stillAuthorized
+        );
+
+    /// <summary>
+    /// A re-check of the endpoint policy <paramref name="configuration"/> names and
+    /// <paramref name="stillAuthorized"/> for <paramref name="user"/>, at the configuration's
+    /// interval. The endpoint policy is evaluated in a scope of its own from
+    /// <paramref name="scopes"/>, as it is for a request, so a handler that reads a store reads it
+    /// again.
+    /// </summary>
+    public static SubscriptionRecheck Of(
+        GraphQLConfiguration? configuration,
+        TimeProvider time,
+        IServiceScopeFactory scopes,
+        ClaimsPrincipal? user,
         Func<CancellationToken, ValueTask<bool>> stillAuthorized
     ) =>
         new(
-            services.GetService<GraphQLConfiguration>()?.ConnectionCredentialRecheckInterval
+            configuration?.ConnectionCredentialRecheckInterval
                 ?? TraxCompositeSocketInterceptor.DefaultCredentialRecheckInterval,
-            services.GetService<TimeProvider>() ?? TimeProvider.System,
-            stillAuthorized
+            time,
+            async ct =>
+                await EndpointPolicyHoldsAsync(configuration, scopes, user).ConfigureAwait(false)
+                && await stillAuthorized(ct).ConfigureAwait(false)
         );
+
+    private static async ValueTask<bool> EndpointPolicyHoldsAsync(
+        GraphQLConfiguration? configuration,
+        IServiceScopeFactory scopes,
+        ClaimsPrincipal? user
+    )
+    {
+        if (configuration?.AuthorizationRequired != true)
+            return true;
+
+        await using var scope = scopes.CreateAsyncScope();
+        return await EndpointPolicy
+            .IsSatisfiedAsync(
+                scope.ServiceProvider.GetRequiredService<IAuthorizationService>(),
+                configuration,
+                user
+            )
+            .ConfigureAwait(false);
+    }
 
     /// <summary>
     /// The events of <paramref name="source"/>, until a check fails. Then the subscriber is sent

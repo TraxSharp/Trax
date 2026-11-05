@@ -19,8 +19,9 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// Each field carries the authorization of the data it streams, decided per subscriber by
 /// <see cref="LifecycleSubscriptionAccess"/>: a subscriber sees the trains the operations
 /// authorization or each train's own posture admits them to, and one who could see nothing is
-/// refused when subscribing. The decision is made again every connection re-check interval, and a
-/// subscription whose subscriber no longer passes ends with a <c>TRAX_AUTHORIZATION</c> error.
+/// refused when subscribing. The decision is made again every connection re-check interval, with
+/// the endpoint policy, and a subscription whose subscriber no longer passes ends with a
+/// <c>TRAX_AUTHORIZATION</c> error.
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/subscriptions">SDK reference</seealso>
 public class LifecycleSubscriptions
@@ -283,7 +284,7 @@ public class LifecycleSubscriptions
         var stream = await TopicSubscribe
             .OneAtATimeAsync<DataChangedEvent>(receiver, nameof(OnDataChanged), ct)
             .ConfigureAwait(false);
-        var recheck = access.Recheck(_ => access.DataChangesFor(user));
+        var recheck = access.Recheck(user, _ => access.DataChangesFor(user));
         return new SubscriberSourceStream<DataChangedEvent>(
             stream,
             (topicStream, readCt) => recheck.Until(Read(topicStream, readCt), ct: readCt)

@@ -26,11 +26,15 @@ it subscribes.
   not only its own, so an output is withheld until the host says it is meant for all of them.
 - A subscriber who could receive nothing is refused when subscribing.
 - The decision is made again for the same principal at every connection re-check interval
-  ([0033](./0033-a-socket-connection-has-a-maximum-lifetime-and-re-checks-its-key.md)). A
-  subscription whose subscriber no longer receives everything it was admitted to ends with
-  `TRAX_AUTHORIZATION`, and a check that fails counts as one that does not pass. The socket and
-  its other operations stay open. The operator machine feed and a machine's push are asked again
-  the same way, by the operations gate and the machine's watch rule.
+  ([0033](./0033-a-socket-connection-has-a-maximum-lifetime-and-re-checks-its-key.md)), starting
+  with the endpoint policy set with `RequireAuthorization(...)` when there is one, evaluated in a
+  scope of its own as for a request. A subscription whose subscriber no longer satisfies it, or no
+  longer receives everything it was admitted to, ends with `TRAX_AUTHORIZATION`, and a check that
+  fails counts as one that does not pass. The socket and its other operations stay open. The
+  operator machine feed, a machine's push and `runProgress` are asked again the same way: the
+  endpoint policy, then the operations gate, the machine's watch rule, or that the run is still
+  the caller's. The push and `runProgress` end with the `NOT_FOUND` event a refused subscribe
+  gets.
 - `onDataChanged` needs the operations authorization when the surface is exposed, and an
   authenticated caller when it is not.
 
@@ -91,9 +95,16 @@ every build.
 - `SubscriptionRecheckTests` pins the re-check: a lifecycle, step, data-change and operator
   machine subscription ends with `TRAX_AUTHORIZATION` at the re-check after its gate or a
   broadcast train's posture stops admitting it, or after the check throws, and goes on while it
-  still passes; over a socket, a subscription that has already received an event ends with a
+  still passes; on a host with an endpoint policy, an unmarked broadcast train's subscription,
+  the operations view and the operator feed end when that policy stops passing, and an unmarked
+  broadcast train's goes on while it passes; over a socket, a subscription that has already
+  received an event ends with a
   `next` frame carrying only the `TRAX_AUTHORIZATION` error, then `complete`, and the socket
   stays open.
+- `MachineChangedRecheckE2ETests` (in `Trax.Api.Tests.StateMachine.E2E`) and
+  `RunProgressRecheckE2ETests` pin the same for a machine's push and `runProgress` over a real
+  socket: each ends with `NOT_FOUND` at the re-check after the endpoint policy stops passing, and
+  goes on while it passes.
 
 Not covered: the principal a subscription re-checks is the one it subscribed with. What changes
 between two checks is what the authorization reads (a policy's store, a train's posture); a
@@ -104,6 +115,8 @@ published between a change and the next check is still delivered.
 
 ## Changelog
 
+- **2026-11-05**: The re-check asks the endpoint policy first, for every subscription, and
+  `runProgress` is re-checked.
 - **2026-10-29**: A subscription's authorization is made again at every connection re-check
   interval, and a subscription that no longer passes ends.
 - **2026-10-23**: The broadcast view withholds `output` unless the host opts the train in.

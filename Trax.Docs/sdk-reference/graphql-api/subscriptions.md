@@ -38,16 +38,19 @@ On an open endpoint a `[TraxBroadcast]` train must declare `[TraxAuthorize]` or 
 
 ### Re-checked while it runs
 
-Every open subscription's authorization is decided again every five minutes, or at the interval set with `RecheckConnectionCredentialsEvery(...)` (the same interval that re-resolves an API-key connection's key; see [Connection lifetime](#connection-lifetime)). The check is the one the subscription was admitted on, for the principal it subscribed with:
+Every open subscription's authorization is decided again every five minutes, or at the interval set with `RecheckConnectionCredentialsEvery(...)` (the same interval that re-resolves an API-key connection's key; see [Connection lifetime](#connection-lifetime)). The check is the one the subscription was admitted on, for the principal it subscribed with. On a host that calls `RequireAuthorization(...)` it starts with the endpoint policy, for every subscription below, and then asks the subscription's own rule:
 
-| Subscription | Asked again |
+| Subscription | Asked again, after the endpoint policy |
 |---|---|
-| `onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`, `onTrainStateChanged`, `onJunctionEvent` | The operations authorization, or the posture of every `[TraxBroadcast]` train the subscriber was admitted to |
+| `onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`, `onTrainStateChanged`, `onJunctionEvent` | The operations authorization, or the posture of every `[TraxBroadcast]` train the subscriber was admitted to. For a train with neither `[TraxAuthorize]` nor `[TraxAllowAnonymous]` the endpoint policy is that posture |
 | `onDataChanged` | The operations authorization, or an authenticated caller when the operations surface is not exposed |
 | `onMachineInstanceChanged` | The operations gate |
 | A machine's push (`<machine>Changed`) | The machine's `Watch` rule, for the same instance ([Machines](/docs/sdk-reference/graphql-api/machines)) |
+| `runProgress` | That the run is one the caller started, of a train marked `[TraxRunProgress]` ([Run progress](/docs/sdk-reference/graphql-api/run-progress)) |
 
-A subscription that no longer passes, or whose check throws, ends. A lifecycle, step, data-change or operator subscription gets a last result carrying only the error, `{"id":"1","type":"next","payload":{"errors":[{"message":"Not authorized.","extensions":{"code":"TRAX_AUTHORIZATION"}}]}}`, then `{"id":"1","type":"complete"}`; a machine's push gets its `NOT_FOUND` event and completes. A broadcast subscriber that keeps some of its trains but loses one ends too, rather than seeing fewer. The socket stays open, its other operations go on, and the client may subscribe again. Each check runs once per open subscription per interval, so a host whose policies read a store pays one read per subscription per interval.
+The endpoint policy is evaluated in a scope of its own at each check, as it is for a request, so a policy handler that reads a store (a suspended account, a revoked grant) reads it again. A subscription the host added through `ConfigureSchema` is not re-checked; only the fields in this table are.
+
+A subscription that no longer passes, or whose check throws, ends. A lifecycle, step, data-change or operator subscription gets a last result carrying only the error, `{"id":"1","type":"next","payload":{"errors":[{"message":"Not authorized.","extensions":{"code":"TRAX_AUTHORIZATION"}}]}}`, then `{"id":"1","type":"complete"}`; a machine's push and `runProgress` get their `NOT_FOUND` event and complete. A broadcast subscriber that keeps some of its trains but loses one ends too, rather than seeing fewer. The socket stays open, its other operations go on, and the client may subscribe again. Each check runs once per open subscription per interval, so a host whose policies read a store pays one read per subscription per interval.
 
 ## Lifecycle Subscription Fields
 

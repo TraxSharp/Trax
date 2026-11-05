@@ -8,6 +8,7 @@ using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Subscriptions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -48,6 +49,7 @@ public class SubscriptionRecheckTests
 
     private const string OpsPolicy = "Ops";
     private const string MembersPolicy = "Members";
+    private const string ActivePolicy = "ActiveAccount";
     private const string AuthorizationCode = "TRAX_AUTHORIZATION";
 
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
@@ -68,6 +70,7 @@ public class SubscriptionRecheckTests
     private volatile bool _opsOpen = true;
     private volatile bool _membersOpen = true;
     private volatile bool _opsThrows;
+    private readonly Accounts _accounts = new();
 
     [SetUp]
     public void Admit()
@@ -76,6 +79,7 @@ public class SubscriptionRecheckTests
         _opsOpen = true;
         _membersOpen = true;
         _opsThrows = false;
+        _accounts.Suspended = false;
     }
 
     [TearDown]
@@ -238,6 +242,83 @@ public class SubscriptionRecheckTests
         var before = results.Received;
         await FirstAsync(results, () => feed.Writer.TryWrite(Record()), after: before);
         results.Ended.Should().BeFalse();
+    }
+
+    #endregion
+
+    #region The endpoint policy
+
+    [Test]
+    public async Task An_unmarked_broadcast_train_ends_when_the_endpoint_policy_no_longer_passes()
+    {
+        _opsOpen = false;
+        var executor = await BuildGatedAsync(UnmarkedBroadcast());
+        var stream = await SubscribeAsync(executor, LifecycleQuery);
+        var results = Collect(stream);
+        await FirstAsync(results, () => PublishCompleted(typeof(IUnmarkedTrain).FullName!));
+
+        _accounts.Suspended = true;
+
+        (await EndAsync(results))
+            .Should()
+            .Be(
+                AuthorizationCode,
+                "the endpoint policy is the gate of a train with no marker, and is asked again "
+                    + "at the re-check, per "
+                    + Adr
+            );
+    }
+
+    [Test]
+    public async Task An_unmarked_broadcast_train_goes_on_while_the_endpoint_policy_passes()
+    {
+        _opsOpen = false;
+        var executor = await BuildGatedAsync(UnmarkedBroadcast());
+        var stream = await SubscribeAsync(executor, LifecycleQuery);
+        var results = Collect(stream);
+        await FirstAsync(results, () => PublishCompleted(typeof(IUnmarkedTrain).FullName!));
+
+        for (var i = 0; i < 3; i++)
+            _time.Advance(Interval);
+
+        var before = results.Received;
+        await FirstAsync(
+            results,
+            () => PublishCompleted(typeof(IUnmarkedTrain).FullName!),
+            after: before
+        );
+        results.Ended.Should().BeFalse("a subscriber the endpoint policy still admits goes on");
+    }
+
+    [Test]
+    public async Task The_operations_view_ends_when_the_endpoint_policy_no_longer_passes()
+    {
+        var executor = await BuildGatedAsync();
+        var stream = await SubscribeAsync(executor, LifecycleQuery);
+        var results = Collect(stream);
+        await FirstAsync(results, () => PublishCompleted("Some.Train"));
+
+        _accounts.Suspended = true;
+
+        (await EndAsync(results))
+            .Should()
+            .Be(
+                AuthorizationCode,
+                "the endpoint policy is asked again beside the operations gate, per " + Adr
+            );
+    }
+
+    [Test]
+    public async Task The_operator_machine_feed_ends_when_the_endpoint_policy_no_longer_passes()
+    {
+        var feed = Channel.CreateUnbounded<MachineInstanceRecord>();
+        var executor = await BuildGatedAsync(operations: Operations(feed));
+        var results = Collect(await SubscribeAsync(executor, OperatorQuery));
+        await FirstAsync(results, () => feed.Writer.TryWrite(Record()));
+
+        _accounts.Suspended = true;
+
+        (await EndAsync(results)).Should().Be(AuthorizationCode, "per " + Adr);
     }
 
     #endregion
@@ -417,10 +498,50 @@ public class SubscriptionRecheckTests
     private static TraxGraphQLBuilder OperationsByPolicy(TraxGraphQLBuilder g) =>
         g.ExposeOperationQueries().GateOperations(policy: OpsPolicy);
 
+    // The operations queries give the schema a query root; the order fixture's models are public,
+    // which a gated endpoint refuses.
+    private static TraxGraphQLBuilder EndpointGated(TraxGraphQLBuilder g) =>
+        OperationsByPolicy(g).RequireAuthorization(ActivePolicy);
+
+    private Task<IRequestExecutor> BuildGatedAsync(
+        TrainRegistration? broadcast = null,
+        IOperationsService? operations = null
+    ) => BuildAsync(EndpointGated, broadcast, operations, queryModels: false);
+
+    /// <summary>Whether the caller's account is suspended: state the endpoint policy reads, outside the principal.</summary>
+    private sealed class Accounts
+    {
+        private volatile bool _suspended;
+
+        public bool Suspended
+        {
+            get => _suspended;
+            set => _suspended = value;
+        }
+    }
+
+    private sealed class ActiveAccount : IAuthorizationRequirement;
+
+    /// <summary>Scoped, as a handler that reads a store usually is.</summary>
+    private sealed class ActiveAccountHandler(Accounts accounts)
+        : AuthorizationHandler<ActiveAccount>
+    {
+        protected override Task HandleRequirementAsync(
+            AuthorizationHandlerContext context,
+            ActiveAccount requirement
+        )
+        {
+            if (!accounts.Suspended)
+                context.Succeed(requirement);
+            return Task.CompletedTask;
+        }
+    }
+
     private async Task<IRequestExecutor> BuildAsync(
         Func<TraxGraphQLBuilder, TraxGraphQLBuilder> configure,
         TrainRegistration? broadcast = null,
-        IOperationsService? operations = null
+        IOperationsService? operations = null,
+        bool queryModels = true
     )
     {
         var discovery = Substitute.For<ITrainDiscoveryService>();
@@ -446,7 +567,10 @@ public class SubscriptionRecheckTests
                     )
             );
             o.AddPolicy(MembersPolicy, p => p.RequireAssertion(_ => _membersOpen));
+            o.AddPolicy(ActivePolicy, p => p.AddRequirements(new ActiveAccount()));
         });
+        services.AddSingleton(_accounts);
+        services.AddScoped<IAuthorizationHandler, ActiveAccountHandler>();
         services.AddDbContext<OrderTestDbContext>(o =>
             o.UseInMemoryDatabase("SubscriptionRecheck_" + Guid.NewGuid())
         );
@@ -454,7 +578,9 @@ public class SubscriptionRecheckTests
             services,
             g =>
                 configure(
-                    g.AddDbContext<OrderTestDbContext>().RecheckConnectionCredentialsEvery(Interval)
+                    (
+                        queryModels ? g.AddDbContext<OrderTestDbContext>() : g
+                    ).RecheckConnectionCredentialsEvery(Interval)
                 )
         );
 
@@ -479,6 +605,32 @@ public class SubscriptionRecheckTests
             RequiredPolicies = [MembersPolicy],
             RequiredRoles = [],
             HasAuthorizeAttribute = true,
+            HasAllowAnonymousAttribute = false,
+            IsQuery = false,
+            IsMutation = false,
+            IsBroadcastEnabled = true,
+            GraphQLOperations = GraphQLOperation.Run,
+            IsRemote = false,
+        };
+
+    public interface IUnmarkedTrain;
+
+    // A broadcast train with no posture of its own: the endpoint policy is its gate.
+    private static TrainRegistration UnmarkedBroadcast() =>
+        new()
+        {
+            ServiceType = typeof(IUnmarkedTrain),
+            ImplementationType = typeof(IUnmarkedTrain),
+            InputType = typeof(object),
+            OutputType = typeof(object),
+            Lifetime = ServiceLifetime.Transient,
+            ServiceTypeName = typeof(IUnmarkedTrain).FullName!,
+            ImplementationTypeName = typeof(IUnmarkedTrain).FullName!,
+            InputTypeName = "Object",
+            OutputTypeName = "Object",
+            RequiredPolicies = [],
+            RequiredRoles = [],
+            HasAuthorizeAttribute = false,
             HasAllowAnonymousAttribute = false,
             IsQuery = false,
             IsMutation = false,

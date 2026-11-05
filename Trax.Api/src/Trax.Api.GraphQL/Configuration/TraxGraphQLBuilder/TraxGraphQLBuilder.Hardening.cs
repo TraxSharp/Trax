@@ -161,9 +161,10 @@ public partial class TraxGraphQLBuilder
     /// principal the connection opened as (it was revoked or rotated, or its roles or claims
     /// changed), or the resolver fails, the connection is closed with code 1008 (policy
     /// violation). Each re-check is one call to the host's API-key resolver per open connection.
-    /// The same interval runs each open subscription's authorization again (the operations gate,
-    /// a broadcast train's posture, a machine's watch rule), and a subscription that no longer
-    /// passes ends while the connection stays open.
+    /// The same interval runs each of Trax's open subscriptions' authorization again: the endpoint
+    /// policy set with <see cref="RequireAuthorization"/>, then the subscription's own rule (the
+    /// operations gate, a broadcast train's posture, a machine's watch rule, or that a followed run
+    /// is the caller's). A subscription that no longer passes ends while the connection stays open.
     /// See <c>docs/adr/0033-a-socket-connection-has-a-maximum-lifetime-and-re-checks-its-key.md</c>
     /// and <c>docs/adr/0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md</c>.
     /// </summary>
@@ -181,7 +182,9 @@ public partial class TraxGraphQLBuilder
     /// Gates every GraphQL operation the Trax schema executes behind an authorization policy, on
     /// every transport: an HTTP request and each operation a subscription socket carries pass the
     /// same check, introspection operations included. A principal that is not authenticated never
-    /// satisfies it, and a socket is also checked once at <c>connection_init</c>.
+    /// satisfies it, and a socket is also checked once at <c>connection_init</c>. Each of Trax's
+    /// open subscriptions asks it again at every connection re-check
+    /// (<see cref="RecheckConnectionCredentialsEvery"/>), and ends when it no longer passes.
     /// <para>
     /// The GraphQL IDE page (HTML GET) and the schema download are not operations and are not
     /// gated by this policy; they follow <c>AllowIntrospection</c>.

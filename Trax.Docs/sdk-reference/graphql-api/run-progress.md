@@ -143,6 +143,13 @@ with a `problem` and completes:
 
 An anonymous subscription is refused with `TRAX_AUTHORIZATION`, as other subscriptions are.
 
+An open stream is checked again every five minutes, or at the interval set with
+[`RecheckConnectionCredentialsEvery(...)`](/docs/sdk-reference/graphql-api/add-trax-graphql#builder-methods): the
+endpoint policy set with `RequireAuthorization(...)`, when there is one, and that the run is still one the caller
+started of a train that carries the attribute. When either no longer passes, or the check throws, the stream sends one
+event with the problem `NOT_FOUND` and completes, and the socket stays open
+([Re-checked while it runs](/docs/sdk-reference/graphql-api/subscriptions#re-checked-while-it-runs)).
+
 ## What a step shows
 
 A step carries the same fields as `onJunctionEvent`'s, with the host detail withheld: no input, output or failure
