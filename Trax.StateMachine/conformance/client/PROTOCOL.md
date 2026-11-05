@@ -345,7 +345,9 @@ and a push as `{ "data": { "<machine>Changed": … } }`, with the fields a host 
 filled in: `dueAt: null`, `dueAtKnown: true`, `problem: null` on an answer (and `id`, `revision`, `state`, `context`
 null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a push. A step with `"bare": true` sends its answer or push as
 given, without them. An answer or push that leaves out `dueAtKnown` or `dueAt` does not know the due time: the
-client reads it as `dueAtKnown: false`, never as a known null.
+client reads it as `dueAtKnown: false`, never as a known null. A push's `rowId`, the row's incarnation, is a whole JSON
+number, as a host serves a GraphQL `Long` (`"rowId": 7`), or null; a client holds it as its decimal text, so the
+view's `rowId` is `"7"`.
 
 A context nests at most 64 levels, the snapshot that holds it counting as one: no store writes a snapshot deeper,
 and every engine refuses to read one. One that deep is read, however deep the answer or socket message around it, so

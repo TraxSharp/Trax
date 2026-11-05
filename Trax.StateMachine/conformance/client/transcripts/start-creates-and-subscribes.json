@@ -15,7 +15,7 @@
     { "await": "start", "expect": { "settled": true } },
     { "subscribe": { "id": "i-1" } },
     { "view": { "status": "ready", "instance": "i-1", "state": "Locked", "context": {}, "revision": 1, "pending": false, "problem": null } },
-    { "push": { "rowId": "7", "revision": 1, "state": "Locked", "context": { "paidWith": null } } },
+    { "push": { "rowId": 7, "revision": 1, "state": "Locked", "context": { "paidWith": null } } },
     { "view": { "status": "ready", "revision": 1, "rowId": null } }
   ]
 }
