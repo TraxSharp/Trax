@@ -307,6 +307,23 @@ public class MachineStreamTests
     }
 
     [Test]
+    public async Task A_resubscribe_whose_subscribe_throws_ends_the_stream_with_a_transport_error()
+    {
+        var (socket, messages, stream) = Follow();
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        socket.Throws = new ObjectDisposedException("socket");
+
+        first.Sink.Complete();
+
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+            .Should()
+            .BeOfType<StreamMessage.Refused>()
+            .Which.Code.Should()
+            .Be(ClientProblemCodes.TransportError);
+    }
+
+    [Test]
     public async Task A_code_the_caller_named_terminal_ends_the_stream_with_that_code()
     {
         var time = new TimerLog();
@@ -528,8 +545,13 @@ public class MachineStreamTests
     {
         public Channel<Opened> Subscriptions { get; } = Channel.CreateUnbounded<Opened>();
 
+        // Thrown by every subscribe from now on, as a custom socket's bug would be.
+        public Exception? Throws { get; set; }
+
         public IDisposable Subscribe(JsonObject payload, ISubscriptionSink sink)
         {
+            if (Throws is not null)
+                throw Throws;
             var opened = new Opened(sink);
             Subscriptions.Writer.TryWrite(opened);
             return opened;

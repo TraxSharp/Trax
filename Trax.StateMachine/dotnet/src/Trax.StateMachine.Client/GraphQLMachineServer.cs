@@ -828,10 +828,29 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                     t =>
                     {
                         if (!t.IsCanceled)
-                            Open(source);
+                            Reopen(source);
                     },
                     TaskScheduler.Default
                 );
+        }
+
+        // Subscribes again after a delay. A socket whose Subscribe throws (a custom socket's bug, or one disposed) has
+        // no stream to follow: the stream ends as it does on a socket that follows no more subscriptions.
+        private void Reopen(CancellationTokenSource fired)
+        {
+            try
+            {
+                Open(fired);
+            }
+            catch (Exception ex)
+            {
+                Deliver(
+                    new StreamMessage.Refused(
+                        ClientProblemCodes.TransportError,
+                        $"The stream could not be subscribed again: the socket's Subscribe threw: {ex.Message}"
+                    )
+                );
+            }
         }
 
         public void Dispose()

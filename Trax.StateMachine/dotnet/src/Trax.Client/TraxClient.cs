@@ -428,10 +428,29 @@ public sealed class TraxClient
                     t =>
                     {
                         if (!t.IsCanceled)
-                            Open(source);
+                            Reopen(source);
                     },
                     TaskScheduler.Default
                 );
+        }
+
+        // Subscribes again after a delay. A transport whose Subscribe throws has no stream to follow: the stream ends
+        // with the failure, as it does on a socket that was disposed.
+        private void Reopen(CancellationTokenSource fired)
+        {
+            try
+            {
+                Open(fired);
+            }
+            catch (Exception ex)
+            {
+                End(
+                    [],
+                    new TraxTransportFailure(
+                        $"The stream could not be subscribed again: the transport's Subscribe threw: {ex.Message}"
+                    )
+                );
+            }
         }
 
         public void Dispose()

@@ -154,7 +154,8 @@ public readonly record struct Optional<T>
 - **Streams.** A `Subscribe` stream ends for good (`Ended`) when the host completes it (no errors, no failure), answers a
   frame with errors or refuses the subscription (`Errors`, or a `Failure` when the refusal carried none), or with a
   `Failure` when it closes the socket with 4401 or 4403 (its `CloseStatus` says which), answers the upgrade 401 or 403, sends a frame that does not fit
-  the result or holds neither data nor an error, ends it with errors it cannot read (a member given twice), when the transport has no socket or the socket was disposed, or when `onEvent` throws. Anything else that
+  the result or holds neither data nor an error, ends it with errors it cannot read (a member given twice), when the transport has no socket or the socket was disposed, when the transport's `Subscribe` throws on a
+  resubscribe, or when `onEvent` throws. Anything else that
   drops the stream, a close, a broken connection, an unanswered ping or a malformed message, is `Interrupted`, said
   once, and the stream is subscribed again after the next of `ResubscribeDelays`, starting over at the first once a
   subscription delivers a frame. `Resumed` follows, before the new subscription's first `Next`; frames sent meanwhile are lost,
