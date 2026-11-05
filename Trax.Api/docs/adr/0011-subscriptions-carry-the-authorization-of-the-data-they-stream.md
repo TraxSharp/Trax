@@ -91,7 +91,9 @@ every build.
 - `SubscriptionRecheckTests` pins the re-check: a lifecycle, step, data-change and operator
   machine subscription ends with `TRAX_AUTHORIZATION` at the re-check after its gate or a
   broadcast train's posture stops admitting it, or after the check throws, and goes on while it
-  still passes; over a socket the end is one `error` frame and the socket stays open.
+  still passes; over a socket, a subscription that has already received an event ends with a
+  `next` frame carrying only the `TRAX_AUTHORIZATION` error, then `complete`, and the socket
+  stays open.
 
 Not covered: the principal a subscription re-checks is the one it subscribed with. What changes
 between two checks is what the authorization reads (a policy's store, a train's posture); a

@@ -47,7 +47,7 @@ Every open subscription's authorization is decided again every five minutes, or 
 | `onMachineInstanceChanged` | The operations gate |
 | A machine's push (`<machine>Changed`) | The machine's `Watch` rule, for the same instance ([Machines](/docs/sdk-reference/graphql-api/machines)) |
 
-A subscription that no longer passes, or whose check throws, ends. A lifecycle, step, data-change or operator subscription gets the message a refused subscribe gets, `{"id":"1","type":"error","payload":[{"message":"Not authorized.","extensions":{"code":"TRAX_AUTHORIZATION"}}]}`; a machine's push gets its `NOT_FOUND` event and completes. A broadcast subscriber that keeps some of its trains but loses one ends too, rather than seeing fewer. The socket stays open, its other operations go on, and the client may subscribe again. Each check runs once per open subscription per interval, so a host whose policies read a store pays one read per subscription per interval.
+A subscription that no longer passes, or whose check throws, ends. A lifecycle, step, data-change or operator subscription gets a last result carrying only the error, `{"id":"1","type":"next","payload":{"errors":[{"message":"Not authorized.","extensions":{"code":"TRAX_AUTHORIZATION"}}]}}`, then `{"id":"1","type":"complete"}`; a machine's push gets its `NOT_FOUND` event and completes. A broadcast subscriber that keeps some of its trains but loses one ends too, rather than seeing fewer. The socket stays open, its other operations go on, and the client may subscribe again. Each check runs once per open subscription per interval, so a host whose policies read a store pays one read per subscription per interval.
 
 ## Lifecycle Subscription Fields
 
