@@ -399,6 +399,14 @@ function hasOwn(obj: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
+/**
+ * The member `key` of a table keyed by a name from the IR (a state, a trigger), or undefined. Only an own member: a
+ * state or trigger may be named `toString` or `__proto__`, which a plain lookup finds on Object.prototype.
+ */
+export function ownMember<V>(table: Readonly<Partial<Record<string, V>>> | undefined, key: string): V | undefined {
+  return table !== undefined && hasOwn(table, key) ? table[key] : undefined;
+}
+
 function resolveSource(source: ValueSource, input: unknown): unknown {
   if ("input" in source)
     return isRecord(input) && hasOwn(input, source.input)

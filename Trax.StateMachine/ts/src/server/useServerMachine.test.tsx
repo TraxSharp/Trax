@@ -239,9 +239,10 @@ describe('useServerMachine', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('a sync that failed in transport runs again when the browser is back online', async () => {
+  // A gate open on i-1 in Unlocked whose sync to Locked sent Push and failed in transport.
+  async function syncFailedOffline(id = 'i-1') {
     const server = new FakeMachineServer();
-    render(<Gate server={server} id="i-1" newRequestId={sequentialRequestIds()} />);
+    const view = render(<Gate server={server} id={id} newRequestId={sequentialRequestIds()} />);
     await settle();
     await settle(() =>
       server.gets[0].resolve({
@@ -253,19 +254,116 @@ describe('useServerMachine', () => {
     expect(server.events).toHaveLength(1);
     await settle(() => server.events[0].fail());
     expect(text('unsaved')).toBe('true');
+    return { server, view };
+  }
 
-    await settle(() => window.dispatchEvent(new Event('online')));
+  const online = () => settle(() => window.dispatchEvent(new Event('online')));
+
+  it('a sync that failed in transport resends its event under the same requestId once the browser is back online', async () => {
+    const { server } = await syncFailedOffline();
+
+    await online();
     expect(server.events).toHaveLength(2);
-    expect(server.events[1].request.trigger).toBe('Push');
+    expect(server.events[1].request).toEqual(server.events[0].request);
+    // The first attempt had reached the server: the replay answers what it recorded, and the sync is done.
     await settle(() =>
       server.events[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2, state: 'Locked', context: {} }) }),
     );
+    expect(server.events).toHaveLength(2);
     expect(text('state')).toBe('Locked');
     expect(text('unsaved')).toBe('false');
 
     // Once it has gone through, coming back online again sends nothing.
-    await settle(() => window.dispatchEvent(new Event('online')));
+    await online();
     expect(server.events).toHaveLength(2);
+  });
+
+  it('a replay that fails in transport again is kept for the next time the browser is back online', async () => {
+    const { server } = await syncFailedOffline();
+
+    await online();
+    await settle(() => server.events[1].fail());
+    expect(text('unsaved')).toBe('true');
+    expect(server.events).toHaveLength(2);
+
+    await online();
+    expect(server.events).toHaveLength(3);
+    expect(server.events[2].request).toEqual(server.events[0].request);
+    await settle(() =>
+      server.events[2].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2, state: 'Locked', context: {} }) }),
+    );
+    expect(text('unsaved')).toBe('false');
+  });
+
+  it('a later syncTo replaces the replay', async () => {
+    const { server } = await syncFailedOffline();
+
+    await settle(() => screen.getByText('sync').click());
+    expect(server.events).toHaveLength(2);
+    await settle(() =>
+      server.events[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2, state: 'Locked', context: {} }) }),
+    );
+    expect(text('unsaved')).toBe('false');
+
+    await online();
+    expect(server.events).toHaveLength(2);
+  });
+
+  it('a later send cancels the replay, so coming back online does not undo it', async () => {
+    const { server } = await syncFailedOffline();
+
+    await settle(() => screen.getByText('push').click());
+    await settle(() =>
+      server.events[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 2, state: 'Locked', context: {} }) }),
+    );
+    await settle(() => screen.getByText('coin').click());
+    await settle(() =>
+      server.events[2].resolve({
+        kind: 'ok',
+        snapshot: serverSnapshot({ revision: 3, state: 'Unlocked', context: { paidWith: 'quarter' } }),
+      }),
+    );
+
+    await online();
+    expect(server.events).toHaveLength(3);
+    expect(text('state')).toBe('Unlocked');
+  });
+
+  it('a replay is not run on the controller of another instance', async () => {
+    const { server, view } = await syncFailedOffline();
+
+    view.rerender(<Gate server={server} id="i-2" newRequestId={sequentialRequestIds()} />);
+    await settle();
+    await settle(() =>
+      server.gets[1].resolve({
+        kind: 'ok',
+        snapshot: serverSnapshot({ state: 'Unlocked', context: { paidWith: 'quarter' } }),
+      }),
+    );
+
+    await online();
+    expect(server.events).toHaveLength(1);
+  });
+
+  it('removes its online listener on unmount and when the controller changes', async () => {
+    const added = vi.spyOn(window, 'addEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
+    const onlineHandlers = (spy: typeof added) =>
+      spy.mock.calls.filter(([type]) => type === 'online').map(([, handler]) => handler);
+    const { server, view } = await syncFailedOffline();
+    const first = onlineHandlers(added).at(-1);
+    expect(first).toBeDefined();
+    expect(onlineHandlers(removed)).not.toContain(first);
+
+    view.rerender(<Gate server={server} id="i-2" newRequestId={sequentialRequestIds()} />);
+    await settle();
+    expect(onlineHandlers(removed)).toContain(first);
+    const second = onlineHandlers(added).at(-1);
+    expect(second).not.toBe(first);
+
+    view.unmount();
+    expect(onlineHandlers(removed)).toContain(second);
+    expect(new Set(onlineHandlers(removed))).toEqual(new Set(onlineHandlers(added)));
   });
 
   it('keeps an unanswered start requestId across a reload, and forgets it once the start answers', async () => {

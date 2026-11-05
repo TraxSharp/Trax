@@ -392,6 +392,96 @@ describe('ServerMachineController', () => {
     expect(controller.get()).toMatchObject({ status: 'stopped', error: { code: 'CLIENT_OUTDATED' } });
   });
 
+  it('dispose while a retried start is in flight, or waiting out SERVER_OUTDATED, settles it DISPOSED', async () => {
+    vi.useFakeTimers();
+    const opened = async () => {
+      const server = new FakeMachineServer();
+      const controller = new ServerMachineController<TurnstileSpec>({
+        machine: turnstile,
+        server,
+        startInput: {},
+        retryDelays: [100],
+        newRequestId: sequentialRequestIds(),
+      });
+      void controller.start();
+      await flushMicrotasks();
+      server.starts[0].fail();
+      await flushMicrotasks();
+      const retried = controller.retry();
+      await flushMicrotasks();
+      return { server, controller, retried };
+    };
+
+    const inFlight = await opened();
+    inFlight.controller.dispose();
+    expect(await inFlight.retried).toMatchObject({ outcome: 'failed', problem: { code: 'DISPOSED' } });
+    // Its late answer changes nothing.
+    inFlight.server.starts[1].resolve({ kind: 'started', id: 'i-1', snapshot: serverSnapshot() });
+    await flushMicrotasks();
+    expect(inFlight.controller.get()).toMatchObject({ id: null, status: 'loading' });
+    expect(inFlight.server.subscriptions).toHaveLength(0);
+
+    const backingOff = await opened();
+    backingOff.server.starts[1].resolve({ kind: 'problem', code: 'SERVER_OUTDATED', message: 'Rolling.' });
+    await flushMicrotasks();
+    backingOff.controller.dispose();
+    expect(await backingOff.retried).toMatchObject({ outcome: 'failed', problem: { code: 'DISPOSED' } });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(backingOff.server.starts).toHaveLength(2);
+  });
+
+  it('dispose while a retried first read is in flight settles it DISPOSED', async () => {
+    const server = new FakeMachineServer();
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      retryDelays: [],
+      newRequestId: sequentialRequestIds(),
+    });
+    const started = controller.start();
+    await flushMicrotasks();
+    server.gets[0].fail();
+    await started;
+
+    const retried = controller.retry();
+    await flushMicrotasks();
+    controller.dispose();
+    expect(await retried).toMatchObject({ outcome: 'failed', problem: { code: 'DISPOSED' } });
+    server.gets[1].resolve({ kind: 'ok', snapshot: serverSnapshot() });
+    await flushMicrotasks();
+    expect(controller.get().status).toBe('loading');
+  });
+
+  it('a retried start rejected with an error the server ends the controller with settles stopped', async () => {
+    class EndingServer extends FakeMachineServer {
+      endedBy = (error: unknown) =>
+        (error as { code?: unknown }).code === 'CONNECTION_CHANGED'
+          ? { code: 'CONNECTION_CHANGED', message: 'Changed.' }
+          : null;
+    }
+    const server = new EndingServer();
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      startInput: {},
+      newRequestId: sequentialRequestIds(),
+    });
+    void controller.start();
+    await flushMicrotasks();
+    server.starts[0].fail();
+    await flushMicrotasks();
+
+    const retried = controller.retry();
+    await flushMicrotasks();
+    server.starts[1].fail(Object.assign(new Error('Changed.'), { code: 'CONNECTION_CHANGED' }));
+
+    expect(await retried).toMatchObject({ outcome: 'stopped', error: { code: 'CONNECTION_CHANGED' } });
+    expect(controller.get()).toMatchObject({ status: 'stopped', error: { code: 'CONNECTION_CHANGED' } });
+    expect(await controller.retry()).toMatchObject({ outcome: 'stopped' });
+    expect(server.starts).toHaveLength(2);
+  });
+
   it('opening an instance whose every read fails shows the problem, and retry reads it again', async () => {
     vi.useFakeTimers();
     const server = new FakeMachineServer();
@@ -1156,5 +1246,58 @@ describe('ServerMachineController', () => {
       expect(server.events[0].request.clientResult).toBeUndefined();
       expect(controller.get().snapshot).toEqual(priced.snapshotAt('Cart', cart));
     });
+  });
+});
+
+// What a page passes to send is copied when it is called: changing the object afterwards changes neither the event
+// queued or in flight nor the prediction shown, as in the C# and Rust clients.
+describe('the input a page passes', () => {
+  it('is copied when send is called, in flight and queued', async () => {
+    const { server, controller } = await ready();
+    const first = { coin: 'quarter' };
+    const second = { coin: 'quarter' };
+
+    void controller.send('Coin', first);
+    void controller.send('Push');
+    void controller.send('Coin', second);
+    first.coin = 'dime';
+    second.coin = 'dime';
+    await flushMicrotasks();
+
+    expect(server.events[0].request.input).toEqual({ coin: 'quarter' });
+    expect(server.events[0].request.clientResult).toContain('quarter');
+    expect(controller.get().snapshot).toEqual(turnstile.snapshotAt('Unlocked', { paidWith: 'quarter' }));
+  });
+
+  it('refuses an input JSON cannot carry when send is called, sending nothing', async () => {
+    const { server, controller } = await ready();
+    const cyclic: Record<string, unknown> = { coin: 'quarter' };
+    cyclic.self = cyclic;
+
+    const sent = await controller.send('Coin', cyclic as never);
+
+    expect(sent).toMatchObject({ outcome: 'refused', problem: { code: 'INVALID_INPUT' } });
+    await flushMicrotasks();
+    expect(server.events).toHaveLength(0);
+  });
+
+  it('settles a start whose request id minter throws as INVALID_REQUEST_ID, and sends nothing', async () => {
+    const server = new FakeMachineServer();
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      newRequestId: () => {
+        throw new Error('no ids today');
+      },
+    });
+
+    await expect(controller.start()).resolves.toBeUndefined();
+    expect(controller.get()).toMatchObject({ status: 'loading', problem: { code: 'INVALID_REQUEST_ID' } });
+    expect(await controller.send('Coin', { coin: 'quarter' })).toMatchObject({
+      outcome: 'failed',
+      problem: { code: 'NOT_READY' },
+    });
+    expect(server.starts).toHaveLength(0);
+    expect(server.events).toHaveLength(0);
   });
 });

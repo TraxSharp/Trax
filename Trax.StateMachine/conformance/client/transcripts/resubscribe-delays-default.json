@@ -1,0 +1,24 @@
+{
+  "about": "A client opened without resubscribe delays waits the first default step, 1000 ms jittered to between half of it and all of it, before subscribing again after a stream that ended without saying why.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "defaults": true,
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "view": { "status": "ready" } },
+    { "complete": true },
+    { "subscribe": { "id": "i-1" }, "notBefore": 500, "before": 1250 },
+    { "push": { "revision": 1, "state": "Locked", "context": {} } },
+    { "view": { "state": "Locked", "revision": 1 } }
+  ]
+}

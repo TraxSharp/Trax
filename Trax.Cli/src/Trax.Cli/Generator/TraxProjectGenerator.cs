@@ -298,8 +298,8 @@ public partial class TraxProjectGenerator
             .Operations.Select(o => o.Group)
             .Where(g => g != null)
             .Cast<string>()
-            .Distinct()
-            .OrderBy(g => g)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         if (groups.Count > 0)

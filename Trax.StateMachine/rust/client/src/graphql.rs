@@ -14,12 +14,13 @@ use reqwest::header::HeaderMap;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use trax_state_machine::{Map, Value};
 
-use crate::controller::{codes, without_nulls};
+use crate::controller::{codes, deeper_than_stored, too_deep_message, without_nulls};
 use crate::server::{
     DueAt, EventRequest, MachineServer, ServerAnswer, ServerProblem, ServerSnapshot, StreamMessage, StreamSink,
     Subscription, TransportError,
@@ -59,34 +60,35 @@ pub struct GraphQLMachineServerOptions {
     pub machine: String,
     /// The machine's persisted documents, from the host's manifest, the push (`changed`) included.
     pub documents: Vec<ManifestDocument>,
-    /// The client requests go through. When `None`, one that follows no redirect and, for an `https` endpoint, sends
-    /// nothing but `https`. Build a client of your own with `redirect(Policy::none())` too: a redirect would carry the
-    /// request's headers to whatever host it names. An answer from another origin than the endpoint's, or a redirect,
-    /// fails the request as a [`TransportError`] whichever client sent it.
-    pub http: Option<reqwest::Client>,
+    /// The builder of the client requests go through, for a proxy, certificates or timeouts of your own; a default
+    /// one when `None`. The server builds it to follow no redirect, whatever the builder set, and, for an `https`
+    /// endpoint, to send nothing but `https`. A redirect, or an answer from another origin than the endpoint's, fails
+    /// the request as a [`TransportError`].
+    pub http: Option<reqwest::ClientBuilder>,
     /// Headers for each request and each socket's upgrade, asked for every time: how a host authenticates a request.
     pub headers: Option<RequestHeaders>,
     /// The `connection_init` payload, asked for on every connection: how a host authenticates a socket.
     pub connection_params: Option<ConnectionParams>,
     /// Delays before subscribing again after a stream that ended without saying why. The last repeats, and they start
-    /// over once a stream has delivered a second push. A socket the host refused (closed with 4401 or 4403, an upgrade
+    /// over once a stream has delivered a second snapshot. Each wait is drawn uniformly between half of its delay and
+    /// all of it, so clients the host dropped together do not all come back at once. A socket the host refused (closed with 4401 or 4403, an upgrade
     /// answered 401 or 403, or a stream error with an authorization code or one of `terminal_stream_errors`) is not
-    /// subscribed again: the stream delivers [`StreamMessage::Refused`] and ends.
+    /// subscribed again: the stream delivers [`StreamMessage::Refused`] and ends. A delay past 2^31 - 1 ms is refused.
     pub resubscribe_delays: Option<Vec<Duration>>,
     /// How long a socket may take to connect and be acknowledged before the attempt counts as failed and is tried
-    /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default.
+    /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default; zero is refused.
     pub connect_timeout: Duration,
     /// How long one request may take, from sending it to reading the last byte of its answer, before it fails as a
-    /// [`TransportError`]. [`DEFAULT_REQUEST_TIMEOUT`] (30 seconds) by default.
+    /// [`TransportError`]. [`DEFAULT_REQUEST_TIMEOUT`] (30 seconds) by default; zero is refused.
     pub request_timeout: Duration,
     /// How long an acknowledged socket may stay silent before it is given up and subscribed again after the
     /// resubscribe delays, so a connection dropped without a close (a NAT that forgot it) is noticed. Halfway through
     /// the silence the client sends a `ping`, which a live host answers with a `pong`. [`DEFAULT_IDLE_TIMEOUT`] (60
-    /// seconds) by default.
+    /// seconds) by default; zero is refused.
     pub idle_timeout: Duration,
     /// The largest response body, and the largest socket message or frame, the host may send, in bytes. A larger
     /// response fails its request as a [`TransportError`]; a larger message ends the stream, which is subscribed again.
-    /// [`DEFAULT_MAX_MESSAGE_SIZE`] (16 MiB) by default.
+    /// [`DEFAULT_MAX_MESSAGE_SIZE`] (16 MiB) by default; zero is refused.
     pub max_message_size: usize,
     /// Accepts an `http` endpoint or a `ws` socket on a host that is not loopback. Off by default: whatever
     /// authenticates the client would travel in cleartext.
@@ -147,6 +149,9 @@ pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 pub const DEFAULT_RESUBSCRIBE_DELAYS: [Duration; 3] =
     [Duration::from_secs(1), Duration::from_secs(2), Duration::from_secs(5)];
 
+// The longest delay a retry or a resubscribe may wait, 2^31 - 1 ms: the longest a timer waits in every client's language.
+pub(crate) const MAX_DELAY: Duration = Duration::from_millis(2_147_483_647);
+
 /// Why a [`GraphQLMachineServer`] could not be built.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConfigError(pub String);
@@ -192,16 +197,43 @@ struct Inner {
     max_message_size: usize,
     terminal_stream_errors: HashSet<String>,
     runtime: Option<tokio::runtime::Handle>,
+    // Where each resubscribe delay's jitter comes from: a number in [0, 1]. Tests pass one of their own.
+    random: fn() -> f64,
 }
 
 impl GraphQLMachineServer {
-    /// Builds the server for one machine. Refuses a machine with no documents, or none for `changed`, and an endpoint
-    /// or socket that is not over TLS on a host that is not loopback unless `allow_insecure_transport` is set.
+    /// Builds the server for one machine. Refuses a machine with no documents, or none for `changed`, an endpoint or
+    /// socket that is not over TLS on a host that is not loopback unless `allow_insecure_transport` is set, and an
+    /// option no limit or timer can honour: a timeout or a message size of zero, or a resubscribe delay past 2^31 - 1
+    /// ms.
     pub fn new(options: GraphQLMachineServerOptions) -> Result<Self, ConfigError> {
         // The socket's TLS needs a process-wide crypto provider; another one already installed is kept.
         let _ = rustls::crypto::ring::default_provider().install_default();
         require_secure(&options.endpoint, "https", options.allow_insecure_transport)?;
         require_secure(&options.socket, "wss", options.allow_insecure_transport)?;
+        for (name, timeout) in [
+            ("request_timeout", options.request_timeout),
+            ("connect_timeout", options.connect_timeout),
+            ("idle_timeout", options.idle_timeout),
+        ] {
+            if timeout.is_zero() {
+                return Err(ConfigError(format!(
+                    "The {name} is zero, which leaves no time to wait. Give it a positive duration."
+                )));
+            }
+        }
+        if options.max_message_size == 0 {
+            return Err(ConfigError(
+                "The max_message_size is zero, which reads no answer. Give it a positive size.".to_owned(),
+            ));
+        }
+        if let Some(delay) = options.resubscribe_delays.iter().flatten().find(|d| **d > MAX_DELAY) {
+            return Err(ConfigError(format!(
+                "The resubscribe delay {} ms is past {} ms, the longest delay a client waits.",
+                delay.as_millis(),
+                MAX_DELAY.as_millis()
+            )));
+        }
         if options.documents.is_empty() {
             return Err(ConfigError(format!(
                 "The machine '{}' has no persisted documents. Export the host's client manifest and pass its \
@@ -231,14 +263,14 @@ impl GraphQLMachineServer {
         let field = machine_field(&options.machine);
         let endpoint_url = reqwest::Url::parse(&options.endpoint)
             .map_err(|e| ConfigError(format!("The endpoint is not an absolute URL: {e}.")))?;
-        let http = match options.http {
-            Some(http) => http,
-            None => reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .https_only(!options.allow_insecure_transport && endpoint_url.scheme() == "https")
-                .build()
-                .map_err(|e| ConfigError(format!("The HTTP client could not be built: {}", e.without_url())))?,
-        };
+        // Set last, so no builder a caller gives can follow a redirect.
+        let http = options
+            .http
+            .unwrap_or_else(reqwest::Client::builder)
+            .redirect(reqwest::redirect::Policy::none())
+            .https_only(!options.allow_insecure_transport && endpoint_url.scheme() == "https")
+            .build()
+            .map_err(|e| ConfigError(format!("The HTTP client could not be built: {}", e.without_url())))?;
         let delays = match options.resubscribe_delays {
             Some(delays) if !delays.is_empty() => delays,
             _ => DEFAULT_RESUBSCRIBE_DELAYS.to_vec(),
@@ -263,8 +295,16 @@ impl GraphQLMachineServer {
                 max_message_size: options.max_message_size,
                 terminal_stream_errors: options.terminal_stream_errors.into_iter().collect(),
                 runtime: options.runtime.or_else(|| tokio::runtime::Handle::try_current().ok()),
+                random: random_unit,
             }),
         })
+    }
+
+    // The server with `random` as the source of the resubscribe delays' jitter.
+    #[cfg(test)]
+    fn with_random(mut self, random: fn() -> f64) -> Self {
+        Arc::get_mut(&mut self.inner).expect("a server not yet shared").random = random;
+        self
     }
 
     /// Deletes one of the caller's instances. One already gone, or never the caller's, is answered discarded too, so
@@ -466,30 +506,44 @@ fn snapshot_of(value: &Value) -> Result<ServerSnapshot, TransportError> {
         .ok_or_else(|| TransportError("The server answered a snapshot without a state.".to_owned()))?
         .to_owned();
     // A revision the store does not record stays `None`: it is not revision 0, which would order every later answer
-    // below it. One that is not an integer a double holds exactly is refused, not rounded: a revision read as larger
-    // than it is would make every later snapshot look stale.
+    // below it. One that is not an integer from zero a double holds exactly is refused, not rounded: a revision read as
+    // larger than it is would make every later snapshot look stale, and no store counts below zero.
     let revision = match value.get("revision") {
         None | Some(Value::Null) => None,
         Some(revision) => Some(revision_of(revision).ok_or_else(|| {
             TransportError(format!(
-                "The server answered a revision that is not an integer: {}.",
+                "The server answered a revision that is not a whole number from zero: {}.",
                 revision.to_json()
             ))
         })?),
     };
-    let context = value
-        .get("context")
-        .and_then(|c| c.as_object())
-        .map(without_nulls)
-        .unwrap_or_default();
+    // A context that is null or left out is empty. One that is not an object is not a context any store wrote: the
+    // answer that holds it fails, and a push that holds it is dropped.
+    let context = match value.get("context") {
+        None | Some(Value::Null) => Map::new(),
+        Some(Value::Object(context)) if deeper_than_stored(context) => return Err(TransportError(too_deep_message())),
+        Some(Value::Object(context)) => without_nulls(context),
+        Some(_) => {
+            return Err(TransportError(
+                "The server answered a context that is not an object.".to_owned(),
+            ))
+        }
+    };
     // A due time the server says it cannot know, or does not carry, stays unknown, so it is never read as "no timer".
+    // One it does carry is an instant with its offset, or null for no timer; anything else is not one a host wrote.
     let due_at = if value.get("dueAtKnown").and_then(|k| k.as_bool()) == Some(false) {
         DueAt::Unknown
     } else {
         match value.get("dueAt") {
             None => DueAt::Unknown,
-            Some(Value::String(s)) => DueAt::At(s.to_string_lossy()),
-            Some(_) => DueAt::None,
+            Some(Value::Null) => DueAt::None,
+            Some(Value::String(s)) if is_instant(&s.to_string_lossy()) => DueAt::At(s.to_string_lossy()),
+            Some(due) => {
+                return Err(TransportError(format!(
+                    "The server answered a dueAt that is not an instant: {}.",
+                    due.to_json()
+                )))
+            }
         }
     };
     let row_id = match value.get("rowId") {
@@ -506,12 +560,64 @@ fn snapshot_of(value: &Value) -> Result<ServerSnapshot, TransportError> {
     })
 }
 
+// Whether `text` is an RFC 3339 instant: a date, a time to the second with any fraction, and its offset (`Z` or
+// `+hh:mm`), each field in range. A time without its offset names no instant.
+fn is_instant(text: &str) -> bool {
+    let b = text.as_bytes();
+    let digits = |from: usize, len: usize| -> Option<u32> {
+        let part = b.get(from..from + len)?;
+        part.iter()
+            .all(u8::is_ascii_digit)
+            .then(|| part.iter().fold(0, |n, d| n * 10 + u32::from(d - b'0')))
+    };
+    let at = |i: usize, c: u8| b.get(i).is_some_and(|x| x.eq_ignore_ascii_case(&c));
+    let (Some(year), Some(month), Some(day), Some(hour), Some(minute), Some(second)) = (
+        digits(0, 4),
+        digits(5, 2),
+        digits(8, 2),
+        digits(11, 2),
+        digits(14, 2),
+        digits(17, 2),
+    ) else {
+        return false;
+    };
+    if !(at(4, b'-') && at(7, b'-') && at(10, b'T') && at(13, b':') && at(16, b':')) {
+        return false;
+    }
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return false,
+    };
+    if day == 0 || day > days || hour > 23 || minute > 59 || second > 59 {
+        return false;
+    }
+    let mut i = 19;
+    if at(i, b'.') {
+        let fraction = b[i + 1..].iter().take_while(|d| d.is_ascii_digit()).count();
+        if fraction == 0 {
+            return false;
+        }
+        i += 1 + fraction;
+    }
+    if at(i, b'Z') {
+        return i + 1 == b.len();
+    }
+    if !(at(i, b'+') || at(i, b'-')) || !at(i + 3, b':') || i + 6 != b.len() {
+        return false;
+    }
+    matches!((digits(i + 1, 2), digits(i + 4, 2)), (Some(h), Some(m)) if h <= 23 && m <= 59)
+}
+
 // The largest integer a double holds exactly, 2^53 - 1: past it a revision cannot be told from its neighbours.
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
 
 fn revision_of(value: &Value) -> Option<i64> {
     match value {
-        Value::Number(n) if n.fract() == 0.0 && n.abs() <= MAX_SAFE_INTEGER => Some(*n as i64),
+        Value::Number(n) if n.fract() == 0.0 && (0.0..=MAX_SAFE_INTEGER).contains(n) => Some(*n as i64),
         _ => None,
     }
 }
@@ -587,6 +693,22 @@ impl MachineServer for GraphQLMachineServer {
     }
 }
 
+// One wait of the resubscribe schedule: chosen uniformly between half of `step` and all of it, from `random` in [0, 1],
+// so the clients a host dropped together do not all subscribe again at the same moment. A draw of 0 waits all of it.
+fn jittered(step: Duration, random: f64) -> Duration {
+    step.mul_f64(1.0 - 0.5 * random.clamp(0.0, 1.0))
+}
+
+static DRAWS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+// A number uniform in [0, 1): the top 53 bits of a counter hashed with the process's random keys.
+fn random_unit() -> f64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    hasher.write_u64(DRAWS.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+    (hasher.finish() >> 11) as f64 / (1u64 << 53) as f64
+}
+
 // The operations a machine serves beside its events. An event's field is never looked up among them.
 const OPERATIONS: [&str; 4] = ["start", "get", "discard", "changed"];
 
@@ -624,7 +746,8 @@ impl Inner {
             match once.await.unwrap_or(Ended::Again) {
                 Ended::ForGood => return,
                 Ended::Again => {
-                    let delay = self.resubscribe_delays[attempt.min(self.resubscribe_delays.len() - 1)];
+                    let step = self.resubscribe_delays[attempt.min(self.resubscribe_delays.len() - 1)];
+                    let delay = jittered(step, (self.random)());
                     attempt += 1;
                     tokio::time::sleep(delay).await;
                 }
@@ -680,17 +803,18 @@ impl Inner {
         // Acknowledged, or closed before: a host that turns the caller away closes here.
         loop {
             match socket.next().await {
-                Some(Ok(Message::Text(text))) => match Value::parse(text.as_str())
-                    .ok()
-                    .as_ref()
-                    .and_then(|m| m.get("type"))
-                    .and_then(|t| t.as_str())
-                {
-                    Some("connection_ack") => break,
-                    Some("ping") => {
-                        let _ = socket.send(Message::text(r#"{"type":"pong"}"#)).await;
+                Some(Ok(Message::Text(text))) => match Value::parse(text.as_str()) {
+                    Err(_) => {
+                        close_not_json(&mut socket).await;
+                        return Err(None);
                     }
-                    _ => {}
+                    Ok(message) => match message.get("type").and_then(|t| t.as_str()) {
+                        Some("connection_ack") => break,
+                        Some("ping") => {
+                            let _ = socket.send(Message::text(r#"{"type":"pong"}"#)).await;
+                        }
+                        _ => {}
+                    },
                 },
                 Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Binary(_) | Message::Frame(_))) => {}
                 Some(Ok(Message::Close(frame))) => return Err(refused_close(frame.as_ref())),
@@ -730,7 +854,7 @@ impl Inner {
 
         // A host that says nothing for half the idle limit is pinged; one that says nothing for the rest of it is gone.
         let mut pinged = false;
-        // What this subscription has delivered. Its first push is the instance as it is now, which every new stream
+        // The snapshots this subscription has delivered. Its first is the instance as it is now, which every new stream
         // sends, so only a second one shows the stream lasted: the resubscribe delays start over then, and a host that
         // drops each stream right after its first push is subscribed again later each time.
         let mut pushes = 0usize;
@@ -762,7 +886,8 @@ impl Inner {
                 _ => break Ended::Again,
             };
             let Ok(message) = Value::parse(text.as_str()) else {
-                continue;
+                close_not_json(&mut socket).await;
+                return Ended::Again;
             };
             match message.get("type").and_then(|t| t.as_str()) {
                 Some("ping") => {
@@ -825,10 +950,16 @@ impl Inner {
             }
             return Some(Ended::Again);
         }
-        let change = payload
-            .get("data")
-            .and_then(|d| d.get(&self.push_field))
-            .filter(|c| !c.is_null())?;
+        let change = payload.get("data").and_then(|d| d.get(&self.push_field))?;
+        // A push no host wrote (not an object, a gone that is not a boolean, a snapshot that is not one a store wrote) is
+        // dropped, and the instance read again: whatever it stood for may have been missed.
+        let malformed = || {
+            sink(StreamMessage::Reload);
+            None
+        };
+        if !matches!(change, Value::Object(_)) {
+            return malformed();
+        }
         if let Some(problem) = change.get("problem").and_then(problem_of) {
             if problem.code == codes::CLIENT_OUTDATED {
                 sink(StreamMessage::ClientOutdated);
@@ -840,16 +971,22 @@ impl Inner {
             }
             return Some(Ended::Again);
         }
-        if change.get("gone").and_then(|g| g.as_bool()) == Some(true) {
-            sink(StreamMessage::Gone { not_found: false });
-            return Some(Ended::ForGood);
+        match change.get("gone") {
+            None | Some(Value::Bool(false)) => {}
+            Some(Value::Bool(true)) => {
+                sink(StreamMessage::Gone { not_found: false });
+                return Some(Ended::ForGood);
+            }
+            Some(_) => return malformed(),
         }
+        // A reload is not a snapshot: it says nothing of whether the stream lasted, so it is not counted.
         if change.get("reload").and_then(|r| r.as_bool()) == Some(true) {
-            *pushes += 1;
             sink(StreamMessage::Reload);
             return None;
         }
-        let snapshot = snapshot_of(change).ok().filter(|s| s.revision.is_some())?;
+        let Some(snapshot) = snapshot_of(change).ok().filter(|s| s.revision.is_some()) else {
+            return malformed();
+        };
         *pushes += 1;
         sink(StreamMessage::Changed(snapshot));
         None
@@ -880,6 +1017,15 @@ impl Inner {
             message,
         })
     }
+}
+
+// Closes a socket that sent text that is not JSON, which is no graphql-transport-ws message, with the protocol's 4400.
+async fn close_not_json(socket: &mut Socket) {
+    let frame = CloseFrame {
+        code: CloseCode::from(4400),
+        reason: "The message is not JSON.".into(),
+    };
+    let _ = socket.close(Some(frame)).await;
 }
 
 // The codes a host refuses a stream's caller with as a GraphQL error: Trax's own, and Hot Chocolate's.
@@ -1025,6 +1171,96 @@ mod tests {
     }
 
     #[test]
+    fn an_answer_whose_context_is_not_an_object_fails() {
+        for context in [r#""x""#, "[]", "5", "true"] {
+            let answer = Value::parse(&format!(
+                r#"{{"id":"i-1","revision":1,"state":"Locked","context":{context}}}"#
+            ))
+            .unwrap();
+
+            let Err(error) = answer_of(&answer) else {
+                panic!("the context {context} was read");
+            };
+
+            assert!(error.0.contains("context"), "{}", error.0);
+        }
+    }
+
+    #[test]
+    fn an_answer_with_a_null_or_no_context_has_an_empty_one() {
+        for context in [r#","context":null"#, ""] {
+            let answer = Value::parse(&format!(r#"{{"id":"i-1","revision":1,"state":"Locked"{context}}}"#)).unwrap();
+
+            let Ok(ServerAnswer::Stored { snapshot, .. }) = answer_of(&answer) else {
+                panic!("the answer {context:?} was not read");
+            };
+
+            assert!(snapshot.context.is_empty());
+        }
+    }
+
+    #[test]
+    fn an_answer_whose_context_nests_deeper_than_a_store_writes_fails() {
+        // The context's member nests `depth` objects under it; the snapshot and the context count as two levels of 64.
+        let read = |depth: usize| {
+            let context = format!(r#"{{"a":{}true{}}}"#, r#"{"a":"#.repeat(depth), "}".repeat(depth));
+            let answer = Value::parse(&format!(
+                r#"{{"id":"i-1","revision":1,"state":"Locked","context":{context}}}"#
+            ))
+            .unwrap();
+            answer_of(&answer).map(|_| ())
+        };
+
+        assert_eq!(read(62), Ok(()));
+        let Err(error) = read(63) else {
+            panic!("a context past the limit was read");
+        };
+        assert!(error.0.contains("deeper"), "{}", error.0);
+    }
+
+    // What `on_next` does with one `next` payload: the messages it delivered, how many pushes it counted, and whether
+    // it ended the subscription.
+    fn next_of(payload: &str) -> (Vec<StreamMessage>, usize, bool) {
+        let server = GraphQLMachineServer::new(options(
+            "https://api.example.com/graphql",
+            "wss://api.example.com/graphql",
+        ))
+        .unwrap();
+        let delivered = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let into = delivered.clone();
+        let sink: StreamSink = Arc::new(move |m| into.lock().unwrap().push(m));
+        let mut pushes = 0;
+        let ended = server
+            .inner
+            .on_next(Some(&Value::parse(payload).unwrap()), &sink, &mut pushes)
+            .is_some();
+        let delivered = delivered.lock().unwrap().clone();
+        (delivered, pushes, ended)
+    }
+
+    #[test]
+    fn a_malformed_push_is_dropped_and_the_instance_read_again() {
+        for change in [
+            r#"{"state":"Locked","revision":1,"context":"x"}"#,
+            r#"{"state":"Locked","revision":1,"context":[]}"#,
+            r#"{"state":"Locked","revision":1,"context":5}"#,
+            r#"{"state":"Locked","revision":-1,"context":{}}"#,
+            r#"{"state":"Locked","revision":1,"context":{},"dueAt":"not a time"}"#,
+            r#"{"state":"Locked","revision":1,"context":{},"gone":"yes"}"#,
+            r#"{"state":5,"revision":1,"context":{}}"#,
+            r#"{"revision":1,"context":{}}"#,
+            r#""Locked""#,
+            r#"["Locked"]"#,
+            "null",
+        ] {
+            let (delivered, pushes, ended) = next_of(&format!(r#"{{"data":{{"turnstileChanged":{change}}}}}"#));
+
+            assert_eq!(delivered, vec![StreamMessage::Reload], "{change}");
+            assert_eq!((pushes, ended), (0, false), "{change}");
+        }
+    }
+
+    #[test]
     fn a_document_declares_its_variables() {
         let declared =
             declared_variables("mutation Op($id: UUID!, $input: CoinInput!, $requestId: String!) { x(id: $id) }");
@@ -1087,6 +1323,36 @@ mod tests {
                 GraphQLMachineServer::new(options(endpoint, socket)).is_ok(),
                 "{endpoint} {socket}"
             );
+        }
+    }
+
+    #[test]
+    fn an_option_no_limit_or_timer_can_honour_is_refused() {
+        let refused = |change: fn(&mut GraphQLMachineServerOptions)| {
+            let mut given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
+            change(&mut given);
+            GraphQLMachineServer::new(given).err()
+        };
+
+        for change in [
+            (|o| o.request_timeout = Duration::ZERO) as fn(&mut GraphQLMachineServerOptions),
+            |o| o.connect_timeout = Duration::ZERO,
+            |o| o.idle_timeout = Duration::ZERO,
+            |o| o.max_message_size = 0,
+            |o| o.resubscribe_delays = Some(vec![Duration::from_millis(10), MAX_DELAY + Duration::from_millis(1)]),
+            |o| o.resubscribe_delays = Some(vec![Duration::MAX]),
+        ] {
+            assert!(refused(change).is_some());
+        }
+        for change in [
+            (|o| o.request_timeout = Duration::from_millis(1)) as fn(&mut GraphQLMachineServerOptions),
+            |o| o.connect_timeout = Duration::from_millis(1),
+            |o| o.idle_timeout = Duration::from_millis(1),
+            |o| o.max_message_size = 1,
+            |o| o.resubscribe_delays = Some(vec![Duration::ZERO, MAX_DELAY]),
+            |o| o.resubscribe_delays = Some(Vec::new()),
+        ] {
+            assert_eq!(refused(change), None);
         }
     }
 
@@ -1206,19 +1472,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_answer_a_client_reached_through_a_redirect_is_a_failure() {
-        let (other, _) = http_host(json_answer(NOT_FOUND)).await;
+    async fn a_builder_of_the_callers_that_follows_redirects_follows_none() {
+        use std::sync::atomic::Ordering;
+
+        let (other, other_received) = http_host(json_answer(NOT_FOUND)).await;
         let (endpoint, _) = http_host(redirect_to(other)).await;
         let mut given = at(format!("http://127.0.0.1:{endpoint}/graphql"));
-        // A client of the caller's own that follows redirects.
-        given.http = Some(reqwest::Client::new());
+        given.http = Some(reqwest::Client::builder().redirect(reqwest::redirect::Policy::limited(10)));
         let server = GraphQLMachineServer::new(given).unwrap();
 
         let Err(error) = server.get("i-1".into()).await else {
-            panic!("the answer from another origin was read");
+            panic!("the redirect was answered");
         };
 
-        assert!(error.0.contains("another origin"), "{}", error.0);
+        assert!(error.0.contains("redirect"), "{}", error.0);
+        assert_eq!(other_received.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
@@ -1284,6 +1552,9 @@ mod tests {
         Acknowledge,
         // Says nothing and holds the connection open.
         Silent,
+        // Answers the connection_init with text that is not JSON, and reports the code the client closes with as the
+        // connection's token (`closed 4400`).
+        NotJson,
         // Acknowledges it, then sends a 64 KiB message.
         Flood,
         // Acknowledges it, then answers every ping with a pong and says nothing else.
@@ -1295,6 +1566,10 @@ mod tests {
         // Acknowledges it, then answers the subscription with one snapshot and completes it, as a host that drops every
         // stream right after its first push.
         PushThenComplete,
+        // Acknowledges it, then answers the subscription with one snapshot and a reload and completes it.
+        PushReloadThenComplete,
+        // Acknowledges it, then answers the subscription with two snapshots and completes it.
+        TwoPushesThenComplete,
     }
 
     // How the host answers connection n.
@@ -1351,9 +1626,19 @@ mod tests {
                         .and_then(|p| p.get("token"))
                         .and_then(|t| t.as_str())
                         .map(str::to_owned);
+                    if let Reply::NotJson = reply {
+                        let _ = socket.send(Message::text("<html>not json</html>")).await;
+                        let closed = match socket.next().await {
+                            Some(Ok(Message::Close(Some(frame)))) => format!("closed {}", u16::from(frame.code)),
+                            other => format!("not closed: {other:?}"),
+                        };
+                        let _ = seen.send((authorization, Some(closed)));
+                        return;
+                    }
                     let _ = seen.send((authorization, token));
                     match reply {
                         Reply::RejectUpgrade => unreachable!("the upgrade was answered 403"),
+                        Reply::NotJson => unreachable!("answered above"),
                         Reply::Drop => {
                             let _ = socket
                                 .close(Some(CloseFrame {
@@ -1378,11 +1663,21 @@ mod tests {
                             };
                             let _ = socket.send(Message::text(message)).await;
                         }
-                        Reply::PushThenComplete => {
+                        Reply::PushThenComplete | Reply::PushReloadThenComplete | Reply::TwoPushesThenComplete => {
                             let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
                             let _ = socket.next().await;
                             let push = r#"{"id":"1","type":"next","payload":{"data":{"turnstileChanged":{"state":"Locked","revision":1,"context":{}}}}}"#;
                             let _ = socket.send(Message::text(push)).await;
+                            let then = match reply {
+                                Reply::PushReloadThenComplete => Some(
+                                    r#"{"id":"1","type":"next","payload":{"data":{"turnstileChanged":{"reload":true}}}}"#,
+                                ),
+                                Reply::TwoPushesThenComplete => Some(push),
+                                _ => None,
+                            };
+                            if let Some(then) = then {
+                                let _ = socket.send(Message::text(then)).await;
+                            }
                             let _ = socket.send(Message::text(r#"{"id":"1","type":"complete"}"#)).await;
                         }
                         Reply::Pong => {
@@ -1470,7 +1765,7 @@ mod tests {
             &format!("ws://127.0.0.1:{port}/graphql"),
         );
         given.resubscribe_delays = Some(vec![Duration::from_millis(10), Duration::from_millis(400)]);
-        let server = GraphQLMachineServer::new(given).unwrap();
+        let server = GraphQLMachineServer::new(given).unwrap().with_random(|| 0.0);
 
         let (deliver, mut delivered) = tokio::sync::mpsc::unbounded_channel();
         let _stream = server.subscribe(
@@ -1492,6 +1787,77 @@ mod tests {
             second.elapsed()
         );
         assert!(matches!(delivered.try_recv(), Ok(StreamMessage::Changed(_))));
+    }
+
+    // Follows "i-1" on a host that answers every connection as `reply` says, with resubscribe delays of 10 ms and
+    // `then`, each delay's jitter drawn from `random`, and answers how long after the second connection the third came.
+    async fn third_connection_after(reply: Replies, then: Duration, random: fn() -> f64) -> Duration {
+        let (port, mut heard) = recording_host(reply).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10), then]);
+        let server = GraphQLMachineServer::new(given).unwrap().with_random(random);
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        let wait = Duration::from_secs(10);
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let second = std::time::Instant::now();
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        second.elapsed()
+    }
+
+    #[tokio::test]
+    async fn a_reload_does_not_count_as_a_push_toward_starting_the_delays_over() {
+        let after = third_connection_after(|_| Reply::PushReloadThenComplete, Duration::from_millis(400), || 0.0).await;
+
+        assert!(after >= Duration::from_millis(300), "subscribed again after {after:?}");
+    }
+
+    #[tokio::test]
+    async fn a_stream_that_delivered_a_second_snapshot_starts_the_delays_over() {
+        let after = third_connection_after(|_| Reply::TwoPushesThenComplete, Duration::from_millis(400), || 0.0).await;
+
+        assert!(after < Duration::from_millis(300), "subscribed again after {after:?}");
+    }
+
+    #[tokio::test]
+    async fn a_resubscribe_delay_is_drawn_between_half_its_step_and_all_of_it() {
+        let after = third_connection_after(|_| Reply::PushThenComplete, Duration::from_millis(800), || 1.0).await;
+
+        assert!(
+            after >= Duration::from_millis(350) && after < Duration::from_millis(700),
+            "subscribed again after {after:?}"
+        );
+    }
+
+    #[test]
+    fn the_jitter_spans_half_the_step_to_all_of_it() {
+        let step = Duration::from_millis(400);
+        assert_eq!(jittered(step, 0.0), step);
+        assert_eq!(jittered(step, 0.5), Duration::from_millis(300));
+        assert_eq!(jittered(step, 1.0), Duration::from_millis(200));
+        assert_eq!(jittered(step, 7.0), Duration::from_millis(200));
+
+        let draws: Vec<f64> = (0..200).map(|_| random_unit()).collect();
+        assert!(draws.iter().all(|d| (0.0..1.0).contains(d)), "{draws:?}");
+        assert!(
+            draws.iter().any(|d| *d < 0.5) && draws.iter().any(|d| *d >= 0.5),
+            "{draws:?}"
+        );
+    }
+
+    #[test]
+    fn only_a_snapshot_counts_as_a_push() {
+        let (delivered, pushes, _) = next_of(r#"{"data":{"turnstileChanged":{"reload":true}}}"#);
+        assert_eq!((delivered, pushes), (vec![StreamMessage::Reload], 0));
+
+        let (delivered, pushes, _) =
+            next_of(r#"{"data":{"turnstileChanged":{"state":"Locked","revision":1,"context":{}}}}"#);
+        assert!(matches!(&delivered[..], [StreamMessage::Changed(_)]), "{delivered:?}");
+        assert_eq!(pushes, 1);
     }
 
     #[tokio::test]
@@ -1609,6 +1975,62 @@ mod tests {
 
         assert!(again.is_ok(), "the dropped socket was never opened again");
         assert!(delivered.try_recv().is_err(), "a dropped socket delivered a message");
+    }
+
+    #[tokio::test]
+    async fn a_socket_that_sends_text_that_is_not_json_before_its_ack_is_closed_4400_and_opened_again() {
+        let (mut heard, mut delivered, _stream) =
+            follow_refused(|n| if n == 0 { Reply::NotJson } else { Reply::Silent }).await;
+        let wait = Duration::from_secs(10);
+
+        let (_, closed) = tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let again = tokio::time::timeout(wait, heard.recv()).await;
+
+        assert_eq!(closed.as_deref(), Some("closed 4400"));
+        assert!(again.is_ok(), "the socket was never opened again");
+        assert!(delivered.try_recv().is_err(), "the socket delivered a message");
+    }
+
+    // The kit's defaults.json, which these hold the private parts of the client to.
+    fn kit_defaults() -> Value {
+        let file = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../conformance/client/defaults.json");
+        Value::parse(&std::fs::read_to_string(&file).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn the_jitter_bounds_are_the_kits() {
+        let jitter = kit_defaults().get("resubscribeJitter").unwrap().clone();
+        let step = Duration::from_millis(1000);
+        assert_eq!(
+            jittered(step, 0.0),
+            step.mul_f64(jitter.get("mostFraction").and_then(Value::as_f64).unwrap())
+        );
+        assert_eq!(
+            jittered(step, 1.0),
+            step.mul_f64(jitter.get("leastFraction").and_then(Value::as_f64).unwrap())
+        );
+    }
+
+    #[test]
+    fn only_the_kits_refused_close_codes_turn_the_caller_away() {
+        use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+        let codes = kit_defaults().get("closeCodes").unwrap().clone();
+        let frame = |code: u16| CloseFrame {
+            code: CloseCode::from(code),
+            reason: "".into(),
+        };
+        for (code, refusal) in codes.get("refused").and_then(Value::as_object).unwrap().iter() {
+            let code: u16 = code.as_str().unwrap().parse().unwrap();
+            assert_eq!(
+                refused_close(Some(&frame(code))).map(|p| p.code).as_deref(),
+                refusal.as_str(),
+                "{code}"
+            );
+        }
+        for code in codes.get("transient").and_then(Value::as_array).unwrap() {
+            let code = code.as_f64().unwrap() as u16;
+            assert_eq!(refused_close(Some(&frame(code))), None, "{code}");
+        }
     }
 
     #[test]
@@ -1805,6 +2227,22 @@ mod tests {
         }
     }
 
+    // A server built without a request timeout gives a request up after the default, on a clock the test holds.
+    #[tokio::test(start_paused = true)]
+    async fn a_server_built_without_a_request_timeout_gives_a_request_up_after_thirty_seconds() {
+        let mut given = with_get(options("http://127.0.0.1:9/graphql", "ws://127.0.0.1:9/graphql"));
+        given.headers = Some(Arc::new(|| Box::pin(std::future::pending())));
+        let server = GraphQLMachineServer::new(given).unwrap();
+        let started = tokio::time::Instant::now();
+
+        let Err(error) = server.get("i-1".into()).await else {
+            panic!("the request was answered");
+        };
+
+        assert_eq!(started.elapsed(), DEFAULT_REQUEST_TIMEOUT);
+        assert!(error.0.contains("did not answer within 30000 ms"), "{}", error.0);
+    }
+
     #[tokio::test]
     async fn a_headers_provider_that_never_answers_fails_the_request_within_the_request_timeout() {
         let mut given = with_get(options("http://127.0.0.1:9/graphql", "ws://127.0.0.1:9/graphql"));
@@ -1821,6 +2259,50 @@ mod tests {
     }
 
     #[test]
+    fn a_due_time_is_read_only_as_an_instant_with_its_offset() {
+        let read = |due: &str| {
+            let answer = Value::parse(&format!(
+                r#"{{"id":"i-1","revision":1,"state":"Locked","context":{{}},"dueAt":{due}}}"#
+            ))
+            .unwrap();
+            answer_of(&answer).map(|a| match a {
+                ServerAnswer::Stored { snapshot, .. } => snapshot.due_at,
+                ServerAnswer::Refused(p) => panic!("{p:?}"),
+            })
+        };
+
+        for due in [
+            "2026-10-22T10:10:00Z",
+            "2026-10-22T12:10:00.000+02:00",
+            "2026-10-22T05:20:00-05:00",
+            "2024-02-29T23:59:59.1234567z",
+        ] {
+            assert_eq!(read(&format!("\"{due}\"")), Ok(DueAt::At(due.to_owned())), "{due}");
+        }
+        assert_eq!(read("null"), Ok(DueAt::None));
+        for due in [
+            "\"not a time\"",
+            "\"2026-10-22T10:10:00\"",
+            "\"2026-10-22\"",
+            "\"2026-13-01T00:00:00Z\"",
+            "\"2025-02-29T00:00:00Z\"",
+            "\"2026-10-22T24:00:00Z\"",
+            "\"2026-10-22T10:10:00.Z\"",
+            "\"2026-10-22T10:10:00+0200\"",
+            "\"2026-10-22T10:10:00Z \"",
+            "\"2026-10-22T10:10:00+02:00:00\"",
+            "5",
+            "true",
+            "{}",
+        ] {
+            let Err(error) = read(due) else {
+                panic!("the dueAt {due} was read");
+            };
+            assert!(error.0.contains("dueAt"), "{}", error.0);
+        }
+    }
+
+    #[test]
     fn a_revision_is_read_only_as_an_integer() {
         let read = |revision: &str| {
             let answer = Value::parse(&format!(
@@ -1834,8 +2316,9 @@ mod tests {
         };
 
         assert_eq!(read("7"), Ok(Some(7)));
+        assert_eq!(read("0"), Ok(Some(0)));
         assert_eq!(read("9007199254740991"), Ok(Some(9_007_199_254_740_991)));
-        for revision in ["4.5", "1e19", "-1e19", "\"7\"", "true"] {
+        for revision in ["4.5", "1e19", "-1e19", "-1", "\"7\"", "true"] {
             let Err(error) = read(revision) else {
                 panic!("the revision {revision} was read");
             };

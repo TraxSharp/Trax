@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ClientProblemCode } from '../results';
 import type { MachineSpec, TypedMachine } from '../typed';
+import { newRequestId as defaultRequestId } from './requestId';
 import { useServerMachine, type UseServerMachineOptions, type UseServerMachineResult } from './useServerMachine';
 
 /** What {@link useRememberedMachine} takes: {@link useServerMachine}'s options, less the instance it chooses itself. */
@@ -61,7 +62,7 @@ export function useRememberedMachine<Spec extends MachineSpec>(
   const { rememberKey, ...rest } = options;
   const startKey = `${rememberKey}:start`;
   const mint = useCallback(
-    () => (rest.newRequestId ?? (() => globalThis.crypto.randomUUID()))(),
+    () => (rest.newRequestId ?? defaultRequestId)(),
     [rest.newRequestId],
   );
 

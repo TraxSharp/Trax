@@ -1,0 +1,29 @@
+{
+  "_comment": "What a machine client built without these options uses, in every language: the values of the table under \"Defaults\" in PROTOCOL.md, which a test holds to this file, and each client's tests hold its own constants to it. Times are in milliseconds and sizes in bytes. Where a client legitimately differs, the value is given per client (ts, dotnet, rust), with null for a client that has no such option and the reason beside it.",
+  "requestTimeoutMs": 30000,
+  "retryDelaysMs": [250, 500, 1000, 2000, 4000],
+  "resubscribeDelaysMs": [1000, 2000, 5000],
+  "resubscribeJitter": {
+    "_comment": "Each resubscribe wait is step * (1 - r / 2), r uniform in [0, 1): a draw of 0 waits the whole step, and no draw waits less than half of it. Retry delays are not jittered.",
+    "leastFraction": 0.5,
+    "mostFraction": 1
+  },
+  "maxResponseBytes": 16777216,
+  "maxSocketMessageBytes": {
+    "_comment": "The TypeScript client does not own its socket: the page builds its graphql-ws client, which reads every message whole.",
+    "ts": null,
+    "dotnet": 16777216,
+    "rust": 16777216
+  },
+  "socket": {
+    "_comment": "The socket's own timing. TypeScript has none of its own (graphql-ws's options are the page's). C# pings at the WebSocket level; Rust gives up an acknowledged socket silent for idleTimeoutMs, sending a graphql-transport-ws ping halfway through the silence.",
+    "ts": null,
+    "dotnet": { "connectTimeoutMs": 10000, "keepAliveIntervalMs": 15000, "keepAliveTimeoutMs": 15000 },
+    "rust": { "connectTimeoutMs": 10000, "idleTimeoutMs": 60000 }
+  },
+  "closeCodes": {
+    "_comment": "A socket closed with a refused code is the host turning the caller away: the client stops for good with that code's refusal. Any other close is transient and subscribed again; the transient ones listed are graphql-transport-ws's own.",
+    "refused": { "4401": "UNAUTHENTICATED", "4403": "FORBIDDEN" },
+    "transient": [4408, 4429]
+  }
+}

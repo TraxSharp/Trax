@@ -1,0 +1,23 @@
+{
+  "about": "A context one level deeper than a stored snapshot may nest is not one a store wrote: the answer that holds it fails as TRANSPORT_ERROR and changes nothing.",
+  "machine": "nest",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "fill": "$id: UUID!, $input: FillInput!, $requestId: String!, $clientResult: String",
+    "drain": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Full", "context": { "a": { "b": true } } } },
+    { "view": { "status": "ready" } },
+    { "client": "send", "trigger": "Drain", "as": "drain" },
+    { "request": "drain", "answer": { "id": "i-1", "revision": 2, "state": "Full", "context": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": { "a": true } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } },
+    { "await": "drain", "expect": { "outcome": "failed", "code": "TRANSPORT_ERROR" } },
+    { "view": { "status": "ready", "state": "Full", "revision": 1, "pending": false, "problem": "TRANSPORT_ERROR" } }
+  ]
+}

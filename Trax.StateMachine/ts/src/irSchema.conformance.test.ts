@@ -16,6 +16,7 @@ const machines = fs
 const committed: [string, string][] = [
   ...machines.map((m): [string, string] => [m, irFile(m)]),
   ["strict-input", conformanceFile("strict-input", "strict.ir.json")],
+  ["hostile values", conformanceFile("values", "hostile.ir.json")],
 ];
 const read = (file: string) => JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
 

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Reflection;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
@@ -263,16 +264,20 @@ public class GraphQLSubscriptionSocketTests
     [TestCase("""{"id":"1"}""")]
     [TestCase("""[]""")]
     [TestCase("""not json""")]
-    public async Task A_malformed_message_fails_the_connection_and_closes_it(string message)
+    [TestCase("""{"type":"next","type":"complete"}""")]
+    public async Task A_malformed_message_fails_the_connection_and_closes_it_with_4400(
+        string message
+    )
     {
-        var gone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closed = new TaskCompletionSource<WebSocketCloseStatus?>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         await using var host = new WireHost(async peer =>
         {
             await peer.AckAsync();
             await peer.SubscribedAsync();
             await peer.SendAsync(message);
-            await peer.GoneAsync();
-            gone.TrySetResult();
+            closed.TrySetResult(await peer.ClosedWithAsync());
         });
         await using var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
@@ -281,8 +286,8 @@ public class GraphQLSubscriptionSocketTests
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeOfType<WebSocketException>();
-        await gone.Task.WaitAsync(Wait);
+        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeAssignableTo<WebSocketException>();
+        (await closed.Task.WaitAsync(Wait)).Should().Be((WebSocketCloseStatus)4400);
     }
 
     [Test]
@@ -415,6 +420,64 @@ public class GraphQLSubscriptionSocketTests
             .Select(m => m["id"]!.GetValue<string>())
             .Should()
             .Equal("2");
+    }
+
+    [Test]
+    public async Task Disposing_the_socket_closes_the_connection_normally()
+    {
+        var closed = new TaskCompletionSource<WebSocketCloseStatus?>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.AckAsync();
+            await peer.SubscribedAsync();
+            closed.TrySetResult(await peer.ClosedWithAsync());
+        });
+        var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var sink = new Sink();
+        using var subscription = socket.Subscribe(Payload, sink);
+        (await sink.Take(1)).Should().Equal("started");
+
+        await socket.DisposeAsync();
+
+        (await closed.Task.WaitAsync(Wait)).Should().Be(WebSocketCloseStatus.NormalClosure);
+        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeOfType<SocketUnavailableException>();
+    }
+
+    [Test]
+    public async Task Disposing_the_socket_lets_go_of_the_connections_stop_and_send_lock()
+    {
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.AckAsync();
+            await peer.SubscribedAsync();
+            await peer.ClosedWithAsync();
+        });
+        var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var sink = new Sink();
+        using var subscription = socket.Subscribe(Payload, sink);
+        (await sink.Take(1)).Should().Equal("started");
+        // The connection, and what it holds, read from the socket's private fields.
+        var connection = typeof(GraphQLSubscriptionSocket)
+            .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(socket)!;
+        var stop = (CancellationTokenSource)
+            connection
+                .GetType()
+                .GetField("_stop", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .GetValue(connection)!;
+        var sending = (SemaphoreSlim)
+            connection.GetType().GetProperty("Sending")!.GetValue(connection)!;
+
+        await socket.DisposeAsync();
+
+        ((Action)(() => _ = stop.Token)).Should().Throw<ObjectDisposedException>();
+        ((Action)(() => _ = sending.AvailableWaitHandle)).Should().Throw<ObjectDisposedException>();
     }
 
     [Test]

@@ -93,6 +93,19 @@ function isDateTime(value: string, zoneless: boolean): boolean {
   return zoneless || m[7] !== undefined || (local >= 24 * 60 && local <= lastMinute - 24 * 60);
 }
 
+const instant =
+  /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]+)?(?:Z|([+-])([0-9]{2}):([0-9]{2}))$/;
+
+/**
+ * Whether `value` is an ISO-8601 instant: a real date and time of day, any fraction of a second, and its offset (`Z` or
+ * `+hh:mm` up to 14 hours). One without an offset names no instant, so it is refused. Never throws.
+ */
+export function isInstant(value: string): boolean {
+  const m = instant.exec(value);
+  if (m === null || !isDay(m, 1) || !isClock(m, 4)) return false;
+  return m[7] === undefined || (Number(m[9]) < 60 && Number(m[8]) * 60 + Number(m[9]) <= 14 * 60);
+}
+
 // The day a valid date is in the proleptic Gregorian calendar, counted from 0001-01-01.
 function dayOf(year: number, month: number, day: number): number {
   const y = year - 1;

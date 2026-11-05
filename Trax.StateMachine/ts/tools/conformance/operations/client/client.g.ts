@@ -105,14 +105,21 @@ export function execute<V, R>(
   }>;
 }
 
-/** Sends a query or mutation and returns its data; throws a TraxOperationError when the answer holds errors. */
+/**
+ * Sends a query or mutation and returns its data; throws a TraxOperationError when the answer holds errors, and a
+ * TraxTransportError when it holds neither errors nor data.
+ */
 export async function send<V, R>(document: TraxDocument<V, R>, variables: V): Promise<R> {
   const answer = await execute(document, variables);
   if (answer.errors?.length) throw new TraxOperationError(answer.errors);
+  if (!isRecord(answer.data)) throw new TraxTransportError("The host answered with neither data nor an error.");
   return answer.data as R;
 }
 
-/** Follows a subscription. A frame with errors ends it through `sink.error`. */
+/**
+ * Follows a subscription. A frame with errors ends it through `sink.error` with a TraxOperationError, and one with
+ * neither errors nor data with a TraxTransportError.
+ */
 export function subscribe<V, R>(document: TraxDocument<V, R>, variables: V, sink: TraxSink<R>): () => void {
   let stop: (() => void) | null = null;
   let stopped = false;
@@ -125,6 +132,12 @@ export function subscribe<V, R>(document: TraxDocument<V, R>, variables: V, sink
           stopped = true;
           stop?.();
           sink.error(new TraxOperationError(answer.errors));
+          return;
+        }
+        if (!isRecord(answer.data)) {
+          stopped = true;
+          stop?.();
+          sink.error(new TraxTransportError("The host sent a frame with neither data nor an error."));
           return;
         }
         sink.next(answer.data as R);
@@ -210,7 +223,7 @@ export function httpTransport(options: HttpTransportOptions): HttpTransport {
       lazy: true,
       retryAttempts: Number.POSITIVE_INFINITY,
       // A host that turned the caller away (4401, 4403) gives the same answer to a retry.
-      shouldRetry: (error) => isCloseEvent(error) && error.code !== 4401 && error.code !== 4403,
+      shouldRetry: retryClosedSocket,
       ...options.socket,
       url: options.socketUrl,
       connectionParams: options.connectionParams,
@@ -223,7 +236,11 @@ export function httpTransport(options: HttpTransportOptions): HttpTransport {
       : { query: request.document.text, operationName: request.document.name, variables: request.variables };
   return {
     execute(request) {
-      return withRequestTimeout(options.requestTimeout ?? defaultRequestTimeout, (signal) => exchange(request, signal));
+      return withRequestTimeout(
+        options.requestTimeout ?? defaultRequestTimeout,
+        (signal) => exchange(request, signal),
+        (message) => new TraxTransportError(message),
+      );
     },
     subscribe(request, sink) {
       return open().subscribe(payload(request), {
@@ -276,39 +293,15 @@ export function httpTransport(options: HttpTransportOptions): HttpTransport {
     }
     if (!isRecord(answer) || (!("data" in answer) && !("errors" in answer)))
       throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status);
+    const refused = Array.isArray(answer.errors) && answer.errors.length > 0;
     // Not 2xx, and no GraphQL error to say why: the request failed, whatever data the body holds.
-    if (!response.ok && !(Array.isArray(answer.errors) && answer.errors.length > 0))
+    if (!response.ok && !refused)
       throw new TraxTransportError(`The host answered ${response.status} with no GraphQL error.`, response.status);
+    // 2xx with no error and no data (`data: null`, `errors: []`): neither a refusal nor a result.
+    if (!refused && !isRecord(answer.data))
+      throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status);
     return answer as TraxAnswer;
   }
-}
-
-/** The request timeout when none is set: 30 seconds. */
-const defaultRequestTimeout = 30_000;
-
-/**
- * Runs one request under `timeout` milliseconds: past it, the signal `run` was given is aborted and the promise
- * rejects with a TraxTransportError, whether or not the fetch heeds the signal.
- */
-async function withRequestTimeout<T>(timeout: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
-  const controller = new AbortController();
-  if (!Number.isFinite(timeout)) return run(controller.signal);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const expired = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      reject(new TraxTransportError(`The host did not answer within ${timeout} ms.`));
-    }, Math.max(0, timeout));
-  });
-  try {
-    return await Promise.race([run(controller.signal), expired]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function isCloseEvent(value: unknown): value is { code: number; reason: string } {
-  return isRecord(value) && typeof value.code === "number" && "reason" in value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -355,6 +348,42 @@ export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean |
 /** The most bytes of an answer the client reads, unless the app names another limit: 16 MiB. */
 const defaultMaxResponseBytes = 16 * 1024 * 1024;
 
+/** How long one request may take, unless the app names another timeout: 30 seconds. */
+const defaultRequestTimeout = 30_000;
+
+/** Refuses a request timeout that is not a positive number of milliseconds (`Infinity` waits as long as the host takes). */
+function requireRequestTimeout(timeout: number): void {
+  if (typeof timeout !== "number" || !(timeout > 0))
+    throw new RangeError(`requestTimeout must be a positive number of milliseconds, or Infinity, got ${timeout}.`);
+}
+
+/**
+ * Runs one request under `timeout` milliseconds: past it, the signal `run` was given is aborted and the promise
+ * rejects with the error `expired` makes, whether or not the fetch heeds the signal.
+ */
+async function withRequestTimeout<T>(
+  timeout: number,
+  run: (signal: AbortSignal) => Promise<T>,
+  expired: (message: string) => Error,
+): Promise<T> {
+  requireRequestTimeout(timeout);
+  const controller = new AbortController();
+  // setTimeout fires at once for a delay past 2^31 - 1 ms, so one that long waits as Infinity does.
+  if (timeout > 2_147_483_647) return run(controller.signal);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(expired(`The host did not answer within ${timeout} ms.`));
+    }, timeout);
+  });
+  try {
+    return await Promise.race([run(controller.signal), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Refuses a socket URL whose traffic would be in cleartext: `wss:` is accepted, `ws:` only to a loopback host
  * (`localhost`, `127.0.0.0/8`, `::1`) or to the origin of a page that was itself served over `http:`, and anything
@@ -377,6 +406,16 @@ export function requireSecureSocket(socketUrl: string, allowInsecure: boolean | 
   throw new Error(
     `The socket ${url.protocol}//${url.host} is not over TLS, so whatever authenticates the client would travel in cleartext. Use wss://, a loopback host, or set allowInsecureTransport when the network is trusted.`,
   );
+}
+
+/**
+ * Whether graphql-ws opens a closed socket again: after any close but 4401 or 4403, the host turning the caller
+ * away, which a retry gets again. graphql-ws gives up on 4401 by itself and retries 4403.
+ */
+function retryClosedSocket(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("reason" in error)) return false;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "number" && code !== 4401 && code !== 4403;
 }
 
 function isLoopbackHost(hostname: string): boolean {

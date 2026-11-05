@@ -169,13 +169,15 @@ export interface HttpExecutorOptions {
   allowInsecureTransport?: boolean;
   /**
    * The largest response body the host may answer with, in bytes; 16 MiB by default. A larger one fails the request,
-   * which the session reports as a transport error, and is not read past the limit.
+   * which the session reports as a transport error, and is not read past the limit. One that is not a positive whole
+   * number throws when the executor is built.
    */
   maxResponseSize?: number;
   /**
    * How long one request may take, in milliseconds, from sending it to the last byte of its answer; 30 seconds by
    * default. A request past it is aborted and fails as a transport error, which `retry` resends under the same request
-   * id. `Infinity` waits for as long as the host takes.
+   * id. `Infinity`, or any timeout past 2^31 - 1 ms, the longest a timer waits, waits for as long as the host takes; one
+   * that is not a positive number throws when the executor is built.
    */
   requestTimeout?: number;
 }
@@ -186,19 +188,49 @@ export const DEFAULT_MAX_RESPONSE_SIZE = 16 * 1024 * 1024;
 /** The request timeout when none is set: 30 seconds. */
 export const DEFAULT_REQUEST_TIMEOUT = 30_000;
 
+/** The longest delay `setTimeout` waits for: 2^31 - 1 ms. It fires at once for any longer one. */
+export const LONGEST_TIMER = 2_147_483_647;
+
+/** Refuses a request timeout that is not a positive number of milliseconds (`Infinity` waits as long as the host takes). */
+export function requireRequestTimeout(timeout: number): void {
+  if (typeof timeout !== 'number' || !(timeout > 0))
+    throw new RangeError(`requestTimeout must be a positive number of milliseconds, or Infinity, got ${timeout}.`);
+}
+
+/**
+ * Refuses a response size limit that is not a positive whole number of bytes. A NaN limit would compare false with
+ * every size and read an answer of any length.
+ */
+export function requireMaxResponseSize(size: number): void {
+  if (!Number.isSafeInteger(size) || size <= 0)
+    throw new RangeError(`maxResponseSize must be a positive whole number of bytes, got ${size}.`);
+}
+
+/**
+ * Refuses a delay no timer can wait for: one that is not a number from zero to 2^31 - 1 ms, NaN and Infinity among them.
+ * `what` names the option in the error.
+ */
+export function requireDelays(delays: readonly number[] | undefined, what: string): void {
+  for (const delay of delays ?? [])
+    if (typeof delay !== 'number' || !(delay >= 0 && delay <= LONGEST_TIMER))
+      throw new RangeError(`Each of ${what} must be from 0 to ${LONGEST_TIMER} milliseconds, got ${delay}.`);
+}
+
 /**
  * Runs one request under `timeout` milliseconds: past it, the signal `run` was given is aborted and the promise rejects,
- * whether or not the `fetch` heeds the signal.
+ * whether or not the `fetch` heeds the signal. A timeout longer than a timer waits for, `Infinity` among them, waits as
+ * long as the host takes; one that is not a positive number rejects.
  */
 export async function withRequestTimeout<T>(timeout: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  requireRequestTimeout(timeout);
   const controller = new AbortController();
-  if (!Number.isFinite(timeout)) return run(controller.signal);
+  if (timeout > LONGEST_TIMER) return run(controller.signal);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       controller.abort();
       reject(new Error(`The server did not answer within ${timeout} ms.`));
-    }, Math.max(0, timeout));
+    }, timeout);
   });
   try {
     return await Promise.race([run(controller.signal), expired]);

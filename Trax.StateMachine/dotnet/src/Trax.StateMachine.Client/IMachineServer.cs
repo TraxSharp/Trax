@@ -90,8 +90,8 @@ public abstract record StreamMessage
     /// answered with. Or the host refused the stream itself with a GraphQL error coded <c>TRAX_AUTHORIZATION</c> or
     /// <c>AUTH_NOT_AUTHORIZED</c> (<c>FORBIDDEN</c>) or <c>AUTH_NOT_AUTHENTICATED</c> (<c>UNAUTHENTICATED</c>); or with
     /// a code the caller named terminal (<see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/>), which is the
-    /// <see cref="Code"/>; or it sent a push the client cannot read, and <see cref="Code"/> is
-    /// <see cref="ClientProblemCodes.TransportError"/>.
+    /// <see cref="Code"/>; or there is no stream to follow (the socket was disposed, or the stream's handler threw), and
+    /// <see cref="Code"/> is <see cref="ClientProblemCodes.TransportError"/>.
     /// </summary>
     public sealed record Refused(string Code, string Message) : StreamMessage;
 }

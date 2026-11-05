@@ -77,10 +77,12 @@ await wizard.sync(controller, 'done', values);
 - **`plan`** searches from the server's snapshot, breadth first, the fields event first and then `navigation` in the
   order given. It answers the events (none when the server already holds that step and those values), `unreachable`,
   `exceeded`, `invalid`, or `undetermined` when only an edge on a custom rule the twin cannot evaluate might get
-  there. It answers null when there is no server snapshot or it does not read.
+  there. It answers null when there is no server snapshot or it does not read, and `invalid` with the fields trigger
+  when the fields input projection throws.
 - **`sync`** hands the same plan to a `ServerMachineController`'s `syncTo`, which sends it one event at a time from
   what the server confirmed, plans again after each answer and after a refusal, and gives way to a later sync. The
-  controller's view is `unsaved` until one settles `synced`: hold a leave guard on it.
+  controller's view is `unsaved` until one settles `synced`: hold a leave guard on it. A fields input projection that
+  throws settles it `failed` with `INVALID_INPUT` and sends nothing; neither `plan` nor `sync` throws.
 
 ## SDK Reference
 

@@ -95,6 +95,15 @@ impl Machine {
         navigation: &[String],
         max_depth: Option<usize>,
     ) -> PlanAnswer {}
+    pub fn plan_stoppable(
+        &self,
+        from: &Snapshot,
+        target: &str,
+        fields: Option<&PlanEvent>,
+        navigation: &[String],
+        max_depth: Option<usize>,
+        stop: &AtomicBool,
+    ) -> Option<PlanAnswer> {}
 }
 pub type Map = BTreeMap<JsString, Value>;
 pub type MigrationFn = dyn Fn(&str, Map) -> (String, Map) + Send + Sync;

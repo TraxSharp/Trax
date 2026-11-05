@@ -2,13 +2,17 @@ import { ClientProblemCode, RefusalCode, type ProblemCode } from '../results';
 import { eventRefusal } from '../machine';
 import type { Problem } from '../problem';
 import type { PlannedEvent } from '../plan';
+import { newRequestId as defaultRequestId } from './requestId';
+import { requireDelays } from '../client/transport';
+import { MAX_NESTING, nestsTooDeep } from '../nesting';
 import type { InputArgs, MachineSpec, StateOf, TriggerOf, TypedMachine, TypedSnapshot } from '../typed';
 
 // The server-authoritative controller: the server owns the instance, the twin only predicts. Every event goes
 // to the server under its own requestId, the server's answer (or a pushed snapshot) replaces the prediction,
 // and snapshots are ordered by `revision` within one incarnation (`rowId`): anything at or below the revision
 // held is dropped, the controller's own answers included. An answer with no revision cannot be ordered: it is taken,
-// and so is whatever comes after it. A push without one is dropped before it gets here (`createMachineServer`). See
+// and so is whatever comes after it. A push without one is dropped before it gets here, and the instance read again
+// (`createMachineServer`). See
 // Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md.
 
 /** One full server snapshot, with the values that travel beside it rather than inside the canonical wire. */
@@ -22,7 +26,8 @@ export interface ServerSnapshot {
   /**
    * Bumped by the database on every write of the row. Null on an answer when the store records none: the snapshot
    * cannot be ordered, so it is never dropped as stale, and whatever comes after it is taken. A push carries one
-   * always: `createMachineServer` drops a push without one rather than deliver a snapshot it cannot order.
+   * always: `createMachineServer` drops a push without one, and reads the instance again, rather than deliver a
+   * snapshot it cannot order.
    */
   revision: number | null;
   state: string;
@@ -148,13 +153,16 @@ export interface ServerMachineOptions<Spec extends MachineSpec> {
    */
   startRequestId?: string;
   /**
-   * Mints a requestId; defaults to `crypto.randomUUID`. A custom one must mint 1 to 200 characters, not blank, with no
-   * control character and no unpaired surrogate: the server answers any other id `INVALID_REQUEST_ID`.
+   * Mints a requestId; defaults to a v4 UUID, from `crypto.randomUUID`, or from `crypto.getRandomValues` where a page that
+   * is not a secure context has no `randomUUID`. A custom one must mint 1 to 200 characters, not blank, with no
+   * control character and no unpaired surrogate: the server answers any other id `INVALID_REQUEST_ID`. One that throws
+   * fails the send (or the start) it was minting for as `INVALID_REQUEST_ID`, which sends nothing, and the queue goes on.
    */
   newRequestId?: () => string;
   /**
    * Delays, in milliseconds, between retries of a `SERVER_OUTDATED` answer (another node of a rolling deploy answered)
    * and of a read the transport failed. One retry per delay; after the last, the event fails and `retry` resends it.
+   * Each is from 0 to 2^31 - 1 ms; any other throws when the controller is built.
    */
   retryDelays?: readonly number[];
 }
@@ -177,7 +185,8 @@ export interface SyncOptions<Spec extends MachineSpec> {
 
 /**
  * What one `syncTo` came to. `synced`: the server holds the target with the fields applied, and `snapshot` is what it
- * confirmed. `superseded`: a later `syncTo` took over. `unreachable`, `exceeded` and `invalid` are the planner's answers
+ * confirmed. `superseded`: a later `syncTo` took over. `unreachable`, `exceeded` and `invalid` (with the `trigger`,
+ * the `target`, or the `code` of a fields input or a context nested too deep) are the planner's answers
  * (`SnapshotMachine.plan`); `exceeded` is also a sync that would send more than twice the machine's states in events.
  * `refused`, `failed` and `stopped` are what the event that ended it came to, as for `send`.
  */
@@ -188,6 +197,7 @@ export type SyncOutcome =
   | { outcome: 'exceeded' }
   | { outcome: 'invalid'; trigger: string }
   | { outcome: 'invalid'; target: string }
+  | { outcome: 'invalid'; code: 'INVALID_INPUT' | 'INVALID_CONTEXT' }
   | { outcome: 'refused'; problem: Problem }
   | { outcome: 'failed'; problem: Problem }
   | { outcome: 'stopped'; error: ServerMachineError };
@@ -222,14 +232,23 @@ interface QueuedEvent {
   settle: (outcome: SendOutcome) => void;
 }
 
-const defaultRequestId = (): string => globalThis.crypto.randomUUID();
-
 // Whether a snapshot at `incoming` is at or below one at `held`. A missing revision on either side cannot be ordered, so
 // it is never older.
 const olderOrSame = (incoming: number | null, held: number | null): boolean =>
   incoming !== null && held !== null && incoming <= held;
 
 const refusal = (code: ProblemCode, message: string): Problem => ({ kind: 'rejected', code, message });
+
+/**
+ * A copy of an input a page passed, so that changing its object after the call changes neither the event nor the
+ * prediction. The input is sent as JSON, so its JSON copy is what the server sees. Throws on a value JSON cannot carry.
+ */
+const copyOf = <T>(value: T): T => {
+  if (value === undefined) return value;
+  const text = JSON.stringify(value);
+  if (text === undefined) throw new TypeError('The input is not a JSON value.');
+  return JSON.parse(text) as T;
+};
 
 const transportFailure = (error: unknown): Problem => ({
   kind: 'transport',
@@ -316,6 +335,9 @@ export class ServerMachineController<Spec extends MachineSpec> {
   private reloadAgain = false;
   private reloadAgainRowId: string | null = null;
   private buffered: ServerSnapshot | null = null;
+  // Whether a `CLIENT_DIVERGENCE` answer started the read in flight: the queue holds until it settles, so the next event
+  // is predicted from what the read says rather than from what the twin got wrong.
+  private diverged = false;
 
   private view: ServerMachineView<Spec>;
 
@@ -326,6 +348,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
     this.startInput = options.startInput;
     this.startRequestId = options.startRequestId;
     this.newRequestId = options.newRequestId ?? defaultRequestId;
+    requireDelays(options.retryDelays, 'retryDelays');
     this.retryDelays = options.retryDelays ?? DEFAULT_RETRY_DELAYS;
     this.view = this.buildView();
   }
@@ -344,15 +367,33 @@ export class ServerMachineController<Spec extends MachineSpec> {
   /**
    * Sends one event under a fresh requestId, after every earlier event of this instance has settled. A trigger the
    * machine does not declare as an event (an outcome, a timer, or a name it lacks) is refused at once with the code
-   * `advance` gives it, and nothing is sent. While the controller holds no instance and is not opening one (its start
-   * was refused or failed, or its first read gave up), a send settles `failed` with `NOT_READY`.
+   * `advance` gives it, and nothing is sent. The input is copied as JSON when it is called, so changing the object
+   * afterwards changes neither the event nor the prediction; one JSON cannot carry, or nested deeper than 512 levels, is
+   * refused with `INVALID_INPUT` and nothing is sent. While the controller holds no instance and is not opening one (its start was refused or failed, or
+   * its first read gave up), a send settles `failed` with `NOT_READY`.
    */
   send<T extends TriggerOf<Spec>>(trigger: T, ...input: InputArgs<Spec, T>): Promise<SendOutcome> {
     if (this.error) return Promise.resolve({ outcome: 'stopped', error: this.error });
     if (this.disposed) return Promise.resolve(this.disposedOutcome());
     const undeclared = eventRefusal(this.machine.core.definition, trigger);
     if (undeclared) return Promise.resolve({ outcome: 'refused', problem: refusal(undeclared.code, undeclared.message) });
-    return this.enqueue({ trigger, input: [...input], request: null });
+    // Checked before it is copied: no engine takes a value nested this deep, and copying one could exhaust the stack.
+    if (input.some(nestsTooDeep))
+      return Promise.resolve({
+        outcome: 'refused',
+        problem: refusal(RefusalCode.InvalidInput, `The input of '${trigger}' nests deeper than ${MAX_NESTING} levels.`),
+      });
+    let copied: unknown[];
+    try {
+      copied = input.map(copyOf);
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      return Promise.resolve({
+        outcome: 'refused',
+        problem: refusal(RefusalCode.InvalidInput, `The input of '${trigger}' cannot be sent as JSON: ${why}`),
+      });
+    }
+    return this.enqueue({ trigger, input: copied, request: null });
   }
 
   /**
@@ -412,15 +453,26 @@ export class ServerMachineController<Spec extends MachineSpec> {
    * one settles it `refused`. An `undetermined` plan sends its events, then its trigger without a prediction. A later
    * `syncTo` supersedes this one, which settles `superseded` once its event in flight answers and sends nothing more.
    * No sync sends more than twice the machine's states in events. Before the first snapshot it settles `failed` with
-   * `NOT_READY`. Never throws.
+   * `NOT_READY`. The fields and the navigation are copied when it is called, as `send` copies its input, and a fields
+   * input JSON cannot carry settles `invalid` with `INVALID_INPUT`. Never throws.
    */
   async syncTo(target: StateOf<Spec>, options: SyncOptions<Spec>): Promise<SyncOutcome> {
     if (this.error) return { outcome: 'stopped', error: this.error };
     if (this.disposed) return this.disposedOutcome();
+    let copied: SyncOptions<Spec>;
+    try {
+      const fields = options.fields ?? null;
+      copied = {
+        fields: fields === null ? null : { ...fields, input: copyOf(fields.input) },
+        navigation: [...options.navigation],
+      };
+    } catch {
+      return { outcome: 'invalid', code: RefusalCode.InvalidInput };
+    }
     const generation = ++this.syncGeneration;
     this.unsaved = true;
     this.emit();
-    const outcome = await this.runSync(generation, target, options);
+    const outcome = await this.runSync(generation, target, copied);
     if (generation === this.syncGeneration && !this.disposed) {
       this.unsaved = outcome.outcome !== 'synced';
       this.emit();
@@ -433,6 +485,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
     const fields = options.fields ?? null;
     let sent = 0;
     let refusals = 0;
+    // The revision the host answered this sync's fields event with, while it is the last event the sync had confirmed.
+    let fieldsAnswered: { revision: number | null } | null = null;
     for (;;) {
       // A send made as the last one settled is queued by the time this runs again: wait for it too, so the plan is
       // made from what the server confirmed with nothing queued.
@@ -452,6 +506,17 @@ export class ServerMachineController<Spec extends MachineSpec> {
           events = [plan.events[0]];
           break;
         case 'undetermined':
+          // At the target with only the fields event left, which rests on a rule the twin cannot evaluate: the host
+          // applied it there when it confirmed it, and nothing has been confirmed since.
+          if (
+            fields !== null &&
+            plan.trigger === fields.trigger &&
+            plan.events.length === 0 &&
+            this.confirmed.state === target &&
+            fieldsAnswered !== null &&
+            fieldsAnswered.revision === this.revision
+          )
+            return { outcome: 'synced', snapshot: this.confirmedSnapshot() };
           // Sent without a prediction: the twin cannot evaluate its edge (`pump` sees that too).
           events = [
             ...plan.events,
@@ -459,6 +524,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
           ];
           break;
         case 'invalid':
+          if ('code' in plan) return { outcome: 'invalid', code: plan.code };
           return 'target' in plan ? { outcome: 'invalid', target: plan.target } : { outcome: 'invalid', trigger: plan.trigger };
         default:
           return { outcome: plan.result };
@@ -475,10 +541,13 @@ export class ServerMachineController<Spec extends MachineSpec> {
         if (generation !== this.syncGeneration) return { outcome: 'superseded' };
         if (answer.outcome === 'stopped' || answer.outcome === 'failed') return answer;
         if (answer.outcome === 'refused') {
+          fieldsAnswered = null;
           if (!REPLANNED.has(answer.problem.code) || ++refusals > 1) return answer;
           await this.readAgain();
           break;
         }
+        fieldsAnswered =
+          fields !== null && event.trigger === fields.trigger ? { revision: answer.snapshot.revision } : null;
       }
     }
   }
@@ -590,7 +659,17 @@ export class ServerMachineController<Spec extends MachineSpec> {
         void this.read(null);
         return;
       }
-      this.startRequestId ??= this.newRequestId();
+      try {
+        this.startRequestId ??= this.newRequestId();
+      } catch (error) {
+        // Nothing can be started without an id to replay it under: the start fails, as a send whose minter threw does.
+        const why = error instanceof Error ? error.message : String(error);
+        this.problem = refusal(RefusalCode.InvalidRequestId, `The request id minter threw: ${why}`);
+        this.emit();
+        this.settleStart({ outcome: 'failed', problem: this.problem });
+        this.notOpened();
+        return;
+      }
       void this.create(this.startRequestId, 0);
     });
   }
@@ -770,9 +849,10 @@ export class ServerMachineController<Spec extends MachineSpec> {
   private readGaveUp(outcome: 'failed' | 'refused'): void {
     this.endRead();
     if (this.disposed || this.error) return;
-    // A push opened the instance meanwhile: whoever waits for the start has it.
+    // A push opened the instance meanwhile: whoever waits for the start has it, and a queue a divergence held goes on.
     if (this.confirmed !== null) {
       this.settleStart({ outcome: 'confirmed', snapshot: this.confirmedSnapshot() });
+      this.pump();
       return;
     }
     this.readFailed = outcome === 'failed';
@@ -796,7 +876,10 @@ export class ServerMachineController<Spec extends MachineSpec> {
       this.reloadAgain = false;
       this.reload(rowId);
     }
-    if (!this.reloading) this.wake(this.readWaiters);
+    if (!this.reloading) {
+      this.diverged = false;
+      this.wake(this.readWaiters);
+    }
   }
 
   // ── Ordering ───────────────────────────────────────────────────────────────────────────────────
@@ -902,6 +985,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
       return;
     }
     if (this.sending || this.disposed || this.error || this.id === null || this.confirmed === null) return;
+    if (this.diverged && this.reloading) return;
     const next = this.queue[0];
     if (!next) return;
     this.sending = true;
@@ -916,7 +1000,20 @@ export class ServerMachineController<Spec extends MachineSpec> {
             next.trigger as TriggerOf<Spec>,
             ...(next.input as InputArgs<Spec, TriggerOf<Spec>>),
           );
-      const request: EventRequest = { id: this.id, trigger: next.trigger, requestId: this.newRequestId() };
+      let requestId: string;
+      try {
+        requestId = this.newRequestId();
+      } catch (error) {
+        // The page's minter failed: this event cannot go out under an id of its own, so it fails, sends nothing, and
+        // the queue goes on.
+        const why = error instanceof Error ? error.message : String(error);
+        this.finish(next, {
+          outcome: 'failed',
+          problem: refusal(RefusalCode.InvalidRequestId, `The request id minter threw: ${why}`),
+        });
+        return;
+      }
+      const request: EventRequest = { id: this.id, trigger: next.trigger, requestId };
       if (next.input.length > 0) request.input = next.input[0];
       if (predicted?.outcome === 'transitioned') request.clientResult = this.machine.serialize(predicted.snapshot);
       next.request = request;
@@ -966,8 +1063,10 @@ export class ServerMachineController<Spec extends MachineSpec> {
         this.finish(entry, { outcome: 'failed', problem: this.problem });
         return;
       case CLIENT_DIVERGENCE:
-        // The twin and the server disagree about this step: what the twin holds cannot be trusted, so read it again.
+        // The twin and the server disagree about this step: what the twin holds cannot be trusted, so read it again,
+        // and send nothing more until that read has settled.
         this.reload(null);
+        this.diverged = this.reloading;
         break;
     }
     this.problem = refusal(answer.code, answer.message);

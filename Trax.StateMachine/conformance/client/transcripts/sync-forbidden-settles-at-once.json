@@ -1,0 +1,30 @@
+{
+  "about": "A refusal a read would not change, FORBIDDEN here, settles the sync refused at once: nothing is read, and the next request the host sees is the event sent after it.",
+  "machine": "wizard",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "begin": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "update": "$id: UUID!, $input: UpdateInput!, $requestId: String!, $clientResult: String",
+    "next": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "back": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "skip": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "send": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Details", "context": { "email": "ada@example.com", "name": "Ada" } } },
+    { "view": { "status": "ready", "unsaved": false } },
+    { "client": "sync", "target": "Review", "fields": { "trigger": "Update", "input": { "email": "ada@example.com", "name": "Ada" } }, "navigation": ["Begin", "Next", "Back"], "as": "s" },
+    { "request": "next", "answer": { "problem": { "code": "FORBIDDEN", "message": "Not yours." } } },
+    { "await": "s", "expect": { "outcome": "refused", "code": "FORBIDDEN" } },
+    { "view": { "status": "ready", "unsaved": true, "problem": "FORBIDDEN" } },
+    { "client": "send", "trigger": "Update", "input": { "email": "bob@example.com", "name": "Bob" }, "as": "u" },
+    { "request": "update", "answer": { "id": "i-1", "revision": 2, "state": "Details", "context": { "email": "bob@example.com", "name": "Bob" } } },
+    { "await": "u", "expect": { "outcome": "confirmed", "revision": 2 } }
+  ]
+}

@@ -1,11 +1,12 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { conformanceFile } from '../fixtures';
 
 import { turnstile, type TurnstileSpec } from '../machines/turnstile/turnstile';
-import { DEFAULT_RETRY_DELAYS, ServerMachineController, type StreamMessage } from '../server/serverController';
+import { ServerMachineController, type StreamMessage } from '../server/serverController';
 import { flushMicrotasks, sequentialRequestIds } from '../server/testing/FakeMachineServer';
 import {
   createMachineServer,
-  DEFAULT_RESUBSCRIBE_DELAYS,
   persistedMessageReplacer,
   type PersistedSubscriptionSocket,
   type SubscriptionSink,
@@ -18,6 +19,7 @@ import { DEFAULT_MAX_RESPONSE_SIZE, DEFAULT_REQUEST_TIMEOUT } from './transport'
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 const hash = turnstile.schemaHash;
@@ -214,6 +216,20 @@ describe('createMachineServer operations', () => {
     expect(await server.discard('i-1', 'rq-d')).toMatchObject({ kind: 'problem', code: 'TRANSPORT_ERROR' });
   });
 
+  it('answers a discard the transport failed as a TRANSPORT_ERROR, never by throwing', async () => {
+    const unavailable = (async () =>
+      new Response('{}', { status: 503, statusText: 'Service Unavailable' })) as unknown as typeof globalThis.fetch;
+    const unreachable = (async () => {
+      throw new TypeError('fetch failed');
+    }) as unknown as typeof globalThis.fetch;
+
+    for (const fetch of [unavailable, unreachable])
+      expect(await serverOver(fetch).server.discard('i-1', 'rq-d')).toMatchObject({
+        kind: 'problem',
+        code: 'TRANSPORT_ERROR',
+      });
+  });
+
   it('refuses at creation a document set without the push document', () => {
     expect(() =>
       createMachineServer('/graphql', {
@@ -241,6 +257,12 @@ describe('createMachineServer operations', () => {
 });
 
 describe('createMachineServer change stream', () => {
+  // Each resubscribe delay is drawn between half the step and the whole of it; a draw of 0 is the whole step, so the
+  // tests below that count milliseconds see the steps as given.
+  beforeEach(() => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+  });
+
   const follow = (resubscribeDelays?: number[], terminalStreamErrors?: string[]) => {
     const { server, socket } = serverOver(http().fetch, new FakeSocket(), resubscribeDelays, terminalStreamErrors);
     const messages: StreamMessage[] = [];
@@ -341,6 +363,28 @@ describe('createMachineServer change stream', () => {
     socket.last.sink.complete();
     vi.advanceTimersByTime(100);
     expect(socket.subscriptions).toHaveLength(4);
+  });
+
+  it('waits a random share of each step, between half of it and all of it, so clients do not resubscribe together', () => {
+    vi.useFakeTimers();
+    const draws = [0.5, 0.75, 0.25];
+    vi.spyOn(Math, 'random').mockImplementation(() => draws.shift() ?? 0);
+    const { socket } = follow([1000, 2000, 4000]);
+
+    const waits: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const before = socket.subscriptions.length;
+      socket.last.sink.complete();
+      let waited = 0;
+      while (socket.subscriptions.length === before) {
+        vi.advanceTimersByTime(1);
+        waited++;
+      }
+      waits.push(waited);
+    }
+
+    // 1000 at 0.5 is 750, 2000 at 0.75 is 1250, 4000 at 0.25 is 3500.
+    expect(waits).toEqual([750, 1250, 3500]);
   });
 
   it('closes the socket subscription and any pending resubscription when closed', () => {
@@ -461,6 +505,22 @@ describe('createMachineServer change stream', () => {
     expect(socket.subscriptions).toHaveLength(2);
   });
 
+  it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(
+    'subscribes again after a stream error coded %s, which names no refusal',
+    (code) => {
+      vi.useFakeTimers();
+      const { socket, messages } = follow([100]);
+
+      socket.last.sink.next({ data: null, errors: [{ message: 'Odd.', extensions: { code } }] });
+      vi.advanceTimersByTime(100);
+      socket.last.sink.error([{ message: 'Odd.', extensions: { code } }]);
+      vi.advanceTimersByTime(100);
+
+      expect(messages).toEqual([]);
+      expect(socket.subscriptions).toHaveLength(3);
+    },
+  );
+
   it('subscribes again after an error whose code was not marked terminal', () => {
     vi.useFakeTimers();
     const { socket, messages } = follow([100], ['CONNECTION_CHANGED']);
@@ -521,12 +581,13 @@ describe('ServerMachineController over createMachineServer', () => {
     expect(socket.last.closed).toBe(true);
   });
 
-  it('fails a send answered malformed as a transport error and keeps running, and drops a malformed push', async () => {
+  it('fails a send answered malformed as a transport error and keeps running, and reads again after a malformed push', async () => {
     const deep = Array.from({ length: 70 }).reduce<unknown>((inner) => ({ inner }), 'x');
-    const { fetch } = http(
+    const { sent, fetch } = http(
       answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, problem: null }),
       answer('coin', { id: 'i-1', revision: 2, state: null, context: null, problem: null }),
       answer('coin', { id: 'i-1', revision: 2, state: 'Unlocked', context: { paidWith: 'dollar', deep }, problem: null }),
+      answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, problem: null }),
     );
     const { server, socket } = serverOver(fetch);
     const controller = new ServerMachineController<TurnstileSpec>({
@@ -546,6 +607,13 @@ describe('ServerMachineController over createMachineServer', () => {
 
     expect(() => socket.push({ rowId: 7, revision: 3, state: 'Locked', context: { deep } })).not.toThrow();
     expect(controller.get()).toMatchObject({ status: 'ready', error: null, revision: 1 });
+    await flushMicrotasks();
+    expect(sent.map((s) => s.id)).toEqual([
+      `trax_machine_turnstile_get_${hash}`,
+      `trax_machine_turnstile_coin_${hash}`,
+      `trax_machine_turnstile_coin_${hash}`,
+      `trax_machine_turnstile_get_${hash}`,
+    ]);
   });
 
   it('stops with the error of a stream refused as CONNECTION_CHANGED, and sends nothing more', async () => {
@@ -716,12 +784,127 @@ describe('ServerMachineController over createMachineServer', () => {
   });
 });
 
-// The defaults every client of the kit shares (conformance/client/PROTOCOL.md, "Defaults").
+// The defaults every client of the kit shares (conformance/client/defaults.json), held by what the client does; the
+// constants themselves are held to the file by defaults.conformance.test.ts.
 describe('the time-based defaults', () => {
-  it('are the client kit\'s', () => {
-    expect(DEFAULT_REQUEST_TIMEOUT).toBe(30_000);
-    expect(DEFAULT_RESUBSCRIBE_DELAYS).toEqual([1000, 2000, 5000]);
-    expect(DEFAULT_RETRY_DELAYS).toEqual([250, 500, 1000, 2000, 4000]);
-    expect(DEFAULT_MAX_RESPONSE_SIZE).toBe(16 * 1024 * 1024);
+  const kit = JSON.parse(fs.readFileSync(conformanceFile('client', 'defaults.json'), 'utf8')) as {
+    retryDelaysMs: number[];
+    resubscribeDelaysMs: number[];
+  };
+
+  // A server and a controller built without any of the options, so each default above is the one in force.
+  const unconfigured = (fetch: typeof globalThis.fetch, socket = new FakeSocket()) => {
+    const server = createMachineServer('/graphql', { fetch, machine: turnstile, documents: DOCUMENTS, socket });
+    const controller = new ServerMachineController<TurnstileSpec>({ machine: turnstile, server, id: 'i-1' });
+    return { server, controller, socket };
+  };
+
+  it('a server built without a request timeout gives up on a request after 30 seconds', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const fetch = ((_url: string, init: RequestInit) => {
+      signal = init.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    }) as unknown as typeof globalThis.fetch;
+    const { server } = unconfigured(fetch);
+
+    let settled = false;
+    const read = server.get('i-1').then(
+      () => 'answered',
+      () => 'rejected',
+    );
+    void read.then(() => (settled = true));
+    await vi.advanceTimersByTimeAsync(DEFAULT_REQUEST_TIMEOUT - 1);
+    expect(settled).toBe(false);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(await read).toBe('rejected');
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('a server built without a response size reads an answer up to 16 MiB and refuses a larger one', async () => {
+    const answerOf = (size: number) => {
+      const body = JSON.stringify(
+        answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, dueAt: null, problem: null }),
+      );
+      return body + ' '.repeat(size - body.length);
+    };
+    const serve = (body: string) =>
+      (async () => new Response(body, { status: 200 })) as unknown as typeof globalThis.fetch;
+
+    const within = unconfigured(serve(answerOf(DEFAULT_MAX_RESPONSE_SIZE))).server;
+    expect(await within.get('i-1')).toMatchObject({ kind: 'ok', snapshot: { revision: 1, state: 'Locked' } });
+
+    const past = unconfigured(serve(answerOf(DEFAULT_MAX_RESPONSE_SIZE + 1))).server;
+    await expect(past.get('i-1')).rejects.toThrow(`larger than ${DEFAULT_MAX_RESPONSE_SIZE} bytes`);
+  });
+
+  it('a controller built without retry delays retries SERVER_OUTDATED after each default delay', async () => {
+    vi.useFakeTimers();
+    const sent: number[] = [];
+    const outdated = { data: { machines: { turnstile: { get: { problem: { code: 'SERVER_OUTDATED', message: 'Rolling.' } } } } } };
+    const fetch = (async () => {
+      sent.push(Date.now());
+      return new Response(JSON.stringify(outdated), { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+    const { controller } = unconfigured(fetch);
+    const begun = Date.now();
+
+    const at = kit.retryDelaysMs.reduce((sum, delay) => [...sum, sum[sum.length - 1] + delay], [0]);
+    const started = controller.start();
+    await vi.advanceTimersByTimeAsync(at[at.length - 1] + 1000);
+    await started;
+
+    expect(sent.map((sentAt) => sentAt - begun)).toEqual(at);
+  });
+
+  it('a server built without resubscribe delays subscribes again after each default step, the last repeating', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const { server, socket } = unconfigured(http().fetch);
+    server.subscribe('i-1', () => {});
+
+    const waits: number[] = [];
+    for (let i = 0; i < kit.resubscribeDelaysMs.length + 1; i++) {
+      const before = socket.subscriptions.length;
+      socket.last.sink.complete();
+      let waited = 0;
+      while (socket.subscriptions.length === before) {
+        vi.advanceTimersByTime(1);
+        waited++;
+      }
+      waits.push(waited);
+    }
+
+    expect(waits).toEqual([...kit.resubscribeDelaysMs, kit.resubscribeDelaysMs[kit.resubscribeDelaysMs.length - 1]]);
+  });
+});
+
+// A numeric option no limit or timer can honour is refused when the server or controller is built: NaN compares false
+// with everything, a negative or infinite delay is not one, and setTimeout fires at once for one past 2^31 - 1 ms.
+describe('the numeric options', () => {
+  const fetch = (async () => new Response('{}')) as unknown as typeof globalThis.fetch;
+  const server = (options: { maxResponseSize?: number; resubscribeDelays?: number[] }) =>
+    createMachineServer('/graphql', { fetch, machine: turnstile, documents: DOCUMENTS, socket: new FakeSocket(), ...options });
+  const badDelays = [Number.NaN, -1, Infinity, 2 ** 31, '5' as unknown as number];
+
+  it('refuses a maxResponseSize that is not a positive whole number of bytes', () => {
+    for (const maxResponseSize of [Number.NaN, 0, -1, 1.5, Infinity, 2 ** 53])
+      expect(() => server({ maxResponseSize }), String(maxResponseSize)).toThrow(RangeError);
+    expect(() => server({ maxResponseSize: 1 })).not.toThrow();
+  });
+
+  it('refuses a resubscribe delay that no timer waits for', () => {
+    for (const delay of badDelays) expect(() => server({ resubscribeDelays: [1000, delay] }), String(delay)).toThrow(RangeError);
+    expect(() => server({ resubscribeDelays: [0, 2 ** 31 - 1] })).not.toThrow();
+  });
+
+  it('refuses a retry delay that no timer waits for', () => {
+    const over = server({});
+    const controller = (retryDelays: number[]) =>
+      new ServerMachineController<TurnstileSpec>({ machine: turnstile, server: over, id: 'i-1', retryDelays });
+    for (const delay of badDelays) expect(() => controller([250, delay]), String(delay)).toThrow(RangeError);
+    expect(() => controller([0, 2 ** 31 - 1])).not.toThrow();
   });
 });

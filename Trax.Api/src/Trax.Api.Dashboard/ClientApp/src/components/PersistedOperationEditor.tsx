@@ -5,12 +5,13 @@ import type { PersistedOperationError } from "../types";
 import { useTraxMutation } from "../lib/consoleClient";
 import { uploadPersistedOperationDocument } from "../trax/index.g";
 
-const ERROR_TITLE: Record<string, string> = {
-  INVALID_INPUT: "Invalid input",
-  PARSE_FAILED: "Parse error",
-  SCHEMA_VALIDATION_FAILED: "Schema validation failed",
-  SHAPE_DIFF_VIOLATION: "Shape change rejected",
-};
+// Keyed by a code the server sends, so a code that names an Object member (`constructor`, `__proto__`) finds nothing.
+const ERROR_TITLE = new Map<string, string>([
+  ["INVALID_INPUT", "Invalid input"],
+  ["PARSE_FAILED", "Parse error"],
+  ["SCHEMA_VALIDATION_FAILED", "Schema validation failed"],
+  ["SHAPE_DIFF_VIOLATION", "Shape change rejected"],
+]);
 
 function abbreviate(fingerprint: string): string {
   return fingerprint.length > 16 ? `${fingerprint.slice(0, 16)}…` : fingerprint;
@@ -149,7 +150,7 @@ export function PersistedOperationEditor({
             className="rounded-md bg-danger-soft border border-danger-line text-danger-fg px-3 py-2 text-xs space-y-1"
           >
             <div>
-              <strong>{ERROR_TITLE[e.code] ?? e.code}</strong>
+              <strong>{ERROR_TITLE.get(e.code) ?? e.code}</strong>
               {e.locations && e.locations.length > 0 && (
                 <span>
                   {" "}

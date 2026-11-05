@@ -8,8 +8,16 @@ import { createServer } from "node:http";
 
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const PROTOCOL = "graphql-transport-ws";
-/** The reason a socket closed with one of the codes a host turns a caller away with is sent with. */
-const CLOSE_REASONS = { 4401: "Unauthorized", 4403: "Forbidden" };
+/**
+ * The reason a socket closed with one of graphql-transport-ws's codes is sent with: the two a host turns a caller away
+ * with, and two it closes a socket with that the client may open again.
+ */
+const CLOSE_REASONS = {
+  4401: "Unauthorized",
+  4403: "Forbidden",
+  4408: "Connection initialisation timeout",
+  4429: "Too many initialisation requests",
+};
 
 /** A queue whose `take` waits for the next item, or fails after `timeout` milliseconds. */
 class Inbox {
@@ -99,6 +107,7 @@ class Connection {
   #closed = false;
   #refuse;
   #pongs = 0;
+  #closedWith = null;
 
   constructor(socket, refuse, onSubscribe) {
     this.#socket = socket;
@@ -127,6 +136,16 @@ class Connection {
     return this.#pongs;
   }
 
+  /** The code of the close frame the client sent, or null while it has sent none. */
+  get closedWith() {
+    return this.#closedWith;
+  }
+
+  /** Sends one text frame as it is, JSON or not. */
+  sendText(text) {
+    if (!this.#closed) this.#socket.write(frame(0x1, text));
+  }
+
   /** Sends one message; `pad` spaces after its JSON make the frame that much larger without changing what it says. */
   send(message, pad = 0) {
     if (!this.#closed) this.#socket.write(frame(0x1, JSON.stringify(message) + " ".repeat(pad)));
@@ -144,7 +163,10 @@ class Connection {
   }
 
   #onFrame({ opcode, payload }) {
-    if (opcode === 0x8) return this.close();
+    if (opcode === 0x8) {
+      if (this.#closedWith === null) this.#closedWith = payload.length >= 2 ? payload.readUInt16BE(0) : 1005;
+      return this.close();
+    }
     if (opcode === 0x9) return this.#socket.write(frame(0xa, payload));
     if (opcode !== 0x1) return;
     const message = JSON.parse(payload.toString("utf8"));
@@ -267,6 +289,11 @@ export async function startHost() {
         },
         next: (value, pad = 0) => conn.send({ id: message.id, type: "next", payload: value }, pad),
         ping: () => conn.send({ type: "ping" }),
+        // A text frame as given, on this subscription's socket, which need not be JSON.
+        raw: (text) => conn.sendText(text),
+        get closedWith() {
+          return conn.closedWith;
+        },
         get pongs() {
           return conn.pongs;
         },
@@ -278,8 +305,8 @@ export async function startHost() {
           live.get(conn)?.delete(message.id);
           conn.send({ id: message.id, type: "complete" });
         },
-        // Closes the socket, with 1011 as a host that goes away does, or with the code given (4401, 4403) as one that
-        // turns the caller away while subscribed does.
+        // Closes the socket, with 1011 as a host that goes away does, or with the code given: 4401 or 4403 as one that
+        // turns the caller away while subscribed does, 4408 or 4429 as one that closes a socket it may take again.
         drop: (code = 1011) => conn.close(code, CLOSE_REASONS[code] ?? "Going away"),
       };
       live.get(conn).add(message.id);

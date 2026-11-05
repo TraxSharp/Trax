@@ -98,11 +98,20 @@ describe("the C# view of a machine whose names C# cannot hold", () => {
     (name) => expect(() => view(withFields([field(name)]))).toThrow("which every C# record has"),
   );
 
-  it.each(["$x", "__arglist", "__makeref"])("refuses a state %s, which C# does not take", (state) =>
+  // value__ is the field every C# enum holds its value in: no member may take it (CS0076), even with an @.
+  it.each(["$x", "__arglist", "__makeref", "value__"])("refuses a state %s, which C# does not take", (state) =>
     expect(() => view(withStates(["Locked", state]))).toThrow(
       `has the state ${JSON.stringify(state)}, which C# does not take as a member name`,
     ),
   );
+
+  it("refuses a trigger value__, which C# does not take", () =>
+    expect(() => view(withTriggers(["Coin", "value__"]))).toThrow(
+      'has the trigger "value__", which C# does not take as a member name',
+    ));
+
+  it("writes a machine with no triggers as an enum with no members", () =>
+    expect(view(withTriggers([]))).toContain("public enum TurnstileTrigger\n{\n}"));
 
   it("refuses context fields that differ only in case, which the view's JSON reads as one", () =>
     expect(() => view(withFields([field("Id"), field("id")]))).toThrow(

@@ -180,6 +180,53 @@ public class TraxProjectGeneratorTests
         Directory.Exists(Path.Combine(_tempDir, "Trains", "Items", "ListItems")).Should().BeTrue();
     }
 
+    // The same schema writes the same file on every machine, whatever culture it runs under.
+    [Test]
+    public void GenerateTrainsLibrary_NamespacesAreInOrdinalOrderUnderAnyCulture()
+    {
+        var generator = new TraxProjectGenerator();
+        static ApiOperation Operation(string name, string group) =>
+            new()
+            {
+                Name = name,
+                Kind = OperationKind.Query,
+                Group = group,
+                InputType = new ApiType
+                {
+                    Name = "Unit",
+                    Fields = [],
+                    IsBuiltIn = true,
+                },
+                OutputType = new ApiType
+                {
+                    Name = "Unit",
+                    Fields = [],
+                    IsBuiltIn = true,
+                },
+            };
+        var schema = MakeSchema(
+            operations: [Operation("GetAlpha", "alpha"), Operation("GetBeta", "Beta")]
+        );
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(
+                "en-US"
+            );
+            generator.GenerateTrainsLibrary(schema, _tempDir, "TestProject");
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = culture;
+        }
+
+        var content = File.ReadAllText(Path.Combine(_tempDir, "GraphQLNamespaces.cs"));
+        content
+            .IndexOf("string Beta", StringComparison.Ordinal)
+            .Should()
+            .BeLessThan(content.IndexOf("string alpha", StringComparison.Ordinal));
+    }
+
     #endregion
 
     #region GenerateTrainsLibrary_Enums

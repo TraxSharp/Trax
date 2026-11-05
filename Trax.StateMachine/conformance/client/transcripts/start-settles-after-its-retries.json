@@ -15,8 +15,9 @@
     { "client": "start", "as": "start" },
     { "subscribe": { "id": "i-1" } },
     { "request": "get", "drop": true },
+    { "request": "get", "hold": "retried" },
     { "unsettled": "start" },
-    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "respond": "retried", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
     { "await": "start", "expect": { "settled": true } },
     { "view": { "status": "ready" } }
   ]

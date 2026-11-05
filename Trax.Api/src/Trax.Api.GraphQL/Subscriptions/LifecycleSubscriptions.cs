@@ -19,7 +19,8 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// Each field carries the authorization of the data it streams, decided per subscriber by
 /// <see cref="LifecycleSubscriptionAccess"/>: a subscriber sees the trains the operations
 /// authorization or each train's own posture admits them to, and one who could see nothing is
-/// refused when subscribing.
+/// refused when subscribing. The decision is made again every connection re-check interval, and a
+/// subscription whose subscriber no longer passes ends with a <c>TRAX_AUTHORIZATION</c> error.
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/subscriptions">SDK reference</seealso>
 public class LifecycleSubscriptions
@@ -258,10 +259,14 @@ public class LifecycleSubscriptions
             throw;
         }
 
+        var recheck = access.LifecycleRecheck(user, visibility);
         return new SubscriberSourceStream<JunctionEvent>(
             stream,
             (topicStream, readCt) =>
-                ReadJunctionEvents(topicStream, metadataId, visibility, baseline, readCt)
+                recheck.Until(
+                    ReadJunctionEvents(topicStream, metadataId, visibility, baseline, readCt),
+                    ct: readCt
+                )
         );
     }
 
@@ -278,7 +283,11 @@ public class LifecycleSubscriptions
         var stream = await TopicSubscribe
             .OneAtATimeAsync<DataChangedEvent>(receiver, nameof(OnDataChanged), ct)
             .ConfigureAwait(false);
-        return new SubscriberSourceStream<DataChangedEvent>(stream, Read);
+        var recheck = access.Recheck(_ => access.DataChangesFor(user));
+        return new SubscriberSourceStream<DataChangedEvent>(
+            stream,
+            (topicStream, readCt) => recheck.Until(Read(topicStream, readCt), ct: readCt)
+        );
     }
 
     private static async ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeLifecycle(
@@ -315,10 +324,14 @@ public class LifecycleSubscriptions
             throw;
         }
 
+        var recheck = access.LifecycleRecheck(user, visibility);
         return new SubscriberSourceStream<TrainLifecycleEvent>(
             stream,
             (topicStream, readCt) =>
-                ReadLifecycle(topicStream, visibility, baseline, externalId, readCt)
+                recheck.Until(
+                    ReadLifecycle(topicStream, visibility, baseline, externalId, readCt),
+                    ct: readCt
+                )
         );
     }
 

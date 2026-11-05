@@ -143,43 +143,21 @@ public class OperationsClientGeneratorTests
             );
     }
 
+    // What the transport refuses (a cleartext or scheme-relative url, a redirect, a status with no error, an answer
+    // with no data, an answer past maxResponseBytes, a host past requestTimeout, a socket closed with 4401 or 4403) is
+    // held by the operations kit, which OperationsConformanceTests runs over the client this generator writes for the
+    // kit's fixture. What no transcript can see is pinned here: the limits a transport has when the app names none.
     [Test]
-    public void The_transport_refuses_cleartext_follows_no_redirect_and_caps_an_answer()
+    public void The_transport_has_default_limits_and_exports_its_checks()
     {
         var files = Render(("src/graphql/Runs.graphql", Runs));
 
         Text(files, "client.g.ts")
             .Should()
-            .Contain(
-                "requireSecureEndpoint(options.url, options.allowInsecureTransport);",
-                "a credential is sent over TLS, or to loopback, unless the app said the network is trusted"
-            )
+            .Contain("const defaultMaxResponseBytes = 16 * 1024 * 1024;")
             .And.Contain(
-                "requireSecureSocket(options.socketUrl, options.allowInsecureTransport);",
-                "the socket carries the credential in connection_init, so it is held to the same rule"
-            )
-            .And.Contain("redirect: \"error\",")
-            .And.Contain(
-                "requireNoRedirect(response);",
-                "a fetch that ignores redirect: \"error\" must not have the answer it followed to read"
-            )
-            .And.Contain(
-                "if (!response.ok && !(Array.isArray(answer.errors) && answer.errors.length > 0))",
-                "an answer that is not 2xx and names no GraphQL error is a failed request, whatever data it holds"
-            )
-            .And.Contain("answer = await readJson(response, options.maxResponseBytes);")
-            .And.Contain("const defaultMaxResponseBytes = 16 * 1024 * 1024;")
-            .And.Contain(
-                "if (/^[\\\\/]{2}/.test(bare.slice(start)))",
-                "a url starting with two slashes either way round names another host on the page's scheme, not a path"
-            )
-            .And.Contain(
-                "withRequestTimeout(options.requestTimeout ?? defaultRequestTimeout,",
-                "a host that never answers fails the request, as it does in the C# client"
-            )
-            .And.Contain(
-                "error.code !== 4401 && error.code !== 4403",
-                "a socket the host turned away is not opened again, as in the C# client"
+                "const defaultRequestTimeout = 30_000;",
+                "a host that never answers fails the request after 30 seconds, as in the C# client"
             )
             .And.NotContain("response.json()");
         Text(files, "index.g.ts")
@@ -1386,6 +1364,78 @@ public class OperationsClientGeneratorTests
             .Be("refused", "a required field the answer lacks is an error, not a default");
     }
 
+    // GraphQL allows `enum Empty` with no values in SDL text but not in a schema: TypeScript would write `= ;`.
+    [Test]
+    public void An_enum_with_no_values_is_refused_by_both_clients()
+    {
+        var options = new OperationsGenerateOptions(
+            Schema + "\nenum Empty\n",
+            [new("src/graphql/Runs.graphql", Runs)]
+        );
+
+        ((Action)(() => ClientGenerator.Render(options)))
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("The GraphQL enum Empty declares no values*");
+        var csharp = () =>
+            ClientGenerator.RenderCSharp(options, ClientGenerator.DefaultOperationsNamespace);
+        csharp
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("The GraphQL enum Empty declares no values*");
+    }
+
+    // A type the schema declares is that type, whatever scalar shares its name.
+    [TestCase("Duration")]
+    [TestCase("Date")]
+    [TestCase("Url")]
+    [TestCase("Byte")]
+    public void A_declared_type_named_like_a_known_scalar_is_typed_as_itself_by_both_clients(
+        string name
+    )
+    {
+        var schema = System.Text.RegularExpressions.Regex.Replace(Schema, @"\bRunState\b", name);
+        var runs = Runs.Replace("RunState", name, StringComparison.Ordinal);
+        var options = new OperationsGenerateOptions(
+            schema,
+            [new("src/graphql/Runs.graphql", runs)]
+        );
+
+        Text(ClientGenerator.Render(options), "documents/runs.g.ts")
+            .Should()
+            .Contain($"  state?: {name} | null;")
+            .And.Contain($"      state: {name};")
+            .And.Contain($"import type {{ {name} }} from \"../types.g\";");
+        Text(
+                ClientGenerator.RenderCSharp(options, ClientGenerator.DefaultOperationsNamespace),
+                "Documents/Runs.g.cs"
+            )
+            .Should()
+            .Contain($"{Client}Optional<{name}?> State {{ get; init; }}")
+            .And.Contain($"    public required {name} State {{ get; init; }}");
+    }
+
+    // A record declares these itself, so an input record of one of their names would hold a member of its own name.
+    [TestCase("Equals")]
+    [TestCase("ToString")]
+    [TestCase("Deconstruct")]
+    public void An_input_named_like_a_member_every_record_has_is_refused_by_the_csharp_client(
+        string name
+    )
+    {
+        var options = new OperationsGenerateOptions(
+            Schema + $"\ninput {name} {{ x: Int }}\n",
+            [new("src/graphql/Runs.graphql", Runs)]
+        );
+
+        var csharp = () =>
+            ClientGenerator.RenderCSharp(options, ClientGenerator.DefaultOperationsNamespace);
+        csharp
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"The GraphQL input {name} would declare the record {name}*");
+    }
+
     [Test]
     public void Two_enum_values_that_take_one_member_are_refused()
     {
@@ -1514,6 +1564,10 @@ public class OperationsClientGeneratorTests
     [TestCase("A.")]
     [TestCase("A.B-C")]
     [TestCase("My.class")]
+    // The engine's C# view takes ASCII names only, and both are written in one --namespace.
+    [TestCase("Caf\u00e9.Operations")]
+    [TestCase("My.\u0391pp")]
+    [TestCase("My.__arglist")]
     public void A_namespace_that_is_not_one_is_refused(string @namespace)
     {
         var act = () =>

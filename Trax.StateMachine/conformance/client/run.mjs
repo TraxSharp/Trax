@@ -3,11 +3,12 @@ import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { expectedCount, judge, readExpectedFailures } from "../expected-failures.mjs";
 import { canonical } from "../kit.mjs";
 import { startHost } from "./host.mjs";
 
 const USAGE =
-  "Usage: node conformance/client/run.mjs [--only <prefix>] (--testee <command> [args...] | --stdio)\n" +
+  "Usage: node conformance/client/run.mjs [--only <prefix>] [--name <testee>] (--testee <command> [args...] | --stdio)\n" +
   "See conformance/client/PROTOCOL.md.";
 
 const clientDir = fileURLToPath(new URL(".", import.meta.url));
@@ -18,6 +19,8 @@ const clientMachinesDir = join(clientDir, "machines");
 const planDir = join(clientDir, "..", "plan");
 const transcriptsDir = join(clientDir, "transcripts");
 const protocolPath = join(clientDir, "PROTOCOL.md");
+// The expected failures of each client, by the name its testee is run under (--name).
+const expectedFailuresDir = join(clientDir, "expected-failures");
 
 // How long a step waits for the client before the transcript fails. Every delay a transcript configures is far
 // shorter, so only a client that never does what the step waits for reaches it.
@@ -137,12 +140,15 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * Runs one transcript against the testee through `ask` (request → Promise<answer>). Throws an Error naming the step
  * that failed; returns when every step passed and nothing arrived that no step took, or `{ skipped }` naming what the
- * transcript needs that the client said it lacks.
+ * transcript needs that the client said it lacks. With `name`, the testee was run under that name (--name), and an
+ * answer to `open` that names another client fails: its expected failures are not that client's.
  */
-export async function runTranscript(transcript, host, askTestee, allowed = allowedLacks()) {
+export async function runTranscript(transcript, host, askTestee, allowed = allowedLacks(), name = undefined) {
   // Every answer comes within the step timeout, or the transcript fails naming the request it waited on, and no answer
   // may be an `error` or `unsupported`, the ones no step compares included.
   const ask = (request) => withTimeout(askTestee(request), `the testee's answer to ${request.op}`).then(checked(request));
+  if (transcript.defaults === true && ["retryDelays", "resubscribeDelays", "open"].some((k) => k in transcript))
+    throw new Error("a transcript on the client's defaults sets no delays and no open options");
   const { ir, irHash } = machineOf(transcript.machine);
   const documents = documentsOf(transcript.machine, irHash, transcript.documents);
   const field = machineField(transcript.machine);
@@ -159,12 +165,16 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
     instance: transcript.instance ?? null,
     startInput: transcript.startInput ?? null,
     effectEvent: transcript.effectEvent ?? null,
-    retryDelays: transcript.retryDelays ?? [10, 10],
-    resubscribeDelays: transcript.resubscribeDelays ?? [10],
+    // Tuned delays keep a run fast; a transcript marked `defaults` gets none, so the client's own are in force.
+    ...(transcript.defaults === true
+      ? {}
+      : { retryDelays: transcript.retryDelays ?? [10, 10], resubscribeDelays: transcript.resubscribeDelays ?? [10] }),
     ...(transcript.open ?? {}),
   });
   const refused = lacksRefused(opened, allowed);
   if (refused !== null) throw new Error(refused);
+  if (name !== undefined && opened.client !== name)
+    throw new Error(`open: the testee runs as ${name}, and its answer names the ${opened.client} client`);
   // A transcript that needs what the client says it cannot do is skipped, and reported as skipped, not passed.
   const lacking = (transcript.needs ?? []).filter((n) => (opened.lacks ?? []).includes(n));
   if (lacking.length > 0) {
@@ -184,6 +194,36 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
   const settled = new Set();
   const background = [];
   let subscription = null;
+  // When the host last ended a stream (completed it, failed it, or closed its socket), for a step that bounds how long
+  // the client waited before subscribing again.
+  let ended = null;
+  // Asks for the view once and compares, without polling: after a fence, a request or subscription the client sent only
+  // once it had taken everything before it, so what it shows then is what it settled on.
+  const viewOnce = async (expected, fail) => {
+    const got = await ask({ op: "view" });
+    if (!matches(expected, got)) fail(`expected the view to hold ${canonical(expected)}, it holds ${canonical(got)}`);
+  };
+  // Requests a step took and holds unanswered until a `respond` step answers them.
+  const held = new Map();
+  // Answers one request the way its step says.
+  const respond = (request, step, fail) => {
+    if (step.drop) request.respond({ close: true });
+    else if (step.hang) request.respond({ hang: true });
+    else if (step.redirect !== undefined)
+      request.respond({ status: step.redirect === true ? 307 : step.redirect, headers: { location: host.decoy } });
+    else if (step.raw !== undefined) request.respond({ raw: step.raw });
+    else if (step.status !== undefined) request.respond({ status: step.status, json: step.body });
+    else if (step.errors !== undefined) request.respond({ json: { data: null, errors: step.errors } });
+    else {
+      // `bare` sends the answer as given, without the fields a host fills in.
+      const answer = step.bare ? step.answer : answerOf(step.answer ?? null);
+      const json = { data: { machines: { [field]: { [request.operation]: answer } } } };
+      // `padTo` pads the body to exactly that many bytes, for a step on either side of a size limit.
+      const pad = step.padTo !== undefined ? step.padTo - Buffer.byteLength(JSON.stringify(json)) : (step.pad ?? 0);
+      if (pad < 0) fail(`the answer is already larger than padTo ${step.padTo}`);
+      request.respond({ json, pad });
+    }
+  };
 
   for (const [index, step] of transcript.steps.entries()) {
     const where = `step ${index + 1} (${JSON.stringify(step).slice(0, 80)})`;
@@ -216,44 +256,66 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
         fail(`expected a ${step.request} request, got ${request.operation} ${canonical(request.body.variables ?? {})}`);
       if (step.variables !== undefined && canonical(request.body.variables ?? {}) !== canonical(step.variables))
         fail(`expected variables ${canonical(step.variables)}, got ${canonical(request.body.variables ?? {})}`);
-      if (step.drop) request.respond({ close: true });
-      else if (step.hang) request.respond({ hang: true });
-      else if (step.redirect !== undefined)
-        request.respond({ status: step.redirect === true ? 307 : step.redirect, headers: { location: host.decoy } });
-      else if (step.raw !== undefined) request.respond({ raw: step.raw });
-      else if (step.status !== undefined) request.respond({ status: step.status, json: step.body });
-      else if (step.errors !== undefined) request.respond({ json: { data: null, errors: step.errors } });
-      else
-        request.respond({
-          json: { data: { machines: { [field]: { [step.request]: answerOf(step.answer ?? null) } } } },
-          pad: step.pad ?? 0,
-        });
+      if (step.hold !== undefined) held.set(step.hold, request);
+      else respond(request, step, fail);
+    } else if (step.respond !== undefined) {
+      const request = held.get(step.respond) ?? fail(`no request is held as ${step.respond}`);
+      held.delete(step.respond);
+      respond(request, step, fail);
     } else if (step.subscribe !== undefined) {
       subscription = await host.subscriptions.take(STEP_TIMEOUT, "subscription").catch((e) => fail(e.message));
       if (subscription.operation !== "changed") fail(`expected the changed document, got ${subscription.payload.id}`);
       if (subscription.payload.query) fail(`the subscription sent a document beside its id: ${subscription.payload.query}`);
       if (canonical(subscription.payload.variables ?? {}) !== canonical(step.subscribe))
         fail(`expected variables ${canonical(step.subscribe)}, got ${canonical(subscription.payload.variables ?? {})}`);
+      // How long after the host ended the stream before it the client subscribed again, against the bounds the
+      // resubscribe delays set: at least half a step (the most jitter takes off), and below the next step's half.
+      if (ended !== null && (step.notBefore !== undefined || step.before !== undefined)) {
+        const waited = Date.now() - ended;
+        if (step.notBefore !== undefined && waited < step.notBefore)
+          fail(`subscribed again ${waited} ms after the stream ended, sooner than ${step.notBefore} ms`);
+        if (step.before !== undefined && waited >= step.before)
+          fail(`subscribed again ${waited} ms after the stream ended, not within ${step.before} ms`);
+      }
     } else if (step.push !== undefined) {
       if (!subscription?.open) fail("no subscription is open to push on");
-      subscription.next({ data: { [`${field}Changed`]: { ...CHANGE_DEFAULTS, ...step.push } } }, step.pad ?? 0);
+      const change = step.bare ? step.push : { ...CHANGE_DEFAULTS, ...step.push };
+      subscription.next({ data: { [`${field}Changed`]: change } }, step.pad ?? 0);
+    } else if (step.pushRaw !== undefined) {
+      if (!subscription?.open) fail("no subscription is open to push on");
+      subscription.raw(step.pushRaw);
+      ended = Date.now();
+    } else if (step.clientClosed !== undefined) {
+      if (!subscription) fail("no socket to watch");
+      const deadline = Date.now() + STEP_TIMEOUT;
+      while (subscription.closedWith === null) {
+        if (Date.now() > deadline) fail("the client did not close the socket");
+        await delay(5);
+      }
+      if (subscription.closedWith !== step.clientClosed)
+        fail(`the client closed the socket with ${subscription.closedWith}, not ${step.clientClosed}`);
     } else if (step.pushErrors !== undefined) {
       if (!subscription?.open) fail("no subscription is open to push on");
       subscription.next({ data: null, errors: step.pushErrors });
     } else if (step.complete !== undefined) {
       if (!subscription?.open) fail("no subscription is open to complete");
       subscription.complete();
+      ended = Date.now();
     } else if (step.dropSocket !== undefined) {
       if (!subscription) fail("no socket to drop");
       subscription.drop(step.dropSocket === true ? undefined : step.dropSocket);
+      ended = Date.now();
     } else if (step.unsettled !== undefined) {
       if (!pending.has(step.unsettled)) fail(`nothing named ${step.unsettled} was sent`);
-      // Long enough for an answer the testee already wrote to arrive, shorter than any retry a transcript configures.
-      await delay(30);
+      // A round trip through the testee rather than a wait: an answer it wrote before its answer to this view has been
+      // read by the time that one is, and a turn of the event loop lets its handlers run.
+      await ask({ op: "view" });
+      await new Promise((resolve) => setImmediate(resolve));
       if (settled.has(step.unsettled)) fail(`${step.unsettled} was answered before it had settled`);
     } else if (step.streamError !== undefined) {
       if (!subscription?.open) fail("no subscription is open to end");
       subscription.error(step.streamError);
+      ended = Date.now();
     } else if (step.ping !== undefined) {
       if (!subscription) fail("no socket to ping");
       const before = subscription.pongs;
@@ -265,6 +327,8 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
       }
     } else if (step.decoy !== undefined) {
       if (host.decoyHits() !== step.decoy) fail(`expected ${step.decoy} requests at the redirect's target, got ${host.decoyHits()}`);
+    } else if (step.view !== undefined && step.once === true) {
+      await viewOnce(step.view, fail);
     } else if (step.view !== undefined) {
       const deadline = Date.now() + STEP_TIMEOUT;
       let got;
@@ -284,6 +348,7 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
   }
 
   if (pending.size > 0) throw new Error(`no step awaited ${[...pending.keys()].join(", ")}`);
+  if (held.size > 0) throw new Error(`no step answered the request held as ${[...held.keys()].join(", ")}`);
   await Promise.all(background);
   await delay(30);
   const extra = host.leftovers();
@@ -322,14 +387,14 @@ export function withTimeout(promise, what) {
 /**
  * Runs every transcript through `exchange` (a sender of request lines and a reader of answer lines, matched by id).
  * Returns the failures, each `{ name, error }`; `onResult` hears each transcript, with `skipped` for one the client
- * cannot run.
+ * cannot run. `name` is the name the testee runs under, as runTranscript takes it.
  */
-export async function runTranscripts(list, host, ask, onResult = () => {}) {
+export async function runTranscripts(list, host, ask, onResult = () => {}, name = undefined) {
   const failures = [];
   const allowed = allowedLacks();
   for (const t of list) {
     try {
-      const result = await runTranscript(t, host, ask, allowed);
+      const result = await runTranscript(t, host, ask, allowed, name);
       onResult({ name: t.name, skipped: result?.skipped });
     } catch (err) {
       failures.push({ name: t.name, error: err.message });
@@ -341,6 +406,44 @@ export async function runTranscripts(list, host, ask, onResult = () => {}) {
     }
   }
   return failures;
+}
+
+/**
+ * Runs transcripts through `run` (onResult → Promise, a runTranscripts with its list, host and ask bound) and judges each
+ * against the testee's expected failures (expected-failures.mjs), whose entries may name a prefix of the failure's text
+ * as `message`. `names` is every transcript of the kit, run or not. `onResult` hears each one with its `verdict` (`pass`,
+ * `skip`, `expected` with the entry's `reason`, or `fail` with a `note` when the list names another failure). Returns the
+ * failures that stand, how many transcripts were skipped and how many the list excused, and the problems with the list.
+ */
+export async function runJudged(run, entries, names, onResult = () => {}) {
+  const judged = judge(entries, names, {
+    detail: "message",
+    detailOf: (f) => f.error,
+    fits: (listed, got) => typeof got === "string" && got.startsWith(listed),
+  });
+  const failures = [];
+  let skipped = 0;
+  await run((r) => {
+    const settled = judged.settle(r.name, r.error !== undefined ? r : r.skipped !== undefined ? "skipped" : null);
+    if (settled.verdict === "skip") skipped += 1;
+    if (settled.verdict === "fail") failures.push(settled.note === undefined ? r : { ...r, note: settled.note });
+    onResult({ ...r, ...settled });
+  });
+  return { failures, skipped, expected: judged.expected, problems: judged.problems };
+}
+
+/** How a judged transcript is reported as it ends. */
+export function resultLine(r) {
+  switch (r.verdict) {
+    case "fail":
+      return `FAIL ${r.name}\n  ${r.error}${r.note === undefined ? "" : `\n  ${r.note}`}`;
+    case "expected":
+      return `xfail ${r.name} (expected: ${r.reason})`;
+    case "skip":
+      return `skip ${r.name} (the client lacks ${r.skipped.join(", ")})`;
+    default:
+      return `ok   ${r.name}`;
+  }
 }
 
 // Requests go out as lines on `output`; answers come back as lines on `input`, matched to their request by id,
@@ -414,10 +517,12 @@ export function lineAsker(input, output) {
 
 async function main(argv) {
   let only = "";
+  let name;
   let mode;
   let command = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--only") only = argv[++i] ?? "";
+    else if (argv[i] === "--name") name = argv[++i] ?? "";
     else if (argv[i] === "--stdio") mode = "stdio";
     else if (argv[i] === "--testee") {
       mode = "spawn";
@@ -426,7 +531,9 @@ async function main(argv) {
     } else throw new Error(`${USAGE}\nUnknown argument ${argv[i]}.`);
   }
   if (!mode || (mode === "spawn" && command.length === 0)) throw new Error(USAGE);
-  const list = transcripts().filter((t) => t.name.startsWith(only));
+  const { entries } = readExpectedFailures(expectedFailuresDir, name, "message");
+  const all = transcripts();
+  const list = all.filter((t) => t.name.startsWith(only));
   // A selection that runs nothing passes nothing: it is a mistake, not a pass.
   if (list.length === 0) throw new Error(`No transcript's name starts with "${only}".`);
 
@@ -439,26 +546,24 @@ async function main(argv) {
 
   const host = await startHost();
   // Each transcript is reported as it ends, so a testee that hangs still shows how far it got.
-  let skipped = 0;
-  const failures = await runTranscripts(list, host, ask, (r) => {
-    if (r.skipped !== undefined) skipped += 1;
-    console.error(
-      r.error !== undefined
-        ? `FAIL ${r.name}\n  ${r.error}`
-        : r.skipped !== undefined
-          ? `skip ${r.name} (the client lacks ${r.skipped.join(", ")})`
-          : `ok   ${r.name}`,
-    );
-  });
+  const judged = await runJudged(
+    (onResult) => runTranscripts(list, host, ask, onResult, name),
+    entries,
+    all.map((t) => t.name),
+    (r) => console.error(resultLine(r)),
+  );
   const ended = await withTimeout(ask({ op: "end" }), "the testee's answer to end").catch((e) => ({ error: e.message }));
   if (child) child.stdin.end();
   await host.close();
 
   const endFailure = testeeFailure(ended);
   if (endFailure !== null) console.error(`FAIL end\n  the testee's answer to end: ${endFailure}`);
-  const ran = list.length - skipped;
-  console.error(`${ran - failures.length} of ${ran} transcripts passed${skipped > 0 ? `, ${skipped} skipped` : ""}.`);
-  return failures.length === 0 && endFailure === null ? 0 : 1;
+  for (const p of judged.problems) console.error(`FAIL expected failures: ${p}`);
+  const ran = list.length - judged.skipped - judged.expected;
+  console.error(
+    `${ran - judged.failures.length} of ${ran} transcripts passed, ${judged.skipped} skipped, ${expectedCount(judged.expected)}.`,
+  );
+  return judged.failures.length === 0 && judged.problems.length === 0 && endFailure === null ? 0 : 1;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url))

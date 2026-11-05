@@ -77,19 +77,22 @@ public sealed record GraphQLSubscriptionSocketOptions
     /// <summary>
     /// How long a ping may go unanswered before the connection counts as broken, and every subscription over it is
     /// failed so its subscriber can subscribe again; 15 seconds by default. A host that drops off the network without
-    /// closing the socket is found this way. <see cref="Timeout.InfiniteTimeSpan"/> waits forever.
+    /// closing the socket is found this way. <see cref="Timeout.InfiniteTimeSpan"/> waits forever. Any other must be
+    /// positive and at most <see cref="int.MaxValue"/> milliseconds.
     /// </summary>
     public TimeSpan KeepAliveTimeout { get; init; } = TimeSpan.FromSeconds(15);
 
     /// <summary>
     /// How long a connection may take to be acknowledged, its <c>connection_init</c> included, before it counts as
-    /// failed; and how long a close waits for the host's answer before the connection is dropped.
+    /// failed; and how long a close waits for the host's answer before the connection is dropped. 10 seconds by default;
+    /// <see cref="Timeout.InfiniteTimeSpan"/> waits forever. Any other must be positive and at most
+    /// <see cref="int.MaxValue"/> milliseconds (about 24.8 days).
     /// </summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// The largest message the server may send, in bytes; 16 MiB by default. A larger one fails the connection, and
-    /// every subscription over it, rather than being read into memory.
+    /// every subscription over it, rather than being read into memory. It must be positive.
     /// </summary>
     public int MaxMessageSize { get; init; } = 16 * 1024 * 1024;
 }
@@ -121,9 +124,38 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     /// The endpoint is relative, or it is not <c>wss</c> on a host that is not loopback and
     /// <see cref="GraphQLSubscriptionSocketOptions.AllowInsecureTransport"/> is not set.
     /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="GraphQLSubscriptionSocketOptions.ConnectTimeout"/> or
+    /// <see cref="GraphQLSubscriptionSocketOptions.KeepAliveTimeout"/> is neither infinite nor between zero, exclusive,
+    /// and <see cref="int.MaxValue"/> milliseconds; or <see cref="GraphQLSubscriptionSocketOptions.KeepAliveInterval"/>
+    /// is below zero and not infinite, or longer than that; or
+    /// <see cref="GraphQLSubscriptionSocketOptions.MaxMessageSize"/> is zero or less.
+    /// </exception>
     public GraphQLSubscriptionSocket(GraphQLSubscriptionSocketOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        TraxHttpTransport.RequireTimeout(
+            options.ConnectTimeout,
+            "connect timeout",
+            nameof(options)
+        );
+        TraxHttpTransport.RequireTimeout(
+            options.KeepAliveTimeout,
+            "keep-alive timeout",
+            nameof(options)
+        );
+        // Zero sends no pings, as infinite does.
+        if (options.KeepAliveInterval != TimeSpan.Zero)
+            TraxHttpTransport.RequireTimeout(
+                options.KeepAliveInterval,
+                "keep-alive interval",
+                nameof(options)
+            );
+        TraxHttpTransport.RequireSize(
+            options.MaxMessageSize,
+            "largest message size",
+            nameof(options)
+        );
         TransportSecurity.RequireSecure(
             options.Endpoint,
             options.AllowInsecureTransport,
@@ -142,7 +174,19 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         public HttpMessageInvoker? Invoker { get; init; }
         public required Task Ready { get; init; }
         public Dictionary<string, Subscription> Sinks { get; } = new(StringComparer.Ordinal);
-        public CancellationTokenSource Stop { get; } = new();
+
+        private readonly CancellationTokenSource _stop = new();
+        private readonly object _stopGate = new();
+        private bool _stopDisposed;
+        private Task? _released;
+
+        public Connection() => Stopping = _stop.Token;
+
+        /// <summary>
+        /// Cancelled once the connection is stopped. Taken when it is built, so it can still be read, cancelled, once
+        /// the source behind it is disposed.
+        /// </summary>
+        public CancellationToken Stopping { get; }
 
         /// <summary>
         /// One send at a time, as the socket allows. Each connection has its own, so a send stalled on an old
@@ -150,6 +194,40 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         /// </summary>
         public SemaphoreSlim Sending { get; } = new(1, 1);
         public bool Closed { get; set; }
+
+        /// <summary>Cancels whatever the connection is still doing.</summary>
+        public void Stop()
+        {
+            lock (_stopGate)
+                if (!_stopDisposed)
+                    _stop.Cancel();
+        }
+
+        /// <summary>
+        /// Stops the connection and lets go of everything it holds, once: the socket, the upgrade's handler, and, once
+        /// the send in flight has given the send lock back, the lock and the stop. Every caller awaits the same release.
+        /// </summary>
+        public Task ReleaseAsync()
+        {
+            lock (_stopGate)
+                return _released ??= ReleaseCoreAsync();
+        }
+
+        private async Task ReleaseCoreAsync()
+        {
+            await Task.Yield();
+            Stop();
+            Socket.Dispose();
+            Invoker?.Dispose();
+            // A send in flight is cancelled by the stop, and gives the lock back; one that comes after finds it disposed.
+            await Sending.WaitAsync().ConfigureAwait(false);
+            Sending.Dispose();
+            lock (_stopGate)
+            {
+                _stopDisposed = true;
+                _stop.Dispose();
+            }
+        }
 
         /// <summary>The host sent a message over the limit, whose rest is never read.</summary>
         public bool Overflowed { get; set; }
@@ -304,9 +382,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         {
             // Already closed, or the host did not answer in time; disposing the socket drops it.
         }
-        connection.Stop.Cancel();
-        connection.Socket.Dispose();
-        connection.Invoker?.Dispose();
+        await connection.ReleaseAsync().ConfigureAwait(false);
     }
 
     private Connection Connect()
@@ -340,7 +416,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         try
         {
             using (
-                var timeout = CancellationTokenSource.CreateLinkedTokenSource(connection.Stop.Token)
+                var timeout = CancellationTokenSource.CreateLinkedTokenSource(connection.Stopping)
             )
             {
                 timeout.CancelAfter(_options.ConnectTimeout);
@@ -361,7 +437,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
 
             for (; ; )
             {
-                var message = await ReceiveAsync(connection, connection.Stop.Token)
+                var message = await ReceiveAsync(connection, connection.Stopping)
                     .ConfigureAwait(false);
                 if (message is null)
                     throw Closed(connection.Socket, "while subscribed");
@@ -371,15 +447,53 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         catch (Exception ex)
         {
             acknowledged.TrySetException(ex);
-            Fail(connection, ex);
+            // A message that is not one of the protocol's closes the socket with 4400, as graphql-transport-ws says:
+            // the close goes out before the connection is stopped, which would drop it instead.
+            var invalid =
+                ex is WebSocketException { WebSocketErrorCode: WebSocketError.InvalidMessageType };
+            Fail(connection, ex, stop: !invalid);
+            if (invalid)
+                await CloseInvalidAsync(connection, ex.Message).ConfigureAwait(false);
             // The rest of a message over the limit is never read. The connection fails first, so a send
             // racing the abort cannot fail the subscriptions with the aborted socket's error instead.
             if (connection.Overflowed)
                 connection.Socket.Abort();
-            connection.Socket.Dispose();
-            connection.Invoker?.Dispose();
+            await connection.ReleaseAsync().ConfigureAwait(false);
         }
     }
+
+    // Sends the close frame for a message the host should not have sent, waiting no longer than a connection may take
+    // to open for a send in flight to give the socket up. Whatever goes wrong, the connection is dropped after.
+    private async Task CloseInvalidAsync(Connection connection, string reason)
+    {
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(
+                connection.Stopping
+            );
+            timeout.CancelAfter(_options.ConnectTimeout);
+            await connection.Sending.WaitAsync(timeout.Token).ConfigureAwait(false);
+            try
+            {
+                // A close reason is at most 123 bytes.
+                var said = reason.Length > 60 ? reason[..60] : reason;
+                await connection
+                    .Socket.CloseOutputAsync(InvalidMessage, said, timeout.Token)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                connection.Sending.Release();
+            }
+        }
+        catch (Exception)
+        {
+            // The socket is gone already, or would not take the close in time; it is dropped either way.
+        }
+    }
+
+    // graphql-transport-ws's close code for a message it does not take.
+    private const WebSocketCloseStatus InvalidMessage = (WebSocketCloseStatus)4400;
 
     // A ClientWebSocket left to itself follows a redirect of its upgrade, and connection_init (the credential) would
     // go to whatever host the redirect names. The upgrade goes through a handler that follows none instead; what
@@ -463,8 +577,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     private async Task OnMessageAsync(Connection connection, JsonObject message)
     {
         var type =
-            Text(message, "type")
-            ?? throw new WebSocketException("The server sent a message with no type.");
+            Text(message, "type") ?? throw Invalid("The server sent a message with no type.");
         var id = Text(message, "id");
         Subscription? subscription = null;
         if (id is not null)
@@ -496,9 +609,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         {
             null => null,
             JsonValue value when value.TryGetValue<string>(out var text) => text,
-            _ => throw new WebSocketException(
-                $"The server sent a message whose {name} is not a string."
-            ),
+            _ => throw Invalid($"The server sent a message whose {name} is not a string."),
         };
 
     // Started, once and first, then the event (none when the subscribe message just went out). A sink that throws
@@ -560,7 +671,8 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     }
 
     // The connection failed or closed: every subscription over it fails, and the next subscription connects again.
-    private void Fail(Connection connection, Exception error)
+    // Unless `stop` is false, whatever the connection is still doing is cancelled: a close about to be sent is not.
+    private void Fail(Connection connection, Exception error, bool stop = true)
     {
         List<Subscription> subscriptions;
         lock (_gate)
@@ -571,7 +683,8 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             subscriptions = connection.Sinks.Values.ToList();
             connection.Sinks.Clear();
         }
-        connection.Stop.Cancel();
+        if (stop)
+            connection.Stop();
         foreach (var subscription in subscriptions)
             End(subscription, error);
     }
@@ -586,7 +699,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     )
     {
         var bytes = Encoding.UTF8.GetBytes(message.ToJsonString());
-        var cancel = token ?? connection.Stop.Token;
+        var cancel = token ?? connection.Stopping;
         await connection.Sending.WaitAsync(cancel).ConfigureAwait(false);
         try
         {
@@ -623,18 +736,25 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             if (result.EndOfMessage)
                 break;
         }
-        JsonNode? parsed;
+        JsonObject? parsed;
         try
         {
-            parsed = JsonNode.Parse(text.ToArray());
+            parsed =
+                JsonNode.Parse(text.ToArray(), documentOptions: TraxHttpTransport.Reading)
+                as JsonObject;
+            // A member given twice is found once the object is read.
+            _ = parsed?.Count;
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
-            throw new WebSocketException("The server sent a message that is not JSON.", ex);
+            throw Invalid("The server sent a message that is not JSON.", ex);
         }
-        return parsed as JsonObject
-            ?? throw new WebSocketException("The server sent a message that is not a JSON object.");
+        return parsed ?? throw Invalid("The server sent a message that is not a JSON object.");
     }
+
+    // A message that is not one graphql-transport-ws sends: the socket is closed with 4400.
+    private static WebSocketException Invalid(string message, Exception? inner = null) =>
+        new(WebSocketError.InvalidMessageType, message, inner);
 
     /// <summary>Closes the socket. Every open subscription fails, and no new one connects.</summary>
     public async ValueTask DisposeAsync()
@@ -648,11 +768,14 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         }
         if (connection is null)
             return;
+        // The close goes out before the connection is stopped: stopping it aborts the socket, and the host would see
+        // the connection drop rather than close.
         Fail(
             connection,
             new SocketUnavailableException(
                 "The socket was disposed: it follows no more subscriptions."
-            )
+            ),
+            stop: false
         );
         await CloseAsync(connection).ConfigureAwait(false);
     }

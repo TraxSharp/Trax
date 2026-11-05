@@ -10,9 +10,9 @@ using Trax.StateMachine.Tests.Fakes;
 namespace Trax.StateMachine.Tests.Client;
 
 /// <summary>
-/// A client whose handler follows redirects is refused before it sends anything, so neither the transport nor the
-/// machine server ever lets a request leave for another host; an answer from another host, through a handler the
-/// transport cannot see into, fails the request.
+/// A client is accepted only on a handler that follows no redirects: one the check can see follows them is refused
+/// before it sends anything, and so is one on a handler it cannot check, unless the caller says that handler follows
+/// none. An answer from another host, through a handler the caller vouched for, still fails the request.
 /// </summary>
 public class RedirectTests
 {
@@ -25,8 +25,19 @@ public class RedirectTests
         "query Q { x }"
     );
 
-    private static TraxHttpTransport Transport(HttpClient http, Uri endpoint) =>
-        new(new TraxHttpTransportOptions { Http = http, Endpoint = endpoint });
+    private static TraxHttpTransport Transport(
+        HttpClient http,
+        Uri endpoint,
+        bool handlerFollowsNoRedirects = false
+    ) =>
+        new(
+            new TraxHttpTransportOptions
+            {
+                Http = http,
+                Endpoint = endpoint,
+                HandlerFollowsNoRedirects = handlerFollowsNoRedirects,
+            }
+        );
 
     private static HttpClient NoRedirects() =>
         new(new SocketsHttpHandler { AllowAutoRedirect = false });
@@ -39,7 +50,7 @@ public class RedirectTests
 
         var build = () => Transport(new HttpClient(), endpoint.Endpoint);
 
-        build.Should().Throw<ArgumentException>().WithMessage("*follows redirects*");
+        build.Should().Throw<ArgumentException>().WithMessage("*must not follow redirects*");
         endpoint.Received.Should().Be(0);
         other.Received.Should().Be(0);
     }
@@ -53,7 +64,88 @@ public class RedirectTests
 
         var build = () => Transport(http, new Uri("https://api.example.com/graphql"));
 
-        build.Should().Throw<ArgumentException>().WithMessage("*follows redirects*");
+        build.Should().Throw<ArgumentException>().WithMessage("*must not follow redirects*");
+    }
+
+    // A handler of a kind the check does not know, alone or behind delegating handlers, and a chain with no handler at
+    // its end: none can be shown to follow no redirects.
+    private static IEnumerable<TestCaseData> Unchecked()
+    {
+        yield return new TestCaseData(
+            new Func<HttpMessageHandler>(() => new FollowsItself())
+        ).SetName("A_handler_the_check_does_not_know_is_refused");
+        yield return new TestCaseData(
+            new Func<HttpMessageHandler>(() =>
+                new PassThrough { InnerHandler = new FollowsItself() }
+            )
+        ).SetName("A_handler_the_check_does_not_know_behind_a_delegating_handler_is_refused");
+        yield return new TestCaseData(
+            new Func<HttpMessageHandler>(() => new PassThrough())
+        ).SetName("A_chain_with_no_handler_at_its_end_is_refused");
+    }
+
+    [TestCaseSource(nameof(Unchecked))]
+    public void A_client_the_check_cannot_show_follows_no_redirects_is_refused(
+        Func<HttpMessageHandler> handler
+    )
+    {
+        using var http = new HttpClient(handler());
+
+        var transport = () => Transport(http, new Uri("https://api.example.com/graphql"));
+        var server = () => MachineServer(http, new Uri("https://api.example.com/graphql"));
+
+        transport
+            .Should()
+            .Throw<ArgumentException>()
+            .WithMessage("*must not follow redirects*HandlerFollowsNoRedirects*");
+        server
+            .Should()
+            .Throw<ArgumentException>()
+            .WithMessage("*must not follow redirects*HandlerFollowsNoRedirects*");
+    }
+
+    [Test]
+    public void A_handler_the_caller_says_follows_no_redirects_is_accepted()
+    {
+        using var http = new HttpClient(new PassThrough { InnerHandler = new FollowsItself() });
+
+        var transport = () =>
+            Transport(
+                http,
+                new Uri("https://api.example.com/graphql"),
+                handlerFollowsNoRedirects: true
+            );
+        var server = () =>
+            MachineServer(
+                http,
+                new Uri("https://api.example.com/graphql"),
+                handlerFollowsNoRedirects: true
+            );
+
+        transport.Should().NotThrow();
+        server.Should().NotThrow();
+    }
+
+    [Test]
+    public void Saying_the_handler_follows_no_redirects_does_not_accept_one_that_does()
+    {
+        using var http = new HttpClient();
+
+        var transport = () =>
+            Transport(
+                http,
+                new Uri("https://api.example.com/graphql"),
+                handlerFollowsNoRedirects: true
+            );
+        var server = () =>
+            MachineServer(
+                http,
+                new Uri("https://api.example.com/graphql"),
+                handlerFollowsNoRedirects: true
+            );
+
+        transport.Should().Throw<ArgumentException>().WithMessage("*must not follow redirects*");
+        server.Should().Throw<ArgumentException>().WithMessage("*must not follow redirects*");
     }
 
     [Test]
@@ -61,9 +153,10 @@ public class RedirectTests
     {
         await using var other = LoopbackHttpHost.Answering(Answer);
         await using var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+        // The caller said it follows none, and it did.
         using var http = new HttpClient(new FollowsItself());
 
-        var answer = await Transport(http, endpoint.Endpoint)
+        var answer = await Transport(http, endpoint.Endpoint, handlerFollowsNoRedirects: true)
             .ExecuteAsync(new TraxRequest(Query, new JsonObject()));
 
         answer.Failure.Should().NotBeNull();
@@ -107,7 +200,7 @@ public class RedirectTests
 
         var build = () => MachineServer(new HttpClient(), endpoint.Endpoint);
 
-        build.Should().Throw<ArgumentException>().WithMessage("*follows redirects*");
+        build.Should().Throw<ArgumentException>().WithMessage("*must not follow redirects*");
         endpoint.Received.Should().Be(0);
         other.Received.Should().Be(0);
     }
@@ -120,19 +213,24 @@ public class RedirectTests
         );
         await using var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
         using var http = new HttpClient(new FollowsItself());
-        var server = MachineServer(http, endpoint.Endpoint);
+        var server = MachineServer(http, endpoint.Endpoint, handlerFollowsNoRedirects: true);
 
         var get = () => server.GetAsync("i-1");
 
         (await get.Should().ThrowAsync<HttpRequestException>()).WithMessage("*redirected*");
     }
 
-    private static GraphQLMachineServer MachineServer(HttpClient http, Uri endpoint) =>
+    private static GraphQLMachineServer MachineServer(
+        HttpClient http,
+        Uri endpoint,
+        bool handlerFollowsNoRedirects = false
+    ) =>
         new(
             new GraphQLMachineServerOptions
             {
                 Http = http,
                 Endpoint = endpoint,
+                HandlerFollowsNoRedirects = handlerFollowsNoRedirects,
                 Machine = new ClientManifestMachine
                 {
                     Id = "turnstile",
@@ -160,7 +258,7 @@ public class RedirectTests
 
     private sealed class PassThrough : DelegatingHandler { }
 
-    // Follows a 307 itself, as a platform's own handler might: the transport cannot tell that it does.
+    // Follows a 307 itself, as a platform's own handler might: the check cannot tell whether it does.
     private sealed class FollowsItself : HttpMessageHandler
     {
         private readonly HttpMessageInvoker _inner = new(

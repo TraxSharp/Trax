@@ -65,10 +65,35 @@ fn handle(request: &Value, machines: &mut HashMap<String, Machine>) -> Value {
             let (Some(name), Some(ir)) = (name, request.get("ir")) else {
                 return error("a load names a machine and carries its ir".into());
             };
+            // An IR nested deeper than any reader takes, built here (PROTOCOL.md, tooDeep).
+            let mut deep_ir;
+            let ir = if request.get("tooDeep").and_then(Value::as_str) == Some("ir") {
+                deep_ir = ir.clone();
+                if let Value::Object(map) = &mut deep_ir {
+                    let mut initial = match map.get(&"initialContext".into()) {
+                        Some(Value::Object(initial)) => initial.clone(),
+                        _ => Map::new(),
+                    };
+                    initial.insert("deep".into(), nested_arrays(600));
+                    map.insert("initialContext".into(), Value::Object(initial));
+                }
+                &deep_ir
+            } else {
+                ir
+            };
             match Machine::from_ir(ir) {
                 Ok(machine) => {
-                    // The one handler every testee binds (PROTOCOL.md): a custom guard named `throws`, which panics.
-                    let machine = machine.with_guard("throws", |_, _| panic!("throws"));
+                    // The handlers every testee binds (PROTOCOL.md): a custom guard named `throws`, which panics, and a
+                    // custom reduction named `nests`, which sets the context's `deep` to 600 arrays nested one in
+                    // another.
+                    let machine =
+                        machine
+                            .with_guard("throws", |_, _| panic!("throws"))
+                            .with_reducer("nests", |context, _| {
+                                let mut next = context.clone();
+                                next.insert("deep".into(), nested_arrays(600));
+                                next
+                            });
                     machines.insert(name.to_owned(), machine);
                     answer(vec![("loaded", Value::Bool(true))])
                 }
@@ -92,19 +117,28 @@ fn handle(request: &Value, machines: &mut HashMap<String, Machine>) -> Value {
             let Some(machine) = name.and_then(|n| machines.get(n)) else {
                 return error(format!("no machine {} is loaded", name.unwrap_or_default()));
             };
-            let Some(snapshot) = request.get("snapshot").and_then(Snapshot::from_value) else {
+            let Some(mut snapshot) = request.get("snapshot").and_then(Snapshot::from_value) else {
                 return error("the request's snapshot is not a snapshot".into());
             };
             let Some(target) = request.get("target").and_then(Value::as_str) else {
                 return error("a plan names a target".into());
             };
-            let fields = match request.get("fields") {
+            let too_deep = request.get("tooDeep").and_then(Value::as_str);
+            let mut fields = match request.get("fields") {
                 None | Some(Value::Null) => None,
                 Some(fields) => match fields.get("trigger").and_then(Value::as_str) {
                     Some(trigger) => Some(PlanEvent::new(trigger, fields.get("input").cloned())),
                     None => return error("the plan's fields name no trigger".into()),
                 },
             };
+            // A value nested deeper than any reader takes, built here (PROTOCOL.md, plan, tooDeep).
+            match (too_deep, fields.as_mut()) {
+                (Some("context"), _) => {
+                    snapshot.context.insert("deep".into(), nested_arrays(600));
+                }
+                (Some("input"), Some(fields)) => fields.input = Some(nested_arrays(600)),
+                _ => {}
+            }
             let Some(navigation) = request.get("navigation").and_then(Value::as_array).and_then(|n| {
                 n.iter()
                     .map(|t| t.as_str().map(str::to_owned))
@@ -171,6 +205,15 @@ fn handle(request: &Value, machines: &mut HashMap<String, Machine>) -> Value {
         }
         _ => answer(vec![("unsupported", Value::Bool(true))]),
     }
+}
+
+// `depth` arrays nested one in another.
+fn nested_arrays(depth: usize) -> Value {
+    let mut value = Value::Array(Vec::new());
+    for _ in 1..depth {
+        value = Value::Array(vec![value]);
+    }
+    value
 }
 
 fn plan_members(plan: PlanAnswer) -> Vec<(&'static str, Value)> {

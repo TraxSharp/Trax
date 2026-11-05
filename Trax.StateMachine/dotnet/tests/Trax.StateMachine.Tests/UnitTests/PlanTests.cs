@@ -8,7 +8,7 @@ namespace Trax.StateMachine.Tests.UnitTests;
 /// <summary>
 /// The planner (<c>conformance/PROTOCOL.md</c>, <c>plan</c>) over the kit's wizard and the test machines, beyond what
 /// the kit's cases hold every engine to: the edge order an IR lists does not matter, a handler makes a custom edge
-/// plannable, the expansion cap, and the compiled machine's planner.
+/// plannable, and the compiled machine's planner. The expansion cap is the kit's odometer cases.
 /// </summary>
 public class PlanTests
 {
@@ -101,6 +101,73 @@ public class PlanTests
         Triggers(plan).Should().Equal("Update", "Skip");
     }
 
+    // The wizard's search over a graph that counts what it asks of the engine.
+    private static (PlanResult Plan, List<string> Advanced, int Serialized) Counted(Snapshot from)
+    {
+        var machine = new IrMachine(WizardIr());
+        var advanced = new List<string>();
+        var serialized = 0;
+        var graph = new PlanGraph(
+            4,
+            s => s is "Start" or "Details" or "Review" or "Sent",
+            t => t is "Begin" or "Next" or "Back" or "Update",
+            (_, _) => true,
+            (s, trigger, input) =>
+            {
+                // Read with the machine's own Serialize, which the count below does not see.
+                advanced.Add($"{machine.Serialize(s)} {trigger}");
+                return machine.Advance(s, trigger, input);
+            },
+            s =>
+            {
+                serialized++;
+                return machine.Serialize(s);
+            }
+        );
+        var plan = EventPlanner.Plan(graph, from, "Review", Fill, Navigation, null);
+        return (plan, advanced, serialized);
+    }
+
+    [Test]
+    public void Each_snapshot_is_advanced_by_each_edge_once_the_goal_tests_fields_event_included()
+    {
+        foreach (var from in new[] { Wizard("Start"), Wizard("Review", "Bob", "bob@example.com") })
+        {
+            var (plan, advanced, serialized) = Counted(from);
+
+            plan.Should().BeOfType<PlanResult.Planned>();
+            advanced.Should().OnlyHaveUniqueItems();
+            // One wire for the snapshot the search starts from, and at most one for each step it took.
+            serialized.Should().BeLessThanOrEqualTo(advanced.Count + 1);
+        }
+    }
+
+    [Test]
+    public void A_navigation_trigger_listed_twice_is_tried_once_from_each_snapshot()
+    {
+        var asked = 0;
+        var machine = new IrMachine(
+            WizardIr(),
+            new Dictionary<string, Func<JsonObject, JsonNode?, bool>>
+            {
+                ["approved"] = (_, _) =>
+                {
+                    asked++;
+                    return false;
+                },
+            }
+        );
+
+        var once = machine.Plan(Wizard("Details"), "Review", Fill, ["Skip"]);
+        var onceAsked = asked;
+        asked = 0;
+        var thrice = machine.Plan(Wizard("Details"), "Review", Fill, ["Skip", "Skip", "Skip"]);
+
+        thrice.Should().BeOfType<PlanResult.Unreachable>();
+        once.Should().BeOfType<PlanResult.Unreachable>();
+        asked.Should().Be(onceAsked);
+    }
+
     [Test]
     public void A_target_past_the_depth_limit_is_exceeded_rather_than_unreachable()
     {
@@ -113,44 +180,6 @@ public class PlanTests
         Triggers(machine.Plan(Wizard("Start"), "Review", Fill, Navigation, maxDepth: 3))
             .Should()
             .HaveCount(3);
-    }
-
-    [Test]
-    public void A_search_that_never_runs_out_of_snapshots_stops_at_the_expansion_cap()
-    {
-        // Every Tick writes a new count, so the snapshots never repeat and B is never reached.
-        var ir = new JsonObject
-        {
-            ["id"] = "counter",
-            ["version"] = 1,
-            ["initialState"] = "A",
-            ["states"] = new JsonArray("A", "B"),
-            ["triggers"] = new JsonArray("Tick"),
-            ["committedStates"] = new JsonArray(),
-            ["transitions"] = new JsonArray(
-                new JsonObject
-                {
-                    ["from"] = "A",
-                    ["trigger"] = "Tick",
-                    ["to"] = "A",
-                    ["reduce"] = new JsonObject { ["reduce"] = "custom", ["name"] = "count" },
-                }
-            ),
-        };
-        var machine = new IrMachine(
-            ir,
-            customReducers: new Dictionary<string, Func<JsonObject, JsonNode?, JsonObject>>
-            {
-                ["count"] = (context, _) =>
-                    new JsonObject { ["n"] = (context["n"]?.GetValue<int>() ?? 0) + 1 },
-            }
-        );
-        var start = machine.CreateInitialSnapshot();
-
-        machine
-            .Plan(start, "B", null, ["Tick"], maxDepth: int.MaxValue)
-            .Should()
-            .BeOfType<PlanResult.Exceeded>();
     }
 
     [Test]
@@ -205,6 +234,31 @@ public class PlanTests
             .Built.Plan(start, "Paid", null, ["Next", "Pay"])
             .Should()
             .Be(new PlanResult.Invalid(Trigger: "Pay"));
+    }
+
+    public enum DoorState
+    {
+        Open,
+        Shut,
+    }
+
+    public enum DoorTrigger
+    {
+        Close,
+        Lock,
+    }
+
+    [Test]
+    public void The_compiled_machine_refuses_a_trigger_no_transition_fires_on()
+    {
+        var m = new MachineBuilder<DoorState, DoorTrigger>();
+        m.Id("door").Version(1).StartsAt(DoorState.Open, () => new JsonObject());
+        m.In(DoorState.Open).On(DoorTrigger.Close).To(DoorState.Shut);
+        var door = m.Build();
+
+        door.Plan(door.Definition.CreateInitialSnapshot(), "Shut", null, ["Close", "Lock"])
+            .Should()
+            .Be(new PlanResult.Invalid(Trigger: "Lock"));
     }
 
     [Test]

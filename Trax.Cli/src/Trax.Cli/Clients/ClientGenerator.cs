@@ -130,7 +130,14 @@ internal sealed partial class ClientGenerator
             options.Documents is not null || progress is not null ? types.Render() : null;
         if (typesText is not null)
             foreach (var type in types.Declared)
+            {
+                // The document and progress modules import their types beside sendDocument.
+                if (DocumentModuleNames.Contains(type))
+                    throw new InvalidOperationException(
+                        $"The GraphQL type '{type}' takes a name its generated modules use. Rename it on the host."
+                    );
                 names.Claim(type, $"the GraphQL type {type}");
+            }
 
         var clientDocuments = options.Documents is { } documentFiles
             ? ClientDocumentSet.Read(documentFiles, manifest, types)
@@ -144,7 +151,7 @@ internal sealed partial class ClientGenerator
                     StringComparer.Ordinal
                 )
             )
-                names.Claim(TypeScript.Identifier(name, "fragment"), $"the fragment {name}");
+                names.Claim(TypeScript.TypeName(name, "fragment"), $"the fragment {name}");
             foreach (var operation in clientDocuments.Operations)
             {
                 var owner = $"the client document {operation.Name} ({operation.Source})";
@@ -152,7 +159,14 @@ internal sealed partial class ClientGenerator
                     TypeScript.Identifier(Lower(operation.Name), "operation"),
                     owner
                 );
+                if (DocumentModuleNames.Contains(function))
+                    throw new InvalidOperationException(
+                        $"{owner} gets a function '{function}', a name its generated modules use. Rename the "
+                            + "operation in the document."
+                    );
                 var result = names.Claim($"{TypeScript.Upper(function)}Result", owner);
+                // Declared in the module beside the types it imports, so no type may take it either.
+                names.Claim($"{function}DocumentId", owner);
                 paths.Claim($"documents/{function}.g.ts", owner);
                 documentModules.Add(
                     (
@@ -666,6 +680,13 @@ internal sealed partial class ClientGenerator
         "TraxOperationError",
     };
 
+    // The names a client document's module, and the progress module, import from client.g beside the types they use.
+    // The index does not export them, so only a document's function or a type the modules import can collide.
+    private static readonly HashSet<string> DocumentModuleNames = new(StringComparer.Ordinal)
+    {
+        "sendDocument",
+    };
+
     // A schema several of a twin's outcomes share is declared as sharedOutput0, sharedOutput1, ...
     [System.Text.RegularExpressions.GeneratedRegex(@"\AsharedOutput[0-9]+\z")]
     private static partial System.Text.RegularExpressions.Regex SharedOutput();
@@ -835,6 +856,42 @@ internal sealed partial class ClientGenerator
         /** The most bytes of an answer the client reads, unless the app names another limit: 16 MiB. */
         const defaultMaxResponseBytes = 16 * 1024 * 1024;
 
+        /** How long one request may take, unless the app names another timeout: 30 seconds. */
+        const defaultRequestTimeout = 30_000;
+
+        /** Refuses a request timeout that is not a positive number of milliseconds (`Infinity` waits as long as the host takes). */
+        function requireRequestTimeout(timeout: number): void {
+          if (typeof timeout !== "number" || !(timeout > 0))
+            throw new RangeError(`requestTimeout must be a positive number of milliseconds, or Infinity, got ${timeout}.`);
+        }
+
+        /**
+         * Runs one request under `timeout` milliseconds: past it, the signal `run` was given is aborted and the promise
+         * rejects with the error `expired` makes, whether or not the fetch heeds the signal.
+         */
+        async function withRequestTimeout<T>(
+          timeout: number,
+          run: (signal: AbortSignal) => Promise<T>,
+          expired: (message: string) => Error,
+        ): Promise<T> {
+          requireRequestTimeout(timeout);
+          const controller = new AbortController();
+          // setTimeout fires at once for a delay past 2^31 - 1 ms, so one that long waits as Infinity does.
+          if (timeout > 2_147_483_647) return run(controller.signal);
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const late = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              controller.abort();
+              reject(expired(`The host did not answer within ${timeout} ms.`));
+            }, timeout);
+          });
+          try {
+            return await Promise.race([run(controller.signal), late]);
+          } finally {
+            clearTimeout(timer);
+          }
+        }
+
         /**
          * Refuses a socket URL whose traffic would be in cleartext: `wss:` is accepted, `ws:` only to a loopback host
          * (`localhost`, `127.0.0.0/8`, `::1`) or to the origin of a page that was itself served over `http:`, and anything
@@ -857,6 +914,16 @@ internal sealed partial class ClientGenerator
           throw new Error(
             `The socket ${url.protocol}//${url.host} is not over TLS, so whatever authenticates the client would travel in cleartext. Use wss://, a loopback host, or set allowInsecureTransport when the network is trusted.`,
           );
+        }
+
+        /**
+         * Whether graphql-ws opens a closed socket again: after any close but 4401 or 4403, the host turning the caller
+         * away, which a retry gets again. graphql-ws gives up on 4401 by itself and retries 4403.
+         */
+        function retryClosedSocket(error: unknown): boolean {
+          if (typeof error !== "object" || error === null || !("reason" in error)) return false;
+          const code = (error as { code?: unknown }).code;
+          return typeof code === "number" && code !== 4401 && code !== 4403;
         }
 
         function isLoopbackHost(hostname: string): boolean {
@@ -953,6 +1020,12 @@ internal sealed partial class ClientGenerator
               allowInsecureTransport?: boolean;
               /** The most bytes of an answer a train function or machine server reads before it refuses it. 16 MiB when not given. */
               maxResponseBytes?: number;
+              /**
+               * How long one request of a train function or machine server may take, in milliseconds, from sending it to the
+               * last byte of its answer; 30 seconds when not given, `Infinity` to wait as long as the host takes. A request past
+               * it is aborted and fails. configureTrax refuses anything else that is not a positive number.
+               */
+              requestTimeout?: number;
             }
 
             let connection: TraxConnection | null = null;
@@ -967,6 +1040,7 @@ internal sealed partial class ClientGenerator
              * hook renders again onto it.
              */
             export function configureTrax(next: TraxConnection): void {
+              if (next.requestTimeout !== undefined) requireRequestTimeout(next.requestTimeout);
               connection = next;
               generation += 1;
               const closing = socket;
@@ -1004,6 +1078,8 @@ internal sealed partial class ClientGenerator
                 connectionParams,
                 lazy: true,
                 retryAttempts: Number.POSITIVE_INFINITY,
+                // A 4403 close reaches the stream, which stops as FORBIDDEN, rather than being retried forever.
+                shouldRetry: retryClosedSocket,
                 jsonMessageReplacer: persistedMessageReplacer,
               }));
             }
@@ -1021,25 +1097,32 @@ internal sealed partial class ClientGenerator
 
             /** Sends a persisted document by its id, never its text, and returns the field at `path` of its answer. */
             export async function sendDocument<T>(id: string, variables: Record<string, unknown>, path: readonly string[]): Promise<T> {
-              const { url, headers, allowInsecureTransport, maxResponseBytes } = traxConnection();
+              const { url, headers, allowInsecureTransport, maxResponseBytes, requestTimeout } = traxConnection();
               requireSecureEndpoint(url, allowInsecureTransport);
-              const response = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", ...headers?.() },
-                body: JSON.stringify({ id, variables: withoutUndefined(variables) }),
-                // A redirect would carry the headers to wherever it points.
-                redirect: "error",
-              });
-              requireNoRedirect(response);
               type Answer = { data?: Record<string, unknown> | null; errors?: { message: string; extensions?: { code?: string } }[] };
-              let answer: Answer | null;
-              try {
-                answer = (await readJson(response, maxResponseBytes)) as Answer | null;
-              } catch (cause) {
-                // A body that is not JSON is the status's to explain; one past the limit is refused either way.
-                if (response.ok || cause instanceof RangeError) throw cause;
-                answer = null;
-              }
+              // The request and the whole of its answer, under the request timeout.
+              const { response, answer } = await withRequestTimeout(
+                requestTimeout ?? defaultRequestTimeout,
+                async (signal) => {
+                  const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", ...headers?.() },
+                    body: JSON.stringify({ id, variables: withoutUndefined(variables) }),
+                    // A redirect would carry the headers to wherever it points.
+                    redirect: "error",
+                    signal,
+                  });
+                  requireNoRedirect(response);
+                  try {
+                    return { response, answer: (await readJson(response, maxResponseBytes)) as Answer | null };
+                  } catch (cause) {
+                    // A body that is not JSON is the status's to explain; one past the limit is refused either way.
+                    if (response.ok || cause instanceof RangeError) throw cause;
+                    return { response, answer: null };
+                  }
+                },
+                (message) => new TraxOperationError(undefined, message),
+              );
               const error = answer?.errors?.[0];
               if (error) throw new TraxOperationError(error.extensions?.code, error.message);
               // Not 2xx, and no GraphQL error to say why: the request failed, whatever data the body holds.
@@ -1179,6 +1262,7 @@ internal sealed partial class ClientGenerator
         sb.Append("      },\n");
         sb.Append("      allowInsecureTransport: connection.allowInsecureTransport,\n");
         sb.Append("      maxResponseSize: connection.maxResponseBytes,\n");
+        sb.Append("      requestTimeout: connection.requestTimeout,\n");
         sb.Append($"      machine: {camel},\n");
         sb.Append($"      documents: {camel}Documents,\n");
         sb.Append(
@@ -1448,15 +1532,29 @@ internal sealed partial class ClientGenerator
                     ? error
                     : new TraxOperationError("CONNECTION_CHANGED", "configureTrax was called while following this run: follow it again."),
                 );
-              return traxSocket().subscribe<{ runProgress: RunProgressEvent }>(payload, {
+              // Set once a frame with neither data nor an error has ended the stream, which then says nothing more.
+              let failed = false;
+              const stop = traxSocket().subscribe<{ runProgress: RunProgressEvent }>(payload, {
                 next: (result) => {
+                  if (failed) return;
                   const error = result.errors?.[0];
                   if (error) onEnd?.(new TraxOperationError(error.extensions?.code as string | undefined, error.message));
-                  else if (result.data) onEvent(result.data.runProgress);
+                  else if (typeof result.data === "object" && result.data !== null) onEvent(result.data.runProgress);
+                  else {
+                    // Neither a refusal nor an event: the stream ends with that failure, as a send answered so does.
+                    failed = true;
+                    stop();
+                    end(new TraxOperationError(undefined, "The host sent a frame with neither data nor an error."));
+                  }
                 },
-                error: (error) => end(error),
-                complete: () => end(),
+                error: (error) => {
+                  if (!failed) end(error);
+                },
+                complete: () => {
+                  if (!failed) end();
+                },
               });
+              return stop;
             }
 
             /** A run as useRunProgress shows it. */

@@ -2,34 +2,50 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { conformanceFile } from "./fixtures";
 import { SnapshotMachine } from "./machine";
-import type { PlanRequest, PlanResult } from "./plan";
+import { searchPlan, type PlanRequest, type PlanResult } from "./plan";
 import { machineFromIr, type IrDocument } from "./rules/irMachine";
 import { typedMachineFromIr } from "./typed";
 import type { Snapshot } from "./types";
 
-// conformance/plan/ holds the planner's cases over the wizard machine; every engine answers them the same. The cases
-// below them are this engine's own: the limits a case file cannot reach cheaply, and the typed view.
+// conformance/plan/ holds the planner's cases over the wizard machine and the others beside it; every engine answers
+// them the same. The cases below them are this engine's own: the limits a case file cannot reach cheaply, and the typed
+// view.
 
 type Case = {
   name: string;
+  machine?: string;
   given: Snapshot;
   target: string;
   fields: PlanRequest["fields"];
   navigation: string[];
   maxDepth?: number;
+  tooDeep?: "input" | "context";
   expect: PlanResult;
+};
+
+// 600 arrays nested one in another, which a case's tooDeep puts in place (conformance/PROTOCOL.md, plan).
+const nested = (): unknown[] => {
+  let deep: unknown[] = [];
+  for (let i = 1; i < 600; i++) deep = [deep];
+  return deep;
 };
 
 const golden = JSON.parse(fs.readFileSync(conformanceFile("plan", "cases.json"), "utf8")) as { cases: Case[] };
 const wizardIr = JSON.parse(fs.readFileSync(conformanceFile("plan", "wizard.ir.json"), "utf8")) as IrDocument;
 const wizard = new SnapshotMachine(machineFromIr(wizardIr));
+const planMachine = (name: string | undefined) =>
+  name === undefined
+    ? wizard
+    : new SnapshotMachine(
+        machineFromIr(JSON.parse(fs.readFileSync(conformanceFile("plan", `${name}.ir.json`), "utf8")) as IrDocument),
+      );
 
 describe("plan conformance", () => {
   it.each(golden.cases.map((c) => [c.name, c] as const))("%s", (_, c) => {
     expect(
-      wizard.plan(c.given, {
+      planMachine(c.machine).plan(c.tooDeep === "context" ? { ...c.given, context: { ...c.given.context, deep: nested() } } : c.given, {
         target: c.target,
-        fields: c.fields,
+        fields: c.tooDeep === "input" && c.fields ? { ...c.fields, input: nested() } : c.fields,
         navigation: c.navigation,
         ...(c.maxDepth === undefined ? {} : { maxDepth: c.maxDepth }),
       }),
@@ -82,49 +98,45 @@ describe("plan", () => {
     });
   });
 
-  // A counter that counts up to `ceiling`: every Up is a new wire, and Never is never reached.
-  const counter = (ceiling: number) =>
-    new SnapshotMachine(
-      machineFromIr(
-        {
-          id: "counter",
-          version: 1,
-          initialState: "Counting",
-          initialContext: { n: 0 },
-          states: ["Counting", "Never"],
-          triggers: ["Up"],
-          committedStates: [],
-          context: {
-            Counting: { fields: [{ name: "n", type: "integer", nullable: false, constraints: [] }] },
-            Never: { fields: [{ name: "n", type: "integer", nullable: false, constraints: [] }] },
-          },
-          inputs: {},
-          transitions: [
-            {
-              from: "Counting",
-              trigger: "Up",
-              to: "Counting",
-              guard: { rule: "compare", source: "context", field: "n", op: "lt", value: ceiling },
-              reduce: { reduce: "custom", name: "up" },
-            },
-          ],
-        } as IrDocument,
-        {},
-        { up: (context) => ({ n: (context.n as number) + 1 }) },
-      ),
-    );
-  const count = (ceiling: number) => {
-    const machine = counter(ceiling);
-    return machine.plan(machine.createInitialSnapshot(), { target: "Never", navigation: ["Up"], maxDepth: 1_000_000 });
-  };
+  it("advances each snapshot by each edge once, the goal test's fields event included", () => {
+    const asked: string[] = [];
+    const spy = {
+      definition: wizard.definition,
+      serialize: (s: Snapshot) => wizard.serialize(s),
+      advance: (s: Snapshot, trigger: string, input?: unknown) => {
+        asked.push(`${wizard.serialize(s)} ${trigger}`);
+        return wizard.advance(s, trigger, input);
+      },
+    } as unknown as SnapshotMachine<string, string>;
+    const bob = { ...empty, state: "Review", context: { email: "bob@example.com", name: "Bob" } };
 
-  it("stops with a snapshot still waiting after ten thousand", () => {
-    expect(count(10_000)).toEqual({ result: "exceeded" });
+    expect(searchPlan(spy, bob, { target: "Review", fields: filled, navigation: ["Begin", "Next", "Back"] })).toEqual({
+      result: "plan",
+      events: [filled],
+    });
+    expect(new Set(asked).size).toBe(asked.length);
+    asked.length = 0;
+    expect(searchPlan(spy, empty, { target: "Review", fields: filled, navigation: ["Begin", "Next", "Back"] })).toEqual({
+      result: "plan",
+      events: [{ trigger: "Begin" }, filled, { trigger: "Next" }],
+    });
+    expect(new Set(asked).size).toBe(asked.length);
   });
 
-  it("is unreachable when it runs out of snapshots at exactly ten thousand", () => {
-    expect(count(9_999)).toEqual({ result: "unreachable" });
+  it("tries a navigation trigger listed twice once from each snapshot", () => {
+    let asked = 0;
+    const refusing = new SnapshotMachine(machineFromIr(wizardIr, { approved: () => (asked++, false) }));
+    const details = { ...empty, state: "Details" };
+    const once = refusing.plan(details, { target: "Review", fields: filled, navigation: ["Skip"] });
+    const onceAsked = asked;
+    asked = 0;
+    const thrice = refusing.plan(details, { target: "Review", fields: filled, navigation: ["Skip", "Skip", "Skip"] });
+
+    expect(thrice).toEqual(once);
+    expect(asked).toBe(onceAsked);
   });
+
+  // The expansion limit is held by the odometer cases of conformance/plan/, which every engine answers.
 
   it("answers a kept custom edge over a limit it reached", () => {
     const details = { ...empty, state: "Details" };

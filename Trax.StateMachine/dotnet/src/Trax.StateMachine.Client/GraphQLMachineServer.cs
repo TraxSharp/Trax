@@ -10,11 +10,15 @@ public sealed record GraphQLMachineServerOptions
 {
     /// <summary>
     /// The client the requests go through. Set its authentication on it, a default header or a delegating handler, as
-    /// for any other <see cref="System.Net.Http.HttpClient"/>. Build it on a handler with automatic redirects off: a
-    /// redirect drops only <c>Authorization</c>, so the body and any other header would follow it to the new host. A
-    /// client on an <see cref="HttpClientHandler"/> or <see cref="SocketsHttpHandler"/> that follows redirects,
-    /// <c>new HttpClient()</c> among them, is refused when the server is built. An answer from another host than
-    /// <see cref="Endpoint"/>'s, through a handler of another kind that followed one, fails the request.
+    /// for any other <see cref="System.Net.Http.HttpClient"/>. It must not follow redirects: build it on a
+    /// <see cref="SocketsHttpHandler"/> or <see cref="HttpClientHandler"/> with
+    /// <see cref="SocketsHttpHandler.AllowAutoRedirect"/> off, behind any delegating handlers
+    /// (<c>new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })</c>). A client whose handler follows
+    /// redirects, <c>new HttpClient()</c> among them, is refused when the server is built, and so is one on a handler of
+    /// another kind unless <see cref="HandlerFollowsNoRedirects"/> is set. The check reads the handler at the end of the
+    /// chain, so each delegating handler before it must pass every request on once, to the handler after it, and send
+    /// none of its own: one that sends a request again, to the host a redirect names or anywhere else, does what the
+    /// check cannot see. An answer from another host than <see cref="Endpoint"/>'s fails the request.
     /// </summary>
     public required HttpClient Http { get; init; }
 
@@ -31,6 +35,14 @@ public sealed record GraphQLMachineServerOptions
     public bool AllowInsecureTransport { get; init; }
 
     /// <summary>
+    /// Says that <see cref="Http"/>'s handler follows no redirects, for a handler the server cannot check: one at the end
+    /// of its chain that is neither a <see cref="SocketsHttpHandler"/> nor an <see cref="HttpClientHandler"/> (a test
+    /// server's, a platform's own). Off by default, and such a client is refused. It changes nothing for a handler the
+    /// server can check: one that follows redirects is refused either way.
+    /// </summary>
+    public bool HandlerFollowsNoRedirects { get; init; }
+
+    /// <summary>
     /// The machine as the host's client manifest lists it, with its persisted documents, the push (<c>changed</c>)
     /// included. Every operation is sent by its document's id; a client never sends a document of its own.
     /// </summary>
@@ -42,12 +54,19 @@ public sealed record GraphQLMachineServerOptions
     /// <summary>
     /// Delays before subscribing again after a stream that ended without saying why (its host stopped, or the socket
     /// closed). The last repeats for as long as the stream is wanted; they start over once a stream has delivered a
-    /// second push, since every stream's first is the instance as it is. A socket the host refused (4401, 4403, or an
-    /// upgrade answered 401 or 403), or a stream it refused with a GraphQL error coded <c>TRAX_AUTHORIZATION</c>,
-    /// <c>AUTH_NOT_AUTHENTICATED</c> or <c>AUTH_NOT_AUTHORIZED</c>, is not subscribed again: it stops the controller as
-    /// <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c>.
+    /// second snapshot (a reload push is not one), since every stream's first is the instance as it is. A socket the
+    /// host refused (4401, 4403, or an upgrade answered 401 or 403), or a stream it refused with a GraphQL error coded
+    /// <c>TRAX_AUTHORIZATION</c>, <c>AUTH_NOT_AUTHENTICATED</c> or <c>AUTH_NOT_AUTHORIZED</c>, is not subscribed
+    /// again: it stops the controller as
+    /// <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c>. Each is a step: the wait is drawn at random between half of it and
+    /// the whole, so the instances a host dropped together do not all come back together.
     /// </summary>
     public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
+
+    // The clock the resubscribe delays and the request timeout run on, and where each wait is drawn from (a number from
+    // 0 to 1); the system's clock and Random.Shared when null. A test pins them.
+    internal TimeProvider? Time { get; init; }
+    internal Func<double>? Random { get; init; }
 
     /// <summary>
     /// The codes of a stream error that ends the controller for good, beside the refusals above. A stream event or error
@@ -58,15 +77,16 @@ public sealed record GraphQLMachineServerOptions
 
     /// <summary>
     /// The largest response body the host may answer with, in bytes; 16 MiB by default. A larger one fails the request,
-    /// which the controller reports as a transport failure, rather than being read into memory.
+    /// which the controller reports as a transport failure, rather than being read into memory. It must be positive.
     /// </summary>
-    public long MaxResponseSize { get; init; } = 16 * 1024 * 1024;
+    public long MaxResponseSize { get; init; } = TraxHttpTransportOptions.DefaultMaxResponseSize;
 
     /// <summary>
     /// How long one request may take, from sending it to reading the last byte of its answer, before it fails as a
     /// transport failure; <see cref="GraphQLMachineServer.DefaultRequestTimeout"/> (30 seconds) by default. The
     /// <see cref="Http"/> client's own <see cref="HttpClient.Timeout"/> still applies, so the shorter of the two holds.
-    /// <see cref="Timeout.InfiniteTimeSpan"/> leaves only the client's.
+    /// <see cref="Timeout.InfiniteTimeSpan"/> leaves only the client's. Any other must be positive and at most
+    /// <see cref="int.MaxValue"/> milliseconds (about 24.8 days), as <see cref="HttpClient.Timeout"/> must.
     /// </summary>
     public TimeSpan RequestTimeout { get; init; } = GraphQLMachineServer.DefaultRequestTimeout;
 }
@@ -119,6 +139,8 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     private readonly Document _changed;
     private readonly IReadOnlyList<TimeSpan> _resubscribeDelays;
     private readonly IReadOnlySet<string> _terminal;
+    private readonly TimeProvider _time;
+    private readonly Func<double> _random;
 
     private sealed record Document(string Id, IReadOnlySet<string> Variables);
 
@@ -126,21 +148,39 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// <exception cref="ArgumentException">
     /// The machine lists no documents, or no <c>changed</c> document, or the endpoint is relative and the client has no
     /// base address, or it is not <c>https</c> on a host that is not loopback and
-    /// <see cref="GraphQLMachineServerOptions.AllowInsecureTransport"/> is not set, or the client follows redirects.
+    /// <see cref="GraphQLMachineServerOptions.AllowInsecureTransport"/> is not set, or the client follows redirects, or
+    /// its handler is one the server cannot check and <see cref="GraphQLMachineServerOptions.HandlerFollowsNoRedirects"/>
+    /// is not set.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="GraphQLMachineServerOptions.RequestTimeout"/> is neither infinite nor between zero, exclusive, and
+    /// <see cref="int.MaxValue"/> milliseconds, or one of <see cref="GraphQLMachineServerOptions.ResubscribeDelays"/>
+    /// is below zero or longer than <see cref="int.MaxValue"/> milliseconds, or
+    /// <see cref="GraphQLMachineServerOptions.MaxResponseSize"/> is zero or less.
     /// </exception>
     public GraphQLMachineServer(GraphQLMachineServerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        if (
-            options.RequestTimeout <= TimeSpan.Zero
-            && options.RequestTimeout != Timeout.InfiniteTimeSpan
-        )
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.RequestTimeout,
-                "The request timeout must be positive, or Timeout.InfiniteTimeSpan."
-            );
-        TransportSecurity.RequireNoRedirects(options.Http, nameof(options));
+        TraxHttpTransport.RequireSize(
+            options.MaxResponseSize,
+            "largest response size",
+            nameof(options)
+        );
+        TraxHttpTransport.RequireDelays(
+            options.ResubscribeDelays,
+            "resubscribe delay",
+            nameof(options)
+        );
+        TraxHttpTransport.RequireTimeout(
+            options.RequestTimeout,
+            "request timeout",
+            nameof(options)
+        );
+        TransportSecurity.RequireNoRedirects(
+            options.Http,
+            options.HandlerFollowsNoRedirects,
+            nameof(options)
+        );
         TransportSecurity.RequireSecure(
             options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
                 ? options.Endpoint
@@ -180,6 +220,8 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             ? delays
             : DefaultResubscribeDelays;
         _terminal = (options.TerminalStreamErrors ?? []).ToHashSet(StringComparer.Ordinal);
+        _time = options.Time ?? TimeProvider.System;
+        _random = options.Random ?? System.Random.Shared.NextDouble;
     }
 
     /// <inheritdoc/>
@@ -248,8 +290,11 @@ public sealed partial class GraphQLMachineServer : IMachineServer
 
     /// <summary>
     /// Deletes one of the caller's instances. An instance already gone, or never the caller's, is answered discarded too,
-    /// so a retry is harmless. Null when it was discarded; otherwise the refusal. An answer that neither says the
-    /// instance was discarded nor gives a problem does not say it is gone, and throws as a failed request does.
+    /// so a retry is harmless. Null when it was discarded; otherwise the refusal, or
+    /// <see cref="ClientProblemCodes.TransportError"/> when the request failed or its answer could not be read. An answer
+    /// that neither says the instance was discarded nor gives a problem does not say it is gone, and is a
+    /// <see cref="ClientProblemCodes.TransportError"/> too. Never throws, unless
+    /// <paramref name="cancellationToken"/> is cancelled.
     /// </summary>
     public async Task<ServerProblem?> DiscardAsync(
         string id,
@@ -257,25 +302,41 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         CancellationToken cancellationToken = default
     )
     {
-        var (answer, refused) = await PostAsync(
-                "discard",
-                new JsonObject { ["id"] = id, ["requestId"] = requestId },
-                cancellationToken
+        try
+        {
+            var (answer, refused) = await PostAsync(
+                    "discard",
+                    new JsonObject { ["id"] = id, ["requestId"] = requestId },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (refused is not null)
+                return refused.Problem;
+            if (answer?["problem"] is JsonObject problem)
+                return ProblemOf(problem);
+            if (
+                answer?["discarded"] is JsonValue discarded
+                && discarded.TryGetValue(out bool gone)
+                && gone
             )
-            .ConfigureAwait(false);
-        if (refused is not null)
-            return refused.Problem;
-        if (answer?["problem"] is JsonObject problem)
-            return ProblemOf(problem);
-        if (
-            answer?["discarded"] is not JsonValue discarded
-            || !discarded.TryGetValue(out bool gone)
-            || !gone
-        )
-            throw new HttpRequestException(
+                return null;
+            return new ServerProblem(
+                ClientProblemCodes.TransportError,
                 "The server answered the discard without saying the instance was discarded."
             );
-        return null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // A request that failed, or an answer that is not one a host wrote (a member given twice among them).
+            return new ServerProblem(
+                ClientProblemCodes.TransportError,
+                string.IsNullOrEmpty(ex.Message) ? "The server could not be reached." : ex.Message
+            );
+        }
     }
 
     // One operation, by its persisted id, its values as variables.
@@ -318,7 +379,8 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 body,
                 _options.MaxResponseSize,
                 _options.RequestTimeout,
-                cancellationToken
+                cancellationToken,
+                _time
             )
             .ConfigureAwait(false);
         if (answered.Failure is { } failure)
@@ -339,34 +401,130 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         return (answered.Data?["machines"]?[_field]?[operation] as JsonObject, null);
     }
 
-    private ServerAnswer AnswerOf(JsonObject? answer)
+    private static ServerAnswer AnswerOf(JsonObject? answer)
     {
         if (answer is null)
             return new ServerAnswer();
-        var id = Text(answer["id"]);
-        if (answer["problem"] is JsonObject problem)
-            return new ServerAnswer { Id = id, Problem = ProblemOf(problem) };
-        return ServerAnswer.Of(
-            new ServerSnapshot
-            {
-                // A revision the store does not record stays null: it is not revision 0, which would order every
-                // later answer below it.
-                Revision = answer["revision"] is JsonValue revision
-                    ? revision.GetValue<long>()
-                    : null,
-                State =
-                    Text(answer["state"])
-                    ?? throw new HttpRequestException(
-                        "The server answered a snapshot without a state."
-                    ),
-                Context = WithoutNulls(answer["context"] as JsonObject),
-                // A due time the server says it cannot know is left unknown, so it is never read as "no timer".
-                DueAtKnown = answer["dueAtKnown"] is not JsonValue known || known.GetValue<bool>(),
-                DueAt = DueAtOf(answer["dueAt"]),
-            },
-            id
-        );
+        try
+        {
+            var id = Text(answer["id"]);
+            if (answer["problem"] is JsonObject problem)
+                return new ServerAnswer { Id = id, Problem = ProblemOf(problem) };
+            return ServerAnswer.Of(SnapshotOf(answer, push: false), id);
+        }
+        // A member of the wrong type, or one given twice.
+        catch (Exception ex)
+            when (ex is FormatException or InvalidOperationException or ArgumentException)
+        {
+            throw new HttpRequestException(
+                $"The server answered a snapshot this client cannot read: {ex.Message}",
+                ex
+            );
+        }
     }
+
+    // The snapshot an answer or a push holds, or a FormatException when it is not one a host wrote: a state that is not
+    // a string, a revision that is not a whole number from zero, a context that is not an object, a due time that is
+    // not an instant. A push must carry its revision and may carry its row id; an answer may leave the revision out (a
+    // store that records none, which is not revision 0: that would order every later answer below it).
+    private static ServerSnapshot SnapshotOf(JsonObject node, bool push)
+    {
+        var state =
+            Text(node["state"])
+            ?? throw new FormatException("The snapshot has no state, or one that is not a string.");
+        if (!RevisionOf(node["revision"], out var revision) || (push && revision is null))
+            throw new FormatException("The snapshot's revision is not a whole number from zero.");
+        if (!ContextOf(node["context"], out var context))
+            throw new FormatException("The snapshot's context is not an object.");
+        if (NestsDeeperThan(context, MaxStoredDepth - 1))
+            throw new FormatException(
+                $"The snapshot's context nests deeper than a stored snapshot may ({MaxStoredDepth} levels, the snapshot counting as one)."
+            );
+        var rowId = !push
+            ? null
+            : node["rowId"] switch
+            {
+                null => null,
+                var row => Text(row)
+                    ?? throw new FormatException("The snapshot's rowId is not a string."),
+            };
+        return new ServerSnapshot
+        {
+            RowId = rowId,
+            Revision = revision,
+            State = state,
+            Context = WithoutNulls(context),
+            // A due time the server says it cannot know, or does not say at all, is left unknown, so it is never read
+            // as "no timer": absent is not null.
+            DueAtKnown = Flag(node, "dueAtKnown") && node.ContainsKey("dueAt"),
+            DueAt = DueAtOf(node["dueAt"]),
+        };
+    }
+
+    // The deepest a stored snapshot nests, itself counting as one (conformance/limits.json, maxStoredDepth): no store
+    // writes one deeper and no engine reads one.
+    private const int MaxStoredDepth = 64;
+
+    // Whether a value nests deeper than `levels` arrays and objects, itself counting as one. Never recurses.
+    private static bool NestsDeeperThan(JsonNode? value, int levels)
+    {
+        var pending = new Stack<(JsonNode? Node, int Depth)>();
+        pending.Push((value, 1));
+        while (pending.TryPop(out var next))
+        {
+            var members = next.Node switch
+            {
+                JsonObject o => o.Select(m => m.Value),
+                JsonArray a => a,
+                _ => null,
+            };
+            if (members is null)
+                continue;
+            if (next.Depth > levels)
+                return true;
+            foreach (var member in members)
+                pending.Push((member, next.Depth + 1));
+        }
+        return false;
+    }
+
+    // A revision is a whole number from zero, or null for a store that records none.
+    private static bool RevisionOf(JsonNode? node, out long? revision)
+    {
+        revision = null;
+        if (node is null)
+            return true;
+        if (node is not JsonValue value)
+            return false;
+        if (value.TryGetValue<long>(out var whole))
+        {
+            revision = whole;
+            return whole >= 0;
+        }
+        // 2.0 is the whole number a JavaScript host may write for 2.
+        if (
+            value.TryGetValue<double>(out var number)
+            && number >= 0
+            && number <= MaxSafeInteger
+            && Math.Floor(number) == number
+        )
+        {
+            revision = (long)number;
+            return true;
+        }
+        return false;
+    }
+
+    private const double MaxSafeInteger = 9007199254740991;
+
+    // A member that is true, false, or absent (false); anything else is not a snapshot a host wrote.
+    private static bool Flag(JsonObject node, string name) =>
+        node[name] switch
+        {
+            null => false,
+            JsonValue value when value.TryGetValue<bool>(out var flag) => flag,
+            _ => throw new FormatException($"The {name} member is not a boolean."),
+        };
 
     /// <inheritdoc/>
     /// <remarks>
@@ -376,10 +534,14 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// 4403, or an upgrade answered 401 or 403) is <see cref="StreamMessage.Refused"/>, and is not subscribed again; so
     /// is a stream the host refused with a GraphQL error coded <c>TRAX_AUTHORIZATION</c> or <c>AUTH_NOT_AUTHORIZED</c>
     /// (<c>FORBIDDEN</c>) or <c>AUTH_NOT_AUTHENTICATED</c> (<c>UNAUTHENTICATED</c>), one whose error code is among
-    /// <see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/> (with that code), and a push the client cannot
-    /// read (a member of the wrong type, or one given twice), as <see cref="ClientProblemCodes.TransportError"/>. A
-    /// stream that ends any other way is subscribed again after the resubscribe delays; the new stream's first event
-    /// is the instance as it is then.
+    /// <see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/> (with that code), and a socket that follows no
+    /// more subscriptions (a <see cref="SocketUnavailableException"/>: it was disposed), or a message
+    /// <paramref name="onMessage"/> threw on, as <see cref="ClientProblemCodes.TransportError"/>. A push the client
+    /// cannot take as one a host wrote (not an object, a member of the wrong type or given twice, a revision that is not
+    /// a whole number from zero, a due time that is not an instant) is dropped and becomes
+    /// <see cref="StreamMessage.Reload"/>, so the instance is read again and the stream goes on. A stream that ends any
+    /// other way is subscribed again after the resubscribe delays; the new stream's first event is the instance as it
+    /// is then.
     /// </remarks>
     public IDisposable Subscribe(string id, Action<StreamMessage> onMessage)
     {
@@ -398,18 +560,25 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         private bool _wanted = true;
         private int _attempt;
 
-        // The pushes the current stream delivered. Every stream's first push is the instance as it is, so only a second
-        // says the stream held: the resubscribe delays start over then.
+        // The snapshots the current stream delivered. Every stream's first push is the instance as it is, so only a
+        // second says the stream held: the resubscribe delays start over then. A reload push is not one.
         private int _pushes;
         private bool _ended;
         private IDisposable? _current;
         private CancellationTokenSource? _timer;
 
-        public void Open()
+        // Subscribes; after a delay, `fired` is the source of the delay that ended.
+        public void Open(CancellationTokenSource? fired = null)
         {
             lock (_gate)
             {
-                _timer = null;
+                // The delay's source is this one's to let go of unless a disposal or a later delay took it, which
+                // cancels and disposes it itself.
+                if (fired is not null && ReferenceEquals(_timer, fired))
+                {
+                    _timer = null;
+                    fired.Dispose();
+                }
                 if (!_wanted)
                     return;
                 _ended = false;
@@ -442,31 +611,26 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             {
                 (message, again) = Read(value);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // A member of the wrong type, or one given twice: the host would send the same push again, so the
-                // stream ends once rather than being subscribed again.
-                Deliver(
-                    new StreamMessage.Refused(
-                        ClientProblemCodes.TransportError,
-                        $"The host sent a push this client cannot read: {ex.Message}"
-                    )
-                );
-                return;
+                // A member of the wrong type, or one given twice: not a push a host wrote. It is dropped, and the
+                // instance read again, so the client neither stops nor holds what it cannot check.
+                message = new StreamMessage.Reload();
+                again = false;
             }
             if (again)
                 Again();
             else if (message is not null)
             {
-                lock (_gate)
-                    if (++_pushes == 2)
-                        _attempt = 0;
+                if (message is StreamMessage.Changed)
+                    lock (_gate)
+                        if (++_pushes == 2)
+                            _attempt = 0;
                 Deliver(message);
             }
         }
 
-        // What one push says: a message to deliver, a stream to subscribe again, or nothing. Throws on a push it cannot
-        // read.
+        // What one push says: a message to deliver, or a stream to subscribe again. Throws on a push it cannot read.
         private (StreamMessage? Message, bool Again) Read(JsonObject value)
         {
             if (value["errors"] is JsonArray { Count: > 0 } errors)
@@ -475,48 +639,37 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 return (ended, ended is null);
             }
             if (value["data"]?[server._pushField] is not JsonObject change)
-                return (null, false);
-            if (change["problem"] is JsonObject problem)
+                throw new FormatException("The push is not an object.");
+            switch (change["problem"])
             {
-                var code = Text(problem["code"]);
-                if (code == ClientOutdated)
-                    return (new StreamMessage.ClientOutdated(), false);
-                if (code == RefusalCode.NotFound.ToWire())
-                    return (new StreamMessage.Gone(NotFound: true), false);
-                return (null, true);
+                case JsonObject problem:
+                    var code = Text(problem["code"]);
+                    if (code == ClientOutdated)
+                        return (new StreamMessage.ClientOutdated(), false);
+                    if (code == RefusalCode.NotFound.ToWire())
+                        return (new StreamMessage.Gone(NotFound: true), false);
+                    return (null, true);
+                case null:
+                    break;
+                default:
+                    throw new FormatException("The push's problem is not an object.");
             }
-            if (change["gone"] is JsonValue gone && gone.GetValue<bool>())
+            if (Flag(change, "gone"))
                 return (new StreamMessage.Gone(NotFound: false), false);
-            if (change["reload"] is JsonValue reload && reload.GetValue<bool>())
+            if (Flag(change, "reload"))
                 return (new StreamMessage.Reload(), false);
-            if (
-                Text(change["state"]) is not { } state
-                || change["revision"] is not JsonValue revision
-            )
-                return (null, false);
-            return (
-                new StreamMessage.Changed(
-                    new ServerSnapshot
-                    {
-                        RowId = change["rowId"] is JsonValue row
-                            ? row.ToJsonString().Trim('"')
-                            : null,
-                        Revision = revision.GetValue<long>(),
-                        State = state,
-                        Context = WithoutNulls(change["context"] as JsonObject),
-                        DueAtKnown =
-                            change["dueAtKnown"] is not JsonValue known || known.GetValue<bool>(),
-                        DueAt = DueAtOf(change["dueAt"]),
-                    }
-                ),
-                false
-            );
+            return (new StreamMessage.Changed(SnapshotOf(change, push: true)), false);
         }
 
         public void Error(Exception error)
         {
             if (RefusedCode(error) is { } code)
                 Deliver(new StreamMessage.Refused(code, error.Message));
+            // No socket to follow it over: subscribing again gets the same answer.
+            else if (error is SocketUnavailableException)
+                Deliver(
+                    new StreamMessage.Refused(ClientProblemCodes.TransportError, error.Message)
+                );
             else if (
                 error is SubscriptionErrorException { Errors: var errors }
                 && EndOf(errors) is { } ended
@@ -577,7 +730,45 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 )
                     _ended = true;
             }
-            onMessage(message);
+            try
+            {
+                onMessage(message);
+            }
+            catch (Exception ex)
+            {
+                HandlerThrew(ex, message);
+            }
+        }
+
+        // The handler threw on a message: the stream ends, is not subscribed again, and, unless the message already
+        // ended it, ends with that failure, as a TraxClient stream whose handler throws does.
+        private void HandlerThrew(Exception thrown, StreamMessage on)
+        {
+            IDisposable? close;
+            lock (_gate)
+            {
+                if (!_wanted)
+                    return;
+                _ended = true;
+                close = _current;
+                _current = null;
+            }
+            close?.Dispose();
+            if (on is StreamMessage.Gone or StreamMessage.ClientOutdated or StreamMessage.Refused)
+                return;
+            try
+            {
+                onMessage(
+                    new StreamMessage.Refused(
+                        ClientProblemCodes.TransportError,
+                        $"The stream's handler threw: {thrown.Message}"
+                    )
+                );
+            }
+            catch (Exception)
+            {
+                // The handler threw on the failure too: the stream has ended either way.
+            }
         }
 
         // The stream ended without a reason: close it and subscribe again after the next delay.
@@ -585,7 +776,9 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         {
             IDisposable? close;
             TimeSpan delay;
-            CancellationTokenSource timer;
+            CancellationTokenSource? previous;
+            CancellationTokenSource source;
+            CancellationToken timer;
             lock (_gate)
             {
                 if (!_wanted || _ended)
@@ -593,18 +786,21 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 _ended = true;
                 close = _current;
                 _current = null;
-                var delays = server._resubscribeDelays;
-                delay = delays[Math.Min(_attempt, delays.Count - 1)];
+                delay = Backoff.Delay(server._resubscribeDelays, _attempt, server._random);
                 _attempt++;
-                timer = _timer = new CancellationTokenSource();
+                // A delay already pending is replaced, so the stream is subscribed again once.
+                previous = _timer;
+                source = _timer = new CancellationTokenSource();
+                timer = source.Token;
             }
             close?.Dispose();
-            _ = Task.Delay(delay, timer.Token)
+            CancelAndDispose(previous);
+            _ = Task.Delay(delay, server._time, timer)
                 .ContinueWith(
                     t =>
                     {
                         if (!t.IsCanceled)
-                            Open();
+                            Open(source);
                     },
                     TaskScheduler.Default
                 );
@@ -622,9 +818,23 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 timer = _timer;
                 _timer = null;
             }
-            timer?.Cancel();
+            CancelAndDispose(timer);
             close?.Dispose();
         }
+
+        // The token was taken before the source is disposed, and is cancelled first: a delay waiting on it ends.
+        private static void CancelAndDispose(CancellationTokenSource? timer)
+        {
+            timer?.Cancel();
+            timer?.Dispose();
+        }
+    }
+
+    // A context that is null or left out is empty, and one that is an object is itself; any other is not a context.
+    private static bool ContextOf(JsonNode? node, out JsonObject? context)
+    {
+        context = node as JsonObject;
+        return node is null or JsonObject;
     }
 
     private static ServerProblem ProblemOf(JsonObject problem) =>
@@ -633,10 +843,24 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     private static string? Text(JsonNode? node) =>
         node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
-    private static DateTimeOffset? DueAtOf(JsonNode? node) =>
-        Text(node) is { } text
-            ? DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)
-            : null;
+    // A due time is null, or an instant: a date and a time with its offset. One without an offset names no instant.
+    private static DateTimeOffset? DueAtOf(JsonNode? node)
+    {
+        if (node is null)
+            return null;
+        if (
+            Text(node) is { } text
+            && Instant().IsMatch(text)
+            && DateTimeOffset.TryParse(
+                text,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out var instant
+            )
+        )
+            return instant;
+        throw new FormatException("The snapshot's dueAt is not an instant.");
+    }
 
     /// <summary>
     /// The context with every null member left out, at every depth: a typed answer cannot tell a member stored as null
@@ -687,4 +911,10 @@ public sealed partial class GraphQLMachineServer : IMachineServer
 
     [GeneratedRegex(@"\$(\w+)\s*:")]
     private static partial Regex DeclaredVariable();
+
+    [GeneratedRegex(
+        @"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$",
+        RegexOptions.CultureInvariant
+    )]
+    private static partial Regex Instant();
 }

@@ -4,6 +4,7 @@ using HotChocolate.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Api.Exceptions;
+using Trax.Api.GraphQL.Subscriptions;
 using Trax.Core.Exceptions;
 using Trax.Mediator.Exceptions;
 using Trax.Scheduler.Services.RunExecutor;
@@ -126,6 +127,11 @@ internal class TraxErrorFilter(ILogger<TraxErrorFilter>? logger = null) : IError
         return error.Exception switch
         {
             TrainAuthorizationException => Public(
+                error,
+                TrainAuthorizationException.PublicMessage,
+                "TRAX_AUTHORIZATION"
+            ),
+            SubscriptionNoLongerAuthorizedException => Public(
                 error,
                 TrainAuthorizationException.PublicMessage,
                 "TRAX_AUTHORIZATION"

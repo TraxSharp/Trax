@@ -133,6 +133,7 @@ Configuration errors throw `InvalidOperationException` when `UsePersistedOperati
 | `GateManagement()` with neither a policy nor roles, or with a role list of only separators | Throws when called. |
 | A policy `GateManagement` names is not registered | The host fails at startup, naming the policy and the field. |
 | `AddPersistedOperationStore` in the same host declares a different `GateManagement` | The host fails at startup, naming both calls. |
+| `RequirePersisted(true)` with `AllowOperations` or `AllowOperationsMatching`, outside Development | The host fails at startup, naming the environment. Under enforcement the allowlist starts only in Development. |
 
 ## Examples
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -84,15 +85,32 @@ public sealed class IrMachine
             customReducers ?? new Dictionary<string, Func<JsonObject, JsonNode?, JsonObject>>();
         try
         {
-            // A twin records the IR format it was generated for; an IR of a newer format than this engine reads is refused.
-            if (
-                ir["irFormat"] is JsonValue format
-                && format.GetValue<int>() > IrExporter.FormatVersion
-            )
+            // An IR built in memory, where no parser held it to a depth, is refused before anything recurses over it.
+            if (EventPlanner.NestsTooDeep(ir))
                 throw new ArgumentException(
-                    $"The IR is in format {format.GetValue<int>()}, and this engine reads format {IrExporter.FormatVersion}. Update Trax.StateMachine.",
+                    $"The IR nests deeper than {EventPlanner.MaxNesting} arrays and objects.",
                     nameof(ir)
                 );
+            // A twin records the IR format it was generated for; an IR of a format this engine does not read, newer or
+            // older, is refused, and so is one that names its format as anything but a number.
+            if (ir.TryGetPropertyValue("irFormat", out var format))
+            {
+                // A format is read by its number, as the other engines read it: 1.0 is format 1, 1.5 is none.
+                var number =
+                    format?.GetValueKind() == JsonValueKind.Number
+                        ? double.Parse(format.ToJsonString(), CultureInfo.InvariantCulture)
+                        : double.NaN;
+                if (!double.IsInteger(number))
+                    throw new ArgumentException(
+                        $"The IR names its format as {format?.ToJsonString() ?? "null"}, which is not a format number.",
+                        nameof(ir)
+                    );
+                if (number > IrExporter.FormatVersion || number < IrExporter.OldestFormatRead)
+                    throw new ArgumentException(
+                        $"The IR is in format {number}, and this engine reads formats {IrExporter.OldestFormatRead} to {IrExporter.FormatVersion}.",
+                        nameof(ir)
+                    );
+            }
             Id = Text(ir["id"], "id");
             Version = ir["version"]!.GetValue<int>();
             InitialState = Text(ir["initialState"], "initialState");
@@ -424,9 +442,10 @@ public sealed class IrMachine
     internal bool Determines(string state, string trigger) =>
         !_undetermined.Contains((state, trigger));
 
-    // A trigger a client may move with: one the machine has, not bound to the effect, an outcome or a timer.
+    // A trigger a client may move with: one a transition fires on, not bound to the effect, an outcome or a timer. A
+    // trigger the IR declares and no transition uses is not one, as in the other engines.
     private bool Navigable(string trigger) =>
-        _triggers.Contains(trigger)
+        _transitions.Any(t => t.Trigger == trigger)
         && !EffectTriggers.Contains(trigger)
         && !_outcomes.ContainsKey(trigger)
         && !_timers.Values.Any(t => t.Trigger == trigger);
@@ -518,6 +537,12 @@ public sealed class IrMachine
     // does not hold is refused as input before the context is validated; then the target's validator.
     private AdvanceResult Enter(string state, JsonObject context)
     {
+        // A custom reduction's context is checked before anything recurses over it, as the other engines check it.
+        if (EventPlanner.NestsTooDeep(context))
+            return Rejected(
+                RefusalCode.InvalidContext,
+                $"The context nests deeper than {EventPlanner.MaxNesting} arrays and objects."
+            );
         if (TimerProblem(state, context) is { } timerProblem)
             return Rejected(RefusalCode.InvalidInput, timerProblem);
         if (ValidateContext(state, context, _guards) is { } contextError)

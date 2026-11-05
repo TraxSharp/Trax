@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,19 +57,26 @@ function jsonFiles(dir) {
     .map((f) => [f.replace(/\.json$/, ""), readJson(join(dir, f))]);
 }
 
+/**
+ * One case per case of a machine's differential corpus, named by what it sends: the state, the trigger and the first 12
+ * hex digits of the SHA-256 of the canonical `given` and `when`. Regenerating the corpus with a case added keeps every
+ * other case's name, so an expected failure that names one still names it.
+ */
+export function differentialCases(machine, ir, corpus) {
+  return corpus.map((c) => {
+    const hash = createHash("sha256").update(canonical({ given: c.given, when: c.when }), "utf8").digest("hex").slice(0, 12);
+    const name = `${machine}/differential/${c.given.state} + ${c.when.trigger} ${hash}`;
+    return step(name, machine, opFor(ir, c.when.trigger), c.given, c.when, c.expect);
+  });
+}
+
 function machineCases(machine) {
   const dir = join(machinesDir, machine);
   const ir = readJson(join(dir, `${machine}.ir.json`));
   const cases = [{ name: `${machine}/load`, request: { op: "load", machine, ir }, expect: { loaded: true } }];
 
   const differential = join(dir, "differential.json");
-  if (existsSync(differential))
-    readJson(differential).cases.forEach((c, i) => {
-      const op = opFor(ir, c.when.trigger);
-      cases.push(
-        step(`${machine}/differential/${i} ${c.given.state} + ${c.when.trigger}`, machine, op, c.given, c.when, c.expect),
-      );
-    });
+  if (existsSync(differential)) cases.push(...differentialCases(machine, ir, readJson(differential).cases));
 
   for (const [file, f] of jsonFiles(join(dir, "fixtures", "advance")))
     cases.push(step(`${machine}/advance/${file}`, machine, f.op ?? opFor(ir, f.when.trigger), f.given, f.when, f.expect));
@@ -119,23 +127,29 @@ function strictInputCases() {
   ];
 }
 
-// The planner over the wizard machine: a load, then one plan per case, compared exactly.
+// The planner over the machines in plan/: a load of each, the wizard first, then one plan per case, compared exactly. A
+// case plans over the wizard unless it names another machine.
 function planCases() {
   const dir = join(conformanceDir, "plan");
   const doc = readJson(join(dir, "cases.json"));
-  const machine = doc.machine;
+  const machines = [...new Set([doc.machine, ...doc.cases.map((c) => c.machine ?? doc.machine)])];
   return [
-    { name: "plan/load", request: { op: "load", machine, ir: readJson(join(dir, `${machine}.ir.json`)) }, expect: { loaded: true } },
+    ...machines.map((machine) => ({
+      name: machine === doc.machine ? "plan/load" : `plan/load-${machine}`,
+      request: { op: "load", machine, ir: readJson(join(dir, `${machine}.ir.json`)) },
+      expect: { loaded: true },
+    })),
     ...doc.cases.map((c) => ({
       name: `plan/${c.name}`,
       request: {
         op: "plan",
-        machine,
+        machine: c.machine ?? doc.machine,
         snapshot: c.given,
         target: c.target,
         fields: c.fields,
         navigation: c.navigation,
         ...(c.maxDepth === undefined ? {} : { maxDepth: c.maxDepth }),
+        ...(c.tooDeep === undefined ? {} : { tooDeep: c.tooDeep }),
       },
       expect: c.expect,
     })),
@@ -148,7 +162,7 @@ function unreadableIrCases() {
   const doc = readJson(join(conformanceDir, "unreadable-ir", "cases.json"));
   return doc.cases.map((c) => ({
     name: `unreadable-ir/${c.name}`,
-    request: { op: "load", machine: `unreadable-${c.name}`, ir: c.ir },
+    request: { op: "load", machine: `unreadable-${c.name}`, ir: c.ir, ...(c.tooDeep === undefined ? {} : { tooDeep: c.tooDeep }) },
     expect: { refused: true },
   }));
 }
@@ -157,6 +171,50 @@ function unreadableIrCases() {
 export function answers(got, expect) {
   if (expect.refused === true) return typeof got.error === "string" && Object.keys(got).length === 1;
   return canonical(got) === canonical(expect);
+}
+
+// Hostile values through each engine's reader and input checks: a load of the machine they are read as, then one
+// rehydrate per stored context and per text, and one advance per input (values/hostile.json).
+function hostileValueCases() {
+  const dir = join(conformanceDir, "values");
+  const doc = readJson(join(dir, "hostile.json"));
+  const machine = doc.machine;
+  const snapshot = (context) => `{"machine":"${machine}","version":1,"state":"S","context":${context}}`;
+  return [
+    { name: "values/load", request: { op: "load", machine, ir: readJson(join(dir, `${machine}.ir.json`)) }, expect: { loaded: true } },
+    ...doc.stored.map((c) => ({
+      name: `values/stored/${c.name}`,
+      request: { op: "rehydrate", machine, text: snapshot(c.stored) },
+      expect:
+        typeof c.expect === "string" ? { result: "ok", wire: snapshot(c.expect) } : { result: "error", code: c.expect.code },
+    })),
+    ...doc.text.map((c) => ({
+      name: `values/text/${c.name}`,
+      request: { op: "rehydrate", machine, text: c.text },
+      expect:
+        typeof c.expect === "string" ? { result: "ok", wire: snapshot(c.expect) } : { result: "error", code: c.expect.code },
+    })),
+    ...doc.input.map((c) => ({
+      name: `values/input/${c.name}`,
+      request: { op: "advance", machine, snapshot: JSON.parse(snapshot("{}")), trigger: c.trigger, input: c.input },
+      expect:
+        typeof c.expect === "string"
+          ? { outcome: "transitioned", wire: snapshot(c.expect) }
+          : { outcome: "rejected", reason: c.expect.reason },
+    })),
+  ];
+}
+
+// What the fuzzer found: each case's IR, loaded as found/<name>, then its requests (found/cases.json).
+function foundCases() {
+  const doc = readJson(join(conformanceDir, "found", "cases.json"));
+  return doc.cases.flatMap((c) => {
+    const machine = `found/${c.name}`;
+    return [
+      { name: `${machine}/load`, request: { op: "load", machine, ir: c.ir }, expect: { loaded: true } },
+      ...c.requests.map((r, i) => ({ name: `${machine}/${i}`, request: { ...r.request, machine }, expect: r.expect })),
+    ];
+  });
 }
 
 function canonicalWireCases() {
@@ -170,7 +228,7 @@ function canonicalWireCases() {
 
 /**
  * Every case of the kit, in a fixed order: each machine's, then the strict inputs, then the planner's, then the IRs that
- * must be refused, then the wire vectors.
+ * must be refused, then the hostile values, then what the fuzzer found, then the wire vectors.
  */
 export function kitCases() {
   const machines = readdirSync(machinesDir, { withFileTypes: true })
@@ -182,6 +240,8 @@ export function kitCases() {
     ...strictInputCases(),
     ...planCases(),
     ...unreadableIrCases(),
+    ...hostileValueCases(),
+    ...foundCases(),
     ...canonicalWireCases(),
   ];
 }

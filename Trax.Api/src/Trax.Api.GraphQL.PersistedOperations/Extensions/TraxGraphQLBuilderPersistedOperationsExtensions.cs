@@ -42,7 +42,7 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
     ///     .UsePersistedOperations(opts => opts
     ///         .RequirePersisted(true)
     ///         .LogNonPersistedRequests(true)
-    ///         .AllowOperationsMatching(id => id.StartsWith("dev_"))
+    ///         .SingleNode()
     ///     )
     /// );
     /// </code>
@@ -81,6 +81,7 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         services.RemoveAll<PersistedOperationsOptions>();
         services.AddSingleton(options);
         services.AddHostedService<PersistedOperations.Startup.PersistedOperationStoreGateValidator>();
+        services.AddHostedService<PersistedOperations.Startup.PersistedOperationsAllowlistEnvironmentValidator>();
 
         // Which boundary is in front of this endpoint is invisible in a running system: the schema
         // is the same either way. Say it once at startup so it can be checked where it is claimed.

@@ -25,7 +25,12 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
         Client = new TraxClient(_transport);
     }
 
-    private ConsoleSession(ConsoleTarget target, HttpClient http, GraphQLSubscriptionSocket socket)
+    private ConsoleSession(
+        ConsoleTarget target,
+        HttpClient http,
+        GraphQLSubscriptionSocket socket,
+        bool testHost
+    )
     {
         Target = target;
         _http = http;
@@ -40,6 +45,9 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
                     // ConsoleTarget refuses a credential over plain HTTP to another machine; without one there is
                     // nothing to keep from the network.
                     AllowInsecureTransport = target.Credential is null,
+                    // A test host's handler answers in process and follows no redirect. The network's is a
+                    // SocketsHttpHandler the transport checks itself.
+                    HandlerFollowsNoRedirects = testHost,
                     ById = _ => !target.SendText,
                 }
             )
@@ -119,7 +127,7 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
                 ConfigureSocket = configureSocket,
             }
         );
-        return new ConsoleSession(target, http, socket);
+        return new ConsoleSession(target, http, socket, testHost: handler is not null);
     }
 
     /// <summary>A session over <paramref name="transport"/>, for a test that scripts the host.</summary>

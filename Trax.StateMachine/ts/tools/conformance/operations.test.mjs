@@ -53,11 +53,27 @@ describe("the operations kit", () => {
   }, 60_000);
 
   it("drives a spawned testee over the protocol", () => {
-    const run = spawnSync(process.execPath, [runner, "--testee", process.execPath, here("operations-testee-ts.mjs")], {
+    const run = spawnSync(process.execPath, [runner, "--name", "ts", "--testee", process.execPath, here("operations-testee-ts.mjs")], {
       encoding: "utf8",
       timeout: 120_000,
     });
-    expect(run.stderr).toContain(`${list.length} of ${list.length} transcripts passed.`);
+    expect(run.stderr).toContain(`${list.length} of ${list.length} transcripts passed, 0 expected failures.`);
     expect(run.status).toBe(0);
   }, 120_000);
+});
+
+// A timeout that is not a positive number would turn the timeout off (NaN) or abort every request at once (a negative
+// one), so it is refused when a request is sent, as maxResponseBytes is.
+describe("the operations client's request timeout", () => {
+  it.each([Number.NaN, -1, 0])("refuses a requestTimeout of %s", async (requestTimeout) => {
+    const transport = client.httpTransport({
+      url: "https://ops.example.test/graphql",
+      socketUrl: "wss://ops.example.test/graphql",
+      requestTimeout,
+      fetch: () => new Promise(() => {}),
+    });
+    client.configureTraxOperations(transport);
+
+    await expect(client.runs({ take: 1 })).rejects.toThrow(/requestTimeout must be a positive number/);
+  });
 });

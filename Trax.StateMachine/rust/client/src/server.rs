@@ -135,6 +135,7 @@ pub trait MachineServer: Send + Sync + 'static {
     fn get(&self, id: String) -> impl Future<Output = Result<ServerAnswer, TransportError>> + Send;
 
     /// Listens to the instance's changes. A stream that ends without saying why is subscribed again by the server,
-    /// so `sink` hears only of what the controller must act on.
+    /// so `sink` hears only of what the controller must act on. One that panics stops the controller with
+    /// `TRANSPORT_ERROR`.
     fn subscribe(&self, id: String, sink: StreamSink) -> Box<dyn Subscription>;
 }

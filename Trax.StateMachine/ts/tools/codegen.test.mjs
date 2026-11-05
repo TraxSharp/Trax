@@ -10,7 +10,7 @@ import { parseFlags, requireFlags } from "./lib/args.mjs";
 import { bundleModule, loadEngine } from "./lib/engine-loader.mjs";
 import { bundleCli } from "./bundle-cli.mjs";
 import { generateCorpus } from "./generate-corpus.mjs";
-import { generateTwin } from "./generate-twin.mjs";
+import { generateTwin, oneOf, TWIN_LANGUAGES } from "./generate-twin.mjs";
 
 // These pin the node codegen entrypoints the `trax machine generate` CLI shells out to. The whole point is
 // byte-parity: the entrypoints must reproduce the committed turnstile artifacts exactly, so the CLI's output
@@ -98,8 +98,15 @@ describe("generate-twin entrypoint", () => {
 
   it("refuses an unknown language", async () => {
     await expect(generateTwin({ irPath: turnstileIr, engineSrc, outDir: out, lang: "cobol" })).rejects.toThrow(
-      "--lang must be 'typescript' or 'csharp'",
+      `--lang must be ${oneOf(TWIN_LANGUAGES)}, got 'cobol'.`,
     );
+  });
+
+  it("lists the languages as Trax.Cli does", () => {
+    expect(TWIN_LANGUAGES[0]).toBe("typescript");
+    expect(oneOf(["typescript", "csharp"])).toBe("'typescript' or 'csharp'");
+    expect(oneOf(["typescript", "csharp", "swift"])).toBe("'typescript', 'csharp' or 'swift'");
+    expect(oneOf(["typescript"])).toBe("'typescript'");
   });
 
   it("derives the filenames from the IR id", async () => {

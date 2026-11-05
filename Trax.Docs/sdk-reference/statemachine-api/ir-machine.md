@@ -62,7 +62,10 @@ public abstract record PlanResult
     public sealed record Unreachable : PlanResult;
     public sealed record Exceeded : PlanResult;
     public sealed record Undetermined(string Trigger, IReadOnlyList<PlannedEvent> Events) : PlanResult;
-    public sealed record Invalid(string? Trigger = null, string? Target = null) : PlanResult;
+    public sealed record Invalid(string? Trigger = null, string? Target = null) : PlanResult
+    {
+        public RefusalCode? Code { get; init; }
+    }
 }
 ```
 
@@ -81,7 +84,7 @@ public abstract record PlanResult
 | `CanFire(snapshot, trigger, input)`, `AvailableTriggers(snapshot)` | Whether a trigger fires, and the triggers with an edge out of the state. |
 | `Plan(snapshot, target, fields, navigation, maxDepth)` | The events that take the snapshot to `target` with the page's fields applied. See [Planning](#planning). |
 | `PlannedEvent` | One event of a plan: its `Trigger`, and its `Input` when it takes one. |
-| `PlanResult` | What a plan came to: `Planned` with its `Events` (empty when the snapshot is there already), `Unreachable`, `Exceeded`, `Undetermined` with the `Trigger` it could not evaluate and the `Events` before it, or `Invalid` with the `Trigger` or the `Target` it cannot plan with. |
+| `PlanResult` | What a plan came to: `Planned` with its `Events` (empty when the snapshot is there already), `Unreachable`, `Exceeded`, `Undetermined` with the `Trigger` it could not evaluate and the `Events` before it, or `Invalid` with the `Trigger` or the `Target` it cannot plan with, or the `Code` (`INVALID_INPUT`, `INVALID_CONTEXT`) of a fields input or a context nested more than 512 arrays and objects deep. |
 
 ## Behavior
 
@@ -100,11 +103,15 @@ that bring the host to where the page is: the state `target`, with `fields` (the
 with its input) applied, moving through the `navigation` triggers. Every engine searches the same way, so they answer
 the same plan, and the conformance kit's `plan` cases hold them to it:
 
-- A `target` that is not a state, or a fields or navigation trigger the machine does not have, one bound to the
-  effect, an outcome, a timer, or a navigation trigger that is also the fields event, answers `Invalid`.
+- A fields input or a snapshot's context that nests more than 512 arrays and objects deep answers `Invalid` with
+  `Code` `INVALID_INPUT` or `INVALID_CONTEXT`, before anything else is checked.
+- A `target` that is not a state, or a fields or navigation trigger no transition fires on (one the IR declares and
+  no transition uses among them), one bound to the effect, an outcome, a timer, or a navigation trigger that is also
+  the fields event, answers `Invalid`.
 - The goal is a snapshot in `target` that the fields event leaves as it is. A fields event the target refuses never
   reaches it. Contexts are compared without their null members, at any depth, since a host omits them.
-- The search is breadth first, and from each snapshot it tries the fields event, then `navigation` in the order given.
+- The search is breadth first, and from each snapshot it tries the fields event, then `navigation` in the order given,
+  a trigger listed twice once, where it is first listed.
   A refused edge is skipped and a snapshot already seen is not visited again, so the plan never depends on the order
   the IR lists its transitions in.
 - A snapshot reached by `maxDepth` events (twice the machine's states by default) is not expanded, and the search

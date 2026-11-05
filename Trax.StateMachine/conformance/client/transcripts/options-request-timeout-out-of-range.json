@@ -1,0 +1,18 @@
+{
+  "about": "A request timeout of zero or less waits for no answer: the client refuses to be built with one, and builds with a positive one.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "build", "requestTimeout": 0, "expect": { "built": false, "code": "INVALID_OPTION" } },
+    { "client": "build", "requestTimeout": -5, "expect": { "built": false, "code": "INVALID_OPTION" } },
+    { "client": "build", "requestTimeout": 1000, "expect": { "built": true } }
+  ]
+}

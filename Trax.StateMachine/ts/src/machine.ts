@@ -1,15 +1,18 @@
 import { durationTicks } from "./duration";
+import { nestsTooDeep } from "./nesting";
 import {
   RefusalCode,
   type AdvanceResult,
   type RehydrationResult,
 } from "./results";
 import type {
+  ContextValidator,
   MachineDefinition,
   MachineTimer,
   Snapshot,
   TransitionDefinition,
 } from "./types";
+import { ownMember } from "./rules/interpreter";
 import { storedTextProblems, unstorable } from "./storedText";
 import { searchPlan, type PlanRequest, type PlanResult } from "./plan";
 
@@ -179,6 +182,10 @@ export class SnapshotMachine<S extends string, T extends string> {
     toState: string,
     newContext: Record<string, unknown>,
   ): AdvanceResult {
+    // A custom reduction's context is checked before anything recurses over it, as the Rust engine checks it.
+    if (nestsTooDeep(newContext))
+      return rejected(RefusalCode.InvalidContext, "The context nests deeper than 512 arrays and objects.");
+
     const timerError = this.timerProblem(toState, newContext);
     if (timerError != null)
       return rejected(RefusalCode.InvalidInput, timerError);
@@ -204,7 +211,7 @@ export class SnapshotMachine<S extends string, T extends string> {
     state: string,
     context: Record<string, unknown>,
   ): string | null {
-    const field = this.def.timers?.[state as S]?.field;
+    const field = ownMember(this.def.timers, state)?.field;
     if (!field) return null;
     const ticks = durationTicks(context[field.name]);
     if (ticks == null)
@@ -218,7 +225,7 @@ export class SnapshotMachine<S extends string, T extends string> {
 
   // Why the input does not match the trigger's declared schema, or null. A validator that throws refuses.
   private inputProblem(trigger: string, input: unknown): string | null {
-    const validate = this.def.inputValidators?.[trigger];
+    const validate = ownMember(this.def.inputValidators, trigger);
     if (!validate) return null;
     try {
       return validate(input);
@@ -240,7 +247,7 @@ export class SnapshotMachine<S extends string, T extends string> {
         RefusalCode.NoTransition,
         `Unknown state '${snapshot.state}'.`,
       );
-    const timer = this.def.timers?.[snapshot.state as S];
+    const timer = ownMember(this.def.timers, snapshot.state);
     if (!timer || timer.trigger !== trigger)
       return rejected(
         RefusalCode.NoTransition,
@@ -259,7 +266,7 @@ export class SnapshotMachine<S extends string, T extends string> {
    * no entry time, so the server sends that beside the snapshot.
    */
   timer(snapshot: Snapshot): MachineTimer | null {
-    const timer = this.def.timers?.[snapshot.state as S];
+    const timer = ownMember(this.def.timers, snapshot.state);
     if (!timer) return null;
     return {
       trigger: timer.trigger,
@@ -489,7 +496,7 @@ export class SnapshotMachine<S extends string, T extends string> {
     context: Record<string, unknown>,
     fromServer = false,
   ): string | null {
-    const validate = this.def.contextValidators?.[state as S];
+    const validate = ownMember<ContextValidator>(this.def.contextValidators, state);
     if (!validate) return null;
     return fromServer ? validate(context, { fromServer }) : validate(context);
   }

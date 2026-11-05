@@ -1,0 +1,11 @@
+{
+  "about": "A push whose data is null and that carries no error ends the stream as a failure, after what came before it.",
+  "steps": [
+    {"client": "subscribe", "operation": "Changes", "variables": {"domain": "RUN"}, "expect": {"subscribed": true}},
+    {"subscribe": "Changes", "variables": {"domain": "RUN"}},
+    {"push": {"onDataChanged": {"domain": "RUN", "id": "1"}}},
+    {"push": null},
+    {"events": [{"next": {"onDataChanged": {"domain": "RUN", "id": "1"}}}, {"ended": "failed"}]},
+    {"quiet": 100}
+  ]
+}

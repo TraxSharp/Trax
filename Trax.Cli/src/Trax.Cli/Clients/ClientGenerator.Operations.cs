@@ -394,14 +394,21 @@ internal sealed partial class ClientGenerator
               }>;
             }
 
-            /** Sends a query or mutation and returns its data; throws a TraxOperationError when the answer holds errors. */
+            /**
+             * Sends a query or mutation and returns its data; throws a TraxOperationError when the answer holds errors, and a
+             * TraxTransportError when it holds neither errors nor data.
+             */
             export async function send<V, R>(document: TraxDocument<V, R>, variables: V): Promise<R> {
               const answer = await execute(document, variables);
               if (answer.errors?.length) throw new TraxOperationError(answer.errors);
+              if (!isRecord(answer.data)) throw new TraxTransportError("The host answered with neither data nor an error.");
               return answer.data as R;
             }
 
-            /** Follows a subscription. A frame with errors ends it through `sink.error`. */
+            /**
+             * Follows a subscription. A frame with errors ends it through `sink.error` with a TraxOperationError, and one with
+             * neither errors nor data with a TraxTransportError.
+             */
             export function subscribe<V, R>(document: TraxDocument<V, R>, variables: V, sink: TraxSink<R>): () => void {
               let stop: (() => void) | null = null;
               let stopped = false;
@@ -414,6 +421,12 @@ internal sealed partial class ClientGenerator
                       stopped = true;
                       stop?.();
                       sink.error(new TraxOperationError(answer.errors));
+                      return;
+                    }
+                    if (!isRecord(answer.data)) {
+                      stopped = true;
+                      stop?.();
+                      sink.error(new TraxTransportError("The host sent a frame with neither data nor an error."));
                       return;
                     }
                     sink.next(answer.data as R);
@@ -499,7 +512,7 @@ internal sealed partial class ClientGenerator
                   lazy: true,
                   retryAttempts: Number.POSITIVE_INFINITY,
                   // A host that turned the caller away (4401, 4403) gives the same answer to a retry.
-                  shouldRetry: (error) => isCloseEvent(error) && error.code !== 4401 && error.code !== 4403,
+                  shouldRetry: retryClosedSocket,
                   ...options.socket,
                   url: options.socketUrl,
                   connectionParams: options.connectionParams,
@@ -512,7 +525,11 @@ internal sealed partial class ClientGenerator
                   : { query: request.document.text, operationName: request.document.name, variables: request.variables };
               return {
                 execute(request) {
-                  return withRequestTimeout(options.requestTimeout ?? defaultRequestTimeout, (signal) => exchange(request, signal));
+                  return withRequestTimeout(
+                    options.requestTimeout ?? defaultRequestTimeout,
+                    (signal) => exchange(request, signal),
+                    (message) => new TraxTransportError(message),
+                  );
                 },
                 subscribe(request, sink) {
                   return open().subscribe(payload(request), {
@@ -565,39 +582,15 @@ internal sealed partial class ClientGenerator
                 }
                 if (!isRecord(answer) || (!("data" in answer) && !("errors" in answer)))
                   throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status);
+                const refused = Array.isArray(answer.errors) && answer.errors.length > 0;
                 // Not 2xx, and no GraphQL error to say why: the request failed, whatever data the body holds.
-                if (!response.ok && !(Array.isArray(answer.errors) && answer.errors.length > 0))
+                if (!response.ok && !refused)
                   throw new TraxTransportError(`The host answered ${response.status} with no GraphQL error.`, response.status);
+                // 2xx with no error and no data (`data: null`, `errors: []`): neither a refusal nor a result.
+                if (!refused && !isRecord(answer.data))
+                  throw new TraxTransportError(`The host answered ${response.status} with no GraphQL answer.`, response.status);
                 return answer as TraxAnswer;
               }
-            }
-
-            /** The request timeout when none is set: 30 seconds. */
-            const defaultRequestTimeout = 30_000;
-
-            /**
-             * Runs one request under `timeout` milliseconds: past it, the signal `run` was given is aborted and the promise
-             * rejects with a TraxTransportError, whether or not the fetch heeds the signal.
-             */
-            async function withRequestTimeout<T>(timeout: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
-              const controller = new AbortController();
-              if (!Number.isFinite(timeout)) return run(controller.signal);
-              let timer: ReturnType<typeof setTimeout> | undefined;
-              const expired = new Promise<never>((_, reject) => {
-                timer = setTimeout(() => {
-                  controller.abort();
-                  reject(new TraxTransportError(`The host did not answer within ${timeout} ms.`));
-                }, Math.max(0, timeout));
-              });
-              try {
-                return await Promise.race([run(controller.signal), expired]);
-              } finally {
-                clearTimeout(timer);
-              }
-            }
-
-            function isCloseEvent(value: unknown): value is { code: number; reason: string } {
-              return isRecord(value) && typeof value.code === "number" && "reason" in value;
             }
 
             function isRecord(value: unknown): value is Record<string, unknown> {

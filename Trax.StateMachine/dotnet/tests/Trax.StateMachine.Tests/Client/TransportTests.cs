@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Microsoft.Extensions.Time.Testing;
 using Trax.Client;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
@@ -38,6 +39,33 @@ public class TransportTests
             },
         ],
     };
+
+    // A server the controller is built over and never reaches.
+    private sealed class NoServer : IMachineServer
+    {
+        public Task<ServerAnswer> StartAsync(
+            JsonNode? input,
+            string requestId,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<ServerAnswer> EventAsync(
+            string id,
+            string trigger,
+            JsonNode? input,
+            string requestId,
+            string? clientResult,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<ServerAnswer> GetAsync(
+            string id,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public IDisposable Subscribe(string id, Action<StreamMessage> onMessage) =>
+            throw new NotSupportedException();
+    }
 
     private sealed class NoSocket : ISubscriptionSocket
     {
@@ -205,6 +233,7 @@ public class TransportTests
             new GraphQLMachineServerOptions
             {
                 Http = new HttpClient(new LargeAnswer(64 * 1024, sayLength)),
+                HandlerFollowsNoRedirects = true,
                 Endpoint = new Uri("https://api.example.com/graphql"),
                 Machine = Turnstile,
                 Socket = new NoSocket(),
@@ -224,6 +253,7 @@ public class TransportTests
             new GraphQLMachineServerOptions
             {
                 Http = new HttpClient(new LargeAnswer(512, sayLength: false)),
+                HandlerFollowsNoRedirects = true,
                 Endpoint = new Uri("https://api.example.com/graphql"),
                 Machine = Turnstile,
                 Socket = new NoSocket(),
@@ -253,38 +283,72 @@ public class TransportTests
             .Be(16 * 1024 * 1024);
     }
 
-    // The time-based defaults every client of the kit shares (conformance/client/PROTOCOL.md, "Defaults").
+    // Built without a request timeout, a server gives a request up after the default 30 seconds, on a clock the test
+    // holds: the default is the one in force, not only the one declared.
     [Test]
-    public void The_time_based_defaults_are_the_client_kits()
+    public async Task A_server_built_without_a_request_timeout_gives_a_request_up_after_thirty_seconds()
     {
-        new GraphQLMachineServerOptions
-        {
-            Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
-            Endpoint = new Uri("https://h/graphql"),
-            Machine = Turnstile,
-            Socket = new NoSocket(),
-        }
-            .RequestTimeout.Should()
-            .Be(TimeSpan.FromSeconds(30));
-        GraphQLMachineServer.DefaultRequestTimeout.Should().Be(TimeSpan.FromSeconds(30));
-        GraphQLMachineServer
-            .DefaultResubscribeDelays.Should()
-            .Equal(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5));
-        ServerMachineController
-            .DefaultRetryDelays.Should()
-            .Equal(
-                TimeSpan.FromMilliseconds(250),
-                TimeSpan.FromMilliseconds(500),
-                TimeSpan.FromSeconds(1),
-                TimeSpan.FromSeconds(2),
-                TimeSpan.FromSeconds(4)
-            );
+        var time = new FakeTimeProvider();
+        var server = new GraphQLMachineServer(
+            new GraphQLMachineServerOptions
+            {
+                Http = new HttpClient(new Unanswered()),
+                HandlerFollowsNoRedirects = true,
+                Endpoint = new Uri("https://h/graphql"),
+                Machine = Turnstile,
+                Socket = new NoSocket(),
+                Time = time,
+            }
+        );
+
+        var read = server.GetAsync("i-1");
+        time.Advance(GraphQLMachineServer.DefaultRequestTimeout - TimeSpan.FromMilliseconds(1));
+        read.IsCompleted.Should().BeFalse();
+        time.Advance(TimeSpan.FromMilliseconds(1));
+
+        var answered = () => read.WaitAsync(TimeSpan.FromSeconds(10));
+        (await answered.Should().ThrowAsync<HttpRequestException>()).WithMessage(
+            "*within 30 seconds*"
+        );
     }
 
-    [Test]
-    public void A_request_timeout_that_is_neither_positive_nor_infinite_is_refused()
+    // A host that never answers: every request waits until it is cancelled.
+    private sealed class Unanswered : HttpMessageHandler
     {
-        var build = () =>
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            // determinism: not a fixed delay, a wait only the request's cancellation ends.
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("unreachable");
+        }
+    }
+
+    // Zero, below infinite, and past the longest wait a timer can count (Int32.MaxValue milliseconds).
+    [TestCase(0.0)]
+    [TestCase(-2.0)]
+    [TestCase(50.0 * 24 * 60 * 60 * 1000)]
+    public void A_request_timeout_the_client_cannot_wait_is_refused(double milliseconds)
+    {
+        var build = () => ServerTimingOut(TimeSpan.FromMilliseconds(milliseconds));
+
+        build.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*request timeout*");
+    }
+
+    // Below zero (Timeout.InfiniteTimeSpan among them), and past the longest wait a timer can count.
+    [TestCase(-1.0)]
+    [TestCase(-5.0)]
+    [TestCase(50.0 * 24 * 60 * 60 * 1000)]
+    public void A_delay_no_timer_can_wait_is_refused_when_the_client_is_built(double milliseconds)
+    {
+        IReadOnlyList<TimeSpan> delays =
+        [
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromMilliseconds(milliseconds),
+        ];
+        var server = () =>
             new GraphQLMachineServer(
                 new GraphQLMachineServerOptions
                 {
@@ -292,10 +356,155 @@ public class TransportTests
                     Endpoint = new Uri("https://h/graphql"),
                     Machine = Turnstile,
                     Socket = new NoSocket(),
-                    RequestTimeout = TimeSpan.Zero,
+                    ResubscribeDelays = delays,
                 }
             );
-        build.Should().Throw<ArgumentOutOfRangeException>();
+        var controller = () =>
+            new ServerMachineController(
+                new ServerMachineOptions
+                {
+                    Machine = Turnstile,
+                    Server = new NoServer(),
+                    RetryDelays = delays,
+                }
+            );
+        var client = () =>
+            new TraxClient(
+                new TraxHttpTransport(
+                    new TraxHttpTransportOptions
+                    {
+                        Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
+                        Endpoint = new Uri("https://h/graphql"),
+                    }
+                ),
+                new TraxClientOptions { ResubscribeDelays = delays }
+            );
+
+        server.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*resubscribe delay*");
+        controller.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*retry delay*");
+        client.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*resubscribe delay*");
+    }
+
+    [TestCase(0.0)]
+    [TestCase(int.MaxValue)]
+    public void A_delay_from_zero_to_the_longest_a_timer_counts_is_accepted(double milliseconds)
+    {
+        IReadOnlyList<TimeSpan> delays = [TimeSpan.FromMilliseconds(milliseconds)];
+        var build = () =>
+            new ServerMachineController(
+                new ServerMachineOptions
+                {
+                    Machine = Turnstile,
+                    Server = new GraphQLMachineServer(
+                        new GraphQLMachineServerOptions
+                        {
+                            Http = new HttpClient(
+                                new SocketsHttpHandler { AllowAutoRedirect = false }
+                            ),
+                            Endpoint = new Uri("https://h/graphql"),
+                            Machine = Turnstile,
+                            Socket = new NoSocket(),
+                            ResubscribeDelays = delays,
+                        }
+                    ),
+                    RetryDelays = delays,
+                }
+            );
+
+        build.Should().NotThrow();
+    }
+
+    [TestCase(-1.0)]
+    [TestCase(1.0)]
+    [TestCase(int.MaxValue)]
+    public void A_request_timeout_the_client_can_wait_is_accepted(double milliseconds)
+    {
+        var build = () => ServerTimingOut(TimeSpan.FromMilliseconds(milliseconds));
+
+        build.Should().NotThrow();
+    }
+
+    private static GraphQLMachineServer ServerTimingOut(TimeSpan timeout) =>
+        new(
+            new GraphQLMachineServerOptions
+            {
+                Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
+                Endpoint = new Uri("https://h/graphql"),
+                Machine = Turnstile,
+                Socket = new NoSocket(),
+                RequestTimeout = timeout,
+            }
+        );
+
+    [TestCase(0.0)]
+    [TestCase(-2.0)]
+    [TestCase(50.0 * 24 * 60 * 60 * 1000)]
+    public void A_connect_timeout_the_socket_cannot_wait_is_refused(double milliseconds)
+    {
+        var build = () =>
+            new GraphQLSubscriptionSocket(
+                new GraphQLSubscriptionSocketOptions
+                {
+                    Endpoint = new Uri("wss://h/graphql"),
+                    ConnectTimeout = TimeSpan.FromMilliseconds(milliseconds),
+                }
+            );
+
+        build.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*connect timeout*");
+    }
+
+    // A ping interval below zero, other than infinite, is one ClientWebSocket refuses only once it connects.
+    [TestCase(-2.0)]
+    [TestCase(50.0 * 24 * 60 * 60 * 1000)]
+    public void A_keep_alive_interval_the_socket_cannot_wait_is_refused(double milliseconds)
+    {
+        var build = () =>
+            new GraphQLSubscriptionSocket(
+                new GraphQLSubscriptionSocketOptions
+                {
+                    Endpoint = new Uri("wss://h/graphql"),
+                    KeepAliveInterval = TimeSpan.FromMilliseconds(milliseconds),
+                }
+            );
+
+        build.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*keep-alive interval*");
+    }
+
+    [TestCase(0.0)]
+    [TestCase(-1.0)]
+    public void A_keep_alive_interval_of_zero_or_infinite_sends_no_pings_and_is_accepted(
+        double milliseconds
+    )
+    {
+        var build = () =>
+            new GraphQLSubscriptionSocket(
+                new GraphQLSubscriptionSocketOptions
+                {
+                    Endpoint = new Uri("wss://h/graphql"),
+                    KeepAliveInterval = TimeSpan.FromMilliseconds(milliseconds),
+                }
+            );
+
+        build.Should().NotThrow();
+    }
+
+    // The machine server's and the socket's limits are held by the kit (options-response-size-out-of-range); the
+    // transport a generated client is built on holds the same one.
+    [TestCase(0L)]
+    [TestCase(-5L)]
+    public void A_response_size_limit_of_zero_or_less_is_refused_by_the_transport(long size)
+    {
+        var build = () =>
+            new TraxHttpTransport(
+                new TraxHttpTransportOptions
+                {
+                    Http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }),
+                    Endpoint = new Uri("https://h/graphql"),
+                    MaxResponseSize = size,
+                }
+            );
+
+        build.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*largest response size*");
     }
 
     private sealed class Sink : ISubscriptionSink

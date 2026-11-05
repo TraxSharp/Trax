@@ -22,9 +22,12 @@ node conformance/client/run.mjs --stdio                                         
 `--stdio` reverses the pipes as the engine runner's does: the runner writes requests on its stdout and reads answers on
 its stdin, so a test in another language (the C# `ClientConformanceTests`) starts the runner and answers in process. The Rust
 client's testee is a binary, `rust/client/src/bin/client_testee.rs`, which the runner spawns.
-The runner writes its report on stderr and exits 0 when every transcript passed, 1 when any failed or the testee's
-answer to `end` was an `error`, and 2 on a usage error, a `--only <prefix>` that selects no transcript, or anything
-else it could not run. `--only <prefix>` runs the transcripts whose name starts with the prefix. The TypeScript
+The runner writes its report on stderr and exits 0 when every transcript passed, was skipped or failed as the testee's
+expected failures list it, 1 when any other failed, the list did not hold or the testee's answer to `end` was an
+`error`, and 2 on a usage error, a `--only <prefix>` that selects no transcript, or anything else it could not run.
+`--only <prefix>` runs the transcripts whose name starts with the prefix, and `--name <testee>` names the testee for
+its [expected failures](#expected-failures). The report ends `N of N transcripts passed, s skipped, k expected
+failures.`, where N leaves out the transcripts skipped and the ones the list excused. The TypeScript
 client's testee exits 3 when esbuild, which it bundles the client with, is not installed. The runner and the host use
 node's own modules only.
 
@@ -58,10 +61,19 @@ one.)
   a document's text.
 - `instance` is the id of an instance to open, or null to start one on `start`.
 - `retryDelays` and `resubscribeDelays` are in milliseconds: the delays between retries of `SERVER_OUTDATED` and of a
-  failed read, and the delays before subscribing again after a stream that ended without saying why.
+  failed read, and the delays before subscribing again after a stream that ended without saying why. A request
+  without them leaves the client's own defaults in force.
 - `maxResponseSize` (bytes), `requestTimeout` (milliseconds) and `allowInsecureTransport` are given only when a
   transcript sets them, and go to the client's own options of those names: the largest answer or socket message it
   reads, how long it waits for an answer, and whether it may talk cleartext to a host that is not this machine.
+- `connectTimeout` and `idleTimeout` (milliseconds) are given only when a transcript sets them, and go to the
+  socket's options: how long a socket may take to connect, and to stay silent (C#'s `ConnectTimeout` and
+  `KeepAliveTimeout`, Rust's `connect_timeout` and `idle_timeout`). A client whose page builds its socket lacks them
+  (`socket-timeouts`).
+- `throwingRequestId: n`, when given, has the testee build the client with a request id minter whose call numbered
+  `n` (from 1) throws (panics, in Rust) and mints nothing; the ids it does mint still count `r1`, `r2`, ….
+  `throwingListener: true` has it subscribe a change listener that throws on every change; a client with no listener
+  to call lacks it (`change-listener`).
 - Every answer to `open` names its client in `client`: `ts`, `dotnet` or `rust`, or the name a new client is given
   in [the allowlist](#what-a-client-may-lack).
 - A client that refuses to be built because its endpoint or socket is cleartext to a host that is not this machine
@@ -84,9 +96,17 @@ guard, a custom reduction, or a custom requirement of the state it enters): it s
 after them until they answer, and sends one even when its own engine would refuse it. A trigger the machine does
 not declare as an event is refused where it is sent, with the code its engine's `advance` gives (`NO_TRANSITION` for
 one it lacks, `OUTCOME_BOUND` for an outcome, `TIMER_BOUND` for a timer), and never reaches the host, whatever its name: an event is never sent as the `start`, `get`, `discard` or `changed` operation.
+A `CLIENT_DIVERGENCE` answer starts a read of the instance, and the queue holds behind it: the next queued event is
+sent only once that read has settled, and is predicted from what the read says.
+A request id minter that throws fails the one send it was minting for, `failed` with `INVALID_REQUEST_ID`, sends
+nothing for it, and the controller carries on.
+An input nested deeper than a value may (512 levels, `../PROTOCOL.md`) is refused where it is sent, `refused` with
+`INVALID_INPUT`, and nothing reaches the host; `tooDeep: "input"`, when given, has the testee send 600 arrays nested
+one in another, built in memory, as the input, as `sync` does below.
 A send before `start` waits for it; once a start or a first read has ended without an instance (refused, or past
 every retry), every send waiting and every later one settles `failed` as `NOT_READY`. **`retry`** resends what last
-failed under the same request id. It resends nothing, and answers `NOTHING_TO_RETRY`, once a later event has been
+failed under the same request id: a start that failed, or, for an instance opened by id, a first read that failed
+past every retry, which it reads again and settles `confirmed` with what the read says. It resends nothing, and answers `NOTHING_TO_RETRY`, once a later event has been
 confirmed or while one is queued or in flight: the failed event would reach the host after it. Both are answered with
 what the send came to:
 
@@ -103,7 +123,11 @@ engine's planner (`../PROTOCOL.md`, `plan`) from the snapshot the host last conf
 plan as `send` does, and plans again from each answer until the plan is empty. A refusal (`GUARD_FAILED`,
 `NO_TRANSITION`, `CLIENT_DIVERGENCE`, `CONFLICT`) reads the instance once and plans again (a `CLIENT_DIVERGENCE`
 starts that read itself); a second refusal in the same sync settles it `refused`. A sync plans only when nothing is
-queued, so an event sent meanwhile goes out first. An `undetermined` plan sends its `events`, then its `trigger` unpredicted. A sync started while another
+queued, so an event sent meanwhile goes out first. An `undetermined` plan sends its `events`, then its `trigger` unpredicted.
+One such plan the planner cannot get past: the fields event resting on a custom rule at the target, which makes every
+plan from the target `undetermined` on the fields trigger with no `events`. So when the host has confirmed the fields
+event this sync sent, and the next plan, from a snapshot in `target` with nothing confirmed since (the revision held is
+the one that answer carried), is that one, the sync settles `synced`: the host applied the fields at the target. A sync started while another
 runs supersedes it: the older settles `superseded` once the event it has in flight answers, and sends nothing more;
 one still waiting when the client stops or is disposed settles `superseded` too. No sync sends more than twice the
 machine's states in events, the unpredicted ones counted; past that it settles `exceeded`.
@@ -115,7 +139,10 @@ machine's states in events, the unpredicted ones counted; past that it settles `
 { "id": 6, "outcome": "unreachable" }
 ```
 
-and `refused`, `failed` and `stopped` with their `code`, as for `send`, and `exceeded` and `invalid`.
+and `refused`, `failed` and `stopped` with their `code`, as for `send`, and `exceeded` and `invalid` (with the
+`trigger` or `target` it cannot plan with, or the `code` of an input or context nested too deep). `tooDeep: "input"`, when
+given, has the testee build 600 arrays nested one in another, in memory, and sync with them as the fields input, as the
+engine kit's `plan` does (`../PROTOCOL.md`): no reader need take a text nested that deep.
 
 **`view`** answers with what the client shows now:
 
@@ -167,14 +194,31 @@ stream says it is gone.
 ```
 
 An answer that neither says the instance was discarded nor gives a problem does not say it is gone: it is
-`TRANSPORT_ERROR`, as a failed request is.
+`TRANSPORT_ERROR`, as a failed request is. A discard is total, as every operation is: a request that fails, and an
+answer that is not JSON or that the client cannot read, settle `failed` with `TRANSPORT_ERROR`, never a throw.
 
 The kit drives no separate effect send. Each client sends the event bound to the effect as any other, through `send`;
 only TypeScript has a second path, the snapshot transport's `send` (`sendSnapshot`) a draft session uses, which is not
 the controller's and has no C# or Rust counterpart.
 
-**`dispose`** closes the client: its stream, and every request it would still send. It is answered `{ "disposed":
-true }`. **`end`** is the last request; the testee answers `{ "id" }` and exits.
+**`dispose`** closes the client: its stream, and every request it would still send. A start or a first read in
+flight settles, and every send in flight or queued settles `failed` with `DISPOSED`; the host hears nothing more. It
+is answered `{ "disposed": true }`.
+
+**`build`** builds a client from the last `open` with the members given over it (`requestTimeout`,
+`maxResponseSize`, `retryDelays`, `resubscribeDelays`, `connectTimeout`, `idleTimeout`), and drops it unstarted. It
+sends nothing and leaves the open client alone. It is answered `{ "built": true }`, or `{ "built": false, "code":
+"INVALID_OPTION" }` when the client refused an option ([Defaults](#defaults)), or `"INSECURE_TRANSPORT"` as for
+`open`.
+
+**`headers`** has the headers each HTTP request asks for throw, from now on, with `"throws": true`, and stop
+throwing with `false`: TypeScript's `headers`, Rust's `headers` (a provider that panics), and for C#, which takes its
+headers on the `HttpClient`, a delegating handler before the client's that throws before it sends. It is answered
+`{ "throws": <bool> }`.
+
+A change listener that throws and headers that throw are the app's bugs, not the controller's: the controller settles
+every operation as it would without them, and a request whose headers threw fails `TRANSPORT_ERROR` before anything
+is sent. **`end`** is the last request; the testee answers `{ "id" }` and exits.
 
 ## What a client may lack
 
@@ -188,22 +232,79 @@ and does not yet is a bug in the client, not an entry here.
     "capability": "upgrade-status",
     "client": "ts",
     "reason": "A WebSocket in a browser or in node does not say what status a failed upgrade was answered with."
+  },
+  {
+    "capability": "socket-message-limit",
+    "client": "ts",
+    "reason": "The page builds the graphql-ws client given as socket and its WebSocket, which read every message whole, so the client never sees a message before it is read and cannot cap its size."
+  },
+  {
+    "capability": "socket-close-code",
+    "client": "ts",
+    "reason": "The page builds the graphql-ws client given as socket, which closes a socket that sent it a message it cannot read with its own code, 4004, not the protocol's 4400."
+  },
+  {
+    "capability": "socket-timeouts",
+    "client": "ts",
+    "reason": "The page builds the graphql-ws client given as socket, which decides how long a socket may take to connect and stay silent; the client has no such options."
+  },
+  {
+    "capability": "change-listener",
+    "client": "rust",
+    "reason": "The view is a tokio watch channel the app reads (watch); there is no callback of the app's for the controller to call, so none can throw."
   }
 ]
 ```
 
+## Expected failures
+
+A client in a new language joins the kit before it passes all of it, as an engine does (`../PROTOCOL.md`, "Expected
+failures"). The transcripts it does not pass yet are listed in `expected-failures/<testee>.json` here, read when the
+runner is run with `--name <testee>`, the name its answer to `open` gives as `client`; an answer that names another
+client fails the transcript, so a testee cannot run under another client's list. `ts`, `dotnet` and `rust` each list
+what they fail today.
+
+```json
+[{ "prefix": "sync-", "reason": "syncTo is not built yet", "message": "the testee's answer to sync: unsupported" }]
+```
+
+An entry names a transcript by its file name without `.json` (`case`), or every transcript whose name starts with
+`prefix`, says why in `reason`, and may give `message`, the start of the text the runner fails the transcript with. The
+rules are the engine kit's: a failing transcript no entry names, a listed one that passes or that the client skips, one
+that fails with another message, an entry that names no transcript, and a transcript two entries name each fail the run.
+
+An expected failure is not a lack. A lack is granted above, for what a client's platform cannot give it, and lasts as
+long as the platform does; an expected failure is what a client has not built yet, and its entry goes when it is built.
+
 ## Defaults
 
-A client built without these options has these values, in every language. The transcripts set shorter ones, so the
-kit cannot see them: each client's unit tests hold them (TypeScript's `machineServer.test.ts`, C#'s `TransportTests`,
-Rust's `tests/controller.rs`). A change to one is a change here and in all three.
+A client built without these options has these values, in every language. A testee sets only the options a transcript
+gives, so a transcript that gives none sees the defaults: `response-size-default` holds the response size. The runner
+gives every transcript short retry and resubscribe delays unless it is marked `"defaults": true`, so
+`retry-delays-default` and `resubscribe-delays-default` hold the first of each. The rest are too long for a
+transcript to wait out, and each client's unit tests hold them by what the client does
+(TypeScript's `machineServer.test.ts`, C#'s `DefaultsParityTests`, Rust's `tests/defaults.rs`). The values are written
+down once, in `defaults.json` beside this file: each client's tests hold its constants to it, and TypeScript's
+`defaults.conformance.test.ts` holds this table to it. A change to one is a change there, here and in all three.
 
 | Option | Default | What it bounds |
 | --- | --- | --- |
 | Request timeout | 30 s | One request, from sending it to the last byte of its answer. Past it the request fails as `TRANSPORT_ERROR`. C#'s also yields to a shorter `HttpClient.Timeout`. |
 | Retry delays | 250, 500, 1000, 2000, 4000 ms | The waits before each retry of a `SERVER_OUTDATED` answer and of a read the transport failed: one retry per delay, then the event fails and `retry` resends it. An empty list retries nothing. |
-| Resubscribe delays | 1000, 2000, 5000 ms | The waits before subscribing again after a stream ended without saying why. The last repeats for as long as the stream is wanted, and the schedule starts over once a stream has delivered its second push, since every stream's first is the instance as it is. An empty list is the default. |
+| Resubscribe delays | 1000, 2000, 5000 ms | The steps of the waits before subscribing again after a stream ended without saying why. The last repeats for as long as the stream is wanted, and the schedule starts over once a stream has delivered its second push, since every stream's first is the instance as it is. An empty list is the default. Each wait is jittered, below. |
 | Response size | 16 MiB | The largest answer body read; a larger one fails its request as `TRANSPORT_ERROR` and is not read past the limit. C# and Rust hold a socket message to the same limit. |
+
+A client refuses to be built with an option no limit or timer can honour: a request, connect or idle timeout of zero
+or less, a response size of zero or less, and a retry or resubscribe delay below zero or past 2^31 - 1 ms. The
+`options-` transcripts hold this through `build`. JSON carries no NaN or infinity, so the kit does not send one; each
+client's unit tests refuse those.
+
+Each resubscribe wait is drawn uniformly between 50% and 100% of its step: `step × (1 − r / 2)`, with `r` uniform in
+[0, 1), drawn afresh for every wait, so the clients a host restart or a refusal like `TOO_MANY_SUBSCRIPTIONS` dropped
+together do not subscribe again in lockstep. Retry delays are not jittered. The random source is the language's
+ordinary one and each client's unit tests replace it (TypeScript's spies on `Math.random`), so a draw of 0 waits the
+whole step. The kit does not pin the random source: `resubscribe-backoff` bounds each wait by half its step, the
+shortest a draw can make it, so it holds the order and growth of the waits whatever is drawn.
 
 The socket's own timing is not pinned, because the TypeScript client does not own its socket: a page builds its
 graphql-ws client and its options with it, and graphql-ws waits for an acknowledgement and stays silent for as long
@@ -220,7 +321,13 @@ It acknowledges a socket's `connection_init` unless the transcript refuses that 
 the socket with 4403 before acknowledging it. A socket the host closes with 4401 or 4403, before it is acknowledged or
 while subscribed, is the host turning the caller away, and the client stops for good: `UNAUTHENTICATED` for 4401,
 `FORBIDDEN` for 4403, and the same for an upgrade answered 401 or 403 where the client's socket can tell one. It
-subscribes again after any other close.
+subscribes again after any other close, graphql-transport-ws's 4408 (not initialised in time) and 4429 (too many
+initialisation requests) among them. C# and Rust hold a socket message to the response size: one larger fails the
+socket, unread past the limit, and the client subscribes again on a new one.
+
+Socket text that is not JSON is not a graphql-transport-ws message: the client closes that socket with 4400, as the
+protocol says, and subscribes again on a new one after the resubscribe delay. A client whose page builds its socket
+lacks the close code (`socket-close-code`).
 
 A host can also refuse one subscription on a socket it accepted (an expired token, an anonymous socket it
 acknowledged): it answers a `next` whose first GraphQL error carries the refusal in `extensions.code`, or an `error`
@@ -234,7 +341,19 @@ again after the resubscribe delay.
 An answer is wrapped the way a host serves it, `{ "data": { "machines": { "<machine>": { "<operation>": … } } } }`,
 and a push as `{ "data": { "<machine>Changed": … } }`, with the fields a host selects that the step does not give
 filled in: `dueAt: null`, `dueAtKnown: true`, `problem: null` on an answer (and `id`, `revision`, `state`, `context`
-null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a push.
+null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a push. A step with `"bare": true` sends its answer or push as
+given, without them. An answer or push that leaves out `dueAtKnown` or `dueAt` does not know the due time: the
+client reads it as `dueAtKnown: false`, never as a known null.
+
+A context nests at most 64 levels, the snapshot that holds it counting as one: no store writes a snapshot deeper,
+and every engine refuses to read one. One that deep is read, however deep the answer or socket message around it, so
+a client's JSON reader takes the whole envelope; one deeper is not one a store wrote, and is malformed (below).
+
+**Malformed answers and pushes.** An answer the client cannot take as one a host wrote fails its request
+`TRANSPORT_ERROR` and changes nothing: one that is not an object, or whose `revision` is not a whole number from zero
+(a fraction, a string, a negative), whose `dueAt` is not an instant, whose `state` is not a string or is missing
+beside no problem, or whose context is not an object or nests too deep. A push like that, or one whose `gone` is not
+a boolean, is dropped and the instance read again. Neither stops the client, and neither is taken unchecked.
 
 ## Transcripts
 
@@ -250,12 +369,15 @@ null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a
   "opened": { "opened": false, "code": "INSECURE_TRANSPORT" },
   "retryDelays": [10, 10],
   "resubscribeDelays": [10],
+  "defaults": false,
   "steps": [ ... ]
 }
 ```
 
-`refuseUpgrades` lists the HTTP statuses the first socket upgrades are answered with instead of switching protocols,
-one each. `open` adds members to the `open` request, overriding the runner's (`endpoint` and `socket` among them).
+`retryDelays` and `resubscribeDelays` default to `[10, 10]` and `[10]`, which keep a run fast. `"defaults": true` sends
+neither, so the client's own [defaults](#defaults) are in force; such a transcript may not set them or `open`, and
+keeps to the first few delays so the run stays fast. `refuseUpgrades` lists the HTTP statuses the first socket
+upgrades are answered with instead of switching protocols, one each. `open` adds members to the `open` request, overriding the runner's (`endpoint` and `socket` among them).
 `opened` compares the answer to `open`; when it is not `opened: true`, the transcript ends there.
 
 `documents` names each operation the host serves and the variables its document declares; the runner writes the
@@ -265,20 +387,28 @@ documents from it. The steps run in order:
 | --- | --- |
 | `{ "client": "<op>", ...args }` | Sends the request. With `"expect"`, waits for its answer and compares; with `"as": "<name>"`, goes on and a later `await` compares; with neither, goes on, and the answer must still come before the transcript ends. |
 | `{ "await": "<name>", "expect": { ... } }` | Waits for the answer sent under that name and compares. |
-| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503` (with `"body": {...}`, the JSON it answers with, or none), `"drop": true` (the connection is closed with no answer), `"hang": true` (no answer ever comes), `"redirect": true` (a 307, or the status given, whose `Location` is a second host that counts what reaches it) or `"raw": "..."` (a 200 with that text as its body). `"pad": n` adds n bytes of whitespace after an answer's JSON. |
-| `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. |
-| `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription; `"pad": n` beside a `push` adds n bytes of whitespace to its frame. |
-| `{ "unsettled": "<name>" }` | Checks that the answer sent under that name has not come yet. |
+| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503` (with `"body": {...}`, the JSON it answers with, or none), `"drop": true` (the connection is closed with no answer), `"hang": true` (no answer ever comes), `"redirect": true` (a 307, or the status given, whose `Location` is a second host that counts what reaches it) or `"raw": "..."` (a 200 with that text as its body). `"pad": n` adds n bytes of whitespace after an answer's JSON, and `"padTo": n` pads the body to exactly n bytes; `"bare": true` sends the answer without the fields a host fills in. With `"hold": "<name>"` instead of an answer, it answers nothing yet. |
+| `{ "respond": "<name>", <answer> }` | Answers the request held under that name, as a `request` step would. |
+| `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. `"notBefore": ms` and `"before": ms` bound how long after the host last ended a stream (`complete`, `streamError`, `dropSocket`) it came. |
+| `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription; `"pad": n` beside a `push` adds n bytes of whitespace to its frame, and `"bare": true` sends it without the fields a host fills in. |
+| `{ "pushRaw": "..." }` | Sends that text as one frame on the last subscription's socket, JSON or not. A later `subscribe` step's bounds count from it. |
+| `{ "clientClosed": 4400 }` | Waits for the client to close the last subscription's socket, and checks the code its close frame carried. |
+| `{ "unsettled": "<name>" }` | Checks that the answer sent under that name has not come yet. It asks for the view first and checks once that answer is in, so an answer the testee wrote before it has been read; put it after a fence (below). |
 | `{ "streamError": [...] }` | Ends the last subscription with a graphql-transport-ws `error` message carrying those errors. |
 | `{ "ping": true }` | Sends a graphql-transport-ws `ping` on the last subscription's socket and waits for the client's `pong`. |
 | `{ "decoy": 0 }` | Checks how many requests reached the second host a redirect points at. |
 | `{ "complete": true }`, `{ "dropSocket": true }` | Completes the last subscription, or closes its socket (with 1011, or with the code given: `{ "dropSocket": 4401 }`). |
-| `{ "view": { ... } }` | Asks for the view until it holds every member given, for up to three seconds. |
+| `{ "view": { ... } }` | Asks for the view until it holds every member given, for up to three seconds. With `"once": true`, asks once: what must stay as it is is checked after a fence, not by waiting. |
 | `{ "quiet": 50 }` | Waits that many milliseconds; nothing may arrive meanwhile. |
 | `{ "wait": 50 }` | Waits that many milliseconds, so the client has taken every request sent before it; what arrives meanwhile waits for a later step. |
 
 A comparison holds when every member the step gives equals the answer's, canonically; members it does not give are
-not compared. After the last step the runner waits briefly, and anything that arrived that no step took fails the
+not compared.
+
+A step that checks something did not happen (a stale push not applied, a send not settled) does not wait for it to
+happen late. It follows a **fence**: something the client sends only once it has taken what came before, such as the
+read a `reload` push makes it send or the subscription it opens after a socket failed. The fence's request is held
+(`hold`), the check made (`"once": true`, `unsettled`), and the request answered (`respond`). After the last step the runner waits briefly, and anything that arrived that no step took fails the
 transcript: a client sends nothing the transcript does not expect.
 
 ## The client surface
@@ -290,10 +420,14 @@ entry points), C# (`Trax.StateMachine.Client`) and Rust (`trax-state-machine-cli
 name a row gives for it is not on its public surface, or when a public member of a type the second table covers is in
 no row: `ClientSurfaceTests` in `dotnet/tests/Trax.StateMachine.Tests.Meta`, `ts/src/clientSurface.test.ts` and
 `rust/client/tests/client_surface.rs`. So a member added to one client fails until it has a row, and the row says
-what the other two call it, or why they have none.
+what the other two call it, or why they have none. Each test reads the column headed with its language's name, so
+another client is another column and a test of its own, and the headers name the languages the testees in
+`conformance/testees.json` are written in.
 
 A cell is one name in backticks, `Type.member` for a member and a bare `Name` for an export of its own (a type, a
-function, a constant), or `—` and the reason that language has none. A type is the name the language exports it
+function, a constant), or `—` and the reason that language has none. A member of a type the first table does not cover
+is named like any other, so it is checked too; a reason is never only a name, which would leave it unchecked. A type's
+members are the ones a caller reaches on it, inherited ones included (C#'s and TypeScript's alike). A type is the name the language exports it
 under, and a member is written as the language spells it, a Rust field or method alike with a dot. The reason is
 for people; the tests only check it is there. Outcomes, problem codes and stream messages are not here: the
 transcripts compare those by value.
@@ -372,13 +506,14 @@ transcripts compare those by value.
 | The endpoint | — the first argument of `createMachineServer` | `GraphQLMachineServerOptions.Endpoint` | `GraphQLMachineServerOptions.endpoint` |
 | The socket | `MachineServerOptions.socket` | `GraphQLMachineServerOptions.Socket` | `GraphQLMachineServerOptions.socket` |
 | The HTTP client | `MachineServerOptions.fetch` | `GraphQLMachineServerOptions.Http` | `GraphQLMachineServerOptions.http` |
+| Say the HTTP client's handler follows no redirects | — every request is sent with `redirect: 'error'` | `GraphQLMachineServerOptions.HandlerFollowsNoRedirects` | — the server builds the builder given as `http` with `redirect(Policy::none())`, whatever it set |
 | Headers on every request | `MachineServerOptions.headers` | — set on the `HttpClient` given as `Http` | `GraphQLMachineServerOptions.headers` |
-| The socket's `connection_init` payload | — the page's graphql-ws client given as `socket` sends it | — `GraphQLSubscriptionSocketOptions.ConnectionParams` | `GraphQLMachineServerOptions.connection_params` |
+| The socket's `connection_init` payload | — the page's graphql-ws client given as `socket` sends it | `GraphQLSubscriptionSocketOptions.ConnectionParams` | `GraphQLMachineServerOptions.connection_params` |
 | allowInsecureTransport | `MachineServerOptions.allowInsecureTransport` | `GraphQLMachineServerOptions.AllowInsecureTransport` | `GraphQLMachineServerOptions.allow_insecure_transport` |
 | maxResponseSize | `MachineServerOptions.maxResponseSize` | `GraphQLMachineServerOptions.MaxResponseSize` | `GraphQLMachineServerOptions.max_message_size` |
 | requestTimeout | `MachineServerOptions.requestTimeout` | `GraphQLMachineServerOptions.RequestTimeout` | `GraphQLMachineServerOptions.request_timeout` |
-| How long a socket may take to connect | — the page's graphql-ws client given as `socket` decides | — `GraphQLSubscriptionSocketOptions.ConnectTimeout` | `GraphQLMachineServerOptions.connect_timeout` |
-| How long a socket may stay silent | — the page's graphql-ws client given as `socket` decides | — `GraphQLSubscriptionSocketOptions.KeepAliveTimeout` | `GraphQLMachineServerOptions.idle_timeout` |
+| How long a socket may take to connect | — the page's graphql-ws client given as `socket` decides | `GraphQLSubscriptionSocketOptions.ConnectTimeout` | `GraphQLMachineServerOptions.connect_timeout` |
+| How long a socket may stay silent | — the page's graphql-ws client given as `socket` decides | `GraphQLSubscriptionSocketOptions.KeepAliveTimeout` | `GraphQLMachineServerOptions.idle_timeout` |
 | resubscribeDelays | `MachineServerOptions.resubscribeDelays` | `GraphQLMachineServerOptions.ResubscribeDelays` | `GraphQLMachineServerOptions.resubscribe_delays` |
 | terminalStreamErrors | `MachineServerOptions.terminalStreamErrors` | `GraphQLMachineServerOptions.TerminalStreamErrors` | `GraphQLMachineServerOptions.terminal_stream_errors` |
 | The runtime subscriptions run on | — a page has one event loop | — continuations run on the thread pool | `GraphQLMachineServerOptions.runtime` |

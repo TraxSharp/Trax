@@ -6,7 +6,8 @@ namespace Trax.StateMachine.Tests.Conformance;
 /// <summary>
 /// The C# engine through the conformance runner, the same runner and the same cases every other engine is checked
 /// with (<c>Trax.StateMachine/conformance/PROTOCOL.md</c>). The runner is started with <c>--stdio</c> and this
-/// process answers its requests, so no separate C# executable is needed.
+/// process answers its requests, so no separate C# executable is needed. The C# engine has no expected failures
+/// (<c>conformance/expected-failures/</c>): every case runs and passes.
 /// </summary>
 [Category(Categories.CrossEngine)]
 public class ConformanceRunnerTests
@@ -19,7 +20,7 @@ public class ConformanceRunnerTests
         var (exitCode, report) = TwinEngine.RunConformance(testee.Answer);
 
         exitCode.Should().Be(0, report);
-        report.Should().MatchRegex(@"([1-9]\d*) of \1 cases passed\.");
+        report.Should().MatchRegex(@"([1-9]\d*) of \1 cases passed, 0 expected failures\.");
     }
 
     [Test]
@@ -30,6 +31,6 @@ public class ConformanceRunnerTests
         var (exitCode, report) = TwinEngine.RunConformance(testee.Answer);
 
         exitCode.Should().Be(0, report);
-        report.Should().MatchRegex(@"([1-9]\d*) of \1 cases passed\.");
+        report.Should().MatchRegex(@"([1-9]\d*) of \1 cases passed, 0 expected failures\.");
     }
 }

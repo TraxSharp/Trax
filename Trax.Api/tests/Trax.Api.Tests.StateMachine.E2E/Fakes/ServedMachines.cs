@@ -29,6 +29,10 @@ public sealed class ServedShelfMachine : ShelfMachine;
 [TraxMachine]
 public sealed class ServedTicketMachine : TicketMachine;
 
+/// <summary><see cref="BadgeMachine"/>, served.</summary>
+[TraxMachine]
+public sealed class ServedBadgeMachine : BadgeMachine;
+
 /// <summary>Registers this assembly's machines on a host, serving the ones it names.</summary>
 public static class E2EMachines
 {
@@ -42,7 +46,8 @@ public static class E2EMachines
 
     /// <summary>
     /// Registers every unmarked machine of this assembly as <see cref="IMachine"/>, except that each one in
-    /// <paramref name="served"/> is registered as its marked subclass instead, so the host serves exactly those.
+    /// <paramref name="served"/> is registered as its marked subclass instead, so the host serves exactly those. An
+    /// abstract machine is registered only when it is served.
     /// </summary>
     /// <exception cref="ArgumentException">A machine in <paramref name="served"/> has no marked subclass here.</exception>
     public static void Register(IServiceCollection services, IReadOnlyCollection<Type> served)
@@ -60,6 +65,10 @@ public static class E2EMachines
             )
         )
             services.AddSingleton(typeof(IMachine), served.Contains(type) ? MarkedOf(type)! : type);
+
+        // An abstract fake is registered only where a host serves it.
+        foreach (var type in served.Where(t => t.IsAbstract))
+            services.AddSingleton(typeof(IMachine), MarkedOf(type)!);
     }
 
     private static Type? MarkedOf(Type machine) =>

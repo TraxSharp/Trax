@@ -96,6 +96,24 @@ describe("generateContextTypes", () => {
       expect(out).toContain("ids: number[];");
     });
 
+    // A oneOf with no values admits no string at all.
+    it("gives a oneOf string with no values the type never", () => {
+      const out = generateContextTypes(
+        schemaFor({
+          name: "size",
+          type: "string",
+          nullable: false,
+          constraints: [{ rule: "oneOf", source: "context", field: "size", values: [] }],
+        }),
+      );
+      expect(out).toContain("size: never;");
+    });
+
+    it("gives a machine with no triggers the trigger type never", () => {
+      const out = generateContextTypes({ ...schemaFor({ name: "x", type: "string", nullable: false, constraints: [] }), triggers: [] });
+      expect(out).toContain("export type SampleTrigger = never;");
+    });
+
     it("gives a oneOf string its literal union instead of string", () => {
       const out = generateContextTypes(
         schemaFor({
@@ -261,6 +279,23 @@ describe("generateMachineFactory shared output schemas", () => {
     expect(text.split('"name": "view"').length - 1).toBe(1);
     expect(text).toContain("const sharedOutput0 = {");
     expect(text.split('"output": sharedOutput0').length - 1).toBe(2);
+  });
+
+  // Only the outcomes' outputs become the shared const: a string of the IR is written as the string it is, whatever
+  // it holds.
+  it("leaves every string of the IR as it is", () => {
+    const marked = { ...ir, note: ["\u0000sharedOutput0", "sharedOutput0"] } as unknown as IrDocument;
+    const text = generateMachineFactory(marked);
+    expect(text).toContain('"note": [\n    "\\u0000sharedOutput0",\n    "sharedOutput0"\n  ]');
+    expect(text.split('"output": sharedOutput0').length - 1).toBe(2);
+  });
+
+  it("writes the IR as JSON.stringify does when no output is shared", () => {
+    const single = { ...ir, outcomes: { "A.done": outcome("A") } } as unknown as IrDocument;
+    const shared = generateMachineFactory(ir);
+    expect(generateMachineFactory(single)).toContain(`const ir = ${JSON.stringify(single, null, 2)} as IrDocument;`);
+    // The shared const is the output schema, as JSON.stringify writes it.
+    expect(shared).toContain(`const sharedOutput0 = ${JSON.stringify(output, null, 2)};`);
   });
 });
 

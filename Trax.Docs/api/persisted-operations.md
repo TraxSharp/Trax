@@ -144,9 +144,14 @@ matches the `operationName` the caller puts in the request, or for an unnamed re
 admits any inline document with an operation of that name, whatever it selects, and a
 `dev_` prefix predicate admits any caller who starts a name with `dev_`.
 
-So the allowlist is a convenience for trusted networks, not a security control. To admit a fixed
-document from a client you do not control, persist the document and have the client send its id:
-that is the control. Per-type `[TraxAuthorize]` still applies to allowlisted requests, as to every
+So the allowlist is a convenience for developer tools, not a security control. With
+`RequirePersisted(true)`, a host that declares one starts only in Development; in any other
+environment it fails at startup and names the environment. With enforcement off the allowlist only
+keeps those names out of the shadow log, and it starts anywhere.
+
+To let a fixed document run outside Development, persist it and have the client send its id: that
+is the control. A health probe that selects only `__typename` needs neither, since it passes as
+introspection unless `DisableIntrospection()` is called. Per-type `[TraxAuthorize]` still applies to allowlisted requests, as to every
 request, because enforcement shapes which documents run and is not the authorization boundary.
 
 Introspection is let through by default. A request counts as introspection when its document

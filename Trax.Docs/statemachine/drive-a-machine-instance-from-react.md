@@ -61,8 +61,8 @@ function Wizard({ id }: { id?: string }) {
   `endedBy` names it, and the controller stops on it the same way. The generated client lists `CONNECTION_CHANGED`
   there, which a server made before the last `configureTrax` refuses every request and stream with. A stream that ends any
   other way (its host stopped, the socket gave up, `TOO_MANY_SUBSCRIPTIONS`) is subscribed again after
-  `resubscribeDelays` (1, 2, then every 5 seconds); the new stream's first event is the instance as it is then, so
-  nothing is read again.
+  `resubscribeDelays` (1, 2, then every 5 seconds, each wait drawn between half the delay and all of it); the new
+  stream's first event is the instance as it is then, so nothing is read again.
 - **Adds `discard(id, requestId)`**, for a page that throws an instance away.
 
 ## What useServerMachine does
@@ -108,12 +108,15 @@ function Wizard({ id }: { id?: string }) {
 - **Syncs a page that ran ahead.** `syncTo(target, { fields, navigation })` is for a page that moves on the twin and
   saves later: it plans from what the server last confirmed, sends one event at a time and plans again from each
   answer, reads the instance once on a refusal, and gives way to a later `syncTo`. `unsaved` is true while one runs
-  and after one that did not settle `synced`; hold a leave guard on it.
+  and after one that did not settle `synced`; hold a leave guard on it. One that failed in transport runs again when
+  the browser comes back online, unless the page called `send` or `syncTo` since: it resends the failed event under
+  its first request id, so an event that did reach the server is not applied twice, and syncs on from the answer.
 - **Moves with its options.** A new `server`, `machine`, `id` or `startRequestId` closes the old instance's stream
   and opens the new one. From that render on the hook is `loading` and sends nothing, so a page whose server changed
   (another user signed in) never shows the instance before it under the new caller.
-- **Mints request ids** with `newRequestId`, `crypto.randomUUID` by default, which never makes one the server
-  refuses. A custom one must keep to the server's rule: 1 to 200 characters, not blank, with no control character
+- **Mints request ids** with `newRequestId`, by default a v4 UUID from `crypto.randomUUID`, or from
+  `crypto.getRandomValues` on a page that is not a secure context and has no `randomUUID`; neither makes one the
+  server refuses. A custom one must keep to the server's rule: 1 to 200 characters, not blank, with no control character
   and no unpaired surrogate; anything else is answered `INVALID_REQUEST_ID`.
 
 It returns `status`, `id`, `snapshot`, `state`, `context`, `revision`, `dueAt`, `pending`, `problem`, `error`,

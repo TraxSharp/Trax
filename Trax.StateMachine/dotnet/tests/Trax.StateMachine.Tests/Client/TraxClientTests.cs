@@ -160,6 +160,20 @@ public class TraxClientTests
         answer.Data.Should().BeNull();
     }
 
+    // A 2xx with no data and no error is neither a result nor a refusal.
+    [TestCase("""{"data":null}""")]
+    [TestCase("""{"errors":[]}""")]
+    [TestCase("""{"data":null,"errors":[]}""")]
+    public async Task A_success_with_no_data_and_no_errors_is_a_transport_failure(string body)
+    {
+        var host = new Host(body);
+
+        var answer = await Client(host).SendAsync(Runs, new RunsVariables { Take = 1 });
+
+        answer.Failure.Should().NotBeNull();
+        answer.Code.Should().Be(TraxTransportFailure.Code);
+    }
+
     [Test]
     public async Task A_host_that_cannot_be_reached_is_a_transport_failure_not_an_exception()
     {
@@ -191,6 +205,7 @@ public class TraxClientTests
                 new TraxHttpTransportOptions
                 {
                     Http = new HttpClient(new Host("{}")),
+                    HandlerFollowsNoRedirects = true,
                     Endpoint = new Uri("https://host/trax/graphql"),
                     Socket = socket,
                 }
@@ -243,6 +258,7 @@ public class TraxClientTests
                 new TraxHttpTransportOptions
                 {
                     Http = new HttpClient(new Host("{}")),
+                    HandlerFollowsNoRedirects = true,
                     Endpoint = new Uri("https://host/trax/graphql"),
                     Socket = socket,
                 }
@@ -275,6 +291,7 @@ public class TraxClientTests
                 new TraxHttpTransportOptions
                 {
                     Http = new HttpClient(new Host("{}")),
+                    HandlerFollowsNoRedirects = true,
                     Endpoint = new Uri("https://host/trax/graphql"),
                     Socket = socket,
                 }
@@ -298,6 +315,39 @@ public class TraxClientTests
             .ContainSingle()
             .Which.Code.Should()
             .Be("AUTH_NOT_AUTHORIZED");
+        opened.Disposed.Should().BeTrue();
+    }
+
+    [TestCase("""{"data":null}""")]
+    [TestCase("""{"data":null,"errors":[]}""")]
+    public async Task A_frame_with_no_data_and_no_errors_ends_the_stream_with_a_failure(
+        string frame
+    )
+    {
+        var socket = new HandSocket();
+        var events = new EventLog<ChangedResult>();
+        var client = new TraxClient(
+            new TraxHttpTransport(
+                new TraxHttpTransportOptions
+                {
+                    Http = new HttpClient(new Host("{}")),
+                    HandlerFollowsNoRedirects = true,
+                    Endpoint = new Uri("https://host/trax/graphql"),
+                    Socket = socket,
+                }
+            )
+        );
+
+        using var stream = client.Subscribe(Changed, TraxNoVariables.Instance, events.Add);
+        var opened = await socket.Subscriptions.Take(Wait);
+        opened.Sink.Next((JsonObject)JsonNode.Parse(frame)!);
+
+        var ended = (await events.Take(1)).Single();
+        ended
+            .Should()
+            .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
+            .Which.Failure.Should()
+            .NotBeNull();
         opened.Disposed.Should().BeTrue();
     }
 
@@ -402,9 +452,10 @@ public class TraxClientTests
     {
         var socket = new HandSocket();
         var time = new FakeTimeProvider();
+        // Every wait drawn as 0: the whole step.
         using var stream = new TraxClient(
             Transport(socket),
-            new TraxClientOptions { Time = time }
+            new TraxClientOptions { Time = time, Random = () => 0.0 }
         ).Subscribe(Changed, TraxNoVariables.Instance, _ => { });
         var current = await socket.Subscriptions.Take(Wait);
 
@@ -436,7 +487,7 @@ public class TraxClientTests
         var time = new FakeTimeProvider();
         using var stream = new TraxClient(
             Transport(socket),
-            new TraxClientOptions { Time = time }
+            new TraxClientOptions { Time = time, Random = () => 0.0 }
         ).Subscribe(Changed, TraxNoVariables.Instance, _ => { });
         var current = await socket.Subscriptions.Take(Wait);
         current.Sink.Error(new IOException("dropped"));
@@ -452,6 +503,79 @@ public class TraxClientTests
             .BeNull("the two second delay has not passed");
         time.Advance(TimeSpan.FromSeconds(1));
         (await socket.Subscriptions.Take(Wait)).Should().NotBeNull();
+    }
+
+    // Each wait is drawn uniformly between half the step and the whole of it, so streams a host dropped together do not
+    // all come back together.
+    [TestCase(0.0, 1000)]
+    [TestCase(0.5, 750)]
+    [TestCase(1.0, 500)]
+    public async Task Each_resubscribe_delay_is_drawn_between_half_its_step_and_the_whole(
+        double drawn,
+        int milliseconds
+    )
+    {
+        var socket = new HandSocket();
+        var time = new FakeTimeProvider();
+        using var stream = new TraxClient(
+            Transport(socket),
+            new TraxClientOptions { Time = time, Random = () => drawn }
+        ).Subscribe(Changed, TraxNoVariables.Instance, _ => { });
+
+        (await socket.Subscriptions.Take(Wait)).Sink.Error(new IOException("dropped"));
+        time.Advance(TimeSpan.FromMilliseconds(milliseconds - 1));
+        (await socket.Subscriptions.TryTake(TimeSpan.FromMilliseconds(200)))
+            .Should()
+            .BeNull($"the {milliseconds} ms wait has not passed");
+        time.Advance(TimeSpan.FromMilliseconds(1));
+
+        (await socket.Subscriptions.Take(Wait)).Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task A_resubscribe_delay_lets_go_of_its_timer_once_it_ends_and_once_the_stream_is_disposed()
+    {
+        var socket = new HandSocket();
+        var time = new FakeTimeProvider();
+        var stream = new TraxClient(
+            Transport(socket),
+            new TraxClientOptions { Time = time, Random = () => 0.0 }
+        ).Subscribe(Changed, TraxNoVariables.Instance, _ => { });
+
+        (await socket.Subscriptions.Take(Wait)).Sink.Error(new IOException("dropped"));
+        var ended = PendingTimer(stream)!;
+        time.Advance(TimeSpan.FromSeconds(1));
+        (await socket.Subscriptions.Take(Wait)).Sink.Error(new IOException("dropped"));
+        var pending = PendingTimer(stream)!;
+        stream.Dispose();
+
+        IsDisposed(ended).Should().BeTrue("its delay ended and the stream was subscribed again");
+        IsDisposed(pending).Should().BeTrue("the stream was disposed while it was pending");
+    }
+
+    // The source of the resubscribe delay pending now, read from the stream's private field.
+    private static CancellationTokenSource? PendingTimer(IDisposable stream) =>
+        (CancellationTokenSource?)
+            stream
+                .GetType()
+                .GetField(
+                    "_timer",
+                    System.Reflection.BindingFlags.NonPublic
+                        | System.Reflection.BindingFlags.Instance
+                )!
+                .GetValue(stream);
+
+    private static bool IsDisposed(CancellationTokenSource source)
+    {
+        try
+        {
+            _ = source.Token;
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
     }
 
     [TestCase(4408)]
@@ -830,6 +954,7 @@ public class TraxClientTests
                 new TraxHttpTransportOptions
                 {
                     Http = new HttpClient(host),
+                    HandlerFollowsNoRedirects = true,
                     Endpoint = new Uri("https://host/trax/graphql"),
                 }
             ),
@@ -862,6 +987,7 @@ public class TraxClientTests
             new TraxHttpTransportOptions
             {
                 Http = new HttpClient(new Host("{}")),
+                HandlerFollowsNoRedirects = true,
                 Endpoint = new Uri("https://host/trax/graphql"),
                 Socket = socket,
             }
@@ -873,6 +999,7 @@ public class TraxClientTests
                 new TraxHttpTransportOptions
                 {
                     Http = new HttpClient(host),
+                    HandlerFollowsNoRedirects = true,
                     Endpoint = new Uri("https://host/trax/graphql"),
                     ById = byId,
                 }

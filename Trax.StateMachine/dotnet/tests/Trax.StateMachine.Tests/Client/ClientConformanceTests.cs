@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using AwesomeAssertions;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -18,7 +21,10 @@ public class ClientConformanceTests
     public async Task The_CSharp_client_passes_every_transcript_of_the_kit()
     {
         await using var testee = new ClientTestee();
-        var start = new ProcessStartInfo("node", "conformance/client/run.mjs --stdio")
+        var start = new ProcessStartInfo(
+            "node",
+            $"conformance/client/run.mjs --name {ClientTestee.Client} --stdio"
+        )
         {
             WorkingDirectory = FixturePaths.FolderRoot,
             RedirectStandardInput = true,
@@ -74,6 +80,67 @@ public class ClientConformanceTests
         var report = await stderr;
 
         process.ExitCode.Should().Be(0, report);
-        report.Should().MatchRegex(@"([1-9]\d*) of \1 transcripts passed\.");
+        // Skipped only where PROTOCOL.md's allowlist grants the C# client a lack, and excused only where its list of
+        // expected failures names the transcript.
+        var expected = ExpectedFailures();
+        report
+            .Should()
+            .MatchRegex(
+                $@"([1-9]\d*) of \1 transcripts passed, {SkippedByTheAllowlist()} skipped, {expected} expected failures?\."
+            );
+    }
+
+    // The transcripts expected-failures/dotnet.json names, by case or by prefix; none when it is absent.
+    private static int ExpectedFailures()
+    {
+        var clientKit = Path.Combine(FixturePaths.ConformanceRoot, "client");
+        var list = Path.Combine(clientKit, "expected-failures", $"{ClientTestee.Client}.json");
+        if (!File.Exists(list))
+            return 0;
+        var entries = JsonNode.Parse(File.ReadAllText(list))!.AsArray();
+        return Directory
+            .GetFiles(Path.Combine(clientKit, "transcripts"), "*.json")
+            .Select(Path.GetFileNameWithoutExtension)
+            .Count(name =>
+                entries.Any(e =>
+                    (string?)e!["case"] == name
+                    || (
+                        e["prefix"] is { } prefix
+                        && name!.StartsWith((string)prefix!, StringComparison.Ordinal)
+                    )
+                )
+            );
+    }
+
+    // A transcript may hold a context as deep as a stored snapshot nests, inside the answer that carries it.
+    private static readonly JsonDocumentOptions Transcript = new() { MaxDepth = 256 };
+
+    // The transcripts that need a capability the allowlist in PROTOCOL.md grants the C# client a lack of.
+    private static int SkippedByTheAllowlist()
+    {
+        var clientKit = Path.Combine(FixturePaths.ConformanceRoot, "client");
+        var protocol = File.ReadAllText(Path.Combine(clientKit, "PROTOCOL.md"));
+        var block = Regex.Match(
+            protocol,
+            @"^```json lacks\n(.*?)^```$",
+            RegexOptions.Multiline | RegexOptions.Singleline
+        );
+        block.Success.Should().BeTrue("PROTOCOL.md has a `json lacks` block");
+        var lacked = JsonNode
+            .Parse(block.Groups[1].Value)!
+            .AsArray()
+            .Where(e => (string?)e!["client"] == ClientTestee.Client)
+            .Select(e => (string)e!["capability"]!)
+            .ToHashSet();
+        return Directory
+            .GetFiles(Path.Combine(clientKit, "transcripts"), "*.json")
+            .Count(path =>
+                (
+                    JsonNode
+                        .Parse(File.ReadAllText(path), documentOptions: Transcript)!["needs"]
+                        ?.AsArray()
+                    ?? []
+                ).Any(n => lacked.Contains((string)n!))
+            );
     }
 }

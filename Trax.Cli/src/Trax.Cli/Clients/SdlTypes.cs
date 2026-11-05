@@ -49,7 +49,15 @@ internal sealed class SdlTypes
         _written = new HashSet<string>(filterInputs ?? [], StringComparer.Ordinal);
         foreach (var definition in sdl.Definitions)
             if (definition is GraphQLTypeDefinition type and not GraphQLScalarTypeDefinition)
+            {
+                // SDL text may leave an enum's values out, but a schema may not: there is no value of it to write.
+                if (definition is GraphQLEnumTypeDefinition { Values: null or { Items.Count: 0 } })
+                    throw new InvalidOperationException(
+                        $"The GraphQL enum {type.Name.StringValue} declares no values, which a GraphQL schema does "
+                            + "not allow. Give it a value or remove it."
+                    );
                 _definitions[type.Name.StringValue] = definition;
+            }
     }
 
     /// <summary>The names <see cref="Render"/> exports, in name order: every enum and input.</summary>
@@ -173,7 +181,7 @@ internal sealed class SdlTypes
                 .OrderBy(d => d.Key, StringComparer.Ordinal)
         )
         {
-            var identifier = TypeScript.Identifier(name, "GraphQL type");
+            var identifier = TypeScript.TypeName(name, "GraphQL type");
             sb.Append('\n');
             switch (definition)
             {
@@ -222,9 +230,10 @@ internal sealed class SdlTypes
             _ => "unknown",
         };
 
+    // A type the schema declares is itself, whatever scalar shares its name, as the C# client reads it.
     private string Scalar(string name) =>
-        Scalars.TryGetValue(name, out var ts) ? ts
-        : _definitions.ContainsKey(name) ? name
+        _definitions.ContainsKey(name) ? name
+        : Scalars.TryGetValue(name, out var ts) ? ts
         : "unknown";
 
     private static string Named(GraphQLType type) =>

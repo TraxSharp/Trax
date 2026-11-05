@@ -204,6 +204,32 @@ internal sealed class WirePeer(NetworkStream stream, CancellationToken stopping)
     }
 
     /// <summary>
+    /// Reads until the client closes the socket, answers its close, and returns the status it closed with: null when it
+    /// dropped the connection with no close frame.
+    /// </summary>
+    public async Task<WebSocketCloseStatus?> ClosedWithAsync()
+    {
+        try
+        {
+            while (await ReceiveAsync() is not null) { }
+        }
+        catch (Exception ex) when (ex is WebSocketException or IOException)
+        {
+            return null;
+        }
+        var status = Socket.CloseStatus;
+        try
+        {
+            await Socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", Stopping);
+        }
+        catch (Exception ex) when (ex is WebSocketException or IOException)
+        {
+            // The client let go before the answer.
+        }
+        return status;
+    }
+
+    /// <summary>
     /// Reads until the client's close, never answers it, and waits until the client drops the connection itself.
     /// </summary>
     public async Task LeaveCloseUnansweredAsync()

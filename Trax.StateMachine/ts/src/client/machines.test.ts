@@ -132,6 +132,23 @@ describe('createMachineExecutor', () => {
     });
   });
 
+  // The host answers under the machine's own field. One whose first field is another (a gateway that adds a field,
+  // a host that orders them otherwise) is read by name, as the C# and Rust clients read it.
+  it('reads the answer under the machine field, whatever field comes first', async () => {
+    const cart = { id: 'draft-1', revision: 1, state: 'Cart', context: { items: [], total: 0 }, problem: null };
+    const { fetch } = recording(
+      { data: { machines: { other: { start: { ...cart, state: 'Paid' } }, checkout: { start: cart } } } },
+      { data: { machines: { other: { start: cart } } } },
+    );
+    const executor = persisted(fetch);
+
+    expect(await startDraft({ executor, machine: checkout, requestId: 'req-1' })).toMatchObject({
+      ok: true,
+      snapshot: JSON.stringify({ machine: 'checkout', version: checkout.version, state: 'Cart', context: { items: [], total: 0 } }),
+    });
+    expect(await startDraft({ executor, machine: checkout, requestId: 'req-2' })).toMatchObject({ ok: false });
+  });
+
   it('sends the effect through its bound event, with no input', async () => {
     const { sent, fetch } = recording(
       answer('pay', { id: 'draft-1', revision: 3, state: 'Paid', context: { receipt: 'r-1' }, problem: null }),
@@ -317,6 +334,41 @@ describe('createMachineExecutor and a host that does not answer', () => {
 
     expect(await loaded).toMatchObject({ ok: false, code: 'TRANSPORT_ERROR' });
     expect(signal?.aborted).toBe(true);
+  });
+
+  it('refuses a request timeout that is not a positive number of milliseconds when it is built', () => {
+    const fetch = (async () => new Response('{}')) as unknown as typeof globalThis.fetch;
+    for (const requestTimeout of [Number.NaN, 0, -1, -Infinity])
+      expect(
+        () => createMachineExecutor('/graphql', { fetch, requestTimeout, machines: [{ machine: checkout, documents }] }),
+        String(requestTimeout),
+      ).toThrow(RangeError);
+  });
+
+  // Every comparison with NaN is false, so a NaN limit would read an answer of any size.
+  it('refuses a response size that is not a positive whole number of bytes when it is built', () => {
+    const fetch = (async () => new Response('{}')) as unknown as typeof globalThis.fetch;
+    for (const maxResponseSize of [Number.NaN, 0, -1, 1.5, Infinity, 2 ** 53, '1024' as unknown as number])
+      expect(
+        () => createMachineExecutor('/graphql', { fetch, maxResponseSize, machines: [{ machine: checkout, documents }] }),
+        String(maxResponseSize),
+      ).toThrow(RangeError);
+  });
+
+  it('waits as long as the host takes on a request timeout past the longest a timer counts', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const fetch = ((_url: string, init: RequestInit) => {
+      signal = init.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    }) as unknown as typeof globalThis.fetch;
+
+    // setTimeout fires at once for a delay past 2^31 - 1 ms: a timeout that long sets no timer, as Infinity does.
+    void load(fetch, 2 ** 31);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(signal?.aborted).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('fails a request whose body never ends within the timeout given', async () => {

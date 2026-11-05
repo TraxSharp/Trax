@@ -1,0 +1,25 @@
+{
+  "about": "A fields event that rests on a custom rule at the target is sent unpredicted once; when the host confirms it there, the sync settles synced rather than send it again, since the planner cannot check the fields on its own.",
+  "machine": "notebook",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "archive": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "file": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "note": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "reopen": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Draft", "context": { "notes": 0 } } },
+    { "view": { "status": "ready", "unsaved": false } },
+    { "client": "sync", "target": "Draft", "fields": { "trigger": "Note" }, "navigation": ["File", "Reopen"], "as": "s" },
+    { "request": "note", "variables": { "id": "i-1", "requestId": "r1" }, "answer": { "id": "i-1", "revision": 2, "state": "Draft", "context": { "notes": 1 } } },
+    { "await": "s", "expect": { "outcome": "synced", "state": "Draft", "revision": 2 } },
+    { "view": { "unsaved": false, "revision": 2 } }
+  ]
+}

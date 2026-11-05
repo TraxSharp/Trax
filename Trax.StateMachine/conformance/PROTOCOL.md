@@ -19,10 +19,43 @@ The runner and `kit.mjs` use only node's own modules, so they run without an `np
 With `--testee`, the runner starts the command and talks to it over the command's stdin and stdout. With `--stdio`,
 the roles on the pipes are reversed: the runner writes requests on its own stdout and reads answers on its stdin, so a
 test in another language (the C# `ConformanceRunnerTests`) can start the runner and answer from inside its own
-process. Either way the runner writes its report on stderr and exits 0 when every case passed, 1 when any failed.
+process. Either way the runner writes its report on stderr and exits 0 when every case passed or failed as the
+testee's expected failures list it, 1 otherwise.
 
 `--only <prefix>` runs the cases whose name starts with the prefix, and every `load`. A prefix no case has is an error
 (exit 2), not an empty pass.
+
+`--name <testee>` names the testee, for its expected failures (below): lowercase letters, digits and hyphens, the
+language's folder name (`ts`, `dotnet`, `rust`). The report ends `N of N cases passed, k expected failures.`, where N
+leaves out the cases the list excused.
+
+## Expected failures
+
+An engine in a new language joins the kit before it passes all of it. The cases it does not pass yet are listed in
+`expected-failures/<testee>.json`, which the runner reads when it is run with `--name <testee>`. Without `--name`, or
+with no file of that name, nothing is excused; `ts`, `dotnet` and `rust` have none.
+
+```json
+[
+  { "prefix": "vault/", "reason": "custom rule handlers are not bound yet", "code": "error" },
+  { "case": "plan/a-depth-limit-reached-is-exceeded", "reason": "the planner's depth limit is not built yet" }
+]
+```
+
+An entry names one case (`case`), or every case whose name starts with `prefix`, and says why in `reason`. It may name
+the `code` the case fails with: the answer's `reason` or `code`, `unsupported`, or `error` for an `error` answer, which
+every case of a machine that did not load also counts as. A case's name is the one the report prints after `FAIL`:
+a fixture's or a vector's own name, and for a differential case its state, its trigger and the first 12 hex digits of
+the SHA-256 of what it sends, so a corpus regenerated with a case added keeps every other name.
+
+The list can only shrink. The run fails (exit 1) when a case fails that no entry names, when a listed case passes
+("listed as failing but passed; remove" the entry), when a listed case fails with another code than its entry names,
+when an entry names no case of the kit (one `--only` leaves out included), and when two entries name one case. A file
+that is not an array of such entries, or an entry with no `reason`, stops the run (exit 2).
+
+A list is for what a language has not built yet, and shrinks as it is built. It is not the client kit's allowlist of
+what a client lacks (`client/PROTOCOL.md`, "What a client may lack"), which is for what a platform cannot give a client
+and stays as long as the platform does.
 
 ## The protocol
 
@@ -42,19 +75,24 @@ builds it; one that only has machines compiled in checks that the IR is the one 
 { "id": 1, "error": "the turnstile this engine has exports a different IR" }
 ```
 
-A testee that builds machines from an IR binds one handler to every machine it loads: a custom guard named `throws`,
-which throws (panics, in Rust), so a case can pin `INTERNAL_ERROR`. It binds no other handler, so every other custom
-rule is one the engine cannot evaluate: a guard that does not hold, a reduction that keeps the context, a state
-requirement that fails except on a snapshot the server sent. The `vault` machine pins that. A testee whose machines are
-compiled has every handler bound, so for `vault` it checks the IR against its compiled machine and then serves it from
-the IR, with only `throws` bound, as an IR testee does.
+A testee that builds machines from an IR binds two handlers to every machine it loads: a custom guard named `throws`,
+which throws (panics, in Rust), so a case can pin `INTERNAL_ERROR`, and a custom reduction named `nests`, which sets the
+context member `deep` to 600 arrays nested one in another, built in memory, so the `deep` machine can pin that a
+reduction's context nested more than 512 deep (the planner's limit, below) is refused as `INVALID_CONTEXT`. It binds no
+other handler, so every other custom rule is one the engine cannot evaluate: a guard that does not hold, a reduction
+that keeps the context, a state requirement that fails except on a snapshot the server sent. The `vault` machine pins
+that. A testee whose machines are compiled has every handler bound, so for `vault` it checks the IR against its
+compiled machine and then serves it from the IR, with only the kit's two handlers bound, as an IR testee does.
 
 Some loads must be refused: the IRs in `unreadable-ir/cases.json` each name one construct no engine knows (a rule, a
-reduction, a field type, a comparison or a rule source) or one field no engine holds (a field, a rule's path or a set
-step's source named `__proto__`, `constructor` or `prototype` in any segment), and a testee that builds machines from an
-IR answers each with `error`. Any `error` passes, since the message is the engine's own; `loaded` fails. A testee that only has compiled
-machines answers `error` because it has no machine of that name, which passes but proves nothing: a compiled machine's
-rules are types in its language and cannot name an unknown construct, so these cases hold the engines that read IRs.
+reduction, a field type, a comparison or a rule source), one field no engine holds (a field, a rule's path or a set
+step's source named `__proto__`, `constructor` or `prototype` in any segment), or an `irFormat` past the newest or
+before the oldest format the engines read, or nest more than 512 deep: for a case with `"tooDeep": "ir"` the testee
+sets the IR's `initialContext` member `deep` to 600 arrays nested one in another before it builds the machine. A testee
+that builds machines from an IR answers each with `error`. Any `error` passes, since the message is the engine's own;
+`loaded` fails. A testee that only has compiled machines answers `error` because it has no machine of that name, which
+passes but proves nothing: a compiled machine's rules are types in its language and cannot name an unknown construct,
+so these cases hold the engines that read IRs.
 
 **`advance`**, **`outcome`** and **`timer`** apply a trigger to a snapshot through the entry point that owns it: a
 client's trigger through advance, an invoked train's outcome (`Fetching.done`) through the outcome path, a state's
@@ -98,8 +136,10 @@ string no JSON parser carries (a lone surrogate), as UTF-16 code units: `stringU
 
 **`plan`** finds the events that take `snapshot` of `machine` to the state `target` with the page's fields applied:
 what a client sends to bring the server to where a page that ran ahead of it is. `fields` is the event that writes the
-page's fields (`trigger` and its `input`), or null; `navigation` is the triggers, without input, that move between
-states; `maxDepth` is the longest plan to look for, twice the machine's states when absent.
+page's fields (`trigger` and its `input`, where a null `input` is none), or null; `navigation` is the triggers,
+without input, that move between states; `maxDepth` is the longest plan to look for, twice the machine's states when absent. `tooDeep`, when given, is
+`input` or `context`: the testee builds 600 arrays nested one in another, in memory, and plans with them as the fields
+input, or as the context member `deep`. No reader need take a text nested that deep, so the kit cannot send one.
 
 ```json
 { "id": 6, "op": "plan", "machine": "wizard", "snapshot": { ... }, "target": "Review",
@@ -114,18 +154,21 @@ states; `maxDepth` is the longest plan to look for, twice the machine's states w
 
 Every engine answers the same plan, so the search is fixed:
 
-- **Invalid first.** A fields input or a snapshot's context past the engine's nesting limit answers `invalid` with
-  `code` `INVALID_INPUT` or `INVALID_CONTEXT`, input first, as `advance` would refuse it. Then a `target` that is not
-  a state answers `invalid` with `target`. Then the fields trigger, then each
-  navigation trigger in order: one the machine does not have, one bound to the effect, an outcome, a timer, or a
-  navigation trigger equal to the fields trigger answers `invalid` with that `trigger`.
+- **Invalid first.** A fields input or a snapshot's context whose arrays and objects nest more than 512 deep (the
+  outermost counting as one, so a context's members start at two) answers `invalid` with `code` `INVALID_INPUT` or
+  `INVALID_CONTEXT`, input first, before anything copies or compares it. Then a `target` that is not a state answers
+  `invalid` with `target`. Then the fields trigger, then each
+  navigation trigger in order: one no transition of the machine fires on (one the IR declares and no transition uses
+  among them), one bound to the effect, an outcome, a timer, or a navigation trigger equal to the fields trigger
+  answers `invalid` with that `trigger`.
 - **Wires without nulls.** Wherever the search compares wires, it compares them with every context member whose value is
   null removed, at every depth: a host omits such members, so a snapshot it confirmed never carries them.
 - **The goal.** A snapshot is the goal when its state is `target` and, with `fields` given, advancing it by the fields
   event transitions to the same wire. A fields event the target state refuses, or one that rests there on a custom rule
   the engine holds no handler for, never reaches the goal.
 - **Breadth first, in the caller's order.** From each snapshot the edges are tried in a fixed order: the fields event
-  first, then `navigation` as given, each through `advance`. A refused edge is skipped. A snapshot whose wire was seen
+  first, then `navigation` as given, each through `advance`; a trigger `navigation` lists more than once is tried
+  once, where it is first listed. A refused edge is skipped. A snapshot whose wire was seen
   is not visited again. The start is the goal test's first case; after it, each new snapshot is tested as it is
   reached, and the first that is the goal ends the search with the events on its path. A plan never depends on the
   order an engine lists its transitions in.
@@ -136,7 +179,10 @@ Every engine answers the same plan, so the search is fixed:
   custom reduction, or a custom requirement of the state it enters) is not tried. The first such edge the search meets
   is kept: when the search ends without a plan, the answer is `undetermined` with that `trigger` and `events`, the
   path to the snapshot it leaves from, even when a limit was also reached. A client sends those, then that event
-  unpredicted (with the fields input when it is the fields trigger), and plans again from the answer.
+  unpredicted (with the fields input when it is the fields trigger), and plans again from the answer. From a target
+  where the fields event rests on such a rule, the answer is `undetermined` on the fields trigger with no `events` for
+  as long as the client asks; a client that has just had the host confirm that event there is done
+  (`client/PROTOCOL.md`, `sync`).
 
 **`end`** is the last request. The testee answers `{ "id" }` and exits.
 
@@ -150,9 +196,40 @@ Every engine answers the same plan, so the search is fixed:
 | `machines/<m>/fixtures/rehydrate/*.json` | `rehydrate`, with the fixture's `fromServer` |
 | `machines/<m>/wire-handoff.json` | `serialize` |
 | `conformance/strict-input/` | `load`, then one `advance` per case |
-| `conformance/plan/` | `load` of `wizard.ir.json`, then one `plan` per case in `cases.json` |
+| `conformance/plan/` | `load` of each machine its cases plan over, `wizard.ir.json` first, then one `plan` per case in `cases.json` |
 | `conformance/unreadable-ir/cases.json` | one `load` per case, which must be refused |
+| `conformance/values/` | `load` of `hostile.ir.json`, then one `rehydrate` per `stored` context and per `text`, and one `advance` per `input`, in `hostile.json` |
+| `conformance/found/cases.json` | per case, a `load` of its IR as `found/<name>`, then its requests to that machine |
 | `conformance/canonical-wire.json` | `canonical` |
+
+## Fuzzing the engines against each other
+
+`fuzz.mjs`, beside the runner, generates requests from a seed and sends each to two or more testees over this protocol,
+with no expected answers: it fails on the first answer that differs between them, shrinks the request to the smallest
+that still differs, and prints it with the seed and each testee's answer. It loads every machine the kit holds first,
+then steps them from the snapshots every testee agreed on, rehydrates mutated stored text, serializes, plans and writes
+canonical wire, with hostile numbers, number text, strings and keys. `--irs` adds small random machines the IR schema
+accepts, which only testees that build machines from an IR can load. A seed replays the same run for as long as the
+testees agree. Only the answer counts; an `error` counts as one, whatever its message.
+
+```bash
+node conformance/fuzz.mjs --seed 1 --cases 400 --irs \
+  --testee rust/target/release/trax-state-machine-testee --testee node ts/tools/conformance/testee-ts.mjs
+```
+
+`--stdio` makes the process on the fuzzer's own stdin and stdout one more testee, as with `run.mjs`: the C#
+`FuzzTests` answer from inside their process, against the TypeScript testee, with the compiled machines and with
+machines built from random IRs. CI runs a few hundred cases from fixed seeds. A long run takes more cases and other
+seeds, and a difference it finds becomes a case in `found/cases.json`, with the answer the engines must agree on:
+
+```bash
+for seed in 1 2 3 4 5; do
+  node conformance/fuzz.mjs --seed $seed --cases 20000 --irs \
+    --testee rust/target/release/trax-state-machine-testee --testee node ts/tools/conformance/testee-ts.mjs
+done
+# from dotnet/, the C# engine against the TypeScript one
+TRAX_FUZZ_SEED=3 TRAX_FUZZ_CASES=20000 dotnet test tests/Trax.StateMachine.Tests --filter "FullyQualifiedName~FuzzTests"
+```
 
 `machines/turnstile/migration.json` is not sent: it migrates from a v1 to a v2 machine that has no IR, so each engine
 replays it in its own tests.

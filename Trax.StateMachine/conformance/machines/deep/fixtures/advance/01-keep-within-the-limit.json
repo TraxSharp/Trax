@@ -1,0 +1,33 @@
+{
+  "name": "A context well within the nesting limit is kept",
+  "given": {
+    "machine": "deep",
+    "version": 1,
+    "state": "Open",
+    "context": {
+      "deep": [
+        [
+          []
+        ]
+      ]
+    }
+  },
+  "when": {
+    "trigger": "Keep"
+  },
+  "expect": {
+    "outcome": "transitioned",
+    "snapshot": {
+      "machine": "deep",
+      "version": 1,
+      "state": "Open",
+      "context": {
+        "deep": [
+          [
+            []
+          ]
+        ]
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isOneOf } from './formats';
+import { isInstant, isOneOf } from './formats';
 import { validateInput, type ContextSchema } from './interpreter';
 
 // A string field is as strict as its C# type: an enum's names, and the formats of a Guid, a date, a time, a
@@ -15,6 +15,23 @@ describe('formats', () => {
     expect(isOneOf('SKY-BLUE', names, exact)).toBe(false);
     expect(isOneOf('purple', names, exact)).toBe(false);
     expect(isOneOf('skyBlue', names, exact)).toBe(false);
+  });
+
+  it('reads an instant only with its offset, a real date and a clock time', () => {
+    for (const ok of ['2026-10-22T10:10:00Z', '2026-10-22T12:10:00.000+02:00', '2026-10-22T05:20:00.123456789-05:00'])
+      expect(isInstant(ok)).toBe(true);
+    for (const bad of [
+      'not a time',
+      '2026-10-22T10:10:00',
+      '2026-10-22',
+      '2026-02-30T10:10:00Z',
+      '2026-10-22T24:00:00Z',
+      '2026-10-22T10:10:00+15:00',
+      '2026-10-22T10:10:00+02:60',
+      '2026-10-22 10:10:00Z',
+      ' 2026-10-22T10:10:00Z',
+    ])
+      expect(isInstant(bad)).toBe(false);
   });
 
   it('refuses a value outside an enum or format, in a field and in a list or map value', () => {

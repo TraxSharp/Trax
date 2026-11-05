@@ -29,7 +29,7 @@ public sealed class PersistedOperationsOptions
     /// <summary>
     /// When true, requests carrying an inline <c>query</c> body (rather than
     /// referencing a persisted operation by id) are rejected with
-    /// <c>PERSISTED_OPERATION_REQUIRED</c>. Allowlist and introspection
+    /// <c>PERSISTED_OPERATION_REQUIRED</c>. Allowlist (in Development only) and introspection
     /// detection still bypass this.
     /// </summary>
     public bool RequirePersisted { get; internal set; } = true;
@@ -45,7 +45,8 @@ public sealed class PersistedOperationsOptions
     /// <summary>
     /// Operation names that bypass enforcement unconditionally. Case-sensitive. Matched against
     /// the <c>operationName</c> the caller supplies, not against the document, so this is a
-    /// convenience for trusted networks rather than a security control.
+    /// convenience for developer tools rather than a security control. With
+    /// <see cref="RequirePersisted"/> on, a host that declares any starts only in Development.
     /// </summary>
     public IReadOnlySet<string> AllowedOperationNames { get; internal set; } =
         new HashSet<string>(StringComparer.Ordinal);
@@ -53,8 +54,9 @@ public sealed class PersistedOperationsOptions
     /// <summary>
     /// Predicates evaluated against the operation name (or, when no name is
     /// available, the document id). Any matching predicate bypasses enforcement. Both keys are
-    /// supplied by the caller, so this is a convenience for trusted networks rather than a
-    /// security control.
+    /// supplied by the caller, so this is a convenience for developer tools rather than a
+    /// security control. With <see cref="RequirePersisted"/> on, a host that declares any starts
+    /// only in Development.
     /// </summary>
     public IReadOnlyList<Func<string, bool>> AllowOperationPredicates { get; internal set; } =
         Array.Empty<Func<string, bool>>();

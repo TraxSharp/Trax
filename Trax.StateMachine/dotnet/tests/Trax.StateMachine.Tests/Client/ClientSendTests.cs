@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using AwesomeAssertions;
@@ -117,6 +118,7 @@ public class ClientSendTests
             new GraphQLMachineServerOptions
             {
                 Http = new HttpClient(host),
+                HandlerFollowsNoRedirects = true,
                 Endpoint = new Uri("https://host/trax/graphql"),
                 Machine = Turnstile with
                 {
@@ -225,6 +227,75 @@ public class ClientSendTests
     }
 
     [Test]
+    public async Task A_retried_start_whose_answer_stops_the_controller_settles_as_stopped()
+    {
+        var server = new StepServer();
+        using var controller = Open(
+            server,
+            id: null,
+            retryDelays: [],
+            predictor: MachinePredictor.FromIr(Turnstile)
+        );
+        var start = controller.StartAsync();
+        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetException(
+            new HttpRequestException("dropped")
+        );
+        await start.WaitAsync(Wait);
+
+        var retry = controller.RetryAsync();
+        // A state this client's machine does not have: the answer stops the controller as CLIENT_OUTDATED.
+        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(At(1, "Nowhere"), "i-1")
+        );
+
+        (await retry.WaitAsync(Wait))
+            .Should()
+            .BeOfType<SendOutcome.Stopped>()
+            .Which.Error.Code.Should()
+            .Be("CLIENT_OUTDATED");
+        controller.View.Status.Should().Be(MachineStatus.Stopped);
+    }
+
+    [Test]
+    public async Task Stopping_and_disposing_let_go_of_the_retry_timers()
+    {
+        var server = new HandServer();
+        var controller = Open(server, null);
+        await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
+        var running = Timers(controller);
+
+        server.Push(new StreamMessage.Refused("FORBIDDEN", "Not yours."));
+        // Settled on the controller's scheduler after the push, so the stop has run.
+        await controller.SendAsync("Coin").WaitAsync(Wait);
+        var afterStop = Timers(controller);
+        controller.Dispose();
+        await controller.SendAsync("Coin").WaitAsync(Wait);
+
+        IsDisposed(running).Should().BeTrue("the stop replaced them");
+        IsDisposed(afterStop).Should().BeTrue("the controller was disposed");
+    }
+
+    // The source every retry delay waits on, read from the controller's private field.
+    private static CancellationTokenSource Timers(ServerMachineController controller) =>
+        (CancellationTokenSource)
+            typeof(ServerMachineController)
+                .GetField("_timers", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .GetValue(controller)!;
+
+    private static bool IsDisposed(CancellationTokenSource source)
+    {
+        try
+        {
+            _ = source.Token;
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
+    }
+
+    [Test]
     public async Task A_send_and_a_sync_before_start_wait_for_it_and_then_go_out()
     {
         var server = new StepServer();
@@ -322,6 +393,70 @@ public class ClientSendTests
         sent.Trigger.Should().Be("Push");
         sent.Answer.SetResult(ServerAnswer.Of(At(2, "Locked")));
         (await next.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+    }
+
+    // The kit holds a minter that throws for an event (request-id-minter-throws); no transcript starts an instance with
+    // one, so the start's is held here.
+    [Test]
+    public async Task A_start_whose_request_id_minter_throws_fails_and_retry_mints_again()
+    {
+        var server = new StepServer();
+        var calls = 0;
+        using var controller = new ServerMachineController(
+            new ServerMachineOptions
+            {
+                Machine = Turnstile,
+                Server = server,
+                RetryDelays = [],
+                NewRequestId = () =>
+                    ++calls == 1
+                        ? throw new InvalidOperationException("the minter threw")
+                        : $"r{calls}",
+            }
+        );
+
+        await controller.StartAsync().WaitAsync(Wait);
+        controller.View.Status.Should().Be(MachineStatus.Loading);
+        controller.View.Problem!.Code.Should().Be("INVALID_REQUEST_ID");
+        server.Starts.Reader.TryRead(out _).Should().BeFalse();
+        (await controller.SendAsync("Push").WaitAsync(Wait))
+            .Should()
+            .BeOfType<SendOutcome.Failed>()
+            .Which.Problem.Code.Should()
+            .Be(ClientProblemCodes.NotReady);
+
+        var retry = controller.RetryAsync();
+        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(At(1, "Locked"), "i-1")
+        );
+
+        (await retry.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        controller.View.Id.Should().Be("i-1");
+    }
+
+    [Test]
+    public async Task A_push_whose_numbers_cannot_be_held_is_dropped_and_the_instance_read_again()
+    {
+        var server = new HandServer();
+        using var controller = Open(server, MachinePredictor.FromIr(Turnstile));
+        await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
+
+        server.Push(
+            new StreamMessage.Changed(
+                At(2, "Locked", (JsonObject)JsonNode.Parse("""{"n":1e400}""")!)
+            )
+        );
+
+        var read = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        controller.View.Status.Should().Be(MachineStatus.Ready);
+        controller.View.Revision.Should().Be(1);
+        read.SetResult(ServerAnswer.Of(At(2, "Locked")));
+        var send = controller.SendAsync("Push");
+        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
+            ServerAnswer.Of(At(3, "Locked"))
+        );
+        (await send.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        controller.View.Error.Should().BeNull();
     }
 
     [Test]
@@ -454,6 +589,119 @@ public class ClientSendTests
         {
             public void Dispose() { }
         }
+    }
+
+    // The kit holds that the start settles (dispose-with-a-read-in-flight); here, that the read itself is let go.
+    [Test]
+    public async Task Disposing_with_the_first_read_in_flight_cancels_it_and_settles_the_start()
+    {
+        var server = new ReadsUntilCancelled();
+        var controller = new ServerMachineController(
+            new ServerMachineOptions
+            {
+                Machine = Turnstile,
+                Server = server,
+                Id = "i-1",
+            }
+        );
+        var start = controller.StartAsync();
+        var token = await server.Read.Task.WaitAsync(Wait);
+
+        controller.Dispose();
+
+        await start.WaitAsync(Wait);
+        token.IsCancellationRequested.Should().BeTrue();
+    }
+
+    // A server whose reads wait until the caller lets them go.
+    private sealed class ReadsUntilCancelled : IMachineServer
+    {
+        public TaskCompletionSource<CancellationToken> Read { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<ServerAnswer> StartAsync(
+            JsonNode? input,
+            string requestId,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<ServerAnswer> EventAsync(
+            string id,
+            string trigger,
+            JsonNode? input,
+            string requestId,
+            string? clientResult,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public async Task<ServerAnswer> GetAsync(
+            string id,
+            CancellationToken cancellationToken = default
+        )
+        {
+            Read.TrySetResult(cancellationToken);
+            // allowed-delay: ends only when the controller cancels the read, which is what the test waits for.
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new InvalidOperationException("Unreachable.");
+        }
+
+        public IDisposable Subscribe(string id, Action<StreamMessage> onMessage) => new Closer();
+
+        private sealed class Closer : IDisposable
+        {
+            public void Dispose() { }
+        }
+    }
+
+    [Test]
+    public async Task A_subscribe_that_throws_stops_the_controller_with_a_transport_error()
+    {
+        using var controller = new ServerMachineController(
+            new ServerMachineOptions
+            {
+                Machine = Turnstile,
+                Server = new SubscribeThrows(),
+                Id = "i-1",
+            }
+        );
+
+        await controller.StartAsync().WaitAsync(Wait);
+        var outcome = await controller.SendAsync("Push").WaitAsync(Wait);
+
+        outcome
+            .Should()
+            .BeOfType<SendOutcome.Stopped>()
+            .Which.Error.Code.Should()
+            .Be(ClientProblemCodes.TransportError);
+        controller.View.Status.Should().Be(MachineStatus.Stopped);
+        controller.View.Error!.Code.Should().Be(ClientProblemCodes.TransportError);
+    }
+
+    // A server whose every read answers the turnstile locked, and whose Subscribe throws, as a custom server's bug would.
+    private sealed class SubscribeThrows : IMachineServer
+    {
+        public Task<ServerAnswer> StartAsync(
+            JsonNode? input,
+            string requestId,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<ServerAnswer> EventAsync(
+            string id,
+            string trigger,
+            JsonNode? input,
+            string requestId,
+            string? clientResult,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<ServerAnswer> GetAsync(
+            string id,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(ServerAnswer.Of(At(1, "Locked")));
+
+        public IDisposable Subscribe(string id, Action<StreamMessage> onMessage) =>
+            throw new InvalidOperationException("a custom server's bug");
     }
 
     private static ServerMachineController Open(

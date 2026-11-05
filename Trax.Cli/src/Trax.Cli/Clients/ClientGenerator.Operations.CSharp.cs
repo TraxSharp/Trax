@@ -71,7 +71,19 @@ internal sealed partial class ClientGenerator
             names.Claim(name, "the client's runtime");
         var declared = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var type in types.Declared)
-            declared[type] = names.Claim(CSharp.TypeName(type), $"the GraphQL type {type}");
+        {
+            var name = CSharp.TypeName(type);
+            // An input is a record, which declares these members itself: one of their names would be its own.
+            if (
+                types.Definition(type) is GraphQLInputObjectTypeDefinition
+                && CSharp.IsRecordMember(name)
+            )
+                throw new InvalidOperationException(
+                    $"The GraphQL input {type} would declare the record {name}, a member every C# record has. "
+                        + "Rename it."
+                );
+            declared[type] = names.Claim(name, $"the GraphQL type {type}");
+        }
         var paths = new Names(StringComparer.OrdinalIgnoreCase, Rename);
 
         var writer = new CSharpWriter(types, declared, fragments, names);
@@ -103,17 +115,19 @@ internal sealed partial class ClientGenerator
     private const string Rename = "Rename one of them.";
 
     /// <summary>
-    /// Whether <paramref name="text"/> is a C# namespace: dotted identifiers, none of them a keyword. Shared with
-    /// <c>trax machine generate --lang csharp</c>, whose view is written in the same <c>--namespace</c>.
+    /// Whether <paramref name="text"/> is a C# namespace: dotted identifiers of ASCII letters, digits and <c>_</c>, none
+    /// of them a keyword or one of the undocumented ones (<c>__arglist</c>). Shared with <c>trax machine generate --lang csharp</c>, whose view is written in the same
+    /// <c>--namespace</c> and whose engine takes the same set.
     /// </summary>
     internal static bool IsNamespace(string text) =>
         text.Length > 0
         && text.Split('.')
             .All(part =>
                 part.Length > 0
-                && (char.IsLetter(part[0]) || part[0] == '_')
-                && part.All(c => char.IsLetterOrDigit(c) || c == '_')
+                && (char.IsAsciiLetter(part[0]) || part[0] == '_')
+                && part.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')
                 && !CSharp.IsKeyword(part)
+                && !CSharp.IsUndocumentedKeyword(part)
             );
 
     // Writes the C# text of the types and the documents.
@@ -640,6 +654,10 @@ internal sealed partial class ClientGenerator
 
         public static bool IsKeyword(string name) => Keywords.Contains(name);
 
+        // Keywords C# does not document, which not even an @ makes a name.
+        public static bool IsUndocumentedKeyword(string name) =>
+            name is "__arglist" or "__makeref" or "__reftype" or "__refvalue";
+
         // A type name: the GraphQL name with its first letter raised and anything that is not a letter, digit or
         // underscore dropped.
         public static string TypeName(string name)
@@ -670,6 +688,8 @@ internal sealed partial class ClientGenerator
             "ReferenceEquals",
             "ToString",
         };
+
+        public static bool IsRecordMember(string name) => RecordMembers.Contains(name);
 
         // A property: the type name of the key, with Value after it when it would take its record's own name or one
         // of the members every record has.

@@ -31,14 +31,36 @@ public sealed class ConformanceTestee(bool fromIr = false)
     // every handler bound, so this testee checks the IR against the compiled machine and then serves it from the IR.
     private static readonly HashSet<string> ServedWithoutHandlers = ["vault"];
 
-    // The machines the kit holds only as an IR, with no C# source to check it against: the planner's wizard, whose IR
-    // was written for its cases. Every testee builds them from the IR.
-    private static readonly HashSet<string> OnlyAnIr = ["wizard"];
+    // The machines the kit holds only as an IR, with no C# source to check it against: the planner's wizard,
+    // notebook and odometer, the nesting limit's deep and the hostile values' machine, whose IRs were written for
+    // their cases. Every testee builds them from the IR.
+    private static readonly HashSet<string> OnlyAnIr =
+    [
+        "wizard",
+        "notebook",
+        "odometer",
+        "deep",
+        "hostile",
+    ];
 
-    // The one handler every testee binds: a custom guard named `throws`, which throws.
+    // The handlers every testee binds: a custom guard named `throws`, which throws, and a custom reduction named
+    // `nests`, which sets the context's `deep` to 600 arrays nested one in another.
     private static readonly Dictionary<string, Func<JsonObject, JsonNode?, bool>> KitGuards = new()
     {
         ["throws"] = (_, _) => throw new InvalidOperationException("throws"),
+    };
+
+    private static readonly Dictionary<
+        string,
+        Func<JsonObject, JsonNode?, JsonObject>
+    > KitReducers = new()
+    {
+        ["nests"] = (context, _) =>
+        {
+            var next = (JsonObject)context.DeepClone();
+            next["deep"] = Nested();
+            return next;
+        },
     };
 
     private readonly Dictionary<string, Served> _loaded = new();
@@ -76,7 +98,12 @@ public sealed class ConformanceTestee(bool fromIr = false)
                 request["fromServer"]?.GetValue<bool>() == true
             ),
             "serialize" => new JsonObject { ["wire"] = machine.Serialize(SnapshotOf(request)) },
-            "plan" => Planned(machine.Plan(SnapshotOf(request), PlanOf(request))),
+            "plan" => Planned(
+                machine.Plan(
+                    Deepened(request, SnapshotOf(request)),
+                    Deepened(request, PlanOf(request))
+                )
+            ),
             _ => new JsonObject { ["unsupported"] = true },
         };
     }
@@ -84,7 +111,12 @@ public sealed class ConformanceTestee(bool fromIr = false)
     private JsonObject Load(JsonObject request)
     {
         var name = request["machine"]!.GetValue<string>();
-        if (fromIr || OnlyAnIr.Contains(name))
+        // What the fuzzer found (conformance/found/) is a machine of its own per case, kept only as an IR.
+        if (
+            fromIr
+            || OnlyAnIr.Contains(name)
+            || name.StartsWith("found/", StringComparison.Ordinal)
+        )
         {
             try
             {
@@ -108,8 +140,18 @@ public sealed class ConformanceTestee(bool fromIr = false)
         return new JsonObject { ["loaded"] = true };
     }
 
-    private static Served FromIr(JsonObject request) =>
-        Served.Of(new IrMachine((JsonObject)request["ir"]!.DeepClone(), KitGuards));
+    private static Served FromIr(JsonObject request)
+    {
+        var ir = (JsonObject)request["ir"]!.DeepClone();
+        // An IR nested deeper than any reader takes, built here (conformance/PROTOCOL.md, tooDeep).
+        if (request["tooDeep"]?.GetValue<string>() == "ir")
+        {
+            if (ir["initialContext"] is not JsonObject initial)
+                ir["initialContext"] = initial = new JsonObject();
+            initial["deep"] = Nested();
+        }
+        return Served.Of(new IrMachine(ir, KitGuards, KitReducers));
+    }
 
     // The IR without its differential block, which is test-only fuzzing input, stripped from a runtime machine: two
     // IRs that differ only there describe the same machine.
@@ -138,6 +180,40 @@ public sealed class ConformanceTestee(bool fromIr = false)
             request["maxDepth"]?.GetValue<int>()
         );
 
+    // A value nested deeper than any reader takes, built here (conformance/PROTOCOL.md, tooDeep): 600 arrays.
+    private static JsonArray Nested()
+    {
+        var deep = new JsonArray();
+        for (var i = 1; i < 600; i++)
+            deep = new JsonArray(deep);
+        return deep;
+    }
+
+    private static Snapshot Deepened(JsonObject request, Snapshot snapshot)
+    {
+        if (request["tooDeep"]?.GetValue<string>() != "context")
+            return snapshot;
+        var context = (JsonObject)snapshot.Context.DeepClone();
+        context["deep"] = Nested();
+        return snapshot with { Context = context };
+    }
+
+    private static (
+        string Target,
+        PlannedEvent? Fields,
+        IReadOnlyList<string> Navigation,
+        int? MaxDepth
+    ) Deepened(
+        JsonObject request,
+        (string Target, PlannedEvent? Fields, IReadOnlyList<string> Navigation, int? MaxDepth) plan
+    ) =>
+        request["tooDeep"]?.GetValue<string>() == "input" && plan.Fields is { } fields
+            ? plan with
+            {
+                Fields = fields with { Input = Nested() },
+            }
+            : plan;
+
     private static JsonObject Planned(PlanResult result) =>
         result switch
         {
@@ -153,6 +229,11 @@ public sealed class ConformanceTestee(bool fromIr = false)
                 ["result"] = "undetermined",
                 ["trigger"] = u.Trigger,
                 ["events"] = Events(u.Events),
+            },
+            PlanResult.Invalid { Code: { } code } => new JsonObject
+            {
+                ["result"] = "invalid",
+                ["code"] = code.ToWire(),
             },
             PlanResult.Invalid { Target: { } target } => new JsonObject
             {

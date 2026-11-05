@@ -39,23 +39,44 @@ internal static class TransportSecurity
             || endpoint.IsLoopback
         );
 
-    public static void RequireNoRedirects(HttpClient? http, string paramName)
+    // A client is accepted only when the check can show its handler follows no redirect: an HttpClientHandler or a
+    // SocketsHttpHandler with AllowAutoRedirect off at the end of its chain. Any other handler is accepted only when the
+    // caller vouches for it; a known handler that follows redirects is refused whether or not they do. The delegating
+    // handlers before it are required, as the options document, to pass each request on once and send none of their
+    // own; what one does inside SendAsync is not something a check of the chain can read.
+    public static void RequireNoRedirects(HttpClient? http, bool vouched, string paramName)
     {
-        if (http is null || !FollowsRedirects(http))
+        if (http is null)
             return;
-        throw new ArgumentException(
-            "The HttpClient follows redirects, so a redirect would carry the request, its body and every default "
-                + "header but Authorization, to whatever host it names. Build it on a handler with automatic "
-                + "redirects off: new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }).",
-            paramName
-        );
+        switch (FollowsRedirects(http))
+        {
+            case false:
+                return;
+            case null when vouched:
+                return;
+            case true:
+                throw new ArgumentException(
+                    "The HttpClient must not follow redirects. Build it on a handler with automatic redirects "
+                        + "off: new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }).",
+                    paramName
+                );
+            case null:
+                throw new ArgumentException(
+                    "The HttpClient must not follow redirects, and its handler is not one the client can check. "
+                        + "Build it on a SocketsHttpHandler or HttpClientHandler with AllowAutoRedirect = false "
+                        + "(behind any delegating handlers), or, for a handler that follows no redirects, set "
+                        + "HandlerFollowsNoRedirects.",
+                    paramName
+                );
+        }
     }
 
-    // Whether the client's handler follows redirects. A redirect is followed inside the handler, before any answer
-    // comes back to be checked, so it has to be known before the first request. The handler is not public; it is read
-    // through an accessor, and a handler of a kind this does not know (a platform's own, a test's) is taken to follow
-    // none: the transport still fails an answer from another host.
-    internal static bool FollowsRedirects(HttpClient http)
+    // Whether the client's handler follows redirects: true or false for an HttpClientHandler or SocketsHttpHandler at the
+    // end of its chain of delegating handlers, and null when the check cannot tell (a handler of another kind, a chain
+    // with no handler at its end, or a runtime whose HttpClient keeps its handler elsewhere). A redirect is followed
+    // inside the handler, before any answer comes back to be checked, so it has to be known before the first request.
+    // The handler is not public; it is read through an accessor.
+    internal static bool? FollowsRedirects(HttpClient http)
     {
         HttpMessageHandler? handler;
         try
@@ -64,7 +85,7 @@ internal static class TransportSecurity
         }
         catch (MissingFieldException)
         {
-            return false;
+            return null;
         }
         while (handler is DelegatingHandler delegating)
             handler = delegating.InnerHandler;
@@ -72,7 +93,7 @@ internal static class TransportSecurity
             return client.AllowAutoRedirect;
         if (!OperatingSystem.IsBrowser() && handler is SocketsHttpHandler sockets)
             return sockets.AllowAutoRedirect;
-        return false;
+        return null;
     }
 
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_handler")]

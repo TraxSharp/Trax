@@ -23,6 +23,13 @@ public static class IrExporter
     internal const int FormatVersion = 1;
 
     /// <summary>
+    /// The oldest IR format <see cref="IrMachine"/> still reads, <c>oldestIrFormatRead</c> in the TypeScript engine
+    /// and <c>OLDEST_IR_FORMAT_READ</c> in the Rust one. Raise it, with both, only when the engines stop reading an
+    /// older format.
+    /// </summary>
+    internal const int OldestFormatRead = 1;
+
+    /// <summary>
     /// Exports <paramref name="machine"/> as single-line canonical IR JSON (stable key order, so the output
     /// can be committed and hashed). The <c>invariants</c> and <c>differential</c> sections are emitted only
     /// when the machine declares them.

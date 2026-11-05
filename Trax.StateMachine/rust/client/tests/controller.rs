@@ -9,10 +9,9 @@ use trax_state_machine::Map;
 use trax_state_machine::Value;
 use trax_state_machine::{PlanEvent, PlanInvalid};
 use trax_state_machine_client::{
-    ir_hash, DueAt, EventRequest, GraphQLMachineServerOptions, MachineServer, MachineView, SendOutcome, ServerAnswer,
-    ServerMachineController, ServerMachineOptions, ServerProblem, ServerSnapshot, StreamMessage, StreamSink,
-    Subscription, SyncOutcome, TransportError, DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_REQUEST_TIMEOUT,
-    DEFAULT_RESUBSCRIBE_DELAYS, DEFAULT_RETRY_DELAYS,
+    ir_hash, without_nulls, DueAt, EventRequest, GraphQLMachineServerOptions, MachineServer, MachineView, SendOutcome,
+    ServerAnswer, ServerMachineController, ServerMachineOptions, ServerProblem, ServerSnapshot, StreamMessage,
+    StreamSink, Subscription, SyncOutcome, TransportError, DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_REQUEST_TIMEOUT,
 };
 
 // The turnstile's IR as the kit commits it, and the hash a host's manifest gives it: the SHA-256 of that text.
@@ -384,6 +383,142 @@ async fn an_observer_that_panics_does_not_stop_the_controller() {
     assert!(!view.pending);
 }
 
+// A context whose one member nests `depth` objects deep under it, built without recursion.
+fn nested(depth: usize) -> Map {
+    let mut value = Value::Bool(true);
+    for _ in 0..depth {
+        let mut member = Map::new();
+        member.insert("a".into(), value);
+        value = Value::Object(member);
+    }
+    let mut context = Map::new();
+    context.insert("a".into(), value);
+    context
+}
+
+// A machine of one state, Open, whose context holds one object, `a`, and one trigger, Touch, that stays in it.
+fn nest() -> (Value, String) {
+    let ir = Value::parse(
+        r#"{"id":"nest","version":1,"initialState":"Open","initialContext":{},"states":["Open"],"triggers":["Touch"],"committedStates":[],"inputs":{},"context":{"Open":{"fields":[{"name":"a","type":"object","nullable":true,"constraints":[]}]}},"transitions":[{"from":"Open","trigger":"Touch","to":"Open"}]}"#,
+    )
+    .unwrap();
+    let hash = ir_hash(&ir);
+    (ir, hash)
+}
+
+// Opens instance i-1 of the nest on a scripted server, read at revision 10.
+async fn opened_nest() -> (ServerMachineController, Script) {
+    let (ir, hash) = nest();
+    let (server, mut script) = scripted();
+    let mut options = ServerMachineOptions::new(ir, hash, server);
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+    let started = controller.start();
+    let first = script.read().await;
+    let _ = first.send(stored(snapshot(Some("row-a"), 10, "Open")));
+    started.await;
+    view_where(&controller, |v| v.revision == Some(10)).await;
+    (controller, script)
+}
+
+// The nest at `revision`, with a context nested `depth` objects deep.
+fn open_nested(revision: i64, depth: usize) -> ServerSnapshot {
+    let mut open = snapshot(Some("row-a"), revision, "Open");
+    open.context = nested(depth);
+    open
+}
+
+// The context's member nests `depth` objects under it; the snapshot and the context count as two levels of 64.
+#[tokio::test]
+async fn an_answer_nested_deeper_than_a_store_writes_fails_as_a_transport_error() {
+    for depth in [63, 1_000_000] {
+        let (controller, mut script) = opened_nest().await;
+
+        let touched = controller.send("Touch", None);
+        let (_, answer) = script.event().await;
+        let _ = answer.send(stored(open_nested(11, depth)));
+
+        let outcome = tokio::time::timeout(Duration::from_secs(5), touched)
+            .await
+            .expect("the send never settled");
+        assert!(
+            matches!(&outcome, SendOutcome::Failed(p) if p.code == "TRANSPORT_ERROR"),
+            "depth {depth}: the answer was not refused"
+        );
+        let view = controller.view();
+        assert_eq!((view.revision, view.error.is_none()), (Some(10), true), "depth {depth}");
+    }
+}
+
+#[tokio::test]
+async fn a_push_nested_deeper_than_a_store_writes_is_dropped_and_the_instance_read_again() {
+    for depth in [63, 1_000_000] {
+        let (controller, mut script) = opened_nest().await;
+
+        script.push(StreamMessage::Changed(open_nested(11, depth)));
+        let read = script.read().await;
+        assert_eq!(controller.view().revision, Some(10), "depth {depth}");
+        let _ = read.send(stored(snapshot(Some("row-a"), 10, "Open")));
+        script.push(StreamMessage::Changed(snapshot(Some("row-a"), 12, "Open")));
+
+        let view = view_where(&controller, |v| v.revision == Some(12)).await;
+        assert_eq!(view.revision, Some(12), "depth {depth}");
+        assert!(view.error.is_none(), "depth {depth}");
+        assert!(
+            view.snapshot.as_ref().is_some_and(|s| s.context.is_empty()),
+            "depth {depth}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_answer_as_deep_as_a_store_writes_is_taken() {
+    let (controller, mut script) = opened_nest().await;
+
+    let touched = controller.send("Touch", None);
+    let (_, answer) = script.event().await;
+    let _ = answer.send(stored(open_nested(11, 62)));
+
+    assert!(matches!(touched.await, SendOutcome::Confirmed(s) if s.revision == Some(11)));
+    assert!(controller.view().error.is_none());
+}
+
+fn context_of(text: &str) -> Map {
+    Value::parse(text).unwrap().as_object().expect("an object").clone()
+}
+
+#[test]
+fn a_null_in_an_array_holds_its_place() {
+    let with_null = without_nulls(&context_of(r#"{"a":[null]}"#));
+    let empty = without_nulls(&context_of(r#"{"a":[]}"#));
+
+    assert_ne!(with_null, empty);
+    assert_eq!(with_null, context_of(r#"{"a":[null]}"#));
+}
+
+#[test]
+fn a_nested_null_member_is_left_out() {
+    assert_eq!(
+        without_nulls(&context_of(r#"{"a":{"b":null}}"#)),
+        without_nulls(&context_of(r#"{"a":{}}"#))
+    );
+    assert_eq!(
+        without_nulls(&context_of(r#"{"a":{"b":null,"c":[{"d":null,"e":1}]},"f":null}"#)),
+        context_of(r#"{"a":{"c":[{"e":1}]}}"#)
+    );
+}
+
+#[test]
+fn a_context_of_any_depth_has_its_nulls_left_out_without_exhausting_the_stack() {
+    let mut context = nested(1_000_000);
+    context.insert("gone".into(), Value::Null);
+
+    let stripped = without_nulls(&context);
+
+    assert!(!stripped.contains_key(&"gone".into()));
+    assert!(stripped.contains_key(&"a".into()));
+}
+
 // Opens instance i-1 of the wizard on a scripted server, read as `state` with Ada's fields, or none.
 async fn opened_wizard(state: &str, filled: bool) -> (ServerMachineController, Script) {
     let (ir, hash) = wizard();
@@ -555,6 +690,49 @@ async fn an_event_whose_request_panics_settles_failed_as_a_transport_error() {
     assert!(!controller.view().pending);
 }
 
+// A server whose subscribe panics, as a custom server's bug might; its read answers Locked and nothing else answers.
+struct SubscribePanics;
+
+impl MachineServer for SubscribePanics {
+    async fn start(&self, _: Option<Value>, _: String) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn event(&self, _: EventRequest) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn get(&self, _: String) -> Result<ServerAnswer, TransportError> {
+        stored(snapshot(None, 1, "Locked"))
+    }
+
+    fn subscribe(&self, _: String, _: StreamSink) -> Box<dyn Subscription> {
+        panic!("a custom server's bug")
+    }
+}
+
+#[tokio::test]
+async fn a_subscribe_that_panics_stops_the_controller_with_a_transport_error() {
+    let (ir, hash) = turnstile();
+    let mut options = ServerMachineOptions::new(ir, hash, SubscribePanics);
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+
+    tokio::time::timeout(Duration::from_secs(5), controller.start())
+        .await
+        .expect("the start never settled");
+    let outcome = tokio::time::timeout(Duration::from_secs(5), controller.send("Coin", None))
+        .await
+        .expect("the send never settled");
+
+    assert!(
+        matches!(&outcome, SendOutcome::Stopped(e) if e.code == "TRANSPORT_ERROR"),
+        "{outcome:?}"
+    );
+    let view = controller.view();
+    assert_eq!(view.error.as_ref().map(|e| e.code.as_str()), Some("TRANSPORT_ERROR"));
+}
+
 // A machine whose plans search widely: ten states any of them moves to, and three numbers each of them sets to one of
 // four values, so a plan to the state nothing reaches expands hundreds of snapshots before it is answered.
 fn sprawl() -> (Value, String) {
@@ -622,9 +800,63 @@ impl MachineServer for Reading {
     }
 }
 
-// On a runtime of one thread, the controller's own task answers a call made while a sync plans, before the plan is done.
-#[tokio::test(flavor = "current_thread")]
-async fn a_sync_plans_off_the_controllers_task() {
+// The controller's own task answers a call made while a sync plans, before the plan is done. The runtime has one
+// blocking thread and the test holds it, so the plan, which runs there, cannot start until the test lets it: a
+// controller that planned on its own task would have settled the sync before it answered the retry.
+#[test]
+fn a_sync_plans_off_the_controllers_task() {
+    use futures_util::FutureExt;
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .max_blocking_threads(1)
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let (ir, hash) = sprawl();
+        let mut options = ServerMachineOptions::new(ir, hash, Reading);
+        options.id = Some("i-1".into());
+        let controller = ServerMachineController::new(options).unwrap();
+        controller.start().await;
+        let navigation: Vec<String> = (0..10)
+            .map(|i| format!("Go{i}"))
+            .chain((0..3).flat_map(|f| (0..4).map(move |v| format!("F{f}v{v}"))))
+            .collect();
+        let (held, holding) = tokio::sync::oneshot::channel();
+        let (release, released) = std::sync::mpsc::channel::<()>();
+        let blocker = tokio::task::spawn_blocking(move || {
+            let _ = held.send(());
+            let _ = released.recv();
+        });
+        holding.await.unwrap();
+
+        let mut synced = Box::pin(controller.sync_to("T", None, navigation));
+        let retried = controller.retry().await;
+
+        assert!(
+            matches!(&retried, SendOutcome::Failed(p) if p.code == "NOTHING_TO_RETRY"),
+            "{retried:?}"
+        );
+        assert!(
+            (&mut synced).now_or_never().is_none(),
+            "the sync planned on the controller's task"
+        );
+        release.send(()).unwrap();
+        blocker.await.unwrap();
+        let outcome = tokio::time::timeout(Duration::from_secs(60), synced)
+            .await
+            .expect("the plan never answered");
+        assert!(
+            matches!(outcome, SyncOutcome::Unreachable | SyncOutcome::Exceeded),
+            "{outcome:?}"
+        );
+    });
+}
+
+// A sync taken over while its plan is still being searched settles superseded at once, and the one that took over is
+// planned and settles on its own.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_sync_superseded_while_its_plan_is_searched_settles_superseded() {
     let (ir, hash) = sprawl();
     let mut options = ServerMachineOptions::new(ir, hash, Reading);
     options.id = Some("i-1".into());
@@ -635,22 +867,20 @@ async fn a_sync_plans_off_the_controllers_task() {
         .chain((0..3).flat_map(|f| (0..4).map(move |v| format!("F{f}v{v}"))))
         .collect();
 
-    let synced = controller.sync_to("T", None, navigation);
-    let retried = controller.retry();
-    tokio::pin!(synced);
+    let searching = controller.sync_to("T", None, navigation);
+    let taking_over = controller.sync_to("S0", None, Vec::new());
 
-    tokio::select! {
-        biased;
-        outcome = &mut synced => panic!("the sync planned on the controller's task: {outcome:?}"),
-        outcome = retried => assert!(matches!(&outcome, SendOutcome::Failed(p) if p.code == "NOTHING_TO_RETRY"), "{outcome:?}"),
-    }
-    let outcome = tokio::time::timeout(Duration::from_secs(60), synced)
-        .await
-        .expect("the plan never answered");
+    let within = Duration::from_secs(5);
+    assert_eq!(
+        tokio::time::timeout(within, searching).await.expect("never settled"),
+        SyncOutcome::Superseded
+    );
+    let outcome = tokio::time::timeout(within, taking_over).await.expect("never settled");
     assert!(
-        matches!(outcome, SyncOutcome::Unreachable | SyncOutcome::Exceeded),
+        matches!(&outcome, SyncOutcome::Synced { snapshot, .. } if snapshot.state == "S0"),
         "{outcome:?}"
     );
+    assert!(!controller.view().unsaved);
 }
 
 #[tokio::test]
@@ -736,14 +966,52 @@ async fn a_send_with_no_instance_to_send_to_settles_not_ready() {
     assert!(!controller.view().pending);
 }
 
-// The defaults every client of the kit shares (conformance/client/PROTOCOL.md, "Defaults").
+// A send made before start waits for it: the read goes out first, and the event only once the read has answered,
+// predicted from what it answered (conformance/client/PROTOCOL.md, `send`).
+#[tokio::test]
+async fn a_send_before_start_waits_for_it() {
+    let (ir, hash) = turnstile();
+    let (server, mut script) = scripted();
+    let mut options = ServerMachineOptions::new(ir, hash, server);
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+
+    let sent = controller.send("Coin", Some(Value::parse(r#"{"coin":"quarter"}"#).unwrap()));
+    let started = controller.start();
+    let read = script.read().await;
+    assert!(
+        script.events.try_recv().is_err(),
+        "the event went out before the read answered"
+    );
+    let _ = read.send(stored(snapshot(None, 1, "Locked")));
+    started.await;
+
+    let (request, answer) = script.event().await;
+    assert_eq!(request.trigger, "Coin");
+    assert!(
+        request
+            .client_result
+            .as_deref()
+            .is_some_and(|r| r.contains("\"Unlocked\"")),
+        "{:?}",
+        request.client_result
+    );
+    let mut unlocked = snapshot(None, 2, "Unlocked");
+    unlocked.context.insert("paidWith".into(), Value::from("quarter"));
+    let _ = answer.send(stored(unlocked));
+    let outcome = tokio::time::timeout(Duration::from_secs(5), sent)
+        .await
+        .expect("the send never settled");
+    assert!(
+        matches!(&outcome, SendOutcome::Confirmed(s) if s.revision == Some(2)),
+        "{outcome:?}"
+    );
+}
+
+// Options built without any of the defaults hold the client's constants, which tests/defaults.rs holds to the kit's
+// conformance/client/defaults.json.
 #[test]
-fn the_defaults_are_the_client_kits() {
-    let ms = Duration::from_millis;
-    assert_eq!(DEFAULT_REQUEST_TIMEOUT, ms(30_000));
-    assert_eq!(DEFAULT_RESUBSCRIBE_DELAYS, [ms(1000), ms(2000), ms(5000)]);
-    assert_eq!(DEFAULT_RETRY_DELAYS, [ms(250), ms(500), ms(1000), ms(2000), ms(4000)]);
-    assert_eq!(DEFAULT_MAX_MESSAGE_SIZE, 16 * 1024 * 1024);
+fn options_built_without_the_defaults_hold_them() {
     let options = GraphQLMachineServerOptions::new("https://h/graphql", "wss://h/graphql", "turnstile", Vec::new());
     assert_eq!(options.request_timeout, DEFAULT_REQUEST_TIMEOUT);
     assert_eq!(options.max_message_size, DEFAULT_MAX_MESSAGE_SIZE);
@@ -753,4 +1021,80 @@ fn the_defaults_are_the_client_kits() {
         dropped: Arc::new(AtomicBool::new(false)),
     };
     assert!(ServerMachineOptions::new(ir, hash, server).retry_delays.is_none());
+}
+
+// A server that starts every instance as i-1 at revision 1, Locked, and says under which request id.
+struct Starting {
+    started: tokio::sync::mpsc::UnboundedSender<String>,
+}
+
+impl MachineServer for Starting {
+    async fn start(&self, _: Option<Value>, request_id: String) -> Result<ServerAnswer, TransportError> {
+        let _ = self.started.send(request_id);
+        Ok(ServerAnswer::Stored {
+            id: Some("i-1".into()),
+            snapshot: snapshot(None, 1, "Locked"),
+        })
+    }
+
+    async fn event(&self, _: EventRequest) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn get(&self, _: String) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    fn subscribe(&self, _: String, _: StreamSink) -> Box<dyn Subscription> {
+        Box::new(Nothing)
+    }
+}
+
+#[tokio::test]
+async fn a_minter_that_panics_for_the_start_fails_it_and_retry_mints_again() {
+    let (ir, hash) = turnstile();
+    let (started, mut starts) = tokio::sync::mpsc::unbounded_channel();
+    let mut options = ServerMachineOptions::new(ir, hash, Starting { started });
+    let mut calls = 0;
+    options.new_request_id = Some(Box::new(move || {
+        calls += 1;
+        if calls == 1 {
+            panic!("the minter panicked");
+        }
+        format!("r{calls}")
+    }));
+    let controller = ServerMachineController::new(options).unwrap();
+
+    tokio::time::timeout(Duration::from_secs(5), controller.start())
+        .await
+        .expect("the start never settled");
+    let view = controller.view();
+    assert_eq!(
+        view.problem.as_ref().map(|p| p.code.as_str()),
+        Some("INVALID_REQUEST_ID")
+    );
+    assert!(starts.try_recv().is_err(), "a start was sent with no request id");
+
+    let retried = tokio::time::timeout(Duration::from_secs(5), controller.retry())
+        .await
+        .expect("the retry never settled");
+    assert!(matches!(retried, SendOutcome::Confirmed(_)), "{retried:?}");
+    assert_eq!(starts.recv().await.as_deref(), Some("r2"));
+}
+
+#[tokio::test]
+async fn a_retry_delay_past_the_longest_a_timer_waits_is_refused() {
+    let built = |delays: Vec<Duration>| {
+        let (ir, hash) = turnstile();
+        let (server, _) = silent();
+        let mut options = ServerMachineOptions::new(ir, hash, server);
+        options.retry_delays = Some(delays);
+        ServerMachineController::new(options).map(|_| ())
+    };
+
+    let longest = Duration::from_millis(2_147_483_647);
+    assert!(built(vec![Duration::from_millis(10), longest + Duration::from_millis(1)]).is_err());
+    assert!(built(vec![Duration::MAX]).is_err());
+    assert!(built(vec![Duration::ZERO, longest]).is_ok());
+    assert!(built(Vec::new()).is_ok());
 }

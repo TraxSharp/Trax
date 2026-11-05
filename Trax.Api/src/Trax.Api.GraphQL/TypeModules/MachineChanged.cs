@@ -8,6 +8,7 @@ using HotChocolate.Resolvers;
 using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Authorization;
+using Trax.Api.GraphQL.Subscriptions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -57,8 +58,9 @@ internal sealed record MachineChange(
 /// <see cref="ISnapshotPrincipal"/>, never an argument, and the machine's watch rule is checked against it
 /// (<see cref="ISnapshotWatchAccess"/>). A missing id, another user's, a system instance's and one the rule refuses
 /// all get one answer, <see cref="RefusalCode.NotFound"/>. The stream then follows the row's <c>row_id</c>, the
-/// incarnation it verified: nothing about the caller is read again, and a row re-created under the same id never
-/// reaches it.</para>
+/// incarnation it verified, and a row re-created under the same id never reaches it. The watch rule is asked again
+/// for the same caller at every connection re-check interval; when it no longer admits the caller to that row the
+/// stream ends with <see cref="RefusalCode.NotFound"/>, the answer a refused subscribe gets.</para>
 /// <para><b>Order.</b> The watch registers before the row is read, and the first event is the row as that read
 /// found it, so a write in between is never lost. Each later event is a newer revision, whole; a burst may arrive
 /// as its latest revision only, which loses nothing.</para>
@@ -191,22 +193,38 @@ internal static class MachineChangedSubscription
         if (string.IsNullOrWhiteSpace(userKey))
             throw new GraphQLException(EndpointPolicyRequestMiddleware.NotAuthorized());
 
-        long? rowId = null;
         if (
             services.GetService<ISnapshotMachineRegistry>()?.Service(machine.Name)
-            is ISnapshotWatchAccess access
+                is not ISnapshotWatchAccess access
+            || machine is not IMachineInternals internals
         )
-        {
-            var caller = services.GetService<ICallerAuthorization>();
-            Actor actor = caller is null
-                ? new Actor.Client(userKey)
-                : new Actor.Client(userKey, caller.IsInRole, caller.SatisfiesPolicy);
-            rowId = await access
-                .AuthorizeWatch(actor, id, ctx.RequestAborted)
-                .ConfigureAwait(false);
-        }
-        if (rowId is not { } row || machine is not IMachineInternals internals)
             return Once(MachineChange.Refused(null, RefusalCode.NotFound, NotFoundMessage));
+
+        if (
+            await access
+                .AuthorizeWatch(Caller(services, userKey), id, ctx.RequestAborted)
+                .ConfigureAwait(false)
+            is not { } row
+        )
+            return Once(MachineChange.Refused(null, RefusalCode.NotFound, NotFoundMessage));
+
+        // The watch rule is asked again at every connection re-check, for the same caller and the
+        // same row, in a scope of its own so it shares no data context with the socket's other
+        // operations. A stream it no longer admits ends with the answer a refused subscribe gets.
+        var scopes = services.GetRequiredService<IServiceScopeFactory>();
+        var recheck = SubscriptionRecheck.For(
+            services,
+            async ct =>
+            {
+                await using var scope = scopes.CreateAsyncScope();
+                var scoped = scope.ServiceProvider;
+                return scoped.GetService<ISnapshotMachineRegistry>()?.Service(machine.Name)
+                        is ISnapshotWatchAccess current
+                    && await current
+                        .AuthorizeWatch(Caller(scoped, userKey), id, ct)
+                        .ConfigureAwait(false) == row;
+            }
+        );
 
         var lease = services.GetRequiredService<MachineWatchLimits>().TryAcquire(userKey, row);
         if (lease is null)
@@ -235,8 +253,19 @@ internal static class MachineChangedSubscription
             watch,
             lease,
             change => Present(change, machine, internals, order)
-        );
+        )
+        {
+            Recheck = recheck,
+            RecheckRefused = MachineChange.Refused(row, RefusalCode.NotFound, NotFoundMessage),
+        };
     }
+
+    // The socket's principal as a machine rule reads it: its user key, and its roles and policies
+    // where the host can answer them.
+    private static Actor Caller(IServiceProvider services, string userKey) =>
+        services.GetService<ICallerAuthorization>() is { } caller
+            ? new Actor.Client(userKey, caller.IsInRole, caller.SatisfiesPolicy)
+            : new Actor.Client(userKey);
 
     // What the subscriber is sent for one change of its row, and whether it ends the stream.
     internal static (MachineChange Event, bool Ends)? Present(
@@ -449,6 +478,12 @@ internal sealed class MachineChangedStream(
 {
     private int _disposed;
 
+    /// <summary>The watch rule asked again while the stream is open, or null for a stream that answers once.</summary>
+    public SubscriptionRecheck? Recheck { get; init; }
+
+    /// <summary>The last event of a stream <see cref="Recheck"/> ends.</summary>
+    public MachineChange? RecheckRefused { get; init; }
+
     public IAsyncEnumerable<MachineChange> ReadEventsAsync() => Read<MachineChange>();
 
     IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync() => Read<object?>();
@@ -481,23 +516,32 @@ internal sealed class MachineChangedStream(
             if (watch is null)
                 yield break;
 
-            await foreach (
-                var change in watch
-                    .Changes.ReadAllAsync(ct)
-                    .WithCancellation(ct)
-                    .ConfigureAwait(false)
-            )
-            {
-                if (present(change) is not { } next)
-                    continue;
-                yield return (TOut)(object)next.Event;
-                if (next.Ends)
-                    yield break;
-            }
+            var events = Events(watch, ct);
+            if (Recheck is { } recheck && RecheckRefused is { } refused)
+                events = recheck.Until(events, () => refused, ct);
+            await foreach (var next in events.WithCancellation(ct).ConfigureAwait(false))
+                yield return (TOut)(object)next;
         }
         finally
         {
             Release();
+        }
+    }
+
+    private async IAsyncEnumerable<MachineChange> Events(
+        SnapshotWatch watch,
+        [EnumeratorCancellation] CancellationToken ct = default
+    )
+    {
+        await foreach (
+            var change in watch.Changes.ReadAllAsync(ct).WithCancellation(ct).ConfigureAwait(false)
+        )
+        {
+            if (present(change) is not { } next)
+                continue;
+            yield return next.Event;
+            if (next.Ends)
+                yield break;
         }
     }
 }

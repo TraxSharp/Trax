@@ -18,12 +18,16 @@ public sealed record TraxClientOptions
     /// <summary>
     /// Delays before subscribing again after the socket dropped a stream. The last repeats for as long as the stream
     /// is followed; they start over once a subscription delivers a frame. <see cref="TraxClient.DefaultResubscribeDelays"/>
-    /// when null or empty.
+    /// when null or empty. Each is a step: the wait is drawn at random between half of it and the whole, so the
+    /// streams a host dropped together do not all come back together.
     /// </summary>
     public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
 
     /// <summary>The clock the resubscribe delays run on; the system's when null.</summary>
     public TimeProvider? Time { get; init; }
+
+    // Where each resubscribe wait is drawn from, a number from 0 to 1; Random.Shared when null. A test pins it.
+    internal Func<double>? Random { get; init; }
 }
 
 /// <summary>What a followed stream delivers.</summary>
@@ -73,20 +77,31 @@ public sealed class TraxClient
     private readonly JsonSerializerOptions _json;
     private readonly IReadOnlyList<TimeSpan> _delays;
     private readonly TimeProvider _time;
+    private readonly Func<double> _random;
 
     /// <summary>Builds the client over <paramref name="transport"/>.</summary>
     /// <exception cref="ArgumentException">
     /// The app turned reflection-based serialization off, and <see cref="TraxClientOptions.Json"/> names no resolver.
     /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// One of <see cref="TraxClientOptions.ResubscribeDelays"/> is below zero or longer than <see cref="int.MaxValue"/>
+    /// milliseconds.
+    /// </exception>
     public TraxClient(ITraxTransport transport, TraxClientOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(transport);
+        TraxHttpTransport.RequireDelays(
+            options?.ResubscribeDelays,
+            "resubscribe delay",
+            nameof(options)
+        );
         _transport = transport;
         _json = TraxJson.LeavingOutUnset(options?.Json);
         _delays = options?.ResubscribeDelays is { Count: > 0 } delays
             ? delays
             : DefaultResubscribeDelays;
         _time = options?.Time ?? TimeProvider.System;
+        _random = options?.Random ?? System.Random.Shared.NextDouble;
     }
 
     /// <summary>The transport the client sends through.</summary>
@@ -176,6 +191,14 @@ public sealed class TraxClient
     {
         if (answer.Failure is not null)
             return new TraxAnswer<TResult> { Failure = answer.Failure };
+        // No data and no error (`data: null`, `errors: []`): neither a result nor a refusal.
+        if (answer.Data is null && answer.Errors.Count == 0)
+            return new TraxAnswer<TResult>
+            {
+                Failure = new TraxTransportFailure(
+                    "The host answered with neither data nor an error."
+                ),
+            };
         try
         {
             return new TraxAnswer<TResult>
@@ -216,11 +239,18 @@ public sealed class TraxClient
         private IDisposable? _current;
         private CancellationTokenSource? _timer;
 
-        public void Open()
+        // Subscribes; after a delay, `fired` is the source of the delay that ended.
+        public void Open(CancellationTokenSource? fired = null)
         {
             lock (_gate)
             {
-                _timer = null;
+                // The delay's source is this one's to let go of unless a disposal or a later delay took it, which
+                // cancels and disposes it itself.
+                if (fired is not null && ReferenceEquals(_timer, fired))
+                {
+                    _timer = null;
+                    fired.Dispose();
+                }
                 if (!_wanted || _ended)
                     return;
             }
@@ -355,7 +385,9 @@ public sealed class TraxClient
         {
             IDisposable? close;
             TimeSpan delay;
-            CancellationTokenSource timer;
+            CancellationTokenSource? previous;
+            CancellationTokenSource source;
+            CancellationToken timer;
             bool first;
             lock (_gate)
             {
@@ -365,19 +397,23 @@ public sealed class TraxClient
                 _current = null;
                 first = !_interrupted;
                 _interrupted = true;
-                delay = client._delays[Math.Min(_attempt, client._delays.Count - 1)];
+                delay = Backoff.Delay(client._delays, _attempt, client._random);
                 _attempt++;
-                timer = _timer = new CancellationTokenSource();
+                // A delay already pending is replaced, so the stream is subscribed again once.
+                previous = _timer;
+                source = _timer = new CancellationTokenSource();
+                timer = source.Token;
             }
             close?.Dispose();
             if (first)
                 Deliver(new TraxStreamEvent<TResult>.Interrupted(reason));
-            _ = Task.Delay(delay, client._time, timer.Token)
+            CancelAndDispose(previous);
+            _ = Task.Delay(delay, client._time, timer)
                 .ContinueWith(
                     t =>
                     {
                         if (!t.IsCanceled)
-                            Open();
+                            Open(source);
                     },
                     TaskScheduler.Default
                 );
@@ -395,8 +431,27 @@ public sealed class TraxClient
                 timer = _timer;
                 _timer = null;
             }
-            timer?.Cancel();
+            CancelAndDispose(timer);
             close?.Dispose();
         }
+
+        // The token was taken before the source is disposed, and is cancelled first: a delay waiting on it ends.
+        private static void CancelAndDispose(CancellationTokenSource? timer)
+        {
+            timer?.Cancel();
+            timer?.Dispose();
+        }
     }
+}
+
+// The resubscribe backoff the three clients share (conformance/client/PROTOCOL.md): the step is the attempt's delay, the
+// last repeating, and the wait is drawn uniformly between half the step and the whole of it, so the streams a host
+// dropped together do not all come back together. A draw of 0 waits the whole step.
+internal static class Backoff
+{
+    internal static TimeSpan Delay(
+        IReadOnlyList<TimeSpan> steps,
+        int attempt,
+        Func<double> random
+    ) => steps[Math.Min(attempt, steps.Count - 1)] * (1.0 - 0.5 * Math.Clamp(random(), 0.0, 1.0));
 }

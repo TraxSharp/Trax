@@ -255,32 +255,8 @@ fn a_context_nested_past_the_limit_is_refused_not_overflowed() {
     assert!(Snapshot::from_value(&Value::Object(stored)).is_none());
 }
 
-#[test]
-fn a_reducer_that_nests_past_the_limit_is_refused_not_overflowed() {
-    let machine = Machine::from_ir_text(CUSTOM)
-        .unwrap()
-        .with_guard("Open", |_, _| true)
-        .with_guard("Approved", |_, _| true)
-        .with_reducer("Stamp", |_, _| {
-            let mut context = Map::new();
-            context.insert("deep".into(), too_deep());
-            context
-        });
-
-    assert_eq!(
-        machine.advance(&start(), "Go", None).unwrap_err().code,
-        RefusalCode::InvalidContext
-    );
-}
-
-#[test]
-fn an_ir_nested_past_the_limit_is_refused_not_overflowed() {
-    let mut ir = conformance("machines/turnstile/turnstile.ir.json");
-    let Value::Object(map) = &mut ir else { unreachable!() };
-    map.insert("note".into(), too_deep());
-
-    assert!(Machine::from_ir(&ir).is_err());
-}
+// A reduction or an IR nested past the limit is refused in the kit: conformance/machines/deep and
+// unreadable-ir/nested-past-the-limit.
 
 #[test]
 fn a_value_nested_past_the_limit_is_written_and_dropped_without_overflowing() {
@@ -344,34 +320,13 @@ fn a_plan_with_no_depth_to_spend_is_exceeded_unless_it_is_already_there() {
     );
 }
 
-// A machine whose one edge counts up forever: every snapshot is new, so only the expansion limit ends the search.
+// A machine whose one edge counts up forever, through a custom reduction. The expansion limit itself is held by the
+// odometer cases of conformance/plan/.
 const COUNTER: &str = r#"{"id":"n","version":1,"initialState":"A","initialContext":{"n":0},"states":["A","B"],
   "triggers":["Tick"],"committedStates":[],"inputs":{},
   "context":{"A":{"fields":[{"name":"n","type":"number","nullable":false,"constraints":[]}]},
              "B":{"fields":[{"name":"n","type":"number","nullable":false,"constraints":[]}]}},
   "transitions":[{"from":"A","trigger":"Tick","to":"A","reduce":{"reduce":"custom","name":"Count"}}]}"#;
-
-#[test]
-fn a_search_that_never_ends_is_bounded_by_its_expansions() {
-    let machine = Machine::from_ir_text(COUNTER)
-        .unwrap()
-        .with_reducer("Count", |context, _| {
-            let mut next = context.clone();
-            let n = context.get(&JsString::from("n")).and_then(Value::as_f64).unwrap_or(0.0);
-            next.insert("n".into(), Value::Number(n + 1.0));
-            next
-        });
-
-    let plan = machine.plan(
-        &machine.initial_snapshot(),
-        "B",
-        None,
-        &["Tick".to_owned()],
-        Some(usize::MAX),
-    );
-
-    assert_eq!(plan, PlanAnswer::Exceeded);
-}
 
 #[test]
 fn a_custom_reduction_on_the_fields_event_never_shows_the_fields_applied() {
@@ -451,5 +406,106 @@ fn a_plan_from_a_context_or_with_an_input_nested_past_the_limit_is_invalid_not_o
     assert_eq!(
         machine.plan(&details(), "Review", Some(&deep_fields), &navigation, None),
         PlanAnswer::Invalid(PlanInvalid::Input)
+    );
+}
+
+#[test]
+fn a_navigation_trigger_listed_twice_is_tried_once_from_each_snapshot() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let asked = Arc::new(AtomicUsize::new(0));
+    let counted = asked.clone();
+    let machine = wizard().with_guard("approved", move |_, _| {
+        counted.fetch_add(1, Ordering::SeqCst);
+        false
+    });
+    let skip = |times: usize| vec!["Skip".to_owned(); times];
+
+    let once = machine.plan(&details(), "Review", Some(&ada()), &skip(1), None);
+    let once_asked = asked.swap(0, Ordering::SeqCst);
+    let thrice = machine.plan(&details(), "Review", Some(&ada()), &skip(3), None);
+
+    assert_eq!(thrice, once);
+    assert_eq!(asked.load(Ordering::SeqCst), once_asked);
+}
+
+#[test]
+fn a_plan_takes_each_step_once_the_goal_tests_fields_event_included() {
+    use std::sync::{Arc, Mutex};
+
+    let from: Arc<Mutex<Vec<String>>> = Arc::default();
+    let seen = from.clone();
+    let machine = Machine::from_ir(&conformance("plan/notebook.ir.json"))
+        .unwrap()
+        .with_reducer("notebook:add-note", move |context, _| {
+            seen.lock().unwrap().push(format!("{context:?}"));
+            let notes = context
+                .get(&JsString::from("notes"))
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0);
+            let mut next = context.clone();
+            next.insert("notes".into(), Value::Number(notes + 1.0));
+            next
+        });
+    let draft = Snapshot::from_value(&object(
+        r#"{"machine":"notebook","version":1,"state":"Draft","context":{"notes":0}}"#,
+    ))
+    .unwrap();
+
+    let plan = machine.plan(
+        &draft,
+        "Draft",
+        Some(&PlanEvent::new("Note", None)),
+        &["File".to_owned(), "Reopen".to_owned()],
+        None,
+    );
+
+    assert_eq!(plan, PlanAnswer::Exceeded);
+    let from = from.lock().unwrap();
+    let distinct: std::collections::HashSet<&String> = from.iter().collect();
+    assert_eq!(
+        distinct.len(),
+        from.len(),
+        "a snapshot was advanced by the fields event twice: {from:?}"
+    );
+}
+
+#[test]
+fn a_stopped_plan_gives_up_before_its_next_expansion() {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let asked = Arc::new(AtomicUsize::new(0));
+    let (stopping, counted) = (stop.clone(), asked.clone());
+    // The guard on Skip stops the search the first time it is asked, during the first expansion.
+    let machine = wizard().with_guard("approved", move |_, _| {
+        counted.fetch_add(1, Ordering::SeqCst);
+        stopping.store(true, Ordering::SeqCst);
+        false
+    });
+    let navigation = ["Skip".to_owned()];
+
+    assert_eq!(
+        machine.plan_stoppable(&details(), "Review", Some(&ada()), &navigation, None, &stop),
+        None
+    );
+    assert_eq!(asked.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        machine.plan_stoppable(
+            &details(),
+            "Review",
+            Some(&ada()),
+            &navigation,
+            None,
+            &AtomicBool::new(true)
+        ),
+        None
+    );
+    assert_eq!(
+        machine.plan_stoppable(&details(), "Nowhere", None, &navigation, None, &AtomicBool::new(true)),
+        Some(machine.plan(&details(), "Nowhere", None, &navigation, None)),
+        "a request refused before any search is answered whatever the stop says"
     );
 }

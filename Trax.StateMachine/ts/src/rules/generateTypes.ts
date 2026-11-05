@@ -151,7 +151,8 @@ export function generateMachineFactory(
 
 // An output schema two or more outcomes share (invoking states whose trains answer with one type) is written once,
 // as a const each outcome names, rather than once per state: the IR's value is the same, and the page's bundle
-// carries the schema once. Placeholders stand in for the consts while the IR is stringified.
+// carries the schema once. Each such outcome's output is swapped for a marker object while the IR is written, and the
+// writer puts the const's name where it meets one, so no string of the IR can be taken for a marker.
 function shareOutputSchemas(ir: object): { text: string; shared: string[] } {
   const outcomes = (ir as { outcomes?: Record<string, { output?: unknown }> }).outcomes ?? {};
   const byText = new Map<string, string[]>();
@@ -163,24 +164,36 @@ function shareOutputSchemas(ir: object): { text: string; shared: string[] } {
 
   const shared: string[] = [];
   const replaced: Record<string, unknown> = {};
-  const placeholders: [string, string][] = [];
+  const markers = new Map<object, string>();
   for (const [text, keys] of byText) {
     if (keys.length < 2) continue;
     const name = `sharedOutput${shared.length}`;
-    const placeholder = `\u0000${name}`;
+    const marker = {};
     shared.push(`const ${name} = ${JSON.stringify(JSON.parse(text), null, 2)};`, "");
-    placeholders.push([JSON.stringify(placeholder), name]);
-    for (const key of keys) replaced[key] = { ...outcomes[key], output: placeholder };
+    markers.set(marker, name);
+    for (const key of keys) replaced[key] = { ...outcomes[key], output: marker };
   }
   if (shared.length === 0) return { text: JSON.stringify(ir, null, 2), shared };
+  return { text: writeJson({ ...ir, outcomes: { ...outcomes, ...replaced } }, markers, "")!, shared };
+}
 
-  let text = JSON.stringify(
-    { ...ir, outcomes: { ...outcomes, ...replaced } },
-    null,
-    2,
-  );
-  for (const [quoted, name] of placeholders) text = text.split(quoted).join(name);
-  return { text, shared };
+// `value` as JSON.stringify(value, null, 2) writes it, with each marker object written as the name it maps to.
+function writeJson(value: unknown, markers: ReadonlyMap<object, string>, indent: string): string | undefined {
+  if (typeof value === "object" && value !== null && markers.has(value)) return markers.get(value)!;
+  if (typeof value !== "object" || value === null) return JSON.stringify(value);
+  const inner = `${indent}  `;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    // JSON.stringify writes null for a value it cannot write in an array.
+    const items = value.map((v) => writeJson(v, markers, inner) ?? "null");
+    return `[\n${items.map((i) => inner + i).join(",\n")}\n${indent}]`;
+  }
+  const members = Object.entries(value)
+    .map(([key, v]) => [key, writeJson(v, markers, inner)] as const)
+    // ...and leaves out a member it cannot write (undefined, a function).
+    .filter((m): m is readonly [string, string] => m[1] !== undefined);
+  if (members.length === 0) return "{}";
+  return `{\n${members.map(([key, v]) => `${inner}${JSON.stringify(key)}: ${v}`).join(",\n")}\n${indent}}`;
 }
 
 // Object shapes are `type` aliases rather than interfaces, so they carry the implicit index signature `MachineSpec`
@@ -235,6 +248,7 @@ function tsType(type: TypeRef): string {
 const valueType = (value: ValueRef): string =>
   value.nullable ? `${tsType(value.type)} | null` : tsType(value.type);
 
-// Each value as a string literal: its JSON, so nothing in it can end the literal.
+// Each value as a string literal: its JSON, so nothing in it can end the literal. No values at all (a machine with no
+// triggers, a oneOf that admits nothing) is the type no value has.
 const union = (values: readonly string[]): string =>
-  values.map((v) => JSON.stringify(v)).join(" | ");
+  values.length === 0 ? "never" : values.map((v) => JSON.stringify(v)).join(" | ");

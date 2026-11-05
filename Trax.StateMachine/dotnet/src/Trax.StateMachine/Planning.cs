@@ -31,11 +31,18 @@ public abstract record PlanResult
         : PlanResult;
 
     /// <summary>
-    /// The request cannot be planned: <see cref="Target"/> is not a state, or <see cref="Trigger"/> is not one a client
-    /// may send to move (one the machine does not have, one bound to the effect, an outcome, a timer, or a navigation
-    /// trigger that is also the fields event). Exactly one of the two is set.
+    /// The request cannot be planned: <see cref="Code"/> is <see cref="RefusalCode.InvalidInput"/> or
+    /// <see cref="RefusalCode.InvalidContext"/> when the
+    /// fields input or the snapshot's context nests more than 512 arrays and objects deep, <see cref="Target"/> is not
+    /// a state, or <see cref="Trigger"/> is not one a client may send to move (one no transition fires on, one bound to
+    /// the effect, an outcome, a timer, or a navigation trigger that is also the fields event). Exactly one of the three
+    /// is set.
     /// </summary>
-    public sealed record Invalid(string? Trigger = null, string? Target = null) : PlanResult;
+    public sealed record Invalid(string? Trigger = null, string? Target = null) : PlanResult
+    {
+        /// <summary>The refusal code of a fields input or a context nested too deep, or null.</summary>
+        public RefusalCode? Code { get; init; }
+    }
 
     private PlanResult() { }
 }
@@ -57,7 +64,18 @@ internal static class EventPlanner
 {
     internal const int MaxExpansions = 10_000;
 
-    private sealed record Node(Snapshot Snapshot, Node? Parent, PlannedEvent? Event, int Depth);
+    // How deep the arrays and objects of a fields input or a context may nest, the outermost counting as one: the Rust
+    // engine's limit, which every engine's planner holds a plan to, so they refuse the same values.
+    internal const int MaxNesting = 512;
+
+    // A snapshot waiting to be expanded, and, when the goal test already applied the fields event to it, that step and
+    // its wire, which the expansion takes instead of advancing it again and then lets go of.
+    private sealed record Node(Snapshot Snapshot, Node? Parent, PlannedEvent? Event, int Depth)
+    {
+        public Applied? Fields { get; set; }
+    }
+
+    private sealed record Applied(AdvanceResult Next, string? Key);
 
     public static PlanResult Plan(
         PlanGraph graph,
@@ -72,6 +90,11 @@ internal static class EventPlanner
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(navigation);
 
+        // Checked first, as advance would refuse them: the search copies and compares both.
+        if (NestsTooDeep(fields?.Input))
+            return new PlanResult.Invalid { Code = RefusalCode.InvalidInput };
+        if (NestsTooDeep(snapshot.Context))
+            return new PlanResult.Invalid { Code = RefusalCode.InvalidContext };
         if (!graph.IsState(target))
             return new PlanResult.Invalid(Target: target);
         if (fields is not null && !graph.Navigable(fields.Trigger))
@@ -80,6 +103,8 @@ internal static class EventPlanner
             if (!graph.Navigable(trigger) || trigger == fields?.Trigger)
                 return new PlanResult.Invalid(Trigger: trigger);
 
+        // A trigger listed twice is tried once, where it is first listed.
+        navigation = navigation.Distinct(StringComparer.Ordinal).ToList();
         fields = fields is null ? null : fields with { Input = fields.Input?.DeepClone() };
         var edges = new List<PlannedEvent>(navigation.Count + 1);
         if (fields is not null)
@@ -91,26 +116,33 @@ internal static class EventPlanner
         // snapshots that differ only there are the same.
         string Key(Snapshot s) => graph.Serialize(s with { Context = WithoutNulls(s.Context) });
 
-        bool IsGoal(Snapshot s)
+        // The goal: the target state, where the fields event, when there is one, changes nothing. A fields event this
+        // engine cannot evaluate there, or one the target refuses, never reaches it. `key` is the snapshot's own, and
+        // `applied` the fields event's step when the test took one, with its wire when it transitioned.
+        bool IsGoal(Snapshot s, string key, out Applied? applied)
         {
+            applied = null;
             if (s.State != target)
                 return false;
             if (fields is null)
                 return true;
-            // A fields event this engine cannot evaluate there, or one the target refuses, never reaches the goal.
             if (!graph.Determines(s.State, fields.Trigger))
                 return false;
-            return graph.Advance(s, fields.Trigger, fields.Input?.DeepClone())
-                    is AdvanceResult.Transitioned applied
-                && Key(applied.Snapshot) == Key(s);
+            var next = graph.Advance(s, fields.Trigger, fields.Input?.DeepClone());
+            applied = new Applied(
+                next,
+                next is AdvanceResult.Transitioned moved ? Key(moved.Snapshot) : null
+            );
+            return applied.Key == key;
         }
 
-        if (IsGoal(snapshot))
+        var startKey = Key(snapshot);
+        if (IsGoal(snapshot, startKey, out var startApplied))
             return new PlanResult.Planned([]);
 
-        var seen = new HashSet<string>(StringComparer.Ordinal) { Key(snapshot) };
+        var seen = new HashSet<string>(StringComparer.Ordinal) { startKey };
         var queue = new Queue<Node>();
-        queue.Enqueue(new Node(snapshot, null, null, 0));
+        queue.Enqueue(new Node(snapshot, null, null, 0) { Fields = startApplied });
         var expanded = 0;
         var cut = false;
         (string Trigger, Node From)? undetermined = null;
@@ -130,8 +162,9 @@ internal static class EventPlanner
                 break;
             }
             expanded++;
-            foreach (var edge in edges)
+            for (var k = 0; k < edges.Count; k++)
             {
+                var edge = edges[k];
                 // An edge this engine cannot evaluate is not tried; the first one met is kept in case nothing else
                 // reaches the target.
                 if (!graph.Determines(node.Snapshot.State, edge.Trigger))
@@ -139,23 +172,58 @@ internal static class EventPlanner
                     undetermined ??= (edge.Trigger, node);
                     continue;
                 }
+                // The fields event is the first edge, and the goal test may have taken that step already.
+                var reused = k == 0 && fields is not null ? node.Fields : null;
                 if (
-                    graph.Advance(node.Snapshot, edge.Trigger, edge.Input?.DeepClone())
+                    (
+                        reused?.Next
+                        ?? graph.Advance(node.Snapshot, edge.Trigger, edge.Input?.DeepClone())
+                    )
                     is not AdvanceResult.Transitioned next
                 )
                     continue;
-                if (!seen.Add(Key(next.Snapshot)))
+                var key = reused?.Key ?? Key(next.Snapshot);
+                if (!seen.Add(key))
                     continue;
-                var reached = new Node(next.Snapshot, node, edge, node.Depth + 1);
-                if (IsGoal(reached.Snapshot))
+                var goal = IsGoal(next.Snapshot, key, out var applied);
+                var reached = new Node(next.Snapshot, node, edge, node.Depth + 1)
+                {
+                    Fields = applied,
+                };
+                if (goal)
                     return new PlanResult.Planned(PathTo(reached));
                 queue.Enqueue(reached);
             }
+            node.Fields = null;
         }
 
         if (undetermined is { } u)
             return new PlanResult.Undetermined(u.Trigger, PathTo(u.From));
         return cut ? new PlanResult.Exceeded() : new PlanResult.Unreachable();
+    }
+
+    // Whether a value nests deeper than MaxNesting. Never recurses, so a value built in memory cannot exhaust the stack.
+    // IrMachine holds an IR and a reduction's context to it too.
+    internal static bool NestsTooDeep(JsonNode? value)
+    {
+        var pending = new Stack<(JsonNode? Node, int Depth)>();
+        pending.Push((value, 0));
+        while (pending.TryPop(out var next))
+        {
+            var members = next.Node switch
+            {
+                JsonObject o => o.Select(m => m.Value),
+                JsonArray a => a,
+                _ => null,
+            };
+            if (members is null)
+                continue;
+            if (next.Depth >= MaxNesting)
+                return true;
+            foreach (var member in members)
+                pending.Push((member, next.Depth + 1));
+        }
+        return false;
     }
 
     // The object with every member whose value is null left out, at every depth, as the client reads a host's answer.

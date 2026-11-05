@@ -24,7 +24,12 @@
     <Content Include="content/**" Exclude="**/bin/**;**/obj/**;**/packages.lock.json" />
     <Compile Remove="**/*" />
     <None Include="README.md" Pack="true" PackagePath="/" />
-    <None Include="../../.github/brand/icon-128.png" Pack="true" PackagePath="icon.png" Visible="false" />
+    <None
+      Include="../../.github/brand/icon-128.png"
+      Pack="true"
+      PackagePath="icon.png"
+      Visible="false"
+    />
   </ItemGroup>
 
   <!--

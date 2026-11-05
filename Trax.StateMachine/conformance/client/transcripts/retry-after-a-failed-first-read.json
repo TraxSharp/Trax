@@ -1,0 +1,26 @@
+{
+  "about": "Opened by id, a first read that fails past every retry leaves retry something to resend: it reads the instance again and settles confirmed with what the read says.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "retryDelays": [10],
+  "steps": [
+    { "client": "start", "as": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "variables": { "id": "i-1" }, "status": 503 },
+    { "request": "get", "variables": { "id": "i-1" }, "status": 503 },
+    { "await": "start", "expect": { "settled": true } },
+    { "view": { "status": "loading", "problem": "TRANSPORT_ERROR" } },
+    { "client": "retry", "as": "retry" },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "await": "retry", "expect": { "outcome": "confirmed", "state": "Unlocked", "revision": 1 } },
+    { "view": { "status": "ready", "state": "Unlocked", "revision": 1 } }
+  ]
+}

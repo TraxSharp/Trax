@@ -28,7 +28,9 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// the host named the train with <c>AllowOutputForBroadcastSubscribers()</c>.
 /// </para>
 /// <para>
-/// A subscriber who could receive nothing is refused when subscribing.
+/// A subscriber who could receive nothing is refused when subscribing, and a subscription is
+/// checked again every connection re-check interval (<see cref="Recheck"/>): one whose subscriber
+/// no longer receives everything it was admitted to ends.
 /// See <c>docs/adr/0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md</c>.
 /// </para>
 /// </remarks>
@@ -36,7 +38,8 @@ internal sealed class LifecycleSubscriptionAccess(
     GraphQLConfiguration configuration,
     ITrainDiscoveryService discovery,
     IAuthorizationService authorization,
-    TrainLifecycleStreamOptions streamOptions
+    TrainLifecycleStreamOptions streamOptions,
+    TimeProvider? time = null
 )
 {
     /// <summary>What replaces a failure reason a broadcast subscriber may not see.</summary>
@@ -82,6 +85,27 @@ internal sealed class LifecycleSubscriptionAccess(
     /// and the subscriber satisfies its gate. Never true for a broadcast subscriber.
     /// </summary>
     public ValueTask<bool> OperationsFor(ClaimsPrincipal? user) => SatisfiesOperationsAsync(user);
+
+    /// <summary>
+    /// <paramref name="stillAuthorized"/> run again at the connection's credential re-check
+    /// interval while a subscription is open.
+    /// </summary>
+    public SubscriptionRecheck Recheck(Func<CancellationToken, ValueTask<bool>> stillAuthorized) =>
+        new(
+            configuration.ConnectionCredentialRecheckInterval,
+            time ?? TimeProvider.System,
+            stillAuthorized
+        );
+
+    /// <summary>
+    /// The re-check of a lifecycle or junction subscription admitted with
+    /// <paramref name="admitted"/>: it passes while <paramref name="user"/> still sees everything
+    /// it was admitted to.
+    /// </summary>
+    public SubscriptionRecheck LifecycleRecheck(
+        ClaimsPrincipal? user,
+        LifecycleVisibility admitted
+    ) => Recheck(async _ => (await LifecycleFor(user).ConfigureAwait(false)).Covers(admitted));
 
     private async ValueTask<bool> SatisfiesOperationsAsync(ClaimsPrincipal? user)
     {
@@ -152,6 +176,13 @@ internal sealed record LifecycleVisibility(bool All, IReadOnlySet<string> Trains
     );
 
     public bool IsEmpty => !All && Trains.Count == 0;
+
+    /// <summary>
+    /// Whether this visibility admits everything <paramref name="other"/> admits: the operations
+    /// view covers every view, and a broadcast view covers another whose trains it all holds.
+    /// </summary>
+    public bool Covers(LifecycleVisibility other) =>
+        All || (!other.All && other.Trains.All(Trains.Contains));
 
     /// <summary>
     /// Outside the operations view, whether the answers on a run's steps are shown. Off unless the

@@ -23,11 +23,23 @@ const vectorIr = {
   transitions: [],
 };
 
-// The one handler every testee binds (conformance/PROTOCOL.md): a custom guard named `throws`, which throws.
+// The handlers every testee binds (conformance/PROTOCOL.md): a custom guard named `throws`, which throws, and a custom
+// reduction named `nests`, which sets the context's `deep` to 600 arrays nested one in another.
 const kitGuards = {
   throws: () => {
     throw new Error("throws");
   },
+};
+
+// A value nested deeper than any reader takes, built here (PROTOCOL.md, tooDeep): 600 arrays.
+const nested = () => {
+  let deep = [];
+  for (let i = 1; i < 600; i++) deep = [deep];
+  return deep;
+};
+
+const kitReducers = {
+  nests: (context) => ({ ...context, deep: nested() }),
 };
 
 /** A handler from one request to its answer, over `engine`, the package's exports. */
@@ -43,7 +55,8 @@ export function createTestee(engine) {
 
   const handlers = {
     load: (r) => {
-      machines.set(r.machine, new SnapshotMachine(machineFromIr(r.ir, kitGuards)));
+      const ir = r.tooDeep === "ir" ? { ...r.ir, initialContext: { ...r.ir.initialContext, deep: nested() } } : r.ir;
+      machines.set(r.machine, new SnapshotMachine(machineFromIr(ir, kitGuards, kitReducers)));
       return { loaded: true };
     },
     advance: (r, core) => step(core, core.advance(r.snapshot, r.trigger, r.input ?? undefined)),
@@ -56,13 +69,17 @@ export function createTestee(engine) {
         : { result: "error", code: result.code };
     },
     serialize: (r, core) => ({ wire: core.serialize(r.snapshot) }),
-    plan: (r, core) =>
-      core.plan(r.snapshot, {
+    plan: (r, core) => {
+      const deep = nested();
+      const fields = r.fields ?? null;
+      const snapshot = r.tooDeep === "context" ? { ...r.snapshot, context: { ...r.snapshot.context, deep } } : r.snapshot;
+      return core.plan(snapshot, {
         target: r.target,
-        fields: r.fields ?? null,
+        fields: r.tooDeep === "input" && fields !== null ? { ...fields, input: deep } : fields,
         navigation: r.navigation,
         ...(r.maxDepth === undefined ? {} : { maxDepth: r.maxDepth }),
-      }),
+      });
+    },
     canonical: (r) => {
       const context = r.context !== undefined
         ? JSON.parse(r.context)

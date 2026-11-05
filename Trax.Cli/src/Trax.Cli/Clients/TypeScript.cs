@@ -116,6 +116,16 @@ internal static partial class TypeScript
         "WeakSet",
     };
 
+    // The type operators. A type may be declared under one of these names, but where a type is read, `x: keyof` is
+    // the start of another type, so nothing could refer to it.
+    private static readonly HashSet<string> TypeOperators = new(StringComparer.Ordinal)
+    {
+        "keyof",
+        "readonly",
+        "unique",
+        "infer",
+    };
+
     private static readonly JsonSerializerOptions Json = new()
     {
         Encoder = JavaScriptEncoder.Default,
@@ -134,6 +144,18 @@ internal static partial class TypeScript
             );
         return name;
     }
+
+    /// <summary>
+    /// <paramref name="name"/> as a type's name: <see cref="Identifier"/>, and refused when it is a type operator
+    /// (<c>keyof</c>, <c>readonly</c>, <c>unique</c>, <c>infer</c>), which no type annotation can name.
+    /// </summary>
+    public static string TypeName(string name, string what) =>
+        TypeOperators.Contains(name)
+            ? throw new InvalidOperationException(
+                $"The {what} '{name}' cannot name generated TypeScript: it is a word TypeScript reserves for a "
+                    + "type operator. Rename it on the host."
+            )
+            : Identifier(name, what);
 
     /// <summary>
     /// Whether <paramref name="name"/> is ASCII letters, digits, <c>_</c> and <c>$</c>, not starting with a digit, and

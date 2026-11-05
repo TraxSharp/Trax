@@ -37,11 +37,15 @@ public sealed record TraxHttpTransportOptions
     /// <summary>
     /// The client the requests go through. Set its authentication on it, a default header (<c>X-Api-Key</c>,
     /// <c>Authorization</c>) or a delegating handler, as for any other <see cref="System.Net.Http.HttpClient"/>. Its
-    /// <see cref="HttpClient.Timeout"/> bounds each request, its body included. Build it on a handler with automatic
-    /// redirects off: a redirect drops only <c>Authorization</c>, so the body and any other header would follow it to
-    /// the new host. A client on an <see cref="HttpClientHandler"/> or <see cref="SocketsHttpHandler"/> that follows
-    /// redirects, <c>new HttpClient()</c> among them, is refused when the transport is built. An answer from another
-    /// host than <see cref="Endpoint"/>'s, through a handler of another kind that followed one, is a
+    /// <see cref="HttpClient.Timeout"/> bounds each request, its body included. It must not follow redirects: build it
+    /// on a <see cref="SocketsHttpHandler"/> or <see cref="HttpClientHandler"/> with
+    /// <see cref="SocketsHttpHandler.AllowAutoRedirect"/> off, behind any delegating handlers
+    /// (<c>new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })</c>). A client whose handler follows
+    /// redirects, <c>new HttpClient()</c> among them, is refused when the transport is built, and so is one on a handler
+    /// of another kind unless <see cref="HandlerFollowsNoRedirects"/> is set. The check reads the handler at the end of
+    /// the chain, so each delegating handler before it must pass every request on once, to the handler after it, and
+    /// send none of its own: one that sends a request again, to the host a redirect names or anywhere else, does what
+    /// the check cannot see. An answer from another host than <see cref="Endpoint"/>'s is a
     /// <see cref="TraxAnswer.Failure"/>.
     /// </summary>
     public required HttpClient Http { get; init; }
@@ -59,8 +63,16 @@ public sealed record TraxHttpTransportOptions
     public bool AllowInsecureTransport { get; init; }
 
     /// <summary>
+    /// Says that <see cref="Http"/>'s handler follows no redirects, for a handler the transport cannot check: one at the
+    /// end of its chain that is neither a <see cref="SocketsHttpHandler"/> nor an <see cref="HttpClientHandler"/> (a
+    /// test server's, a platform's own). Off by default, and such a client is refused. It changes nothing for a handler
+    /// the transport can check: one that follows redirects is refused either way.
+    /// </summary>
+    public bool HandlerFollowsNoRedirects { get; init; }
+
+    /// <summary>
     /// The largest response body the host may answer with, in bytes; 16 MiB by default. A larger one is a
-    /// <see cref="TraxAnswer.Failure"/>, never read into memory.
+    /// <see cref="TraxAnswer.Failure"/>, never read into memory. It must be positive.
     /// </summary>
     public long MaxResponseSize { get; init; } = DefaultMaxResponseSize;
 
@@ -94,12 +106,21 @@ public sealed class TraxHttpTransport : ITraxTransport
     /// <exception cref="ArgumentException">
     /// The endpoint is relative and the client has no base address; or it is not <c>https</c> on a host that is not
     /// loopback, and <see cref="TraxHttpTransportOptions.AllowInsecureTransport"/> is not set; or the client follows
-    /// redirects.
+    /// redirects, or its handler is one the transport cannot check and
+    /// <see cref="TraxHttpTransportOptions.HandlerFollowsNoRedirects"/> is not set.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="TraxHttpTransportOptions.MaxResponseSize"/> is zero or less.
     /// </exception>
     public TraxHttpTransport(TraxHttpTransportOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        TransportSecurity.RequireNoRedirects(options.Http, nameof(options));
+        RequireSize(options.MaxResponseSize, "largest response size", nameof(options));
+        TransportSecurity.RequireNoRedirects(
+            options.Http,
+            options.HandlerFollowsNoRedirects,
+            nameof(options)
+        );
         TransportSecurity.RequireSecure(
             options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
                 ? options.Endpoint
@@ -171,7 +192,8 @@ public sealed class TraxHttpTransport : ITraxTransport
         JsonObject body,
         long maxResponseSize = TraxHttpTransportOptions.DefaultMaxResponseSize,
         TimeSpan? requestTimeout = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        TimeProvider? time = null
     )
     {
         ArgumentNullException.ThrowIfNull(http);
@@ -190,11 +212,14 @@ public sealed class TraxHttpTransport : ITraxTransport
             : http.BaseAddress is { } baseAddress ? new Uri(baseAddress, endpoint)
             : null;
 
-        // With ResponseHeadersRead the client's timeout stops at the headers; this one runs on through the body.
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // With ResponseHeadersRead the client's timeout stops at the headers; this one runs on through the body, on the
+        // clock given.
         var limit = Shorter(http.Timeout, requestTimeout ?? Timeout.InfiniteTimeSpan);
-        if (limit != Timeout.InfiniteTimeSpan)
-            timeout.CancelAfter(limit);
+        using var timed = new CancellationTokenSource(limit, time ?? TimeProvider.System);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timed.Token
+        );
         try
         {
             using var response = await http.SendAsync(
@@ -203,8 +228,7 @@ public sealed class TraxHttpTransport : ITraxTransport
                     timeout.Token
                 )
                 .ConfigureAwait(false);
-            // A handler the transport could not see into followed a redirect: it has already sent the request on,
-            // and its answer is not the endpoint's.
+            // A handler the caller vouched for followed a redirect anyway: its answer is not the endpoint's.
             if (
                 asked is not null
                 && response.RequestMessage?.RequestUri is { IsAbsoluteUri: true } answeredBy
@@ -243,6 +267,63 @@ public sealed class TraxHttpTransport : ITraxTransport
         }
     }
 
+    /// <summary>
+    /// How deep an answer or a socket message may nest: the deepest any value may (512 levels, the kit's
+    /// <c>conformance/limits.json</c>). System.Text.Json's default of 64 counts the envelope around a value, so it would
+    /// refuse a context a store wrote at its own limit of 64 once wrapped in <c>data</c> and its fields. Whoever reads
+    /// the value inside holds it to its own limit.
+    /// </summary>
+    internal const int MaxReadDepth = 512;
+
+    internal static readonly JsonDocumentOptions Reading = new() { MaxDepth = MaxReadDepth };
+
+    /// <summary>The longest timeout a request or a connection waits for: the longest a timer can count.</summary>
+    internal static readonly TimeSpan MaxTimeout = TimeSpan.FromMilliseconds(int.MaxValue);
+
+    // Refuses a timeout no timer can wait for: zero or less, other than infinite, or longer than MaxTimeout.
+    internal static void RequireTimeout(TimeSpan timeout, string what, string paramName)
+    {
+        if (
+            timeout == Timeout.InfiniteTimeSpan
+            || (timeout > TimeSpan.Zero && timeout <= MaxTimeout)
+        )
+            return;
+        throw new ArgumentOutOfRangeException(
+            paramName,
+            timeout,
+            $"The {what} must be positive and at most {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days), "
+                + "or Timeout.InfiniteTimeSpan."
+        );
+    }
+
+    // Refuses a size limit no answer fits in: zero or less.
+    internal static void RequireSize(long size, string what, string paramName)
+    {
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(
+                paramName,
+                size,
+                $"The {what} must be at least one byte."
+            );
+    }
+
+    // Refuses a delay no timer can wait for: one below zero, Timeout.InfiniteTimeSpan among them, or longer than
+    // MaxTimeout. Zero waits not at all.
+    internal static void RequireDelays(
+        IReadOnlyList<TimeSpan>? delays,
+        string what,
+        string paramName
+    )
+    {
+        foreach (var delay in delays ?? [])
+            if (delay < TimeSpan.Zero || delay > MaxTimeout)
+                throw new ArgumentOutOfRangeException(
+                    paramName,
+                    delay,
+                    $"Each {what} must be from zero to {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days)."
+                );
+    }
+
     // The shorter of two timeouts, either of which may be infinite.
     private static TimeSpan Shorter(TimeSpan a, TimeSpan b) =>
         a == Timeout.InfiniteTimeSpan ? b
@@ -261,7 +342,7 @@ public sealed class TraxHttpTransport : ITraxTransport
         TraxAnswer? answer;
         try
         {
-            answer = TraxAnswer.Of(JsonNode.Parse(text));
+            answer = TraxAnswer.Of(JsonNode.Parse(text, documentOptions: Reading));
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
