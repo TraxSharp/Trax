@@ -1847,6 +1847,9 @@ mod tests {
 
     // Follows "i-1" on a host that answers every connection as `reply` says, with resubscribe delays of 10 ms and
     // `then`, each delay's jitter drawn from `random`, and answers how long after the second connection the third came.
+    // These run over a real socket, which a paused clock cannot: tokio jumps a paused clock to the next timer whenever
+    // the runtime waits on I/O, so the socket's own timeouts would fire at once. A bound above is therefore never
+    // tighter than the next step the delays would take without what the test checks.
     async fn third_connection_after(reply: Replies, then: Duration, random: fn() -> f64) -> Duration {
         let (port, mut heard) = recording_host(reply).await;
         let mut given = options(
@@ -1874,17 +1877,19 @@ mod tests {
 
     #[tokio::test]
     async fn a_stream_that_delivered_a_second_snapshot_starts_the_delays_over() {
-        let after = third_connection_after(|_| Reply::TwoPushesThenComplete, Duration::from_millis(400), || 0.0).await;
+        // Started over, the third connection comes after 10 ms; not, after a minute.
+        let after = third_connection_after(|_| Reply::TwoPushesThenComplete, Duration::from_secs(60), || 0.0).await;
 
-        assert!(after < Duration::from_millis(300), "subscribed again after {after:?}");
+        assert!(after < Duration::from_secs(30), "subscribed again after {after:?}");
     }
 
     #[tokio::test]
     async fn a_resubscribe_delay_is_drawn_between_half_its_step_and_all_of_it() {
-        let after = third_connection_after(|_| Reply::PushThenComplete, Duration::from_millis(800), || 1.0).await;
+        // A draw of 1 waits half the step, 1 s; a delay that ignored the draw would wait the whole step, 2 s.
+        let after = third_connection_after(|_| Reply::PushThenComplete, Duration::from_millis(2000), || 1.0).await;
 
         assert!(
-            after >= Duration::from_millis(350) && after < Duration::from_millis(700),
+            after >= Duration::from_millis(950) && after < Duration::from_millis(2000),
             "subscribed again after {after:?}"
         );
     }
