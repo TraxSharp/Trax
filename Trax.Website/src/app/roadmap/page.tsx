@@ -4,7 +4,7 @@ import roadmap from "@/data/roadmap.json";
 export const metadata: Metadata = {
   title: "Roadmap",
   description:
-    "Where Trax .NET is going: from a spec to a running API and a small generated client.",
+    "Where Trax .NET is going next, and everything it has shipped since 1.0.",
 };
 
 type Status = "done" | "building" | "next" | "later";
@@ -109,16 +109,6 @@ export default function RoadmapPage() {
                 </p>
                 <h3 className="mt-2 font-semibold text-text-primary">{m.title}</h3>
                 <Points points={m.points} />
-                {m.code && (
-                  <details className="mt-4 min-w-0">
-                    <summary className="cursor-pointer text-xs text-text-muted hover:text-text-primary">
-                      Code
-                    </summary>
-                    <pre className="mt-2 overflow-x-auto border-l-2 border-accent/30 bg-bg-secondary px-4 py-3 font-mono text-[12px] leading-relaxed text-text-primary">
-                      {m.code.text}
-                    </pre>
-                  </details>
-                )}
               </article>
             ))}
           </div>

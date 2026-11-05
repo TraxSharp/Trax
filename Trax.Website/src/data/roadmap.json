@@ -104,7 +104,7 @@
       "shipped": "July to September 2026 · 1.52",
       "title": "State machines",
       "points": [
-        "Machines written in C#, with a TypeScript twin",
+        "Machines written in C#, with a twin that runs in the browser",
         "Declarative rules exported as one portable description",
         "The twin generated from it by the CLI",
         "Both runtimes checked against each other on a shared corpus",
@@ -147,11 +147,7 @@
         "A machine state that runs a train",
         "Checkpoints, and resuming from any step",
         "Every branch and step visible in GraphQL and the dashboard"
-      ],
-      "code": {
-        "caption": "Shipped",
-        "text": " Chain<LoadCorpus>()\n.Parallel(p => p\n    .Branch(\"embedding\", b => b.Chain<EmbeddingSimilarity>())\n    .Branch(\"cocitation\", b => b.Chain<CoCitationOverlap>()))\n.Chain<CombineSignals>()\n.Resolve();\n\n m.In(Partition.Ingesting)\n.Invokes<IIngestPartitionTrain, IngestInput, IngestOutput>(ctx => new IngestInput(ctx[\"source\"]!.GetValue<string>()))\n.OnDone(Partition.Ingested)\n.OnFailed(Partition.Failed)\n.OnCancelled(Partition.Cancelled);"
-      }
+      ]
     },
     {
       "key": "machines-api",
@@ -163,11 +159,7 @@
         "Authorization on each event, checked on the server",
         "Persisted operations only",
         "Live snapshots over a subscription"
-      ],
-      "code": {
-        "caption": "Shipped",
-        "text": "mutation {\n  machines {\n    checkout {\n      submit(id: $id, input: { address: $address }, requestId: $req) {\n        state\n        context { total }\n      }\n    }\n  }\n}\n\nsubscription {\n  machineChanged(machine: \"checkout\", id: $id) { state revision }\n}"
-      }
+      ]
     },
     {
       "key": "clients",
@@ -180,11 +172,7 @@
         "The machines, running in the browser",
         "Live progress while a train runs",
         "Operation hashes on the wire, never query text"
-      ],
-      "code": {
-        "caption": "Shipped",
-        "text": "$ trax client --target react --manifest web/src/trax/manifest.json --out web/src/trax\n\nconfigureTrax({ url, socketUrl, user });\nconst checkout = useRememberedCheckout();\ncheckout.send(\"Submit\", { address });"
-      }
+      ]
     },
     {
       "key": "child-machines",
@@ -195,11 +183,7 @@
         "A state starts a child machine and waits for it to end",
         "The child's outcome moves the parent on",
         "Leaving the state removes the child"
-      ],
-      "code": {
-        "caption": "Shipped",
-        "text": "m.In(OrderState.Packing)\n    .Spawns<ParcelMachine, OrderContext, ParcelResult>(c => c.ParcelId)\n    .OnDone(OrderState.Sent)\n    .OnFailed(OrderState.Lost)\n    .OnCancelled(OrderState.Recalled);"
-      }
+      ]
     },
     {
       "key": "client-documents",
@@ -211,15 +195,12 @@
         "A typed function for each one, with exactly the fields it asks for",
         "The server registers them when it starts, and checks them there",
         "Answers that refer back to themselves no longer stop a server"
-      ],
-      "code": {
-        "caption": "Shipped",
-        "text": "query OrderCard($input: FindOrderInput!) {\n  discover {\n    findOrder(input: $input) { title customer { name } }\n  }\n}\n\n$ trax client --manifest web/src/trax/manifest.json --out web/src/trax \\\n    --documents 'web/src/**/*.graphql'"
-      }
+      ]
     },
     {
       "key": "console",
-      "status": "building",
+      "status": "done",
+      "shipped": "October 2026 · 1.68",
       "title": "One operations console",
       "points": [
         "One dashboard, organised by trains, machines and schedules",
@@ -230,12 +211,24 @@
     },
     {
       "key": "book",
-      "status": "building",
+      "status": "done",
+      "shipped": "October 2026 · 1.68",
       "title": "The Trax book",
       "points": [
         "One shop, built from an empty folder to a deployed app",
         "One Trax feature a chapter, in the order you need them",
         "Every chapter compiles as the project so far"
+      ]
+    },
+    {
+      "key": "every-language",
+      "status": "building",
+      "title": "Machines in every language",
+      "points": [
+        "Clients that predict the server's answer the same way in the browser, in .NET and in Rust",
+        "Swift and Kotlin next, for iOS and Android",
+        "Python after them",
+        "One conformance suite every language has to pass"
       ]
     },
     {
