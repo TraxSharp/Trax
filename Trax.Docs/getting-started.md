@@ -24,6 +24,9 @@ Every C# block on this page is compiled in CI against the package versions in th
 - Docker, from step 4 on, for Postgres.
 - `curl`, to call the application.
 
+Every Trax package releases at one version, and a minor release can change public API. [Versioning and
+stability](/docs/reference/versioning) says what each release may change.
+
 ## 1. Create the project
 
 ```bash
@@ -371,12 +374,16 @@ and runs the train every minute on worker threads in this process. The manifest 
 so it survives a restart.
 
 Run the application. Within a minute or two the scheduled runs appear, each greeting `World`. The
-`psql` query from step 4 lists them above the two earlier runs:
+`psql` query from step 4 lists them above the two earlier runs. After two scheduled runs:
 
 ```text
         name         | train_state | name_in |    message
 ---------------------+-------------+---------+---------------
  Greeter.IGreetTrain | completed   | World   | Hello, World!
+ Greeter.IGreetTrain | completed   | World   | Hello, World!
+ Greeter.IGreetTrain | failed      |         |
+ Greeter.IGreetTrain | completed   | Ada     | Hello, Ada!
+(4 rows)
 ```
 
 Stop the application before the next step.

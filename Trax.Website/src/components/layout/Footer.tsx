@@ -38,6 +38,12 @@ export default function Footer() {
               >
                 Getting Started
               </Link>
+              <Link
+                href="/docs/reference/versioning"
+                className="block text-text-muted hover:text-text-secondary"
+              >
+                Versioning
+              </Link>
             </div>
             <div className="space-y-2">
               <a

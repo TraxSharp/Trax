@@ -49,7 +49,7 @@ install ([Packages](/docs/reference/packages) has the full list).
 | Capability | In plain words | Learn it | Understand it | Package |
 |---|---|---|---|---|
 | Calling a train by its input | Run a train by handing over its input, without referencing the class. | [Chapter 2](/docs/book/testing-place-order) | [Mediator](/docs/mediator) | `Trax.Mediator` |
-| Queued work | Ask for a run now and let it start when there is room, capped per train. | [Chapter 11](/docs/book/a-separate-worker) | [Queued work](/docs/mediator/queued-work) | `Trax.Mediator` |
+| Queued work | Ask for a run now and let it start when there is room under the scheduler's caps. | [Chapter 11](/docs/book/a-separate-worker) | [Queued work](/docs/mediator/queued-work) | `Trax.Mediator` |
 | Schedules | Cron, intervals, one-off delays, and trains that run after another succeeds. | [Chapter 9](/docs/book/scheduled-work) | [Scheduling](/docs/scheduler) | `Trax.Scheduler` |
 | Retries and dead letters | Retry with backoff, then park the run for an operator to requeue or acknowledge. | [Chapter 10](/docs/book/failures-retries-and-dead-letters) | [How retries work](/docs/scheduler/how-retries-work) | `Trax.Scheduler` |
 | Workers | Run the same trains in other processes, over HTTP, SQS or AWS Lambda, and recover a run whose worker died. | [Chapter 11](/docs/book/a-separate-worker) | [Deployment topologies](/docs/reference/deployment-topologies) | `Trax.Scheduler` |

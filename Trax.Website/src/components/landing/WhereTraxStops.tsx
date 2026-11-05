@@ -23,8 +23,12 @@ const limits: {
     body: "Trains are C#, and one Postgres database coordinates them. Workflows written in several languages, or replicated across regions, are outside what Trax does.",
   },
   {
+    title: "Schedules run in UTC",
+    body: "Cron schedules and their exclusions are evaluated in UTC. A job that has to run at 9:00 local time across daylight saving changes needs its own conversion, or a scheduler with time zones.",
+  },
+  {
     title: "No tracing export yet",
-    body: "Runs are recorded in the database and logged through ILogger. They are not emitted as OpenTelemetry spans.",
+    body: "Runs are recorded in the database and logged through ILogger, and machines publish metrics through System.Diagnostics. Runs are not emitted as OpenTelemetry spans.",
   },
 ];
 
@@ -39,7 +43,7 @@ export default function WhereTraxStops() {
           What it does not do today, so you can decide before you install it.
         </p>
         <Link href="/docs/reference/comparison" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
-          How Trax compares with Quartz.NET and Hangfire &rarr;
+          How Trax compares with Temporal, Elsa, XState, Hangfire and others &rarr;
         </Link>
 
         <div className="mt-10 grid gap-x-16 gap-y-8 sm:grid-cols-2">
