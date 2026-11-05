@@ -166,7 +166,7 @@ const firstErrorOf = (errors: GraphQLErrors | undefined): { code: string; messag
 };
 
 interface MachineChange {
-  rowId?: number | string | null;
+  rowId?: number | null;
   revision?: number | null;
   state?: string | null;
   context?: Record<string, unknown> | null;
@@ -361,6 +361,12 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
             // A push no host wrote is dropped, and the instance read again: whatever the host wrote then is not known.
             if (!isContext(pushed)) return deliver({ type: 'reconnected' });
             const change = pushed as MachineChange;
+            // A problem is null or an object with a code; anything else no host wrote.
+            const problem: unknown = change.problem;
+            if (problem != null && (!isContext(problem) || typeof problem.code !== 'string'))
+              return deliver({ type: 'reconnected' });
+            // A rowId is a whole number, as a host serves a GraphQL Long, or null.
+            if (change.rowId != null && !Number.isInteger(change.rowId)) return deliver({ type: 'reconnected' });
             if (change.problem) {
               if (change.problem.code === CLIENT_OUTDATED) deliver({ type: 'client-outdated' });
               else if (change.problem.code === NOT_FOUND) deliver({ type: 'gone', notFound: true });

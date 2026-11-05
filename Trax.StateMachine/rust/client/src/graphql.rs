@@ -560,10 +560,16 @@ fn snapshot_of(value: &Value) -> Result<ServerSnapshot, TransportError> {
             }
         }
     };
+    // A host serves rowId as a GraphQL Long: a whole number, or null. Anything else no host wrote.
     let row_id = match value.get("rowId") {
-        Some(Value::String(s)) => Some(s.to_string_lossy()),
-        Some(Value::Number(n)) => Some(trax_state_machine::number_text(*n)),
-        _ => None,
+        None | Some(Value::Null) => None,
+        Some(Value::Number(n)) if n.fract() == 0.0 && n.is_finite() => Some(trax_state_machine::number_text(*n)),
+        Some(row) => {
+            return Err(TransportError(format!(
+                "The server answered a rowId that is not a whole number: {}.",
+                row.to_json()
+            )))
+        }
     };
     Ok(ServerSnapshot {
         row_id,

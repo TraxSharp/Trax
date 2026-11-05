@@ -1,0 +1,41 @@
+{
+  "about": "A next with no data, with data but not the push's field, or with a problem that is not an object with a code is dropped and the instance read again, and the client carries on.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "status": "ready" } },
+    { "pushPayload": { "data": null } },
+    { "request": "get", "variables": { "id": "i-1" }, "hold": "fence" },
+    { "view": { "status": "ready", "state": "Unlocked", "revision": 1, "error": null }, "once": true },
+    { "respond": "fence", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "pushPayload": { "data": {} } },
+    { "request": "get", "variables": { "id": "i-1" }, "hold": "fence" },
+    { "view": { "status": "ready", "state": "Unlocked", "revision": 1, "error": null }, "once": true },
+    { "respond": "fence", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "pushPayload": {} },
+    { "request": "get", "variables": { "id": "i-1" }, "hold": "fence" },
+    { "view": { "status": "ready", "state": "Unlocked", "revision": 1, "error": null }, "once": true },
+    { "respond": "fence", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "push": { "revision": 2, "state": "Locked", "context": {}, "problem": "nope" } },
+    { "request": "get", "variables": { "id": "i-1" }, "hold": "fence" },
+    { "view": { "status": "ready", "state": "Unlocked", "revision": 1, "error": null }, "once": true },
+    { "respond": "fence", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "push": { "revision": 2, "state": "Locked", "context": {}, "problem": { "message": "no code" } } },
+    { "request": "get", "variables": { "id": "i-1" }, "hold": "fence" },
+    { "view": { "status": "ready", "state": "Unlocked", "revision": 1, "error": null }, "once": true },
+    { "respond": "fence", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "push": { "revision": 2, "state": "Locked", "context": {} } },
+    { "view": { "status": "ready", "state": "Locked", "revision": 2, "error": null } }
+  ]
+}

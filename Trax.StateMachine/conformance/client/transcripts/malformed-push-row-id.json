@@ -1,0 +1,33 @@
+{
+  "about": "A push whose rowId is not a whole number or null (a fraction, a string, a boolean) is dropped and the instance read again; a whole number is held as its decimal text.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "status": "ready" } },
+    { "push": { "revision": 2, "state": "Locked", "context": {}, "rowId": 7.5 } },
+    { "request": "get", "variables": { "id": "i-1" }, "hold": "fence" },
+    { "view": { "status": "ready", "state": "Unlocked", "revision": 1, "error": null }, "once": true },
+    { "respond": "fence", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "push": { "revision": 2, "state": "Locked", "context": {}, "rowId": "7" } },
+    { "request": "get", "variables": { "id": "i-1" }, "hold": "fence" },
+    { "view": { "status": "ready", "state": "Unlocked", "revision": 1, "error": null }, "once": true },
+    { "respond": "fence", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "push": { "revision": 2, "state": "Locked", "context": {}, "rowId": true } },
+    { "request": "get", "variables": { "id": "i-1" }, "hold": "fence" },
+    { "view": { "status": "ready", "state": "Unlocked", "revision": 1, "error": null }, "once": true },
+    { "respond": "fence", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "push": { "revision": 2, "state": "Locked", "context": {}, "rowId": 7 } },
+    { "view": { "status": "ready", "state": "Locked", "revision": 2, "rowId": "7", "error": null } }
+  ]
+}

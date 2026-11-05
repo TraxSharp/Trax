@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Trax.Client;
@@ -454,15 +455,13 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         };
     }
 
-    // A row id is a string, or a whole number as Trax.Api writes its Long, kept as its decimal text (2.0 is the 2 a
-    // JavaScript host may write). Anything else is not a row id a host wrote.
+    // A row id is a whole number as Trax.Api writes its Long, kept as its decimal text (2.0 is the 2 a JavaScript host
+    // may write). Anything else, a string among them, is not a row id a host wrote.
     private static string? RowIdOf(JsonNode? node)
     {
         if (node is null)
             return null;
-        if (Text(node) is { } text)
-            return text;
-        if (node is JsonValue value)
+        if (node is JsonValue value && value.GetValueKind() == JsonValueKind.Number)
         {
             if (value.TryGetValue<long>(out var whole))
                 return whole.ToString(CultureInfo.InvariantCulture);
@@ -473,7 +472,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             )
                 return ((long)number).ToString(CultureInfo.InvariantCulture);
         }
-        throw new FormatException("The snapshot's rowId is not a string or a whole number.");
+        throw new FormatException("The snapshot's rowId is not a whole number.");
     }
 
     // The deepest a stored snapshot nests, itself counting as one (conformance/limits.json, maxStoredDepth): no store
@@ -658,7 +657,9 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             switch (change["problem"])
             {
                 case JsonObject problem:
-                    var code = Text(problem["code"]);
+                    var code =
+                        Text(problem["code"])
+                        ?? throw new FormatException("The push's problem has no code.");
                     if (code == ClientOutdated)
                         return (new StreamMessage.ClientOutdated(), false);
                     if (code == RefusalCode.NotFound.ToWire())

@@ -281,6 +281,9 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
       if (!subscription?.open) fail("no subscription is open to push on");
       const change = step.bare ? step.push : { ...CHANGE_DEFAULTS, ...step.push };
       subscription.next({ data: { [`${field}Changed`]: change } }, step.pad ?? 0);
+    } else if (step.pushPayload !== undefined) {
+      if (!subscription?.open) fail("no subscription is open to push on");
+      subscription.next(step.pushPayload);
     } else if (step.pushRaw !== undefined) {
       if (!subscription?.open) fail("no subscription is open to push on");
       subscription.raw(step.pushRaw);
@@ -315,6 +318,10 @@ export async function runTranscript(transcript, host, askTestee, allowed = allow
     } else if (step.streamError !== undefined) {
       if (!subscription?.open) fail("no subscription is open to end");
       subscription.error(step.streamError);
+      ended = Date.now();
+    } else if (step.streamErrorRaw !== undefined) {
+      if (!subscription?.open) fail("no subscription is open to end");
+      subscription.errorRaw(step.streamErrorRaw);
       ended = Date.now();
     } else if (step.ping !== undefined) {
       if (!subscription) fail("no socket to ping");

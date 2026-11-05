@@ -341,7 +341,8 @@ message carrying it. That is the same refusal, and the client stops for good wit
 A `next` or `error` coded `CLIENT_OUTDATED` stops it as `CLIENT_OUTDATED`. A client that lets its caller name further
 terminal codes (TypeScript's `terminalStreamErrors`, C#'s `TerminalStreamErrors`) stops on those as well, whether they
 come in a `next` or an `error`, with the code as given. A stream error with any other code, or none, is subscribed
-again after the resubscribe delay.
+again after the resubscribe delay, and so is one whose errors cannot be read (a member given twice, a payload that is
+not a list): the client never ends a stream silently.
 
 An answer is wrapped the way a host serves it, `{ "data": { "machines": { "<machine>": { "<operation>": … } } } }`,
 and a push as `{ "data": { "<machine>Changed": … } }`, with the fields a host selects that the step does not give
@@ -350,7 +351,7 @@ null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a
 given, without them. An answer or push that leaves out `dueAtKnown` or `dueAt` does not know the due time: the
 client reads it as `dueAtKnown: false`, never as a known null. A push's `rowId`, the row's incarnation, is a whole JSON
 number, as a host serves a GraphQL `Long` (`"rowId": 7`), or null; a client holds it as its decimal text, so the
-view's `rowId` is `"7"`.
+view's `rowId` is `"7"`. A `rowId` that is anything else (a fraction, a string, a boolean) makes the push malformed.
 
 A context nests at most 64 levels, the snapshot that holds it counting as one: no store writes a snapshot deeper,
 and every engine refuses to read one. One that deep is read, however deep the answer or socket message around it, so
@@ -360,7 +361,8 @@ a client's JSON reader takes the whole envelope; one deeper is not one a store w
 `TRANSPORT_ERROR` and changes nothing: one that is not an object, or whose `revision` is not a whole number from zero
 (a fraction, a string, a negative), whose `dueAt` is not an instant, whose `state` is not a string or is missing
 beside no problem, or whose context is not an object or nests too deep. A push like that, or one whose `gone` is not
-a boolean, is dropped and the instance read again. Neither stops the client, and neither is taken unchecked.
+a boolean, whose `problem` is neither null nor an object with a code, or whose `next` carries no `data` object with
+the push's field in it, is dropped and the instance read again. Neither stops the client, and neither is taken unchecked.
 
 ## Transcripts
 
@@ -398,10 +400,12 @@ documents from it. The steps run in order:
 | `{ "respond": "<name>", <answer> }` | Answers the request held under that name, as a `request` step would. |
 | `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. `"notBefore": ms` and `"before": ms` bound how long after the host last ended a stream (`complete`, `streamError`, `dropSocket`) it came. |
 | `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription; `"pad": n` beside a `push` adds n bytes of whitespace to its frame, and `"bare": true` sends it without the fields a host fills in. |
+| `{ "pushPayload": { ... } }` | Sends one `next` on the last subscription whose payload is that value as given, with no `data` wrapped around it: `{ "data": null }`, `{ "data": {} }`. |
 | `{ "pushRaw": "..." }` | Sends that text as one frame on the last subscription's socket, JSON or not. A later `subscribe` step's bounds count from it. |
 | `{ "clientClosed": 4400 }` | Waits for the client to close the last subscription's socket, and checks the code its close frame carried. |
 | `{ "unsettled": "<name>" }` | Checks that the answer sent under that name has not come yet. It asks for the view first and checks once that answer is in, so an answer the testee wrote before it has been read; put it after a fence (below). |
 | `{ "streamError": [...] }` | Ends the last subscription with a graphql-transport-ws `error` message carrying those errors. |
+| `{ "streamErrorRaw": "..." }` | Ends the last subscription with an `error` message whose payload is that text as written, so it can carry what a serializer would not write, such as a member given twice. |
 | `{ "ping": true }` | Sends a graphql-transport-ws `ping` on the last subscription's socket and waits for the client's `pong`. |
 | `{ "decoy": 0 }` | Checks how many requests reached the second host a redirect points at. |
 | `{ "complete": true }`, `{ "dropSocket": true }` | Completes the last subscription, or closes its socket (with 1011, or with the code given: `{ "dropSocket": 4401 }`). |
