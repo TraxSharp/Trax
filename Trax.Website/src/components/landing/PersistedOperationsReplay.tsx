@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import data from "@/data/persisted-operations-recordings.json";
 import { durationOf, scheduleOf, viewAt, type Actor, type Card, type Outcome, type Recording } from "@/lib/persisted-operations-replay";
 import { nextStop, previousStop, stepIndex, stopsOf } from "@/lib/replay-steps";
+import ReplayToolbar, { PrimaryButton, ToolButton, ToolSelect } from "./ReplayToolbar";
 import StepButtons from "./StepButtons";
 
 // Recorded from the PersistedOperations sample's API by Trax.Samples' scripts/recordings/persisted-operations.mjs,
@@ -81,58 +82,49 @@ export default function PersistedOperationsReplay() {
   }, [play]);
 
   return (
-    <div ref={root} className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)_minmax(0,300px)]">
-      <div className="flex flex-col gap-5 rounded-lg border border-border bg-bg-secondary p-4 text-sm">
-        <Group label="Scenario">
-          <select
-            value={key}
-            disabled={active}
-            onChange={(e) => {
-              setKey(e.target.value);
-              reset();
-            }}
-            className="rounded-md border border-border bg-bg-primary px-2 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-50"
-          >
-            {stories.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.title}
-              </option>
-            ))}
-          </select>
-        </Group>
-        <Group label="Actions">
-          <button
-            onClick={play}
-            disabled={active}
-            className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-40"
-          >
-            Play
-          </button>
-          <StepButtons onBack={() => step(false)} onNext={() => step(true)} at={Math.max(0, stepIndex(stops, elapsed))} of={stops.length} />
-          <button
-            onClick={reset}
-            disabled={elapsed < 0}
-            className="rounded-md border border-border bg-bg-tertiary px-3 py-2 text-left text-sm text-text-primary transition-colors hover:border-accent/60 disabled:cursor-default disabled:opacity-35 disabled:hover:border-border"
-          >
-            Reset
-          </button>
-        </Group>
-      </div>
+    <div ref={root} className="flex flex-col gap-4">
+      <ReplayToolbar caption={caption(view.cards.at(-1))} hint="Pick a scenario and Play, or step through its requests with Back and Next.">
+        <ToolSelect
+          label="Scenario"
+          value={key}
+          disabled={active}
+          onChange={(e) => {
+            setKey(e.target.value);
+            reset();
+          }}
+        >
+          {stories.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.title}
+            </option>
+          ))}
+        </ToolSelect>
+        <PrimaryButton onClick={play} disabled={active}>
+          Play
+        </PrimaryButton>
+        <StepButtons onBack={() => step(false)} onNext={() => step(true)} at={Math.max(0, stepIndex(stops, elapsed))} of={stops.length} />
+        <ToolButton onClick={reset} disabled={elapsed < 0}>
+          Reset
+        </ToolButton>
+      </ReplayToolbar>
 
-      <RequestsPanel cards={view.cards} />
-      <PhonePanel greeting={view.phone.greeting} calling={view.phone.calling} />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
+        <RequestsPanel cards={view.cards} />
+        <PhonePanel greeting={view.phone.greeting} calling={view.phone.calling} />
+      </div>
       <StoredPanel stored={view.stored} proposed={view.proposed} />
     </div>
   );
 }
 
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2.5">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">{label}</span>
-      {children}
-    </div>
-  );
+// The latest request in a line, under the controls: who sent it and what came back.
+function caption(card: Card | undefined) {
+  if (!card) return null;
+  const who = ACTOR[card.actor];
+  if (card.outcome === "waiting") return `${who} sends a request…`;
+  if (card.outcome === "refused") return `${who} was refused: ${card.answer}`;
+  if (card.outcome === "accepted") return `${who}'s upload was accepted.`;
+  return `${who} got an answer: ${card.answer}`;
 }
 
 function PanelTitle({ children }: { children: React.ReactNode }) {
@@ -152,7 +144,7 @@ function RequestsPanel({ cards }: { cards: Card[] }) {
   }, [cards.length]);
 
   return (
-    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary lg:h-[600px]">
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary lg:h-[480px]">
       <PanelTitle>Requests</PanelTitle>
       <div ref={box} className="flex h-[340px] flex-col gap-2.5 overflow-y-auto p-3 lg:h-auto lg:min-h-0 lg:flex-1">
         {cards.map((card) => (
@@ -187,7 +179,7 @@ function RequestsPanel({ cards }: { cards: Card[] }) {
 function PhonePanel({ greeting, calling }: { greeting: string | null; calling: boolean }) {
   return (
     <div className="flex min-w-0 justify-center">
-      <div className="flex h-[360px] w-full max-w-[300px] flex-col overflow-hidden rounded-[2rem] lg:h-[600px] border border-border bg-bg-secondary px-3 pb-3 pt-2.5">
+      <div className="flex h-[360px] w-full max-w-[300px] flex-col overflow-hidden rounded-[2rem] lg:h-[480px] border border-border bg-bg-secondary px-3 pb-3 pt-2.5">
         <div className="mx-auto mb-3 h-1.5 w-16 rounded-full bg-border" />
         <div className="flex flex-1 flex-col rounded-[1.4rem] border border-border bg-bg-primary px-4 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Your app</p>
@@ -217,7 +209,7 @@ function StoredPanel({
   proposed: { document: string; outcome: Outcome; against: string | null } | null;
 }) {
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-bg-secondary pb-3 lg:col-span-3">
+    <div className="min-w-0 rounded-lg border border-border bg-bg-secondary pb-3">
       <PanelTitle>Stored query: greet_v1</PanelTitle>
       {/* Room for both documents, so the operator's edit does not push the page down. */}
       <div className="mx-3 mt-3 flex min-h-[190px] flex-col gap-2">

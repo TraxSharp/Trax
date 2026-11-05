@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import ReplayToolbar, { PrimaryButton, ToolButton } from "./ReplayToolbar";
 import { useFitCode } from "./useFitCode";
 import data from "@/data/chat-service-recordings.json";
 import {
@@ -68,81 +69,52 @@ export default function ChatServiceReplay() {
   const charlieIn = playback?.charlieJoinedAt != null;
 
   return (
-    <div ref={root} className="grid gap-4 lg:grid-cols-[230px_repeat(3,minmax(0,1fr))]">
-      {/* Controls */}
-      <div className="flex flex-col gap-5 rounded-lg border border-border bg-bg-secondary p-4 text-sm lg:h-[480px] lg:overflow-y-auto">
-        <Group label="Next line">
-          {!playback ? (
-            <button
-              onClick={start}
-              className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover"
-            >
-              Open the room
-            </button>
-          ) : offered.length > 0 ? (
+    <div ref={root} className="flex flex-col gap-4">
+      {/* The next line goes where the other demos put their caption: here, choosing it is what moves the story. */}
+      <ReplayToolbar
+        caption={
+          offered.length > 0 ? (
             <>
-              <p className="text-xs text-text-muted">{offered[0].speaker} says:</p>
+              <span className="text-xs text-text-muted">{offered[0].speaker} says:</span>
               {offered.map((line) => (
-                <ActionButton key={line.key} onClick={() => send(line.key)}>
+                <ToolButton key={line.key} onClick={() => send(line.key)}>
                   {line.content}
-                </ActionButton>
+                </ToolButton>
               ))}
             </>
-          ) : (
-            <p className="min-h-[2.5em] text-xs leading-relaxed text-text-muted">
-              {!prologueDone
-                ? "Alice is creating the room and adding Bob..."
-                : playing
-                  ? "Sending..."
-                  : null}
-            </p>
-          )}
-        </Group>
-
-        <Group label="Charlie">
-          <ActionButton onClick={letCharlieTry} disabled={!prologueDone || playing || playback?.refused || charlieIn}>
-            Charlie tries to listen in
-          </ActionButton>
-          <ActionButton onClick={letCharlieIn} disabled={!prologueDone || playing || charlieIn}>
-            Alice adds Charlie
-          </ActionButton>
-        </Group>
-
-        <ActionButton onClick={() => setPlayback(null)} disabled={!playback}>
+          ) : !playback ? null : !prologueDone ? (
+            "Alice is creating the room and adding Bob..."
+          ) : playing ? (
+            "Sending..."
+          ) : null
+        }
+        hint="Open the room, then pick what Alice and Bob say."
+        reserve="min-h-[124px] sm:min-h-[58px]"
+      >
+        {!playback ? <PrimaryButton onClick={start}>Open the room</PrimaryButton> : null}
+        <ToolButton onClick={letCharlieTry} disabled={!prologueDone || playing || playback?.refused || charlieIn}>
+          Charlie tries to listen in
+        </ToolButton>
+        <ToolButton onClick={letCharlieIn} disabled={!prologueDone || playing || charlieIn}>
+          Alice adds Charlie
+        </ToolButton>
+        <ToolButton onClick={() => setPlayback(null)} disabled={!playback}>
           Reset
-        </ActionButton>
+        </ToolButton>
+      </ReplayToolbar>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <ChatView user="Alice" playback={playback} />
+        <ChatView user="Bob" playback={playback} />
+        <ChatView user="Charlie" playback={playback} />
       </div>
 
-      <ChatView user="Alice" playback={playback} />
-      <ChatView user="Bob" playback={playback} />
-      <ChatView user="Charlie" playback={playback} />
-
-      <div className="grid gap-4 lg:col-span-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <UnderTheHood played={playback?.played ?? []} />
         <CodePanel played={playback?.played ?? []} />
       </div>
 
     </div>
-  );
-}
-
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2.5">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-function ActionButton({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className="rounded-md border border-border bg-bg-tertiary px-3 py-2 text-left text-sm text-text-primary transition-colors hover:border-accent/60 disabled:cursor-default disabled:opacity-35 disabled:hover:border-border"
-    >
-      {children}
-    </button>
   );
 }
 

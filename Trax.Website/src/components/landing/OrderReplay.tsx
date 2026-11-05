@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import ReplayToolbar, { PrimaryButton, ToolButton, ToolSelect, ToolbarPills } from "./ReplayToolbar";
 import StepButtons from "./StepButtons";
 import { alignChains, codeLineLayout, useFitCode } from "./useFitCode";
 import { replayNow } from "@/lib/replay-pace";
@@ -41,10 +42,7 @@ export default function OrderReplay() {
     return () => clearInterval(timer);
   }, [active, duration]);
 
-  // Counts runs, so the code panel starts each one following it again.
-  const [runs, setRuns] = useState(0);
   const run = useCallback((k: string) => {
-    setRuns((n) => n + 1);
     base.current = replayNow();
     setElapsed(0);
     setPaused(false);
@@ -60,10 +58,7 @@ export default function OrderReplay() {
   const step = (forward: boolean) => {
     autoplayed.current = true;
     const now = playing ? elapsed : -1;
-    if (!playing) {
-      setRuns((n) => n + 1);
-      setPlaying(key);
-    }
+    if (!playing) setPlaying(key);
     setPaused(true);
     setElapsed(forward ? nextStop(stops, now) : previousStop(stops, now));
   };
@@ -91,106 +86,85 @@ export default function OrderReplay() {
   const leaves = key === "left-in-cart";
 
   return (
-    <div ref={root} className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)_minmax(0,300px)]">
-      {/* Laptop */}
-      <div className="flex flex-col gap-5 rounded-lg border border-border bg-bg-secondary p-4 text-sm">
-        <Group label="Scenario">
-          <select
-            value={key}
-            disabled={active}
-            onChange={(e) => {
-              setKey(e.target.value as Scenario["key"]);
-              reset();
-            }}
-            className="rounded-md border border-border bg-bg-primary px-2 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-50"
-          >
-            {scenarios.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.title}
-              </option>
-            ))}
-          </select>
-        </Group>
+    <div ref={root} className="flex flex-col gap-4">
+      <ReplayToolbar caption={view?.note} hint="Place the order and watch the machine run its train, or step through it with Back and Next.">
+        <ToolSelect
+          label="Scenario"
+          value={key}
+          disabled={active}
+          onChange={(e) => {
+            setKey(e.target.value as Scenario["key"]);
+            reset();
+          }}
+        >
+          {scenarios.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.title}
+            </option>
+          ))}
+        </ToolSelect>
+        <span className="flex items-baseline gap-3 rounded-md border border-border bg-bg-primary px-3 py-2">
+          <span className="text-text-primary">{ORDER.item}</span>
+          <span className="text-text-muted">{ORDER.price}</span>
+        </span>
+        <PrimaryButton onClick={() => run(key)} disabled={active}>
+          {leaves ? "Leave it in the cart" : "Place order"}
+        </PrimaryButton>
+        <StepButtons
+          onBack={() => step(false)}
+          onNext={() => step(true)}
+          at={playing ? stepIndex(stops, elapsed) : 0}
+          of={stops.length}
+        />
+        <ToolButton onClick={reset} disabled={!playing}>
+          Reset
+        </ToolButton>
+        <ToolbarPills>
+          {(view?.progress ?? [
+            { label: "Ordered", tone: "idle" as Tone, stage: "sent" as Stage },
+            { label: "Cooking", tone: "idle" as Tone, stage: "cooking" as Stage },
+            { label: "Delivered", tone: "idle" as Tone, stage: "delivered" as Stage },
+          ]).map((p) => (
+            <li
+              key={p.label}
+              className="rounded-full border border-border px-2.5 py-1 text-center text-text-muted transition-colors"
+              style={
+                p.tone === "idle"
+                  ? undefined
+                  : { borderColor: tint(p.stage, 0.6), color: STAGES[p.stage].color, background: p.tone === "running" ? tint(p.stage, 0.12) : undefined }
+              }
+            >
+              {p.label}
+            </li>
+          ))}
+        </ToolbarPills>
+      </ReplayToolbar>
 
-        <Group label="Laptop">
-          <div className="flex items-baseline justify-between rounded-md border border-border bg-bg-primary px-3 py-2">
-            <span className="text-text-primary">{ORDER.item}</span>
-            <span className="text-text-muted">{ORDER.price}</span>
-          </div>
-          <button
-            onClick={() => run(key)}
-            disabled={active}
-            className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-40"
-          >
-            {leaves ? "Leave it in the cart" : "Place order"}
-          </button>
-          <StepButtons
-            onBack={() => step(false)}
-            onNext={() => step(true)}
-            at={playing ? stepIndex(stops, elapsed) : 0}
-            of={stops.length}
-          />
-          <ActionButton onClick={reset} disabled={!playing}>
-            Reset
-          </ActionButton>
-          <p className="min-h-[3.5em] text-xs leading-relaxed text-signal">{view?.note}</p>
-        </Group>
-
-        <Group label="Progress">
-          <ol className="grid grid-cols-3 gap-1.5 text-xs font-medium">
-            {(view?.progress ?? [
-              { label: "Ordered", tone: "idle" as Tone, stage: "sent" as Stage },
-              { label: "Cooking", tone: "idle" as Tone, stage: "cooking" as Stage },
-              { label: "Delivered", tone: "idle" as Tone, stage: "delivered" as Stage },
-            ]).map((p) => (
-              <li
-                key={p.label}
-                className="rounded-full border border-border px-1 py-1 text-center text-text-muted transition-colors"
-                style={
-                  p.tone === "idle"
-                    ? undefined
-                    : { borderColor: tint(p.stage, 0.6), color: STAGES[p.stage].color, background: p.tone === "running" ? tint(p.stage, 0.12) : undefined }
-                }
-              >
-                {p.label}
-              </li>
-            ))}
-          </ol>
-        </Group>
+      <div className="grid gap-4 min-[1200px]:h-[420px] min-[1200px]:grid-cols-[minmax(0,1fr)_minmax(0,280px)]">
+        <TimelinePanel track={track} train={recordings.train?.name ?? "DeliverOrderTrain"} />
+        <PhonePanel view={view} />
       </div>
 
-      <CodePanel
-        key={runs}
-        machine={recordings.source}
-        train={recordings.train?.source}
-        lit={view?.lit ?? null}
-        trainLit={view?.trainLit ?? null}
-        revision={view?.revision ?? null}
-      />
-      <PhonePanel view={view} />
-      <TimelinePanel track={track} train={recordings.train?.name ?? "DeliverOrderTrain"} />
+      {/* The run is the demo; the code that drives it sits below, lit in step with it, for whoever wants to look. */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        {recordings.source && (
+          <CodePanel
+            kind="machine"
+            source={recordings.source}
+            lit={view?.lit ?? null}
+            revision={view?.revision ?? null}
+          />
+        )}
+        {recordings.train?.source && (
+          <CodePanel
+            kind="train"
+            source={recordings.train.source}
+            lit={view?.trainLit ? { step: view.trainLit.step, stage: view.trainLit.stage } : null}
+          />
+        )}
+      </div>
 
     </div>
-  );
-}
-
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2.5">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-function ActionButton({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className="rounded-md border border-border bg-bg-tertiary px-3 py-2 text-left text-sm text-text-primary transition-colors hover:border-accent/60 disabled:cursor-default disabled:opacity-35 disabled:hover:border-border"
-    >
-      {children}
-    </button>
   );
 }
 
@@ -223,38 +197,28 @@ function highlight(line: string) {
   return parts;
 }
 
-type Shown = "machine" | "train";
-
 /**
- * The machine's code, or the train's while the order's run is on its junctions: the panel follows the run, and a
- * file tab picked by hand holds until the next run.
+ * The machine's code or the train's, lit in step with the run. `lit` names a line, or for the train a step, in the
+ * colour of the stage the order is in.
  */
 function CodePanel({
-  machine,
-  train,
+  kind,
+  source,
   lit,
-  trainLit,
-  revision,
+  revision = null,
 }: {
-  machine: { file: string; code: string } | undefined;
-  train: { file: string; code: string } | undefined;
-  lit: { line: number; tone: Tone; stage: Stage } | null;
-  trainLit: { step: string; tone: Tone; stage: Stage } | null;
-  revision: number | null;
+  kind: "machine" | "train";
+  source: { file: string; code: string };
+  lit: { line: number; stage: Stage } | { step: string; stage: Stage } | null;
+  revision?: number | null;
 }) {
-  const [picked, setPicked] = useState<Shown | null>(null);
-  const shown: Shown = picked ?? (trainLit && train ? "train" : "machine");
-  const source = shown === "train" ? train : machine;
-  const code = source?.code ?? "";
-  const file = source?.file ?? "OrderMachine.cs";
-  const lines = useMemo(() => alignChains(code.split("\n")), [code]);
-  // Only the part that acts, so it stays on screen while the light moves: the machine's states, from the first
-  // m.In(...) to the end of Configure, or the train's chain, from Junctions() to Resolve(). The line numbers stay
-  // the file's.
+  const lines = useMemo(() => alignChains(source.code.split("\n")), [source.code]);
+  // Only the part that acts: the machine's states, from the first m.In(...) to the end of Configure, or the train's
+  // chain, from Junctions() to Resolve(). The line numbers stay the file's.
   const [first, last, indent] = useMemo(() => {
     let at: number;
     let end = -1;
-    if (shown === "train") {
+    if (kind === "train") {
       at = lines.findIndex((l) => l.includes("Junctions()"));
       end = lines.findIndex((l, i) => i > at && l.includes(".Resolve()"));
     } else {
@@ -266,41 +230,23 @@ function CodePanel({
     const range = at < 0 || end < 0 ? [0, lines.length] : [at, end + 1];
     const indent = Math.min(...lines.slice(range[0], range[1]).filter((l) => l.trim()).map((l) => l.search(/\S/)));
     return [range[0], range[1], Number.isFinite(indent) ? indent : 0];
-  }, [lines, shown]);
+  }, [lines, kind]);
   const litLine =
-    shown === "train"
-      ? trainLit
-        ? { line: lines.findIndex((l) => l.includes(`Chain<${trainLit.step}>`)) + 1, stage: trainLit.stage }
-        : null
-      : lit;
+    lit == null ? null : "step" in lit ? { line: lines.findIndex((l) => l.includes(`Chain<${lit.step}>`)) + 1, stage: lit.stage } : lit;
   const pane = useRef<HTMLPreElement>(null);
-  useFitCode(pane, file, 12, 11);
-
-  const tab = (which: Shown, name: string | undefined) =>
-    name && (
-      <button
-        onClick={() => setPicked(which)}
-        className={`-mb-[9px] border-b-2 pb-2 font-mono normal-case tracking-normal transition-colors ${
-          shown === which ? "border-accent text-text-primary" : "border-transparent text-text-muted hover:text-text-secondary"
-        }`}
-      >
-        {name.split("/").pop()}
-      </button>
-    );
+  useFitCode(pane, source.file, 12, 11);
 
   return (
-    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary lg:h-[600px]">
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary">
       <PanelTitle>
-        Code
-        {tab("machine", machine?.file)}
-        {tab("train", train?.file)}
+        Code <span className="font-mono normal-case tracking-normal text-text-secondary">{source.file.split("/").pop()}</span>
         {revision != null && (
           <span className="ml-auto font-mono font-normal normal-case tracking-normal text-text-muted/70" title="The order's revision on the server">
             update {revision}
           </span>
         )}
       </PanelTitle>
-      <pre ref={pane} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-3 font-mono text-[12px] leading-[1.7] text-text-secondary">
+      <pre ref={pane} className="overflow-x-hidden py-3 font-mono text-[12px] leading-[1.7] text-text-secondary">
         {lines.slice(first, last).map((line, offset) => {
           const i = first + offset;
           const on = litLine != null && i + 1 === litLine.line;
@@ -340,7 +286,7 @@ function PhonePanel({ view }: { view: ReturnType<typeof viewAt> | null }) {
   // A plain phone: a rounded frame with a thin bar for the notch, showing a delivery app's screen.
   return (
     <div className="flex min-w-0 justify-center">
-      <div className="flex h-[460px] w-full max-w-[300px] flex-col overflow-hidden rounded-[2rem] border border-border bg-bg-secondary px-3 pb-3 pt-2.5 lg:h-auto">
+      <div className="flex h-[420px] w-full max-w-[300px] flex-col overflow-hidden rounded-[2rem] border border-border bg-bg-secondary px-3 pb-3 pt-2.5">
         <div className="mx-auto mb-3 h-1.5 w-16 rounded-full bg-border" />
         <div className="flex flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-border bg-bg-primary">
           <div className="border-b border-border px-4 pb-3 pt-4">
@@ -380,21 +326,22 @@ function PhonePanel({ view }: { view: ReturnType<typeof viewAt> | null }) {
   );
 }
 
-// The timeline is a fixed grid: the row names, then Cart, the five junctions (under Ordered), then the outcomes.
-const GRID = "grid grid-cols-[124px_repeat(8,minmax(0,1fr))] gap-x-1";
+// The timeline is a fixed grid: Cart, the five junctions (under Ordered), then the outcomes. Each row's name sits
+// above it, so the steps get the width.
+const GRID = "grid grid-cols-[repeat(8,minmax(0,1fr))] gap-x-1.5";
 
 function TimelinePanel({ track, train }: { track: Track; train: string }) {
   const [cart, ...rest] = track.machine;
   const ordered = rest.find((s) => s.key === "Ordered");
   const outcomes = rest.filter((s) => s.key !== "Ordered");
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-bg-secondary pb-3 lg:col-span-3">
+    <div className="@container flex min-w-0 flex-col rounded-lg border border-border bg-bg-secondary pb-3">
       <PanelTitle>Timeline</PanelTitle>
       <StackedTimeline track={track} train={train} />
-      <div className="mx-3 mt-3 hidden min-h-[114px] overflow-x-auto rounded-md border border-border bg-bg-primary/60 p-3 md:block">
-        <div className="min-w-[720px] text-[11px]">
+      <div className="mx-3 mt-3 hidden flex-1 flex-col justify-center overflow-x-auto rounded-md border border-border bg-bg-primary/60 p-4 @3xl:flex">
+        <div className="min-w-[640px] text-[11.5px]">
+          <RowName>OrderMachine</RowName>
           <div className={GRID}>
-            <RowName>OrderMachine</RowName>
             <SlotBox slot={cart} />
             {ordered ? (
               <div className="col-span-5">
@@ -415,15 +362,15 @@ function TimelinePanel({ track, train }: { track: Track; train: string }) {
           </div>
           {track.train && (
             <>
-              <div className={`${GRID} h-10`}>
-                <div className="col-start-3 relative">
+              <div className={`${GRID} h-16`}>
+                <div className="col-start-2 relative">
                   {track.starts && (
                     <Connector lit={track.starts.lit} side="left" tone="done">
                       starts the train
                     </Connector>
                   )}
                 </div>
-                <div className="col-start-7 relative">
+                <div className="col-start-6 relative">
                   {track.outcome && (
                     <Connector lit={track.outcome.lit} side="right" tone={track.outcome.tone}>
                       {track.outcome.text}
@@ -432,7 +379,9 @@ function TimelinePanel({ track, train }: { track: Track; train: string }) {
                 </div>
               </div>
               <div className={GRID}>
-                <RowName>{train}</RowName>
+                <div className="col-span-7 col-start-2">
+                  <RowName>{train}</RowName>
+                </div>
                 <div />
                 {track.train.map((s) => (
                   <SlotBox key={s.key} slot={s} />
@@ -453,7 +402,7 @@ function StackedTimeline({ track, train }: { track: Track; train: string }) {
   const ordered = rest.find((s) => s.key === "Ordered");
   const outcomes = rest.filter((s) => s.key !== "Ordered");
   return (
-    <div className="mx-3 mt-3 flex flex-col gap-1.5 rounded-md border border-border bg-bg-primary/60 p-3 text-[11px] md:hidden">
+    <div className="mx-3 mt-3 flex flex-1 flex-col gap-1.5 rounded-md border border-border bg-bg-primary/60 p-3 text-[11px] @3xl:hidden">
       <span className="font-medium text-text-secondary">OrderMachine</span>
       <SlotBox slot={cart} />
       {track.timer && (
@@ -491,7 +440,7 @@ function StackedLink({ lit, tone, children }: { lit: boolean; tone: Tone; childr
 }
 
 function RowName({ children }: { children: React.ReactNode }) {
-  return <span className="flex h-6 items-center truncate font-medium text-text-secondary">{children}</span>;
+  return <span className="mb-1.5 flex items-center truncate font-medium text-text-secondary">{children}</span>;
 }
 
 function SlotBox({ slot }: { slot: Slot }) {
@@ -502,7 +451,7 @@ function SlotBox({ slot }: { slot: Slot }) {
   return (
     <div
       title={slot.title ?? slot.label}
-      className={`relative h-6 overflow-hidden rounded border border-border bg-bg-secondary transition-opacity ${slot.dimmed ? "opacity-40" : ""}`}
+      className={`relative h-10 overflow-hidden rounded border border-border bg-bg-secondary transition-opacity ${slot.dimmed ? "opacity-40" : ""}`}
       style={on ? { borderColor: tint(stage, 0.55), background: slot.tone === "waiting" ? tint(stage, 0.07) : undefined } : undefined}
     >
       <div
@@ -510,7 +459,7 @@ function SlotBox({ slot }: { slot: Slot }) {
         style={{ width: `${slot.fill * 100}%`, background: on ? tint(stage, 0.24) : undefined }}
       />
       <span
-        className={`relative flex h-full items-center gap-1.5 truncate px-1.5 text-[10.5px] font-medium ${on ? "" : "text-text-muted"}`}
+        className={`relative flex h-full items-center gap-1.5 truncate px-2 text-[11px] font-medium ${on ? "" : "text-text-muted"}`}
         style={on ? { color: STAGES[stage].color } : undefined}
       >
         <span className="truncate">{slot.label}</span>
