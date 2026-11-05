@@ -36,8 +36,8 @@ public class FuzzTests
         report.Should().Contain("every testee answered alike");
     }
 
-    // An engine that throws breaks the rule that every operation is total: answered as an error, which differs from
-    // whatever the other engine answers, so the fuzzer reports and shrinks it.
+    // An engine that throws breaks the rule that every operation is total: it is answered as an error, and the fuzzer
+    // fails an error to any op but a load, whatever the other engine answers, and shrinks it.
     private static string Answer(ConformanceTestee testee, string line)
     {
         try

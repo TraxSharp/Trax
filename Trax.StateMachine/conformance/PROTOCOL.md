@@ -210,7 +210,9 @@ that still differs, and prints it with the seed and each testee's answer. It loa
 then steps them from the snapshots every testee agreed on, rehydrates mutated stored text, serializes, plans and writes
 canonical wire, with hostile numbers, number text, strings and keys. `--irs` adds small random machines the IR schema
 accepts, which only testees that build machines from an IR can load. A seed replays the same run for as long as the
-testees agree. Only the answer counts; an `error` counts as one, whatever its message.
+testees agree. Only the answer counts; an `error` counts as one, whatever its message, but only a `load` may answer
+one: every other op is total and answers a refusal as a value, and the generator builds no case that asks for an error,
+so an `error` to any other op fails the run even when every testee answers one.
 
 ```bash
 node conformance/fuzz.mjs --seed 1 --cases 400 --irs \
