@@ -1,7 +1,7 @@
 #!/bin/sh
 # Renders the PNG files from the SVGs draw.py writes, with headless Chromium. Every SVG is
 # 100 x 100, so the device scale factor sets the size. README.md in this folder runs it in a
-# container. Chromium will not scale below half size, so favicon.ico is made from icon-512.png.
+# container. Chromium will not scale below half size, so the .ico files are made from the 512 px PNGs.
 set -eu
 cd "$(dirname "$0")"
 
@@ -16,3 +16,6 @@ shot icon.svg 512 icon-512.png
 shot icon.svg 192 icon-192.png
 shot icon.svg 128 icon-128.png
 shot icon-square.svg 180 apple-touch-icon.png
+shot site-icon.svg 512 site-icon-512.png
+shot site-icon.svg 192 site-icon-192.png
+shot site-icon-square.svg 180 site-apple-touch-icon.png

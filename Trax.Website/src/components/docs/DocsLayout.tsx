@@ -21,7 +21,7 @@ export default function DocsLayout({ navTree, children }: DocsLayoutProps) {
           className="min-w-0 flex-1 overflow-x-auto px-8 py-8 lg:px-12"
           data-docs-content
         >
-          <div className="mx-auto max-w-3xl">{children}</div>
+          <div className="mx-auto max-w-4xl">{children}</div>
         </article>
         <TableOfContents />
       </main>

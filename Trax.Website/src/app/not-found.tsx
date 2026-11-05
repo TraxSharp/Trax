@@ -7,7 +7,7 @@ export default function NotFound() {
       <p className="mt-4 text-lg text-text-secondary">Page not found</p>
       <Link
         href="/"
-        className="mt-8 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+        className="mt-8 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover"
       >
         Go Home
       </Link>

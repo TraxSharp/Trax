@@ -18,7 +18,7 @@ export default function Hero() {
             <div className="mt-10 flex items-center gap-4">
               <Link
                 href="/docs/getting-started"
-                className="rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+                className="rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover"
               >
                 Get started
               </Link>

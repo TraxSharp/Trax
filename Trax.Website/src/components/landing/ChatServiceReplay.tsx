@@ -75,7 +75,7 @@ export default function ChatServiceReplay() {
           {!playback ? (
             <button
               onClick={start}
-              className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+              className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover"
             >
               Open the room
             </button>
@@ -202,7 +202,7 @@ function ChatView({ user, playback }: { user: string; playback: ChatPlayback | n
                   </span>
                   <span
                     className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-sm ${
-                      line.mine ? "bg-accent text-white" : "bg-bg-tertiary text-text-primary"
+                      line.mine ? "bg-accent text-accent-ink" : "bg-bg-tertiary text-text-primary"
                     }`}
                   >
                     {line.content}

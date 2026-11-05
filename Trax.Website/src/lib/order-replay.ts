@@ -55,7 +55,7 @@ export const STAGES: Record<Stage, { label: string; color: string }> = {
   charged: { label: "Charged", color: "#a093c6" },
   cooking: { label: "Cooking", color: "#c68f68" },
   courier: { label: "With the courier", color: "#78a6c4" },
-  delivered: { label: "Delivered", color: "#6fa86f" },
+  delivered: { label: "Delivered", color: "#52ab7e" },
   cancelled: { label: "Cancelled", color: "#c47a85" },
   cleared: { label: "Cleared", color: "#8d8a84" },
 };
