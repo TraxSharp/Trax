@@ -76,15 +76,16 @@ pub struct GraphQLMachineServerOptions {
     /// subscribed again: the stream delivers [`StreamMessage::Refused`] and ends. A delay past 2^31 - 1 ms is refused.
     pub resubscribe_delays: Option<Vec<Duration>>,
     /// How long a socket may take to connect and be acknowledged before the attempt counts as failed and is tried
-    /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default; zero is refused.
+    /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default; zero or past 2^31 - 1
+    /// ms is refused.
     pub connect_timeout: Duration,
     /// How long one request may take, from sending it to reading the last byte of its answer, before it fails as a
-    /// [`TransportError`]. [`DEFAULT_REQUEST_TIMEOUT`] (30 seconds) by default; zero is refused.
+    /// [`TransportError`]. [`DEFAULT_REQUEST_TIMEOUT`] (30 seconds) by default; zero or past 2^31 - 1 ms is refused.
     pub request_timeout: Duration,
     /// How long an acknowledged socket may stay silent before it is given up and subscribed again after the
     /// resubscribe delays, so a connection dropped without a close (a NAT that forgot it) is noticed. Halfway through
     /// the silence the client sends a `ping`, which a live host answers with a `pong`. [`DEFAULT_IDLE_TIMEOUT`] (60
-    /// seconds) by default; zero is refused.
+    /// seconds) by default; zero or past 2^31 - 1 ms is refused.
     pub idle_timeout: Duration,
     /// The largest response body, and the largest socket message or frame, the host may send, in bytes. A larger
     /// response fails its request as a [`TransportError`]; a larger message ends the stream, which is subscribed again.
@@ -149,7 +150,8 @@ pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 pub const DEFAULT_RESUBSCRIBE_DELAYS: [Duration; 3] =
     [Duration::from_secs(1), Duration::from_secs(2), Duration::from_secs(5)];
 
-// The longest delay a retry or a resubscribe may wait, 2^31 - 1 ms: the longest a timer waits in every client's language.
+// The longest delay a retry or a resubscribe may wait, and the longest timeout, 2^31 - 1 ms: the longest a timer waits
+// in every client's language.
 pub(crate) const MAX_DELAY: Duration = Duration::from_millis(2_147_483_647);
 
 /// Why a [`GraphQLMachineServer`] could not be built.
@@ -204,8 +206,8 @@ struct Inner {
 impl GraphQLMachineServer {
     /// Builds the server for one machine. Refuses a machine with no documents, or none for `changed`, an endpoint or
     /// socket that is not over TLS on a host that is not loopback unless `allow_insecure_transport` is set, and an
-    /// option no limit or timer can honour: a timeout or a message size of zero, or a resubscribe delay past 2^31 - 1
-    /// ms.
+    /// option no limit or timer can honour: a timeout or a message size of zero, or a timeout or a resubscribe delay
+    /// past 2^31 - 1 ms.
     pub fn new(options: GraphQLMachineServerOptions) -> Result<Self, ConfigError> {
         // The socket's TLS needs a process-wide crypto provider; another one already installed is kept.
         let _ = rustls::crypto::ring::default_provider().install_default();
@@ -219,6 +221,13 @@ impl GraphQLMachineServer {
             if timeout.is_zero() {
                 return Err(ConfigError(format!(
                     "The {name} is zero, which leaves no time to wait. Give it a positive duration."
+                )));
+            }
+            if timeout > MAX_DELAY {
+                return Err(ConfigError(format!(
+                    "The {name} {} ms is past {} ms, the longest a client waits.",
+                    timeout.as_millis(),
+                    MAX_DELAY.as_millis()
                 )));
             }
         }
@@ -1341,6 +1350,9 @@ mod tests {
             |o| o.max_message_size = 0,
             |o| o.resubscribe_delays = Some(vec![Duration::from_millis(10), MAX_DELAY + Duration::from_millis(1)]),
             |o| o.resubscribe_delays = Some(vec![Duration::MAX]),
+            |o| o.request_timeout = MAX_DELAY + Duration::from_millis(1),
+            |o| o.connect_timeout = MAX_DELAY + Duration::from_millis(1),
+            |o| o.idle_timeout = Duration::MAX,
         ] {
             assert!(refused(change).is_some());
         }
@@ -1351,6 +1363,9 @@ mod tests {
             |o| o.max_message_size = 1,
             |o| o.resubscribe_delays = Some(vec![Duration::ZERO, MAX_DELAY]),
             |o| o.resubscribe_delays = Some(Vec::new()),
+            |o| o.request_timeout = MAX_DELAY,
+            |o| o.connect_timeout = MAX_DELAY,
+            |o| o.idle_timeout = MAX_DELAY,
         ] {
             assert_eq!(refused(change), None);
         }

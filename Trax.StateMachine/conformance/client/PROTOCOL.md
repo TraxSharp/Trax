@@ -295,8 +295,10 @@ down once, in `defaults.json` beside this file: each client's tests hold its con
 | Response size | 16 MiB | The largest answer body read; a larger one fails its request as `TRANSPORT_ERROR` and is not read past the limit. C# and Rust hold a socket message to the same limit. |
 
 A client refuses to be built with an option no limit or timer can honour: a request, connect or idle timeout of zero
-or less, a response size of zero or less, and a retry or resubscribe delay below zero or past 2^31 - 1 ms. The
-`options-` transcripts hold this through `build`. JSON carries no NaN or infinity, so the kit does not send one; each
+or less or past 2^31 - 1 ms, a response size of zero or less, and a retry or resubscribe delay below zero or past
+2^31 - 1 ms. A language's own value for no timeout at all (TypeScript's `Infinity`, C#'s `Timeout.InfiniteTimeSpan`)
+is not a duration and is taken: the request waits as long as the host takes. The `options-` transcripts hold this
+through `build`. JSON carries no NaN or infinity, so the kit does not send one; each
 client's unit tests refuse those.
 
 Each resubscribe wait is drawn uniformly between 50% and 100% of its step: `step × (1 − r / 2)`, with `r` uniform in

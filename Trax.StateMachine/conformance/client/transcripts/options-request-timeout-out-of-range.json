@@ -1,5 +1,5 @@
 {
-  "about": "A request timeout of zero or less waits for no answer: the client refuses to be built with one, and builds with a positive one.",
+  "about": "A request timeout of zero or less waits for no answer, and one past 2^31 - 1 ms is one no timer waits for: the client refuses to be built with either, and builds with one from 1 ms to that.",
   "machine": "turnstile",
   "instance": "i-1",
   "documents": {
@@ -13,6 +13,8 @@
   "steps": [
     { "client": "build", "requestTimeout": 0, "expect": { "built": false, "code": "INVALID_OPTION" } },
     { "client": "build", "requestTimeout": -5, "expect": { "built": false, "code": "INVALID_OPTION" } },
-    { "client": "build", "requestTimeout": 1000, "expect": { "built": true } }
+    { "client": "build", "requestTimeout": 2147483648, "expect": { "built": false, "code": "INVALID_OPTION" } },
+    { "client": "build", "requestTimeout": 1000, "expect": { "built": true } },
+    { "client": "build", "requestTimeout": 2147483647, "expect": { "built": true } }
   ]
 }

@@ -8,6 +8,6 @@
     "maxValueDepth": "The deepest a fields input or a context may nest before a plan answers invalid (PROTOCOL.md, plan), and the deepest the Rust engine reads or builds a value.",
     "maxStoredDepth": "The deepest a stored snapshot may nest: System.Text.Json's default reader depth, which the C# engine reads with and the others match (turnstile rehydrate fixture 18). C# has no constant of its own for it.",
     "maxPlanExpansions": "The snapshots a plan expands before it answers exceeded (PROTOCOL.md, plan).",
-    "maxTimerMs": "The longest a JavaScript or .NET timer waits: a longer timeout in the TypeScript or C# client waits for as long as the host takes. Rust's timers have no such bound."
+    "maxTimerMs": "The longest a JavaScript or .NET timer waits. Every client refuses to be built with a request, connect or idle timeout, or a retry or resubscribe delay, past it (client/PROTOCOL.md, Defaults), Rust's included, though its timers have no such bound."
   }
 }

@@ -336,13 +336,14 @@ describe('createMachineExecutor and a host that does not answer', () => {
     expect(signal?.aborted).toBe(true);
   });
 
-  it('refuses a request timeout that is not a positive number of milliseconds when it is built', () => {
+  it('refuses a request timeout that is not from 1 ms to 2^31 - 1 ms when it is built', () => {
     const fetch = (async () => new Response('{}')) as unknown as typeof globalThis.fetch;
-    for (const requestTimeout of [Number.NaN, 0, -1, -Infinity])
-      expect(
-        () => createMachineExecutor('/graphql', { fetch, requestTimeout, machines: [{ machine: checkout, documents }] }),
-        String(requestTimeout),
-      ).toThrow(RangeError);
+    const executor = (requestTimeout: number) =>
+      createMachineExecutor('/graphql', { fetch, requestTimeout, machines: [{ machine: checkout, documents }] });
+    for (const requestTimeout of [Number.NaN, 0, -1, -Infinity, 2 ** 31])
+      expect(() => executor(requestTimeout), String(requestTimeout)).toThrow(RangeError);
+    for (const requestTimeout of [1, 2 ** 31 - 1, Infinity])
+      expect(() => executor(requestTimeout), String(requestTimeout)).not.toThrow();
   });
 
   // Every comparison with NaN is false, so a NaN limit would read an answer of any size.
@@ -355,7 +356,7 @@ describe('createMachineExecutor and a host that does not answer', () => {
       ).toThrow(RangeError);
   });
 
-  it('waits as long as the host takes on a request timeout past the longest a timer counts', async () => {
+  it('waits as long as the host takes on an infinite request timeout', async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;
     const fetch = ((_url: string, init: RequestInit) => {
@@ -363,8 +364,7 @@ describe('createMachineExecutor and a host that does not answer', () => {
       return new Promise<Response>(() => {});
     }) as unknown as typeof globalThis.fetch;
 
-    // setTimeout fires at once for a delay past 2^31 - 1 ms: a timeout that long sets no timer, as Infinity does.
-    void load(fetch, 2 ** 31);
+    void load(fetch, Infinity);
     await vi.advanceTimersByTimeAsync(1);
 
     expect(signal?.aborted).toBe(false);
