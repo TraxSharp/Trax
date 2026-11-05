@@ -998,6 +998,7 @@ public sealed class ServerMachineController : IDisposable
             return;
         }
         var snapshot = answer.Snapshot! with { RowId = answer.Snapshot.RowId ?? rowId ?? _rowId };
+        var unopened = _confirmed is null;
         var changed = Accept(snapshot, Source.Load, out var unreadable);
         if (unreadable is not null)
         {
@@ -1020,6 +1021,12 @@ public sealed class ServerMachineController : IDisposable
             Reload(null);
         if (_error is not null)
             return;
+        // The first snapshot ends whatever failure the reads before it showed.
+        if (unopened && _confirmed is not null && _problem is not null)
+        {
+            _problem = null;
+            changed = true;
+        }
         // A first read RetryAsync resent settles with what it read.
         if (_startWaiters.Count > 0 && _confirmed is not null)
         {

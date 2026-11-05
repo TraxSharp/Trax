@@ -480,6 +480,28 @@ public class ClientSendTests
         controller.View.Problem!.Code.Should().Be("TRANSPORT_ERROR");
     }
 
+    [Test]
+    public async Task A_first_read_that_gets_through_on_a_retry_shows_no_problem()
+    {
+        var server = new StepServer();
+        using var controller = Open(
+            server,
+            id: "i-1",
+            retryDelays: [TimeSpan.FromMilliseconds(10)]
+        );
+        var start = controller.StartAsync();
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetException(
+            new HttpRequestException("down")
+        );
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+            ServerAnswer.Of(At(1, "Locked"))
+        );
+
+        await start.WaitAsync(Wait);
+        controller.View.Status.Should().Be(MachineStatus.Ready);
+        controller.View.Problem.Should().BeNull();
+    }
+
     // The last read either does not get through or is answered by a server another version kept answering.
     [TestCase(false)]
     [TestCase(true)]
