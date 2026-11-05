@@ -1039,6 +1039,8 @@ public class OperationsClientGeneratorTests
     [TestCase("rust", null, "--lang 'rust' is not one trax client writes")]
     [TestCase(null, "My.App", "give it with --lang csharp")]
     [TestCase("csharp", "My.class", "is not a C# namespace")]
+    [TestCase("csharp", "Trax.Client", "is Trax.Client's own namespace")]
+    [TestCase("csharp", "Trax.Client.Operations", "is Trax.Client's own namespace")]
     public void The_language_options_are_refused_where_they_do_not_apply(
         string? lang,
         string? @namespace,
@@ -1418,7 +1420,9 @@ public class OperationsClientGeneratorTests
     // A record declares these itself, so an input record of one of their names would hold a member of its own name.
     [TestCase("Equals")]
     [TestCase("ToString")]
-    [TestCase("Deconstruct")]
+    [TestCase("GetHashCode")]
+    [TestCase("EqualityContract")]
+    [TestCase("PrintMembers")]
     public void An_input_named_like_a_member_every_record_has_is_refused_by_the_csharp_client(
         string name
     )
@@ -1434,6 +1438,65 @@ public class OperationsClientGeneratorTests
             .Should()
             .Throw<InvalidOperationException>()
             .WithMessage($"The GraphQL input {name} would declare the record {name}*");
+    }
+
+    // A sealed record declares only the members above. These it inherits or declares under another name, so a record
+    // of one of their names compiles.
+    [TestCase("Clone")]
+    [TestCase("Deconstruct")]
+    [TestCase("GetType")]
+    [TestCase("Finalize")]
+    [TestCase("MemberwiseClone")]
+    [TestCase("ReferenceEquals")]
+    public void An_input_named_like_a_member_a_record_only_inherits_is_written_by_the_csharp_client(
+        string name
+    )
+    {
+        var files = ClientGenerator.RenderCSharp(
+            new OperationsGenerateOptions(
+                Schema + $"\ninput {name} {{ x: Int }}\n",
+                [new("src/graphql/Runs.graphql", Runs)]
+            ),
+            ClientGenerator.DefaultOperationsNamespace
+        );
+
+        Text(files, "Types.g.cs").Should().Contain($"internal sealed record {name}\n");
+        CompileCSharp(files, out _)
+            .Where(d => d.Severity >= Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
+            .Select(d => d.ToString())
+            .Should()
+            .BeEmpty();
+    }
+
+    // Each document is a static field of TraxOperations, which inherits these from object: a field of one of their
+    // names would hide it (CS0108), and a build that treats warnings as errors would fail.
+    [TestCase("ToString")]
+    [TestCase("Equals")]
+    [TestCase("GetHashCode")]
+    [TestCase("GetType")]
+    [TestCase("ReferenceEquals")]
+    [TestCase("MemberwiseClone")]
+    public void A_document_named_like_a_member_of_object_is_refused_by_the_csharp_client(
+        string name
+    )
+    {
+        var act = () =>
+            ClientGenerator.RenderCSharp(
+                new OperationsGenerateOptions(
+                    Schema,
+                    [
+                        new(
+                            $"src/graphql/{name}.graphql",
+                            Runs.Replace("query Runs(", $"query {name}(", StringComparison.Ordinal)
+                        ),
+                    ]
+                ),
+                ClientGenerator.DefaultOperationsNamespace
+            );
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"*both generate the name '{name}'. Rename one of them.");
     }
 
     [Test]

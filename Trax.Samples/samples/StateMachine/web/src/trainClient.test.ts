@@ -108,6 +108,61 @@ describe("the connection's limits", () => {
   it.each([Number.NaN, -1, 0])("refuses a requestTimeout of %s", (requestTimeout) => {
     expect(() => configureTrax({ ...connection, requestTimeout })).toThrow(RangeError);
   });
+
+  // The machine servers take the limit as the engine's rule has it, so configureTrax refuses what they would refuse
+  // later, while a page renders.
+  it.each([0, -1, 1048576.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses a maxResponseBytes of %s",
+    (maxResponseBytes) => {
+      expect(() => configureTrax({ ...connection, maxResponseBytes })).toThrow(RangeError);
+    },
+  );
+});
+
+// A fetch other than the platform's (node-fetch, an XHR polyfill) hands back a body the machine server reads too: a
+// train function holds it to the same limit the same way.
+describe("a train function's reading of a body that is not a web stream", () => {
+  const text = JSON.stringify({ data: machines });
+  const response = (body: unknown, headers: Record<string, string> = {}) =>
+    ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      redirected: false,
+      type: "basic",
+      headers: new Headers(headers),
+      body,
+      text: async () => text,
+    }) as unknown as Response;
+  const chunks = (...parts: string[]) =>
+    (async function* () {
+      for (const part of parts) yield new TextEncoder().encode(part);
+    })();
+
+  it("reads a Node stream by async iteration", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(response(chunks(text.slice(0, 10), text.slice(10))));
+
+    await expect(stateMachineListMachines()).resolves.toEqual([]);
+  });
+
+  it("refuses a Node stream past maxResponseBytes", async () => {
+    configureTrax({ url: "/trax/graphql", socketUrl: "wss://example.test/trax/graphql", maxResponseBytes: 64 });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(response(chunks(text, " ".repeat(64))));
+
+    await expect(stateMachineListMachines()).rejects.toThrow("more than 64 bytes");
+  });
+
+  it("reads a body with no stream when it says a length within the limit", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(response(null, { "Content-Length": String(text.length) }));
+
+    await expect(stateMachineListMachines()).resolves.toEqual([]);
+  });
+
+  it("refuses a body with no stream and no length, which it cannot read bounded", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(response(null));
+
+    await expect(stateMachineListMachines()).rejects.toThrow("without a length");
+  });
 });
 
 // The socket every machine server shares: a host that turns the caller away with 4403 gives a retry the same answer,

@@ -13,12 +13,16 @@ namespace Trax.Api.StateMachine.E2E;
 /// A push's watch rule is asked again at every connection re-check interval, for the same caller and the same row,
 /// over a real socket: a stream whose caller no longer satisfies the rule's policy ends with <c>NOT_FOUND</c>, the
 /// answer a refused subscribe gets, and the socket stays open; one whose caller still does goes on.
-/// <para>Enforces <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>
+/// On a host gated with <c>RequireAuthorization(...)</c> the endpoint policy is asked first: a stream whose caller no
+/// longer satisfies it ends the same way.
+/// <para>Enforces <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>
+/// and <c>docs/adr/0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md</c>.</para>
 /// </summary>
 [Property(
     "adr",
     "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md"
 )]
+[Property("adr", "docs/adr/0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md")]
 [TestFixture]
 [NonParallelizable]
 public class MachineChangedRecheckE2ETests
@@ -26,12 +30,18 @@ public class MachineChangedRecheckE2ETests
     private const string Adr =
         "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
 
+    private const string SubscriptionsAdr =
+        "docs/adr/0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md";
+
     private const string Database = "trax_sm_machine_changed_recheck";
 
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(1);
 
     private IHost _host = null!;
     private volatile bool _watchers = true;
+    private volatile bool _active = true;
+
+    private const string ActivePolicy = "ActiveAccount";
 
     [OneTimeSetUp]
     public async Task Up()
@@ -43,14 +53,24 @@ public class MachineChangedRecheckE2ETests
             new E2EHostOptions
             {
                 Served = [typeof(BadgeMachine)],
-                GraphQL = g => g.RecheckConnectionCredentialsEvery(Interval),
+                // The endpoint is gated, so the assembly's public diagnostic trains are left out.
+                Trains = t => !t.HasAllowAnonymousAttribute,
+                GraphQL = g =>
+                    g.RecheckConnectionCredentialsEvery(Interval)
+                        .RequireAuthorization(ActivePolicy),
                 Services = s =>
                     s.AddAuthorization(o =>
+                    {
                         o.AddPolicy(
                             BadgeMachine.WatchPolicy,
                             p => p.RequireAuthenticatedUser().RequireAssertion(_ => _watchers)
-                        )
-                    ),
+                        );
+                        // The endpoint policy, reading state outside the principal.
+                        o.AddPolicy(
+                            ActivePolicy,
+                            p => p.RequireAuthenticatedUser().RequireAssertion(_ => _active)
+                        );
+                    }),
             }
         );
     }
@@ -63,7 +83,11 @@ public class MachineChangedRecheckE2ETests
     }
 
     [SetUp]
-    public void Admit() => _watchers = true;
+    public void Admit()
+    {
+        _watchers = true;
+        _active = true;
+    }
 
     [Test]
     public async Task A_stream_whose_caller_no_longer_satisfies_the_watch_rule_ends_not_found()
@@ -107,6 +131,27 @@ public class MachineChangedRecheckE2ETests
         var next = await ws.NextChangeAsync("1");
         next.ProblemCode.Should().BeNull("a caller the rule still admits keeps receiving");
         next.StateIs(nameof(BadgeState.Returned)).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task A_stream_whose_caller_no_longer_satisfies_the_endpoint_policy_ends_not_found()
+    {
+        var id = await IssueAsync("Issued");
+        await using var ws = await GraphQLWs.ConnectAsync(_host, E2EHost.AliceKey);
+        await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(id, BadgeMachine.MachineId));
+        (await ws.NextChangeAsync("1")).State.Should().NotBeNull("the owner may watch");
+
+        _active = false;
+
+        var last = (await ws.ReadUntilEndAsync("1", TimeSpan.FromSeconds(15)))[^1];
+        last.ProblemCode.Should()
+            .Be(
+                RefusalCode.NotFound.ToWire(),
+                "the endpoint policy is asked again at the re-check beside the watch rule, per "
+                    + SubscriptionsAdr
+            );
+        last.State.Should().BeNull("the refusal carries no snapshot");
+        (await ws.NextAsync("1")).GetProperty("type").GetString().Should().Be("complete");
     }
 
     private async Task<Guid> IssueAsync(string state, Guid? id = null)

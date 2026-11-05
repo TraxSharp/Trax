@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.Services.Authorization;
@@ -30,7 +31,8 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// <para>
 /// A subscriber who could receive nothing is refused when subscribing, and a subscription is
 /// checked again every connection re-check interval (<see cref="Recheck"/>): one whose subscriber
-/// no longer receives everything it was admitted to ends.
+/// no longer satisfies the endpoint policy, or no longer receives everything it was admitted to,
+/// ends.
 /// See <c>docs/adr/0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md</c>.
 /// </para>
 /// </remarks>
@@ -39,6 +41,7 @@ internal sealed class LifecycleSubscriptionAccess(
     ITrainDiscoveryService discovery,
     IAuthorizationService authorization,
     TrainLifecycleStreamOptions streamOptions,
+    IServiceScopeFactory scopes,
     TimeProvider? time = null
 )
 {
@@ -87,25 +90,32 @@ internal sealed class LifecycleSubscriptionAccess(
     public ValueTask<bool> OperationsFor(ClaimsPrincipal? user) => SatisfiesOperationsAsync(user);
 
     /// <summary>
-    /// <paramref name="stillAuthorized"/> run again at the connection's credential re-check
-    /// interval while a subscription is open.
+    /// The endpoint policy and <paramref name="stillAuthorized"/>, asked again for
+    /// <paramref name="user"/> at the connection's credential re-check interval while a
+    /// subscription is open.
     /// </summary>
-    public SubscriptionRecheck Recheck(Func<CancellationToken, ValueTask<bool>> stillAuthorized) =>
-        new(
-            configuration.ConnectionCredentialRecheckInterval,
+    public SubscriptionRecheck Recheck(
+        ClaimsPrincipal? user,
+        Func<CancellationToken, ValueTask<bool>> stillAuthorized
+    ) =>
+        SubscriptionRecheck.Of(
+            configuration,
             time ?? TimeProvider.System,
+            scopes,
+            user,
             stillAuthorized
         );
 
     /// <summary>
     /// The re-check of a lifecycle or junction subscription admitted with
-    /// <paramref name="admitted"/>: it passes while <paramref name="user"/> still sees everything
-    /// it was admitted to.
+    /// <paramref name="admitted"/>: it passes while <paramref name="user"/> still satisfies the
+    /// endpoint policy and sees everything it was admitted to.
     /// </summary>
     public SubscriptionRecheck LifecycleRecheck(
         ClaimsPrincipal? user,
         LifecycleVisibility admitted
-    ) => Recheck(async _ => (await LifecycleFor(user).ConfigureAwait(false)).Covers(admitted));
+    ) =>
+        Recheck(user, async _ => (await LifecycleFor(user).ConfigureAwait(false)).Covers(admitted));
 
     private async ValueTask<bool> SatisfiesOperationsAsync(ClaimsPrincipal? user)
     {

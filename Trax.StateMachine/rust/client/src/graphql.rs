@@ -60,10 +60,15 @@ pub struct GraphQLMachineServerOptions {
     pub machine: String,
     /// The machine's persisted documents, from the host's manifest, the push (`changed`) included.
     pub documents: Vec<ManifestDocument>,
-    /// The builder of the client requests go through, for a proxy, certificates or timeouts of your own; a default
-    /// one when `None`. The server builds it to follow no redirect, whatever the builder set, and, for an `https`
-    /// endpoint, to send nothing but `https`. A redirect, or an answer from another origin than the endpoint's, fails
-    /// the request as a [`TransportError`].
+    /// The builder of the client the HTTP requests (`start`, events, reads) go through, for a proxy, certificates or
+    /// timeouts of your own; a default one when `None`. The server builds it to follow no redirect, whatever the
+    /// builder set, and, for an `https` endpoint, to send nothing but `https`. A redirect, or an answer from another
+    /// origin than the endpoint's, fails the request as a [`TransportError`].
+    ///
+    /// The change stream does not use it. Its socket connects to `socket` directly, through no proxy, and trusts only
+    /// the Mozilla roots bundled with `webpki-roots`, not the system's store or a certificate added here. A host whose
+    /// certificate chains to a private CA answers HTTP requests made with such a builder while every socket fails to
+    /// connect and is tried again after the resubscribe delays.
     pub http: Option<reqwest::ClientBuilder>,
     /// Headers for each request and each socket's upgrade, asked for every time: how a host authenticates a request.
     pub headers: Option<RequestHeaders>,
@@ -76,15 +81,16 @@ pub struct GraphQLMachineServerOptions {
     /// subscribed again: the stream delivers [`StreamMessage::Refused`] and ends. A delay past 2^31 - 1 ms is refused.
     pub resubscribe_delays: Option<Vec<Duration>>,
     /// How long a socket may take to connect and be acknowledged before the attempt counts as failed and is tried
-    /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default; zero is refused.
+    /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default; zero or past 2^31 - 1
+    /// ms is refused.
     pub connect_timeout: Duration,
     /// How long one request may take, from sending it to reading the last byte of its answer, before it fails as a
-    /// [`TransportError`]. [`DEFAULT_REQUEST_TIMEOUT`] (30 seconds) by default; zero is refused.
+    /// [`TransportError`]. [`DEFAULT_REQUEST_TIMEOUT`] (30 seconds) by default; zero or past 2^31 - 1 ms is refused.
     pub request_timeout: Duration,
     /// How long an acknowledged socket may stay silent before it is given up and subscribed again after the
     /// resubscribe delays, so a connection dropped without a close (a NAT that forgot it) is noticed. Halfway through
     /// the silence the client sends a `ping`, which a live host answers with a `pong`. [`DEFAULT_IDLE_TIMEOUT`] (60
-    /// seconds) by default; zero is refused.
+    /// seconds) by default; zero or past 2^31 - 1 ms is refused.
     pub idle_timeout: Duration,
     /// The largest response body, and the largest socket message or frame, the host may send, in bytes. A larger
     /// response fails its request as a [`TransportError`]; a larger message ends the stream, which is subscribed again.
@@ -149,7 +155,8 @@ pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 pub const DEFAULT_RESUBSCRIBE_DELAYS: [Duration; 3] =
     [Duration::from_secs(1), Duration::from_secs(2), Duration::from_secs(5)];
 
-// The longest delay a retry or a resubscribe may wait, 2^31 - 1 ms: the longest a timer waits in every client's language.
+// The longest delay a retry or a resubscribe may wait, and the longest timeout, 2^31 - 1 ms: the longest a timer waits
+// in every client's language.
 pub(crate) const MAX_DELAY: Duration = Duration::from_millis(2_147_483_647);
 
 /// Why a [`GraphQLMachineServer`] could not be built.
@@ -204,8 +211,8 @@ struct Inner {
 impl GraphQLMachineServer {
     /// Builds the server for one machine. Refuses a machine with no documents, or none for `changed`, an endpoint or
     /// socket that is not over TLS on a host that is not loopback unless `allow_insecure_transport` is set, and an
-    /// option no limit or timer can honour: a timeout or a message size of zero, or a resubscribe delay past 2^31 - 1
-    /// ms.
+    /// option no limit or timer can honour: a timeout or a message size of zero, or a timeout or a resubscribe delay
+    /// past 2^31 - 1 ms.
     pub fn new(options: GraphQLMachineServerOptions) -> Result<Self, ConfigError> {
         // The socket's TLS needs a process-wide crypto provider; another one already installed is kept.
         let _ = rustls::crypto::ring::default_provider().install_default();
@@ -219,6 +226,13 @@ impl GraphQLMachineServer {
             if timeout.is_zero() {
                 return Err(ConfigError(format!(
                     "The {name} is zero, which leaves no time to wait. Give it a positive duration."
+                )));
+            }
+            if timeout > MAX_DELAY {
+                return Err(ConfigError(format!(
+                    "The {name} {} ms is past {} ms, the longest a client waits.",
+                    timeout.as_millis(),
+                    MAX_DELAY.as_millis()
                 )));
             }
         }
@@ -546,10 +560,16 @@ fn snapshot_of(value: &Value) -> Result<ServerSnapshot, TransportError> {
             }
         }
     };
+    // A host serves rowId as a GraphQL Long: a whole number, or null. Anything else no host wrote.
     let row_id = match value.get("rowId") {
-        Some(Value::String(s)) => Some(s.to_string_lossy()),
-        Some(Value::Number(n)) => Some(trax_state_machine::number_text(*n)),
-        _ => None,
+        None | Some(Value::Null) => None,
+        Some(Value::Number(n)) if n.fract() == 0.0 && n.is_finite() => Some(trax_state_machine::number_text(*n)),
+        Some(row) => {
+            return Err(TransportError(format!(
+                "The server answered a rowId that is not a whole number: {}.",
+                row.to_json()
+            )))
+        }
     };
     Ok(ServerSnapshot {
         row_id,
@@ -950,17 +970,27 @@ impl Inner {
             }
             return Some(Ended::Again);
         }
-        let change = payload.get("data").and_then(|d| d.get(&self.push_field))?;
-        // A push no host wrote (not an object, a gone that is not a boolean, a snapshot that is not one a store wrote) is
-        // dropped, and the instance read again: whatever it stood for may have been missed.
+        // A push no host wrote (no change, not an object, a problem with no code, a gone that is not a boolean, a
+        // snapshot that is not one a store wrote) is dropped, and the instance read again: whatever it stood for may
+        // have been missed.
         let malformed = || {
             sink(StreamMessage::Reload);
             None
         };
+        let Some(change) = payload.get("data").and_then(|d| d.get(&self.push_field)) else {
+            return malformed();
+        };
         if !matches!(change, Value::Object(_)) {
             return malformed();
         }
-        if let Some(problem) = change.get("problem").and_then(problem_of) {
+        let problem = match change.get("problem") {
+            None | Some(Value::Null) => None,
+            Some(problem) => match problem_of(problem) {
+                Some(problem) => Some(problem),
+                None => return malformed(),
+            },
+        };
+        if let Some(problem) = problem {
             if problem.code == codes::CLIENT_OUTDATED {
                 sink(StreamMessage::ClientOutdated);
                 return Some(Ended::ForGood);
@@ -1258,6 +1288,32 @@ mod tests {
             assert_eq!(delivered, vec![StreamMessage::Reload], "{change}");
             assert_eq!((pushes, ended), (0, false), "{change}");
         }
+        // No change at all, or a problem that is not one: C# and TypeScript read the instance again on these too.
+        for payload in [
+            r#"{"data":null}"#,
+            r#"{"data":{}}"#,
+            r#"{}"#,
+            r#"{"data":{"turnstileChanged":{"problem":"NOT_FOUND"}}}"#,
+            r#"{"data":{"turnstileChanged":{"problem":5}}}"#,
+            r#"{"data":{"turnstileChanged":{"problem":{"message":"no code"}}}}"#,
+        ] {
+            let (delivered, pushes, ended) = next_of(payload);
+
+            assert_eq!(delivered, vec![StreamMessage::Reload], "{payload}");
+            assert_eq!((pushes, ended), (0, false), "{payload}");
+        }
+    }
+
+    #[test]
+    fn a_push_with_a_null_problem_is_a_snapshot() {
+        let (delivered, pushes, ended) =
+            next_of(r#"{"data":{"turnstileChanged":{"state":"Locked","revision":1,"context":{},"problem":null}}}"#);
+
+        assert!(
+            matches!(delivered.as_slice(), [StreamMessage::Changed(_)]),
+            "{delivered:?}"
+        );
+        assert_eq!((pushes, ended), (1, false));
     }
 
     #[test]
@@ -1341,6 +1397,9 @@ mod tests {
             |o| o.max_message_size = 0,
             |o| o.resubscribe_delays = Some(vec![Duration::from_millis(10), MAX_DELAY + Duration::from_millis(1)]),
             |o| o.resubscribe_delays = Some(vec![Duration::MAX]),
+            |o| o.request_timeout = MAX_DELAY + Duration::from_millis(1),
+            |o| o.connect_timeout = MAX_DELAY + Duration::from_millis(1),
+            |o| o.idle_timeout = Duration::MAX,
         ] {
             assert!(refused(change).is_some());
         }
@@ -1351,6 +1410,9 @@ mod tests {
             |o| o.max_message_size = 1,
             |o| o.resubscribe_delays = Some(vec![Duration::ZERO, MAX_DELAY]),
             |o| o.resubscribe_delays = Some(Vec::new()),
+            |o| o.request_timeout = MAX_DELAY,
+            |o| o.connect_timeout = MAX_DELAY,
+            |o| o.idle_timeout = MAX_DELAY,
         ] {
             assert_eq!(refused(change), None);
         }
@@ -1791,6 +1853,9 @@ mod tests {
 
     // Follows "i-1" on a host that answers every connection as `reply` says, with resubscribe delays of 10 ms and
     // `then`, each delay's jitter drawn from `random`, and answers how long after the second connection the third came.
+    // These run over a real socket, which a paused clock cannot: tokio jumps a paused clock to the next timer whenever
+    // the runtime waits on I/O, so the socket's own timeouts would fire at once. A bound above is therefore never
+    // tighter than the next step the delays would take without what the test checks.
     async fn third_connection_after(reply: Replies, then: Duration, random: fn() -> f64) -> Duration {
         let (port, mut heard) = recording_host(reply).await;
         let mut given = options(
@@ -1818,17 +1883,19 @@ mod tests {
 
     #[tokio::test]
     async fn a_stream_that_delivered_a_second_snapshot_starts_the_delays_over() {
-        let after = third_connection_after(|_| Reply::TwoPushesThenComplete, Duration::from_millis(400), || 0.0).await;
+        // Started over, the third connection comes after 10 ms; not, after a minute.
+        let after = third_connection_after(|_| Reply::TwoPushesThenComplete, Duration::from_secs(60), || 0.0).await;
 
-        assert!(after < Duration::from_millis(300), "subscribed again after {after:?}");
+        assert!(after < Duration::from_secs(30), "subscribed again after {after:?}");
     }
 
     #[tokio::test]
     async fn a_resubscribe_delay_is_drawn_between_half_its_step_and_all_of_it() {
-        let after = third_connection_after(|_| Reply::PushThenComplete, Duration::from_millis(800), || 1.0).await;
+        // A draw of 1 waits half the step, 1 s; a delay that ignored the draw would wait the whole step, 2 s.
+        let after = third_connection_after(|_| Reply::PushThenComplete, Duration::from_millis(2000), || 1.0).await;
 
         assert!(
-            after >= Duration::from_millis(350) && after < Duration::from_millis(700),
+            after >= Duration::from_millis(950) && after < Duration::from_millis(2000),
             "subscribed again after {after:?}"
         );
     }

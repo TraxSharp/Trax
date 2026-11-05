@@ -83,6 +83,11 @@ public partial class GeneratedNamesPropertyTests
         "EqualityContract",
         "Clone",
         "Deconstruct",
+        "GetType",
+        "ReferenceEquals",
+        "MemberwiseClone",
+        "Finalize",
+        "PrintMembers",
         "Value",
         "Runs",
         "runs",
@@ -300,12 +305,14 @@ public partial class GeneratedNamesPropertyTests
                     return;
                 }
                 var errors = Compile(files)
-                    .Where(d => d.Severity == DiagnosticSeverity.Error)
+                    .Where(d => d.Severity == DiagnosticSeverity.Error || Hiding.Contains(d.Id))
                     .Select(d => d.ToString())
                     .ToList();
                 errors
                     .Should()
-                    .BeEmpty($"the client written for\n{c.Schema}\n{c.Document}\ncompiles");
+                    .BeEmpty(
+                        $"the client written for\n{c.Schema}\n{c.Document}\ncompiles, hiding no inherited member"
+                    );
                 Interlocked.Increment(ref written);
             },
             iter: 500
@@ -314,6 +321,286 @@ public partial class GeneratedNamesPropertyTests
             .Should()
             .BePositive("some of the cases are written, or the property holds of nothing");
     }
+
+    // The names above, drawn from a fixed seed so a failure is the same on every run, with a fragment each document
+    // spreads and, in the manifest client, the run progress module. The regexes above read names; this runs the
+    // compiler over what is written, so a module that does not parse or names a type it does not declare or import
+    // fails here rather than in a consumer's build.
+    [Test]
+    public void A_sample_of_the_typescript_clients_typechecks()
+    {
+        var engine = TypeScriptEngine();
+        var root = Directory.CreateTempSubdirectory("trax-ts-names-");
+        try
+        {
+            var random = new System.Random(20261105);
+            string Pick() =>
+                random.Next(4) == 0
+                    ? "abAB_"[random.Next(5)]
+                        + new string(
+                            Enumerable
+                                .Range(0, random.Next(5))
+                                .Select(_ => "abAB_09"[random.Next(7)])
+                                .ToArray()
+                        )
+                    : Hostile[random.Next(Hostile.Length)];
+            var operations = 0;
+            var manifests = 0;
+            for (var i = 0; i < 4000 && (operations < 40 || manifests < 40); i++)
+            {
+                var c = new Case(
+                    Pick(),
+                    [Pick(), Pick()],
+                    Pick(),
+                    Pick(),
+                    Pick(),
+                    [Pick()],
+                    Pick(),
+                    Pick(),
+                    Pick()
+                );
+                var fragment = Pick();
+                if (
+                    operations < 40
+                    && TryWrite(root, $"operations-{i}", OperationsWithFragment(c, fragment))
+                )
+                    operations++;
+                if (
+                    manifests < 40
+                    && TryWrite(root, $"manifest-{i}", ManifestWithProgress(c, Pick(), fragment))
+                )
+                    manifests++;
+            }
+            operations.Should().Be(40, "the seed writes enough operations clients to check");
+            manifests.Should().Be(40, "the seed writes enough manifest clients to check");
+
+            File.WriteAllText(
+                Path.Combine(root.FullName, "tsconfig.json"),
+                $$"""
+                {
+                  "compilerOptions": {
+                    "target": "es2022",
+                    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+                    "module": "esnext",
+                    "moduleResolution": "bundler",
+                    "moduleDetection": "force",
+                    "jsx": "react-jsx",
+                    "verbatimModuleSyntax": true,
+                    "strict": true,
+                    "noUnusedLocals": true,
+                    "noUnusedParameters": true,
+                    "noFallthroughCasesInSwitch": true,
+                    "skipLibCheck": true,
+                    "types": ["node"],
+                    "noEmit": true,
+                    "paths": {
+                      "@traxsharp/state-machine": [{{Json(
+                    Path.Combine(engine, "src", "index.ts")
+                )}}],
+                      "@traxsharp/state-machine/client": [{{Json(
+                    Path.Combine(engine, "src", "client", "index.ts")
+                )}}],
+                      "@traxsharp/state-machine/react": [{{Json(
+                    Path.Combine(engine, "src", "react.ts")
+                )}}]
+                    }
+                  },
+                  "include": ["cases"]
+                }
+                """
+            );
+            Directory.CreateSymbolicLink(
+                Path.Combine(root.FullName, "node_modules"),
+                Path.Combine(engine, "node_modules")
+            );
+
+            var (code, output) = Node(
+                root.FullName,
+                Path.Combine(engine, "node_modules", "typescript", "bin", "tsc"),
+                "-p",
+                "tsconfig.json"
+            );
+
+            var failing = CaseFolder()
+                .Matches(output)
+                .Select(m => m.Groups[1].Value)
+                .Distinct()
+                .Select(folder =>
+                    File.ReadAllText(Path.Combine(root.FullName, "cases", folder, "case.graphql"))
+                );
+            code.Should()
+                .Be(0, $"every sampled client typechecks:\n{output}\n{string.Join("\n", failing)}");
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    // Writes the client `render` makes under cases/<folder>, beside the schema and documents it was made from; false
+    // when the generator refuses them.
+    private static bool TryWrite(
+        DirectoryInfo root,
+        string folder,
+        (Func<IReadOnlyList<ClientFile>> Render, string Source) client
+    )
+    {
+        IReadOnlyList<ClientFile> files;
+        try
+        {
+            files = client.Render();
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        var dir = Path.Combine(root.FullName, "cases", folder);
+        foreach (var file in files)
+        {
+            var path = Path.Combine(dir, file.Path);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, file.Text);
+        }
+        File.WriteAllText(Path.Combine(dir, "case.graphql"), $"# {folder}\n{client.Source}\n");
+        return true;
+    }
+
+    private static (Func<IReadOnlyList<ClientFile>>, string) OperationsWithFragment(
+        Case c,
+        string fragment
+    )
+    {
+        var document = $$"""
+            query {{c.Operation}}(${{c.EnumVariable}}: {{c.Enum}}, ${{c.InputVariable}}: {{c.Input}}) {
+              operations { runs(state: ${{c.EnumVariable}}, filter: ${{c.InputVariable}}) { ...{{fragment}} state } }
+            }
+
+            fragment {{fragment}} on Run { id other }
+            """;
+        return (
+            () =>
+                ClientGenerator.Render(
+                    new OperationsGenerateOptions(
+                        c.Schema,
+                        [new ClientDocumentFile("src/graphql/Runs.graphql", document)]
+                    )
+                ),
+            $"{c.Schema}\n{document}"
+        );
+    }
+
+    private static (Func<IReadOnlyList<ClientFile>>, string) ManifestWithProgress(
+        Case c,
+        string field,
+        string fragment
+    )
+    {
+        var options = ManifestOptions(c, field);
+        var document = $$"""
+            mutation {{c.Operation}}(${{c.InputVariable}}: {{c.Input}}!, ${{c.EnumVariable}}: {{c.Enum}}) {
+              dispatch { {{field}}(input: ${{c.InputVariable}}, mode: ${{c.EnumVariable}}) { ...{{fragment}} mode } }
+            }
+
+            fragment {{fragment}} on Started { externalId other }
+            """;
+        var sample = Fakes.ClientManifests.Sample();
+        var manifest = new Trax.StateMachine.ClientManifest
+        {
+            Trains = options.Manifest.Trains.Select(t => t with { Progress = true }).ToList(),
+            Progress = sample.Progress,
+            Types = options.Manifest.Types + "\n" + ProgressTypes,
+        };
+        return (
+            () =>
+                new ClientGenerator(new Fakes.FakeNodeRunner()).Render(
+                    options with
+                    {
+                        Manifest = manifest,
+                        Documents = [new ClientDocumentFile("src/graphql/Start.graphql", document)],
+                    }
+                ),
+            $"{manifest.Types}\n{document}"
+        );
+    }
+
+    // The types the run progress documents select, from the sample manifest.
+    private static readonly string ProgressTypes = Fakes.ClientManifests.TrainTypes[
+        Fakes.ClientManifests.TrainTypes.IndexOf("type RunProgress {", StringComparison.Ordinal)..
+    ];
+
+    private static string Json(string text) => System.Text.Json.JsonSerializer.Serialize(text);
+
+    [GeneratedRegex(@"cases/([^/(]+)/")]
+    private static partial Regex CaseFolder();
+
+    // Trax.StateMachine/ts with its npm packages, whose TypeScript, graphql-ws and React the check compiles against.
+    private static string TypeScriptEngine()
+    {
+        for (
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            dir is not null;
+            dir = dir.Parent
+        )
+        {
+            var engine = Path.Combine(dir.FullName, "Trax.StateMachine", "ts");
+            if (File.Exists(Path.Combine(dir.FullName, "global.json")) && Directory.Exists(engine))
+            {
+                if (!File.Exists(Path.Combine(engine, "node_modules", "typescript", "bin", "tsc")))
+                    IntegrationTests.NodePrerequisite.Missing(
+                        "Trax.StateMachine/ts has no node_modules; run `npm ci` there to typecheck the clients."
+                    );
+                return engine;
+            }
+        }
+        IntegrationTests.NodePrerequisite.Missing(
+            "The repository is not checked out around this build."
+        );
+        return "";
+    }
+
+    private static (int ExitCode, string Output) Node(string workingDirectory, params string[] args)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("node")
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var arg in args)
+            start.ArgumentList.Add(arg);
+        System.Diagnostics.Process process;
+        try
+        {
+            process = System.Diagnostics.Process.Start(start)!;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            IntegrationTests.NodePrerequisite.Missing(
+                "node is not on PATH; the TypeScript check needs it."
+            );
+            return (0, "");
+        }
+        using (process)
+        {
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(TimeSpan.FromMinutes(5)))
+            {
+                process.Kill(entireProcessTree: true);
+                return (-1, "tsc did not finish within five minutes.");
+            }
+            return (process.ExitCode, stdout.Result + stderr.Result);
+        }
+    }
+
+    // The warnings a member that hides an inherited one raises. A consumer that builds with -warnaserror fails on them.
+    private static readonly HashSet<string> Hiding = new(StringComparer.Ordinal)
+    {
+        "CS0108",
+        "CS0109",
+        "CS0114",
+    };
 
     private static void AssertTypeScriptNames(IReadOnlyList<ClientFile> files)
     {

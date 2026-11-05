@@ -169,11 +169,13 @@ public class LifecycleSubscriptionAccessTests
             o.AddPolicy(TrainPolicy, p => p.RequireClaim("billing"));
         });
 
+        var provider = services.BuildServiceProvider();
         return new LifecycleSubscriptionAccess(
             configuration,
             discovery,
-            services.BuildServiceProvider().GetRequiredService<IAuthorizationService>(),
-            new TrainLifecycleStreamOptions()
+            provider.GetRequiredService<IAuthorizationService>(),
+            new TrainLifecycleStreamOptions(),
+            provider.GetRequiredService<IServiceScopeFactory>()
         );
     }
 

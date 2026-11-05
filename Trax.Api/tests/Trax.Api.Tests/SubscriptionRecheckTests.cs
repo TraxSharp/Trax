@@ -8,6 +8,7 @@ using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Subscriptions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -48,6 +49,7 @@ public class SubscriptionRecheckTests
 
     private const string OpsPolicy = "Ops";
     private const string MembersPolicy = "Members";
+    private const string ActivePolicy = "ActiveAccount";
     private const string AuthorizationCode = "TRAX_AUTHORIZATION";
 
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
@@ -68,6 +70,7 @@ public class SubscriptionRecheckTests
     private volatile bool _opsOpen = true;
     private volatile bool _membersOpen = true;
     private volatile bool _opsThrows;
+    private readonly Accounts _accounts = new();
 
     [SetUp]
     public void Admit()
@@ -76,6 +79,7 @@ public class SubscriptionRecheckTests
         _opsOpen = true;
         _membersOpen = true;
         _opsThrows = false;
+        _accounts.Suspended = false;
     }
 
     [TearDown]
@@ -242,6 +246,83 @@ public class SubscriptionRecheckTests
 
     #endregion
 
+    #region The endpoint policy
+
+    [Test]
+    public async Task An_unmarked_broadcast_train_ends_when_the_endpoint_policy_no_longer_passes()
+    {
+        _opsOpen = false;
+        var executor = await BuildGatedAsync(UnmarkedBroadcast());
+        var stream = await SubscribeAsync(executor, LifecycleQuery);
+        var results = Collect(stream);
+        await FirstAsync(results, () => PublishCompleted(typeof(IUnmarkedTrain).FullName!));
+
+        _accounts.Suspended = true;
+
+        (await EndAsync(results))
+            .Should()
+            .Be(
+                AuthorizationCode,
+                "the endpoint policy is the gate of a train with no marker, and is asked again "
+                    + "at the re-check, per "
+                    + Adr
+            );
+    }
+
+    [Test]
+    public async Task An_unmarked_broadcast_train_goes_on_while_the_endpoint_policy_passes()
+    {
+        _opsOpen = false;
+        var executor = await BuildGatedAsync(UnmarkedBroadcast());
+        var stream = await SubscribeAsync(executor, LifecycleQuery);
+        var results = Collect(stream);
+        await FirstAsync(results, () => PublishCompleted(typeof(IUnmarkedTrain).FullName!));
+
+        for (var i = 0; i < 3; i++)
+            _time.Advance(Interval);
+
+        var before = results.Received;
+        await FirstAsync(
+            results,
+            () => PublishCompleted(typeof(IUnmarkedTrain).FullName!),
+            after: before
+        );
+        results.Ended.Should().BeFalse("a subscriber the endpoint policy still admits goes on");
+    }
+
+    [Test]
+    public async Task The_operations_view_ends_when_the_endpoint_policy_no_longer_passes()
+    {
+        var executor = await BuildGatedAsync();
+        var stream = await SubscribeAsync(executor, LifecycleQuery);
+        var results = Collect(stream);
+        await FirstAsync(results, () => PublishCompleted("Some.Train"));
+
+        _accounts.Suspended = true;
+
+        (await EndAsync(results))
+            .Should()
+            .Be(
+                AuthorizationCode,
+                "the endpoint policy is asked again beside the operations gate, per " + Adr
+            );
+    }
+
+    [Test]
+    public async Task The_operator_machine_feed_ends_when_the_endpoint_policy_no_longer_passes()
+    {
+        var feed = Channel.CreateUnbounded<MachineInstanceRecord>();
+        var executor = await BuildGatedAsync(operations: Operations(feed));
+        var results = Collect(await SubscribeAsync(executor, OperatorQuery));
+        await FirstAsync(results, () => feed.Writer.TryWrite(Record()));
+
+        _accounts.Suspended = true;
+
+        (await EndAsync(results)).Should().Be(AuthorizationCode, "per " + Adr);
+    }
+
+    #endregion
+
     #region Over a socket
 
     [Test]
@@ -265,17 +346,40 @@ public class SubscriptionRecheckTests
                 payload = new { query = LifecycleQuery },
             }
         );
+        // Admitted first: the subscribe-time check sends the same error frame, so the gate closes
+        // only once an event has arrived and the error can come from nowhere but the re-check.
+        (await FirstFrameAsync(host, socket))
+            .GetProperty("type")
+            .GetString()
+            .Should()
+            .Be("next");
 
         _membersOpen = false;
 
+        // Events published before the first frame arrived may still be on their way, and the
+        // server may send a keep-alive. The re-check's error is the stream's last result, a
+        // `next` frame carrying only errors, and the operation then completes.
         var frames = new List<JsonElement>();
-        while (frames.Count == 0 || frames[^1].GetProperty("type").GetString() == "next")
-            frames.Add(await ReceiveAsync(socket));
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        while (frames.Count == 0 || frames[^1].GetProperty("type").GetString() != "complete")
+        {
+            DateTime
+                .UtcNow.Should()
+                .BeBefore(deadline, "the re-check ends the subscription within a few intervals");
+            var frame = await ReceiveAsync(socket);
+            if (frame.GetProperty("type").GetString() is not ("ping" or "pong"))
+                frames.Add(frame);
+        }
         var raw = string.Join("\n", frames.Select(f => f.GetRawText()));
-        frames.Should().ContainSingle(raw);
-        frames[0].GetProperty("type").GetString().Should().Be("error", raw);
-        frames[0]
-            .GetProperty("payload")
+        frames.Should().HaveCountGreaterThanOrEqualTo(2, raw);
+        var last = frames[^2];
+        last.GetProperty("type").GetString().Should().Be("next", raw);
+        var payload = last.GetProperty("payload");
+        (!payload.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
+            .Should()
+            .BeTrue("the last result carries no event: " + raw);
+        payload
+            .GetProperty("errors")
             .EnumerateArray()
             .Single()
             .GetProperty("extensions")
@@ -293,6 +397,28 @@ public class SubscriptionRecheckTests
     }
 
     private const string SocketKey = "recheck-socket-key-0123456789abcdefghijk";
+
+    /// <summary>
+    /// Publishes a completed run of the broadcast train until the socket's first frame arrives,
+    /// and returns it. The subscribe frame can reach the server before its topic is registered.
+    /// </summary>
+    private static async Task<JsonElement> FirstFrameAsync(IHost host, WebSocket socket)
+    {
+        var sender = host.Services.GetRequiredService<ITopicEventSender>();
+        var first = ReceiveAsync(socket);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (!first.IsCompleted && DateTime.UtcNow < deadline)
+        {
+            await sender.SendAsync(
+                nameof(LifecycleSubscriptions.OnTrainCompleted),
+                Completed(typeof(IMembersTrain).FullName!)
+            );
+            // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes the
+            // instant the frame arrives.
+            await Task.WhenAny(first, Task.Delay(100));
+        }
+        return await first;
+    }
 
     private async Task<IHost> StartSocketHostAsync(TrainRegistration broadcast)
     {
@@ -372,10 +498,50 @@ public class SubscriptionRecheckTests
     private static TraxGraphQLBuilder OperationsByPolicy(TraxGraphQLBuilder g) =>
         g.ExposeOperationQueries().GateOperations(policy: OpsPolicy);
 
+    // The operations queries give the schema a query root; the order fixture's models are public,
+    // which a gated endpoint refuses.
+    private static TraxGraphQLBuilder EndpointGated(TraxGraphQLBuilder g) =>
+        OperationsByPolicy(g).RequireAuthorization(ActivePolicy);
+
+    private Task<IRequestExecutor> BuildGatedAsync(
+        TrainRegistration? broadcast = null,
+        IOperationsService? operations = null
+    ) => BuildAsync(EndpointGated, broadcast, operations, queryModels: false);
+
+    /// <summary>Whether the caller's account is suspended: state the endpoint policy reads, outside the principal.</summary>
+    private sealed class Accounts
+    {
+        private volatile bool _suspended;
+
+        public bool Suspended
+        {
+            get => _suspended;
+            set => _suspended = value;
+        }
+    }
+
+    private sealed class ActiveAccount : IAuthorizationRequirement;
+
+    /// <summary>Scoped, as a handler that reads a store usually is.</summary>
+    private sealed class ActiveAccountHandler(Accounts accounts)
+        : AuthorizationHandler<ActiveAccount>
+    {
+        protected override Task HandleRequirementAsync(
+            AuthorizationHandlerContext context,
+            ActiveAccount requirement
+        )
+        {
+            if (!accounts.Suspended)
+                context.Succeed(requirement);
+            return Task.CompletedTask;
+        }
+    }
+
     private async Task<IRequestExecutor> BuildAsync(
         Func<TraxGraphQLBuilder, TraxGraphQLBuilder> configure,
         TrainRegistration? broadcast = null,
-        IOperationsService? operations = null
+        IOperationsService? operations = null,
+        bool queryModels = true
     )
     {
         var discovery = Substitute.For<ITrainDiscoveryService>();
@@ -401,7 +567,10 @@ public class SubscriptionRecheckTests
                     )
             );
             o.AddPolicy(MembersPolicy, p => p.RequireAssertion(_ => _membersOpen));
+            o.AddPolicy(ActivePolicy, p => p.AddRequirements(new ActiveAccount()));
         });
+        services.AddSingleton(_accounts);
+        services.AddScoped<IAuthorizationHandler, ActiveAccountHandler>();
         services.AddDbContext<OrderTestDbContext>(o =>
             o.UseInMemoryDatabase("SubscriptionRecheck_" + Guid.NewGuid())
         );
@@ -409,7 +578,9 @@ public class SubscriptionRecheckTests
             services,
             g =>
                 configure(
-                    g.AddDbContext<OrderTestDbContext>().RecheckConnectionCredentialsEvery(Interval)
+                    (
+                        queryModels ? g.AddDbContext<OrderTestDbContext>() : g
+                    ).RecheckConnectionCredentialsEvery(Interval)
                 )
         );
 
@@ -434,6 +605,32 @@ public class SubscriptionRecheckTests
             RequiredPolicies = [MembersPolicy],
             RequiredRoles = [],
             HasAuthorizeAttribute = true,
+            HasAllowAnonymousAttribute = false,
+            IsQuery = false,
+            IsMutation = false,
+            IsBroadcastEnabled = true,
+            GraphQLOperations = GraphQLOperation.Run,
+            IsRemote = false,
+        };
+
+    public interface IUnmarkedTrain;
+
+    // A broadcast train with no posture of its own: the endpoint policy is its gate.
+    private static TrainRegistration UnmarkedBroadcast() =>
+        new()
+        {
+            ServiceType = typeof(IUnmarkedTrain),
+            ImplementationType = typeof(IUnmarkedTrain),
+            InputType = typeof(object),
+            OutputType = typeof(object),
+            Lifetime = ServiceLifetime.Transient,
+            ServiceTypeName = typeof(IUnmarkedTrain).FullName!,
+            ImplementationTypeName = typeof(IUnmarkedTrain).FullName!,
+            InputTypeName = "Object",
+            OutputTypeName = "Object",
+            RequiredPolicies = [],
+            RequiredRoles = [],
+            HasAuthorizeAttribute = false,
             HasAllowAnonymousAttribute = false,
             IsQuery = false,
             IsMutation = false,
@@ -474,20 +671,20 @@ public class SubscriptionRecheckTests
         );
 
     private void PublishCompleted(string trainName) =>
-        Send(
-            nameof(LifecycleSubscriptions.OnTrainCompleted),
-            new TrainLifecycleEvent(
-                MetadataId: 1,
-                ExternalId: "ext",
-                TrainName: trainName,
-                TrainState: TrainState.Completed,
-                Timestamp: DateTime.UtcNow,
-                FailureJunction: null,
-                FailureReason: null,
-                Output: null,
-                HostName: "worker-1",
-                HostEnvironment: "Production"
-            )
+        Send(nameof(LifecycleSubscriptions.OnTrainCompleted), Completed(trainName));
+
+    private static TrainLifecycleEvent Completed(string trainName) =>
+        new(
+            MetadataId: 1,
+            ExternalId: "ext",
+            TrainName: trainName,
+            TrainState: TrainState.Completed,
+            Timestamp: DateTime.UtcNow,
+            FailureJunction: null,
+            FailureReason: null,
+            Output: null,
+            HostName: "worker-1",
+            HostEnvironment: "Production"
         );
 
     private void Send<T>(string topic, T message) =>

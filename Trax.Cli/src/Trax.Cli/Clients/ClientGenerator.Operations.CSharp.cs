@@ -22,7 +22,8 @@ internal sealed partial class ClientGenerator
 
     // The static classes every C# operations client declares, which no generated record may take. Everything the
     // client takes from Trax.Client or the BCL is written as global::, so a schema type of the same name (an input
-    // named Optional or TraxClient) declares its own record and changes nothing else.
+    // named Optional or TraxClient) declares its own record and changes nothing else, outside Trax.Client's own
+    // namespace, which --namespace may not name.
     private static readonly string[] CSharpRuntimeNames =
     [
         "TraxOperations",
@@ -44,6 +45,16 @@ internal sealed partial class ClientGenerator
         if (!IsNamespace(@namespace))
             throw new InvalidOperationException(
                 $"--namespace '{@namespace}' is not a C# namespace (dotted identifiers, such as My.App.Operations)."
+            );
+        // In Trax.Client a record named like one of its types (an input TraxClient) takes that type's full name and
+        // wins over it (CS0436), global:: or not; below it, the runtime's names and the generated ones mix in every lookup.
+        if (
+            @namespace == "Trax.Client"
+            || @namespace.StartsWith("Trax.Client.", StringComparison.Ordinal)
+        )
+            throw new InvalidOperationException(
+                $"--namespace '{@namespace}' is Trax.Client's own namespace, which the client is written against. "
+                    + "Name another, such as My.App.Operations."
             );
         GraphQLDocument sdl;
         try
@@ -76,7 +87,7 @@ internal sealed partial class ClientGenerator
             // An input is a record, which declares these members itself: one of their names would be its own.
             if (
                 types.Definition(type) is GraphQLInputObjectTypeDefinition
-                && CSharp.IsRecordMember(name)
+                && CSharp.IsDeclaredRecordMember(name)
             )
                 throw new InvalidOperationException(
                     $"The GraphQL input {type} would declare the record {name}, a member every C# record has. "
@@ -145,15 +156,30 @@ internal sealed partial class ClientGenerator
         private const string Client = "global::Trax.Client.";
 
         // The members of TraxOperations and of TraxOperationsClient, so no document's field or method takes the name
-        // of its class or of another document's.
-        private readonly Names _fields = Seeded("TraxOperations");
+        // of its class or of another document's. A document's field would hide one of object's members of its name
+        // (CS0108), so those are taken too; its method takes parameters none of them has, and hides nothing.
+        private readonly Names _fields = Seeded("TraxOperations", ObjectMembers);
 
-        private readonly Names _methods = Seeded("TraxOperationsClient");
+        private readonly Names _methods = Seeded("TraxOperationsClient", []);
 
-        private static Names Seeded(string type)
+        // What a static class inherits from object that a field of the same name hides. Finalize is left out: a field
+        // of that name hides nothing.
+        private static readonly string[] ObjectMembers =
+        [
+            "Equals",
+            "GetHashCode",
+            "GetType",
+            "MemberwiseClone",
+            "ReferenceEquals",
+            "ToString",
+        ];
+
+        private static Names Seeded(string type, string[] inherited)
         {
             var members = new Names(rename: Rename);
             members.Claim(type, $"the class {type} the client declares");
+            foreach (var member in inherited)
+                members.Claim(member, $"the member {member} {type} inherits from object");
             return members;
         }
 
@@ -689,7 +715,19 @@ internal sealed partial class ClientGenerator
             "ToString",
         };
 
-        public static bool IsRecordMember(string name) => RecordMembers.Contains(name);
+        // The members a sealed record without a primary constructor declares itself (CS0542 refuses a record of one of
+        // their names). The rest of RecordMembers it inherits, or declares under another name, so a record may take them.
+        private static readonly HashSet<string> DeclaredRecordMembers = new(StringComparer.Ordinal)
+        {
+            "EqualityContract",
+            "Equals",
+            "GetHashCode",
+            "PrintMembers",
+            "ToString",
+        };
+
+        public static bool IsDeclaredRecordMember(string name) =>
+            DeclaredRecordMembers.Contains(name);
 
         // A property: the type name of the key, with Value after it when it would take its record's own name or one
         // of the members every record has.

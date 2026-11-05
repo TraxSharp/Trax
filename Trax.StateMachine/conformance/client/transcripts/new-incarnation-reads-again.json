@@ -14,9 +14,9 @@
     { "client": "start" },
     { "subscribe": { "id": "i-1" } },
     { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
-    { "push": { "rowId": "7", "revision": 4, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "push": { "rowId": 7, "revision": 4, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
     { "view": { "rowId": "7", "revision": 4, "state": "Unlocked" } },
-    { "push": { "rowId": "8", "revision": 1, "state": "Locked", "context": {} } },
+    { "push": { "rowId": 8, "revision": 1, "state": "Locked", "context": {} } },
     { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
     { "view": { "rowId": "8", "revision": 1, "state": "Locked" } }
   ]

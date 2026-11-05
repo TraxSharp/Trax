@@ -7,7 +7,8 @@ import { readLines } from "./run.mjs";
 
 // Differential fuzzing over the testee protocol (PROTOCOL.md). From a seed it generates requests against the kit's
 // machines, and with --irs against small random machines too, sends each to every testee and fails on the first
-// answer that differs. No engine is the reference: the engines are held to each other. The cases are a function of
+// answer that differs, or on an error answer to any op but load. No engine is the reference: the engines are held to
+// each other. The cases are a function of
 // the seed and of the answers the engines agreed on, so a seed replays the same run for as long as they agree.
 
 const USAGE =
@@ -662,7 +663,8 @@ function lineExchange(input, output) {
 
 /**
  * Runs `count` cases from `seed` against `testees` (each `{ name, exchange }`). Returns null when every testee gave
- * every answer the others gave, or the first difference, shrunk: `{ index, original, request, ir, answers }`.
+ * every answer the others gave and no error but to a load, or else the first difference or error, shrunk:
+ * `{ index, original, request, ir, answers }`.
  */
 export async function fuzz({ seed, count, irs, testees, log = () => {} }) {
   let id = 0;
@@ -678,7 +680,11 @@ export async function fuzz({ seed, count, irs, testees, log = () => {} }) {
     }
     return answers;
   };
-  const differ = (answers) => new Set(answers.map(normal)).size > 1;
+  // Every op but load is total (PROTOCOL.md): it answers a refusal as a value, never an error, and the generator builds
+  // no case that asks for one. An error there is a failure even when every testee answers one, since two engines that
+  // both throw agree on nothing. Only a load may be refused with an error, and there the testees must agree.
+  const differ = (request, answers) =>
+    new Set(answers.map(normal)).size > 1 || (request.op !== "load" && answers.some((a) => typeof a.error === "string"));
   // A canonical case shrinks as a tree, so its number text survives; it is sent as text.
   const wireRequest = (request) => {
     if (request.contextTree === undefined) return request;
@@ -697,14 +703,14 @@ export async function fuzz({ seed, count, irs, testees, log = () => {} }) {
     const request = generator.next();
     if (request.op === "load") loads.set(request.machine, request.ir);
     const answers = await ask(request);
-    if (!differ(answers)) {
+    if (!differ(request, answers)) {
       generator.agreed(request, answers[0]);
       continue;
     }
     log(`difference at case ${index}; shrinking`);
     let smallest = request.op === "canonical" && request.context !== undefined ? { op: "canonical", contextTree: JSON.parse(request.context) } : request;
     // JSON.parse loses number text; keep the text when the tree no longer differs.
-    if (smallest.contextTree !== undefined && !differ(await ask(wireRequest(smallest)))) smallest = request;
+    if (smallest.contextTree !== undefined && !differ(request, await ask(wireRequest(smallest)))) smallest = request;
     let smallestAnswers = answers;
     let budget = 3000;
     for (let shrunk = true; shrunk && budget > 0; ) {
@@ -712,7 +718,7 @@ export async function fuzz({ seed, count, irs, testees, log = () => {} }) {
       for (const candidate of smallerRequests(smallest)) {
         if (--budget <= 0) break;
         const got = await ask(wireRequest(candidate));
-        if (differ(got)) {
+        if (differ(candidate, got)) {
           smallest = candidate;
           smallestAnswers = got;
           shrunk = true;
@@ -734,7 +740,8 @@ export async function fuzz({ seed, count, irs, testees, log = () => {} }) {
 
 /** The difference as text: the seed, the request shrunk, and what each testee answered. */
 export function describe(seed, difference) {
-  const lines = [`DIFFERENCE at case ${difference.index} of seed ${seed}.`];
+  const alike = new Set(difference.answers.map(([, answer]) => normal(answer))).size === 1;
+  const lines = [`${alike ? "ERROR" : "DIFFERENCE"} at case ${difference.index} of seed ${seed}.`];
   if (difference.ir) lines.push(`machine ${difference.request.machine}, loaded from: ${JSON.stringify(difference.ir)}`);
   const { id: _, ...request } = difference.request;
   lines.push(`request: ${JSON.stringify(request)}`);

@@ -1,5 +1,5 @@
 {
-  "about": "A socket connect or idle timeout of zero or less gives the socket no time: the client refuses to be built with one, and builds with positive ones.",
+  "about": "A socket connect or idle timeout of zero or less gives the socket no time, and one past 2^31 - 1 ms is one no timer waits for: the client refuses to be built with either, and builds with ones from 1 ms to that.",
   "machine": "turnstile",
   "instance": "i-1",
   "needs": ["socket-timeouts"],
@@ -16,6 +16,9 @@
     { "client": "build", "connectTimeout": -5, "expect": { "built": false, "code": "INVALID_OPTION" } },
     { "client": "build", "idleTimeout": 0, "expect": { "built": false, "code": "INVALID_OPTION" } },
     { "client": "build", "idleTimeout": -5, "expect": { "built": false, "code": "INVALID_OPTION" } },
-    { "client": "build", "connectTimeout": 1000, "idleTimeout": 1000, "expect": { "built": true } }
+    { "client": "build", "connectTimeout": 2147483648, "expect": { "built": false, "code": "INVALID_OPTION" } },
+    { "client": "build", "idleTimeout": 2147483648, "expect": { "built": false, "code": "INVALID_OPTION" } },
+    { "client": "build", "connectTimeout": 1000, "idleTimeout": 1000, "expect": { "built": true } },
+    { "client": "build", "connectTimeout": 2147483647, "idleTimeout": 2147483647, "expect": { "built": true } }
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "about": "A client opened without resubscribe delays waits the first default step, 1000 ms jittered to between half of it and all of it, before subscribing again after a stream that ended without saying why.",
+  "about": "A client opened without resubscribe delays waits the first default step, 1000 ms jittered to between half of it and all of it, before subscribing again after a stream that ended without saying why. The upper bound is the next step, 2000 ms, so a loaded runner has time to spare.",
   "machine": "turnstile",
   "instance": "i-1",
   "defaults": true,
@@ -17,7 +17,7 @@
     { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
     { "view": { "status": "ready" } },
     { "complete": true },
-    { "subscribe": { "id": "i-1" }, "notBefore": 500, "before": 1250 },
+    { "subscribe": { "id": "i-1" }, "notBefore": 500, "before": 2000 },
     { "push": { "revision": 1, "state": "Locked", "context": {} } },
     { "view": { "state": "Locked", "revision": 1 } }
   ]

@@ -198,10 +198,10 @@ paths:
 | --- | --- | --- |
 | `state-machine-dotnet` | `dotnet/`, `conformance/`, or Trax.Effect | the folder job's checks over `dotnet/Trax.StateMachine.slnx` (format, locks, deprecations, pack with package validation, coverage) and its tests, without the CrossEngine ones |
 | `state-machine-ts` | `ts/`, `conformance/` | typecheck, vitest, build, `npm pack --dry-run`, audit |
-| `state-machine-rust` | `rust/`, `conformance/` | `cargo fmt --check`, clippy with warnings as errors, `cargo test`, then the engine kit and the client kit through the Rust testees, and a short fuzz of the Rust engine against the TypeScript one |
+| `state-machine-rust` | `rust/`, `conformance/`, and the TypeScript engine the fuzz runs (`ts/src/`, its testee and loader, its package and tsconfig files) | `cargo fmt --check`, clippy with warnings as errors, `cargo test`, then the engine kit and the client kit through the Rust testees, and a short fuzz of the Rust engine against the TypeScript one |
 | `state-machine-conformance` | anything in the folder, or Trax.Effect | the CrossEngine tests (among them the engine kit through the C# engine, a short fuzz of it against the TypeScript one, `FuzzTests`, and the client kit through the C# client, `ClientConformanceTests`), then the engine kit through the TypeScript engine and the client kit through the TypeScript client |
 
-The three language suites leave each other alone, but the folder is still one unit to the change
-detector: any change in it runs `state-machine-conformance`, which builds and runs the C# tests, and
+The three language suites leave each other alone, but for the TypeScript engine the Rust suite's
+fuzz runs, and the folder is still one unit to the change detector: any change in it runs `state-machine-conformance`, which builds and runs the C# tests, and
 selects the folder itself. Trax.Mediator and Trax.Cli list this folder upstream, so a change anywhere
 in it, a `rust/`-only one included, also runs them and the folders below them.

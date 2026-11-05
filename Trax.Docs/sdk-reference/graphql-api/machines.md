@@ -154,8 +154,9 @@ id when persisted operations are on.
   event with the problem `NOT_FOUND`, then the end. The stream then follows the row's `row_id`, so a row deleted and
   created again under the same id never reaches it. The rule is asked again for the same principal and row every
   five minutes, or at the interval set with
-  [`RecheckConnectionCredentialsEvery(...)`](/docs/sdk-reference/graphql-api/add-trax-graphql#builder-methods); when
-  it no longer admits the caller, the stream ends with that same `NOT_FOUND` event, and the socket stays open.
+  [`RecheckConnectionCredentialsEvery(...)`](/docs/sdk-reference/graphql-api/add-trax-graphql#builder-methods), after
+  the endpoint policy set with `RequireAuthorization(...)` when there is one; when either no longer admits the caller,
+  the stream ends with that same `NOT_FOUND` event, and the socket stays open.
 - **Order.** The watch registers before the instance is read, and the first event is the instance as it is then.
   Each later event is a newer revision, whole, migrated and validated as `get` reads it; a burst may arrive as its
   latest revision only. Drop an event, or an answer to your own step, at or below the revision you hold: a skipped

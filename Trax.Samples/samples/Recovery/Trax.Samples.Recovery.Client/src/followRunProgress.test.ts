@@ -43,3 +43,26 @@ describe("followRunProgress", () => {
     },
   );
 });
+
+describe("followRunProgress on a refusal", () => {
+  it("ends the stream once on a frame with errors, and delivers nothing the host sends after it", () => {
+    socket.disposed = 0;
+    const events: unknown[] = [];
+    const ends: unknown[] = [];
+    followRunProgress(
+      "run-1",
+      (event) => events.push(event),
+      (error) => ends.push(error),
+    );
+
+    socket.sink!.next({ data: null, errors: [{ message: "Not yours.", extensions: { code: "NOT_FOUND" } }] });
+    socket.sink!.next({ data: { runProgress: { runId: "run-1", sequence: 1 } } });
+    socket.sink!.complete();
+
+    expect(events).toEqual([]);
+    expect(ends).toHaveLength(1);
+    expect(ends[0]).toBeInstanceOf(TraxOperationError);
+    expect(ends[0]).toMatchObject({ code: "NOT_FOUND", message: "Not yours." });
+    expect(socket.disposed).toBe(1);
+  });
+});

@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using HotChocolate;
@@ -208,12 +209,14 @@ internal static class MachineChangedSubscription
         )
             return Once(MachineChange.Refused(null, RefusalCode.NotFound, NotFoundMessage));
 
-        // The watch rule is asked again at every connection re-check, for the same caller and the
-        // same row, in a scope of its own so it shares no data context with the socket's other
-        // operations. A stream it no longer admits ends with the answer a refused subscribe gets.
+        // The endpoint policy and the watch rule are asked again at every connection re-check, for
+        // the same caller and the same row, each in a scope of its own so it shares no data context
+        // with the socket's other operations. A stream they no longer admit ends with the answer a
+        // refused subscribe gets.
         var scopes = services.GetRequiredService<IServiceScopeFactory>();
         var recheck = SubscriptionRecheck.For(
             services,
+            ctx.GetGlobalStateOrDefault<ClaimsPrincipal>("ClaimsPrincipal"),
             async ct =>
             {
                 await using var scope = scopes.CreateAsyncScope();

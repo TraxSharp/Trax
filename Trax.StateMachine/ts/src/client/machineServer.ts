@@ -54,10 +54,12 @@ export interface MachineServerOptions extends HttpExecutorOptions {
    * Delays, in milliseconds, before subscribing again after a stream that ended without saying why (its host stopped,
    * or the socket gave up). Each wait is drawn uniformly between half the delay and the whole of it, so the pages a
    * host dropped together do not subscribe again together. The last delay repeats for as long as the stream is wanted, and the schedule starts over
-   * once a stream has delivered a second push: every new stream's first is the instance as it is then. A socket the host refused (a
+   * once a stream has delivered a second snapshot (a reload push does not count): every new stream's first is the instance as it is then. A socket the host refused (a
    * close with 4401 or 4403), or a stream it refused with a GraphQL error coded `TRAX_AUTHORIZATION`,
    * `AUTH_NOT_AUTHENTICATED` or `AUTH_NOT_AUTHORIZED`, is not subscribed again: it ends the controller as
-   * `UNAUTHENTICATED` or `FORBIDDEN`. Each is from 0 to 2^31 - 1 ms; any other throws when the server is built.
+   * `UNAUTHENTICATED` or `FORBIDDEN`. A close reaches the stream only once the socket stops retrying it, and graphql-ws
+   * retries a 4403 close, so give a graphql-ws socket {@link retryClosedSocket} as its `shouldRetry` or a 4403 never
+   * ends it. Each is from 0 to 2^31 - 1 ms; any other throws when the server is built.
    */
   resubscribeDelays?: readonly number[];
   /**
@@ -73,9 +75,13 @@ export interface MachineServerOptions extends HttpExecutorOptions {
 
 /**
  * The answer to `discard`. A discard of an instance already gone, or never the caller's, is `discarded` too. An answer
- * that does not say the instance was discarded, and gives no problem, is a `TRANSPORT_ERROR`.
+ * that does not say the instance was discarded, and gives no problem, is a `TRANSPORT_ERROR`. A request rejected with
+ * one of {@link MachineServerOptions.terminalStreamErrors} is a problem with that code and the error's message.
  */
-export type DiscardResponse = { kind: 'discarded' } | ServerProblem;
+export type DiscardResponse =
+  | { kind: 'discarded' }
+  | ServerProblem
+  | { kind: 'problem'; code: string & {}; message: string };
 
 /** A {@link MachineServer} that can also discard an instance. */
 export interface TypedMachineServer extends MachineServer {
@@ -110,6 +116,19 @@ export const REFUSED_CLOSES: ReadonlyMap<number, string> = new Map([
   [4401, RefusalCode.Unauthenticated],
   [4403, RefusalCode.Forbidden],
 ]);
+
+/**
+ * Whether a graphql-ws client opens a closed socket again: after any close but 4401 or 4403, the host turning the
+ * caller away, which a retry gets again. Anything that is not a close event is not retried, as graphql-ws's own default
+ * does. graphql-ws gives up on 4401 by itself but retries 4403 for as long as `retryAttempts` allows, so a socket with
+ * `retryAttempts: Infinity` never hands the stream the 4403 that ends it as `FORBIDDEN`. Pass this as the client's
+ * `shouldRetry`.
+ */
+export function retryClosedSocket(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('reason' in error)) return false;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'number' && !REFUSED_CLOSES.has(code);
+}
 
 /**
  * The code and message a socket error ends the stream with when the host refused the socket (a close with 4401 or
@@ -147,7 +166,7 @@ const firstErrorOf = (errors: GraphQLErrors | undefined): { code: string; messag
 };
 
 interface MachineChange {
-  rowId?: number | string | null;
+  rowId?: number | null;
   revision?: number | null;
   state?: string | null;
   context?: Record<string, unknown> | null;
@@ -271,11 +290,14 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
   const get = async (id: string): Promise<GetResponse> => answered(await client.load(machine.id, id));
 
   // Total, as every operation a page calls itself is: a request the transport failed is a TRANSPORT_ERROR, not a throw.
+  // A rejection with a terminal code keeps its code, so the page can tell this server will refuse everything now.
   const discard = async (id: string, requestId: string): Promise<DiscardResponse> => {
     let output: Awaited<ReturnType<typeof client.discard>>;
     try {
       output = await client.discard(machine.id, id, requestId);
     } catch (error) {
+      const ended = terminalOf(error);
+      if (ended) return { kind: 'problem', ...ended };
       return {
         kind: 'problem',
         code: ClientProblemCode.TransportError,
@@ -339,6 +361,12 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
             // A push no host wrote is dropped, and the instance read again: whatever the host wrote then is not known.
             if (!isContext(pushed)) return deliver({ type: 'reconnected' });
             const change = pushed as MachineChange;
+            // A problem is null or an object with a code; anything else no host wrote.
+            const problem: unknown = change.problem;
+            if (problem != null && (!isContext(problem) || typeof problem.code !== 'string'))
+              return deliver({ type: 'reconnected' });
+            // A rowId is a whole number, as a host serves a GraphQL Long, or null.
+            if (change.rowId != null && !Number.isInteger(change.rowId)) return deliver({ type: 'reconnected' });
             if (change.problem) {
               if (change.problem.code === CLIENT_OUTDATED) deliver({ type: 'client-outdated' });
               else if (change.problem.code === NOT_FOUND) deliver({ type: 'gone', notFound: true });

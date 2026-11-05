@@ -301,6 +301,11 @@ export async function startHost() {
           live.get(conn)?.delete(message.id);
           conn.send({ id: message.id, type: "error", payload: errors });
         },
+        // An error message whose payload is the text given, which need not be JSON a serializer would write.
+        errorRaw: (payloadText) => {
+          live.get(conn)?.delete(message.id);
+          conn.sendText(`{"id":${JSON.stringify(message.id)},"type":"error","payload":${payloadText}}`);
+        },
         complete: () => {
           live.get(conn)?.delete(message.id);
           conn.send({ id: message.id, type: "complete" });

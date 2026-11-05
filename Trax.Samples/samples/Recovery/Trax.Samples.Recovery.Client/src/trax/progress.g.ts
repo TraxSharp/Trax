@@ -169,20 +169,21 @@ export function followRunProgress(
         ? error
         : new TraxOperationError("CONNECTION_CHANGED", "configureTrax was called while following this run: follow it again."),
     );
-  // Set once a frame with neither data nor an error has ended the stream, which then says nothing more.
+  // Set once a frame has ended the stream (a refusal, or neither data nor an error), which then says nothing more.
   let failed = false;
+  const fail = (error: TraxOperationError) => {
+    failed = true;
+    stop();
+    end(error);
+  };
   const stop = traxSocket().subscribe<{ runProgress: RunProgressEvent }>(payload, {
     next: (result) => {
       if (failed) return;
       const error = result.errors?.[0];
-      if (error) onEnd?.(new TraxOperationError(error.extensions?.code as string | undefined, error.message));
+      if (error) fail(new TraxOperationError(error.extensions?.code as string | undefined, error.message));
       else if (typeof result.data === "object" && result.data !== null) onEvent(result.data.runProgress);
-      else {
-        // Neither a refusal nor an event: the stream ends with that failure, as a send answered so does.
-        failed = true;
-        stop();
-        end(new TraxOperationError(undefined, "The host sent a frame with neither data nor an error."));
-      }
+      // Neither a refusal nor an event: the stream ends with that failure, as a send answered so does.
+      else fail(new TraxOperationError(undefined, "The host sent a frame with neither data nor an error."));
     },
     error: (error) => {
       if (!failed) end(error);

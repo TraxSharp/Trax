@@ -605,6 +605,34 @@ public class TraxClientTests
     }
 
     [Test]
+    public async Task A_resubscribe_whose_subscribe_throws_ends_the_stream_with_a_failure()
+    {
+        var socket = new HandSocket();
+        var time = new FakeTimeProvider();
+        var events = new EventLog<ChangedResult>();
+        using var stream = new TraxClient(
+            Transport(socket),
+            new TraxClientOptions { Time = time, ResubscribeDelays = [TimeSpan.FromSeconds(1)] }
+        ).Subscribe(Changed, TraxNoVariables.Instance, events.Add);
+        (await socket.Subscriptions.Take(Wait)).Sink.Error(new IOException("dropped"));
+        (await events.Take(1))
+            .Single()
+            .Should()
+            .BeOfType<TraxStreamEvent<ChangedResult>.Interrupted>();
+        socket.Throws = new ObjectDisposedException("socket");
+
+        time.Advance(TimeSpan.FromSeconds(1));
+
+        var ended = (await events.Take(1))
+            .Single()
+            .Should()
+            .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
+            .Subject;
+        ended.Errors.Should().BeEmpty();
+        ended.Failure!.Message.Should().Contain("socket");
+    }
+
+    [Test]
     public async Task Disposing_the_handle_cancels_a_pending_resubscribe()
     {
         var socket = new HandSocket();
@@ -796,6 +824,38 @@ public class TraxClientTests
         // negative-wait: a retry would have connected again within the 10 ms delay.
         await Task.Delay(300);
         host.Connections.Should().Be(1);
+    }
+
+    [Test]
+    public async Task An_error_whose_errors_cannot_be_read_ends_the_stream_with_a_failure()
+    {
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.AckAsync();
+            var id = await peer.SubscribedAsync();
+            await peer.SendAsync(
+                $$$"""{"type":"error","id":"{{{id}}}","payload":[{"message":"m","extensions":{"code":"A","code":"B"}}]}"""
+            );
+            await peer.GoneAsync();
+        });
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var events = new EventLog<ChangedResult>();
+
+        using var stream = new TraxClient(Transport(socket)).Subscribe(
+            Changed,
+            TraxNoVariables.Instance,
+            events.Add
+        );
+
+        var ended = (await events.Take(1))
+            .Single()
+            .Should()
+            .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
+            .Subject;
+        ended.Errors.Should().BeEmpty();
+        ended.Failure.Should().NotBeNull();
     }
 
     [Test]
@@ -1046,8 +1106,13 @@ public class TraxClientTests
     {
         public Signals<Opened> Subscriptions { get; } = new();
 
+        // Thrown by every subscribe from now on, as a custom socket's bug would be.
+        public Exception? Throws { get; set; }
+
         public IDisposable Subscribe(JsonObject payload, ISubscriptionSink sink)
         {
+            if (Throws is not null)
+                throw Throws;
             var opened = new Opened(payload, sink);
             Subscriptions.Add(opened);
             return opened;

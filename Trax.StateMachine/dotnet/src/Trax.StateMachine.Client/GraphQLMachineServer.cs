@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Trax.Client;
@@ -440,14 +441,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             throw new FormatException(
                 $"The snapshot's context nests deeper than a stored snapshot may ({MaxStoredDepth} levels, the snapshot counting as one)."
             );
-        var rowId = !push
-            ? null
-            : node["rowId"] switch
-            {
-                null => null,
-                var row => Text(row)
-                    ?? throw new FormatException("The snapshot's rowId is not a string."),
-            };
+        var rowId = push ? RowIdOf(node["rowId"]) : null;
         return new ServerSnapshot
         {
             RowId = rowId,
@@ -459,6 +453,26 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             DueAtKnown = Flag(node, "dueAtKnown") && node.ContainsKey("dueAt"),
             DueAt = DueAtOf(node["dueAt"]),
         };
+    }
+
+    // A row id is a whole number as Trax.Api writes its Long, kept as its decimal text (2.0 is the 2 a JavaScript host
+    // may write). Anything else, a string among them, is not a row id a host wrote.
+    private static string? RowIdOf(JsonNode? node)
+    {
+        if (node is null)
+            return null;
+        if (node is JsonValue value && value.GetValueKind() == JsonValueKind.Number)
+        {
+            if (value.TryGetValue<long>(out var whole))
+                return whole.ToString(CultureInfo.InvariantCulture);
+            if (
+                value.TryGetValue<double>(out var number)
+                && Math.Abs(number) <= MaxSafeInteger
+                && Math.Floor(number) == number
+            )
+                return ((long)number).ToString(CultureInfo.InvariantCulture);
+        }
+        throw new FormatException("The snapshot's rowId is not a whole number.");
     }
 
     // The deepest a stored snapshot nests, itself counting as one (conformance/limits.json, maxStoredDepth): no store
@@ -643,7 +657,9 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             switch (change["problem"])
             {
                 case JsonObject problem:
-                    var code = Text(problem["code"]);
+                    var code =
+                        Text(problem["code"])
+                        ?? throw new FormatException("The push's problem has no code.");
                     if (code == ClientOutdated)
                         return (new StreamMessage.ClientOutdated(), false);
                     if (code == RefusalCode.NotFound.ToWire())
@@ -670,11 +686,24 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 Deliver(
                     new StreamMessage.Refused(ClientProblemCodes.TransportError, error.Message)
                 );
-            else if (
-                error is SubscriptionErrorException { Errors: var errors }
-                && EndOf(errors) is { } ended
-            )
-                Deliver(ended);
+            else if (error is SubscriptionErrorException { Errors: var errors })
+            {
+                StreamMessage? ended;
+                try
+                {
+                    ended = EndOf(errors);
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                {
+                    // A member given twice: errors this client cannot read say nothing about why the stream ended, so
+                    // it is subscribed again, as after any other error.
+                    ended = null;
+                }
+                if (ended is not null)
+                    Deliver(ended);
+                else
+                    Again();
+            }
             else
                 Again();
         }
@@ -800,10 +829,29 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                     t =>
                     {
                         if (!t.IsCanceled)
-                            Open(source);
+                            Reopen(source);
                     },
                     TaskScheduler.Default
                 );
+        }
+
+        // Subscribes again after a delay. A socket whose Subscribe throws (a custom socket's bug, or one disposed) has
+        // no stream to follow: the stream ends as it does on a socket that follows no more subscriptions.
+        private void Reopen(CancellationTokenSource fired)
+        {
+            try
+            {
+                Open(fired);
+            }
+            catch (Exception ex)
+            {
+                Deliver(
+                    new StreamMessage.Refused(
+                        ClientProblemCodes.TransportError,
+                        $"The stream could not be subscribed again: the socket's Subscribe threw: {ex.Message}"
+                    )
+                );
+            }
         }
 
         public void Dispose()

@@ -1,0 +1,24 @@
+{
+  "about": "A stream error whose errors cannot be read, here a member given twice, is subscribed again after the resubscribe delay, as a stream error with no code is: the stream does not end silently.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "resubscribeDelays": [10],
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "status": "ready" } },
+    { "streamErrorRaw": "[{\"message\":\"m\",\"extensions\":{\"code\":\"A\",\"code\":\"B\"}}]" },
+    { "subscribe": { "id": "i-1" } },
+    { "push": { "revision": 2, "state": "Locked", "context": {} } },
+    { "view": { "status": "ready", "state": "Locked", "revision": 2, "error": null } }
+  ]
+}

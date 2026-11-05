@@ -16,8 +16,9 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// <summary>
 /// The operator's live view of state-machine instances, <c>subscription { onMachineInstanceChanged(machine:) }</c>:
 /// each instance whenever any path on any host writes it, with its state, revision and whether it waits on a run,
-/// never its context or its owner's key. Behind the operations gate, checked again every connection re-check interval
-/// (a subscriber that no longer passes it is sent a <c>TRAX_AUTHORIZATION</c> error and the stream ends), and read through
+/// never its context or its owner's key. Behind the operations gate, checked again with the endpoint policy every
+/// connection re-check interval (a subscriber that no longer passes either is sent a <c>TRAX_AUTHORIZATION</c> error and
+/// the stream ends), and read through
 /// <see cref="IOperationsService.WatchMachineInstancesAsync"/>, the feed the dashboard's State machines page reads, so
 /// both views follow the host's one change listener. Registered with the operations queries. See
 /// <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.
@@ -62,7 +63,7 @@ internal static class MachineInstanceFeed
             ctx.ArgumentValue<string?>("machine"),
             stop.Token
         );
-        return new FeedStream(feed, stop, access.Recheck(_ => access.OperationsFor(user)));
+        return new FeedStream(feed, stop, access.Recheck(user, _ => access.OperationsFor(user)));
     }
 
     /// <summary>

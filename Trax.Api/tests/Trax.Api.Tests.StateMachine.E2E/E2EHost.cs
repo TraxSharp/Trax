@@ -166,6 +166,11 @@ public static class E2EHost
                         if (options.ExposeOperations)
                             AddOperationsServices(services);
 
+                        if (options.Trains is { } keep)
+                            services.AddSingleton<ITrainDiscoveryService>(
+                                new KeptTrains(new TrainDiscoveryService(services), keep)
+                            );
+
                         services.AddTraxApi();
                         // The six stateMachine trains are all mutations; the Ping query train (this
                         // assembly) keeps the root Query type non-empty so HotChocolate can build.
@@ -304,6 +309,14 @@ public static class E2EHost
             throw new InvalidOperationException("This host runs no trains.");
     }
 
+    /// <summary>The trains of <paramref name="all"/> that <paramref name="keep"/> keeps.</summary>
+    private sealed class KeptTrains(ITrainDiscoveryService all, Func<TrainRegistration, bool> keep)
+        : ITrainDiscoveryService
+    {
+        public IReadOnlyList<TrainRegistration> DiscoverTrains() =>
+            all.DiscoverTrains().Where(keep).ToList();
+    }
+
     /// <summary>A scheduler facade these hosts never call: every member throws.</summary>
     public class NoScheduler : DispatchProxy
     {
@@ -332,6 +345,12 @@ public sealed record E2EHostOptions
     /// shared operations service. With it on, every train's lifecycle is published to the operator.
     /// </summary>
     public bool ExposeOperations { get; init; }
+
+    /// <summary>
+    /// When set, only the trains it keeps are discovered: a host gated with <c>RequireAuthorization(...)</c> leaves
+    /// out the assembly's <c>[TraxAllowAnonymous]</c> trains, which such a host refuses to start with.
+    /// </summary>
+    public Func<TrainRegistration, bool>? Trains { get; init; }
 
     /// <summary>Registrations made after Trax's, so the last one wins.</summary>
     public Action<IServiceCollection>? Services { get; init; }

@@ -17,7 +17,7 @@ through. The server applies every transition, stores it and answers what it stor
 
 ```ts
 import { createClient } from 'graphql-ws';
-import { createMachineServer, persistedMessageReplacer } from '@traxsharp/state-machine/client';
+import { createMachineServer, persistedMessageReplacer, retryClosedSocket } from '@traxsharp/state-machine/client';
 import { useServerMachine } from '@traxsharp/state-machine/react';
 import documents from './topic-map.documents.json';
 
@@ -30,6 +30,7 @@ const server = createMachineServer('/trax/graphql', {
     connectionParams: { apiKey: key },
     lazy: true,
     retryAttempts: Infinity,
+    shouldRetry: retryClosedSocket,   // a 4401 or 4403 close is not retried, so it ends the stream
     jsonMessageReplacer: persistedMessageReplacer,
   }),
 });
@@ -53,7 +54,8 @@ function Wizard({ id }: { id?: string }) {
   id is answered with as gone with `notFound`; `CLIENT_OUTDATED` as client-outdated; `reload: true` as a read. A socket
   the host closed with 4401 or 4403 refused the caller, and subscribing again would get the same answer: it ends the
   stream for good as `ended`, with `UNAUTHENTICATED` or `FORBIDDEN` and a message naming the close code (graphql-ws gives
-  up on 4401 at once and on 4403 after its own `retryAttempts`). A stream the host refuses on a socket it accepted, with
+  up on 4401 at once, but retries 4403 for as long as `retryAttempts` allows unless its `shouldRetry` is
+  `retryClosedSocket`). A stream the host refuses on a socket it accepted, with
   a GraphQL error coded `TRAX_AUTHORIZATION` or `AUTH_NOT_AUTHORIZED` (`FORBIDDEN`) or `AUTH_NOT_AUTHENTICATED`
   (`UNAUTHENTICATED`), ends the same way. A socket error whose `code` is in `terminalStreamErrors`, or a stream error
   whose `extensions.code` is, ends the stream for good too: it reaches the controller as `ended`, and is not

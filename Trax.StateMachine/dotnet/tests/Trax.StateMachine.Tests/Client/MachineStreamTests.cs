@@ -146,7 +146,9 @@ public class MachineStreamTests
     [TestCase("""{"turnstileChanged":{"state":"Locked","revision":-1,"context":{}}}""")]
     [TestCase("""{"turnstileChanged":{"state":"Locked","revision":1.5,"context":{}}}""")]
     [TestCase("""{"turnstileChanged":{"state":"Locked","context":{}}}""")]
-    [TestCase("""{"turnstileChanged":{"state":"Locked","revision":1,"rowId":7,"context":{}}}""")]
+    [TestCase("""{"turnstileChanged":{"state":"Locked","revision":1,"rowId":"7","context":{}}}""")]
+    [TestCase("""{"turnstileChanged":{"state":"Locked","revision":1,"rowId":7.5,"context":{}}}""")]
+    [TestCase("""{"turnstileChanged":{"problem":{"message":"no code"}}}""")]
     [TestCase(
         """{"turnstileChanged":{"state":"Locked","revision":1,"dueAt":"soon","context":{}}}"""
     )]
@@ -206,6 +208,32 @@ public class MachineStreamTests
             .Be(new DateTimeOffset(2026, 10, 22, 10, 10, 0, 500, TimeSpan.Zero));
     }
 
+    // Trax.Api types rowId as a Long, so a host writes it as a number.
+    [TestCase("7")]
+    [TestCase("7.0")]
+    public async Task A_row_id_written_as_a_whole_number_is_read_as_its_decimal_text(string rowId)
+    {
+        var (socket, messages, stream) = Follow();
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Push(
+            (JsonObject)
+                JsonNode.Parse(
+                    """{"data":{"turnstileChanged":{"state":"Locked","revision":1,"rowId":ROW,"context":{}}}}""".Replace(
+                        "ROW",
+                        rowId
+                    )
+                )!
+        );
+
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+            .Should()
+            .BeOfType<StreamMessage.Changed>()
+            .Which.Snapshot.RowId.Should()
+            .Be("7");
+    }
+
     private static JsonObject Errors(string code) =>
         (JsonObject)
             JsonNode.Parse(
@@ -256,6 +284,43 @@ public class MachineStreamTests
         // Subscribing again would wait on a timer first: none was started.
         time.Delays.Should().BeEmpty();
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task An_error_whose_errors_cannot_be_read_is_subscribed_again()
+    {
+        var (socket, messages, stream) = Follow();
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Sink.Error(
+            new SubscriptionErrorException(
+                (JsonArray)
+                    JsonNode.Parse("""[{"message":"m","extensions":{"code":"A","code":"B"}}]""")!
+            )
+        );
+
+        var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        second.Should().NotBeSameAs(first);
+        first.Disposed.Should().BeTrue();
+        messages.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task A_resubscribe_whose_subscribe_throws_ends_the_stream_with_a_transport_error()
+    {
+        var (socket, messages, stream) = Follow();
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        socket.Throws = new ObjectDisposedException("socket");
+
+        first.Sink.Complete();
+
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+            .Should()
+            .BeOfType<StreamMessage.Refused>()
+            .Which.Code.Should()
+            .Be(ClientProblemCodes.TransportError);
     }
 
     [Test]
@@ -480,8 +545,13 @@ public class MachineStreamTests
     {
         public Channel<Opened> Subscriptions { get; } = Channel.CreateUnbounded<Opened>();
 
+        // Thrown by every subscribe from now on, as a custom socket's bug would be.
+        public Exception? Throws { get; set; }
+
         public IDisposable Subscribe(JsonObject payload, ISubscriptionSink sink)
         {
+            if (Throws is not null)
+                throw Throws;
             var opened = new Opened(sink);
             Subscriptions.Writer.TryWrite(opened);
             return opened;

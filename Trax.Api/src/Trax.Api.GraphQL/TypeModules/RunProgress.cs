@@ -267,7 +267,8 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
             throw new GraphQLException(EndpointPolicyRequestMiddleware.NotAuthorized());
 
         var access = services.GetRequiredService<RunProgressAccess>();
-        var run = await access.FindAsync(runId, services, ctx.RequestAborted).ConfigureAwait(false);
+        var starters = RunProgressAccess.Starters(services);
+        var run = await access.FindAsync(runId, starters, ctx.RequestAborted).ConfigureAwait(false);
         if (run is null)
             return Once(new RunProgressEvent(runId, 1, null, null, null, NotFound()));
 
@@ -340,6 +341,16 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
             {
                 NextTry = access.NextTryAsync,
                 ReadQueued = access.QueuedFateAsync,
+                // The endpoint policy and the run being the caller's are asked again at every
+                // connection re-check; a stream they no longer admit ends with the answer a
+                // refused subscribe gets.
+                Recheck = SubscriptionRecheck.For(
+                    services,
+                    user,
+                    async ct =>
+                        await access.FindAsync(runId, starters, ct).ConfigureAwait(false)
+                            is not null
+                ),
                 Logger = services.GetService<ILoggerFactory>()?.CreateLogger<RunProgressStream>(),
             };
         }
@@ -386,7 +397,7 @@ internal enum QueuedFate
     Gone,
 }
 
-/// <summary>One run a caller may follow, as <see cref="RunProgressAccess.FindAsync"/> found it.</summary>
+/// <summary>One run a caller may follow, as <c>RunProgressAccess.FindAsync</c> found it.</summary>
 internal sealed record RunProgressRun(
     string RunId,
     string TrainName,
@@ -440,13 +451,19 @@ internal sealed class RunProgressAccess(
             );
     });
 
-    public async Task<RunProgressRun?> FindAsync(
+    public Task<RunProgressRun?> FindAsync(
         string runId,
         IServiceProvider services,
         CancellationToken ct
+    ) => FindAsync(runId, Starters(services), ct);
+
+    /// <summary>The run <paramref name="runId"/> when one of <paramref name="starters"/> started it.</summary>
+    public async Task<RunProgressRun?> FindAsync(
+        string runId,
+        IReadOnlyCollection<string> starters,
+        CancellationToken ct
     )
     {
-        var starters = Starters(services);
         if (starters.Count == 0 || runId.Length != 32 || _trains.Value.Count == 0)
             return null;
         var names = _trains.Value.Keys.ToList();
@@ -649,9 +666,11 @@ internal sealed class RunProgressAccess(
         );
     }
 
-    // The caller as a run records its starter: the principal id the mediator read when the caller started it, and the
-    // user key a machine records when it invokes the train for its owner.
-    private static List<string> Starters(IServiceProvider services)
+    /// <summary>
+    /// The caller of <paramref name="services"/> as a run records its starter: the principal id the mediator read when
+    /// the caller started it, and the user key a machine records when it invokes the train for its owner.
+    /// </summary>
+    internal static List<string> Starters(IServiceProvider services)
     {
         var principalId = services.GetService<ICurrentPrincipalProvider>()?.GetCurrentPrincipalId();
         var userKey = services.GetService<ISnapshotPrincipal>()?.CurrentUserKey;
@@ -810,6 +829,12 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
         _lease = lease;
     }
 
+    /// <summary>
+    /// The authorization the stream was admitted on, asked again while it runs; null for a stream
+    /// that answers once.
+    /// </summary>
+    public SubscriptionRecheck? Recheck { get; init; }
+
     public IAsyncEnumerable<RunProgressEvent> ReadEventsAsync() => Read<RunProgressEvent>();
 
     IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync() => Read<object?>();
@@ -836,6 +861,43 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             yield break;
         }
 
+        var events = Events(ct);
+        if (Recheck is { } recheck)
+        {
+            var sequence = 0L;
+            await foreach (
+                var next in recheck
+                    .Until(
+                        events,
+                        () =>
+                            new RunProgressEvent(
+                                _run!.RunId,
+                                sequence + 1,
+                                null,
+                                null,
+                                null,
+                                RunProgressTypeModule.NotFound()
+                            ),
+                        ct
+                    )
+                    .WithCancellation(ct)
+                    .ConfigureAwait(false)
+            )
+            {
+                sequence = next.Sequence;
+                yield return (TOut)(object)next;
+            }
+            yield break;
+        }
+
+        await foreach (var next in events.WithCancellation(ct).ConfigureAwait(false))
+            yield return (TOut)(object)next;
+    }
+
+    private async IAsyncEnumerable<RunProgressEvent> Events(
+        [EnumeratorCancellation] CancellationToken ct = default
+    )
+    {
         var run = _run!;
         var merged = Channel.CreateUnbounded<(
             TrainLifecycleEvent? State,
@@ -875,36 +937,37 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             // The state the run was in when it was found comes first, so a stream opened after the run ended still
             // says how it ended, and then the stream ends.
             sequence++;
-            yield return (TOut)
-                (object)
-                    new RunProgressEvent(run.RunId, sequence, run.State, null, run.Failure, null);
+            yield return new RunProgressEvent(
+                run.RunId,
+                sequence,
+                run.State,
+                null,
+                run.Failure,
+                null
+            );
             if (IsEnd(run.State))
             {
                 if (run.RetriedAs is { } known)
-                    yield return (TOut)
-                        (object)
-                            new RunProgressEvent(
-                                run.RunId,
-                                ++sequence,
-                                null,
-                                null,
-                                null,
-                                null,
-                                known
-                            );
+                    yield return new RunProgressEvent(
+                        run.RunId,
+                        ++sequence,
+                        null,
+                        null,
+                        null,
+                        null,
+                        known
+                    );
                 else
                     await foreach (var retry in RetryOf(run, stop.Token).ConfigureAwait(false))
-                        yield return (TOut)
-                            (object)
-                                new RunProgressEvent(
-                                    run.RunId,
-                                    ++sequence,
-                                    null,
-                                    null,
-                                    null,
-                                    null,
-                                    retry
-                                );
+                        yield return new RunProgressEvent(
+                            run.RunId,
+                            ++sequence,
+                            null,
+                            null,
+                            null,
+                            null,
+                            retry
+                        );
                 yield break;
             }
 
@@ -914,11 +977,11 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                 if (closed is not null && item is { State: null, Step: null, Lost: false })
                 {
                     if (await closed.ConfigureAwait(false) is { } last)
-                        yield return (TOut)(object)(last with { Sequence = ++sequence });
+                        yield return (last with { Sequence = ++sequence });
                     yield break;
                 }
                 if (Next(run, item, ref sequence, out end) is { } next)
-                    yield return (TOut)(object)next;
+                    yield return next;
                 if (end is not null)
                     break;
             }
@@ -947,17 +1010,23 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             }
             while (merged.Reader.TryRead(out var item))
                 if (item.Step is not null && Next(run, item, ref sequence, out _) is { } step)
-                    yield return (TOut)(object)step;
+                    yield return step;
 
-            yield return (TOut)(object)(end with { Sequence = ++sequence });
+            yield return (end with { Sequence = ++sequence });
 
             await foreach (
                 var retry in RetryOf(run with { State = end.State!.Value }, stop.Token)
                     .ConfigureAwait(false)
             )
-                yield return (TOut)
-                    (object)
-                        new RunProgressEvent(run.RunId, ++sequence, null, null, null, null, retry);
+                yield return new RunProgressEvent(
+                    run.RunId,
+                    ++sequence,
+                    null,
+                    null,
+                    null,
+                    null,
+                    retry
+                );
         }
         finally
         {

@@ -1106,8 +1106,29 @@ impl<S: MachineServer> Actor<S> {
 
     // A read that failed past every retry: one that was the first leaves `retry` something to resend.
     fn read_gave_up(&mut self, problem: MachineProblem) {
-        self.read_failed = self.confirmed.is_none();
-        self.settle_read(SendOutcome::Failed(problem));
+        // A push may have opened the instance while the read was retrying: then what is held answers the read.
+        match self.held() {
+            Some(held) => self.settle_read(SendOutcome::Confirmed(held)),
+            None => {
+                self.read_failed = true;
+                self.settle_read(SendOutcome::Failed(problem));
+            }
+        }
+    }
+
+    // The snapshot the client holds, as the server last confirmed it.
+    fn held(&self) -> Option<ServerSnapshot> {
+        let confirmed = self.confirmed.as_ref()?;
+        Some(ServerSnapshot {
+            row_id: self.row_id.clone(),
+            revision: self.revision,
+            state: confirmed.state.clone(),
+            context: confirmed.context.clone(),
+            due_at: match &self.due_at {
+                Some(due) => DueAt::At(due.clone()),
+                None => DueAt::None,
+            },
+        })
     }
 
     fn listen(&mut self, id: String) {
@@ -1144,7 +1165,11 @@ impl<S: MachineServer> Actor<S> {
     }
 
     fn close(&mut self) {
-        self.stream = None;
+        // A subscription whose drop panics (a custom one's bug) is closed as far as the controller goes: the panic stays
+        // here rather than taking the controller's task, and every waiter with it.
+        if let Some(stream) = self.stream.take() {
+            let _ = std::panic::catch_unwind(AssertUnwindSafe(move || drop(stream)));
+        }
         self.stream_generation += 1;
     }
 
@@ -1285,7 +1310,12 @@ impl<S: MachineServer> Actor<S> {
                     row_id: row,
                     ..snapshot
                 };
+                let first = self.confirmed.is_none();
                 let mut changed = self.accept(read.clone(), Source::Load);
+                // The first read that gets through clears the failure an earlier attempt left.
+                if first && self.confirmed.is_some() && self.problem.take().is_some() {
+                    changed = true;
+                }
                 self.settle_read(match &self.error {
                     Some(error) => SendOutcome::Stopped(error.clone()),
                     None => SendOutcome::Confirmed(read),
@@ -1428,6 +1458,21 @@ impl<S: MachineServer> Actor<S> {
         request: Option<EventRequest>,
         reply: Option<oneshot::Sender<SendOutcome>>,
     ) -> u64 {
+        let entry = self.queued(trigger, input, request, reply);
+        self.emit();
+        self.pump();
+        entry
+    }
+
+    // Puts an event at the back of the queue without sending anything, so a caller can note its entry before `pump`
+    // answers it.
+    fn queued(
+        &mut self,
+        trigger: String,
+        input: Option<Value>,
+        request: Option<EventRequest>,
+        reply: Option<oneshot::Sender<SendOutcome>>,
+    ) -> u64 {
         self.next_entry += 1;
         let entry = self.next_entry;
         self.queue.push(Queued {
@@ -1437,8 +1482,6 @@ impl<S: MachineServer> Actor<S> {
             request,
             reply,
         });
-        self.emit();
-        self.pump();
         entry
     }
 
@@ -1805,13 +1848,16 @@ impl<S: MachineServer> Actor<S> {
         if run.sent >= 2 * self.machine.states().len() {
             return self.settle_sync(SyncOutcome::Exceeded);
         }
-        let fields = run.fields.as_ref().is_some_and(|f| f.trigger == next.trigger);
-        let entry = self.enqueue(next.trigger, next.input, None, None);
+        // The sync holds the event as in flight before `pump` runs: a minter that panics answers it there, and the
+        // sync has to hear that.
+        run.sent += 1;
+        run.sending_fields = run.fields.as_ref().is_some_and(|f| f.trigger == next.trigger);
+        let entry = self.queued(next.trigger, next.input, None, None);
         if let Some(run) = self.sync.as_mut() {
-            run.sent += 1;
             run.in_flight = Some(entry);
-            run.sending_fields = fields;
         }
+        self.emit();
+        self.pump();
     }
 
     // A sync's event, or a superseded sync's last one, has answered.

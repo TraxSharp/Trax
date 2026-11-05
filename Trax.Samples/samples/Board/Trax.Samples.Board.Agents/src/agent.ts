@@ -339,8 +339,16 @@ export class Worker {
     this.signIn();
     const id = this.assignments.get(ticketId);
     if (!id) return;
-    await assignmentServer().discard(id, crypto.randomUUID());
-    this.assignments.delete(ticketId);
+    const answer = await assignmentServer().discard(id, crypto.randomUUID());
+    // Gone either way: the host discarded it, or holds no such instance.
+    if (answer.kind === "discarded" || answer.code === "NOT_FOUND") {
+      this.assignments.delete(ticketId);
+      return;
+    }
+    // The instance may still be on the host, so the id is kept for another try.
+    console.error(
+      `${this.name} could not discard the assignment ${id} for ${ticketId}: ${answer.code}, ${answer.message}`,
+    );
   }
 
   // Reads the ticket back from the board, as this worker sees it, after a move, and names the ticket machine's

@@ -204,3 +204,69 @@ describe("the generated transport's checks", () => {
     ).resolves.toEqual({ data: { operations: null } });
   });
 });
+
+// The limits are checked when the transport is built, so a bad one fails there rather than on every request.
+describe("the generated transport's limits", () => {
+  const options = { url: "/trax/graphql", socketUrl: "wss://ops.example.com/trax/graphql" };
+
+  test.each([0, -1, 1024.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses a maxResponseBytes of %s",
+    (maxResponseBytes) => expect(() => httpTransport({ ...options, maxResponseBytes })).toThrow(RangeError),
+  );
+
+  test.each([0, -1, Number.NaN])("refuses a requestTimeout of %s", (requestTimeout) =>
+    expect(() => httpTransport({ ...options, requestTimeout })).toThrow(RangeError),
+  );
+
+  test("accepts an Infinity requestTimeout", () =>
+    expect(() => httpTransport({ ...options, requestTimeout: Number.POSITIVE_INFINITY })).not.toThrow());
+});
+
+// A fetch other than the platform's (node-fetch, an XHR polyfill) hands back a body the machine server reads too, and
+// both hold it to the same limit.
+describe("the generated transport's reading of a body that is not a web stream", () => {
+  const options = { url: "/trax/graphql", socketUrl: "wss://ops.example.com/trax/graphql" };
+  const text = JSON.stringify({ data: { operations: null } });
+  const response = (body: unknown, headers: Record<string, string> = {}) =>
+    ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      redirected: false,
+      type: "basic",
+      headers: new Headers(headers),
+      body,
+      text: async () => text,
+    }) as unknown as Response;
+  const chunks = (...parts: string[]) =>
+    (async function* () {
+      for (const part of parts) yield new TextEncoder().encode(part);
+    })();
+  const send = (answer: Response, maxResponseBytes?: number) =>
+    httpTransport({ ...options, maxResponseBytes, fetch: async () => answer }).execute({
+      document: serverVersionDocument,
+      variables: {},
+    });
+
+  test("reads a Node stream by async iteration", async () =>
+    await expect(send(response(chunks(text.slice(0, 10), text.slice(10))))).resolves.toEqual({
+      data: { operations: null },
+    }));
+
+  test("refuses a Node stream past the limit", async () =>
+    await expect(send(response(chunks(text, " ".repeat(64))), 64)).rejects.toThrow("more than 64 bytes"));
+
+  test("reads a body with no stream when it says a length within the limit", async () =>
+    await expect(send(response(null, { "Content-Length": String(text.length) }))).resolves.toEqual({
+      data: { operations: null },
+    }));
+
+  test("refuses a body with no stream and no length, which it cannot read bounded", async () => {
+    const sent = send(response(null));
+
+    await expect(sent).rejects.toBeInstanceOf(TraxTransportError);
+    await expect(sent).rejects.toMatchObject({
+      cause: expect.objectContaining({ message: expect.stringContaining("without a length") }),
+    });
+  });
+});

@@ -291,12 +291,14 @@ down once, in `defaults.json` beside this file: each client's tests hold its con
 | --- | --- | --- |
 | Request timeout | 30 s | One request, from sending it to the last byte of its answer. Past it the request fails as `TRANSPORT_ERROR`. C#'s also yields to a shorter `HttpClient.Timeout`. |
 | Retry delays | 250, 500, 1000, 2000, 4000 ms | The waits before each retry of a `SERVER_OUTDATED` answer and of a read the transport failed: one retry per delay, then the event fails and `retry` resends it. An empty list retries nothing. |
-| Resubscribe delays | 1000, 2000, 5000 ms | The steps of the waits before subscribing again after a stream ended without saying why. The last repeats for as long as the stream is wanted, and the schedule starts over once a stream has delivered its second push, since every stream's first is the instance as it is. An empty list is the default. Each wait is jittered, below. |
+| Resubscribe delays | 1000, 2000, 5000 ms | The steps of the waits before subscribing again after a stream ended without saying why. The last repeats for as long as the stream is wanted, and the schedule starts over once a stream has delivered its second snapshot (a reload push does not count), since every stream's first is the instance as it is. An empty list is the default. Each wait is jittered, below. |
 | Response size | 16 MiB | The largest answer body read; a larger one fails its request as `TRANSPORT_ERROR` and is not read past the limit. C# and Rust hold a socket message to the same limit. |
 
 A client refuses to be built with an option no limit or timer can honour: a request, connect or idle timeout of zero
-or less, a response size of zero or less, and a retry or resubscribe delay below zero or past 2^31 - 1 ms. The
-`options-` transcripts hold this through `build`. JSON carries no NaN or infinity, so the kit does not send one; each
+or less or past 2^31 - 1 ms, a response size of zero or less, and a retry or resubscribe delay below zero or past
+2^31 - 1 ms. A language's own value for no timeout at all (TypeScript's `Infinity`, C#'s `Timeout.InfiniteTimeSpan`)
+is not a duration and is taken: the request waits as long as the host takes. The `options-` transcripts hold this
+through `build`. JSON carries no NaN or infinity, so the kit does not send one; each
 client's unit tests refuse those.
 
 Each resubscribe wait is drawn uniformly between 50% and 100% of its step: `step × (1 − r / 2)`, with `r` uniform in
@@ -304,7 +306,10 @@ Each resubscribe wait is drawn uniformly between 50% and 100% of its step: `step
 together do not subscribe again in lockstep. Retry delays are not jittered. The random source is the language's
 ordinary one and each client's unit tests replace it (TypeScript's spies on `Math.random`), so a draw of 0 waits the
 whole step. The kit does not pin the random source: `resubscribe-backoff` bounds each wait by half its step, the
-shortest a draw can make it, so it holds the order and growth of the waits whatever is drawn.
+shortest a draw can make it, so it holds the order and growth of the waits whatever is drawn. The kit runs on the
+wall clock, over real sockets, so an upper bound leaves room for a loaded machine: `resubscribe-delays-default` holds
+its wait under the next step, 2000 ms, not under the 1000 ms step it draws from. Each client's unit tests hold the
+draw itself.
 
 The socket's own timing is not pinned, because the TypeScript client does not own its socket: a page builds its
 graphql-ws client and its options with it, and graphql-ws waits for an acknowledgement and stays silent for as long
@@ -336,14 +341,17 @@ message carrying it. That is the same refusal, and the client stops for good wit
 A `next` or `error` coded `CLIENT_OUTDATED` stops it as `CLIENT_OUTDATED`. A client that lets its caller name further
 terminal codes (TypeScript's `terminalStreamErrors`, C#'s `TerminalStreamErrors`) stops on those as well, whether they
 come in a `next` or an `error`, with the code as given. A stream error with any other code, or none, is subscribed
-again after the resubscribe delay.
+again after the resubscribe delay, and so is one whose errors cannot be read (a member given twice, a payload that is
+not a list): the client never ends a stream silently.
 
 An answer is wrapped the way a host serves it, `{ "data": { "machines": { "<machine>": { "<operation>": … } } } }`,
 and a push as `{ "data": { "<machine>Changed": … } }`, with the fields a host selects that the step does not give
 filled in: `dueAt: null`, `dueAtKnown: true`, `problem: null` on an answer (and `id`, `revision`, `state`, `context`
 null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a push. A step with `"bare": true` sends its answer or push as
 given, without them. An answer or push that leaves out `dueAtKnown` or `dueAt` does not know the due time: the
-client reads it as `dueAtKnown: false`, never as a known null.
+client reads it as `dueAtKnown: false`, never as a known null. A push's `rowId`, the row's incarnation, is a whole JSON
+number, as a host serves a GraphQL `Long` (`"rowId": 7`), or null; a client holds it as its decimal text, so the
+view's `rowId` is `"7"`. A `rowId` that is anything else (a fraction, a string, a boolean) makes the push malformed.
 
 A context nests at most 64 levels, the snapshot that holds it counting as one: no store writes a snapshot deeper,
 and every engine refuses to read one. One that deep is read, however deep the answer or socket message around it, so
@@ -353,7 +361,8 @@ a client's JSON reader takes the whole envelope; one deeper is not one a store w
 `TRANSPORT_ERROR` and changes nothing: one that is not an object, or whose `revision` is not a whole number from zero
 (a fraction, a string, a negative), whose `dueAt` is not an instant, whose `state` is not a string or is missing
 beside no problem, or whose context is not an object or nests too deep. A push like that, or one whose `gone` is not
-a boolean, is dropped and the instance read again. Neither stops the client, and neither is taken unchecked.
+a boolean, whose `problem` is neither null nor an object with a code, or whose `next` carries no `data` object with
+the push's field in it, is dropped and the instance read again. Neither stops the client, and neither is taken unchecked.
 
 ## Transcripts
 
@@ -391,10 +400,12 @@ documents from it. The steps run in order:
 | `{ "respond": "<name>", <answer> }` | Answers the request held under that name, as a `request` step would. |
 | `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. `"notBefore": ms` and `"before": ms` bound how long after the host last ended a stream (`complete`, `streamError`, `dropSocket`) it came. |
 | `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription; `"pad": n` beside a `push` adds n bytes of whitespace to its frame, and `"bare": true` sends it without the fields a host fills in. |
+| `{ "pushPayload": { ... } }` | Sends one `next` on the last subscription whose payload is that value as given, with no `data` wrapped around it: `{ "data": null }`, `{ "data": {} }`. |
 | `{ "pushRaw": "..." }` | Sends that text as one frame on the last subscription's socket, JSON or not. A later `subscribe` step's bounds count from it. |
 | `{ "clientClosed": 4400 }` | Waits for the client to close the last subscription's socket, and checks the code its close frame carried. |
 | `{ "unsettled": "<name>" }` | Checks that the answer sent under that name has not come yet. It asks for the view first and checks once that answer is in, so an answer the testee wrote before it has been read; put it after a fence (below). |
 | `{ "streamError": [...] }` | Ends the last subscription with a graphql-transport-ws `error` message carrying those errors. |
+| `{ "streamErrorRaw": "..." }` | Ends the last subscription with an `error` message whose payload is that text as written, so it can carry what a serializer would not write, such as a member given twice. |
 | `{ "ping": true }` | Sends a graphql-transport-ws `ping` on the last subscription's socket and waits for the client's `pong`. |
 | `{ "decoy": 0 }` | Checks how many requests reached the second host a redirect points at. |
 | `{ "complete": true }`, `{ "dropSocket": true }` | Completes the last subscription, or closes its socket (with 1011, or with the code given: `{ "dropSocket": 4401 }`). |
@@ -500,6 +511,7 @@ transcripts compare those by value.
 | The default resubscribe delays | `DEFAULT_RESUBSCRIBE_DELAYS` | `GraphQLMachineServer.DefaultResubscribeDelays` | `DEFAULT_RESUBSCRIBE_DELAYS` |
 | The default request timeout | `DEFAULT_REQUEST_TIMEOUT` | `GraphQLMachineServer.DefaultRequestTimeout` | `DEFAULT_REQUEST_TIMEOUT` |
 | Leave the empty query out of a socket message | `persistedMessageReplacer` | — `GraphQLSubscriptionSocket` writes its own messages | — the server writes its own socket's messages |
+| Retry every socket close but 4401 and 4403 | `retryClosedSocket` | — `GraphQLSubscriptionSocket` reopens its own socket | — the server reopens its own socket |
 | Options with every choice left to its default | — an object literal | — an object initializer | `GraphQLMachineServerOptions.new` |
 | The machine | `MachineServerOptions.machine` | `GraphQLMachineServerOptions.Machine` | `GraphQLMachineServerOptions.machine` |
 | Its persisted documents | `MachineServerOptions.documents` | — the manifest entry given as `Machine` carries them | `GraphQLMachineServerOptions.documents` |

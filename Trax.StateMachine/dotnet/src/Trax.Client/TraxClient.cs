@@ -312,7 +312,22 @@ public sealed class TraxClient
             switch (error)
             {
                 case SubscriptionErrorException refused:
-                    var errors = TraxGraphQLError.ListOf(refused.Errors);
+                    IReadOnlyList<TraxGraphQLError> errors;
+                    try
+                    {
+                        errors = TraxGraphQLError.ListOf(refused.Errors);
+                    }
+                    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                    {
+                        // A member given twice, as in a frame of the same kind: the host would send the same again.
+                        End(
+                            [],
+                            new TraxTransportFailure(
+                                $"The host ended the stream with errors this client cannot read: {ex.Message}"
+                            )
+                        );
+                        return;
+                    }
                     End(
                         errors,
                         errors.Count == 0 ? new TraxTransportFailure(refused.Message) : null
@@ -413,10 +428,29 @@ public sealed class TraxClient
                     t =>
                     {
                         if (!t.IsCanceled)
-                            Open(source);
+                            Reopen(source);
                     },
                     TaskScheduler.Default
                 );
+        }
+
+        // Subscribes again after a delay. A transport whose Subscribe throws has no stream to follow: the stream ends
+        // with the failure, as it does on a socket that was disposed.
+        private void Reopen(CancellationTokenSource fired)
+        {
+            try
+            {
+                Open(fired);
+            }
+            catch (Exception ex)
+            {
+                End(
+                    [],
+                    new TraxTransportFailure(
+                        $"The stream could not be subscribed again: the transport's Subscribe threw: {ex.Message}"
+                    )
+                );
+            }
         }
 
         public void Dispose()
