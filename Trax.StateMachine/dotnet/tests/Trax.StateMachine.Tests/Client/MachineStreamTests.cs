@@ -211,9 +211,7 @@ public class MachineStreamTests
     // Trax.Api types rowId as a Long, so a host writes it as a number.
     [TestCase("7")]
     [TestCase("7.0")]
-    public async Task A_row_id_written_as_a_whole_number_is_read_as_its_decimal_text(
-        string rowId
-    )
+    public async Task A_row_id_written_as_a_whole_number_is_read_as_its_decimal_text(string rowId)
     {
         var (socket, messages, stream) = Follow();
         using var following = stream;
