@@ -1144,7 +1144,11 @@ impl<S: MachineServer> Actor<S> {
     }
 
     fn close(&mut self) {
-        self.stream = None;
+        // A subscription whose drop panics (a custom one's bug) is closed as far as the controller goes: the panic stays
+        // here rather than taking the controller's task, and every waiter with it.
+        if let Some(stream) = self.stream.take() {
+            let _ = std::panic::catch_unwind(AssertUnwindSafe(move || drop(stream)));
+        }
         self.stream_generation += 1;
     }
 

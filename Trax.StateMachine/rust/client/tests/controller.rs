@@ -766,6 +766,76 @@ async fn a_subscribe_that_panics_stops_the_controller_with_a_transport_error() {
     assert_eq!(view.error.as_ref().map(|e| e.code.as_str()), Some("TRANSPORT_ERROR"));
 }
 
+// A stream whose drop panics, as a custom subscription's bug might, from a server whose read answers Locked and whose
+// events are never answered.
+struct DropPanics;
+
+impl Subscription for DropPanics {}
+
+impl Drop for DropPanics {
+    fn drop(&mut self) {
+        panic!("a custom subscription's bug")
+    }
+}
+
+struct PanicsOnClose {
+    sink: Arc<std::sync::Mutex<Option<StreamSink>>>,
+}
+
+impl MachineServer for PanicsOnClose {
+    async fn start(&self, _: Option<Value>, _: String) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn event(&self, _: EventRequest) -> Result<ServerAnswer, TransportError> {
+        std::future::pending().await
+    }
+
+    async fn get(&self, _: String) -> Result<ServerAnswer, TransportError> {
+        stored(snapshot(None, 1, "Locked"))
+    }
+
+    fn subscribe(&self, _: String, sink: StreamSink) -> Box<dyn Subscription> {
+        *self.sink.lock().unwrap() = Some(sink);
+        Box::new(DropPanics)
+    }
+}
+
+#[tokio::test]
+async fn a_stream_whose_drop_panics_still_stops_the_controller_with_the_hosts_code() {
+    let (ir, hash) = turnstile();
+    let sink = Arc::new(std::sync::Mutex::new(None));
+    let mut options = ServerMachineOptions::new(ir, hash, PanicsOnClose { sink: sink.clone() });
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+    controller.start().await;
+    view_where(&controller, |v| v.revision == Some(1)).await;
+    let sending = controller.send("Coin", None);
+
+    let push = sink.lock().unwrap().clone().expect("no stream was opened");
+    push(StreamMessage::Refused(ServerProblem {
+        code: "FORBIDDEN".into(),
+        message: "No.".into(),
+    }));
+    let outcome = tokio::time::timeout(Duration::from_secs(5), sending)
+        .await
+        .expect("the send never settled");
+
+    assert!(
+        matches!(&outcome, SendOutcome::Stopped(e) if e.code == "FORBIDDEN"),
+        "{outcome:?}"
+    );
+    let view = view_where(&controller, |v| v.error.is_some()).await;
+    assert_eq!(view.error.as_ref().map(|e| e.code.as_str()), Some("FORBIDDEN"));
+    let later = tokio::time::timeout(Duration::from_secs(5), controller.send("Coin", None))
+        .await
+        .expect("a send after the stop never settled");
+    assert!(
+        matches!(&later, SendOutcome::Stopped(e) if e.code == "FORBIDDEN"),
+        "{later:?}"
+    );
+}
+
 // A machine whose plans search widely: ten states any of them moves to, and three numbers each of them sets to one of
 // four values, so a plan to the state nothing reaches expands hundreds of snapshots before it is answered.
 fn sprawl() -> (Value, String) {
