@@ -287,6 +287,26 @@ public class MachineStreamTests
     }
 
     [Test]
+    public async Task An_error_whose_errors_cannot_be_read_is_subscribed_again()
+    {
+        var (socket, messages, stream) = Follow();
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Sink.Error(
+            new SubscriptionErrorException(
+                (JsonArray)
+                    JsonNode.Parse("""[{"message":"m","extensions":{"code":"A","code":"B"}}]""")!
+            )
+        );
+
+        var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        second.Should().NotBeSameAs(first);
+        first.Disposed.Should().BeTrue();
+        messages.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    [Test]
     public async Task A_code_the_caller_named_terminal_ends_the_stream_with_that_code()
     {
         var time = new TimerLog();

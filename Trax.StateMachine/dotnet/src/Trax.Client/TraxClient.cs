@@ -312,7 +312,22 @@ public sealed class TraxClient
             switch (error)
             {
                 case SubscriptionErrorException refused:
-                    var errors = TraxGraphQLError.ListOf(refused.Errors);
+                    IReadOnlyList<TraxGraphQLError> errors;
+                    try
+                    {
+                        errors = TraxGraphQLError.ListOf(refused.Errors);
+                    }
+                    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                    {
+                        // A member given twice, as in a frame of the same kind: the host would send the same again.
+                        End(
+                            [],
+                            new TraxTransportFailure(
+                                $"The host ended the stream with errors this client cannot read: {ex.Message}"
+                            )
+                        );
+                        return;
+                    }
                     End(
                         errors,
                         errors.Count == 0 ? new TraxTransportFailure(refused.Message) : null

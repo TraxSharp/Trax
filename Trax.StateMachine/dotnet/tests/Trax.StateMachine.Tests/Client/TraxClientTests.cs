@@ -799,6 +799,38 @@ public class TraxClientTests
     }
 
     [Test]
+    public async Task An_error_whose_errors_cannot_be_read_ends_the_stream_with_a_failure()
+    {
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.AckAsync();
+            var id = await peer.SubscribedAsync();
+            await peer.SendAsync(
+                $$$"""{"type":"error","id":"{{{id}}}","payload":[{"message":"m","extensions":{"code":"A","code":"B"}}]}"""
+            );
+            await peer.GoneAsync();
+        });
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var events = new EventLog<ChangedResult>();
+
+        using var stream = new TraxClient(Transport(socket)).Subscribe(
+            Changed,
+            TraxNoVariables.Instance,
+            events.Add
+        );
+
+        var ended = (await events.Take(1))
+            .Single()
+            .Should()
+            .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
+            .Subject;
+        ended.Errors.Should().BeEmpty();
+        ended.Failure.Should().NotBeNull();
+    }
+
+    [Test]
     public async Task An_error_with_no_errors_over_a_real_socket_ends_the_stream()
     {
         await using var host = new WireHost(async peer =>

@@ -685,11 +685,24 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 Deliver(
                     new StreamMessage.Refused(ClientProblemCodes.TransportError, error.Message)
                 );
-            else if (
-                error is SubscriptionErrorException { Errors: var errors }
-                && EndOf(errors) is { } ended
-            )
-                Deliver(ended);
+            else if (error is SubscriptionErrorException { Errors: var errors })
+            {
+                StreamMessage? ended;
+                try
+                {
+                    ended = EndOf(errors);
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                {
+                    // A member given twice: errors this client cannot read say nothing about why the stream ended, so
+                    // it is subscribed again, as after any other error.
+                    ended = null;
+                }
+                if (ended is not null)
+                    Deliver(ended);
+                else
+                    Again();
+            }
             else
                 Again();
         }
