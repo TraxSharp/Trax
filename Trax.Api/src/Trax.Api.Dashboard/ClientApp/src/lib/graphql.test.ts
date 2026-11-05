@@ -204,3 +204,20 @@ describe("the generated transport's checks", () => {
     ).resolves.toEqual({ data: { operations: null } });
   });
 });
+
+// The limits are checked when the transport is built, so a bad one fails there rather than on every request.
+describe("the generated transport's limits", () => {
+  const options = { url: "/trax/graphql", socketUrl: "wss://ops.example.com/trax/graphql" };
+
+  test.each([0, -1, 1024.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses a maxResponseBytes of %s",
+    (maxResponseBytes) => expect(() => httpTransport({ ...options, maxResponseBytes })).toThrow(RangeError),
+  );
+
+  test.each([0, -1, Number.NaN])("refuses a requestTimeout of %s", (requestTimeout) =>
+    expect(() => httpTransport({ ...options, requestTimeout })).toThrow(RangeError),
+  );
+
+  test("accepts an Infinity requestTimeout", () =>
+    expect(() => httpTransport({ ...options, requestTimeout: Number.POSITIVE_INFINITY })).not.toThrow());
+});

@@ -940,11 +940,20 @@ internal sealed partial class ClientGenerator
         }
 
         /**
+         * Refuses a response size limit that is not a positive whole number of bytes, as the engine's machine server does:
+         * a NaN limit would compare false with every size and read an answer of any length.
+         */
+        function requireMaxResponseBytes(size: number): void {
+          if (!Number.isSafeInteger(size) || size <= 0)
+            throw new RangeError(`maxResponseBytes must be a positive whole number of bytes, got ${size}.`);
+        }
+
+        /**
          * The answer's body as JSON, read to at most `maxBytes`: a longer one is cancelled and refused with a RangeError
          * rather than held in memory.
          */
         async function readJson(response: Response, maxBytes: number = defaultMaxResponseBytes): Promise<unknown> {
-          if (!(maxBytes > 0) || !Number.isFinite(maxBytes)) throw new RangeError(`maxResponseBytes must be a positive number, got ${maxBytes}.`);
+          requireMaxResponseBytes(maxBytes);
           const tooLarge = () => new RangeError(`The host answered with more than ${maxBytes} bytes, the most this client reads.`);
           const declared = Number(response.headers?.get("Content-Length") ?? Number.NaN);
           if (declared > maxBytes) {
@@ -1018,7 +1027,10 @@ internal sealed partial class ClientGenerator
                * every train function, machine server and socket refuses such a url.
                */
               allowInsecureTransport?: boolean;
-              /** The most bytes of an answer a train function or machine server reads before it refuses it. 16 MiB when not given. */
+              /**
+               * The most bytes of an answer a train function or machine server reads before it refuses it, a positive whole
+               * number. 16 MiB when not given; configureTrax refuses anything else.
+               */
               maxResponseBytes?: number;
               /**
                * How long one request of a train function or machine server may take, in milliseconds, from sending it to the
@@ -1041,6 +1053,7 @@ internal sealed partial class ClientGenerator
              */
             export function configureTrax(next: TraxConnection): void {
               if (next.requestTimeout !== undefined) requireRequestTimeout(next.requestTimeout);
+              if (next.maxResponseBytes !== undefined) requireMaxResponseBytes(next.maxResponseBytes);
               connection = next;
               generation += 1;
               const closing = socket;

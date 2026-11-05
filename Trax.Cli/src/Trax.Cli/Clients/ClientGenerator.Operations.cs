@@ -475,12 +475,15 @@ internal sealed partial class ClientGenerator
                * default, and httpTransport refuses such a url.
                */
               allowInsecureTransport?: boolean;
-              /** The most bytes of an answer the transport reads before it refuses it. 16 MiB when not given. */
+              /**
+               * The most bytes of an answer the transport reads before it refuses it, a positive whole number. 16 MiB when
+               * not given; httpTransport refuses anything else.
+               */
               maxResponseBytes?: number;
               /**
                * How long one request may take, in milliseconds, from sending it to the last byte of its answer; 30 seconds
                * when not given. A request past it is aborted and fails with a TraxTransportError. `Infinity` waits for as
-               * long as the host takes.
+               * long as the host takes; httpTransport refuses anything else that is not a positive number.
                */
               requestTimeout?: number;
             }
@@ -505,6 +508,9 @@ internal sealed partial class ClientGenerator
             export function httpTransport(options: HttpTransportOptions): HttpTransport {
               requireSecureEndpoint(options.url, options.allowInsecureTransport);
               requireSecureSocket(options.socketUrl, options.allowInsecureTransport);
+              // Checked here, so a bad limit fails where the transport is built rather than on every request.
+              if (options.requestTimeout !== undefined) requireRequestTimeout(options.requestTimeout);
+              if (options.maxResponseBytes !== undefined) requireMaxResponseBytes(options.maxResponseBytes);
               let socket: Client | null = null;
               const byId = options.byId ?? ((document) => document.id !== null);
               const open = (): Client =>

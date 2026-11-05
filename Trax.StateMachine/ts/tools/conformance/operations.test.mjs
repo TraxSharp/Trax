@@ -63,17 +63,16 @@ describe("the operations kit", () => {
 });
 
 // A timeout that is not a positive number would turn the timeout off (NaN) or abort every request at once (a negative
-// one), so it is refused when a request is sent, as maxResponseBytes is.
+// one), so httpTransport refuses it when the transport is built, as it does a bad maxResponseBytes.
 describe("the operations client's request timeout", () => {
-  it.each([Number.NaN, -1, 0])("refuses a requestTimeout of %s", async (requestTimeout) => {
-    const transport = client.httpTransport({
-      url: "https://ops.example.test/graphql",
-      socketUrl: "wss://ops.example.test/graphql",
-      requestTimeout,
-      fetch: () => new Promise(() => {}),
-    });
-    client.configureTraxOperations(transport);
-
-    await expect(client.runs({ take: 1 })).rejects.toThrow(/requestTimeout must be a positive number/);
+  it.each([Number.NaN, -1, 0])("refuses a requestTimeout of %s", (requestTimeout) => {
+    expect(() =>
+      client.httpTransport({
+        url: "https://ops.example.test/graphql",
+        socketUrl: "wss://ops.example.test/graphql",
+        requestTimeout,
+        fetch: () => new Promise(() => {}),
+      }),
+    ).toThrow(/requestTimeout must be a positive number/);
   });
 });

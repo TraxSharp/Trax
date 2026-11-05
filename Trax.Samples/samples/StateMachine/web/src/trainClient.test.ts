@@ -108,6 +108,15 @@ describe("the connection's limits", () => {
   it.each([Number.NaN, -1, 0])("refuses a requestTimeout of %s", (requestTimeout) => {
     expect(() => configureTrax({ ...connection, requestTimeout })).toThrow(RangeError);
   });
+
+  // The machine servers take the limit as the engine's rule has it, so configureTrax refuses what they would refuse
+  // later, while a page renders.
+  it.each([0, -1, 1048576.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses a maxResponseBytes of %s",
+    (maxResponseBytes) => {
+      expect(() => configureTrax({ ...connection, maxResponseBytes })).toThrow(RangeError);
+    },
+  );
 });
 
 // The socket every machine server shares: a host that turns the caller away with 4403 gives a retry the same answer,

@@ -186,12 +186,15 @@ export interface HttpTransportOptions {
    * default, and httpTransport refuses such a url.
    */
   allowInsecureTransport?: boolean;
-  /** The most bytes of an answer the transport reads before it refuses it. 16 MiB when not given. */
+  /**
+   * The most bytes of an answer the transport reads before it refuses it, a positive whole number. 16 MiB when
+   * not given; httpTransport refuses anything else.
+   */
   maxResponseBytes?: number;
   /**
    * How long one request may take, in milliseconds, from sending it to the last byte of its answer; 30 seconds
    * when not given. A request past it is aborted and fails with a TraxTransportError. `Infinity` waits for as
-   * long as the host takes.
+   * long as the host takes; httpTransport refuses anything else that is not a positive number.
    */
   requestTimeout?: number;
 }
@@ -216,6 +219,9 @@ export interface HttpTransport extends TraxTransport {
 export function httpTransport(options: HttpTransportOptions): HttpTransport {
   requireSecureEndpoint(options.url, options.allowInsecureTransport);
   requireSecureSocket(options.socketUrl, options.allowInsecureTransport);
+  // Checked here, so a bad limit fails where the transport is built rather than on every request.
+  if (options.requestTimeout !== undefined) requireRequestTimeout(options.requestTimeout);
+  if (options.maxResponseBytes !== undefined) requireMaxResponseBytes(options.maxResponseBytes);
   let socket: Client | null = null;
   const byId = options.byId ?? ((document) => document.id !== null);
   const open = (): Client =>
@@ -432,11 +438,20 @@ function requireNoRedirect(response: Response): void {
 }
 
 /**
+ * Refuses a response size limit that is not a positive whole number of bytes, as the engine's machine server does:
+ * a NaN limit would compare false with every size and read an answer of any length.
+ */
+function requireMaxResponseBytes(size: number): void {
+  if (!Number.isSafeInteger(size) || size <= 0)
+    throw new RangeError(`maxResponseBytes must be a positive whole number of bytes, got ${size}.`);
+}
+
+/**
  * The answer's body as JSON, read to at most `maxBytes`: a longer one is cancelled and refused with a RangeError
  * rather than held in memory.
  */
 async function readJson(response: Response, maxBytes: number = defaultMaxResponseBytes): Promise<unknown> {
-  if (!(maxBytes > 0) || !Number.isFinite(maxBytes)) throw new RangeError(`maxResponseBytes must be a positive number, got ${maxBytes}.`);
+  requireMaxResponseBytes(maxBytes);
   const tooLarge = () => new RangeError(`The host answered with more than ${maxBytes} bytes, the most this client reads.`);
   const declared = Number(response.headers?.get("Content-Length") ?? Number.NaN);
   if (declared > maxBytes) {
