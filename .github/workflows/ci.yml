@@ -1021,6 +1021,9 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Every file package.json names is built and packed
+        # Neither tsup nor npm pack fails on an exports target the build did not write.
+        run: npm run check:exports
       - name: Pack (what a release publishes)
         # The release packs this folder the same way and publishes the tarball to npm, so a
         # broken prepack or a file left out of it fails here rather than after a version is cut.

@@ -59,6 +59,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "check:exports": "node tools/check-exports.mjs",
     "bundle:cli": "node tools/bundle-cli.mjs",
     "prepack": "npm run build && node -e \"require('node:fs').copyFileSync('../../LICENSE', 'LICENSE')\"",
     "postpack": "node -e \"require('node:fs').rmSync('LICENSE', { force: true })\"",
