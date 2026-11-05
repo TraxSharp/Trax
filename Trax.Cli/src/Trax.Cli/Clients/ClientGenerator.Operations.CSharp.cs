@@ -145,15 +145,30 @@ internal sealed partial class ClientGenerator
         private const string Client = "global::Trax.Client.";
 
         // The members of TraxOperations and of TraxOperationsClient, so no document's field or method takes the name
-        // of its class or of another document's.
-        private readonly Names _fields = Seeded("TraxOperations");
+        // of its class or of another document's. A document's field would hide one of object's members of its name
+        // (CS0108), so those are taken too; its method takes parameters none of them has, and hides nothing.
+        private readonly Names _fields = Seeded("TraxOperations", ObjectMembers);
 
-        private readonly Names _methods = Seeded("TraxOperationsClient");
+        private readonly Names _methods = Seeded("TraxOperationsClient", []);
 
-        private static Names Seeded(string type)
+        // What a static class inherits from object that a field of the same name hides. Finalize is left out: a field
+        // of that name hides nothing.
+        private static readonly string[] ObjectMembers =
+        [
+            "Equals",
+            "GetHashCode",
+            "GetType",
+            "MemberwiseClone",
+            "ReferenceEquals",
+            "ToString",
+        ];
+
+        private static Names Seeded(string type, string[] inherited)
         {
             var members = new Names(rename: Rename);
             members.Claim(type, $"the class {type} the client declares");
+            foreach (var member in inherited)
+                members.Claim(member, $"the member {member} {type} inherits from object");
             return members;
         }
 

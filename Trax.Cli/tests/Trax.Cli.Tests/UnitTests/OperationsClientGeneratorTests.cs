@@ -1466,6 +1466,37 @@ public class OperationsClientGeneratorTests
             .BeEmpty();
     }
 
+    // Each document is a static field of TraxOperations, which inherits these from object: a field of one of their
+    // names would hide it (CS0108), and a build that treats warnings as errors would fail.
+    [TestCase("ToString")]
+    [TestCase("Equals")]
+    [TestCase("GetHashCode")]
+    [TestCase("GetType")]
+    [TestCase("ReferenceEquals")]
+    [TestCase("MemberwiseClone")]
+    public void A_document_named_like_a_member_of_object_is_refused_by_the_csharp_client(
+        string name
+    )
+    {
+        var act = () =>
+            ClientGenerator.RenderCSharp(
+                new OperationsGenerateOptions(
+                    Schema,
+                    [
+                        new(
+                            $"src/graphql/{name}.graphql",
+                            Runs.Replace("query Runs(", $"query {name}(", StringComparison.Ordinal)
+                        ),
+                    ]
+                ),
+                ClientGenerator.DefaultOperationsNamespace
+            );
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"*both generate the name '{name}'. Rename one of them.");
+    }
+
     [Test]
     public void Two_enum_values_that_take_one_member_are_refused()
     {

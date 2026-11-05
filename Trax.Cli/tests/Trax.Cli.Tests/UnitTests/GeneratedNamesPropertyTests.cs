@@ -83,6 +83,11 @@ public partial class GeneratedNamesPropertyTests
         "EqualityContract",
         "Clone",
         "Deconstruct",
+        "GetType",
+        "ReferenceEquals",
+        "MemberwiseClone",
+        "Finalize",
+        "PrintMembers",
         "Value",
         "Runs",
         "runs",
@@ -300,12 +305,14 @@ public partial class GeneratedNamesPropertyTests
                     return;
                 }
                 var errors = Compile(files)
-                    .Where(d => d.Severity == DiagnosticSeverity.Error)
+                    .Where(d => d.Severity == DiagnosticSeverity.Error || Hiding.Contains(d.Id))
                     .Select(d => d.ToString())
                     .ToList();
                 errors
                     .Should()
-                    .BeEmpty($"the client written for\n{c.Schema}\n{c.Document}\ncompiles");
+                    .BeEmpty(
+                        $"the client written for\n{c.Schema}\n{c.Document}\ncompiles, hiding no inherited member"
+                    );
                 Interlocked.Increment(ref written);
             },
             iter: 500
@@ -314,6 +321,14 @@ public partial class GeneratedNamesPropertyTests
             .Should()
             .BePositive("some of the cases are written, or the property holds of nothing");
     }
+
+    // The warnings a member that hides an inherited one raises. A consumer that builds with -warnaserror fails on them.
+    private static readonly HashSet<string> Hiding = new(StringComparer.Ordinal)
+    {
+        "CS0108",
+        "CS0109",
+        "CS0114",
+    };
 
     private static void AssertTypeScriptNames(IReadOnlyList<ClientFile> files)
     {
