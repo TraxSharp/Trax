@@ -10,6 +10,26 @@ nav_order: 4
 
 The names Trax uses, in the code and in these pages. Where a term has a familiar equivalent, its entry starts with it (*Roughly:*); the rest of the entry is the exact meaning. Each entry says where the type lives; [Packages](/docs/reference/packages) says which package to install for it. Each term is a heading, so a link can name it, as the operations console's help links do: `/docs/reference/glossary#manifest-group`.
 
+## The railway words
+
+![The railway picture. Stations Cart, Address, Payment, Placing and Placed sit on a track. A signal stands before Placing. The PlaceOrder train has left Placing and passes junctions on its way to Placed. Stations are states, tracks are moves, signals are guards, trains are the work, junctions are its steps.](/docs-images/railway.svg)
+
+Trax uses railway words, and the picture holds:
+
+- **Stations are states**: where the process waits for someone to act.
+- **Tracks are moves**: the only ways from one station to the next. There is no track from Cart
+  straight to Placed.
+- **Signals are guards**: checks a move must pass before it is allowed.
+- **Trains are the work**, such as reserving stock or taking a payment. A train never waits: it
+  leaves a station and runs without stopping to the next one. Not every move needs a train; here
+  only Placing starts one.
+- **Junctions are steps**: the points a train passes on its way. If you know railways, note that
+  in Trax a junction is a step on a train's route, not a place where tracks split.
+
+You lay the stations, the track and the signals, and you build the trains and their junctions. Trax
+runs the railway: it keeps every process at exactly one station, lets nothing past a signal that
+says no, and dispatches the trains.
+
 ## Trains and junctions
 
 ### Train
@@ -209,3 +229,9 @@ An EF entity marked `[TraxQueryModel]` (in `Trax.Effect.Attributes`), which `Add
 *Roughly:* a long-lived record that moves between named states.
 
 A machine deriving `Machine<TState, TTrigger>` in `Trax.StateMachine.Persistence`: states, triggers and a context record, stored as a language-neutral snapshot that the C# engine and its TypeScript twin both read. See [State Machines](/docs/statemachine).
+
+### Run-once effect
+
+*Roughly:* an idempotent side effect, the kind usually called "exactly-once".
+
+An `ISnapshotEffect` bound to a transition with `RunsOnce<TEffect>()`, or any call made through `IdempotentEffect`. Trax records its result once per intent, and a retry, a second device or a repeated send replays that result instead of calling again. The call itself is at least once: if the process dies after the downstream system acted but before the receipt was recorded, the lease expires and the effect runs again under the same key. The effect passes that key to the system it calls, so the downstream system can tell it is a repeat. See [Effects](/docs/sdk-reference/statemachine-api/i-snapshot-effect#exactly-once-and-the-receipt).

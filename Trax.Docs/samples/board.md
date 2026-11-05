@@ -108,9 +108,19 @@ event enters runs the lane's check train, and only the train's outcome leaves it
             .OnCancelled(AssignmentState.Rejected, reduce: CheckDidNotFinish);
 ```
 
+`Accepted` is the rule declared at the top of the machine, `Input((CheckResult r) => r.Accepted).IsTrue()`: the
+first `OnDone` is taken only when the check train's own result says it accepted the evidence, and any other result
+lands in `Rejected` with the train's reason.
+
 A check train checks that the worker holds the ticket in the lane (from `InvokedRun.UserKey`, never from anything it
 sent), runs the evidence against the shop's rules and its policy, and only then fires the ticket's transition. Each
 `[TraxAuthorize(Roles = ...)]` matches the event that enters its state, which the host checks at startup.
+
+Sam's lane works the same way, with a decision instead of evidence. `Approve` and `SendBack` both need the
+`Reviewer` role, so no bot can send them, and `SendBack` needs a reason. Both enter `CheckingReview`, whose
+`ReviewTrain` checks that Sam holds the ticket in Review and then fires `Approved`, which moves the ticket to Done, or
+`SentBack`, which returns it to Fix with the reason on it. A person reviewing is one more lane with a role, not a
+special case.
 
 ## The agents
 
