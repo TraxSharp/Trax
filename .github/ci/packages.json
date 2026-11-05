@@ -91,7 +91,16 @@
       "name": "state-machine-rust",
       "folder": "Trax.StateMachine/rust",
       "upstream": [],
-      "paths": ["Trax.StateMachine/rust/", "Trax.StateMachine/conformance/"]
+      "paths": [
+        "Trax.StateMachine/rust/",
+        "Trax.StateMachine/conformance/",
+        "Trax.StateMachine/ts/src/",
+        "Trax.StateMachine/ts/tools/lib/",
+        "Trax.StateMachine/ts/tools/conformance/testee-ts.mjs",
+        "Trax.StateMachine/ts/package.json",
+        "Trax.StateMachine/ts/package-lock.json",
+        "Trax.StateMachine/ts/tsconfig.json"
+      ]
     },
     {
       "name": "state-machine-conformance",

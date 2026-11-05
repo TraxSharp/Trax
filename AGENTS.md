@@ -181,10 +181,10 @@ folders it runs for and its paths, and the folder's row leaves its tests out wit
 its C# solution, its TypeScript engine, its Rust engine and the checks that span them are four
 suites (`state-machine-dotnet`, `state-machine-ts`, `state-machine-rust`,
 `state-machine-conformance`), each with its own paths. The three language suites run only for
-their own language and `conformance/`, but `state-machine-conformance` runs for anything in the
-folder, and the change detector selects the folder and everything downstream of it for any change
-there, so even a `rust/`-only change runs the C# conformance tests and the Mediator, Scheduler, Api,
-Cli, Samples and Docs jobs. None of them reruns Trax.Effect. **`CI result` is the one required check.**
+their own language and `conformance/` (the Rust one also for the TypeScript engine its fuzz runs),
+but `state-machine-conformance` runs for anything in the folder, and the change detector selects
+the folder and everything downstream of it for any change there, so even a `rust/`-only change
+runs the C# conformance tests and the Mediator, Scheduler, Api, Cli, Samples and Docs jobs. None of them reruns Trax.Effect. **`CI result` is the one required check.**
 
 ## Releases
 

@@ -1029,7 +1029,9 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
   # The Rust engine and its client, Trax.StateMachine/rust (packages.json suite state-machine-rust).
-  # It runs for a change under Trax.StateMachine/rust or the conformance kits. The runner image has
+  # It runs for a change under Trax.StateMachine/rust or the conformance kits, and for a change to
+  # what the fuzzer below runs of the TypeScript engine: its src/, the testee and the loader that
+  # bundles it, and its package.json, package-lock.json and tsconfig.json. The runner image has
   # rustup; the engine crate has no dependencies, and the client's come from crates.io at the
   # versions Cargo.lock pins (--locked), which cargo-deny checks for advisories. The TypeScript
   # engine's packages come from npm, for the fuzzer that holds the two engines to each other.
