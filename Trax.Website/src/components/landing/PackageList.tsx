@@ -174,7 +174,7 @@ const total = folders.reduce((n, f) => n + f.packages.length, 0);
 function Badge({ name }: { name: string }) {
   return (
     <img
-      src={`https://img.shields.io/nuget/v/${name}?style=flat-square&color=3d8b37&label=`}
+      src={`https://img.shields.io/nuget/v/${name}?style=flat-square&color=1f5f41&label=`}
       alt={`${name} version`}
       className="h-4 flex-shrink-0 opacity-60 group-hover:opacity-100"
     />

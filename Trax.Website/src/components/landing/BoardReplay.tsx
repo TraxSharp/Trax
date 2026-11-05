@@ -17,7 +17,7 @@ import {
 
 // The Board sample's agents, replayed a move at a time: the board the server holds, the pod each agent works in, and
 // what the server answered. It plays itself once the first time it is on screen; Back and Next take over.
-const TONE: Record<Tone, string> = { ok: "#5cb85c", bad: "#d97a7a", warn: "#d4a24c", info: "#7a9ec2", idle: "#8f8b84" };
+const TONE: Record<Tone, string> = { ok: "#6cc596", bad: "#d97a7a", warn: "#d4a24c", info: "#7a9ec2", idle: "#8f8b84" };
 const STRIP_TONE: Record<(typeof ASSIGNMENT_STATES)[number], Tone> = { Working: "info", Checking: "info", Accepted: "ok", Rejected: "warn" };
 const PACE_MS = 2600;
 // How a marked move is named: on the ticket it touched, in the rule panel, and in the key under the board.
@@ -122,7 +122,7 @@ export default function BoardReplay({ recordings }: { recordings: BoardRecording
           <button onClick={() => step(move - 1)} className="min-h-11 rounded-md border border-border bg-bg-secondary px-4 text-sm text-text-primary">
             Back
           </button>
-          <button onClick={() => step(move + 1)} className="min-h-11 rounded-md bg-accent px-[18px] text-sm font-medium text-white hover:bg-accent-hover">
+          <button onClick={() => step(move + 1)} className="min-h-11 rounded-md bg-accent px-[18px] text-sm font-medium text-accent-ink hover:bg-accent-hover">
             Next move
           </button>
           <button onClick={() => step(0)} className="min-h-11 rounded-md border border-border px-4 text-sm text-text-secondary">
@@ -186,7 +186,7 @@ export default function BoardReplay({ recordings }: { recordings: BoardRecording
           work package: the ticket, instructions, tools, a lease
         </span>
         <span className="flex items-center gap-2">
-          <Arrow color="#5cb85c" />
+          <Arrow color="#6cc596" />
           submit(evidence): the server re-runs it before anything moves
         </span>
       </div>
@@ -215,7 +215,7 @@ function Arrow({ down, color }: { down?: boolean; color: string }) {
 }
 
 function TicketCard({ ticket, holderColor }: { ticket: TicketView; holderColor: string }) {
-  const chip = ticket.state === "Done" ? "#6fa86f" : ticket.live ? "#5cb85c" : "#8f8b84";
+  const chip = ticket.state === "Done" ? "#52ab7e" : ticket.live ? "#6cc596" : "#8f8b84";
   // A move a worker got wrong lights the card in its tone instead of the usual green.
   const wrong = ticket.attempt ? TONE[INTENT_TONE[ticket.attempt.intent]] : null;
   return (
@@ -252,7 +252,7 @@ function TicketCard({ ticket, holderColor }: { ticket: TicketView; holderColor: 
         </div>
       ) : (
         <div className="mt-auto flex h-[15px] flex-none items-center gap-1.5 text-[10.5px] text-text-muted">
-          <Dot color={ticket.holder ? holderColor : ticket.moved ? "#5cb85c" : "#3a3a37"} />
+          <Dot color={ticket.holder ? holderColor : ticket.moved ? "#6cc596" : "#3a3a37"} />
           <span className="truncate">{ticket.holder ? `held by ${ticket.holder}` : ticket.moved ? "moved by the server" : "unclaimed"}</span>
         </div>
       )}
