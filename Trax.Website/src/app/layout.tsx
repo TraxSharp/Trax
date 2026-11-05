@@ -7,16 +7,27 @@ import "./globals.css";
 
 // Served from the npm packages rather than fetched from Google Fonts at build time, so a build
 // needs no network beyond npm.
-const geistSans = localFont({
-  src: "../../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2",
-  variable: "--font-geist-sans",
-  weight: "100 900",
+// Atkinson Hyperlegible Next, drawn so similar letters (I l 1, O 0) cannot be confused.
+const atkinson = localFont({
+  src: [
+    {
+      path: "../../node_modules/@fontsource-variable/atkinson-hyperlegible-next/files/atkinson-hyperlegible-next-latin-wght-normal.woff2",
+      style: "normal",
+    },
+    {
+      path: "../../node_modules/@fontsource-variable/atkinson-hyperlegible-next/files/atkinson-hyperlegible-next-latin-wght-italic.woff2",
+      style: "italic",
+    },
+  ],
+  variable: "--font-atkinson",
+  weight: "200 800",
 });
 
-const geistMono = localFont({
-  src: "../../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2",
-  variable: "--font-geist-mono",
-  weight: "100 900",
+// The wordmark's typeface (.github/brand), for code and the monospaced labels.
+const jetbrainsMono = localFont({
+  src: "../../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2",
+  variable: "--font-jetbrains-mono",
+  weight: "100 800",
 });
 
 export const metadata: Metadata = {
@@ -36,7 +47,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
+        className={`${atkinson.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >
         <div className="flex min-h-screen flex-col">
           <Header />
