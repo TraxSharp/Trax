@@ -987,12 +987,12 @@ public sealed class ServerMachineController : IDisposable
                 var failed = problem.Code == ServerOutdated;
                 _readFailed = first && failed;
                 Emit();
-                if (first)
-                    SettleStart(
-                        failed
-                            ? new SendOutcome.Failed(_problem)
-                            : new SendOutcome.Refused(_problem)
-                    );
+                // A push may have opened the instance meanwhile: whoever waits for the start has it.
+                SettleStart(
+                    !first ? new SendOutcome.Confirmed(ConfirmedSnapshot())
+                    : failed ? new SendOutcome.Failed(_problem)
+                    : new SendOutcome.Refused(_problem)
+                );
                 Pump();
             }
             return;
@@ -1045,11 +1045,17 @@ public sealed class ServerMachineController : IDisposable
             {
                 var first = _confirmed is null;
                 EndRead();
-                // A first read that failed past every retry is RetryAsync's to read again.
-                if (first && !_disposed && _error is null)
+                if (!_disposed && _error is null)
                 {
-                    _readFailed = true;
-                    SettleStart(new SendOutcome.Failed(failure));
+                    // A first read that failed past every retry is RetryAsync's to read again. One a push opened the
+                    // instance during settles whoever waits for the start with it.
+                    if (first)
+                    {
+                        _readFailed = true;
+                        SettleStart(new SendOutcome.Failed(failure));
+                    }
+                    else
+                        SettleStart(new SendOutcome.Confirmed(ConfirmedSnapshot()));
                 }
                 Pump();
                 return Task.CompletedTask;

@@ -480,6 +480,47 @@ public class ClientSendTests
         controller.View.Problem!.Code.Should().Be("TRANSPORT_ERROR");
     }
 
+    // The last read either does not get through or is answered by a server another version kept answering.
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task A_retried_first_read_that_gives_up_after_a_push_opened_the_instance_settles_confirmed(
+        bool outdated
+    )
+    {
+        var server = new StepServer();
+        using var controller = Open(
+            server,
+            id: "i-1",
+            retryDelays: [TimeSpan.FromMilliseconds(50)]
+        );
+        var start = controller.StartAsync();
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetException(
+            new HttpRequestException("down")
+        );
+        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetException(
+            new HttpRequestException("down")
+        );
+        await start.WaitAsync(Wait);
+        controller.View.Status.Should().Be(MachineStatus.Loading);
+
+        var retry = controller.RetryAsync();
+        var read = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        server.Push(new StreamMessage.Changed(At(1, "Locked")));
+        read.SetException(new HttpRequestException("down"));
+        var last = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        if (outdated)
+            last.SetResult(ServerAnswer.Refused("SERVER_OUTDATED", "Another version answered."));
+        else
+            last.SetException(new HttpRequestException("down"));
+
+        (await retry.WaitAsync(Wait))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>()
+            .Which.Snapshot.Revision.Should()
+            .Be(1);
+        controller.View.Status.Should().Be(MachineStatus.Ready);
+    }
+
     [Test]
     public async Task A_prediction_that_cannot_be_written_is_sent_without_one_and_the_queue_goes_on()
     {
@@ -583,7 +624,17 @@ public class ClientSendTests
             CancellationToken cancellationToken = default
         ) => Hand(Reads);
 
-        public IDisposable Subscribe(string id, Action<StreamMessage> onMessage) => new Nothing();
+        private Action<StreamMessage>? _onMessage;
+
+        public IDisposable Subscribe(string id, Action<StreamMessage> onMessage)
+        {
+            _onMessage = onMessage;
+            return new Nothing();
+        }
+
+        // Delivers a message on the instance's stream, as a push from the server would arrive.
+        public void Push(StreamMessage message) =>
+            (_onMessage ?? throw new InvalidOperationException("Nothing subscribed."))(message);
 
         private sealed class Nothing : IDisposable
         {
