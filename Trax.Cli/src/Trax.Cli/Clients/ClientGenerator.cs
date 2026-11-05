@@ -949,35 +949,52 @@ internal sealed partial class ClientGenerator
         }
 
         /**
-         * The answer's body as JSON, read to at most `maxBytes`: a longer one is cancelled and refused with a RangeError
-         * rather than held in memory.
+         * The answer's body as JSON, read to at most `maxBytes`, the way the engine's machine server reads one: a longer
+         * one is cancelled and refused with a RangeError rather than held in memory. A response with no body stream to
+         * read (an XHR polyfill, React Native) is read whole only when it says a length within the limit, and refused
+         * otherwise; a Node stream (node-fetch) is read by async iteration.
          */
         async function readJson(response: Response, maxBytes: number = defaultMaxResponseBytes): Promise<unknown> {
           requireMaxResponseBytes(maxBytes);
           const tooLarge = () => new RangeError(`The host answered with more than ${maxBytes} bytes, the most this client reads.`);
-          const declared = Number(response.headers?.get("Content-Length") ?? Number.NaN);
-          if (declared > maxBytes) {
-            await response.body?.cancel().catch(() => undefined);
+          const header = response.headers?.get("Content-Length");
+          const declared = header == null || header.trim() === "" ? Number.NaN : Number(header);
+          if (Number.isFinite(declared) && declared > maxBytes) {
+            await cancelBody(response.body);
             throw tooLarge();
           }
-          const reader = response.body?.getReader();
-          if (!reader) {
-            // A response with no body stream (an empty one, or a stand-in for fetch): its text, held to the same limit.
+          const body = response.body as unknown;
+          if (!body) {
+            if (!Number.isFinite(declared) || declared < 0)
+              throw new Error("The host answered without a length, and the response has no body stream to read it bounded.");
             const text = await response.text();
             if (new TextEncoder().encode(text).byteLength > maxBytes) throw tooLarge();
             return JSON.parse(text);
           }
           const chunks: Uint8Array[] = [];
           let size = 0;
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
+          const take = (value: Uint8Array): boolean => {
             size += value.byteLength;
-            if (size > maxBytes) {
-              await reader.cancel().catch(() => undefined);
-              throw tooLarge();
-            }
+            if (size > maxBytes) return false;
             chunks.push(value);
+            return true;
+          };
+          if (typeof (body as ReadableStream<Uint8Array>).getReader === "function") {
+            const reader = (body as ReadableStream<Uint8Array>).getReader();
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (!take(value)) {
+                await reader.cancel().catch(() => undefined);
+                throw tooLarge();
+              }
+            }
+          } else if (typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function") {
+            // Leaving the loop early returns the iterator, which destroys a Node stream.
+            for await (const value of body as AsyncIterable<Uint8Array | string>)
+              if (!take(typeof value === "string" ? new TextEncoder().encode(value) : value)) throw tooLarge();
+          } else {
+            throw new Error("The response body is not a stream this client can read.");
           }
           const bytes = new Uint8Array(size);
           let offset = 0;
@@ -986,6 +1003,17 @@ internal sealed partial class ClientGenerator
             offset += chunk.byteLength;
           }
           return JSON.parse(new TextDecoder().decode(bytes));
+        }
+
+        /** Stops reading a body the client refused: a web stream is cancelled, a Node stream destroyed. */
+        async function cancelBody(body: unknown): Promise<void> {
+          const stream = body as { cancel?: () => Promise<void>; destroy?: () => void } | null;
+          try {
+            if (typeof stream?.cancel === "function") await stream.cancel();
+            else stream?.destroy?.();
+          } catch {
+            // The body is abandoned either way.
+          }
         }
 
         """;
