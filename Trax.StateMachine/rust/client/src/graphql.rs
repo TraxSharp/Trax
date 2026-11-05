@@ -60,10 +60,15 @@ pub struct GraphQLMachineServerOptions {
     pub machine: String,
     /// The machine's persisted documents, from the host's manifest, the push (`changed`) included.
     pub documents: Vec<ManifestDocument>,
-    /// The builder of the client requests go through, for a proxy, certificates or timeouts of your own; a default
-    /// one when `None`. The server builds it to follow no redirect, whatever the builder set, and, for an `https`
-    /// endpoint, to send nothing but `https`. A redirect, or an answer from another origin than the endpoint's, fails
-    /// the request as a [`TransportError`].
+    /// The builder of the client the HTTP requests (`start`, events, reads) go through, for a proxy, certificates or
+    /// timeouts of your own; a default one when `None`. The server builds it to follow no redirect, whatever the
+    /// builder set, and, for an `https` endpoint, to send nothing but `https`. A redirect, or an answer from another
+    /// origin than the endpoint's, fails the request as a [`TransportError`].
+    ///
+    /// The change stream does not use it. Its socket connects to `socket` directly, through no proxy, and trusts only
+    /// the Mozilla roots bundled with `webpki-roots`, not the system's store or a certificate added here. A host whose
+    /// certificate chains to a private CA answers HTTP requests made with such a builder while every socket fails to
+    /// connect and is tried again after the resubscribe delays.
     pub http: Option<reqwest::ClientBuilder>,
     /// Headers for each request and each socket's upgrade, asked for every time: how a host authenticates a request.
     pub headers: Option<RequestHeaders>,
