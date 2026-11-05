@@ -105,7 +105,7 @@ src/
 │   ├── robots.ts, sitemap.ts
 │   └── layout.tsx, not-found.tsx
 ├── components/
-│   ├── landing/                  # landing page sections; SeeItRunning.tsx tabs the samples, *Replay.tsx play them
+│   ├── landing/                  # landing page sections; BuiltWithTrax.tsx tabs the samples, *Replay.tsx play them
 │   ├── docs/                     # docs layout, sidebar, page chrome (DocArticle), breadcrumb, table of contents
 │   ├── layout/                   # header, footer, mobile nav
 │   └── mdx/                      # element overrides for rendered docs
@@ -133,12 +133,13 @@ tests/
 └── *-replay.test.ts              # plays every recording through its sample's player
 ```
 
-## See it running
+## Built with Trax
 
-The **See it running** section has a tab per sample: Recovery, State machine, Chat over WebSockets, SignalR and
-Persisted operations. Each tab plays the real sample in the browser, and the reader can drive it: crash a Recovery
-run, fire the checkout's triggers in any order, pick the next chat line, start pings, call and hot-fix persisted
-operations. Nothing runs a server. Each `src/data/<sample>-recordings.json` holds what the sample's host actually
+The **Built with Trax** section has a tab per sample: Agents (Board), State Machines and Workflows (both Recovery),
+Live Updates (ChatService) and Persisted Operations. Each tab plays the real sample in the browser, and the reader can
+drive it: step the agents across the board, place an order, crash a refund run, pick the next chat line, call and
+hot-fix persisted operations. Every tab has the same shape: the controls in `ReplayToolbar` across the top, the run
+below, the code under the run. Nothing runs a server. Each `src/data/<sample>-recordings.json` holds what the sample's host actually
 sent, recorded by Trax.Samples' `scripts/recordings` with every request, response and pushed event; where a sample
 takes free input, presets were recorded instead. Under each demo, `SampleSource` links the real C# on GitHub and
 gives the commands to start it.

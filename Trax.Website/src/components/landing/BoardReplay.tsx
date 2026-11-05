@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReplayToolbar, { PrimaryButton, ToolButton, ToolSelect } from "./ReplayToolbar";
 import {
   ASSIGNMENT_STATES,
   INTENT_TONE,
@@ -97,47 +98,33 @@ export default function BoardReplay({ recordings }: { recordings: BoardRecording
   };
 
   return (
-    <div ref={root} className="flex flex-col gap-3.5">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <label className="flex items-center gap-2 text-[13px] text-text-secondary">
-          Scenario
-          <select
-            value={key}
-            onChange={(e) => {
-              autoplayed.current = true;
-              setPlaying(false);
-              setKey(e.target.value);
-              setMove(0);
-            }}
-            className="min-h-11 rounded-md border border-border bg-bg-secondary px-2.5 text-sm text-text-primary outline-none focus:border-accent"
-          >
-            {scenarios.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="flex gap-2">
-          <button onClick={() => step(move - 1)} className="min-h-11 rounded-md border border-border bg-bg-secondary px-4 text-sm text-text-primary">
-            Back
-          </button>
-          <button onClick={() => step(move + 1)} className="min-h-11 rounded-md bg-accent px-[18px] text-sm font-medium text-accent-ink hover:bg-accent-hover">
-            Next move
-          </button>
-          <button onClick={() => step(0)} className="min-h-11 rounded-md border border-border px-4 text-sm text-text-secondary">
-            Start over
-          </button>
-        </div>
+    <div ref={root} className="flex flex-col gap-4">
+      {/* The caption is as tall as the longest the recording gives (177 characters, two lines at full width), so the
+          board below never moves as captions change length. */}
+      <ReplayToolbar caption={move === 0 ? scenario?.caption : view.caption} reserve="min-h-[7.5em] md:min-h-[4.5em] lg:min-h-[3em]">
+        <ToolSelect
+          label="Scenario"
+          value={key}
+          onChange={(e) => {
+            autoplayed.current = true;
+            setPlaying(false);
+            setKey(e.target.value);
+            setMove(0);
+          }}
+        >
+          {scenarios.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.title}
+            </option>
+          ))}
+        </ToolSelect>
+        <ToolButton onClick={() => step(move - 1)}>Back</ToolButton>
+        <PrimaryButton onClick={() => step(move + 1)}>Next move</PrimaryButton>
+        <ToolButton onClick={() => step(0)}>Start over</ToolButton>
         <span className="font-mono text-xs text-text-muted">
           move {move} / {last}
         </span>
-      </div>
-      {/* Its own row, as tall as the longest caption the recording gives (177 characters, two lines at full width), so
-          the board below never moves as captions change length. */}
-      <p className="min-h-[7.5em] text-sm leading-normal text-signal md:min-h-[4.5em] lg:min-h-[3em]">
-        {move === 0 ? scenario?.caption : view.caption}
-      </p>
+      </ReplayToolbar>
 
       {/* The board across the whole width, then the pods in one row, so the whole demo fits a laptop screen once the
           tabs are at the top. The other tabs show code; this one shows the clients. */}

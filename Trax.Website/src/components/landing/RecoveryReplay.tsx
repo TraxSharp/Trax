@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import ReplayToolbar, { PrimaryButton, ToolButton, ToolSelect, ToolbarPills } from "./ReplayToolbar";
 import { alignChains, codeLineLayout, useFitCode } from "./useFitCode";
 import data from "@/data/recovery-recordings.json";
 import {
@@ -161,77 +162,59 @@ export default function RecoveryReplay() {
   const lanes = trackOf(playback?.recording ?? chosen, playback, elapsed);
 
   return (
-    <div ref={root} className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)_minmax(0,300px)]">
-      {/* Controls */}
-      <div className="flex flex-col gap-5 rounded-lg border border-border bg-bg-secondary p-4 text-sm">
-        <Group label="Refund">
-          <Picker label="Order" value={order} options={ORDERS} disabled={locked} onChange={(v) => choose(() => setOrder(v))} />
-          <Picker
-            label="Crash"
-            value={crash}
-            options={CRASHES}
-            disabled={locked}
-            onChange={(v) => choose(() => setCrash(v as CrashAt))}
-          />
-        </Group>
+    <div ref={root} className="flex flex-col gap-4">
+      <ReplayToolbar
+        caption={retryIn != null && playback?.forkTaken === "none" ? `Retrying in ${retryIn.toFixed(1)} s` : null}
+        hint="Pick an order and where it crashes, then Run. During the backoff, change the data or ask the model afresh."
+      >
+        <Picker label="Order" value={order} options={ORDERS} disabled={locked} onChange={(v) => choose(() => setOrder(v))} />
+        <Picker
+          label="Crash"
+          value={crash}
+          options={CRASHES}
+          disabled={locked}
+          onChange={(v) => choose(() => setCrash(v as CrashAt))}
+        />
+        <PrimaryButton onClick={() => run()} disabled={locked}>
+          Run
+        </PrimaryButton>
+        <ToolButton onClick={changeData} disabled={!forkable}>
+          Change the data during the backoff
+        </ToolButton>
+        <ToolButton onClick={askAfresh} disabled={!forkable && !(playback?.waiting && !playback.requeued)}>
+          Ask afresh
+        </ToolButton>
+        <ToolButton onClick={() => setPlayback(null)} disabled={!playback}>
+          Reset
+        </ToolButton>
+        <ToolbarPills>
+          {PHASES.map((p, i) => {
+            // A run that never crashed skips Breaks and Recovers.
+            const crashed = playback?.attempts.some((a) => a.trainState === "FAILED") ?? false;
+            const done = phase === "done" ? i === 0 || crashed : i < reached;
+            const tone = done
+              ? "border-accent/50 text-accent-bright"
+              : i === reached
+                ? i === 1
+                  ? "border-derail/60 text-derail"
+                  : "border-info/60 text-info"
+                : "border-border text-text-muted";
+            return (
+              <li key={p.label} className={`rounded-full border px-2.5 py-1 text-center ${tone}`}>
+                {p.label}
+              </li>
+            );
+          })}
+        </ToolbarPills>
+      </ReplayToolbar>
 
-        <Group label="Actions">
-          <button
-            onClick={() => run()}
-            disabled={locked}
-            className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-40"
-          >
-            Run
-          </button>
-          <ActionButton onClick={changeData} disabled={!forkable}>
-            Change the data during the backoff
-          </ActionButton>
-          <div className="grid grid-cols-2 gap-2">
-            <ActionButton
-              onClick={askAfresh}
-              disabled={!forkable && !(playback?.waiting && !playback.requeued)}
-            >
-              Ask afresh
-            </ActionButton>
-            <ActionButton onClick={() => setPlayback(null)} disabled={!playback}>
-              Reset
-            </ActionButton>
-          </div>
-          <p className="min-h-[3.5em] text-xs leading-relaxed text-text-muted">
-            {retryIn != null && playback?.forkTaken === "none" ? (
-              <span className="text-signal">
-                Retrying in {retryIn.toFixed(1)} s
-              </span>
-            ) : null}
-          </p>
-        </Group>
-
-        <Group label="Progress">
-          <ol className="grid grid-cols-3 gap-1.5 text-xs font-medium">
-            {PHASES.map((p, i) => {
-              // A run that never crashed skips Breaks and Recovers.
-              const crashed = playback?.attempts.some((a) => a.trainState === "FAILED") ?? false;
-              const done = phase === "done" ? i === 0 || crashed : i < reached;
-              const tone = done
-                ? "border-accent/50 text-accent-bright"
-                : i === reached
-                  ? i === 1
-                    ? "border-derail/60 text-derail"
-                    : "border-info/60 text-info"
-                  : "border-border text-text-muted";
-              return (
-                <li key={p.label} className={`rounded-full border px-2 py-1 text-center ${tone}`}>
-                  {p.label}
-                </li>
-              );
-            })}
-          </ol>
-        </Group>
+      <div className="grid gap-4 min-[1200px]:h-[360px] min-[1200px]:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
+        <TimelinePanel lanes={lanes} />
+        <ModelPanel calls={modelCallsOf(playback)} />
       </div>
 
+      {/* The run is the demo; the train behind it sits below, lit in step with it, for whoever wants to look. */}
       <CodePanel source={sources.REFUND} step={step} />
-      <ModelPanel calls={modelCallsOf(playback)} />
-      <TimelinePanel lanes={lanes} />
 
     </div>
   );
@@ -251,41 +234,13 @@ function Picker({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="flex flex-col gap-1.5 text-xs text-text-muted">
-      {label}
-      <select
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-border bg-bg-primary px-2 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-50"
-      >
-        {options.map((o) => (
-          <option key={o.key} value={o.key}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2.5">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-function ActionButton({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className="rounded-md border border-border bg-bg-tertiary px-3 py-2 text-left text-sm text-text-primary transition-colors hover:border-accent/60 disabled:cursor-default disabled:opacity-35 disabled:hover:border-border"
-    >
-      {children}
-    </button>
+    <ToolSelect label={label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+      {options.map((o) => (
+        <option key={o.key} value={o.key}>
+          {o.label}
+        </option>
+      ))}
+    </ToolSelect>
   );
 }
 
@@ -340,11 +295,11 @@ function CodePanel({ source, step }: { source: { file: string; code: string }; s
         : "border-accent-bright bg-accent/15";
 
   return (
-    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary lg:h-[600px]">
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary">
       <PanelTitle>
         Code <span className="font-mono normal-case tracking-normal text-text-secondary">{source.file}</span>
       </PanelTitle>
-      <pre ref={pane} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-3 font-mono text-[12px] leading-[1.7] text-text-secondary">
+      <pre ref={pane} className="overflow-x-hidden py-3 font-mono text-[12px] leading-[1.7] text-text-secondary">
         {lines.slice(first, last).map((line, offset) => {
           const i = first + offset;
           const layout = codeLineLayout(line.slice(indent));
@@ -386,7 +341,7 @@ function ModelPanel({ calls }: { calls: ModelCall[] }) {
         Model
         {model && <span className="ml-auto font-mono font-normal normal-case tracking-normal text-text-muted/80">{model}</span>}
       </PanelTitle>
-      <div ref={box} className="flex h-[340px] flex-col gap-2.5 overflow-y-auto p-3 lg:h-auto lg:flex-1 lg:basis-0">
+      <div ref={box} className="flex h-[340px] flex-col gap-2.5 overflow-y-auto p-3 min-[1200px]:h-auto min-[1200px]:flex-1 min-[1200px]:basis-0">
         {calls.map((call) => (
           <div key={call.key} className="rounded-md border border-border bg-bg-primary/60 p-2.5 text-xs">
             <div className="flex items-center gap-2">
@@ -451,18 +406,19 @@ const STATUS_TONES: Record<NonNullable<TrackLane["status"]>["tone"], string> = {
   failed: "border-derail/40 text-derail",
 };
 
+// One row per attempt, time running left to right, every row the same steps so a restored step sits under the
+// attempt that saved it. Too narrow for that, each attempt becomes a card and the cards sit side by side.
 function TimelinePanel({ lanes }: { lanes: TrackLane[] }) {
   const columns = lanes[0]?.slots.length ?? 0;
-  const grid = { gridTemplateColumns: `96px repeat(${columns}, minmax(0, 1fr)) 84px` };
+  const grid = { gridTemplateColumns: `76px repeat(${columns}, minmax(0, 1fr))` };
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-bg-secondary pb-3 lg:col-span-3">
+    <div className="@container flex min-w-0 flex-col rounded-lg border border-border bg-bg-secondary pb-3">
       <PanelTitle>Timeline</PanelTitle>
-      {/* Narrow screens: each attempt top to bottom. */}
-      <div className="mx-3 mt-3 flex flex-col gap-3 md:hidden">
+      <div className="mx-3 mt-3 grid flex-1 content-start gap-3 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))] @3xl:hidden">
         {lanes.map((lane) => (
-          <div key={lane.id} className="flex flex-col gap-1.5 rounded-md border border-border bg-bg-primary/60 p-3 text-[11px]">
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-text-secondary">{lane.label}</span>
+          <div key={lane.id} className="flex min-w-0 flex-col gap-1.5 rounded-md border border-border bg-bg-primary/60 p-3 text-[11px]">
+            <div className="flex h-6 items-center justify-between gap-2">
+              <span className="truncate font-medium text-text-secondary">{lane.label}</span>
               {lane.status && <StatusPill status={lane.status} />}
             </div>
             {lane.slots.map((slot) => (
@@ -471,19 +427,20 @@ function TimelinePanel({ lanes }: { lanes: TrackLane[] }) {
           </div>
         ))}
       </div>
-      <div className="mx-3 mt-3 hidden overflow-x-auto rounded-md border border-border bg-bg-primary/60 p-3 md:block">
-        {/* Room for three attempts, the most a run shows, so a requeue does not push the page down. */}
-        <div className="flex min-h-[84px] flex-col gap-1.5 text-[11px]" style={{ minWidth: 96 + 84 + columns * 110 }}>
-          {lanes.map((lane) => (
-            <div key={lane.id} className="grid items-center gap-x-1" style={grid}>
+      {/* Room for three attempts, the most a run shows, so a requeue does not push the page down. */}
+      <div className="mx-3 mt-3 hidden flex-1 flex-col justify-center gap-2 rounded-md border border-border bg-bg-primary/60 p-4 text-[11px] @3xl:flex">
+        {lanes.map((lane) => (
+          <div key={lane.id} className="grid items-center gap-x-1.5" style={grid}>
+            {/* The attempt's status under its name, so the steps get the width. */}
+            <span className="flex min-w-0 flex-col items-start gap-1">
               <span className="truncate font-medium text-text-secondary">{lane.label}</span>
-              {lane.slots.map((slot) => (
-                <SlotBox key={slot.key} slot={slot} />
-              ))}
-              <span className="flex justify-end">{lane.status && <StatusPill status={lane.status} />}</span>
-            </div>
-          ))}
-        </div>
+              {lane.status && <StatusPill status={lane.status} />}
+            </span>
+            {lane.slots.map((slot) => (
+              <SlotBox key={slot.key} slot={slot} />
+            ))}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -498,12 +455,13 @@ function SlotBox({ slot }: { slot: LaneSlot }) {
   return (
     <div
       title={slot.title ?? slot.label}
-      className={`relative h-6 overflow-hidden rounded border bg-bg-secondary transition-opacity ${tone.box} ${slot.dimmed ? "opacity-40" : ""}`}
+      className={`relative h-11 overflow-hidden rounded border bg-bg-secondary transition-opacity ${tone.box} ${slot.dimmed ? "opacity-40" : ""}`}
     >
       <div className={`absolute inset-y-0 left-0 transition-[width] duration-100 ${tone.fill}`} style={{ width: `${slot.fill * 100}%` }} />
-      <span className={`relative flex h-full items-center gap-1.5 truncate px-1.5 text-[10.5px] font-medium ${tone.text}`}>
+      {/* The note goes under the name, so a narrow box still shows the name whole. */}
+      <span className={`relative flex h-full flex-col justify-center px-2 text-[11px] font-medium leading-tight ${tone.text}`}>
         <span className="truncate">{slot.label}</span>
-        {slot.note && <span className="ml-auto shrink-0 text-[9.5px] font-normal opacity-80">{slot.note}</span>}
+        {slot.note && <span className="truncate text-[9.5px] font-normal opacity-80">{slot.note}</span>}
       </span>
     </div>
   );
