@@ -117,7 +117,7 @@ export function useMachineStage(machine: keyof typeof HOOKS, user: string) {
     state: snapshot?.state ?? null,
     context: snapshot?.context ?? {},
     advance: (trigger: string, input?: Record<string, unknown>) => fire(trigger, input),
-    /** Sends the event bound to the machine's effect: the server runs the effect itself, exactly once. */
+    /** Sends the event bound to the machine's effect: the server runs the effect itself, once per intent. */
     send: () => fire(EFFECT_TRIGGER[machine] ?? "Pay"),
   };
 }

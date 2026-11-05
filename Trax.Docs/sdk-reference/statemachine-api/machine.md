@@ -133,7 +133,7 @@ against the one `RunsOnce` effect.
 | `Because(string message)` | The detail surfaced when the guard rejects the trigger. |
 | `Reduce(Func<JsonObject, JsonNode?, JsonObject> reducer)` | Computes the next context. Return a fresh JSON object; never mutate the input. |
 | `Reduce(Reduction reduce)` | The declarative, exportable reducer: `Set(...).FromInput(...)`, `Clear()`, `Reset()`, `Keep()`. See the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules). |
-| `RunsOnce<TEffect>(string? keyPrefix = null)` | Binds an `ISnapshotEffect` that runs exactly once when this transition is sent, keyed on `{keyPrefix}:{user}:{id}`. Omit `keyPrefix` and it defaults to `{machineId}:{trigger}`. On the server only the send fires this transition: an advance of its trigger through the draft service or `IMachineInstances.Advance` is refused as `EFFECT_BOUND`. The engine's own `SnapshotMachine.Advance` and the TypeScript twin's `advance` do not refuse it and fire the edge like any other. A machine binds at most one. |
+| `RunsOnce<TEffect>(string? keyPrefix = null)` | Binds an `ISnapshotEffect` that runs once per send of this transition (at least once if a runner dies mid-call, always under the same key), keyed on `{keyPrefix}:{user}:{id}`. Omit `keyPrefix` and it defaults to `{machineId}:{trigger}`. On the server only the send fires this transition: an advance of its trigger through the draft service or `IMachineInstances.Advance` is refused as `EFFECT_BOUND`. The engine's own `SnapshotMachine.Advance` and the TypeScript twin's `advance` do not refuse it and fire the edge like any other. A machine binds at most one. |
 | `To(TState state)` | The destination state. Also closes the transition, so you can chain another `On(...)`. |
 
 ## IDifferentialBuilder

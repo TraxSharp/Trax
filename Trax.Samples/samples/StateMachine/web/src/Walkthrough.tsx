@@ -144,7 +144,7 @@ function explain(machine: MachineView, last: LastAction, user: string): Step[] {
         `No. The ${effectMove?.effect} only runs on the ${effectMove?.trigger} move out of ${effectMove?.from}, so nothing ran.`,
       );
       check(
-        `Ran the ${effectMove?.effect}, exactly once.`,
+        `Ran the ${effectMove?.effect} and recorded its receipt.`,
         ["DELIVERY_FAILED", "EFFECT_IN_PROGRESS", "DRAFT_CHANGED", "REQUEST_ID_REUSED"],
         receiptOf(last) ? `Receipt ${receiptOf(last)}.` : undefined,
       );

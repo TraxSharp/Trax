@@ -50,7 +50,7 @@ export function SideEffect({ last, draftId }: { last: LastAction | null; draftId
         <h3>Side effect: the charge</h3>
         <p className="effect-lead">
           The page never calls a payment API. The machine binds the charge to the <strong>Pay</strong> edge, and the
-          server runs it itself when a draft takes <code>Review → Paid</code>, exactly once.
+          server runs it itself when a draft takes <code>Review → Paid</code>, and records one charge however often it is sent.
         </p>
       </div>
 

@@ -145,7 +145,7 @@ chapter that teaches it and the package that ships it.
     <td width="50%"><a href="Trax.Samples/samples/Recovery"><img src="Trax.Samples/samples/Recovery/screenshot.png" alt="The Recovery sample: a refund train's code, the model's recorded answers, and a timeline where the first attempt crashes and the second resumes from a checkpoint."></a></td>
   </tr>
   <tr>
-    <td><a href="Trax.Samples/samples/StateMachine"><b>StateMachine</b></a>: a checkout the browser drives and the server decides, with a charge that runs exactly once.</td>
+    <td><a href="Trax.Samples/samples/StateMachine"><b>StateMachine</b></a>: a checkout the browser drives and the server decides, with a charge recorded once, however often it is sent.</td>
     <td><a href="Trax.Samples/samples/Recovery"><b>Recovery</b></a>: a crashed run resumes without asking its model the same questions twice.</td>
   </tr>
 </table>

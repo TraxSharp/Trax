@@ -37,8 +37,8 @@ the builder refuses, found after the states were drawn. Read the rules below bef
    for `UsePostgres(...)` or `UseSqlite(...)` (`Trax.Effect.Data.Postgres` or `.Sqlite`). The host refuses to start
    a machine that invokes trains on InMemory. `trax-api` has the mediator but no scheduler and no junction progress,
    so it needs those too ([Invoke a train from a state](https://traxsharp.net/docs/statemachine/invoking-trains)).
-4. **One irreversible effect, or trains.** `RunsOnce<TEffect>()` binds the machine's one exactly-once effect (a
-   charge) to one edge. Work with several stages is invoked trains.
+4. **One irreversible effect, or trains.** `RunsOnce<TEffect>()` binds the machine's one run-once effect (a
+   charge, recorded once, called again only under the same key after a crash) to one edge. Work with several stages is invoked trains.
 
 ## The rules that shape the machine
 
