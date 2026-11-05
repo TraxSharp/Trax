@@ -306,7 +306,10 @@ Each resubscribe wait is drawn uniformly between 50% and 100% of its step: `step
 together do not subscribe again in lockstep. Retry delays are not jittered. The random source is the language's
 ordinary one and each client's unit tests replace it (TypeScript's spies on `Math.random`), so a draw of 0 waits the
 whole step. The kit does not pin the random source: `resubscribe-backoff` bounds each wait by half its step, the
-shortest a draw can make it, so it holds the order and growth of the waits whatever is drawn.
+shortest a draw can make it, so it holds the order and growth of the waits whatever is drawn. The kit runs on the
+wall clock, over real sockets, so an upper bound leaves room for a loaded machine: `resubscribe-delays-default` holds
+its wait under the next step, 2000 ms, not under the 1000 ms step it draws from. Each client's unit tests hold the
+draw itself.
 
 The socket's own timing is not pinned, because the TypeScript client does not own its socket: a page builds its
 graphql-ws client and its options with it, and graphql-ws waits for an acknowledgement and stays silent for as long
