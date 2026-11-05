@@ -959,17 +959,27 @@ impl Inner {
             }
             return Some(Ended::Again);
         }
-        let change = payload.get("data").and_then(|d| d.get(&self.push_field))?;
-        // A push no host wrote (not an object, a gone that is not a boolean, a snapshot that is not one a store wrote) is
-        // dropped, and the instance read again: whatever it stood for may have been missed.
+        // A push no host wrote (no change, not an object, a problem with no code, a gone that is not a boolean, a
+        // snapshot that is not one a store wrote) is dropped, and the instance read again: whatever it stood for may
+        // have been missed.
         let malformed = || {
             sink(StreamMessage::Reload);
             None
         };
+        let Some(change) = payload.get("data").and_then(|d| d.get(&self.push_field)) else {
+            return malformed();
+        };
         if !matches!(change, Value::Object(_)) {
             return malformed();
         }
-        if let Some(problem) = change.get("problem").and_then(problem_of) {
+        let problem = match change.get("problem") {
+            None | Some(Value::Null) => None,
+            Some(problem) => match problem_of(problem) {
+                Some(problem) => Some(problem),
+                None => return malformed(),
+            },
+        };
+        if let Some(problem) = problem {
             if problem.code == codes::CLIENT_OUTDATED {
                 sink(StreamMessage::ClientOutdated);
                 return Some(Ended::ForGood);
@@ -1267,6 +1277,32 @@ mod tests {
             assert_eq!(delivered, vec![StreamMessage::Reload], "{change}");
             assert_eq!((pushes, ended), (0, false), "{change}");
         }
+        // No change at all, or a problem that is not one: C# and TypeScript read the instance again on these too.
+        for payload in [
+            r#"{"data":null}"#,
+            r#"{"data":{}}"#,
+            r#"{}"#,
+            r#"{"data":{"turnstileChanged":{"problem":"NOT_FOUND"}}}"#,
+            r#"{"data":{"turnstileChanged":{"problem":5}}}"#,
+            r#"{"data":{"turnstileChanged":{"problem":{"message":"no code"}}}}"#,
+        ] {
+            let (delivered, pushes, ended) = next_of(payload);
+
+            assert_eq!(delivered, vec![StreamMessage::Reload], "{payload}");
+            assert_eq!((pushes, ended), (0, false), "{payload}");
+        }
+    }
+
+    #[test]
+    fn a_push_with_a_null_problem_is_a_snapshot() {
+        let (delivered, pushes, ended) =
+            next_of(r#"{"data":{"turnstileChanged":{"state":"Locked","revision":1,"context":{},"problem":null}}}"#);
+
+        assert!(
+            matches!(delivered.as_slice(), [StreamMessage::Changed(_)]),
+            "{delivered:?}"
+        );
+        assert_eq!((pushes, ended), (1, false));
     }
 
     #[test]
