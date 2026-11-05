@@ -3,7 +3,7 @@ import MachineOnServer from "@/components/landing/MachineOnServer";
 import FourWays from "@/components/landing/FourWays";
 import RunRecord from "@/components/landing/RunRecord";
 import Decisions from "@/components/landing/Decisions";
-import SeeItRunning from "@/components/landing/SeeItRunning";
+import BuiltWithTrax from "@/components/landing/BuiltWithTrax";
 import LayerDiagram from "@/components/landing/LayerDiagram";
 import DeploymentArchitectures from "@/components/landing/DeploymentArchitectures";
 import WhereTraxStops from "@/components/landing/WhereTraxStops";
@@ -14,7 +14,7 @@ export default function Home() {
   return (
     <main>
       <Hero />
-      <SeeItRunning />
+      <BuiltWithTrax />
       <MachineOnServer />
       <FourWays />
       <RunRecord />

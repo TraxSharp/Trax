@@ -117,7 +117,7 @@ const samples: Sample[] = [
   },
 ];
 
-export default function SeeItRunning() {
+export default function BuiltWithTrax() {
   const [active, setActive] = useState(0);
 
   // The demos differ in height, and so does one demo from moment to moment. The panel only ever grows to the
@@ -148,7 +148,11 @@ export default function SeeItRunning() {
     <section className="border-b border-border pb-24 pt-8">
       {/* Wider than the rest of the page, so a demo fits on one screen without scrolling between its steps. */}
       <div className="mx-auto max-w-[1280px] px-4 sm:px-8">
-        <h2 className="text-2xl font-semibold text-text-primary">See it running</h2>
+        <h2 className="text-2xl font-semibold text-text-primary">Built with Trax</h2>
+        <p className="mt-3 max-w-2xl text-text-secondary">
+          Five sample apps written on Trax. Each demo replays a run recorded from the real app, with the app&apos;s own
+          code underneath.
+        </p>
 
         <div className="mt-8 flex flex-wrap items-end gap-x-6 gap-y-3 border-b border-border">
           <div role="tablist" className="flex flex-wrap gap-1">
