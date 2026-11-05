@@ -230,6 +230,28 @@ describe('createMachineServer operations', () => {
       });
   });
 
+  it('answers a discard rejected with a terminal code with that code, not TRANSPORT_ERROR', async () => {
+    // A server made before configureTrax: its headers refuse every request with CONNECTION_CHANGED.
+    const { sent, fetch } = http();
+    const server = createMachineServer('/graphql', {
+      fetch,
+      machine: turnstile,
+      documents: DOCUMENTS,
+      socket: new FakeSocket(),
+      terminalStreamErrors: ['CONNECTION_CHANGED'],
+      headers: () => {
+        throw refusal('CONNECTION_CHANGED', 'configureTrax was called since this server was made.');
+      },
+    });
+
+    expect(await server.discard('i-1', 'rq-d')).toEqual({
+      kind: 'problem',
+      code: 'CONNECTION_CHANGED',
+      message: 'configureTrax was called since this server was made.',
+    });
+    expect(sent).toHaveLength(0);
+  });
+
   it('refuses at creation a document set without the push document', () => {
     expect(() =>
       createMachineServer('/graphql', {

@@ -73,9 +73,13 @@ export interface MachineServerOptions extends HttpExecutorOptions {
 
 /**
  * The answer to `discard`. A discard of an instance already gone, or never the caller's, is `discarded` too. An answer
- * that does not say the instance was discarded, and gives no problem, is a `TRANSPORT_ERROR`.
+ * that does not say the instance was discarded, and gives no problem, is a `TRANSPORT_ERROR`. A request rejected with
+ * one of {@link MachineServerOptions.terminalStreamErrors} is a problem with that code and the error's message.
  */
-export type DiscardResponse = { kind: 'discarded' } | ServerProblem;
+export type DiscardResponse =
+  | { kind: 'discarded' }
+  | ServerProblem
+  | { kind: 'problem'; code: string & {}; message: string };
 
 /** A {@link MachineServer} that can also discard an instance. */
 export interface TypedMachineServer extends MachineServer {
@@ -271,11 +275,14 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
   const get = async (id: string): Promise<GetResponse> => answered(await client.load(machine.id, id));
 
   // Total, as every operation a page calls itself is: a request the transport failed is a TRANSPORT_ERROR, not a throw.
+  // A rejection with a terminal code keeps its code, so the page can tell this server will refuse everything now.
   const discard = async (id: string, requestId: string): Promise<DiscardResponse> => {
     let output: Awaited<ReturnType<typeof client.discard>>;
     try {
       output = await client.discard(machine.id, id, requestId);
     } catch (error) {
+      const ended = terminalOf(error);
+      if (ended) return { kind: 'problem', ...ended };
       return {
         kind: 'problem',
         code: ClientProblemCode.TransportError,
