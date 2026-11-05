@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createClient } from 'graphql-ws';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { conformanceFile } from '../fixtures';
 
@@ -8,6 +9,7 @@ import { flushMicrotasks, sequentialRequestIds } from '../server/testing/FakeMac
 import {
   createMachineServer,
   persistedMessageReplacer,
+  retryClosedSocket,
   type PersistedSubscriptionSocket,
   type SubscriptionSink,
 } from './machineServer';
@@ -564,6 +566,66 @@ describe('persistedMessageReplacer', () => {
       payload: { id: 'doc-1', variables: { id: 'i-1' } },
     });
     expect(JSON.stringify({ query: 'q' }, persistedMessageReplacer)).toBe('{"query":"q"}');
+  });
+});
+
+describe('retryClosedSocket', () => {
+  const close = (code: number) => ({ code, reason: '', wasClean: true });
+
+  it('retries a socket closed for any reason but the host turning the caller away', () => {
+    for (const code of [1000, 1001, 1006, 1011, 4400, 4429, 4499, 4500])
+      expect(retryClosedSocket(close(code))).toBe(true);
+    expect(retryClosedSocket(close(4401))).toBe(false);
+    expect(retryClosedSocket(close(4403))).toBe(false);
+  });
+
+  it('does not retry anything that is not a close event, as graphql-ws by default does not', () => {
+    for (const error of [null, undefined, 4403, 'closed', new Error('boom'), { code: 1006 }, { code: '1006', reason: '' }])
+      expect(retryClosedSocket(error)).toBe(false);
+  });
+
+  it('lets a graphql-ws client retrying forever end a 4403 close, so the stream stops FORBIDDEN', async () => {
+    // A socket the host refuses as soon as it is opened.
+    let opened = 0;
+    class RefusingSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      readyState = RefusingSocket.CONNECTING;
+      onclose: ((event: unknown) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      onopen: (() => void) | null = null;
+      onmessage: ((event: unknown) => void) | null = null;
+      constructor() {
+        opened++;
+        setTimeout(() => {
+          this.readyState = RefusingSocket.CLOSED;
+          this.onclose?.({ code: 4403, reason: 'Forbidden', wasClean: true });
+        }, 0);
+      }
+      send() {}
+      close() {}
+    }
+    const socket = createClient({
+      url: 'wss://host/graphql',
+      webSocketImpl: RefusingSocket,
+      lazy: true,
+      retryAttempts: Infinity,
+      retryWait: async () => {},
+      shouldRetry: retryClosedSocket,
+      jsonMessageReplacer: persistedMessageReplacer,
+    });
+    const { server } = serverOver(http().fetch, socket as unknown as FakeSocket, [100]);
+    const messages: StreamMessage[] = [];
+    server.subscribe('i-1', (m) => messages.push(m));
+
+    await vi.waitFor(() => expect(messages).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(messages).toEqual([{ type: 'ended', code: 'FORBIDDEN', message: 'The host refused the socket: 4403 Forbidden.' }]);
+    expect(opened).toBe(1);
+    await socket.dispose();
   });
 });
 

@@ -507,6 +507,7 @@ transcripts compare those by value.
 | The default resubscribe delays | `DEFAULT_RESUBSCRIBE_DELAYS` | `GraphQLMachineServer.DefaultResubscribeDelays` | `DEFAULT_RESUBSCRIBE_DELAYS` |
 | The default request timeout | `DEFAULT_REQUEST_TIMEOUT` | `GraphQLMachineServer.DefaultRequestTimeout` | `DEFAULT_REQUEST_TIMEOUT` |
 | Leave the empty query out of a socket message | `persistedMessageReplacer` | — `GraphQLSubscriptionSocket` writes its own messages | — the server writes its own socket's messages |
+| Retry every socket close but 4401 and 4403 | `retryClosedSocket` | — `GraphQLSubscriptionSocket` reopens its own socket | — the server reopens its own socket |
 | Options with every choice left to its default | — an object literal | — an object initializer | `GraphQLMachineServerOptions.new` |
 | The machine | `MachineServerOptions.machine` | `GraphQLMachineServerOptions.Machine` | `GraphQLMachineServerOptions.machine` |
 | Its persisted documents | `MachineServerOptions.documents` | — the manifest entry given as `Machine` carries them | `GraphQLMachineServerOptions.documents` |

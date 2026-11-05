@@ -57,7 +57,9 @@ export interface MachineServerOptions extends HttpExecutorOptions {
    * once a stream has delivered a second push: every new stream's first is the instance as it is then. A socket the host refused (a
    * close with 4401 or 4403), or a stream it refused with a GraphQL error coded `TRAX_AUTHORIZATION`,
    * `AUTH_NOT_AUTHENTICATED` or `AUTH_NOT_AUTHORIZED`, is not subscribed again: it ends the controller as
-   * `UNAUTHENTICATED` or `FORBIDDEN`. Each is from 0 to 2^31 - 1 ms; any other throws when the server is built.
+   * `UNAUTHENTICATED` or `FORBIDDEN`. A close reaches the stream only once the socket stops retrying it, and graphql-ws
+   * retries a 4403 close, so give a graphql-ws socket {@link retryClosedSocket} as its `shouldRetry` or a 4403 never
+   * ends it. Each is from 0 to 2^31 - 1 ms; any other throws when the server is built.
    */
   resubscribeDelays?: readonly number[];
   /**
@@ -114,6 +116,19 @@ export const REFUSED_CLOSES: ReadonlyMap<number, string> = new Map([
   [4401, RefusalCode.Unauthenticated],
   [4403, RefusalCode.Forbidden],
 ]);
+
+/**
+ * Whether a graphql-ws client opens a closed socket again: after any close but 4401 or 4403, the host turning the
+ * caller away, which a retry gets again. Anything that is not a close event is not retried, as graphql-ws's own default
+ * does. graphql-ws gives up on 4401 by itself but retries 4403 for as long as `retryAttempts` allows, so a socket with
+ * `retryAttempts: Infinity` never hands the stream the 4403 that ends it as `FORBIDDEN`. Pass this as the client's
+ * `shouldRetry`.
+ */
+export function retryClosedSocket(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('reason' in error)) return false;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'number' && !REFUSED_CLOSES.has(code);
+}
 
 /**
  * The code and message a socket error ends the stream with when the host refused the socket (a close with 4401 or

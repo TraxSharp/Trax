@@ -58,6 +58,7 @@ export {
 export {
   createMachineServer,
   persistedMessageReplacer,
+  retryClosedSocket,
   DEFAULT_RESUBSCRIBE_DELAYS,
   type DiscardResponse,
   type MachineServerOptions,

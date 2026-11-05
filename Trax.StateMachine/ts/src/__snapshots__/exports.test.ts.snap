@@ -129,6 +129,7 @@ exports[`the published exports > match the committed baseline 1`] = `
     "createMachineServer",
     "persistedMessageReplacer",
     "requireSecureEndpoint",
+    "retryClosedSocket",
     "startDraft",
   ],
   "@traxsharp/state-machine/react": [
