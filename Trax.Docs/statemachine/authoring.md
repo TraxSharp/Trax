@@ -1,6 +1,6 @@
 ---
 title: Author and serve a machine
-description: "Author a declarative state machine with caller rules and an exactly-once effect, wire it into a host, and serve it to clients as its own typed GraphQL API."
+description: "Author a declarative state machine with caller rules and a run-once effect, wire it into a host, and serve it to clients as its own typed GraphQL API."
 type: how-to
 area: machines
 nav_order: 1
@@ -11,7 +11,7 @@ source:
 
 # Author and serve a machine
 
-This builds a checkout machine (`Cart`, `Review`, `Paid`) whose `Pay` event charges a card exactly once, registers
+This builds a checkout machine (`Cart`, `Review`, `Paid`) whose `Pay` event charges a card once per order, registers
 it in a host, and serves it to clients under the `machines` GraphQL root. What a machine is, and why the snapshot is
 shaped the way it is, is in [State machines](/docs/statemachine).
 
@@ -175,7 +175,7 @@ A request with no user key is refused as `UNAUTHENTICATED`. Authentication itsel
 ## 4. Register the machine in the host
 
 `AddStateMachines` discovers every machine in the assemblies it is given and wires the snapshot store, the
-effect-claim ledger, the exactly-once runner and the registry over the data provider configured in `AddEffects`.
+effect-claim ledger, the run-once runner and the registry over the data provider configured in `AddEffects`.
 Call it after `AddEffects` and before `AddMediator`. A served machine's operations are persisted documents that
 carry the machine's version, so the GraphQL host must call `UsePersistedOperations`; a host that serves a machine
 without it refuses to start.
@@ -229,7 +229,7 @@ and limits are in the [machines root](/docs/sdk-reference/graphql-api/machines),
 [Result codes](/docs/sdk-reference/statemachine-api/result-codes).
 
 [12. Checkout is a state machine](/docs/book/checkout-is-a-state-machine) builds one step by step and serves it.
-The [State Machine sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/StateMachine) is another runnable version: two machines, a GraphQL host, exactly-once over the
+The [State Machine sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/StateMachine) is another runnable version: two machines, a GraphQL host, a run-once charge over the
 wire, a forward migration and a server-checked total.
 
 ## Serve the generic mutations instead

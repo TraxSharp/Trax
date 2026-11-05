@@ -26,7 +26,9 @@ no code.
 
 - [Trax in five minutes](/docs/introduction): the problem, the idea, and how the pieces fit.
 - [What Trax does](/docs/what-trax-does): every capability on one page, and where each is taught.
-- [Trax compared with Quartz.NET and Hangfire](/docs/reference/comparison): what each is for.
+- [Trax compared](/docs/reference/comparison): with Temporal, Durable Functions, Elsa, MassTransit, XState, Hangfire
+  and Quartz.NET, and when each is the better fit.
+- [Versioning and stability](/docs/reference/versioning): what a release may change, and what Trax runs on.
 - [Samples](/docs/samples): complete applications you can run.
 
 **Building with it in .NET**
@@ -38,6 +40,7 @@ no code.
 
 **Putting AI agents to work on it**
 
+- [Trax and AI agents](/docs/ai-agents): where Trax sits around an agent, and why its evidence is rerun.
 - [Board](/docs/samples/board): scripted agents work tickets, and the server checks their evidence.
 - [Train or machine](/docs/statemachine/train-or-machine): which one a piece of work needs.
 - [State machines](/docs/statemachine): states, moves and the guarantees the server keeps.
@@ -104,7 +107,9 @@ The [Glossary](/docs/reference/glossary) gives every Trax name its plain meaning
   the shape Trax expects.
 - [Deployment topologies](/docs/reference/deployment-topologies): the ways to split an application
   across processes, and the sample that runs each.
-- [Trax compared with Quartz.NET and Hangfire](/docs/reference/comparison): what each is for.
+- [Trax compared](/docs/reference/comparison): with Temporal, Durable Functions, Elsa, MassTransit, XState, Hangfire
+  and Quartz.NET, and when each is the better fit.
+- [Versioning and stability](/docs/reference/versioning): what a release may change, and what Trax runs on.
 
 ### Look up
 

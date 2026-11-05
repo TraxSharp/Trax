@@ -5,8 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax/blob/main/Trax.Api/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs/reference/trax-console)
 
-> Part of [Trax .NET](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
-> run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
+> Part of [Trax .NET](https://github.com/TraxSharp): a .NET framework for processes the server enforces. Any client,
+> a browser, a script or an AI agent, can drive them; the server checks every move and records every run. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
 
 `trax-console` is the Trax operations console in a terminal: runs, dead letters, the work queue, manifests, a run's
 trace and machine instances, read and acted on over SSH or anywhere without a browser. It sends only the documents the

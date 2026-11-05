@@ -1,7 +1,7 @@
 # trax-state-machine
 
-> Part of [Trax .NET](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
-> run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
+> Part of [Trax .NET](https://github.com/TraxSharp): a .NET framework for processes the server enforces. Any client,
+> a browser, a script or an AI agent, can drive them; the server checks every move and records every run. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
 
 The state-machine engine in Rust. A machine is declared once in C# and exported as an IR; this crate builds the
 machine from that IR and answers what the server would do with a trigger, byte for byte on the wire and code for

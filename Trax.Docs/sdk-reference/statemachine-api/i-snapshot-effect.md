@@ -1,6 +1,6 @@
 ---
 title: ISnapshotEffect
-description: Reference for ISnapshotEffect, the side effect a state machine transition runs exactly once, and the receipt it records on the draft.
+description: Reference for ISnapshotEffect, the side effect a state machine transition runs once per intent, and the receipt it records on the draft.
 type: reference
 area: machines
 parent: State Machine API
@@ -79,7 +79,10 @@ The implementation is resolved from the container as `TEffect` when the transiti
 ### Exactly-once and the receipt
 
 The effect runs through the persistence layer's idempotent path: a claim is taken before the effect, held
-under a lease with a fence token, and a crash mid-flight replays without re-running a completed effect. The
+under a lease with a fence token, and a crash after the receipt is recorded replays it without re-running the
+effect. A crash between the downstream call and the recorded receipt cannot be told apart from a call that never
+happened, so the effect runs again once its lease passes, under the same key. Recording is exactly once; the call is at
+least once, and the downstream system's use of the key is what keeps the second call from acting twice. The
 key is `{keyPrefix}:{userKey}:{id}`, so it is scoped per draft per user. A system-owned instance's key is
 `{keyPrefix}::{id}`, which no user's can equal, because a user key is never empty. A draft deleted by the draft TTL releases
 the key, and so does a reset to the initial state once the effect's outcome is settled on the draft: a reset while

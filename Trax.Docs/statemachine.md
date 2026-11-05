@@ -1,6 +1,6 @@
 ---
 title: State machines
-description: "How Trax state machines work: the definition and snapshot documents, the three guarantees, matching C# and TypeScript runtimes, and exactly-once effects."
+description: "How Trax state machines work: the definition and snapshot documents, the three guarantees, matching C# and TypeScript runtimes, and run-once effects."
 type: explanation
 area: machines
 nav_order: 1
@@ -47,7 +47,8 @@ the data for that step, and only that step, so its shape is discriminated by `st
 2. **Illegal states unrepresentable.** Each state validates its own context on the way in (rehydrate) and on
    the way out (advance). A snapshot that claims a state but carries the wrong data is rejected as a typed
    error, never quietly accepted.
-3. **No unhandled exceptions.** Every operation is total. `Advance` returns a transitioned or rejected
+3. **The engine never throws.** Every engine operation is total. This is a promise about the engine, not about the
+   guards, reducers and effects you write, or about the host around it. `Advance` returns a transitioned or rejected
    result. `Rehydrate` returns an ok or error result. An unpermitted trigger, a failed guard, or malformed
    stored JSON all become typed values, never a throw. That includes JSON that parses but cannot be kept:
    `Rehydrate` refuses a number outside the range of a double (`1e400`) and a NUL character as `MALFORMED`,
@@ -85,7 +86,7 @@ whatever built the snapshot: the [canonical wire](/docs/statemachine/canonical-w
 `JSON.stringify` number and string rules. It is also what makes a hash or a signature over a stored snapshot
 meaningful.
 
-## Persistence and exactly-once effects
+## Persistence and run-once effects
 
 The persistence layer is generic over a machine's (state, trigger) pair and stores the context in a real
 `jsonb` column. Its tables (`snapshot_draft` and `effect_claim`) ship as migrations in the core data
@@ -107,8 +108,11 @@ by the state's rule, not just to its type. A checkout whose context carries a `t
 at one cent and have the charge take one cent. The [State Machine sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/StateMachine) shows the
 check and its test.
 
-Some transitions carry an irreversible side effect: charge a card, send a letter, provision a resource. Those run
-exactly once per intent, even under retries, two devices, or a crash mid-flight. A send marks the draft's row before
+Some transitions carry an irreversible side effect: charge a card, send a letter, provision a resource. Trax records
+each one once per intent, even under retries, two devices, or a crash mid-flight, and a repeated send gets the recorded
+receipt instead of a second call. The call itself is at least once: a runner that dies after the downstream system
+acted, but before the receipt was written, leaves the effect to run again under the same key. Exactly-once delivery is
+only as good as the downstream system's handling of that key. A send marks the draft's row before
 it runs the effect, so two concurrent sends deliver once and nothing else writes the draft while the effect runs;
 the receipt, the move and the end of the mark are one write, and a retry replays the recorded result. A lease with a
 fence token keeps the mark live: if a runner marks the draft and then dies, the lease expires and the next send, or
@@ -143,6 +147,6 @@ terminal step. The [TypeScript package](/docs/sdk-reference/statemachine-api/typ
 | Piece | Location |
 | --- | --- |
 | C# engine (pure, total, dependency-free) | Trax.StateMachine |
-| C# persistence, exactly-once effects, mutation trains | Trax.StateMachine.Persistence |
+| C# persistence, run-once effects, mutation trains | Trax.StateMachine.Persistence |
 | TypeScript engine, typed facade, React hook | the @traxsharp/state-machine package |
 | Shared machines (the exported IR, differential and migration goldens) and the frontend generators | the shared machines directory and the codegen tools |

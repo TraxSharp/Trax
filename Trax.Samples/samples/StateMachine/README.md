@@ -5,7 +5,7 @@ exposes both, so each is served as its own typed operations under `machines { ..
 with `start`, which mints its id from the machine's declared start, and moves it only with the machine's events, one
 mutation each. It shows the whole feature end to end: fluent authoring, one-line
 discovery, server-side authority (the server, not the browser, decides every state, down to the checkout total),
-and an exactly-once effect.
+and a run-once effect.
 
 ![The StateMachine page: the checkout is Paid, a second Pay charged nothing, and the payment provider lists one charge](screenshot.png)
 
@@ -31,7 +31,7 @@ builder.Services.AddScoped<ICharge, LoggingCharge>();
 ```
 
 `AddStateMachines` discovers the machines and wires the store, the effect-claim ledger, the
-exactly-once runner, the registry and the trains every machine operation runs through. It must come before
+run-once effect runner, the registry and the trains every machine operation runs through. It must come before
 `AddMediator`. `[TraxMachine]` marks the machines clients reach; the generic `stateMachine` mutations are not served. The host
 supplies only the two things a machine can't know: how to map its auth to a user key
 (`ISnapshotPrincipal`) and the charge implementation.
@@ -60,7 +60,7 @@ mutation {
   machines { checkout { start(requestId: "start-1") { id state context { items total } problem { code } } } }
 }
 
-# Add an item (the server prices the cart), review, and charge exactly once.
+# Add an item (the server prices the cart), review, and charge once.
 mutation {
   machines { checkout { addItem(id: "ID", input: { item: "book" }, requestId: "add-1") {
     state context { items total } problem { code } } } }

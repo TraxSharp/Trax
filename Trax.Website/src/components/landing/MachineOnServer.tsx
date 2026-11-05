@@ -9,13 +9,19 @@ export default function MachineOnServer() {
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
         <h2 className="text-2xl font-semibold text-text-primary">The state lives on the server</h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          A state machine is written once, in C#. The page uses the same machine to know what it can do next, and the
-          server checks every move against the machine&apos;s rules and the caller before storing anything. A refused
-          move comes back with the reason the machine gives.
+          A state machine is declared in C#. Its declared rules travel to the page as data, so the page uses the same
+          machine to know what it can do next, and the server checks every move against the machine&apos;s rules and the
+          caller before storing anything. A refused move comes back with the reason the machine gives. A rule only your
+          own code can compute is written once for each runtime that runs it.
         </p>
-        <Link href="/docs/statemachine/authoring" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
-          How a machine is written &rarr;
-        </Link>
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium">
+          <Link href="/docs/statemachine/authoring" className="text-accent hover:text-accent-hover">
+            How a machine is written &rarr;
+          </Link>
+          <Link href="/docs/statemachine#two-runtimes-one-behavior" className="text-accent hover:text-accent-hover">
+            What travels and what does not &rarr;
+          </Link>
+        </div>
 
         <Figure
           caption={

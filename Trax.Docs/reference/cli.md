@@ -367,7 +367,7 @@ assembly, not the source.
 | `<name>` | Yes | Machine name as a kebab-case id (`checkout`, `ship-to-store`). The type prefix is the PascalCase form. |
 | `--output` | No | Directory to write `<Name>Machine.cs` (default: current directory). |
 | `--namespace` | No | Namespace for the generated file (default: `Machines`). |
-| `--with-effect` | No | Include an exactly-once `ISnapshotEffect` stub and mark the terminal state committed. |
+| `--with-effect` | No | Include a run-once `ISnapshotEffect` stub and mark the terminal state committed. |
 | `--force` | No | Overwrite the file if it already exists. |
 
 ### `trax machine generate`
@@ -464,7 +464,7 @@ Review
 ```
 
 A guard shows its `Because(...)` text, or its rule when it has none; a reducer shows its kind; an edge that
-runs an exactly-once effect shows the effect type and that it is send-only. A state that invokes a train lists
+runs a run-once effect shows the effect type and that it is send-only. A state that invokes a train lists
 the train's outcome edges under their triggers (`Dealing.done`, `Dealing.failed`, `Dealing.cancelled`), in the
 order they are tried, and they count toward reachability like any other edge. A state no edge from the initial
 state reaches is marked `unreachable from the initial state`, and a state with no outgoing edge prints

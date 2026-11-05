@@ -18,7 +18,7 @@ const WORDS = [
   ["Trigger", "a request to move. It only means something if an arrow with its name leaves the current state."],
   ["Guard", "a rule a move must pass to happen."],
   ["Rule", "what every draft in a state must hold, checked whenever a draft lands there."],
-  ["Effect", "something irreversible a move does, such as a charge. It runs exactly once."],
+  ["Effect", "something irreversible a move does, such as a charge. It is recorded once, and a repeat send gets the same receipt."],
 ];
 
 const MACHINES = [TURNSTILE, CHECKOUT];

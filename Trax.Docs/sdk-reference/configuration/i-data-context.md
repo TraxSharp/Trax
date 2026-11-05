@@ -88,7 +88,7 @@ From `IEffectProvider` it also has `Track(IModel)`, `Update(IModel)` and `SaveCh
 | `RecordedDecisions` | `trax.decision` | Each decision a run made, written by [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording) |
 | `JunctionRuns` | `trax.junction_run` | Each step of a run, written by [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events). Read one run's steps in order with `ForRun(metadataId)`. |
 | `SnapshotDrafts` | `trax.snapshot_draft` | State-machine drafts, one per user and draft id |
-| `EffectClaims` | `trax.effect_claim` | Exactly-once state-machine effect intents |
+| `EffectClaims` | `trax.effect_claim` | Run-once state-machine effect intents |
 | `Checkpoints` | `trax.checkpoint` | The state a train declared with `Checkpoint<TState>()`, one row per run and node, from which a later run resumes. |
 | `SnapshotTransitions` | `trax.snapshot_transition` | Each state-machine instance's history: one row per snapshot write, deleted with the instance |
 

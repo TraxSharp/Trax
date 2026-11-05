@@ -21,7 +21,7 @@ redirect_from:
 
 Registers state-machine persistence as a step in the `AddTrax` builder chain. One call discovers every
 `Machine<TState, TTrigger>` in the given assemblies and wires the subsystem: the snapshot store, the effect-claim
-ledger, the exactly-once runner, the machine registry, and the six generic `stateMachine` mutation trains, which it
+ledger, the run-once effect runner, the machine registry, and the six generic `stateMachine` mutation trains, which it
 contributes to the mediator scan so Trax routes them by input type. The stores reach their tables through the
 `IDataContext` the database provider configured in `AddEffects` registers (`IDataContext.SnapshotDrafts` and
 `IDataContext.EffectClaims`).
@@ -108,7 +108,7 @@ and by the host, or twice by the host) is one machine and is served once.
 | `StateMachineOptions` | Singleton | The options `configure` set |
 | `ISnapshotStore` | Scoped | `EfSnapshotStore` over the provider's `IDataContext` and `ISqlDialect` |
 | `IEffectClaimStore` | Scoped | `EfEffectClaimStore`, the same way |
-| `IdempotentEffect` | Scoped | The exactly-once runner over the claim store |
+| `IdempotentEffect` | Scoped | The run-once effect runner over the claim store |
 | `ISnapshotMachineRegistry` | Scoped | Builds each machine's draft service and effect runner, and answers `SchemaHash` |
 | `IMachineInstances` | Scoped | [System-owned instances](/docs/sdk-reference/statemachine-api/machine-instances) |
 | `ISnapshotChangeListener` | Singleton | The [change feed](#change-feed) |

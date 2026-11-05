@@ -65,7 +65,7 @@ export const TURNSTILE: MachineView = {
 export const CHECKOUT: MachineView = {
   name: "checkout",
   title: "A machine with an effect",
-  tagline: "Three states, and one move that does something irreversible, exactly once.",
+  tagline: "Three states, and one move that does something irreversible, once.",
   example: "Picture a checkout: fill a cart, review it, pay. Paying charges a card, which must never happen twice.",
   states: [
     { name: "Cart", rule: "the total is $9.99 per item, and there is no receipt" },

@@ -29,7 +29,7 @@ The Postgres and Sqlite data providers create these tables in the `trax` schema 
 | `decision` | `RecordedDecision` | Each decision a run made; columns on [Decision records](/docs/effect/decisions#the-decision-table) |
 | `junction_run` | `JunctionRun` | Each step of a run stored by [junction events](/docs/effect/junction-events#stored-steps) |
 | `checkpoint` | `Checkpoint` | One row per run and declared node a run can [resume](/docs/sdk-reference/train-methods/checkpoint) from |
-| `effect_claim` | `EffectClaim` | An idempotency claim for an exactly-once side effect, with a lease and fence token |
+| `effect_claim` | `EffectClaim` | An idempotency claim for a run-once side effect, with a lease and fence token |
 | `runner_nonce` | `RunnerNonce` | Nonces a runner accepted on signed requests, so instances sharing the database accept a request once |
 | `snapshot_draft` | `SnapshotDraft` | State machine instance drafts, used by `Trax.StateMachine.Persistence` |
 | `snapshot_transition` | `SnapshotTransition` | Each state-machine instance's history, one row per snapshot write, deleted with the instance |
