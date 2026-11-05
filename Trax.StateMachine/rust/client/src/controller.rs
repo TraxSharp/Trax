@@ -1428,6 +1428,21 @@ impl<S: MachineServer> Actor<S> {
         request: Option<EventRequest>,
         reply: Option<oneshot::Sender<SendOutcome>>,
     ) -> u64 {
+        let entry = self.queued(trigger, input, request, reply);
+        self.emit();
+        self.pump();
+        entry
+    }
+
+    // Puts an event at the back of the queue without sending anything, so a caller can note its entry before `pump`
+    // answers it.
+    fn queued(
+        &mut self,
+        trigger: String,
+        input: Option<Value>,
+        request: Option<EventRequest>,
+        reply: Option<oneshot::Sender<SendOutcome>>,
+    ) -> u64 {
         self.next_entry += 1;
         let entry = self.next_entry;
         self.queue.push(Queued {
@@ -1437,8 +1452,6 @@ impl<S: MachineServer> Actor<S> {
             request,
             reply,
         });
-        self.emit();
-        self.pump();
         entry
     }
 
@@ -1805,13 +1818,16 @@ impl<S: MachineServer> Actor<S> {
         if run.sent >= 2 * self.machine.states().len() {
             return self.settle_sync(SyncOutcome::Exceeded);
         }
-        let fields = run.fields.as_ref().is_some_and(|f| f.trigger == next.trigger);
-        let entry = self.enqueue(next.trigger, next.input, None, None);
+        // The sync holds the event as in flight before `pump` runs: a minter that panics answers it there, and the
+        // sync has to hear that.
+        run.sent += 1;
+        run.sending_fields = run.fields.as_ref().is_some_and(|f| f.trigger == next.trigger);
+        let entry = self.queued(next.trigger, next.input, None, None);
         if let Some(run) = self.sync.as_mut() {
-            run.sent += 1;
             run.in_flight = Some(entry);
-            run.sending_fields = fields;
         }
+        self.emit();
+        self.pump();
     }
 
     // A sync's event, or a superseded sync's last one, has answered.

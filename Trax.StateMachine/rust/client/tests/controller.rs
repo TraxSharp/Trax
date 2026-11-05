@@ -592,6 +592,39 @@ async fn a_divergence_is_read_once_and_planned_again() {
     assert!(!controller.view().unsaved);
 }
 
+// A sync whose event's request id cannot be minted settles with that, rather than planning again.
+#[tokio::test]
+async fn a_sync_whose_minter_panics_fails_as_an_invalid_request_id() {
+    let (ir, hash) = wizard();
+    let (server, mut script) = scripted();
+    let mut options = ServerMachineOptions::new(ir, hash, server);
+    options.id = Some("i-1".into());
+    options.new_request_id = Some(Box::new(|| panic!("the minter panicked")));
+    let controller = ServerMachineController::new(options).unwrap();
+    let started = controller.start();
+    let first = script.read().await;
+    let _ = first.send(stored(wizard_at(1, "Details", true)));
+    started.await;
+    view_where(&controller, |v| v.revision == Some(1)).await;
+
+    let synced = tokio::time::timeout(
+        Duration::from_secs(5),
+        controller.sync_to("Review", Some(ada()), navigation()),
+    )
+    .await
+    .expect("the sync never settled");
+
+    assert!(
+        matches!(&synced, SyncOutcome::Failed(p) if p.code == "INVALID_REQUEST_ID"),
+        "{synced:?}"
+    );
+    assert!(
+        script.events.try_recv().is_err(),
+        "an event was sent with no request id"
+    );
+    assert!(controller.view().unsaved);
+}
+
 #[tokio::test]
 async fn a_sync_over_a_trigger_bound_to_the_effect_is_invalid_and_sends_nothing() {
     let (controller, mut script) = opened_wizard("Review", true).await;
