@@ -291,7 +291,7 @@ down once, in `defaults.json` beside this file: each client's tests hold its con
 | --- | --- | --- |
 | Request timeout | 30 s | One request, from sending it to the last byte of its answer. Past it the request fails as `TRANSPORT_ERROR`. C#'s also yields to a shorter `HttpClient.Timeout`. |
 | Retry delays | 250, 500, 1000, 2000, 4000 ms | The waits before each retry of a `SERVER_OUTDATED` answer and of a read the transport failed: one retry per delay, then the event fails and `retry` resends it. An empty list retries nothing. |
-| Resubscribe delays | 1000, 2000, 5000 ms | The steps of the waits before subscribing again after a stream ended without saying why. The last repeats for as long as the stream is wanted, and the schedule starts over once a stream has delivered its second push, since every stream's first is the instance as it is. An empty list is the default. Each wait is jittered, below. |
+| Resubscribe delays | 1000, 2000, 5000 ms | The steps of the waits before subscribing again after a stream ended without saying why. The last repeats for as long as the stream is wanted, and the schedule starts over once a stream has delivered its second snapshot (a reload push does not count), since every stream's first is the instance as it is. An empty list is the default. Each wait is jittered, below. |
 | Response size | 16 MiB | The largest answer body read; a larger one fails its request as `TRANSPORT_ERROR` and is not read past the limit. C# and Rust hold a socket message to the same limit. |
 
 A client refuses to be built with an option no limit or timer can honour: a request, connect or idle timeout of zero
