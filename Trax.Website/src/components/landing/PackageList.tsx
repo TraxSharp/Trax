@@ -64,7 +64,7 @@ const folders: Folder[] = [
   },
   {
     folder: "Trax.StateMachine",
-    summary: "State machines in C# and TypeScript",
+    summary: "State machines for the browser and the server",
     packages: [
       {
         name: "Trax.StateMachine",
@@ -76,7 +76,7 @@ const folders: Folder[] = [
       },
       {
         name: "Trax.StateMachine.Testing",
-        desc: "Conformance tests between the C# and TypeScript engines",
+        desc: "Conformance tests that hold every engine to the same answers",
       },
     ],
   },
