@@ -1,181 +1,74 @@
 import Link from "next/link";
-import { codeToHtml } from "shiki";
-
-interface CodeBlock {
-  label: string;
-  code: string;
-}
+import { Arrow, Box } from "./Diagram";
 
 interface Architecture {
   name: string;
   description: string;
-  blocks: CodeBlock[];
+  // The processes, left to right. A row of several is one process holding them all.
+  processes: { label: string; onDemand?: boolean }[][];
 }
 
+// The five ways the scheduler docs describe splitting a Trax app, drawn as its processes over the one database they
+// share. The configuration for each is on the linked page.
 const architectures: Architecture[] = [
   {
     name: "All-in-one",
-    description:
-      "API, scheduler, and job execution in a single process.",
-    blocks: [
-      {
-        label: "Program.cs",
-        code: `builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UsePostgres(conn))
-        .AddMediator(assembly)
-        .AddScheduler(scheduler => scheduler
-            .Schedule<IProcessOrderTrain>(...)
-        )
-);
-
-builder.Services.AddTraxGraphQL();`,
-      },
-    ],
+    description: "API, scheduler and the jobs they run in a single process.",
+    processes: [[{ label: "API" }, { label: "Scheduler" }, { label: "Jobs" }]],
   },
   {
     name: "API + Scheduler",
-    description:
-      "The API handles requests and queues work. A separate scheduler process picks up jobs and runs them locally.",
-    blocks: [
-      {
-        label: "Api / Program.cs",
-        code: `builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UsePostgres(conn))
-        .AddMediator(assembly)
-);
-builder.Services.AddTraxGraphQL();`,
-      },
-      {
-        label: "Scheduler / Program.cs",
-        code: `builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UsePostgres(conn))
-        .AddMediator(assembly)
-        .AddScheduler(scheduler => scheduler
-            .Schedule<IProcessOrderTrain>(...)
-        )
-);`,
-      },
-    ],
+    description: "The API queues work, and a separate scheduler picks it up and runs it.",
+    processes: [[{ label: "API" }], [{ label: "Scheduler" }]],
   },
   {
     name: "Hub + Workers",
-    description:
-      "A hub manages scheduling and the API. Stateless worker nodes poll the database for jobs and execute them independently.",
-    blocks: [
-      {
-        label: "Hub / Program.cs",
-        code: `builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UsePostgres(conn))
-        .AddMediator(assembly)
-        .AddScheduler(scheduler => scheduler
-            .Schedule<IProcessOrderTrain>(...)
-        )
-);
-builder.Services.AddTraxGraphQL();`,
-      },
-      {
-        label: "Worker / Program.cs",
-        code: `builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UsePostgres(conn))
-        .AddMediator(assembly)
-);
-builder.Services.AddTraxWorker(opts => {
-    opts.WorkerCount = 4;
-    opts.PollingInterval = TimeSpan.FromSeconds(1);
-});`,
-      },
-    ],
+    description: "A hub serves the API and schedules. Workers take jobs from the database and run them.",
+    processes: [[{ label: "Hub" }], [{ label: "Worker" }], [{ label: "Worker" }], [{ label: "Worker" }]],
   },
   {
     name: "Ephemeral dispatch",
-    description:
-      "The API hands work to an AWS Lambda function through the AWS SDK.",
-    blocks: [
-      {
-        label: "Api / Program.cs",
-        code: `builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UsePostgres(conn))
-        .AddMediator(assembly)
-        .AddScheduler(scheduler => scheduler
-            .UseLambdaWorkers(
-                lambda => lambda.FunctionName = "trax-runner",
-                routing => routing
-                    .ForTrain<IProcessOrderTrain>()
-            )
-            .UseLambdaRun(
-                lambda => lambda.FunctionName = "trax-runner"
-            )
-        )
-);`,
-      },
-      {
-        label: "Runner / Function.cs",
-        code: `public class Function : TraxLambdaFunction
-{
-    protected override void ConfigureServices(
-        IServiceCollection services,
-        IConfiguration configuration)
-    {
-        services.AddTrax(trax =>
-            trax.AddEffects(effects =>
-                    effects.UsePostgres(conn))
-                .AddMediator(assembly)
-        );
-    }
-}`,
-      },
-    ],
+    description: "The API hands work to an AWS Lambda function, which runs it and stops.",
+    processes: [[{ label: "API" }], [{ label: "Lambda", onDemand: true }]],
   },
   {
     name: "Just the scheduler",
-    description:
-      "No API at all. A standalone process that runs trains on a schedule.",
-    blocks: [
-      {
-        label: "Program.cs",
-        code: `builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UsePostgres(conn))
-        .AddMediator(assembly)
-        .AddScheduler(scheduler => scheduler
-            .Schedule<IDataProcessingTrain>(
-                "data-processing",
-                new DataProcessingInput(),
-                Every.Minutes(5)
-            )
-            .ThenInclude<IReportingTrain>(...)
-        )
-);`,
-      },
-    ],
+    description: "No API at all. One process runs trains on a schedule.",
+    processes: [[{ label: "Scheduler" }]],
   },
 ];
 
-async function HighlightedBlock({ block }: { block: CodeBlock }) {
-  const html = await codeToHtml(block.code, {
-    lang: "csharp",
-    theme: "github-dark-dimmed",
-  });
-
+function Topology({ arch }: { arch: Architecture }) {
+  const lambda = arch.processes.some((p) => p.some((x) => x.onDemand));
   return (
-    <div className="overflow-hidden rounded border border-border/50">
-      <div className="border-b border-border/50 bg-bg-secondary px-4 py-2">
-        <span className="font-mono text-xs text-text-muted">{block.label}</span>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        {arch.processes.map((process, i) => (
+          <div key={i} className="contents">
+            {lambda && i > 0 && <Arrow direction="right" />}
+            {process.length > 1 ? (
+              <div className="flex flex-1 gap-1.5 rounded-md border border-border p-1.5">
+                {process.map((p) => (
+                  <Box key={p.label} label={p.label} className="flex-1 px-1.5 py-1.5" />
+                ))}
+              </div>
+            ) : (
+              <Box label={process[0].label} tone={process[0].onDemand ? "muted" : "plain"} className="flex-1 px-1.5" />
+            )}
+          </div>
+        ))}
       </div>
-      <div
-        className="[&_pre]:overflow-x-auto [&_pre]:bg-bg-secondary [&_pre]:p-4 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:leading-relaxed"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+      <Arrow direction="down" />
+      <Box label="Postgres" tone="accent" className="py-1.5" />
     </div>
   );
 }
 
-export default async function DeploymentArchitectures() {
+export default function DeploymentArchitectures() {
   return (
     <section className="border-b border-border py-24">
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
-        <h2 className="text-2xl font-semibold text-text-primary">
-          Deploy it however you want
-        </h2>
+        <h2 className="text-2xl font-semibold text-text-primary">Deploy it however you want</h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
           Start in one process and split it out as load grows, without rewriting your trains.
         </p>
@@ -183,24 +76,18 @@ export default async function DeploymentArchitectures() {
           Running work on other machines &rarr;
         </Link>
 
-        <div className="mt-12 space-y-16">
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {architectures.map((arch, i) => (
-            <div key={arch.name}>
-              <div className="flex items-baseline gap-3">
-                <span className="font-mono text-xs text-text-muted">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <h3 className="text-lg font-semibold text-text-primary">
-                  {arch.name}
-                </h3>
+            <div key={arch.name} className="flex flex-col gap-4 rounded-lg border border-border/60 bg-bg-secondary/40 p-5">
+              <div>
+                <div className="flex items-baseline gap-3">
+                  <span className="font-mono text-xs text-text-muted">{String(i + 1).padStart(2, "0")}</span>
+                  <h3 className="font-semibold text-text-primary">{arch.name}</h3>
+                </div>
+                <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">{arch.description}</p>
               </div>
-              <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-secondary">
-                {arch.description}
-              </p>
-              <div className="mt-4 space-y-3">
-                {arch.blocks.map((block) => (
-                  <HighlightedBlock key={block.label} block={block} />
-                ))}
+              <div className="mt-auto">
+                <Topology arch={arch} />
               </div>
             </div>
           ))}

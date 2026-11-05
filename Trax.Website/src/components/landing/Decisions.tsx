@@ -1,122 +1,13 @@
 import Link from "next/link";
-import { codeToHtml } from "shiki";
-import CodeTabs, { type CodeTab } from "./CodeTabs";
+import { Arrow, Box, Figure } from "./Diagram";
 
-// Every snippet is copied from the Decisions pages in Trax.Docs
-// (core/decisions.md, effect/decisions.md), so it matches what the docs show.
-
-const switchCode = `protected override Task<Either<Exception, Resolution>> Junctions() =>
-     Chain<ParseTicket>()
-    .Switch<Ticket, TicketTrack>(tracks => tracks
-        .When(TicketTrack.Refund, t => t.Chain<IssueRefund>().Chain<NotifyCustomer>(),
-              requireConfidence: 0.7)
-        .When(TicketTrack.Escalate, t => t.Chain<OpenIncident>())
-        .When(TicketTrack.SelfServe, t => t.Chain<SendHelpArticle>())
-        .RequireConfidence(0.5)
-        .Otherwise(t => t.Chain<QueueForHuman>()))
-    .Chain<CloseTicket>()
-    .Resolve();`;
-
-interface RawTab {
-  label: string;
-  caption: string;
-  blocks: { file: string; lang: string; code: string }[];
-}
-
-const rawTabs: RawTab[] = [
-  {
-    label: "Ask once, route twice",
-    caption:
-      "Decide asks several questions about one state in a single call, and later steps route on the answers without asking again. Gate routes on a yes or no probability, Switch on a choice and Scale on a level.",
-    blocks: [
-      {
-        file: "ModeratePostTrain.cs",
-        lang: "csharp",
-        code: ` AddServices(decider)
-.Decide<Post>(q => q.YesNo<ContainsThreat>().Choice<Verdict>().Score<Severity>())
-.Gate<ContainsThreat>(gate => gate
-    .Yes(t => t.Chain<TakeDownPost>(), atLeast: 0.7)
-    .No(t => t.Switch<Verdict>(verdict => verdict
-        .When(Verdict.Allow, a => a.Chain<PublishPost>())
-        .When(Verdict.Remove, r => r.Chain<TakeDownPost>())
-        .When(Verdict.Review, r => r.Scale<Severity>(scale => scale
-            .AtLeast(Severity.Low, s => s.Chain<QueueForModerator>())
-            .AtLeast(Severity.High, s => s.Chain<PageTrustAndSafety>())))),
-        below: 0.3)
-    .Unsure(t => t.Chain<PageTrustAndSafety>()))
-.Resolve();`,
-      },
-    ],
-  },
-  {
-    label: "The question",
-    caption:
-      "A model judges by the question's words and each option's description.",
-    blocks: [
-      {
-        file: "TicketTrack.cs",
-        lang: "csharp",
-        code: `[Asks("Which team should handle this support ticket?")]
-public enum TicketTrack
-{
-    [Description("The customer wants their money back for an order.")]
-    Refund,
-
-    [Description("An outage, a security problem or a legal threat. Page whoever is on call.")]
-    Escalate,
-
-    [Description("A how-to question the help centre already answers.")]
-    SelfServe,
-}`,
-      },
-    ],
-  },
-  {
-    label: "Deciders",
-    caption:
-      "A decider answers the questions. Use a model server such as Nimble, rules written in code, or a fast decider that hands what it is unsure of to a slower one.",
-    blocks: [
-      {
-        file: "Program.cs",
-        lang: "csharp",
-        code: `services.AddTrax(trax => trax.AddEffects(effects => effects
-    .UsePostgres(connectionString)
-    .AddDecisionRecording()
-    .AddNimbleDecider(o => o.Endpoint = new Uri("http://localhost:8000/v1/systemone"))));`,
-      },
-      {
-        file: "UnderwritingRules.cs",
-        lang: "csharp",
-        code: `var policy = new RuleDecider().Choice<LoanApplication, Underwriting>(application =>
-    application switch
-    {
-        { CreditScore: >= 740, DebtToIncome: <= 0.36m } => Underwriting.Approve,
-        { CreditScore: < 580 } or { DebtToIncome: > 0.5m } => Underwriting.Decline,
-        _ => Underwriting.ManualReview,
-    });`,
-      },
-      {
-        file: "Cascade.cs",
-        lang: "csharp",
-        code: `services.AddSingleton<IDecider>(sp => new CascadingDecider(
-    first: sp.GetRequiredService<SystemOneDecider>(),   // Nimble
-    then: sp.GetRequiredService<LargeModelDecider>(),
-    escalateBelow: 0.8));`,
-      },
-    ],
-  },
-  {
-    label: "Shadows",
-    caption:
-      "A shadow is asked every question the live decider is asked, alongside it. Its answers are recorded with whether each agreed,.",
-    blocks: [
-      {
-        file: "ModeratePostTrain.cs",
-        lang: "csharp",
-        code: `.Decide<Post>(q => q.YesNo<ContainsThreat>().Choice<Verdict>().Shadow<ICandidateDecider>())`,
-      },
-    ],
-  },
+// The support-ticket example from the Decisions pages in Trax.Docs (core/decisions.md, effect/decisions.md), drawn as
+// the fork the train takes. The row below is the record of the same decision. The code is on the linked pages.
+const tracks: { label: string; note: string; taken?: boolean; fallback?: boolean }[] = [
+  { label: "Refund", note: "needs 0.7 sure", taken: true },
+  { label: "Escalate", note: "open an incident" },
+  { label: "Self-serve", note: "send a help article" },
+  { label: "A person", note: "when the answer is under 0.5 sure", fallback: true },
 ];
 
 const decisionRow: { name: string; value: string }[] = [
@@ -132,51 +23,30 @@ const decisionRow: { name: string; value: string }[] = [
   { name: "state_hash", value: "k1:9c41e07b…" },
 ];
 
-export default async function Decisions() {
-  const switchHtml = await codeToHtml(switchCode, {
-    lang: "csharp",
-    theme: "github-dark-dimmed",
-  });
-
-  const tabs: CodeTab[] = await Promise.all(
-    rawTabs.map(async (tab) => ({
-      label: tab.label,
-      caption: tab.caption,
-      blocks: await Promise.all(
-        tab.blocks.map(async (block) => ({
-          file: block.file,
-          html: await codeToHtml(block.code, {
-            lang: block.lang,
-            theme: "github-dark-dimmed",
-          }),
-        })),
-      ),
-    })),
-  );
-
+export default function Decisions() {
   return (
     <section className="border-b border-border py-24">
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
-        <h2 className="text-2xl font-semibold text-text-primary">
-          A train can choose its track at run time
-        </h2>
+        <h2 className="text-2xl font-semibold text-text-primary">A train can choose its track at run time</h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          A <code className="font-mono text-[0.95em]">Switch</code>,{" "}
-          <code className="font-mono text-[0.95em]">Gate</code> or{" "}
-          <code className="font-mono text-[0.95em]">Scale</code> names every
-          track the train can take. At run time a decider answers a typed
-          question about a value in Memory, and the train takes the matching
-          track.
+          A train names every track it can take. At run time a decider, from a decision model to a rule table, answers a typed
+          question about the work, and the train takes the matching track. An answer that is not sure enough takes the
+          fallback instead.
         </p>
 
-        <div
-          className="mt-8 overflow-hidden rounded border border-accent/30 [&_pre]:overflow-x-auto [&_pre]:bg-bg-secondary [&_pre]:p-5 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: switchHtml }}
-        />
-
-        <div className="mt-10">
-          <CodeTabs tabs={tabs} />
-        </div>
+        <Figure caption="The model answered Refund, 0.86 sure, so the ticket took the refund track.">
+          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+            <Box label="A ticket" className="sm:w-36" />
+            <Arrow />
+            <Box label="Which team should handle this?" note="asked once, recorded" className="sm:w-60" />
+            <Arrow />
+            <div className="grid flex-1 grid-cols-2 gap-3">
+              {tracks.map((t) => (
+                <Box key={t.label} label={t.label} note={t.note} tone={t.taken ? "accent" : t.fallback ? "muted" : "plain"} />
+              ))}
+            </div>
+          </div>
+        </Figure>
 
         <div className="mt-16 grid gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-16">
           <div className="space-y-4 text-text-secondary">

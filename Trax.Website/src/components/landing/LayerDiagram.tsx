@@ -64,10 +64,10 @@ export default function LayerDiagram() {
     <section className="border-b border-border py-24">
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
         <h2 className="text-2xl font-semibold text-text-primary">
-          Take the layers you need
+          What you get
         </h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          Each package adds one thing, and the trains you already wrote do not change.
+          Take the parts you need. Each package adds one thing, and the trains you already wrote do not change.
         </p>
         <Link href="/docs/reference/packages" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
           Every package and what it adds &rarr;
@@ -101,15 +101,13 @@ export default function LayerDiagram() {
                     {layer.rung}
                   </span>
                   <span className="text-sm text-text-muted">{layer.name}</span>
-                  <code className="text-xs text-text-muted">
-                    {layer.cmd}
-                  </code>
                 </div>
                 <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-secondary">
                   {layer.desc}
                 </p>
                 <p className="mt-1 text-xs text-text-muted">
                   In place of {layer.replaces}
+                  <code className="ml-3 hidden text-text-muted/60 sm:inline">{layer.cmd}</code>
                 </p>
               </Link>
             </div>

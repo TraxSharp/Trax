@@ -15,12 +15,12 @@ export default function Home() {
     <main>
       <Hero />
       <BuiltWithTrax />
-      <MachineOnServer />
-      <FourWays />
-      <RunRecord />
       <LayerDiagram />
-      <DeploymentArchitectures />
+      <MachineOnServer />
+      <RunRecord />
       <Decisions />
+      <FourWays />
+      <DeploymentArchitectures />
       <WhereTraxStops />
       <QuickStart />
       <PackageList />
