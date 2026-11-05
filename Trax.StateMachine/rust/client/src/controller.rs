@@ -1106,8 +1106,29 @@ impl<S: MachineServer> Actor<S> {
 
     // A read that failed past every retry: one that was the first leaves `retry` something to resend.
     fn read_gave_up(&mut self, problem: MachineProblem) {
-        self.read_failed = self.confirmed.is_none();
-        self.settle_read(SendOutcome::Failed(problem));
+        // A push may have opened the instance while the read was retrying: then what is held answers the read.
+        match self.held() {
+            Some(held) => self.settle_read(SendOutcome::Confirmed(held)),
+            None => {
+                self.read_failed = true;
+                self.settle_read(SendOutcome::Failed(problem));
+            }
+        }
+    }
+
+    // The snapshot the client holds, as the server last confirmed it.
+    fn held(&self) -> Option<ServerSnapshot> {
+        let confirmed = self.confirmed.as_ref()?;
+        Some(ServerSnapshot {
+            row_id: self.row_id.clone(),
+            revision: self.revision,
+            state: confirmed.state.clone(),
+            context: confirmed.context.clone(),
+            due_at: match &self.due_at {
+                Some(due) => DueAt::At(due.clone()),
+                None => DueAt::None,
+            },
+        })
     }
 
     fn listen(&mut self, id: String) {
@@ -1289,7 +1310,12 @@ impl<S: MachineServer> Actor<S> {
                     row_id: row,
                     ..snapshot
                 };
+                let first = self.confirmed.is_none();
                 let mut changed = self.accept(read.clone(), Source::Load);
+                // The first read that gets through clears the failure an earlier attempt left.
+                if first && self.confirmed.is_some() && self.problem.take().is_some() {
+                    changed = true;
+                }
                 self.settle_read(match &self.error {
                     Some(error) => SendOutcome::Stopped(error.clone()),
                     None => SendOutcome::Confirmed(read),
