@@ -1039,6 +1039,8 @@ public class OperationsClientGeneratorTests
     [TestCase("rust", null, "--lang 'rust' is not one trax client writes")]
     [TestCase(null, "My.App", "give it with --lang csharp")]
     [TestCase("csharp", "My.class", "is not a C# namespace")]
+    [TestCase("csharp", "Trax.Client", "is Trax.Client's own namespace")]
+    [TestCase("csharp", "Trax.Client.Operations", "is Trax.Client's own namespace")]
     public void The_language_options_are_refused_where_they_do_not_apply(
         string? lang,
         string? @namespace,

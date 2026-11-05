@@ -22,7 +22,8 @@ internal sealed partial class ClientGenerator
 
     // The static classes every C# operations client declares, which no generated record may take. Everything the
     // client takes from Trax.Client or the BCL is written as global::, so a schema type of the same name (an input
-    // named Optional or TraxClient) declares its own record and changes nothing else.
+    // named Optional or TraxClient) declares its own record and changes nothing else, outside Trax.Client's own
+    // namespace, which --namespace may not name.
     private static readonly string[] CSharpRuntimeNames =
     [
         "TraxOperations",
@@ -44,6 +45,16 @@ internal sealed partial class ClientGenerator
         if (!IsNamespace(@namespace))
             throw new InvalidOperationException(
                 $"--namespace '{@namespace}' is not a C# namespace (dotted identifiers, such as My.App.Operations)."
+            );
+        // In Trax.Client a record named like one of its types (an input TraxClient) takes that type's full name and
+        // wins over it (CS0436), global:: or not; below it, the runtime's names and the generated ones mix in every lookup.
+        if (
+            @namespace == "Trax.Client"
+            || @namespace.StartsWith("Trax.Client.", StringComparison.Ordinal)
+        )
+            throw new InvalidOperationException(
+                $"--namespace '{@namespace}' is Trax.Client's own namespace, which the client is written against. "
+                    + "Name another, such as My.App.Operations."
             );
         GraphQLDocument sdl;
         try
