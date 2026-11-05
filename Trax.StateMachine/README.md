@@ -1,7 +1,7 @@
 # Trax.StateMachine
 
-> Part of [Trax .NET](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
-> run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
+> Part of [Trax .NET](https://github.com/TraxSharp): a .NET framework for processes the server enforces. Any client,
+> a browser, a script or an AI agent, can drive them; the server checks every move and records every run. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
 
 State machines a page drives and the server applies. A machine is declared once in C#; the server runs it, and a
 browser runs the same rules to show what an event will do before the server answers. Each language has a directory

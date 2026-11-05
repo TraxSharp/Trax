@@ -6,8 +6,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax/blob/main/Trax.Scheduler/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs/scheduler)
 
-> Part of [Trax .NET](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
-> run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
+> Part of [Trax .NET](https://github.com/TraxSharp): a .NET framework for processes the server enforces. Any client,
+> a browser, a script or an AI agent, can drive them; the server checks every move and records every run. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
 
 Trax.Scheduler adds cron schedules, retries, dead letters and remote or Lambda workers for Trax trains. It builds on
 [Trax.Mediator](https://github.com/TraxSharp/Trax/tree/main/Trax.Mediator), and Trax.Api and its operations console read and
