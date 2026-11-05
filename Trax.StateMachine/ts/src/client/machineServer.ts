@@ -54,7 +54,7 @@ export interface MachineServerOptions extends HttpExecutorOptions {
    * Delays, in milliseconds, before subscribing again after a stream that ended without saying why (its host stopped,
    * or the socket gave up). Each wait is drawn uniformly between half the delay and the whole of it, so the pages a
    * host dropped together do not subscribe again together. The last delay repeats for as long as the stream is wanted, and the schedule starts over
-   * once a stream has delivered a second push: every new stream's first is the instance as it is then. A socket the host refused (a
+   * once a stream has delivered a second snapshot (a reload push does not count): every new stream's first is the instance as it is then. A socket the host refused (a
    * close with 4401 or 4403), or a stream it refused with a GraphQL error coded `TRAX_AUTHORIZATION`,
    * `AUTH_NOT_AUTHENTICATED` or `AUTH_NOT_AUTHORIZED`, is not subscribed again: it ends the controller as
    * `UNAUTHENTICATED` or `FORBIDDEN`. A close reaches the stream only once the socket stops retrying it, and graphql-ws
