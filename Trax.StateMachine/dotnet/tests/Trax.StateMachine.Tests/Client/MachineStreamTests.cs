@@ -146,7 +146,6 @@ public class MachineStreamTests
     [TestCase("""{"turnstileChanged":{"state":"Locked","revision":-1,"context":{}}}""")]
     [TestCase("""{"turnstileChanged":{"state":"Locked","revision":1.5,"context":{}}}""")]
     [TestCase("""{"turnstileChanged":{"state":"Locked","context":{}}}""")]
-    [TestCase("""{"turnstileChanged":{"state":"Locked","revision":1,"rowId":7,"context":{}}}""")]
     [TestCase(
         """{"turnstileChanged":{"state":"Locked","revision":1,"dueAt":"soon","context":{}}}"""
     )]
@@ -204,6 +203,35 @@ public class MachineStreamTests
         changed
             .Snapshot.DueAt.Should()
             .Be(new DateTimeOffset(2026, 10, 22, 10, 10, 0, 500, TimeSpan.Zero));
+    }
+
+    // Trax.Api types rowId as a Long, so a real host writes it as a number; a host may also write it as a string.
+    [TestCase("7")]
+    [TestCase("7.0")]
+    [TestCase("\"7\"")]
+    public async Task A_row_id_written_as_a_whole_number_or_a_string_is_read_as_its_decimal_text(
+        string rowId
+    )
+    {
+        var (socket, messages, stream) = Follow();
+        using var following = stream;
+        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        first.Push(
+            (JsonObject)
+                JsonNode.Parse(
+                    """{"data":{"turnstileChanged":{"state":"Locked","revision":1,"rowId":ROW,"context":{}}}}""".Replace(
+                        "ROW",
+                        rowId
+                    )
+                )!
+        );
+
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+            .Should()
+            .BeOfType<StreamMessage.Changed>()
+            .Which.Snapshot.RowId.Should()
+            .Be("7");
     }
 
     private static JsonObject Errors(string code) =>

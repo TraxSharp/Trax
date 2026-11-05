@@ -440,14 +440,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             throw new FormatException(
                 $"The snapshot's context nests deeper than a stored snapshot may ({MaxStoredDepth} levels, the snapshot counting as one)."
             );
-        var rowId = !push
-            ? null
-            : node["rowId"] switch
-            {
-                null => null,
-                var row => Text(row)
-                    ?? throw new FormatException("The snapshot's rowId is not a string."),
-            };
+        var rowId = push ? RowIdOf(node["rowId"]) : null;
         return new ServerSnapshot
         {
             RowId = rowId,
@@ -459,6 +452,28 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             DueAtKnown = Flag(node, "dueAtKnown") && node.ContainsKey("dueAt"),
             DueAt = DueAtOf(node["dueAt"]),
         };
+    }
+
+    // A row id is a string, or a whole number as Trax.Api writes its Long, kept as its decimal text (2.0 is the 2 a
+    // JavaScript host may write). Anything else is not a row id a host wrote.
+    private static string? RowIdOf(JsonNode? node)
+    {
+        if (node is null)
+            return null;
+        if (Text(node) is { } text)
+            return text;
+        if (node is JsonValue value)
+        {
+            if (value.TryGetValue<long>(out var whole))
+                return whole.ToString(CultureInfo.InvariantCulture);
+            if (
+                value.TryGetValue<double>(out var number)
+                && Math.Abs(number) <= MaxSafeInteger
+                && Math.Floor(number) == number
+            )
+                return ((long)number).ToString(CultureInfo.InvariantCulture);
+        }
+        throw new FormatException("The snapshot's rowId is not a string or a whole number.");
     }
 
     // The deepest a stored snapshot nests, itself counting as one (conformance/limits.json, maxStoredDepth): no store
