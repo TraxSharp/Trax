@@ -1418,7 +1418,9 @@ public class OperationsClientGeneratorTests
     // A record declares these itself, so an input record of one of their names would hold a member of its own name.
     [TestCase("Equals")]
     [TestCase("ToString")]
-    [TestCase("Deconstruct")]
+    [TestCase("GetHashCode")]
+    [TestCase("EqualityContract")]
+    [TestCase("PrintMembers")]
     public void An_input_named_like_a_member_every_record_has_is_refused_by_the_csharp_client(
         string name
     )
@@ -1434,6 +1436,34 @@ public class OperationsClientGeneratorTests
             .Should()
             .Throw<InvalidOperationException>()
             .WithMessage($"The GraphQL input {name} would declare the record {name}*");
+    }
+
+    // A sealed record declares only the members above. These it inherits or declares under another name, so a record
+    // of one of their names compiles.
+    [TestCase("Clone")]
+    [TestCase("Deconstruct")]
+    [TestCase("GetType")]
+    [TestCase("Finalize")]
+    [TestCase("MemberwiseClone")]
+    [TestCase("ReferenceEquals")]
+    public void An_input_named_like_a_member_a_record_only_inherits_is_written_by_the_csharp_client(
+        string name
+    )
+    {
+        var files = ClientGenerator.RenderCSharp(
+            new OperationsGenerateOptions(
+                Schema + $"\ninput {name} {{ x: Int }}\n",
+                [new("src/graphql/Runs.graphql", Runs)]
+            ),
+            ClientGenerator.DefaultOperationsNamespace
+        );
+
+        Text(files, "Types.g.cs").Should().Contain($"internal sealed record {name}\n");
+        CompileCSharp(files, out _)
+            .Where(d => d.Severity >= Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
+            .Select(d => d.ToString())
+            .Should()
+            .BeEmpty();
     }
 
     [Test]

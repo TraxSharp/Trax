@@ -76,7 +76,7 @@ internal sealed partial class ClientGenerator
             // An input is a record, which declares these members itself: one of their names would be its own.
             if (
                 types.Definition(type) is GraphQLInputObjectTypeDefinition
-                && CSharp.IsRecordMember(name)
+                && CSharp.IsDeclaredRecordMember(name)
             )
                 throw new InvalidOperationException(
                     $"The GraphQL input {type} would declare the record {name}, a member every C# record has. "
@@ -689,7 +689,19 @@ internal sealed partial class ClientGenerator
             "ToString",
         };
 
-        public static bool IsRecordMember(string name) => RecordMembers.Contains(name);
+        // The members a sealed record without a primary constructor declares itself (CS0542 refuses a record of one of
+        // their names). The rest of RecordMembers it inherits, or declares under another name, so a record may take them.
+        private static readonly HashSet<string> DeclaredRecordMembers = new(StringComparer.Ordinal)
+        {
+            "EqualityContract",
+            "Equals",
+            "GetHashCode",
+            "PrintMembers",
+            "ToString",
+        };
+
+        public static bool IsDeclaredRecordMember(string name) =>
+            DeclaredRecordMembers.Contains(name);
 
         // A property: the type name of the key, with Value after it when it would take its record's own name or one
         // of the members every record has.
