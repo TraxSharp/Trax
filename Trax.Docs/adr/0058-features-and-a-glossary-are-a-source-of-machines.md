@@ -80,12 +80,14 @@ corpus under `Trax.StateMachine/conformance/formats/`, as `formatSchemas.conform
 Serving from the IR is held by `MachineFromIrTests` there (each conformance machine a file can describe exports exactly
 its file and replays its corpus; what a file cannot describe, a mispaired host entry and access that disagrees with the
 IR's timer rules are refused), `MachineDirectoryTests` there (a directory's host file and IRs list the same machines and name only what the IRs have), `IrMachineHostTests` in `Trax.StateMachine.Persistence.Integration`, and
-`IrMachineSchemaTests` and `IrMachineE2ETests` in Trax.Api.
+`IrMachineSchemaTests` and `IrMachineE2ETests` in Trax.Api. Derivation is held by `GherkinDerivationTests` there (each refusal, the self-check, and a derived machine served as
+written), `AccessDerivationTests` (grants from an actor's own act, nothing widened, the access table) and
+`TimerDerivationTests` (time on a scenario clock, stays, timer rules the host accepts).
 
-Not covered: those hold the formats and the serving. Derivation, the access it grants, the self-check, policies and
-views are held by their own tests as each lands, and this ADR's changelog names them then.
+Not covered: policies and views are held by their own tests as each lands, and this ADR's changelog names them then.
 
 ## Changelog
 
+- **2026-11-06**: Derivation, access and timers land; their tests named in Exemplars.
 - **2026-11-06**: Features name their people in the third person; "I" is refused.
 - **2026-11-06**: Recorded.

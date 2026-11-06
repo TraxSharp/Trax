@@ -60,6 +60,8 @@ internal static class FeatureDerivation
                 Sorted(uiSteps)
             );
 
+        foreach (var (id, ir) in irs)
+            TimerRules.Fill(ir, access.Entries[id]);
         var written = irs.ToDictionary(
             kv => kv.Key,
             kv => CanonicalJson.Serialize(kv.Value),
@@ -174,6 +176,25 @@ internal sealed record StartObservation(
     long Line
 );
 
+/// <summary>An instance leaving a state once time passed: its state's timer, at most <see cref="Elapsed"/> long.</summary>
+internal sealed record TimerObservation(
+    string Machine,
+    string From,
+    TimeSpan Elapsed,
+    string To,
+    FeatureScenario Scenario,
+    long Line
+);
+
+/// <summary>An instance still in a state after <see cref="Elapsed"/> there: its timer, if any, is longer.</summary>
+internal sealed record StayObservation(
+    string Machine,
+    string State,
+    TimeSpan Elapsed,
+    FeatureScenario Scenario,
+    long Line
+);
+
 /// <summary>One outcome of an invoked train, and where it took the instance.</summary>
 internal sealed record OutcomeObservation(
     string Machine,
@@ -200,6 +221,11 @@ internal sealed class Walk
     // A When that was refused: its Thens say nothing more, so they are not checked.
     private bool _refusedWhen;
 
+    // The scenario's clock, which only time passing moves, and whether the last When was time passing.
+    private TimeSpan _clock;
+    private bool _afterTime;
+    private InstanceKey? _timed;
+
     private Walk(FeatureScenario scenario, Glossary glossary)
     {
         _scenario = scenario;
@@ -212,14 +238,25 @@ internal sealed class Walk
     internal List<Observation> Observations { get; } = [];
     internal List<OutcomeObservation> Outcomes { get; } = [];
     internal List<StartObservation> Starts { get; } = [];
+    internal List<TimerObservation> Timers { get; } = [];
+    internal List<StayObservation> Stays { get; } = [];
 
     /// <summary>Each step with its meaning, for the replay; a step with none is left out.</summary>
     internal List<(FeatureStep Step, Meaning Meaning)> Steps { get; } = [];
 
-    internal sealed class Instance(string? state, JsonObject context)
+    internal sealed class Instance(string? state, JsonObject context, TimeSpan entered)
     {
-        public string? State { get; set; } = state;
+        public string? State { get; private set; } = state;
         public JsonObject Context { get; set; } = context;
+
+        /// <summary>When, on the scenario's clock, the instance entered its state: a timer counts from here.</summary>
+        public TimeSpan Entered { get; private set; } = entered;
+
+        public void Enter(string state, TimeSpan at)
+        {
+            State = state;
+            Entered = at;
+        }
     }
 
     private sealed record Pending(
@@ -261,6 +298,7 @@ internal sealed class Walk
                     break;
                 case StepKind.When:
                     walk.Settle();
+                    walk._afterTime = false;
                     var problems = walk.Problems.Count;
                     walk.When(step, meaning);
                     walk._refusedWhen = walk.Problems.Count > problems;
@@ -305,14 +343,15 @@ internal sealed class Walk
                     );
                 _instances[key] = new Instance(
                     Initial(s.Machine),
-                    InitialContext(_glossary.Machines[s.Machine])
+                    InitialContext(_glossary.Machines[s.Machine]),
+                    _clock
                 );
                 Starts.Add(
                     new StartObservation(s.Machine, _people[s.Person], _scenario, step.Line)
                 );
                 break;
             case Meaning.InState { Still: false } s:
-                InstanceAt(new InstanceKey(s.Machine, s.Owner)).State = s.State;
+                InstanceAt(new InstanceKey(s.Machine, s.Owner)).Enter(s.State, _clock);
                 break;
             case Meaning.Guard g:
                 var instance = InstanceAt(new InstanceKey(g.Machine, g.Owner));
@@ -413,12 +452,11 @@ internal sealed class Walk
                     step.Line
                 );
                 break;
-            case Meaning.Passes:
-                Fail(
-                    step.Line,
-                    $"'{step.Text}': time passing is derived as a timer, which this derivation does not do yet."
-                );
-                break;
+            case Meaning.Passes p:
+                _clock += p.Time;
+                _afterTime = true;
+                _timed = null;
+                return;
             default:
                 Fail(
                     step.Line,
@@ -430,6 +468,11 @@ internal sealed class Walk
 
     private void Then(FeatureStep step, Meaning meaning)
     {
+        if (_afterTime && meaning is Meaning.InState timed)
+        {
+            AfterTime(step, timed);
+            return;
+        }
         switch (meaning)
         {
             case Meaning.InState s
@@ -475,6 +518,49 @@ internal sealed class Walk
                 );
                 break;
         }
+    }
+
+    // A Then after time passed: the instance moved, which is its state's timer firing, or it is still where it was,
+    // which says the timer is longer than it has been there. Only one machine moves by time in one pass; another
+    // changing after it is a policy reacting to the first.
+    private void AfterTime(FeatureStep step, Meaning.InState s)
+    {
+        var key = new InstanceKey(s.Machine, s.Owner);
+        if (!_instances.TryGetValue(key, out var instance) || instance.State is null)
+        {
+            Fail(
+                step.Line,
+                $"'{step.Text}': the scenario has not said what state {Name(key)} is in."
+            );
+            return;
+        }
+        var elapsed = _clock - instance.Entered;
+        if (instance.State == s.State)
+        {
+            Stays.Add(new StayObservation(s.Machine, s.State, elapsed, _scenario, step.Line));
+            return;
+        }
+        if (s.Still)
+        {
+            Fail(
+                step.Line,
+                $"'{step.Text}': {Name(key)} is {instance.State} here, so it cannot still be {s.State}."
+            );
+            return;
+        }
+        if (_timed is { } first && first.Machine != key.Machine)
+        {
+            Fail(
+                step.Line,
+                $"'{step.Text}': {Name(first)} moved when time passed, and {Name(key)} moving after it is a policy reacting to it, which this derivation does not do yet."
+            );
+            return;
+        }
+        _timed = key;
+        Timers.Add(
+            new TimerObservation(s.Machine, instance.State, elapsed, s.State, _scenario, step.Line)
+        );
+        instance.Enter(s.State, _clock);
     }
 
     // What the When did, from its Thens: moved to the state they name, refused (told or still), or not allowed.
@@ -545,7 +631,7 @@ internal sealed class Walk
                     invoke.Examples.GetValueOrDefault(outcome.Phrase),
                     InitialContext(_glossary.Machines[outcome.Machine])
                 );
-            instance.State = moved[0];
+            instance.Enter(moved[0], _clock);
             return;
         }
 
@@ -594,7 +680,7 @@ internal sealed class Walk
                     pending.Input,
                     InitialContext(_glossary.Machines[machine])
                 );
-            instance.State = m.To;
+            instance.Enter(m.To, _clock);
         }
     }
 
@@ -604,7 +690,8 @@ internal sealed class Walk
         if (!_instances.TryGetValue(key, out var instance))
             _instances[key] = instance = new Instance(
                 null,
-                InitialContext(_glossary.Machines[key.Machine])
+                InitialContext(_glossary.Machines[key.Machine]),
+                _clock
             );
         return instance;
     }

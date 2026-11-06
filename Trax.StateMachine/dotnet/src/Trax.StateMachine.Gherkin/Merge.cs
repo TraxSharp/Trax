@@ -226,6 +226,7 @@ internal static class Merge
         }
 
         var outcomes = Outcomes(machine, walks, problems);
+        var timers = Timers(machine, walks, problems);
         if (problems.Count > before)
             return null;
 
@@ -274,6 +275,8 @@ internal static class Merge
         };
         if (outcomes.Count > 0)
             ir["outcomes"] = outcomes;
+        if (timers.Count > 0)
+            ir["timers"] = timers;
         return ir;
     }
 
@@ -349,6 +352,87 @@ internal static class Merge
         return outcomes;
     }
 
+    // Each state's timer, from the instances that left it once time passed: where they went, and the shortest wait that
+    // moved one, which every stay in the state must be shorter than. Its rules are filled in once access is derived.
+    private static JsonArray Timers(
+        GlossaryMachine machine,
+        IReadOnlyList<Walk> walks,
+        List<Problem> problems
+    )
+    {
+        var timers = new JsonArray();
+        var moved = walks.SelectMany(w => w.Timers).Where(o => o.Machine == machine.Id).ToList();
+        var stays = walks.SelectMany(w => w.Stays).Where(o => o.Machine == machine.Id).ToList();
+        foreach (var state in moved.Select(o => o.From).Distinct().Order(StringComparer.Ordinal))
+        {
+            var fired = moved.Where(o => o.From == state).ToList();
+            var targets = fired.Select(o => o.To).Distinct().ToList();
+            if (targets.Count > 1)
+            {
+                var other = fired.First(o => o.To == targets[1]);
+                problems.Add(
+                    new Problem(
+                        other.Scenario.File,
+                        other.Line,
+                        $"Time takes {machine.Id} from {state} to {targets[1]} here and to {targets[0]} elsewhere. A state's timer goes to one state."
+                    )
+                );
+                continue;
+            }
+            var shortest = fired.MinBy(o => o.Elapsed)!;
+            if (shortest.Elapsed <= TimeSpan.Zero)
+            {
+                problems.Add(
+                    new Problem(
+                        shortest.Scenario.File,
+                        shortest.Line,
+                        $"{machine.Id} leaves {state} with no time passing there. Say how long: 'When 5 minutes pass'."
+                    )
+                );
+                continue;
+            }
+            foreach (
+                var stay in stays.Where(s => s.State == state && s.Elapsed >= shortest.Elapsed)
+            )
+                problems.Add(
+                    new Problem(
+                        stay.Scenario.File,
+                        stay.Line,
+                        $"{machine.Id} is still {state} after {Said(stay.Elapsed)} here, and leaves it after {Said(shortest.Elapsed)} in '{shortest.Scenario.Name}' ({shortest.Scenario.Id})."
+                    )
+                );
+            if (targets[0] == state)
+                problems.Add(
+                    new Problem(
+                        shortest.Scenario.File,
+                        shortest.Line,
+                        $"Time takes {machine.Id} from {state} back into {state}, and a timer never enters its own state."
+                    )
+                );
+            if (machine.SystemKey is null && machine.Invokes.ContainsKey(targets[0]))
+                problems.Add(
+                    new Problem(
+                        shortest.Scenario.File,
+                        shortest.Line,
+                        $"Time takes {machine.Id} into {targets[0]}, which runs a train, and a user's machine never starts a train on a timer: the host refuses it, since no user is there to run it as."
+                    )
+                );
+            timers.Add(
+                new JsonObject
+                {
+                    ["state"] = state,
+                    ["trigger"] = $"{state}.after",
+                    ["target"] = targets[0],
+                    ["rules"] = new JsonArray(),
+                    ["after"] = IsoDuration.Format(shortest.Elapsed),
+                }
+            );
+        }
+        return timers;
+    }
+
+    private static string Said(TimeSpan time) => IsoDuration.Format(time);
+
     private static JsonArray Sorted(IEnumerable<string> names) =>
         new(names.Order(StringComparer.Ordinal).Select(n => (JsonNode?)n).ToArray());
 }
@@ -374,17 +458,36 @@ internal static class SelfCheck
             return engine;
         }
         var snapshots = new Dictionary<InstanceKey, Snapshot>();
+        // When each instance entered its state, on the scenario's clock: a timer counts from there.
+        var entered = new Dictionary<InstanceKey, TimeSpan>();
+        var clock = TimeSpan.Zero;
         Snapshot Of(InstanceKey key, string? state = null)
         {
             if (!snapshots.TryGetValue(key, out var snapshot))
             {
                 var engine = Engine(key.Machine);
                 snapshot = engine.CreateInitialSnapshot();
+                entered[key] = clock;
             }
             if (state is not null)
+            {
                 snapshot = snapshot with { State = state };
+                entered[key] = clock;
+            }
             return snapshots[key] = snapshot;
         }
+        // A transition enters its target, a self-transition included, so the timer starts again.
+        void Enter(InstanceKey key, Snapshot snapshot, TimeSpan at)
+        {
+            snapshots[key] = snapshot;
+            entered[key] = at;
+        }
+        TimeSpan? TimerOf(InstanceKey key, string state) =>
+            irs[key.Machine]["timers"] is JsonArray timers
+            && timers.FirstOrDefault(t => t!["state"]!.GetValue<string>() == state) is { } timer
+            && IsoDuration.TryParse(timer["after"]!.GetValue<string>(), out var after)
+                ? after
+                : null;
         void Fail(long line, string message) =>
             problems.Add(
                 new Problem(
@@ -431,7 +534,7 @@ internal static class SelfCheck
                     var key = new InstanceKey(machine, owner);
                     var result = Engine(machine).Advance(Of(key), trigger, input);
                     if (result is AdvanceResult.Transitioned moved)
-                        snapshots[key] = moved.Snapshot;
+                        Enter(key, moved.Snapshot, clock);
                     last = (key, result);
                     break;
                 case (StepKind.When, Meaning.Outcome o):
@@ -447,8 +550,42 @@ internal static class SelfCheck
                             invoke.Examples.GetValueOrDefault(o.Phrase)?.DeepClone()
                         );
                     if (outcome is AdvanceResult.Transitioned applied)
-                        snapshots[waiting.Key] = applied.Snapshot;
+                        Enter(waiting.Key, applied.Snapshot, clock);
                     last = (waiting.Key, outcome);
+                    break;
+                case (StepKind.When, Meaning.Passes p):
+                    // Every timer due by the new time fires, earliest first, and a timer its target starts fires too
+                    // when it is due in turn.
+                    clock += p.Time;
+                    last = null;
+                    for (var fired = 0; fired < 1000; fired++)
+                    {
+                        var due = snapshots
+                            .Select(kv =>
+                                (
+                                    kv.Key,
+                                    kv.Value,
+                                    At: TimerOf(kv.Key, kv.Value.State) is { } after
+                                        ? entered[kv.Key] + after
+                                        : (TimeSpan?)null
+                                )
+                            )
+                            .Where(d => d.At is { } at && at <= clock)
+                            .OrderBy(d => d.At)
+                            .ThenBy(d => d.Key.Machine, StringComparer.Ordinal)
+                            .ThenBy(d => d.Key.Owner, StringComparer.Ordinal)
+                            .FirstOrDefault();
+                        if (due.At is not { } fireAt)
+                            break;
+                        if (
+                            Engine(due.Key.Machine)
+                                .ApplyTimer(due.Value, $"{due.Value.State}.after")
+                            is AdvanceResult.Transitioned timed
+                        )
+                            Enter(due.Key, timed.Snapshot, fireAt);
+                        else
+                            break;
+                    }
                     break;
                 case (StepKind.Then, Meaning.InState s):
                     var at = new InstanceKey(s.Machine, s.Owner);
