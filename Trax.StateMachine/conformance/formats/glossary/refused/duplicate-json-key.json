@@ -2,17 +2,15 @@
   "version": 1,
   "version": 1,
   "actors": {
-    "anyone": {
-      "phrase": "I am signed in",
+    "member": {
+      "noun": "a member",
       "anyAuthenticated": true
     }
   },
   "machines": {
     "note": {
-      "ownedBy": "anyone",
-      "subject": [
-        "my note"
-      ],
+      "ownedBy": "member",
+      "noun": "note",
       "initial": "Open",
       "states": {
         "Open": "is open"

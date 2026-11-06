@@ -2,13 +2,13 @@
   "version": 1,
   "actors": {
     "customer": {
-      "phrase": "I am a customer",
+      "noun": "a customer",
       "roles": [
         "customer"
       ]
     },
     "baker": {
-      "phrase": "I am a baker",
+      "noun": "a baker",
       "roles": [
         "baker"
       ]
@@ -16,7 +16,7 @@
   },
   "machines": {},
   "views": {
-    "my orders": {
+    "orders": {
       "reads": [
         {
           "machine": "order"
@@ -35,7 +35,7 @@
         }
       }
     },
-    "the shop": {
+    "the shop sign": {
       "reads": [
         {
           "machine": "order"

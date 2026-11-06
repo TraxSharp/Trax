@@ -69,8 +69,8 @@ internal sealed partial record Glossary(
 
     private static GlossaryActor ReadActor(At at, string name, JsonObject actor)
     {
-        at.Closed(actor, "phrase", "roles", "anyAuthenticated");
-        var phrase = Names.PhraseAt(at["phrase"], at.Required(actor, "phrase"));
+        at.Closed(actor, "noun", "roles", "anyAuthenticated");
+        var noun = Names.PhraseAt(at["noun"], at.Required(actor, "noun"));
         var hasRoles = actor.ContainsKey("roles");
         var any = actor.ContainsKey("anyAuthenticated");
         // A role-less actor would derive rules that admit any signed-in caller, so saying so is required.
@@ -81,7 +81,7 @@ internal sealed partial record Glossary(
         var roles = hasRoles
             ? at["roles"].Distinct(actor["roles"], 1, (a, n) => a.Text(n, 1, 128))
             : [];
-        return new GlossaryActor(name, phrase, roles, any);
+        return new GlossaryActor(name, noun, roles, any);
     }
 
     private static GlossaryMachine ReadMachine(At at, string id, JsonObject machine)
@@ -90,7 +90,8 @@ internal sealed partial record Glossary(
             machine,
             "ownedBy",
             "system",
-            "subject",
+            "noun",
+            "name",
             "start",
             "initial",
             "context",
@@ -104,9 +105,17 @@ internal sealed partial record Glossary(
         var system = machine.ContainsKey("system");
         if (owned == system)
             throw at.Fail("must give 'ownedBy' an actor, or 'system' a key, and not both.");
+        // A user's machine is referred to by its noun and its owner ("Ada's order"), a system machine by its name.
+        if (owned && machine.ContainsKey("name"))
+            throw at["name"].Fail("is a system machine's; a user's machine has a 'noun'.");
+        if (system && machine.ContainsKey("noun"))
+            throw at["noun"].Fail("is a user's machine's; a system machine has a 'name'.");
         var ownedBy = owned ? Names.WordAt(at["ownedBy"], machine["ownedBy"]) : null;
         var key = system ? Names.SystemKeyAt(at["system"], machine["system"]) : null;
-        var subjects = at["subject"].Distinct(at.Required(machine, "subject"), 1, Names.PhraseAt);
+        var reference = Names.PhraseAt(
+            at[owned ? "noun" : "name"],
+            at.Required(machine, owned ? "noun" : "name")
+        );
         var start = machine.ContainsKey("start")
             ? Names.PhraseAt(at["start"], machine["start"])
             : null;
@@ -143,7 +152,7 @@ internal sealed partial record Glossary(
             id,
             ownedBy,
             key,
-            subjects,
+            reference,
             start,
             initial,
             context,
@@ -244,9 +253,13 @@ internal sealed partial record Glossary(
     // The checks that need more than one key at a time.
     private void Check(At at)
     {
-        // Every phrase that opens or names a step is unique across the glossary; the words for a machine's states
-        // and guards follow its subject, so they are unique within the machine.
+        // Every phrase that makes a step is unique across the glossary, compared as the step it makes: a user machine's
+        // {subject} is its noun, so two machines may share "cancels {subject}" and "Ada cancels her order" still means
+        // one thing. The words for a machine's states and guards follow a reference to it, so they are unique within
+        // the machine. Actor nouns are one namespace, and machine nouns and system names another.
         var steps = new Dictionary<string, string>(StringComparer.Ordinal);
+        var nouns = new Dictionary<string, string>(StringComparer.Ordinal);
+        var references = new Dictionary<string, string>(StringComparer.Ordinal);
         void Unique(Dictionary<string, string> seen, At where, string phrase)
         {
             if (!seen.TryAdd(Names.Normal(phrase), where.Pointer))
@@ -256,7 +269,7 @@ internal sealed partial record Glossary(
         }
 
         foreach (var actor in Actors.Values)
-            Unique(steps, at["actors"][actor.Name]["phrase"], actor.Phrase);
+            Unique(nouns, at["actors"][actor.Name]["noun"], actor.Noun);
 
         var systemKeys = Machines.ToDictionary(
             m => m.Key,
@@ -284,8 +297,7 @@ internal sealed partial record Glossary(
                 throw m["context"]
                     .Fail("has a field named 'state', which a view reads as the machine's state.");
 
-            for (var i = 0; i < machine.Subjects.Count; i++)
-                Unique(steps, m["subject"][i], machine.Subjects[i]);
+            Unique(references, ReferenceAt(m, machine), machine.Reference);
             if (machine.Start is { } start)
                 Unique(steps, m["start"], start);
 
@@ -301,9 +313,28 @@ internal sealed partial record Glossary(
             foreach (var trigger in machine.Triggers.Values)
             {
                 var t = m["triggers"][trigger.Name];
-                Unique(steps, t["phrase"], trigger.Phrase);
+                Unique(steps, t["phrase"], Said(trigger.Phrase, machine));
                 Distinct(t["input"], trigger.InputNames);
-                foreach (var placeholder in Placeholders(t["phrase"], trigger.Phrase))
+                if (trigger.InputNames.Contains(SubjectSlot))
+                    throw t["input"]
+                        .Fail(
+                            $"has a field named '{SubjectSlot}', which a phrase uses for the machine."
+                        );
+                var placeholders = Placeholders(t["phrase"], trigger.Phrase).ToList();
+                var subjects = placeholders.Count(p => p == SubjectSlot);
+                // A user's instance is named by its owner where {subject} is; a system machine is named by its name.
+                if (machine.SystemKey is null && subjects != 1)
+                    throw t["phrase"]
+                        .Fail(
+                            $"must say where the {machine.Reference} goes, once, as {{{SubjectSlot}}}: "
+                                + $"'places {{{SubjectSlot}}}' is said 'Ada places her {machine.Reference}'."
+                        );
+                if (machine.SystemKey is not null && subjects != 0)
+                    throw t["phrase"]
+                        .Fail(
+                            $"names a system machine, which is '{machine.Reference}', never {{{SubjectSlot}}}."
+                        );
+                foreach (var placeholder in placeholders.Where(p => p != SubjectSlot))
                     if (!trigger.InputNames.Contains(placeholder))
                         throw t["phrase"]
                             .Fail($"'{{{placeholder}}}' is not one of the trigger's input fields.");
@@ -336,9 +367,14 @@ internal sealed partial record Glossary(
             foreach (var link in machine.Links.Values)
             {
                 var l = m["links"][link.Phrase];
-                Unique(steps, l, link.Phrase);
+                if (Placeholders(l, link.Phrase).ToList() is not [SubjectSlot])
+                    throw l.Fail(
+                        $"must say where the linked instance goes, once, as {{{SubjectSlot}}}: "
+                            + $"'the receipt for {{{SubjectSlot}}}'."
+                    );
                 if (!Machines.TryGetValue(link.Machine, out var linked))
                     throw l["machine"].Fail($"'{link.Machine}' is not a machine.");
+                Unique(steps, l, Said(link.Phrase, linked));
                 if (linked.SystemKey is not null)
                     throw l["machine"]
                         .Fail(
@@ -349,11 +385,20 @@ internal sealed partial record Glossary(
                         .Fail($"'{link.Field}' is not one of the machine's context fields.");
             }
 
-            // Only a trigger's phrase takes an input, so a brace anywhere else is a mistake.
+            // Only a trigger's or a link's phrase holds a placeholder, so a brace anywhere else is a mistake.
             foreach (var (where, phrase) in OtherPhrases(m, machine))
                 if (phrase.AsSpan().IndexOfAny('{', '}') >= 0)
-                    throw where.Fail("only a trigger's phrase may hold a {placeholder}.");
+                    throw where.Fail(
+                        "only a trigger's or a link's phrase may hold a {placeholder}."
+                    );
+
+            // Features name their people, so no phrase speaks as one of them.
+            foreach (var (where, phrase) in AllPhrases(m, machine))
+                FirstPerson(where, phrase);
         }
+
+        foreach (var actor in Actors.Values)
+            FirstPerson(at["actors"][actor.Name]["noun"], actor.Noun);
 
         foreach (var view in Views.Values)
         {
@@ -376,10 +421,48 @@ internal sealed partial record Glossary(
         }
     }
 
+    /// <summary>Where a phrase names the machine it is about: <c>places {subject}</c>.</summary>
+    internal const string SubjectSlot = "subject";
+
+    // A phrase as the step it makes, for comparing: {subject} is the machine's noun.
+    private static string Said(string phrase, GlossaryMachine machine) =>
+        phrase.Replace($"{{{SubjectSlot}}}", $"{{{machine.Reference}}}", StringComparison.Ordinal);
+
+    private static At ReferenceAt(At m, GlossaryMachine machine) =>
+        m[machine.SystemKey is null ? "noun" : "name"];
+
+    private static readonly HashSet<string> FirstPersonWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "i",
+        "me",
+        "my",
+        "mine",
+        "myself",
+    };
+
+    private static void FirstPerson(At where, string phrase)
+    {
+        foreach (var word in phrase.Split(' ', '\'', '\u2019', ',', '.', '!', '?'))
+            if (FirstPersonWords.Contains(word))
+                throw where.Fail(
+                    $"'{phrase}' speaks as '{word}'. Features name their people ('Ada places her order'), so a "
+                        + "glossary phrase is written without one."
+                );
+    }
+
+    private static IEnumerable<(At, string)> AllPhrases(At m, GlossaryMachine machine)
+    {
+        foreach (var other in OtherPhrases(m, machine))
+            yield return other;
+        foreach (var trigger in machine.Triggers.Values)
+            yield return (m["triggers"][trigger.Name]["phrase"], trigger.Phrase);
+        foreach (var phrase in machine.Links.Keys)
+            yield return (m["links"][phrase], phrase);
+    }
+
     private static IEnumerable<(At, string)> OtherPhrases(At m, GlossaryMachine machine)
     {
-        for (var i = 0; i < machine.Subjects.Count; i++)
-            yield return (m["subject"][i], machine.Subjects[i]);
+        yield return (ReferenceAt(m, machine), machine.Reference);
         if (machine.Start is { } start)
             yield return (m["start"], start);
         foreach (var (state, phrase) in machine.States)
@@ -392,8 +475,6 @@ internal sealed partial record Glossary(
         foreach (var invoke in machine.Invokes.Values)
         foreach (var phrase in invoke.Outcomes.Keys)
             yield return (m["invokes"][invoke.State]["outcomes"][phrase], phrase);
-        foreach (var phrase in machine.Links.Keys)
-            yield return (m["links"][phrase], phrase);
     }
 
     private static void Distinct(At at, IReadOnlyList<string> names)
@@ -432,20 +513,26 @@ internal sealed partial record Glossary(
     private static partial Regex Placeholder();
 }
 
-/// <summary>Who a scenario's "I" is: an actor with its roles, or any signed-in caller.</summary>
+/// <summary>
+/// An actor, with the noun a feature names a person by (<c>Given Ada is a customer</c>), and its roles or any signed-in
+/// caller.
+/// </summary>
 internal sealed record GlossaryActor(
     string Name,
-    string Phrase,
+    string Noun,
     IReadOnlyList<string> Roles,
     bool AnyAuthenticated
 );
 
-/// <summary>One machine of a glossary.</summary>
+/// <summary>
+/// One machine of a glossary. <see cref="Reference"/> is a user's machine's noun (<c>order</c>, said as
+/// <c>Ada's order</c>) or a system machine's name (<c>the shop</c>).
+/// </summary>
 internal sealed record GlossaryMachine(
     string Id,
     string? OwnedBy,
     string? SystemKey,
-    IReadOnlyList<string> Subjects,
+    string Reference,
     string? Start,
     string Initial,
     JsonArray Context,

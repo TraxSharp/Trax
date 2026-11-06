@@ -29,10 +29,13 @@ failure rather than a bug.
   `ir.schema.json` in `Trax.StateMachine/conformance/`. A reader refuses an unknown key, an actor with no roles that
   does not say `anyAuthenticated`, and a phrase or action word used twice. A step two machines could own is
   ambiguous, never resolved to the first.
-- **A first-person act grants access, and every grant is reported.** `When I submit my ticket`, under
-  `Given I am a customer`, grants customers that trigger. An actor no scenario shows doing a thing is denied. Derivation
-  also writes `access.txt`, one sorted line per trigger, start and view with the actors it admits, and it is
-  committed, so a new grant shows in a pull request's diff. Its check fails when the file is stale.
+- **Features name their people, and an actor's own act grants access.** A scenario names each person from an actor's
+  noun (`Given Ada is a customer`) and refers to a user's instance by its owner (`Ada's order`, or `her order` for the
+  step's own person, and no one else). `When Ada places her order` grants customers that trigger. An actor no scenario
+  shows doing it is denied. The glossary writes a trigger's phrase without the person, with `{subject}` where the
+  machine goes (`places {subject}`), and no glossary phrase speaks as "I". Derivation also writes `access.txt`, one
+  sorted line per trigger, start and view with the actors it admits, and it is committed, so a new grant shows in a
+  pull request's diff. Its check fails when the file is stale.
 - **Ownership is one of two kinds, and strict.** A machine is `ownedBy: <actor>` or `system`. A user-owned machine is
   moved by its owner on their own instances, and by the server (timers, train outcomes, policies). A system machine is
   moved only by the server and read through a served view. A feature in which one actor acts on another's instance,
@@ -58,7 +61,10 @@ failure rather than a bug.
   home, and every pair of files needed its own pairing check.
 - **One bundle per machine holding the IR and the host parts.** Rejected: the IR stops being a standalone document, and
   anything that ships the file whole ships the access rules to the client.
-- **Grants only through explicit "I can" lines.** Rejected: every trigger would be written twice. Implicit grants with
+- **Features in the first person ("I").** Rejected: "I" cannot name two people in one scenario, so one actor acting on
+  another's instance stays invisible until the server refuses it. Cucumber's published advice (real data, named
+  people) points the same way.
+- **Grants only through explicit "can" lines.** Rejected: every trigger would be written twice. Implicit grants with
   no report were rejected too, since an access change would hide among policies, views and provenance in `host.json`.
 - **Clients may fire role-gated system instances.** Rejected: it brings the questions of several users on one
   instance (whose run cap, which actor is recorded) into this design without answering them.
@@ -68,7 +74,7 @@ failure rather than a bug.
 ## Exemplars
 
 **Enforced elsewhere:** in `Trax.StateMachine.Tests`, `GlossaryFormatTests` (versions, unknown keys, role-less
-actors, duplicate phrases), `HostFileFormatTests` (unknown keys, owners named by actor, a policy firing a client's
+actors, duplicate phrases, a phrase that speaks as "I"), `HostFileFormatTests` (unknown keys, owners named by actor, a policy firing a client's
 trigger, a client rule on a system machine), and `FormatCorpusTests`, which holds both readers and both schemas to the
 corpus under `Trax.StateMachine/conformance/formats/`, as `formatSchemas.conformance.test.ts` does for the schemas.
 Serving from the IR is held by `MachineFromIrTests` there (each conformance machine a file can describe exports exactly
@@ -81,4 +87,5 @@ views are held by their own tests as each lands, and this ADR's changelog names 
 
 ## Changelog
 
+- **2026-11-06**: Features name their people in the third person; "I" is refused.
 - **2026-11-06**: Recorded.

@@ -7,7 +7,8 @@ namespace Trax.StateMachine.Tests.UnitTests;
 
 /// <summary>
 /// The glossary is read strictly (<c>Trax.Docs/adr/0058</c>): a version, no key it does not know, no actor without
-/// roles unless it says any signed-in caller, and no phrase two things could mean. Each of these was a way, in the
+/// roles unless it says any signed-in caller, no phrase two things could mean, and no phrase that speaks as "I", since
+/// features name their people. Each of these was a way, in the
 /// proof of concept, for a typo to open a trigger to everyone or send a step to the wrong machine.
 /// </summary>
 public class GlossaryFormatTests
@@ -18,15 +19,26 @@ public class GlossaryFormatTests
         var glossary = Glossary.Read(Bakery().ToJsonString());
 
         glossary.Actors["customer"].Roles.Should().Equal("customer");
+        glossary.Actors["customer"].Noun.Should().Be("a customer");
         var order = glossary.Machines["order"];
         order.OwnedBy.Should().Be("customer");
+        order.Reference.Should().Be("order");
         order.Initial.Should().Be("Draft");
         order.Triggers["Order"].InputNames.Should().Equal("loaves");
         order.Guards["hasLoaves"].Fails.Should().Be("has nothing in it");
         order.Invokes["Paying"].Train.Should().Be("Bakery.Trains.ITakePayment");
         glossary.Machines["shop"].SystemKey.Should().Be("shop/main");
-        glossary.Machines["receipt"].Links["my order's receipt"].Field.Should().Be("orderId");
-        glossary.Views["the shop"].Reads.Select(r => r.Machine).Should().Equal("order", "shop");
+        glossary.Machines["shop"].Reference.Should().Be("the shop");
+        glossary
+            .Machines["receipt"]
+            .Links["the receipt for {subject}"]
+            .Field.Should()
+            .Be("orderId");
+        glossary
+            .Views["the shop sign"]
+            .Reads.Select(r => r.Machine)
+            .Should()
+            .Equal("order", "shop");
     }
 
     [Test]
@@ -56,19 +68,54 @@ public class GlossaryFormatTests
     }
 
     [Test]
-    public void Two_machines_sharing_an_action_are_refused_naming_both_places()
+    public void Two_triggers_sharing_a_sentence_are_refused_naming_both_places()
     {
         var glossary = Bakery();
-        glossary["machines"]!["order"]!["triggers"]!["Place"]!["phrase"] = "cancel it";
-        glossary["machines"]!["receipt"]!["triggers"]!["Cancel"]!["phrase"] = "Cancel  it";
+        glossary["machines"]!["shop"]!["triggers"]!["Close"]!["phrase"] = "The  shop OPENS";
 
         var read = () => Glossary.Read(glossary.ToJsonString());
 
         read.Should()
             .Throw<FormatException>()
             .WithMessage(
-                "*/machines/receipt/triggers/Cancel/phrase*/machines/order/triggers/Place/phrase*"
+                "*/machines/shop/triggers/Close/phrase*/machines/shop/triggers/Open/phrase*"
             );
+    }
+
+    [Test]
+    public void Two_machines_may_share_an_action_their_nouns_tell_apart()
+    {
+        var glossary = Bakery();
+        glossary["machines"]!["order"]!["triggers"]!["Place"]!["phrase"] = "cancels {subject}";
+        glossary["machines"]!["receipt"]!["triggers"]!["Cancel"]!["phrase"] = "cancels {subject}";
+
+        var read = Glossary.Read(glossary.ToJsonString());
+
+        read.Machines["receipt"].Triggers["Cancel"].Phrase.Should().Be("cancels {subject}");
+    }
+
+    [Test]
+    public void A_phrase_that_speaks_as_I_is_refused()
+    {
+        var glossary = Bakery();
+        glossary["machines"]!["order"]!["triggers"]!["Place"]!["phrase"] = "I place {subject}";
+
+        var read = () => Glossary.Read(glossary.ToJsonString());
+
+        read.Should()
+            .Throw<FormatException>()
+            .WithMessage("*/triggers/Place/phrase*speaks as 'I'*name their people*");
+    }
+
+    [Test]
+    public void A_users_trigger_that_does_not_say_where_its_machine_goes_is_refused()
+    {
+        var glossary = Bakery();
+        glossary["machines"]!["order"]!["triggers"]!["Place"]!["phrase"] = "places the order";
+
+        var read = () => Glossary.Read(glossary.ToJsonString());
+
+        read.Should().Throw<FormatException>().WithMessage("*/triggers/Place/phrase*{subject}*");
     }
 
     [Test]
@@ -113,18 +160,18 @@ public class GlossaryFormatTests
         read.Should().Throw<FormatException>().WithMessage("*/version: must be 1*");
     }
 
-    [TestCase("I order {loaves} loaves", new[] { "loaves" })]
-    [TestCase("I order {loaves} loaves for {day}", new[] { "loaves", "day" })]
-    [TestCase("I order loaves", new string[0])]
+    [TestCase("orders {loaves} loaves", new[] { "loaves" })]
+    [TestCase("orders {loaves} loaves for {subject}", new[] { "loaves", "subject" })]
+    [TestCase("orders loaves", new string[0])]
     public void A_trigger_phrase_names_its_placeholders(string phrase, string[] names)
     {
         Glossary.Placeholders(new At("glossary", ""), phrase).Should().Equal(names);
     }
 
-    [TestCase("I order {loaves loaves")]
-    [TestCase("I order loaves} now")]
-    [TestCase("I order {} loaves")]
-    [TestCase("I order {two words} loaves")]
+    [TestCase("orders {loaves loaves")]
+    [TestCase("orders loaves} now")]
+    [TestCase("orders {} loaves")]
+    [TestCase("orders {two words} loaves")]
     public void A_brace_that_is_no_placeholder_is_refused(string phrase)
     {
         var read = () => Glossary.Placeholders(new At("glossary", ""), phrase).ToList();

@@ -2,13 +2,13 @@
   "version": 1,
   "actors": {
     "customer": {
-      "phrase": "I am a customer",
+      "noun": "a customer",
       "roles": [
         "customer"
       ]
     },
     "baker": {
-      "phrase": "I am a baker",
+      "noun": "a baker",
       "roles": [
         "baker"
       ]
@@ -17,10 +17,8 @@
   "machines": {
     "order": {
       "ownedBy": "customer",
-      "subject": [
-        "my order"
-      ],
-      "start": "I have an order",
+      "noun": "order",
+      "start": "has an order",
       "initial": "Draft",
       "context": [
         {
@@ -44,7 +42,7 @@
       },
       "triggers": {
         "Order": {
-          "phrase": "I order {loaves} loaves",
+          "phrase": "orders {loaves} loaves for {subject}",
           "input": [
             {
               "name": "loaves",
@@ -66,10 +64,10 @@
           }
         },
         "Place": {
-          "phrase": "I place my order"
+          "phrase": "places {subject}"
         },
         "Bake": {
-          "phrase": "baking starts"
+          "phrase": "{subject} starts baking"
         }
       },
       "guards": {
@@ -135,9 +133,7 @@
     },
     "receipt": {
       "ownedBy": "customer",
-      "subject": [
-        "my receipt"
-      ],
+      "noun": "receipt",
       "initial": "Issued",
       "context": [
         {
@@ -154,11 +150,11 @@
       },
       "triggers": {
         "Cancel": {
-          "phrase": "the receipt is voided"
+          "phrase": "{subject} is voided"
         }
       },
       "links": {
-        "my order's receipt": {
+        "the receipt for {subject}": {
           "machine": "order",
           "field": "orderId"
         }
@@ -166,10 +162,8 @@
     },
     "shift": {
       "ownedBy": "baker",
-      "subject": [
-        "my shift"
-      ],
-      "start": "I have a shift",
+      "noun": "shift",
+      "start": "has a shift",
       "initial": "Off",
       "states": {
         "Off": "is not started",
@@ -177,15 +171,13 @@
       },
       "triggers": {
         "ClockIn": {
-          "phrase": "I clock in"
+          "phrase": "clocks in for {subject}"
         }
       }
     },
     "shop": {
       "system": "shop/main",
-      "subject": [
-        "the shop"
-      ],
+      "name": "the shop",
       "initial": "Closed",
       "states": {
         "Closed": "is closed",
@@ -202,7 +194,7 @@
     }
   },
   "views": {
-    "my orders": {
+    "orders": {
       "reads": [
         {
           "machine": "order"
@@ -221,7 +213,7 @@
         }
       }
     },
-    "the shop": {
+    "the shop sign": {
       "reads": [
         {
           "machine": "order"
