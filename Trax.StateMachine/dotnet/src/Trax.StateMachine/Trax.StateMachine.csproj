@@ -31,6 +31,9 @@
     <InternalsVisibleTo Include="Trax.StateMachine.Client" />
     <!-- Serves a machine from its IR and host entry through the GraphQL surface, with no C# class to name. -->
     <InternalsVisibleTo Include="Trax.Api.Tests" />
+    <!-- Derives machines from features: reads the glossary, writes the IR in the exporter's canonical form, and replays
+         every scenario on what it derived with the engine's own rule and reduction readers. -->
+    <InternalsVisibleTo Include="Trax.StateMachine.Gherkin" />
     <InternalsVisibleTo Include="Trax.Api.Tests.StateMachine.E2E" />
   </ItemGroup>
 </Project>

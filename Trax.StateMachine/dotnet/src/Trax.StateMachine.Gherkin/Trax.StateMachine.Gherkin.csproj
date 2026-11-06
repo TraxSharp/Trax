@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Trax.StateMachine.Gherkin</AssemblyName>
+    <!-- A new package id, so nuget.org has no release to validate against yet. Remove after the first release that
+         ships it (Directory.Build.props). -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+    <Description>Derive Trax .NET state machines from Gherkin features and a glossary: each machine's portable IR and the host file that says who may use it, checked by replaying every scenario on what was derived.</Description>
+    <PackageTags>trax;statemachine;gherkin;cucumber;bdd</PackageTags>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.StateMachine/Trax.StateMachine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Cucumber's own parser: Backgrounds, Rules, outlines and And/But arrive as pickles with file:line. -->
+    <PackageReference Include="Gherkin" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.StateMachine.Tests" />
+  </ItemGroup>
+</Project>
