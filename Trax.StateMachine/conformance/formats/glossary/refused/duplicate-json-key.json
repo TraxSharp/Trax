@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "version": 1,
+  "actors": {
+    "anyone": {
+      "phrase": "I am signed in",
+      "anyAuthenticated": true
+    }
+  },
+  "machines": {
+    "note": {
+      "ownedBy": "anyone",
+      "subject": [
+        "my note"
+      ],
+      "initial": "Open",
+      "states": {
+        "Open": "is open"
+      }
+    }
+  }
+}

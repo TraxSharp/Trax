@@ -67,12 +67,13 @@ failure rather than a bug.
 
 ## Exemplars
 
-**Enforced elsewhere:** `GlossaryFormatTests` in `Trax.StateMachine.Tests` (versions, unknown keys, role-less actors,
-duplicate phrases), and `MachineFromIrTests` there (a host file and its IRs pair exactly, every name a policy or view
-gives exists, emitted type names do not collide).
+**Enforced elsewhere:** in `Trax.StateMachine.Tests`, `GlossaryFormatTests` (versions, unknown keys, role-less
+actors, duplicate phrases), `HostFileFormatTests` (unknown keys, owners named by actor, a policy firing a client's
+trigger, a client rule on a system machine), and `FormatCorpusTests`, which holds both readers and both schemas to the
+corpus under `Trax.StateMachine/conformance/formats/`, as `formatSchemas.conformance.test.ts` does for the schemas.
 
-Not covered: those hold the formats and the serving. Derivation, the access it grants, the self-check, policies and
-views are held by their own tests as each lands, and this ADR's changelog names them then.
+Not covered: those hold the formats. Serving from the IR, derivation, the access it grants, the self-check, policies
+and views are held by their own tests as each lands, and this ADR's changelog names them then.
 
 ## Changelog
 

@@ -1,0 +1,250 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:trax:state-machine:glossary:1",
+  "title": "Trax machine glossary, version 1",
+  "description": "What the words of a set of Gherkin features mean: the actors, the machines with their subjects, states, triggers, guards, invoked trains and links, and the views. Machines are derived from the features and this file (Trax.Docs/adr/0058). Normative: the C# reader accepts exactly the documents this schema accepts, then refuses the ones whose names do not agree (a phrase used twice, an owner that is not an actor); the corpus under formats/glossary holds the two to each other. Every object is closed. The field, rule and reduction shapes are the IR's own.",
+  "type": "object",
+  "required": ["version", "actors", "machines"],
+  "properties": {
+    "version": { "const": 1 },
+    "actors": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/word" },
+      "additionalProperties": { "$ref": "#/$defs/actor" }
+    },
+    "machines": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/machineId" },
+      "additionalProperties": { "$ref": "#/$defs/machine" }
+    },
+    "views": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/phrase" },
+      "additionalProperties": { "$ref": "#/$defs/view" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "phrase": {
+      "description": "Words a step is written in. Compared with case and runs of whitespace ignored.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^\\S(.*\\S)?$"
+    },
+    "word": {
+      "description": "A lowercase name: an actor, a guard.",
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9]*$",
+      "maxLength": 64
+    },
+    "machineId": {
+      "description": "A machine's id, lowercase words joined by single hyphens, so no two ids emit the same type names.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "member": {
+      "description": "A state or trigger name, emitted as an enum member.",
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9]*$",
+      "maxLength": 64
+    },
+    "systemKey": {
+      "description": "The fixed key of a system instance: the machine id, a slash, and a name.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 129
+    },
+    "phrases": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/phrase" }
+    },
+    "fields": {
+      "type": "array",
+      "items": { "$ref": "urn:trax:state-machine:ir-format:1#/$defs/field" }
+    },
+    "actor": {
+      "description": "Who a scenario's 'I' is. An actor holds roles, or says it is any signed-in caller; never neither.",
+      "type": "object",
+      "required": ["phrase"],
+      "properties": {
+        "phrase": { "$ref": "#/$defs/phrase" },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        },
+        "anyAuthenticated": { "const": true }
+      },
+      "additionalProperties": false,
+      "oneOf": [{ "required": ["roles"] }, { "required": ["anyAuthenticated"] }]
+    },
+    "machine": {
+      "description": "One machine. It is owned by an actor, or it is a system machine at a fixed key; never both.",
+      "type": "object",
+      "required": ["subject", "initial", "states"],
+      "properties": {
+        "ownedBy": { "$ref": "#/$defs/word" },
+        "system": { "$ref": "#/$defs/systemKey" },
+        "subject": { "$ref": "#/$defs/phrases" },
+        "start": { "$ref": "#/$defs/phrase" },
+        "initial": { "$ref": "#/$defs/member" },
+        "context": { "$ref": "#/$defs/fields" },
+        "states": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/member" },
+          "additionalProperties": { "$ref": "#/$defs/phrase" }
+        },
+        "triggers": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/member" },
+          "additionalProperties": { "$ref": "#/$defs/trigger" }
+        },
+        "guards": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/word" },
+          "additionalProperties": { "$ref": "#/$defs/guard" }
+        },
+        "invokes": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/member" },
+          "additionalProperties": { "$ref": "#/$defs/invoke" }
+        },
+        "links": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/phrase" },
+          "additionalProperties": { "$ref": "#/$defs/link" }
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [{ "required": ["ownedBy"] }, { "required": ["system"] }]
+    },
+    "trigger": {
+      "description": "A trigger and the words that fire it. A {placeholder} in the phrase names an input field.",
+      "type": "object",
+      "required": ["phrase"],
+      "properties": {
+        "phrase": { "$ref": "#/$defs/phrase" },
+        "input": { "$ref": "#/$defs/fields" },
+        "reduce": { "$ref": "urn:trax:state-machine:ir-format:1#/$defs/reduction" }
+      },
+      "additionalProperties": false
+    },
+    "guard": {
+      "description": "A condition, with the words for when it holds and when it fails.",
+      "type": "object",
+      "required": ["holds", "fails", "rule"],
+      "properties": {
+        "holds": { "$ref": "#/$defs/phrase" },
+        "fails": { "$ref": "#/$defs/phrase" },
+        "rule": { "$ref": "urn:trax:state-machine:ir-format:1#/$defs/rule" }
+      },
+      "additionalProperties": false
+    },
+    "invoke": {
+      "description": "The train a state invokes (keyed by the state), what it is given, what it answers, and the words for each outcome.",
+      "type": "object",
+      "required": ["train", "outcomes"],
+      "properties": {
+        "train": {
+          "description": "The train's canonical name, its interface's full name (Trax.Docs/adr/0007).",
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+          "maxLength": 512
+        },
+        "input": {
+          "description": "Each field of the train's input, by name, from the context field named.",
+          "type": "object",
+          "propertyNames": { "$ref": "urn:trax:state-machine:ir-format:1#/$defs/fieldName" },
+          "additionalProperties": { "$ref": "urn:trax:state-machine:ir-format:1#/$defs/fieldName" }
+        },
+        "output": { "$ref": "#/$defs/fields" },
+        "outcomes": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/phrase" },
+          "additionalProperties": { "$ref": "#/$defs/outcome" }
+        },
+        "examples": {
+          "description": "An output for each done outcome, by its phrase, that a scenario run in memory answers with.",
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/phrase" },
+          "additionalProperties": { "type": "object" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "outcome": {
+      "type": "object",
+      "required": ["outcome"],
+      "properties": {
+        "outcome": { "enum": ["done", "failed", "cancelled"] },
+        "when": { "$ref": "urn:trax:state-machine:ir-format:1#/$defs/rule" },
+        "reduce": { "$ref": "urn:trax:state-machine:ir-format:1#/$defs/reduction" }
+      },
+      "additionalProperties": false
+    },
+    "link": {
+      "description": "Words naming the instance of another machine whose id this machine's context field holds.",
+      "type": "object",
+      "required": ["machine", "field"],
+      "properties": {
+        "machine": { "$ref": "#/$defs/machineId" },
+        "field": { "$ref": "urn:trax:state-machine:ir-format:1#/$defs/fieldName" }
+      },
+      "additionalProperties": false
+    },
+    "view": {
+      "description": "A view: what it reads (the caller's own instances of a user machine, a system instance at its key) and the fields it shows.",
+      "type": "object",
+      "required": ["reads", "fields"],
+      "properties": {
+        "reads": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["machine"],
+            "properties": {
+              "machine": { "$ref": "#/$defs/machineId" },
+              "key": { "$ref": "#/$defs/systemKey" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "fields": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "urn:trax:state-machine:ir-format:1#/$defs/fieldName" },
+          "additionalProperties": { "$ref": "#/$defs/viewField" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "viewField": {
+      "description": "One shown field: a machine's state, or one of its context fields. A state may be shown with a label per state.",
+      "type": "object",
+      "required": ["from"],
+      "properties": {
+        "from": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*\\.[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "labels": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/member" },
+          "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

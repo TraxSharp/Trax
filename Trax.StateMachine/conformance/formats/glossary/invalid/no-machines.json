@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "actors": {
+    "customer": {
+      "phrase": "I am a customer",
+      "roles": [
+        "customer"
+      ]
+    },
+    "baker": {
+      "phrase": "I am a baker",
+      "roles": [
+        "baker"
+      ]
+    }
+  },
+  "machines": {},
+  "views": {
+    "my orders": {
+      "reads": [
+        {
+          "machine": "order"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "order.state",
+          "labels": {
+            "Draft": "Not sent",
+            "Baking": "In the oven"
+          }
+        },
+        "loaves": {
+          "from": "order.loaves"
+        }
+      }
+    },
+    "the shop": {
+      "reads": [
+        {
+          "machine": "order"
+        },
+        {
+          "machine": "shop",
+          "key": "shop/main"
+        }
+      ],
+      "fields": {
+        "open": {
+          "from": "shop.state",
+          "labels": {
+            "Open": "We're open",
+            "Closed": "Closed"
+          }
+        }
+      }
+    }
+  }
+}

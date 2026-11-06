@@ -1,0 +1,200 @@
+{
+  "version": 1,
+  "machines": {
+    "order": {
+      "schemaHash": "h-order",
+      "owner": "user",
+      "start": {
+        "roles": [
+          [
+            "customer"
+          ]
+        ]
+      },
+      "read": {
+        "roles": [
+          [
+            "customer"
+          ]
+        ]
+      },
+      "triggers": {
+        "Order": {
+          "roles": [
+            [
+              "customer"
+            ]
+          ]
+        },
+        "Place": {
+          "roles": [
+            [
+              "customer"
+            ]
+          ]
+        },
+        "Bake": {
+          "server": true
+        }
+      },
+      "invokes": {
+        "Paying": {
+          "train": "Bakery.Trains.ITakePayment",
+          "input": {
+            "amount": "loaves"
+          }
+        }
+      }
+    },
+    "receipt": {
+      "schemaHash": "h-receipt",
+      "owner": "user",
+      "read": {
+        "roles": [
+          [
+            "customer"
+          ]
+        ]
+      },
+      "triggers": {
+        "Cancel": {
+          "server": true
+        }
+      }
+    },
+    "shift": {
+      "schemaHash": "h-shift",
+      "owner": "user",
+      "start": {
+        "roles": [
+          [
+            "baker"
+          ]
+        ]
+      },
+      "read": {
+        "roles": [
+          [
+            "baker"
+          ]
+        ]
+      },
+      "triggers": {
+        "ClockIn": {
+          "roles": [
+            [
+              "baker"
+            ]
+          ]
+        }
+      }
+    },
+    "shop": {
+      "schemaHash": "h-shop",
+      "owner": {
+        "system": "shop/main"
+      },
+      "triggers": {
+        "Open": {
+          "server": true
+        },
+        "Close": {
+          "server": true
+        }
+      }
+    }
+  },
+  "policies": [
+    {
+      "shape": "toSystem",
+      "when": {
+        "machine": "shift",
+        "enters": "On"
+      },
+      "then": {
+        "machine": "shop",
+        "key": "shop/main",
+        "trigger": "Open"
+      }
+    },
+    {
+      "shape": "broadcast",
+      "when": {
+        "machine": "shop",
+        "enters": "Open"
+      },
+      "then": {
+        "machine": "order",
+        "inState": "Placed",
+        "trigger": "Bake"
+      },
+      "batch": 100
+    },
+    {
+      "shape": "linked",
+      "when": {
+        "machine": "order",
+        "enters": "Declined"
+      },
+      "then": {
+        "machine": "receipt",
+        "link": "orderId",
+        "trigger": "Cancel"
+      }
+    }
+  ],
+  "views": {
+    "my orders": {
+      "reads": [
+        {
+          "machine": "order"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "order.state",
+          "labels": {
+            "Draft": "Not sent"
+          }
+        },
+        "loaves": {
+          "from": "order.loaves"
+        }
+      },
+      "readers": {
+        "roles": [
+          [
+            "customer"
+          ]
+        ]
+      }
+    },
+    "the shop": {
+      "reads": [
+        {
+          "machine": "shop",
+          "key": "shop/main"
+        }
+      ],
+      "fields": {
+        "open": {
+          "from": "shop.state"
+        }
+      },
+      "readers": {
+        "anyAuthenticated": true
+      }
+    }
+  },
+  "provenance": {
+    "order": {
+      "edge Draft Place": [
+        {
+          "file": "features/order.feature",
+          "line": 12,
+          "scenario": "Placing an order"
+        }
+      ]
+    }
+  }
+}

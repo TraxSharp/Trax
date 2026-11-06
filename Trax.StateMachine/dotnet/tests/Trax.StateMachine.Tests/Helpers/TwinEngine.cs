@@ -114,6 +114,34 @@ public static class TwinEngine
     }
 
     /// <summary>
+    /// Checks each document text in <paramref name="documents"/> against the schema of <paramref name="format"/>
+    /// (<c>glossary</c> or <c>host</c>, <c>conformance/&lt;format&gt;.schema.json</c>) with the engine's validator
+    /// (<c>tools/conformance/format-schema.mjs</c>), and returns each one's errors, empty when it is valid.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<string>> ValidateFormat(
+        string format,
+        IReadOnlyList<string> documents
+    )
+    {
+        var engineRoot = EngineRoot();
+        var request = new JsonObject
+        {
+            ["format"] = format,
+            ["documents"] = new JsonArray(documents.Select(d => (JsonNode)d).ToArray()),
+        };
+        var answers = (JsonArray)
+            JsonNode.Parse(
+                Run(engineRoot, "tools/conformance/format-schema.mjs", request.ToJsonString())
+            )!;
+        return answers
+            .Select(errors =>
+                (IReadOnlyList<string>)
+                    ((JsonArray)errors!).Select(e => e!.GetValue<string>()).ToList()
+            )
+            .ToList();
+    }
+
+    /// <summary>
     /// Runs the conformance runner (<c>conformance/run.mjs --name dotnet --stdio</c>) with <paramref name="answer"/> as its
     /// testee: each request line the runner writes is answered with the line <paramref name="answer"/> returns.
     /// Returns the runner's exit code (0 when every case passed) and its report.
