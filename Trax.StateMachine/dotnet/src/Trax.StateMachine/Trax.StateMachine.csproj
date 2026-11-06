@@ -29,5 +29,8 @@
     <InternalsVisibleTo Include="Trax.Api.GraphQL" />
     <!-- Reads which edges a machine built from the IR cannot evaluate, so the client sends those with no prediction. -->
     <InternalsVisibleTo Include="Trax.StateMachine.Client" />
+    <!-- Serves a machine from its IR and host entry through the GraphQL surface, with no C# class to name. -->
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+    <InternalsVisibleTo Include="Trax.Api.Tests.StateMachine.E2E" />
   </ItemGroup>
 </Project>

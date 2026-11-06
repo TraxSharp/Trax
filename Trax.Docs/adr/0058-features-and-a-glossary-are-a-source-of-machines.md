@@ -71,9 +71,13 @@ failure rather than a bug.
 actors, duplicate phrases), `HostFileFormatTests` (unknown keys, owners named by actor, a policy firing a client's
 trigger, a client rule on a system machine), and `FormatCorpusTests`, which holds both readers and both schemas to the
 corpus under `Trax.StateMachine/conformance/formats/`, as `formatSchemas.conformance.test.ts` does for the schemas.
+Serving from the IR is held by `MachineFromIrTests` there (each conformance machine a file can describe exports exactly
+its file and replays its corpus; what a file cannot describe, a mispaired host entry and access that disagrees with the
+IR's timer rules are refused), `IrMachineHostTests` in `Trax.StateMachine.Persistence.Integration`, and
+`IrMachineSchemaTests` and `IrMachineE2ETests` in Trax.Api.
 
-Not covered: those hold the formats. Serving from the IR, derivation, the access it grants, the self-check, policies
-and views are held by their own tests as each lands, and this ADR's changelog names them then.
+Not covered: those hold the formats and the serving. Derivation, the access it grants, the self-check, policies and
+views are held by their own tests as each lands, and this ADR's changelog names them then.
 
 ## Changelog
 

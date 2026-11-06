@@ -715,7 +715,7 @@ public sealed class IrMachine
             ? duration
             : throw new FormatException($"'{node}' is not an ISO-8601 duration.");
 
-    private static ContextSchema ReadSchema(JsonObject schema) =>
+    internal static ContextSchema ReadSchema(JsonObject schema) =>
         new(ReadFields(schema["fields"] as JsonArray ?? []));
 
     private static List<FieldSchema> ReadFields(JsonArray fields) =>
@@ -739,7 +739,7 @@ public sealed class IrMachine
             Keys = f["keys"] is JsonObject keys ? ReadField(keys, "") : null,
         };
 
-    private static Rule ReadRule(JsonObject r)
+    internal static Rule ReadRule(JsonObject r)
     {
         var kind = Text(r["rule"], "rule");
         switch (kind)
@@ -786,7 +786,7 @@ public sealed class IrMachine
     private static List<Rule> ReadRules(JsonNode? node) =>
         (node as JsonArray ?? []).Select(r => ReadRule(r!.AsObject())).ToList();
 
-    private static Reduction ReadReduction(JsonObject r) =>
+    internal static Reduction ReadReduction(JsonObject r) =>
         Text(r["reduce"], "reduce") switch
         {
             "keep" => new Reduction.Keep(),

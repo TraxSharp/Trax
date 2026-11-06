@@ -322,6 +322,30 @@ public sealed record BuiltMachine<TState, TTrigger>(
             .ToList();
 }
 
+/// <summary>
+/// What a machine replayed from its IR (<c>Trax.StateMachine.Persistence</c>, ADR <c>Trax.Docs/adr/0058</c>) declares a
+/// state's context with: the record the API is typed from, and the IR's own schema, which is what the engines check.
+/// A hand-written machine reflects one from the other with <see cref="IStateBuilder{TState,TTrigger}.Context{TContext}"/>.
+/// </summary>
+internal interface IIrStateBuilder<TState, TTrigger>
+    where TState : struct, Enum
+    where TTrigger : struct, Enum
+{
+    IStateBuilder<TState, TTrigger> Context(Type record, ContextSchema schema);
+}
+
+/// <summary>
+/// What a machine replayed from its IR declares a trigger's input with: the record the API is typed from, and the IR's
+/// own schema. A hand-written machine reflects one from the other with
+/// <see cref="ITransitionBuilder{TState,TTrigger}.WithInput{TInput}"/>.
+/// </summary>
+internal interface IIrTransitionBuilder<TState, TTrigger>
+    where TState : struct, Enum
+    where TTrigger : struct, Enum
+{
+    ITransitionBuilder<TState, TTrigger> WithInput(Type record, ContextSchema schema);
+}
+
 /// <summary>The root of the fluent configuration. See <see cref="MachineBuilder{TState,TTrigger}"/>.</summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/machine#imachinebuilder">SDK reference</seealso>
 public interface IMachineBuilder<TState, TTrigger>
@@ -2124,7 +2148,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         };
 
     private sealed class StateBuilder(MachineBuilder<TState, TTrigger> owner, TState state)
-        : IStateBuilder<TState, TTrigger>
+        : IStateBuilder<TState, TTrigger>,
+            IIrStateBuilder<TState, TTrigger>
     {
         public IStateBuilder<TState, TTrigger> Holds(Func<JsonObject, string?> validator)
         {
@@ -2143,6 +2168,14 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         {
             owner._contextTypes.Remove(state);
             return SetSchema(ContextSchema.Empty);
+        }
+
+        public IStateBuilder<TState, TTrigger> Context(Type record, ContextSchema schema)
+        {
+            ArgumentNullException.ThrowIfNull(record);
+            ArgumentNullException.ThrowIfNull(schema);
+            owner._contextTypes[state] = record;
+            return SetSchema(schema);
         }
 
         private IStateBuilder<TState, TTrigger> SetSchema(ContextSchema schema)
@@ -2379,7 +2412,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         IStateBuilder<TState, TTrigger> state,
         TState from,
         TTrigger trigger
-    ) : ITransitionBuilder<TState, TTrigger>
+    ) : ITransitionBuilder<TState, TTrigger>, IIrTransitionBuilder<TState, TTrigger>
     {
         private Func<JsonObject, JsonNode?, bool>? _guard;
         private string? _guardMessage;
@@ -2420,6 +2453,16 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             // naming the record.
             _inputSchema = SchemaReflection.ForInput(typeof(TInput));
             _inputType = typeof(TInput);
+            return this;
+        }
+
+        public ITransitionBuilder<TState, TTrigger> WithInput(Type record, ContextSchema schema)
+        {
+            ArgumentNullException.ThrowIfNull(record);
+            ArgumentNullException.ThrowIfNull(schema);
+            owner._usedDeclarative = true;
+            _inputSchema = schema;
+            _inputType = record;
             return this;
         }
 

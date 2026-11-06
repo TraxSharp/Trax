@@ -1,0 +1,306 @@
+using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.StateMachine.Features;
+
+namespace Trax.StateMachine.Persistence.FromIr;
+
+/// <summary>
+/// Builds the machines a host serves from IR files and their entries in a host file, with no C# machine class (ADR
+/// <c>Trax.Docs/adr/0058</c>). Everything is checked before a machine is returned, and every refusal is an
+/// <see cref="InvalidOperationException"/> naming the machine: the IR is one this engine reads and a served machine can
+/// be (no effect, no custom rule or reduction, whose handlers no file can name); it is the IR its host entry was derived
+/// from; every train it invokes is found; and the machine built from it exports exactly the file.
+/// </summary>
+internal static class IrMachines
+{
+    /// <summary>One machine to serve: its IR, its entry in the host file, and its corpus to self-check against.</summary>
+    internal sealed record Source(JsonObject Ir, HostMachine Host, string? Corpus = null);
+
+    /// <summary>Builds every machine of <paramref name="sources"/>, refusing two whose type names would collide.</summary>
+    /// <param name="sources">The machines.</param>
+    /// <param name="trainAssemblies">Where the trains the machines invoke are looked for, by their full name.</param>
+    internal static IReadOnlyList<IMachine> Create(
+        IReadOnlyList<Source> sources,
+        IReadOnlyCollection<Assembly> trainAssemblies
+    )
+    {
+        var prefixes = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var source in sources)
+        {
+            var id = source.Host.Id;
+            if (prefixes.TryGetValue(IrTypes.Pascal(id), out var other))
+                throw new InvalidOperationException(
+                    $"The machines '{other}' and '{id}' would both emit types named {IrTypes.Pascal(id)}*. Rename one."
+                );
+            prefixes[IrTypes.Pascal(id)] = id;
+        }
+        return sources.Select(s => Create(s, trainAssemblies)).ToList();
+    }
+
+    /// <summary>Builds one machine from its IR and its host entry.</summary>
+    internal static IMachine Create(Source source, IReadOnlyCollection<Assembly> trainAssemblies)
+    {
+        var (ir, host, corpus) = source;
+        var id = host.Id;
+        string Refuse(string problem) =>
+            $"The machine '{id}' cannot be served from its IR: {problem}";
+
+        // Read once by the engine, which refuses an IR it cannot read; then held to what a served machine can be.
+        try
+        {
+            _ = new IrMachine(ir);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException(Refuse(ex.Message), ex);
+        }
+        if (ir["id"]!.GetValue<string>() != id)
+            throw new InvalidOperationException(
+                Refuse($"the IR's id is '{ir["id"]}', and the host file's entry is '{id}'.")
+            );
+        foreach (var problem in Unservable(ir, host))
+            throw new InvalidOperationException(Refuse(problem));
+
+        // The host entry was derived from this IR, by its hash, not a hash of the file's bytes: the canonical IR's,
+        // which the store writes to every instance's ir_hash.
+        var canonical = CanonicalJson.Serialize(Canonicalizable(ir));
+        var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
+        if (host.SchemaHash != hash)
+            throw new InvalidOperationException(
+                Refuse(
+                    $"the host file's entry was derived from the IR {host.SchemaHash}, and this IR is {hash}. "
+                        + "Derive them again together."
+                )
+            );
+
+        var trains = Trains(ir, host, trainAssemblies, Refuse);
+
+        IrTypes types;
+        try
+        {
+            types = IrTypes.Emit(
+                id,
+                Names(ir["states"]),
+                Names(ir["triggers"]),
+                Schemas(ir["context"]),
+                Schemas(ir["inputs"])
+            );
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException(Refuse(ex.Message), ex);
+        }
+
+        var replay = new IrReplay(ir, host, types, trains, corpus);
+        var kind = host.SystemKey is null ? typeof(ServedIrMachine<,>) : typeof(SystemIrMachine<,>);
+        var machine = (IMachine)
+            Activator.CreateInstance(
+                kind.MakeGenericType(types.State, types.Trigger),
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                args: [replay],
+                culture: null
+            )!;
+
+        // Built here, so a refusal names the machine at registration rather than at its first request.
+        string exported;
+        try
+        {
+            exported = machine.ExportIr();
+        }
+        catch (Exception ex)
+            when (ex is InvalidOperationException or ArgumentException or TargetInvocationException)
+        {
+            var cause = ex is TargetInvocationException { InnerException: { } inner } ? inner : ex;
+            throw new InvalidOperationException(Refuse(cause.Message), cause);
+        }
+        if (exported != canonical)
+            throw new InvalidOperationException(
+                Refuse(
+                    "the machine built from it exports a different IR, so the server would not run what the file and "
+                        + $"every client generated from it say. First difference: {FirstDifference(canonical, exported)}."
+                )
+            );
+        return machine;
+    }
+
+    /// <summary>
+    /// Registers machines built by <see cref="Create(IReadOnlyList{Source}, IReadOnlyCollection{Assembly})"/> as the
+    /// host's own <see cref="IMachine"/> registrations, beside the ones <c>AddStateMachines</c> scans for, so the
+    /// registry, the stores and the startup checks see them as any other machine.
+    /// </summary>
+    internal static IServiceCollection AddIrMachines(
+        this IServiceCollection services,
+        IEnumerable<IMachine> machines
+    )
+    {
+        foreach (var machine in machines)
+            services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IMachine), machine));
+        return services;
+    }
+
+    /// <summary>The input and output types of a train interface, from its <c>IServiceTrain&lt;TIn, TOut&gt;</c>.</summary>
+    internal static (Type Input, Type Output) TrainTypes(Type train)
+    {
+        var service =
+            (train.IsGenericType && train.GetGenericTypeDefinition() == typeof(IServiceTrain<,>))
+                ? train
+                : train
+                    .GetInterfaces()
+                    .Single(i =>
+                        i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IServiceTrain<,>)
+                    );
+        var arguments = service.GetGenericArguments();
+        return (arguments[0], arguments[1]);
+    }
+
+    // What no served machine can be: an effect, whose type no file can name; a custom rule or reduction, whose handler
+    // no file can bind; a failed or cancelled outcome edge with a guard, which the builder has no way to declare; and a
+    // trigger only the server fires, which the host cannot serve without serving it to clients until policies arrive.
+    private static IEnumerable<string> Unservable(JsonObject ir, HostMachine host)
+    {
+        foreach (var edge in ir["transitions"]!.AsArray())
+            if (edge!["effect"] is not null)
+                yield return $"the edge {edge["from"]} -{edge["trigger"]}-> {edge["to"]} runs an effect, and no file "
+                    + "can name an effect's type.";
+        foreach (var path in CustomPaths(ir, ""))
+            yield return $"{path} is a custom rule or reduction, and no file can bind its handler.";
+        foreach (var (name, outcome) in ir["outcomes"] as JsonObject ?? [])
+            if (outcome!["outcome"]!.GetValue<string>() != "done")
+                foreach (var edge in outcome["edges"]!.AsArray())
+                    if (edge!["guard"] is not null)
+                        yield return $"the outcome {name} has a guarded edge, and only a done outcome's edges take "
+                            + "a guard.";
+        if (host.SystemKey is null)
+            foreach (var (trigger, access) in host.Triggers)
+                if (access.IsServer)
+                    yield return $"the host file says only the server fires '{trigger}', and a user's machine "
+                        + "serves every trigger to its clients until policies are served.";
+    }
+
+    // Every place a custom rule or reduction is named, as a JSON path, wherever it nests.
+    private static IEnumerable<string> CustomPaths(JsonNode? node, string path)
+    {
+        switch (node)
+        {
+            case JsonObject o:
+                if (
+                    (
+                        o["rule"] is JsonValue r
+                        && r.GetValueKind() == System.Text.Json.JsonValueKind.String
+                        && r.GetValue<string>() == "custom"
+                    )
+                    || (
+                        o["reduce"] is JsonValue d
+                        && d.GetValueKind() == System.Text.Json.JsonValueKind.String
+                        && d.GetValue<string>() == "custom"
+                    )
+                )
+                    yield return path.Length == 0 ? "/" : path;
+                foreach (var (key, value) in o)
+                foreach (var found in CustomPaths(value, $"{path}/{key}"))
+                    yield return found;
+                break;
+            case JsonArray a:
+                for (var i = 0; i < a.Count; i++)
+                    foreach (var found in CustomPaths(a[i], $"{path}/{i}"))
+                        yield return found;
+                break;
+        }
+    }
+
+    // The train each invoking state runs: named by the host file, found by its full name in the assemblies given, and an
+    // IServiceTrain. The outcome's output schema is checked against the train's output type when the export is compared.
+    private static Dictionary<string, Type> Trains(
+        JsonObject ir,
+        HostMachine host,
+        IReadOnlyCollection<Assembly> assemblies,
+        Func<string, string> refuse
+    )
+    {
+        var invoking = (ir["outcomes"] as JsonObject ?? [])
+            .Select(o => o.Value!["state"]!.GetValue<string>())
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var state in host.Invokes.Keys)
+            if (!invoking.Contains(state))
+                throw new InvalidOperationException(
+                    refuse(
+                        $"the host file names a train for {state}, which the IR does not say invokes one."
+                    )
+                );
+
+        var trains = new Dictionary<string, Type>(StringComparer.Ordinal);
+        foreach (var state in invoking.Order(StringComparer.Ordinal))
+        {
+            if (!host.Invokes.TryGetValue(state, out var invoke))
+                throw new InvalidOperationException(
+                    refuse($"{state} invokes a train, and the host file does not name which.")
+                );
+            var found = assemblies
+                .Select(a => a.GetType(invoke.Train, throwOnError: false))
+                .OfType<Type>()
+                .Distinct()
+                .ToList();
+            if (found.Count != 1)
+                throw new InvalidOperationException(
+                    refuse(
+                        found.Count == 0
+                            ? $"{state} invokes {invoke.Train}, which none of the train assemblies holds."
+                            : $"{state} invokes {invoke.Train}, which more than one train assembly holds."
+                    )
+                );
+            var train = found[0];
+            if (
+                !train.IsInterface
+                || !train
+                    .GetInterfaces()
+                    .Any(i =>
+                        i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IServiceTrain<,>)
+                    )
+            )
+                throw new InvalidOperationException(
+                    refuse(
+                        $"{state} invokes {invoke.Train}, which is not a train interface (IServiceTrain<TIn, TOut>)."
+                    )
+                );
+            trains[state] = train;
+        }
+        return trains;
+    }
+
+    // An IR as the exporter writes it, so its canonical text and hash are the ones the exporter produces. The engine
+    // accepts an irFormat beside it, which a generated twin adds and the exporter does not write.
+    private static JsonObject Canonicalizable(JsonObject ir)
+    {
+        var copy = (JsonObject)ir.DeepClone();
+        copy.Remove("irFormat");
+        return copy;
+    }
+
+    private static List<string> Names(JsonNode? node) =>
+        node!.AsArray().Select(n => n!.GetValue<string>()).ToList();
+
+    private static Dictionary<string, ContextSchema> Schemas(JsonNode? node) =>
+        node!
+            .AsObject()
+            .ToDictionary(
+                kv => kv.Key,
+                kv => IrMachine.ReadSchema(kv.Value!.AsObject()),
+                StringComparer.Ordinal
+            );
+
+    private static string FirstDifference(string expected, string actual)
+    {
+        var at = 0;
+        while (at < expected.Length && at < actual.Length && expected[at] == actual[at])
+            at++;
+        string Around(string text) =>
+            text.Substring(Math.Max(0, at - 40), Math.Min(80, text.Length - Math.Max(0, at - 40)));
+        return $"the file has ...{Around(expected)}... and the machine ...{Around(actual)}...";
+    }
+}
