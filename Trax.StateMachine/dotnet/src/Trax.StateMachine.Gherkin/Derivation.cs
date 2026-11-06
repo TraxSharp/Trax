@@ -13,6 +13,7 @@ namespace Trax.StateMachine.Gherkin;
 internal sealed record Derived(
     IReadOnlyDictionary<string, string> Irs,
     string? Host,
+    string? Access,
     IReadOnlyList<Problem> Problems,
     IReadOnlyList<Problem> UiSteps
 );
@@ -49,9 +50,11 @@ internal static class FeatureDerivation
             foreach (var walk in walks)
                 problems.AddRange(SelfCheck.Replay(walk, glossary, irs));
 
-        if (problems.Count > 0)
+        var access = problems.Count == 0 ? Access.Derive(glossary, walks, irs, problems) : null;
+        if (problems.Count > 0 || access is null)
             return new Derived(
                 new Dictionary<string, string>(),
+                null,
                 null,
                 Sorted(problems),
                 Sorted(uiSteps)
@@ -62,7 +65,13 @@ internal static class FeatureDerivation
             kv => CanonicalJson.Serialize(kv.Value),
             StringComparer.Ordinal
         );
-        return new Derived(written, Host(glossary, written), [], Sorted(uiSteps));
+        return new Derived(
+            written,
+            Host(glossary, written, access),
+            access.Table,
+            [],
+            Sorted(uiSteps)
+        );
     }
 
     private static List<Problem> Sorted(IEnumerable<Problem> problems) =>
@@ -74,8 +83,12 @@ internal static class FeatureDerivation
             .ToList();
 
     // The server-only half: each machine's owner, the IR it was derived with, and the train each invoking state runs.
-    // Who may start, read and fire each machine is written by the access derivation.
-    private static string Host(Glossary glossary, IReadOnlyDictionary<string, string> irs)
+    // Who may start, read and fire each machine is the access derivation's.
+    private static string Host(
+        Glossary glossary,
+        IReadOnlyDictionary<string, string> irs,
+        Access access
+    )
     {
         var machines = new JsonObject();
         foreach (var (id, ir) in irs)
@@ -90,6 +103,8 @@ internal static class FeatureDerivation
                     ? new JsonObject { ["system"] = key }
                     : "user",
             };
+            foreach (var (name, value) in access.Entries[id])
+                entry[name] = value!.DeepClone();
             if (machine.Invokes.Count > 0)
             {
                 var invokes = new JsonObject();
@@ -145,7 +160,16 @@ internal sealed record Observation(
     JsonObject Context,
     JsonObject? Input,
     string? Person,
+    string? Actor,
     Result Result,
+    FeatureScenario Scenario,
+    long Line
+);
+
+/// <summary>A person starting an instance of their own: <c>Given Ada has an order</c>.</summary>
+internal sealed record StartObservation(
+    string Machine,
+    string Actor,
     FeatureScenario Scenario,
     long Line
 );
@@ -173,6 +197,9 @@ internal sealed class Walk
     private readonly Dictionary<InstanceKey, Instance> _instances = [];
     private Pending? _pending;
 
+    // A When that was refused: its Thens say nothing more, so they are not checked.
+    private bool _refusedWhen;
+
     private Walk(FeatureScenario scenario, Glossary glossary)
     {
         _scenario = scenario;
@@ -184,6 +211,7 @@ internal sealed class Walk
     internal List<Problem> UiSteps { get; } = [];
     internal List<Observation> Observations { get; } = [];
     internal List<OutcomeObservation> Outcomes { get; } = [];
+    internal List<StartObservation> Starts { get; } = [];
 
     /// <summary>Each step with its meaning, for the replay; a step with none is left out.</summary>
     internal List<(FeatureStep Step, Meaning Meaning)> Steps { get; } = [];
@@ -233,10 +261,13 @@ internal sealed class Walk
                     break;
                 case StepKind.When:
                     walk.Settle();
+                    var problems = walk.Problems.Count;
                     walk.When(step, meaning);
+                    walk._refusedWhen = walk.Problems.Count > problems;
                     break;
                 default:
-                    walk.Then(step, meaning);
+                    if (!walk._refusedWhen)
+                        walk.Then(step, meaning);
                     break;
             }
         }
@@ -275,6 +306,9 @@ internal sealed class Walk
                 _instances[key] = new Instance(
                     Initial(s.Machine),
                     InitialContext(_glossary.Machines[s.Machine])
+                );
+                Starts.Add(
+                    new StartObservation(s.Machine, _people[s.Person], _scenario, step.Line)
                 );
                 break;
             case Meaning.InState { Still: false } s:
@@ -316,6 +350,28 @@ internal sealed class Walk
                     Meaning.Happens h => (h.Machine, h.Owner, h.Input),
                     _ => throw new InvalidOperationException(),
                 };
+                // A person acts on their own instance, and a system machine is moved by the server alone (MS-18
+                // decision 1).
+                if (meaning is Meaning.Act act)
+                {
+                    var acted = _glossary.Machines[act.Machine];
+                    if (acted.SystemKey is not null)
+                    {
+                        Fail(
+                            step.Line,
+                            $"'{step.Text}': {act.Person} fires {acted.Reference}, and only the server moves a system machine. Say what happens instead: '{acted.Reference} ...'."
+                        );
+                        return;
+                    }
+                    if (act.Owner != act.Person)
+                    {
+                        Fail(
+                            step.Line,
+                            $"'{step.Text}': {act.Person} acts on {act.Owner}'s {acted.Reference}. A person acts on their own; one acting on another's needs instances shared between people, which Trax does not have yet."
+                        );
+                        return;
+                    }
+                }
                 var key = new InstanceKey(machine, owner);
                 if (!_instances.TryGetValue(key, out var instance) || instance.State is null)
                 {
@@ -522,6 +578,7 @@ internal sealed class Walk
                 pending.Context,
                 pending.Input,
                 person,
+                person is null ? null : _people[person],
                 result,
                 _scenario,
                 pending.Line

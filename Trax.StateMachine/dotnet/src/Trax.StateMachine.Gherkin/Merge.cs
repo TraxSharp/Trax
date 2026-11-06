@@ -251,6 +251,14 @@ internal static class Merge
         )
             transitions.Add(edge.Json);
 
+        // A machine serves the triggers its scenarios fire and do not deny. One no scenario fires has no edge and no
+        // rule, and one only ever denied is one no one may fire, so neither is served (a client sending it is refused).
+        var served = walks
+            .SelectMany(w => w.Observations)
+            .Where(o => o.Machine == machine.Id && o.Result is not Result.Denied)
+            .Select(o => o.Trigger)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
         var ir = new JsonObject
         {
             ["id"] = machine.Id,
@@ -258,7 +266,7 @@ internal static class Merge
             ["initialState"] = machine.Initial,
             ["initialContext"] = Walk.InitialContext(machine),
             ["states"] = Sorted(machine.States.Keys),
-            ["triggers"] = Sorted(machine.Triggers.Keys),
+            ["triggers"] = Sorted(served),
             ["committedStates"] = new JsonArray(),
             ["context"] = context,
             ["inputs"] = inputs,
