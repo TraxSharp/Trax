@@ -90,7 +90,32 @@ internal static class IrDirectory
         this IServiceCollection services,
         string directory,
         params Assembly[] trainAssemblies
-    ) => services.AddIrMachines(Load(directory, trainAssemblies).Machines);
+    ) => services.AddIrMachinesFrom(directory, null, trainAssemblies);
+
+    /// <summary>
+    /// As <see cref="AddIrMachinesFrom(IServiceCollection, string, Assembly[])"/>, and, when the host file has policies,
+    /// the runner that fires them, configured by <paramref name="policies"/>.
+    /// </summary>
+    internal static IServiceCollection AddIrMachinesFrom(
+        this IServiceCollection services,
+        string directory,
+        Action<PolicyRunnerOptions>? policies,
+        params Assembly[] trainAssemblies
+    )
+    {
+        var loaded = Load(directory, trainAssemblies);
+        services.AddIrMachines(loaded.Machines);
+        if (loaded.Host.Policies.Count > 0)
+        {
+            var options = new PolicyRunnerOptions();
+            policies?.Invoke(options);
+            services.AddSingleton(new MachinePolicies(loaded.Host.Policies));
+            services.AddSingleton(options);
+            services.AddSingleton<MachinePolicyRunner>();
+            services.AddHostedService(sp => sp.GetRequiredService<MachinePolicyRunner>());
+        }
+        return services;
+    }
 
     // The host file against the IRs: the same machines, and every name a policy, a view or an invoke gives exists.
     internal static void Check(

@@ -667,6 +667,9 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         {
             IrHashes = services.GetService<MachineIrHashes>() is { } hashes ? hashes.Of : null,
             Timers = services.GetService<MachineTimerLookup>() is { } timers ? timers.Of : null,
+            Policies = services.GetService<FromIr.MachinePolicies>() is { } policies
+                ? policies.Entered
+                : null,
             Writes = services.GetService<SnapshotWriteSignal>(),
         };
 
@@ -685,7 +688,8 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         bool leaving,
         EnteringInvoke? entering,
         CancellationToken cancellationToken,
-        string? trigger = null
+        string? trigger = null,
+        TransitionNote? note = null
     )
     {
         var owner = new DraftOwner(due.OwnerKind, due.UserKey);
@@ -713,7 +717,8 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 next,
                 leaving || run is not null ? new InvokeTokenWrite(run?.Token) : null,
                 cancellationToken,
-                trigger
+                trigger,
+                note
             )
         )
             return new InvokeWrite.Conflict();

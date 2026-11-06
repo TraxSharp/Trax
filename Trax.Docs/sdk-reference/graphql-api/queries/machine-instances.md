@@ -233,7 +233,7 @@ pass as `after` for the next page, or null on the last. Each `MachineInstanceTra
 | `revision` | `Long!` | The revision the write gave the instance. A write that left the snapshot alone, or one made around Trax's store, has none, so revisions can skip |
 | `kind` | `SnapshotTransitionKind!` | `START` (created: a start, a save that created a draft, or a parent spawning it), `COMMAND` (an event moved it, or an effect it bound ran), `SAVE` (an autosave, or host code writing the snapshot), `TIMER` (its state's timer fired) or `OUTCOME` (a run it invoked ended) |
 | `trigger` | `String` | The command: the event's name, the timer's event, or `State.done`, `State.failed` or `State.cancelled` for an outcome. Null for a creation, a save, and an outcome that could not be applied, which leaves the instance where it was |
-| `actor` | `SnapshotTransitionActor!` | `OWNER` (a client acting for a user's instance), `HOST` (host code driving a system instance) or `MACHINE` (a timer, an outcome, a spawn). Never which user |
+| `actor` | `SnapshotTransitionActor!` | `OWNER` (a client acting for a user's instance), `HOST` (host code driving a system instance) `MACHINE` (a timer, an outcome, a spawn) or `POLICY` (the server reacting to another instance through a machine policy). Never which user |
 | `fromState` | `String` | The state it left; null for its creation |
 | `toState` | `String!` | The state it entered |
 | `at` | `DateTime!` | When it was written |

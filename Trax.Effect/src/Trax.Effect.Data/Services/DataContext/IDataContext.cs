@@ -218,6 +218,13 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
     DbSet<Effect.Models.SnapshotTransition.SnapshotTransition> SnapshotTransitions =>
         ((DbContext)this).Set<Effect.Models.SnapshotTransition.SnapshotTransition>();
 
+    /// <summary>
+    /// The fires machine policies still owe (<c>trax.machine_policy_fire</c>): written with the transition that sets one
+    /// off, deleted with the fire. Server-only.
+    /// </summary>
+    DbSet<Effect.Models.MachinePolicyFire.MachinePolicyFire> MachinePolicyFires =>
+        ((DbContext)this).Set<Effect.Models.MachinePolicyFire.MachinePolicyFire>();
+
     #endregion
 
     /// <summary>

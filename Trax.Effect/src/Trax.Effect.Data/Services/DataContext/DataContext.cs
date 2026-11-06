@@ -161,6 +161,11 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     /// </summary>
     public DbSet<Effect.Models.SnapshotTransition.SnapshotTransition> SnapshotTransitions { get; set; }
 
+    /// <summary>
+    /// Gets or sets the DbSet for the fires machine policies still owe, one row per fire.
+    /// </summary>
+    public DbSet<Effect.Models.MachinePolicyFire.MachinePolicyFire> MachinePolicyFires { get; set; }
+
     #endregion
 
     /// <summary>
@@ -198,6 +203,7 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
         Models.Checkpoint.PersistentCheckpoint.OnModelCreating(modelBuilder);
         Models.HostHeartbeat.PersistentHostHeartbeat.OnModelCreating(modelBuilder);
         Models.SnapshotTransition.PersistentSnapshotTransition.OnModelCreating(modelBuilder);
+        Models.MachinePolicyFire.PersistentMachinePolicyFire.OnModelCreating(modelBuilder);
     }
 
     /// <summary>

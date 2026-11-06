@@ -59,6 +59,13 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     /// <summary>Wakes this host's change listener after a write commits; null when nothing listens.</summary>
     internal SnapshotWriteSignal? Writes { get; init; }
 
+    /// <summary>
+    /// The policies a machine entering a state sets off, by identity (<see cref="FromIr.MachinePolicies.Entered"/>), or
+    /// null when the host has none. A command, a timer or an outcome that changes state queues a fire row for each, in
+    /// its transaction, so the fire is owed exactly when the transition committed.
+    /// </summary>
+    internal Func<string, string, IReadOnlyList<string>>? Policies { get; init; }
+
     // A write that committed on its own wakes the listener now. One inside a caller's transaction does not: the
     // caller wakes it after its commit, since a poll that ran first would read the old revision.
     private T Wrote<T>(T written, bool changed)
@@ -518,6 +525,53 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 .State = EntityState.Detached;
             if (transition is not null)
                 ((DbContext)db).Entry(transition).State = EntityState.Detached;
+        }
+    }
+
+    // A fire row for every policy the transition sets off, beside its history row: only a command, a timer or an
+    // outcome that enters a new state, so a creation, a save or a self-transition sets nothing off.
+    private async Task QueuePolicies(
+        KnownRow row,
+        Snapshot snapshot,
+        RowWrite write,
+        CancellationToken cancellationToken
+    )
+    {
+        if (
+            Policies is not { } policies
+            || write.Note
+                is not {
+                    Kind: SnapshotTransitionKind.Command
+                        or SnapshotTransitionKind.Timer
+                        or SnapshotTransitionKind.Outcome
+                }
+            || row.State == snapshot.State
+            || policies(snapshot.Machine, snapshot.State) is not { Count: > 0 } owed
+        )
+            return;
+        var instance = await db
+            .SnapshotDrafts.AsNoTracking()
+            .Where(x => x.RowId == row.RowId)
+            .Select(x => x.Id)
+            .FirstAsync(cancellationToken);
+        var fires = owed.Select(policy => new Trax.Effect.Models.MachinePolicyFire.MachinePolicyFire
+            {
+                Policy = policy,
+                SourceRowId = row.RowId,
+                SourceInstanceId = instance,
+                SourceRevision = row.Revision + 1,
+                CreatedAt = write.Now,
+            })
+            .ToList();
+        db.MachinePolicyFires.AddRange(fires);
+        try
+        {
+            await ((DbContext)db).SaveChangesAsync(cancellationToken);
+        }
+        finally
+        {
+            foreach (var fire in fires)
+                ((DbContext)db).Entry(fire).State = EntityState.Detached;
         }
     }
 
@@ -1205,6 +1259,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             ),
             cancellationToken
         );
+        await QueuePolicies(row, snapshot, write, cancellationToken);
         if (transaction is not null)
         {
             await transaction.Commit();
@@ -1718,7 +1773,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         Snapshot next,
         InvokeTokenWrite? invokeToken,
         CancellationToken cancellationToken,
-        string? trigger = null
+        string? trigger = null,
+        TransitionNote? note = null
     ) =>
         Write(
             db.SnapshotDrafts.Where(x =>
@@ -1727,7 +1783,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             new RowWrite
             {
                 Snapshot = next,
-                Note = TransitionNote.Timer(trigger),
+                Note = note ?? TransitionNote.Timer(trigger),
                 IrHash = IrHashOf(next.Machine),
                 Due = DueFor(next),
                 InvokeToken = invokeToken,

@@ -46,9 +46,12 @@ internal static class FeatureDerivation
                     irs[machine.Id] = ir;
             }
 
+        var policies =
+            problems.Count == 0 ? PolicyMerge.Derive(glossary, walks, irs, problems) : [];
+
         if (problems.Count == 0)
             foreach (var walk in walks)
-                problems.AddRange(SelfCheck.Replay(walk, glossary, irs));
+                problems.AddRange(SelfCheck.Replay(walk, glossary, irs, policies));
 
         var access = problems.Count == 0 ? Access.Derive(glossary, walks, irs, problems) : null;
         if (problems.Count > 0 || access is null)
@@ -69,7 +72,7 @@ internal static class FeatureDerivation
         );
         return new Derived(
             written,
-            Host(glossary, written, access),
+            Host(glossary, written, access, policies),
             access.Table,
             [],
             Sorted(uiSteps)
@@ -89,7 +92,8 @@ internal static class FeatureDerivation
     private static string Host(
         Glossary glossary,
         IReadOnlyDictionary<string, string> irs,
-        Access access
+        Access access,
+        JsonArray policies
     )
     {
         var machines = new JsonObject();
@@ -136,7 +140,14 @@ internal static class FeatureDerivation
             machines[id] = entry;
         }
         return CanonicalJson.Serialize(
-            new JsonObject { ["version"] = HostFile.Version, ["machines"] = machines }
+            policies.Count > 0
+                ? new JsonObject
+                {
+                    ["version"] = HostFile.Version,
+                    ["machines"] = machines,
+                    ["policies"] = policies.DeepClone(),
+                }
+                : new JsonObject { ["version"] = HostFile.Version, ["machines"] = machines }
         );
     }
 }
@@ -195,6 +206,22 @@ internal sealed record StayObservation(
     long Line
 );
 
+/// <summary>
+/// One instance moving because another did: when <see cref="When"/> (owned by <see cref="WhenOwner"/>) entered
+/// <see cref="Enters"/>, <see cref="Target"/> went from <see cref="From"/> to <see cref="To"/>. A policy.
+/// </summary>
+internal sealed record PolicyObservation(
+    string When,
+    string? WhenOwner,
+    string Enters,
+    string Target,
+    string? TargetOwner,
+    string From,
+    string To,
+    FeatureScenario Scenario,
+    long Line
+);
+
 /// <summary>One outcome of an invoked train, and where it took the instance.</summary>
 internal sealed record OutcomeObservation(
     string Machine,
@@ -240,6 +267,7 @@ internal sealed class Walk
     internal List<StartObservation> Starts { get; } = [];
     internal List<TimerObservation> Timers { get; } = [];
     internal List<StayObservation> Stays { get; } = [];
+    internal List<PolicyObservation> Policies { get; } = [];
 
     /// <summary>Each step with its meaning, for the replay; a step with none is left out.</summary>
     internal List<(FeatureStep Step, Meaning Meaning)> Steps { get; } = [];
@@ -269,6 +297,9 @@ internal sealed class Walk
     )
     {
         public List<Meaning> Thens { get; } = [];
+
+        // Other instances the Thens say moved: what the When set off, which is a policy reacting to it.
+        public List<(InstanceKey Key, string To, long Line)> Cascades { get; } = [];
     }
 
     internal static Walk Run(FeatureScenario scenario, Glossary glossary, StepResolver resolver)
@@ -491,6 +522,13 @@ internal sealed class Walk
                         $"'{step.Text}' answers no act of {person}'s. It follows the When in which {person} acts."
                     );
                 break;
+            case Meaning.InState { Still: false } s
+                when _pending is not null
+                    && _instances.TryGetValue(new InstanceKey(s.Machine, s.Owner), out var other)
+                    && other.State is not null
+                    && other.State != s.State:
+                _pending.Cascades.Add((new InstanceKey(s.Machine, s.Owner), s.State, step.Line));
+                break;
             case Meaning.InState s:
                 var key = new InstanceKey(s.Machine, s.Owner);
                 if (!_instances.TryGetValue(key, out var instance) || instance.State != s.State)
@@ -550,10 +588,21 @@ internal sealed class Walk
         }
         if (_timed is { } first && first.Machine != key.Machine)
         {
-            Fail(
-                step.Line,
-                $"'{step.Text}': {Name(first)} moved when time passed, and {Name(key)} moving after it is a policy reacting to it, which this derivation does not do yet."
+            // Another machine moving after the first, in one pass of time, is a policy reacting to the first.
+            Policies.Add(
+                new PolicyObservation(
+                    first.Machine,
+                    first.Owner,
+                    _instances[first].State!,
+                    key.Machine,
+                    key.Owner,
+                    instance.State,
+                    s.State,
+                    _scenario,
+                    step.Line
+                )
             );
+            instance.Enter(s.State, _clock);
             return;
         }
         _timed = key;
@@ -632,6 +681,7 @@ internal sealed class Walk
                     InitialContext(_glossary.Machines[outcome.Machine])
                 );
             instance.Enter(moved[0], _clock);
+            Cascade(pending, moved[0]);
             return;
         }
 
@@ -681,6 +731,41 @@ internal sealed class Walk
                     InitialContext(_glossary.Machines[machine])
                 );
             instance.Enter(m.To, _clock);
+            Cascade(pending, m.To);
+        }
+        else
+            Cascade(pending, null);
+    }
+
+    // What the When set off in other instances: each is a policy reacting to the When's instance entering its new
+    // state. A When that moved nothing sets nothing off.
+    private void Cascade(Pending pending, string? entered)
+    {
+        foreach (var (key, to, line) in pending.Cascades)
+        {
+            if (entered is null)
+            {
+                Fail(
+                    line,
+                    $"{Name(key)} moves here, and the When before it moved nothing, so nothing reacts to it."
+                );
+                continue;
+            }
+            var target = _instances[key];
+            Policies.Add(
+                new PolicyObservation(
+                    pending.Key.Machine,
+                    pending.Key.Owner,
+                    entered,
+                    key.Machine,
+                    key.Owner,
+                    target.State!,
+                    to,
+                    _scenario,
+                    line
+                )
+            );
+            target.Enter(to, _clock);
         }
     }
 

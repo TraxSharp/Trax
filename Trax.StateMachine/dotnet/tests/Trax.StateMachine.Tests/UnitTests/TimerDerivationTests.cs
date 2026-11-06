@@ -144,7 +144,10 @@ public class TimerDerivationTests
             .Problems.Should()
             .ContainSingle()
             .Which.Message.Should()
-            .Contain("is a policy reacting to it");
+            .Contain(
+                "no scenario shows a trigger doing that",
+                "the lamp going off is a policy reacting to the door, so a scenario must show the trigger that turns it off"
+            );
     }
 
     [Test]

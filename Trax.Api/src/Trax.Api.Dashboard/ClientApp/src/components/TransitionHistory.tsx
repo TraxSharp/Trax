@@ -36,6 +36,7 @@ const ACTOR_LABEL: Record<SnapshotTransitionActor, string> = {
   OWNER: "Owner",
   HOST: "Host",
   MACHINE: "Machine",
+  POLICY: "Policy",
 };
 
 const KIND_TONE: Record<SnapshotTransitionKind, string> = {

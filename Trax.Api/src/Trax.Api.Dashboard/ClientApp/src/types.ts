@@ -1014,7 +1014,7 @@ export interface MachineInstanceChange {
 export type SnapshotTransitionKind = "START" | "COMMAND" | "SAVE" | "TIMER" | "OUTCOME";
 
 /** Who made one transition: the owner, host code, or the machine itself. Never which user. */
-export type SnapshotTransitionActor = "OWNER" | "HOST" | "MACHINE";
+export type SnapshotTransitionActor = "OWNER" | "HOST" | "MACHINE" | "POLICY";
 
 /** One transition in an instance's history, as `machineInstance { transitions }` serves it. */
 export interface MachineInstanceTransition {

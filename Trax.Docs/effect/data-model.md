@@ -33,6 +33,7 @@ The Postgres and Sqlite data providers create these tables in the `trax` schema 
 | `runner_nonce` | `RunnerNonce` | Nonces a runner accepted on signed requests, so instances sharing the database accept a request once |
 | `snapshot_draft` | `SnapshotDraft` | State machine instance drafts, used by `Trax.StateMachine.Persistence` |
 | `snapshot_transition` | `SnapshotTransition` | Each state-machine instance's history, one row per snapshot write, deleted with the instance |
+| `machine_policy_fire` | `MachinePolicyFire` | The fires machine policies still owe, written with the transition that sets one off and deleted with the fire |
 | `persisted_operation` | `PersistedOperation` | Stored GraphQL operations served by id |
 | `persisted_operation_history` | `PersistedOperationHistory` | One row per change to a persisted operation |
 

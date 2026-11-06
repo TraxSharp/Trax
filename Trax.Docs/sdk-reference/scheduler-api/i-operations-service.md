@@ -740,7 +740,7 @@ The runs the instance invoked, newest first, at most `OperationsService.MachineI
 One page of the instance's history, newest first: a `MachineInstanceTransitionRecord` for every snapshot write Trax
 recorded (`trax.snapshot_transition`), or `null` when no row matches. Each carries the `Revision`, the `Kind`
 (`SnapshotTransitionKind`: `Start`, `Command`, `Save`, `Timer`, `Outcome`), the `Trigger`, the `Actor`
-(`SnapshotTransitionActor`: `Owner`, `Host`, `Machine`, never which user), `FromState`, `ToState`, `At`,
+(`SnapshotTransitionActor`: `Owner`, `Host`, `Machine`, `Policy`, never which user), `FromState`, `ToState`, `At`,
 `PreviousAt` (the transition before it), and what it started: `StartedRun` (`MachineInstanceStartedRun`, with
 `ExecutionId`, `TrainState` and `WorkQueueEntryId`, never the token) or `StartedChild`
 (`MachineInstanceStartedChild`, with `Machine`, `OwnerKind`, `Id` and `RowId`). `take` is clamped to 1 through 500;

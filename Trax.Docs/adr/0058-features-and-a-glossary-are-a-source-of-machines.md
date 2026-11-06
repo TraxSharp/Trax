@@ -89,12 +89,16 @@ its file and replays its corpus; what a file cannot describe, a mispaired host e
 IR's timer rules are refused), `MachineDirectoryTests` there (a directory's host file and IRs list the same machines and name only what the IRs have), `IrMachineHostTests` in `Trax.StateMachine.Persistence.Integration`, and
 `IrMachineSchemaTests` and `IrMachineE2ETests` in Trax.Api. Derivation is held by `GherkinDerivationTests` there (each refusal, the self-check, and a derived machine served as
 written), `AccessDerivationTests` (grants from an actor's own act, nothing widened, the access table) and
-`TimerDerivationTests` (time on a scenario clock, stays, timer rules the host accepts).
+`TimerDerivationTests` (time on a scenario clock, stays, timer rules the host accepts), and policies by
+`PolicyDerivationTests` (the three shapes, what a policy cannot be) and `PolicyRunnerTests` in
+`Trax.StateMachine.Persistence.Integration` (the owner's linked instance only, the fire recorded as the policy's, once
+across hosts and restarts, a broadcast capped and coalesced, a server-only trigger refused to a client).
 
-Not covered: policies and views are held by their own tests as each lands, and this ADR's changelog names them then.
+Not covered: views are held by their own tests as they land, and this ADR's changelog names them then.
 
 ## Changelog
 
+- **2026-11-06**: Policies land: server-only triggers, the fire table, the runner, derived policies.
 - **2026-11-06**: Derivation, access and timers land; their tests named in Exemplars.
 - **2026-11-06**: Features name their people in the third person; "I" is refused.
 - **2026-11-06**: Recorded.

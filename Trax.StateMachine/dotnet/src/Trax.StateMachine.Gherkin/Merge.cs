@@ -446,7 +446,8 @@ internal static class SelfCheck
     internal static IEnumerable<Problem> Replay(
         Walk walk,
         Glossary glossary,
-        IReadOnlyDictionary<string, JsonObject> irs
+        IReadOnlyDictionary<string, JsonObject> irs,
+        JsonArray policies
     )
     {
         var engines = new Dictionary<string, IrMachine>(StringComparer.Ordinal);
@@ -481,6 +482,46 @@ internal static class SelfCheck
         {
             snapshots[key] = snapshot;
             entered[key] = at;
+        }
+        // The policies an instance entering a state sets off, fired as the server fires them: a broadcast on every instance
+        // waiting in its state, a system policy on the system instance, a linked one on the same owner's instances.
+        void React(InstanceKey source, string entered, int depth)
+        {
+            if (depth > 8)
+                return;
+            foreach (var policy in policies)
+            {
+                if (
+                    policy!["when"]!["machine"]!.GetValue<string>() != source.Machine
+                    || policy["when"]!["enters"]!.GetValue<string>() != entered
+                )
+                    continue;
+                var then = policy["then"]!;
+                var target = then["machine"]!.GetValue<string>();
+                var trigger = then["trigger"]!.GetValue<string>();
+                var reached = policy["shape"]!.GetValue<string>() switch
+                {
+                    "broadcast" => snapshots.Where(kv =>
+                        kv.Key.Machine == target
+                        && kv.Value.State == then["inState"]!.GetValue<string>()
+                    ),
+                    "toSystem" => snapshots.Where(kv =>
+                        kv.Key.Machine == target && kv.Key.Owner is null
+                    ),
+                    _ => snapshots.Where(kv =>
+                        kv.Key.Machine == target && kv.Key.Owner == source.Owner
+                    ),
+                };
+                foreach (var (key, snapshot) in reached.ToList())
+                    if (
+                        Engine(target).Advance(snapshot, trigger)
+                        is AdvanceResult.Transitioned fired
+                    )
+                    {
+                        Enter(key, fired.Snapshot, clock);
+                        React(key, fired.Snapshot.State, depth + 1);
+                    }
+            }
         }
         TimeSpan? TimerOf(InstanceKey key, string state) =>
             irs[key.Machine]["timers"] is JsonArray timers
@@ -534,7 +575,10 @@ internal static class SelfCheck
                     var key = new InstanceKey(machine, owner);
                     var result = Engine(machine).Advance(Of(key), trigger, input);
                     if (result is AdvanceResult.Transitioned moved)
+                    {
                         Enter(key, moved.Snapshot, clock);
+                        React(key, moved.Snapshot.State, 0);
+                    }
                     last = (key, result);
                     break;
                 case (StepKind.When, Meaning.Outcome o):
@@ -550,7 +594,10 @@ internal static class SelfCheck
                             invoke.Examples.GetValueOrDefault(o.Phrase)?.DeepClone()
                         );
                     if (outcome is AdvanceResult.Transitioned applied)
+                    {
                         Enter(waiting.Key, applied.Snapshot, clock);
+                        React(waiting.Key, applied.Snapshot.State, 0);
+                    }
                     last = (waiting.Key, outcome);
                     break;
                 case (StepKind.When, Meaning.Passes p):
@@ -582,7 +629,10 @@ internal static class SelfCheck
                                 .ApplyTimer(due.Value, $"{due.Value.State}.after")
                             is AdvanceResult.Transitioned timed
                         )
+                        {
                             Enter(due.Key, timed.Snapshot, fireAt);
+                            React(due.Key, timed.Snapshot.State, 0);
+                        }
                         else
                             break;
                     }

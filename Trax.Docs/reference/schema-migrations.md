@@ -718,3 +718,21 @@ around the store, so revisions can skip.
 The table is new and starts empty: an instance's history begins with its first write after the upgrade. A host on the
 previous version writes snapshots without history, so during a rolling deploy the rows it writes are missing from the
 history of the instances it moves.
+
+## Machine policy fires (090, SQLite 049)
+
+`090_machine_policy_fire.sql` (SQLite `049`) adds `trax.machine_policy_fire`, `MachinePolicyFire` on the model and
+`IDataContext.MachinePolicyFires`: the fires that machine policies still owe. A policy of a machine derived from
+features reacts to one instance's transition by firing a server-only trigger on another, and the row that says so is
+written in the same transaction as the transition, so it exists only if the transition committed. The transaction that
+fires it deletes it, so a fire happens once, on whichever host claims the row, and a host that was down fires what it
+owes when it starts. Each row holds the `policy`, the source instance's row, id and revision (`source_row_id`,
+`source_instance_id`, `source_revision`), and, once a broadcast is expanded into one row per target, the
+`target_row_id`. It holds no context and no owner key: the owner is read from the source row when the row is fired.
+`ix_machine_policy_fire_policy` on `(policy, id)` serves the runner's oldest-first read.
+
+On Postgres it also adds `'policy'` to `trax.snapshot_transition_actor`, the actor a policy's transition is recorded
+with. On SQLite the actor is its integer, `3`.
+
+The table is new and starts empty. A host on the previous version writes transitions without queueing policy fires, so
+during a rolling deploy a transition that host writes sets no policy off.

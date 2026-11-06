@@ -251,7 +251,7 @@ export type SnapshotOwnerKind = "USER" | "SYSTEM";
  * Who made one transition of a state-machine instance. Stored in trax.snapshot_transition.actor. It names a
  * kind of actor, never a user: a user-owned instance's history does not say whose it is.
  */
-export type SnapshotTransitionActor = "OWNER" | "HOST" | "MACHINE";
+export type SnapshotTransitionActor = "OWNER" | "HOST" | "MACHINE" | "POLICY";
 
 /** What wrote one row of a state-machine instance's history. Stored in trax.snapshot_transition.kind. */
 export type SnapshotTransitionKind = "START" | "COMMAND" | "SAVE" | "TIMER" | "OUTCOME";

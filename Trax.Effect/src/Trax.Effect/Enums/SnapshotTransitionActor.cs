@@ -17,4 +17,7 @@ public enum SnapshotTransitionActor
 
     /// <summary>Trax moving the instance itself: a timer, a run's outcome, or a parent spawning it.</summary>
     Machine = 2,
+
+    /// <summary>The server reacting to another instance's transition through a machine policy; never a user.</summary>
+    Policy = 3,
 }

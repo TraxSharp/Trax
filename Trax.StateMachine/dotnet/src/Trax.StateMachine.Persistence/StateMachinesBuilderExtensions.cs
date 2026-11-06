@@ -214,6 +214,9 @@ public static class StateMachinesBuilderExtensions
         {
             IrHashes = sp.GetRequiredService<MachineIrHashes>().Of,
             Timers = sp.GetRequiredService<MachineTimerLookup>().Of,
+            Policies = sp.GetService<FromIr.MachinePolicies>() is { } policies
+                ? policies.Entered
+                : null,
             Writes = sp.GetRequiredService<SnapshotWriteSignal>(),
         });
         services.AddScoped<IEffectClaimStore>(sp => new EfEffectClaimStore(
@@ -235,6 +238,9 @@ public static class StateMachinesBuilderExtensions
         {
             IrHashes = sp.GetRequiredService<MachineIrHashes>().Of,
             Timers = sp.GetRequiredService<MachineTimerLookup>().Of,
+            Policies = sp.GetService<FromIr.MachinePolicies>() is { } policies
+                ? policies.Entered
+                : null,
             Writes = sp.GetRequiredService<SnapshotWriteSignal>(),
         });
         services.AddScoped<InvokeOutbox>();

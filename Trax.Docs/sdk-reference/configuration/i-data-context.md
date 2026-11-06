@@ -45,6 +45,7 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable  // IEffectPro
     DbSet<EffectClaim> EffectClaims { get; }
     DbSet<Checkpoint> Checkpoints { get; }
     DbSet<SnapshotTransition> SnapshotTransitions { get; }
+    DbSet<MachinePolicyFire> MachinePolicyFires { get; }
 
     int Changes { get; set; }
 
@@ -91,6 +92,7 @@ From `IEffectProvider` it also has `Track(IModel)`, `Update(IModel)` and `SaveCh
 | `EffectClaims` | `trax.effect_claim` | Run-once state-machine effect intents |
 | `Checkpoints` | `trax.checkpoint` | The state a train declared with `Checkpoint<TState>()`, one row per run and node, from which a later run resumes. |
 | `SnapshotTransitions` | `trax.snapshot_transition` | Each state-machine instance's history: one row per snapshot write, deleted with the instance |
+| `MachinePolicyFires` | `trax.machine_policy_fire` | The fires machine policies still owe: written with the transition that sets one off, deleted with the fire. Server-only |
 
 A `Checkpoint` row holds the run (`MetadataId`), the declared node (`NodeId`, and `BranchPath` inside a
 `Parallel` branch), the stored state as JSON (`State`) with its type (`StateType`), the tracks the routing steps
@@ -98,14 +100,20 @@ before it took (`Tracks`), and the two values a resume compares with the running
 chain's hash, and `StateFingerprint`, a fingerprint of the state type's serialized shape. A resume refuses when
 either differs. `CreatedAt` is when it was written. See [Checkpoint](/docs/sdk-reference/train-methods/checkpoint).
 
+A `MachinePolicyFire` row is one fire a machine policy still owes: the `Policy` it belongs to, the instance whose
+transition set it off (its row `SourceRowId`, its id `SourceInstanceId`, and the `SourceRevision` that transition gave
+it), the `TargetRowId` of the instance to fire once a broadcast is expanded into one row per target (null before), and
+`CreatedAt`. The store writes it in the transition's transaction, and the policy runner deletes it in the transaction
+that fires it. It holds no context and no owner key.
+
 A `SnapshotTransition` row is one write of an instance's snapshot: the instance's row (`DraftRowId`), the `Revision`
 the write gave it, its `Kind` (`SnapshotTransitionKind`: `Start`, `Command`, `Save`, `Timer` or `Outcome`), the
-command's name (`Trigger`), the `Actor` (`SnapshotTransitionActor`: `Owner`, `Host` or `Machine`), `FromState` and
+command's name (`Trigger`), the `Actor` (`SnapshotTransitionActor`: `Owner`, `Host`, `Machine` or `Policy`), `FromState` and
 `ToState`, when it was written (`At`), and the server-only `InvokeToken` of the run or child it started. The store
 writes it in the snapshot's transaction; it holds no context and no owner key. Operators read it as
 [`machineInstance { transitions }`](/docs/sdk-reference/graphql-api/queries/machine-instances#transitions).
 
-`RunnerNonces`, `RecordedDecisions`, `JunctionRuns`, `SnapshotDrafts`, `EffectClaims`, `Checkpoints` and `SnapshotTransitions` have default implementations on the interface, so an implementation written before they existed still loads.
+`RunnerNonces`, `RecordedDecisions`, `JunctionRuns`, `SnapshotDrafts`, `EffectClaims`, `Checkpoints`, `SnapshotTransitions` and `MachinePolicyFires` have default implementations on the interface, so an implementation written before they existed still loads.
 
 ### Methods
 

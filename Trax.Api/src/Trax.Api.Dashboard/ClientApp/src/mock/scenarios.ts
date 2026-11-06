@@ -1453,7 +1453,7 @@ type TransitionRow = {
   revision: number;
   kind: "START" | "COMMAND" | "SAVE" | "TIMER" | "OUTCOME";
   trigger: string | null;
-  actor: "OWNER" | "HOST" | "MACHINE";
+  actor: "OWNER" | "HOST" | "MACHINE" | "POLICY";
   fromState: string | null;
   toState: string;
   at: string;
