@@ -38,7 +38,7 @@ internal sealed record Problem(string File, long Line, string Message)
 }
 
 /// <summary>
-/// Reads feature files with Cucumber's own parser (MS-18 decision 16) into scenarios: Backgrounds, Rules, outlines and
+/// Reads feature files with Cucumber's own parser (ADR 0058) into scenarios: Backgrounds, Rules, outlines and
 /// And/But are resolved by the parser. What derivation does not read is refused rather than skipped: a data table, a
 /// DocString, and a <c>*</c> step, which has no Given, When or Then meaning.
 /// </summary>

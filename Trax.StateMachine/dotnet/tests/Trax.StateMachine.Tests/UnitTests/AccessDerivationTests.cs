@@ -9,7 +9,7 @@ namespace Trax.StateMachine.Tests.UnitTests;
 
 /// <summary>
 /// Access is derived from who the features show doing what, and never widened (ADR <c>Trax.Docs/adr/0058</c>). Only a
-/// machine's owner acts on an instance (MS-18 decision 1), an actor's own act grants it the trigger (decision 10), and
+/// machine's owner acts on an instance (ADR 0058), an actor's own act grants it the trigger (decision 10), and
 /// every grant is in the access table. The proof of concept served a trigger a scenario denied to any signed-in caller,
 /// derived machines no one could drive, and let one actor act on another's instance in memory only; each is a problem
 /// here.

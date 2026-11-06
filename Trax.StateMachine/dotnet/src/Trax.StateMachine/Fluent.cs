@@ -170,6 +170,13 @@ public sealed record BuiltMachine<TState, TTrigger>(
     internal bool SystemOwned { get; init; }
 
     /// <summary>
+    /// The triggers only the server fires (a policy reacting to another machine), never served to a client: they are
+    /// not in <see cref="Triggers"/>, which the typed API and the startup check are built from, and a client sending
+    /// one is refused, since it has no rule. Declared through <see cref="IIrMachineBuilder{TState,TTrigger}"/>.
+    /// </summary>
+    internal IReadOnlySet<TTrigger> ServerOnly { get; init; } = new HashSet<TTrigger>();
+
+    /// <summary>
     /// The most live invoked runs one user may hold, counted across every machine, for entering one of this
     /// machine's invoking states to be allowed. Declared with <see cref="IMachineBuilder{TState,TTrigger}.InvokedRunLimit"/>; system owners are not
     /// capped.
@@ -297,6 +304,7 @@ public sealed record BuiltMachine<TState, TTrigger>(
     /// </summary>
     internal IReadOnlyList<MachineTrigger> Triggers =>
         Enum.GetValues<TTrigger>()
+            .Where(trigger => !ServerOnly.Contains(trigger))
             .Select(trigger => new MachineTrigger(
                 trigger.ToString(),
                 Effects.Any(e => EqualityComparer<TTrigger>.Default.Equals(e.Trigger, trigger))
@@ -332,6 +340,21 @@ internal interface IIrStateBuilder<TState, TTrigger>
     where TTrigger : struct, Enum
 {
     IStateBuilder<TState, TTrigger> Context(Type record, ContextSchema schema);
+}
+
+/// <summary>
+/// What a machine replayed from its IR declares about the machine as a whole beyond the public builder: its server-only
+/// triggers.
+/// </summary>
+internal interface IIrMachineBuilder<TState, TTrigger>
+    where TState : struct, Enum
+    where TTrigger : struct, Enum
+{
+    /// <summary>
+    /// Marks <paramref name="trigger"/> as fired by the server only (ADR 0058): not served, with no client
+    /// rule. Build refuses one that also declares a rule.
+    /// </summary>
+    void ServerOnly(TTrigger trigger);
 }
 
 /// <summary>
@@ -801,7 +824,9 @@ public interface ITransitionBuilder<TState, TTrigger>
 /// declared here, on the transition it belongs to, and nothing leaks into the composition root. The result
 /// is the same <see cref="MachineDefinition{TState,TTrigger}"/> the engine already interprets.
 /// </summary>
-public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, TTrigger>
+public sealed partial class MachineBuilder<TState, TTrigger>
+    : IMachineBuilder<TState, TTrigger>,
+        IIrMachineBuilder<TState, TTrigger>
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {
@@ -832,6 +857,11 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         new(StringComparer.Ordinal);
     private bool _usedDeclarative;
     private bool _systemOwned;
+    private readonly HashSet<TTrigger> _serverOnly = [];
+
+    void IIrMachineBuilder<TState, TTrigger>.ServerOnly(TTrigger trigger) =>
+        _serverOnly.Add(trigger);
+
     private StartDeclaration? _start;
     private readonly List<ServerWrite> _serverWrites = [];
     private readonly List<EventWrite> _eventWrites = [];
@@ -1247,9 +1277,18 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                     + string.Join(" ", openWrites.Select(p => char.ToUpperInvariant(p[0]) + p[1..]))
             );
 
+        // A server-only trigger is never a client's, so it declares no client rule.
+        foreach (var trigger in _serverOnly)
+            if (rules.Events.TryGetValue(trigger.ToString(), out var clientRule))
+                throw new InvalidOperationException(
+                    $"The machine '{_id}' cannot be built: {trigger} is fired by the server only, and declares a "
+                        + $"client rule ({clientRule})."
+                );
+
         return new BuiltMachine<TState, TTrigger>(definition, _committed, _effects, declarative)
         {
             SystemOwned = _systemOwned,
+            ServerOnly = new HashSet<TTrigger>(_serverOnly),
             InvokedRunLimit = _invokedRunLimit,
             TriggerInputTypes = declaredInputs.ToDictionary(kv => kv.Key, kv => kv.Value.Type),
             ContextTypes = new Dictionary<TState, Type>(_contextTypes),

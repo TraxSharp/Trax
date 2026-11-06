@@ -457,6 +457,9 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
             StringComparer.Ordinal
         );
 
+    IReadOnlySet<string> IMachineInternals.ServerTriggers =>
+        Built.ServerOnly.Select(t => t.ToString()).ToHashSet(StringComparer.Ordinal);
+
     IReadOnlySet<string> IMachineInternals.TimedStates =>
         Built.Timers.Keys.Select(s => s.ToString()).ToHashSet(StringComparer.Ordinal);
 

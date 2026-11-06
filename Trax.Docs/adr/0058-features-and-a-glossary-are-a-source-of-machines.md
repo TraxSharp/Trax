@@ -48,6 +48,13 @@ failure rather than a bug.
 - **Trax serves the views, under a derived read rule.** A view is read by the actors whose scenarios read it, and by
   no one else. It reads only the caller's own instances and system instances at their fixed keys, and shows only the
   fields the glossary lists. A view no scenario reads is not served.
+- **Features are read by Cucumber's own parser,** in a derivation package of its own, so the engine takes no new
+  dependency. A value in a step is quoted and read as its field's type (`When Ada orders "3" loaves`). The fixed steps
+  (`Ada is told "..."`, `Ada is not allowed`, `5 minutes pass`, `still`) are English only in this version.
+- **Discard follows read.** A derived machine's owner discards their own instances, narrowed by the read rule's roles;
+  committed, invoking and effect-target states are not discarded whatever the rule.
+- **A trigger the server fires is not a client's.** A policy's trigger is never served, and a trigger no scenario
+  fires, or one only ever denied, is not served at all.
 - **Fail closed everywhere.** No rule means not served. Two scenarios that disagree, or two grants that clash, are a
   derivation problem naming both scenarios, never a rule widened to fit.
 - **The parser checks itself.** Derivation replays every scenario on the machines it derived and fails on any that

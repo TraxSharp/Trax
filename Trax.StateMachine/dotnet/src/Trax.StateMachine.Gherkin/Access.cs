@@ -7,7 +7,7 @@ namespace Trax.StateMachine.Gherkin;
 /// <summary>
 /// Who may start, read and fire each machine, derived from who the features show doing it (ADR
 /// <c>Trax.Docs/adr/0058</c>), and the table every grant is reported in (<c>access.txt</c>). With strict ownership
-/// (MS-18 decision 1) only a machine's owner acts on an instance, so a trigger is granted to the owning actor when a
+/// (ADR 0058) only a machine's owner acts on an instance, so a trigger is granted to the owning actor when a
 /// scenario shows that actor's person doing it, fired only by the server when only steps with no person fire it, and
 /// otherwise not served. Nothing is widened: a clash is a problem naming both scenarios.
 /// </summary>
@@ -57,7 +57,7 @@ internal sealed class Access
             if (owner is not null)
             {
                 // An owner reads their own instances; the read rule is the owner's actor, which the host narrows to
-                // owner-only (and discard follows it, MS-18 decision 15).
+                // owner-only (and discard follows it, ADR 0058).
                 entry["read"] = rule!.DeepClone();
                 lines.Add(Line(machine, "read", rule!, owner, glossary));
             }
@@ -73,7 +73,7 @@ internal sealed class Access
                 var denied = byPerson.Where(x => x.Result is Result.Denied).ToList();
 
                 // A trigger the server fires is never served to a client, so a person firing it too is two triggers
-                // (MS-18 decision 3).
+                // (ADR 0058).
                 if (byPerson.Count > 0 && byServer.Count > 0)
                 {
                     problems.Add(

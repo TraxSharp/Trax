@@ -63,7 +63,7 @@ internal static class IrMachines
             throw new InvalidOperationException(
                 Refuse($"the IR's id is '{ir["id"]}', and the host file's entry is '{id}'.")
             );
-        foreach (var problem in Unservable(ir, host))
+        foreach (var problem in Unservable(ir))
             throw new InvalidOperationException(Refuse(problem));
 
         // The host entry was derived from this IR, by its hash, not a hash of the file's bytes: the canonical IR's,
@@ -160,9 +160,8 @@ internal static class IrMachines
     }
 
     // What no served machine can be: an effect, whose type no file can name; a custom rule or reduction, whose handler
-    // no file can bind; a failed or cancelled outcome edge with a guard, which the builder has no way to declare; and a
-    // trigger only the server fires, which the host cannot serve without serving it to clients until policies arrive.
-    private static IEnumerable<string> Unservable(JsonObject ir, HostMachine host)
+    // no file can bind; a failed or cancelled outcome edge with a guard, which the builder has no way to declare.
+    private static IEnumerable<string> Unservable(JsonObject ir)
     {
         foreach (var edge in ir["transitions"]!.AsArray())
             if (edge!["effect"] is not null)
@@ -176,11 +175,6 @@ internal static class IrMachines
                     if (edge!["guard"] is not null)
                         yield return $"the outcome {name} has a guarded edge, and only a done outcome's edges take "
                             + "a guard.";
-        if (host.SystemKey is null)
-            foreach (var (trigger, access) in host.Triggers)
-                if (access.IsServer)
-                    yield return $"the host file says only the server fires '{trigger}', and a user's machine "
-                        + "serves every trigger to its clients until policies are served.";
     }
 
     // Every place a custom rule or reduction is named, as a JSON path, wherever it nests.

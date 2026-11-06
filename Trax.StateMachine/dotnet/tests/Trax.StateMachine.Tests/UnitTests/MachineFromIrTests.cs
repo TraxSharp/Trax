@@ -203,20 +203,35 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void A_user_machines_trigger_only_the_server_fires_is_refused_until_policies_are_served()
+    public void A_user_machines_server_only_trigger_is_not_served_and_needs_no_client_rule()
     {
         var ir = Ir("turnstile");
         var host = Host(ir) with
         {
-            Triggers = new Dictionary<string, TriggerAccess> { ["Push"] = TriggerAccess.Server },
+            Start = AccessRule.AnyAuthenticated,
+            Read = AccessRule.AnyAuthenticated,
+            Triggers = new Dictionary<string, TriggerAccess>
+            {
+                ["Coin"] = new(AccessRule.AnyAuthenticated),
+                ["Push"] = TriggerAccess.Server,
+            },
         };
 
-        var create = () => IrMachines.Create(new IrMachines.Source(ir, host), Trains);
+        var machine = IrMachines.Create(new IrMachines.Source(ir, host), Trains);
 
-        create
+        machine
+            .Triggers.Select(t => t.Name)
             .Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*only the server fires 'Push'*");
+            .NotContain("Push", "a server-only trigger is not in the typed API");
+        ((IMachineInternals)machine).ServerTriggers.Should().Equal("Push");
+        MachineRulesStartupValidator
+            .Problems([machine], new StateMachineOptions(), null)
+            .Result.Should()
+            .BeEmpty();
+        machine
+            .ExportIr()
+            .Should()
+            .Be(CanonicalJson.Serialize(ir), "the IR still has Push; only its serving changes");
     }
 
     [Test]

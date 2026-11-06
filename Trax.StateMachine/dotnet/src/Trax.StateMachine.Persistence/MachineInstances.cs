@@ -396,6 +396,11 @@ internal interface IMachineInternals
     /// <summary>The states with a timer, by name. Empty for a machine with none.</summary>
     IReadOnlySet<string> TimedStates { get; }
 
+    /// <summary>
+    /// The triggers only the server fires, by name: a policy's, never served to a client. Empty for a machine with none.
+    /// </summary>
+    IReadOnlySet<string> ServerTriggers { get; }
+
     /// <summary>Where each timed state's timer goes, by the timed state's name.</summary>
     IReadOnlyDictionary<string, string> TimerTargets { get; }
 

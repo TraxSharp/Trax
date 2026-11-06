@@ -389,8 +389,8 @@ internal sealed class Walk
                     Meaning.Happens h => (h.Machine, h.Owner, h.Input),
                     _ => throw new InvalidOperationException(),
                 };
-                // A person acts on their own instance, and a system machine is moved by the server alone (MS-18
-                // decision 1).
+                // A person acts on their own instance, and a system machine is moved by the server alone (ADR
+                // 0058).
                 if (meaning is Meaning.Act act)
                 {
                     var acted = _glossary.Machines[act.Machine];

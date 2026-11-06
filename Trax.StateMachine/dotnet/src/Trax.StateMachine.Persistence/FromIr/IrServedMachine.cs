@@ -71,6 +71,10 @@ internal sealed class IrReplay(
             );
         if (host.SystemKey is not null)
             m.SystemOwned();
+        // A trigger only the server fires (a policy's) is never served to a client.
+        foreach (var (trigger, access) in host.Triggers)
+            if (access.IsServer && Enum.TryParse<TTrigger>(trigger, out var serverOnly))
+                ((IIrMachineBuilder<TState, TTrigger>)m).ServerOnly(serverOnly);
 
         foreach (var (state, schema) in ir["context"]!.AsObject())
             ((IIrStateBuilder<TState, TTrigger>)m.In(State<TState>(state))).Context(
@@ -215,7 +219,7 @@ internal sealed class IrReplay(
     }
 
     // Who may start, read and fire the machine, from its entry in the host file. A user's machine is read and discarded
-    // by its owner, narrowed by the read rule's roles (MS-18 decision 15).
+    // by its owner, narrowed by the read rule's roles (ADR 0058).
     private void ConfigureAccess<TState, TTrigger>(IMachineBuilder<TState, TTrigger> m)
         where TState : struct, Enum
         where TTrigger : struct, Enum

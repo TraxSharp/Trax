@@ -49,8 +49,8 @@ internal abstract record Meaning
 }
 
 /// <summary>
-/// Resolves a step's text to its <see cref="Meaning"/>, from the glossary's phrases and the fixed English steps (MS-18
-/// decisions 19 and 20). A person is a capitalised name the scenario introduced with <c>Name is &lt;noun&gt;</c>; a
+/// Resolves a step's text to its <see cref="Meaning"/>, from the glossary's phrases and the fixed English steps (ADR
+/// 0058). A person is a capitalised name the scenario introduced with <c>Name is &lt;noun&gt;</c>; a
 /// user machine's instance is <c>Name's noun</c>, or <c>her</c>, <c>his</c> or <c>their noun</c> for the step's own
 /// person. A value is quoted and read as its field's type. A step two meanings match is ambiguous, never the first.
 /// </summary>
