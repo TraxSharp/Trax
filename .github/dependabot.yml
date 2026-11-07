@@ -89,6 +89,7 @@ updates:
       - "/Trax.Core/plugins/vscode/trax-hints"
       # Each sample's frontend, and the scripts that record and photograph the samples for
       # traxsharp.net.
+      - "/Trax.Samples/samples/Bakery/Trax.Samples.Bakery.Web"
       - "/Trax.Samples/samples/Board/Trax.Samples.Board.Agents"
       - "/Trax.Samples/samples/Board/Trax.Samples.Board.Client"
       - "/Trax.Samples/samples/ChatService/Trax.Samples.ChatService.Client"
