@@ -73,6 +73,40 @@ public class MachineBoardE2ETests
         stickies.Should().Contain(s => s.GetProperty("kind").GetString() == "view");
     }
 
+    [TestCase("v-order")]
+    [TestCase("v-shop")]
+    public async Task An_actor_two_machines_share_does_not_join_their_lanes(string machine)
+    {
+        // The order's start and the shop sign's readers are both anyone signed in, one actor sticky on the whole
+        // board, and no policy or view joins the two machines.
+        var board = await Board(E2EHost.OperatorKey, machine);
+
+        board
+            .GetProperty("lanes")
+            .EnumerateArray()
+            .Select(l => l.GetString())
+            .Should()
+            .Equal([machine]);
+        var stickies = board.GetProperty("stickies").EnumerateArray().ToList();
+        stickies.Should().OnlyContain(s => s.GetProperty("machine").GetString() == machine);
+        var actors = stickies
+            .Where(s => s.GetProperty("kind").GetString() == "actor")
+            .Select(s => s.GetProperty("id").GetString())
+            .ToList();
+        actors.Should().Contain("actor:anyone signed in", "the machine's own actor is still drawn");
+        var links = board.GetProperty("links").EnumerateArray().ToList();
+        actors
+            .Should()
+            .OnlyContain(
+                a =>
+                    links.Any(l =>
+                        l.GetProperty("from").GetString() == a
+                        || l.GetProperty("to").GetString() == a
+                    ),
+                "each actor keeps its arrow"
+            );
+    }
+
     [Test]
     public async Task A_host_file_with_no_provenance_gives_stickies_with_no_scenarios()
     {

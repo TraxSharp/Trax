@@ -34,7 +34,8 @@ public partial class OperationsService
     /// <inheritdoc />
     /// <remarks>
     /// Drawn from the host file the host serves and the IRs of its machines, so it shows what runs, not what the
-    /// features say today. The lanes are the machine's own and each machine an arrow on the whole board joins it to.
+    /// features say today. The lanes are the machine's own and each machine a policy or a view on the whole board joins it
+    /// to; an actor joins none.
     /// </remarks>
     public Task<MachineBoardDescription?> GetMachineBoardAsync(string machine, CancellationToken ct)
     {
@@ -55,25 +56,62 @@ public partial class OperationsService
                 StringComparer.Ordinal
             );
         var drawn = Board.Draw(irs, host);
+        // An actor sticky is one per rule on the whole board, in the lane of the first machine that drew it, so two
+        // machines whose rules admit the same callers share one. It joins nothing: a policy or a view does.
+        var byId = drawn.Stickies.ToDictionary(s => s.Id, StringComparer.Ordinal);
+        bool IsActor(string id) => byId[id].Kind == Board.Kind.Actor;
         var lane = drawn
-            .Stickies.Where(s => s.Machine == machine)
+            .Stickies.Where(s => s.Machine == machine && s.Kind != Board.Kind.Actor)
             .Select(s => s.Id)
             .ToHashSet(StringComparer.Ordinal);
         var joined = drawn
-            .Links.Where(l => lane.Contains(l.From) || lane.Contains(l.To))
+            .Links.Where(l => !IsActor(l.From) && !IsActor(l.To))
+            .Where(l => lane.Contains(l.From) || lane.Contains(l.To))
             .SelectMany(l => new[] { l.From, l.To })
-            .Select(id => drawn.Stickies.First(s => s.Id == id).Machine)
+            .Select(id => byId[id].Machine)
             .Append(machine)
             .ToHashSet(StringComparer.Ordinal);
-        var stickies = drawn.Stickies.Where(s => joined.Contains(s.Machine)).ToList();
+        var drawnHere = drawn
+            .Stickies.Where(s => s.Kind != Board.Kind.Actor && joined.Contains(s.Machine))
+            .ToList();
+        var here = drawnHere.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+        // An actor is shown when an arrow ties it to a sticky on this board: in its own lane if it is tied to that
+        // machine, otherwise in the first lane it is tied to, the asked-for machine's first.
+        var lanes = joined
+            .OrderBy(m => m == machine ? 0 : 1)
+            .ThenBy(m => m, StringComparer.Ordinal)
+            .ToList();
+        var actors = drawn
+            .Stickies.Where(s => s.Kind == Board.Kind.Actor)
+            .Select(actor =>
+            {
+                var tied = drawn
+                    .Links.Where(l => l.From == actor.Id || l.To == actor.Id)
+                    .Select(l => l.From == actor.Id ? l.To : l.From)
+                    .Where(here.Contains)
+                    .Select(id => byId[id].Machine)
+                    .ToHashSet(StringComparer.Ordinal);
+                return tied.Count == 0
+                    ? null
+                    : actor with
+                    {
+                        Machine = tied.Contains(actor.Machine)
+                            ? actor.Machine
+                            : lanes.First(tied.Contains),
+                    };
+            })
+            .OfType<Board.Sticky>();
+        var stickies = drawnHere
+            .Concat(actors)
+            .OrderBy(s => s.Machine, StringComparer.Ordinal)
+            .ThenBy(s => s.Kind)
+            .ThenBy(s => s.Id, StringComparer.Ordinal)
+            .ToList();
         var shown = stickies.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
         return Task.FromResult<MachineBoardDescription?>(
             new MachineBoardDescription(
                 machine,
-                joined
-                    .OrderBy(m => m == machine ? 0 : 1)
-                    .ThenBy(m => m, StringComparer.Ordinal)
-                    .ToList(),
+                lanes,
                 stickies
                     .Select(s => new MachineStickyDescription(
                         s.Id,
