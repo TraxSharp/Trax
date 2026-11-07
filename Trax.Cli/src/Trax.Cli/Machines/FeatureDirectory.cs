@@ -10,7 +10,7 @@ namespace Trax.Cli.Machines;
 /// <c>access.txt</c>. A machine that no longer derives has its file removed, and a directory holding anything else is
 /// refused rather than cleaned. <see cref="Check"/> writes nothing and names every file that differs.
 /// </summary>
-internal static class FeatureMachines
+internal static class FeatureDirectory
 {
     internal const string HostFileName = "host.json";
     internal const string AccessFileName = "access.txt";
@@ -185,5 +185,5 @@ internal static class FeatureMachines
         || (name.EndsWith(IrSuffix, StringComparison.Ordinal) && name.Length > IrSuffix.Length);
 }
 
-/// <summary>A path or input <see cref="FeatureMachines"/> cannot use, worded for the terminal.</summary>
+/// <summary>A path or input <see cref="FeatureDirectory"/> cannot use, worded for the terminal.</summary>
 internal sealed class FeatureMachinesException(string message) : Exception(message);

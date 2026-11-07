@@ -356,8 +356,8 @@ internal static class MachineCommand
     {
         try
         {
-            FeatureMachines.RefuseForeign(outDir);
-            var result = FeatureMachines.Derive(featuresDir, glossaryPath);
+            FeatureDirectory.RefuseForeign(outDir);
+            var result = FeatureDirectory.Derive(featuresDir, glossaryPath);
             foreach (var step in result.UiSteps)
                 stdout.WriteLine($"not derived (about the UI): {step}");
             if (result.Problems.Count > 0)
@@ -371,7 +371,7 @@ internal static class MachineCommand
             }
             if (check)
             {
-                var drift = FeatureMachines.Check(outDir, result.Files);
+                var drift = FeatureDirectory.Check(outDir, result.Files);
                 foreach (var line in drift)
                     stderr.WriteLine(line);
                 if (drift.Count > 0)
@@ -384,7 +384,7 @@ internal static class MachineCommand
                 stdout.WriteLine($"{outDir} is up to date.");
                 return 0;
             }
-            var changes = FeatureMachines.Write(outDir, result.Files);
+            var changes = FeatureDirectory.Write(outDir, result.Files);
             foreach (var line in changes)
                 stdout.WriteLine(line);
             if (changes.Count == 0)
@@ -526,7 +526,7 @@ internal static class MachineCommand
     {
         try
         {
-            var (glossary, features) = FeatureMachines.Read(args.FeaturesDir, args.GlossaryPath);
+            var (glossary, features) = FeatureDirectory.Read(args.FeaturesDir, args.GlossaryPath);
             var (host, irs) = Trax.StateMachine.Persistence.FromIr.IrDirectory.Read(
                 args.MachinesDir
             );
@@ -694,7 +694,7 @@ internal static class MachineCommand
     {
         try
         {
-            var (glossary, features) = FeatureMachines.Read(featuresDir, glossaryPath);
+            var (glossary, features) = FeatureDirectory.Read(featuresDir, glossaryPath);
             var (gaps, problems) = Missing.Find(glossary, features);
             if (problems.Count > 0)
             {
@@ -778,7 +778,7 @@ internal static class MachineCommand
     {
         try
         {
-            var (glossary, features) = FeatureMachines.Read(featuresDir, glossaryPath);
+            var (glossary, features) = FeatureDirectory.Read(featuresDir, glossaryPath);
             var (phrases, problems) = Usage.Find(glossary, features);
             foreach (var problem in problems)
                 stderr.WriteLine(problem);
