@@ -17,7 +17,8 @@ namespace Trax.StateMachine.Persistence.FromIr;
 /// the owner and never with a role. Every row is worked in a transaction of its own and deleted in it, so a fire happens
 /// once whichever host claims it; a row another host holds is passed over (<c>FOR UPDATE SKIP LOCKED</c> on Postgres; on
 /// SQLite the transaction holds the database's write lock). A row that cannot be fired is logged and dropped, and never
-/// blocks the rest.
+/// blocks the rest. A row whose target another write holds, or that has an effect in flight, is kept and tried again on
+/// a later pass.
 /// </summary>
 /// <remarks>
 /// A row with no target is one policy's reaction to one transition. A linked policy fires on the source owner's
@@ -99,7 +100,8 @@ internal sealed class MachinePolicyRunner(
         return worked;
     }
 
-    // One row, in its own transaction: expanded or fired, then deleted. False when another host holds it or it is gone.
+    // One row, in its own transaction: expanded or fired, then deleted. False when another host holds it, it is gone, or
+    // its target is busy, so it is kept for a later pass.
     private async Task<bool> Work(MachinePolicyFire row, CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
@@ -119,13 +121,22 @@ internal sealed class MachinePolicyRunner(
             await Delete(context, row.Id, cancellationToken);
         }
         else if (row.TargetRowId is { } target)
-            await Fire(services, context, row, policy, target, cancellationToken);
+        {
+            if (!await Fire(services, context, policy, target, cancellationToken))
+                return false;
+            await Delete(context, row.Id, cancellationToken);
+        }
         else if (policy.Shape == "broadcast")
             await Expand(context, row, policy, cancellationToken);
         else
         {
+            var busy = new List<long>();
             foreach (var found in await Targets(context, row, policy, cancellationToken))
-                await Fire(services, context, row, policy, found, cancellationToken, delete: false);
+                if (!await Fire(services, context, policy, found, cancellationToken))
+                    busy.Add(found);
+            // A busy target gets a row of its own, so a later pass fires it and the others are not fired twice.
+            if (busy.Count > 0)
+                await Owe(context, row, busy, cancellationToken);
             await Delete(context, row.Id, cancellationToken);
         }
         await transaction.Commit();
@@ -162,9 +173,20 @@ internal sealed class MachinePolicyRunner(
         await context
             .MachinePolicyFires.Where(f => f.Policy == row.Policy && f.TargetRowId == null)
             .ExecuteDeleteAsync(cancellationToken);
+        await Owe(context, row, waiting, cancellationToken);
+    }
+
+    // One row of the policy per target, from the same source.
+    private static async Task Owe(
+        IDataContext context,
+        MachinePolicyFire row,
+        IEnumerable<long> targets,
+        CancellationToken cancellationToken
+    )
+    {
         var now = DateTimeOffset.UtcNow;
         context.MachinePolicyFires.AddRange(
-            waiting.Select(target => new MachinePolicyFire
+            targets.Select(target => new MachinePolicyFire
             {
                 Policy = row.Policy,
                 SourceRowId = row.SourceRowId,
@@ -228,18 +250,35 @@ internal sealed class MachinePolicyRunner(
     }
 
     // Fires the policy's trigger on one instance, as the server: the engine's advance, then the timer's write path,
-    // which starts and cancels runs and timers as the state is entered and left.
-    private async Task Fire(
+    // which starts and cancels runs and timers as the state is entered and left. True when the fire is done with,
+    // fired or never to be; false when the target is busy and the fire is owed still.
+    private async Task<bool> Fire(
         IServiceProvider services,
         IDataContext context,
-        MachinePolicyFire row,
         HostPolicy policy,
         long target,
-        CancellationToken cancellationToken,
-        bool delete = true
+        CancellationToken cancellationToken
     )
     {
-        var failure = await TryFire(services, context, policy, target, cancellationToken);
+        var fired = await TryFire(services, context, policy, target, cancellationToken);
+        if (fired is ServerFire.Fired.Busy busy)
+        {
+            logger.LogDebug(
+                "The policy {Policy} did not fire {Trigger} on instance row {Target} yet: {Why}; a later pass tries again.",
+                policy.When + "." + policy.Enters,
+                policy.Trigger,
+                target,
+                busy.Why
+            );
+            return false;
+        }
+        var failure = fired switch
+        {
+            ServerFire.Fired.Moved => null,
+            ServerFire.Fired.Refused refused => $"{refused.Code.ToWire()}: {refused.Message}",
+            ServerFire.Fired.Failed failed => failed.Why,
+            _ => "unknown result",
+        };
         if (failure is not null)
             logger.LogWarning(
                 "The policy {Policy} did not fire {Trigger} on instance row {Target}: {Failure}.",
@@ -248,19 +287,18 @@ internal sealed class MachinePolicyRunner(
                 target,
                 failure
             );
-        if (delete)
-            await Delete(context, row.Id, cancellationToken);
+        return true;
     }
 
-    // The fire itself; the reason it did not happen, or null when it did.
-    private async Task<string?> TryFire(
+    // The fire itself.
+    private Task<ServerFire.Fired> TryFire(
         IServiceProvider services,
         IDataContext context,
         HostPolicy policy,
         long target,
         CancellationToken cancellationToken
     ) =>
-        await ServerFire.Fire(
+        ServerFire.Fire(
             services,
             context,
             _byName.Value,
@@ -273,13 +311,7 @@ internal sealed class MachinePolicyRunner(
                     ? $"it left {policy.By} before the policy reached it"
                     : null,
             cancellationToken
-        ) switch
-        {
-            ServerFire.Fired.Moved => null,
-            ServerFire.Fired.Refused refused => $"{refused.Code.ToWire()}: {refused.Message}",
-            ServerFire.Fired.Failed failed => failed.Why,
-            _ => "unknown result",
-        };
+        );
 
     // Claims a fire row for this transaction: on Postgres a row another host holds is passed over, not waited on.
     private static async Task<bool> Lock(

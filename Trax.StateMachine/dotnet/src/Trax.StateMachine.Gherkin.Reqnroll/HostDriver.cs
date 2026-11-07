@@ -71,9 +71,15 @@ internal sealed class HostDriver(
             context,
             CancellationToken.None
         );
-        if (seeded is ServerFire.Fired.Failed failed)
+        var why = seeded switch
+        {
+            ServerFire.Fired.Failed failed => failed.Why,
+            ServerFire.Fired.Busy busy => busy.Why,
+            _ => null,
+        };
+        if (why is not null)
             throw new InvalidOperationException(
-                $"{Describe(key)} could not be put in {state}: {failed.Why}."
+                $"{Describe(key)} could not be put in {state}: {why}."
             );
     }
 
@@ -246,6 +252,9 @@ internal sealed class HostDriver(
                 throw new InvalidOperationException(
                     $"{trigger} could not be fired on {Describe(key)}: {failed.Why}."
                 ),
+            Persistence.FromIr.ServerFire.Fired.Busy busy => throw new InvalidOperationException(
+                $"{trigger} could not be fired on {Describe(key)}: {busy.Why}."
+            ),
             _ => throw new InvalidOperationException("unknown result"),
         };
     }

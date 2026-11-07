@@ -19,8 +19,14 @@ internal static class ServerFire
 
         internal sealed record Refused(RefusalCode Code, string Message) : Fired;
 
-        /// <summary>Nothing was fired, and why: the instance is gone, locked, or not this host's.</summary>
+        /// <summary>Nothing was fired, and why: the instance is gone, unreadable, or not this host's. Trying again does not help.</summary>
         internal sealed record Failed(string Why) : Fired;
+
+        /// <summary>
+        /// Nothing was fired because another write holds the instance or reached it first, or an effect is in flight on
+        /// it. The same fire may succeed later.
+        /// </summary>
+        internal sealed record Busy(string Why) : Fired;
     }
 
     internal static async Task<Fired> Fire(
@@ -60,7 +66,7 @@ internal static class ServerFire
         if (!machines.TryGetValue(due.Machine, out var machine))
             return new Fired.Failed($"this host does not serve {due.Machine}");
         if (!await store.LockDue(due, cancellationToken))
-            return new Fired.Failed("another write holds it");
+            return new Fired.Busy("another write holds it");
         if (machine.Rehydrate(due.Json) is not RehydrationResult.Ok readable)
             return new Fired.Failed("this host cannot read it");
 
@@ -87,7 +93,9 @@ internal static class ServerFire
                     InvokeWrite.Refused refused => new Fired.Failed(
                         refused.Exception?.Message ?? refused.Message
                     ),
-                    _ => new Fired.Failed("another write reached it first"),
+                    _ => new Fired.Busy(
+                        "another write reached it first, or an effect is in flight"
+                    ),
                 };
             case AdvanceResult.Rejected rejected:
                 return new Fired.Refused(
@@ -150,7 +158,7 @@ internal static class ServerFire
         if (!machines.TryGetValue(due.Machine, out var machine))
             return new Fired.Failed($"this host does not serve {due.Machine}");
         if (!await store.LockDue(due, cancellationToken))
-            return new Fired.Failed("another write holds it");
+            return new Fired.Busy("another write holds it");
         if (machine.Rehydrate(due.Json) is not RehydrationResult.Ok readable)
             return new Fired.Failed("this host cannot read it");
         var current = readable.Snapshot;
@@ -175,7 +183,7 @@ internal static class ServerFire
             InvokeWrite.Refused refused => new Fired.Failed(
                 refused.Exception?.Message ?? refused.Message
             ),
-            _ => new Fired.Failed("another write reached it first"),
+            _ => new Fired.Busy("another write reached it first, or an effect is in flight"),
         };
     }
 }

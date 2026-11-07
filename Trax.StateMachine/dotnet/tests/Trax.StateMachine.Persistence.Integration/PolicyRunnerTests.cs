@@ -181,6 +181,62 @@ public class PolicyRunnerTests(StoreProvider provider)
     }
 
     [Test]
+    public async Task A_fire_whose_target_is_busy_is_kept_and_fired_on_a_later_pass()
+    {
+        var ada = NewUser();
+        var order = await Start(ada, "p-order");
+        var receipt = await Start(ada, "p-receipt");
+        await Advance(
+            ada,
+            "p-receipt",
+            receipt,
+            "Attach",
+            new JsonObject { ["orderId"] = order.ToString() }
+        );
+        await Advance(ada, "p-order", order, "Expire");
+        await HoldEffect(receipt, Guid.NewGuid());
+
+        await Runner(_host).PassOnce(CancellationToken.None);
+
+        (await StateOf(receipt)).Should().Be("Issued", "an effect in flight holds the receipt");
+        (await Owed()).Should().ContainSingle("the fire is still owed while its target is held");
+
+        await HoldEffect(receipt, null);
+        await Runner(_host).PassOnce(CancellationToken.None);
+
+        (await StateOf(receipt)).Should().Be("Void");
+        (await Owed()).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task A_broadcast_fire_whose_target_is_busy_is_kept_and_fired_on_a_later_pass()
+    {
+        var user = NewUser();
+        var order = await Start(user, "p-order");
+        await Advance(user, "p-order", order, "Place");
+        await Queue(Broadcast);
+        await HoldEffect(order, Guid.NewGuid());
+
+        await Runner(_host).PassOnce(CancellationToken.None);
+        await Runner(_host).PassOnce(CancellationToken.None);
+
+        var row = (await _host.Rows(order)).Single().RowId;
+        (await StateOf(order)).Should().Be("Placed");
+        (await Owed())
+            .Should()
+            .Contain(
+                f => f.TargetRowId == row,
+                "the expanded fire is still owed while its target is held"
+            );
+
+        await HoldEffect(order, null);
+        await Runner(_host).PassOnce(CancellationToken.None);
+
+        (await StateOf(order)).Should().Be("Baking");
+        (await Owed()).Should().BeEmpty();
+    }
+
+    [Test]
     public async Task A_creation_and_a_save_set_no_policy_off()
     {
         var ada = NewUser();
@@ -281,6 +337,16 @@ public class PolicyRunnerTests(StoreProvider provider)
         using var scope = _host.Scope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await context.MachinePolicyFires.AsNoTracking().ToListAsync();
+    }
+
+    // Marks the instance with an effect in flight, as the effect runner does, or clears it.
+    private async Task HoldEffect(Guid id, Guid? token)
+    {
+        using var scope = _host.Scope();
+        await scope
+            .ServiceProvider.GetRequiredService<IDataContext>()
+            .SnapshotDrafts.Where(d => d.Id == id)
+            .ExecuteUpdateAsync(u => u.SetProperty(d => d.EffectToken, token));
     }
 
     private async Task Queue(string policy)
