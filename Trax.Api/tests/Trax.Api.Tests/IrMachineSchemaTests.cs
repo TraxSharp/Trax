@@ -68,7 +68,7 @@ public class IrMachineSchemaTests
         ((InputObjectType)coin).Fields.Select(f => f.Name).Should().Contain("coin");
     }
 
-    private static string IrFile(string name)
+    internal static string IrFile(string name)
     {
         for (
             var dir = new DirectoryInfo(AppContext.BaseDirectory);

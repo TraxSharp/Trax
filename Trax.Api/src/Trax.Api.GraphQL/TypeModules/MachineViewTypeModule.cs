@@ -51,6 +51,21 @@ internal sealed class MachineViewTypeModule(
                     $"The view '{view.Name}' has no GraphQL name: a view's name is words of letters and digits, the first "
                         + "starting with a letter."
                 );
+            // A field is a field of the row type beside the instance's id: it cannot be the id, and GraphQL has to name it.
+            foreach (var field in view.Fields)
+                if (
+                    field.Name == "id"
+                    || field.Name.StartsWith("__", StringComparison.Ordinal)
+                    || !System.Text.RegularExpressions.Regex.IsMatch(
+                        field.Name,
+                        @"\A[_A-Za-z][_0-9A-Za-z]*\z"
+                    )
+                )
+                    throw new InvalidOperationException(
+                        $"The view '{view.Name}' has a field '{field.Name}' it cannot serve: a view's field is a GraphQL "
+                            + "name (letters, digits and _, not starting with a digit or __), and not 'id', which is the "
+                            + "instance's."
+                    );
             var viewType = $"{pascal}View";
             foreach (var read in view.Reads)
                 types.Add(RowType(view, read, pascal, byName[read.Machine]));
