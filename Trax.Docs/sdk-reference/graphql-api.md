@@ -42,6 +42,7 @@ app.Run();
 - [Mutations](/docs/sdk-reference/graphql-api/mutations): the `dispatch` and `operations` mutation namespaces, one page per namespace.
 - [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions): lifecycle, junction, machine instance and data change events; WebSocket and authentication.
 - [Machines root](/docs/sdk-reference/graphql-api/machines): each exposed state machine as its own typed operations.
+- [Views root](/docs/sdk-reference/graphql-api/views): each view a host serves from features, read only by its readers.
 - [ConfigureFiltering](/docs/sdk-reference/graphql-api/configure-filtering): opt-in filter operators.
 - [Cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders): batched lookups across `DbContext`s.
 - [Error codes](/docs/sdk-reference/graphql-api/error-codes): every code in `extensions.code`.

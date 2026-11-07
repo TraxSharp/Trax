@@ -22,6 +22,7 @@ namespace Trax.Api.GraphQL.TypeModules;
 /// features show reading it: every other caller is refused <c>FORBIDDEN</c> before anything is read. A state is shown
 /// as a String, its label when the view gives one; a context field has the type its machine's record gives it.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/views">SDK reference</seealso>
 internal sealed class MachineViewTypeModule(
     IEnumerable<IMachine> machines,
     MachineViewCatalog catalog

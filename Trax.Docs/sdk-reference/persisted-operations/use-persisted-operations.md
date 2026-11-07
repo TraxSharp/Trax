@@ -65,6 +65,10 @@ A host where a train carries [`[TraxRunProgress]`](/docs/sdk-reference/graphql-a
 two documents of `runProgress`, under `trax_progress_query_<shapeHash><textHash>` and
 `trax_progress_subscription_<shapeHash><textHash>`, hashed the same way. One pair serves every such train.
 
+A host that serves views from features registers one document per view of the
+[`views` root](/docs/sdk-reference/graphql-api/views#persisted-documents), under `trax_view_<view>_<shapeHash><textHash>`,
+hashed the same way.
+
 A host that serves the operations console ([UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard#with-persisted-operations))
 registers the console's own documents too, under `trax_console_<name>_<hash>`, hashed as a client
 document is, and tells the console their ids. Each reaches only `operations` or one of the
