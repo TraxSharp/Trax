@@ -256,10 +256,14 @@ internal sealed record HostFile(
                         .Fail("a system machine's triggers are fired by the server only.");
         }
 
+        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var i = 0; i < Policies.Count; i++)
         {
             var policy = Policies[i];
             var p = at["policies"][i];
+            // Two policies that wait for the same entry and fire the same trigger are one fire, named once.
+            if (!seen.TryAdd(policy.Id, i))
+                throw p.Fail($"'{policy.Id}' is the policy at /policies/{seen[policy.Id]} again.");
             if (!Machines.TryGetValue(policy.When, out var source))
                 throw p["when"]["machine"].Fail($"'{policy.When}' is not a machine here.");
             if (!Machines.TryGetValue(policy.Target, out var target))
@@ -370,7 +374,11 @@ internal sealed record HostPolicy(
     string Target,
     string Trigger,
     string By
-);
+)
+{
+    /// <summary>The policy's identity: what it waits for and what it fires, <c>shop.Open&gt;order.Bake</c>.</summary>
+    internal string Id => $"{When}.{Enters}>{Target}.{Trigger}";
+}
 
 internal sealed record HostView(
     string Name,

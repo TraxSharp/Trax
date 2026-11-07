@@ -30,6 +30,5 @@ internal sealed class MachinePolicies
         _entered.GetValueOrDefault((machine, state)) ?? [];
 
     /// <summary>A policy's identity: what it waits for and what it fires, <c>shop.Open&gt;order.Bake</c>.</summary>
-    internal static string Id(HostPolicy policy) =>
-        $"{policy.When}.{policy.Enters}>{policy.Target}.{policy.Trigger}";
+    internal static string Id(HostPolicy policy) => policy.Id;
 }

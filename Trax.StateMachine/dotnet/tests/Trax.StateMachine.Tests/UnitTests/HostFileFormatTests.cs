@@ -93,6 +93,21 @@ public class HostFileFormatTests
     }
 
     [Test]
+    public void A_policy_listed_twice_is_refused_at_the_second()
+    {
+        var host = Bakery();
+        var twice = host["policies"]![1]!.DeepClone();
+        twice["then"]!["inState"] = "Draft";
+        host["policies"]!.AsArray().Add(twice);
+
+        var read = () => HostFile.Read(host.ToJsonString());
+
+        read.Should()
+            .Throw<FormatException>()
+            .WithMessage("*/policies/3:*shop.Open>order.Bake*policies/1*");
+    }
+
+    [Test]
     public void A_batch_size_is_refused_since_it_is_the_hosts_option()
     {
         var host = Bakery();
