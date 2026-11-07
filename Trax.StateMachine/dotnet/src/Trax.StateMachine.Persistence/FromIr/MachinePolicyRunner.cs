@@ -188,8 +188,7 @@ internal sealed class MachinePolicyRunner(
     {
         if (policy.Shape == "toSystem")
         {
-            var slash = policy.By.IndexOf('/');
-            var id = MachineInstanceId.For(policy.Target, MachineKey.Of(policy.By[(slash + 1)..]));
+            var id = SystemInstanceStarter.IdOf(policy.Target, policy.By);
             return await context
                 .SnapshotDrafts.AsNoTracking()
                 .Where(d =>

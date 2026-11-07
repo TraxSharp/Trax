@@ -92,12 +92,17 @@ written), `AccessDerivationTests` (grants from an actor's own act, nothing widen
 `TimerDerivationTests` (time on a scenario clock, stays, timer rules the host accepts), and policies by
 `PolicyDerivationTests` (the three shapes, what a policy cannot be) and `PolicyRunnerTests` in
 `Trax.StateMachine.Persistence.Integration` (the owner's linked instance only, the fire recorded as the policy's, once
-across hosts and restarts, a broadcast capped and coalesced, a server-only trigger refused to a client).
+across hosts and restarts, a broadcast capped and coalesced, a server-only trigger refused to a client). Views are held by
+`ViewDerivationTests` (readers from the people who read a view, a person's own instances only) and
+`IrMachineViewsE2ETests` in Trax.Api (a reader's own rows, `FORBIDDEN` for anyone else, the system instance started by
+the host).
 
-Not covered: views are held by their own tests as they land, and this ADR's changelog names them then.
+Not covered: persisted documents for the `views` root are not generated yet, so a host that requires persisted
+operations cannot serve views.
 
 ## Changelog
 
+- **2026-11-06**: Views land: derived readers, the `views` root, system instances started by the host.
 - **2026-11-06**: Policies land: server-only triggers, the fire table, the runner, derived policies.
 - **2026-11-06**: Derivation, access and timers land; their tests named in Exemplars.
 - **2026-11-06**: Features name their people in the third person; "I" is refused.

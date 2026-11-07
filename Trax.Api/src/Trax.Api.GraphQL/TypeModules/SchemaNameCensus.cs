@@ -47,10 +47,19 @@ internal sealed class SchemaNameCensus
         GraphQLConfiguration configuration,
         IReadOnlyList<TrainRegistration> trains,
         IReadOnlyDictionary<TrainRegistration, string> trainNames,
-        bool machinesExposed = false
+        bool machinesExposed = false,
+        bool viewsExposed = false
     )
     {
         var census = new SchemaNameCensus();
+
+        // The views root, when the host serves views of machines derived from features.
+        if (viewsExposed)
+            census.Field(
+                "RootQuery",
+                MachineViewTypeModule.RootField,
+                Trax(MachineViewTypeModule.RootField)
+            );
 
         // The machines root, on both roots, when the host exposes a machine.
         if (machinesExposed)

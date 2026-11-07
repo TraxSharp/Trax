@@ -159,12 +159,17 @@ public static class GraphQLServiceExtensions
         // when the container is built: served if the root is there, refused below if it is not.
         var machinesExposed =
             stateMachineOptions is not null && StateMachineOptions.ServedIn(services).Count > 0;
+        // The views root: a host that serves machines from features registers their views before this call.
+        var viewsExposed = services.Any(sd =>
+            sd.ServiceType == typeof(Trax.StateMachine.Persistence.FromIr.MachineViewCatalog)
+        );
 
         var nameCensus = SchemaNameCensus.Take(
             config,
             trainRegistrations,
             trainNames,
-            machinesExposed
+            machinesExposed,
+            viewsExposed
         );
 
         // A train registered after this call skipped the checks above. Refuse the host, naming it,
@@ -301,6 +306,13 @@ public static class GraphQLServiceExtensions
                 sp.GetRootServiceProvider().GetService<ILogger<TraxErrorFilter>>()
             ))
             .AddInMemorySubscriptions();
+
+        // The views root: one query field per view, each read only by its readers.
+        if (viewsExposed)
+        {
+            services.AddSingleton<MachineViewTypeModule>();
+            graphqlBuilder.AddTypeModule<MachineViewTypeModule>();
+        }
 
         // The machines root: each machine the host exposes, served through its own typed operations.
         if (machinesExposed)

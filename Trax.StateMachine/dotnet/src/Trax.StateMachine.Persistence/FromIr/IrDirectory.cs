@@ -105,6 +105,11 @@ internal static class IrDirectory
     {
         var loaded = Load(directory, trainAssemblies);
         services.AddIrMachines(loaded.Machines);
+        services.AddSingleton(loaded.Host);
+        if (loaded.Host.Machines.Values.Any(m => m.SystemKey is not null))
+            services.AddHostedService<SystemInstanceStarter>();
+        if (loaded.Host.Views.Count > 0)
+            services.AddSingleton(new MachineViewCatalog(loaded.Host.Views));
         if (loaded.Host.Policies.Count > 0)
         {
             var options = new PolicyRunnerOptions();

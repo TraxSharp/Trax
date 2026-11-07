@@ -160,6 +160,8 @@ public static class E2EHost
                         E2EMachines.Register(services, options.Served);
                         foreach (var machine in options.Instances)
                             services.AddSingleton(machine);
+                        if (options.Views is { } views)
+                            services.AddSingleton(views);
 
                         // The two things a machine can't know: map auth to a user key, and the effect impl.
                         services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
@@ -348,6 +350,9 @@ public sealed record E2EHostOptions
     /// has no type of its own to name in <see cref="Served"/>.
     /// </summary>
     public IReadOnlyList<Trax.StateMachine.Persistence.IMachine> Instances { get; init; } = [];
+
+    /// <summary>The views of machines served from features, registered before <c>AddTraxGraphQL</c> reads them.</summary>
+    internal Trax.StateMachine.Persistence.FromIr.MachineViewCatalog? Views { get; init; }
 
     /// <summary>Applied to the GraphQL builder after the operations surface, when that is exposed.</summary>
     public Func<TraxGraphQLBuilder, TraxGraphQLBuilder>? GraphQL { get; init; }
