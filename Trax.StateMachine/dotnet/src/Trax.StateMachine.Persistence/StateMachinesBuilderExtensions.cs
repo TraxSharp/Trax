@@ -11,6 +11,7 @@ using Trax.Effect.Data.Services.SnapshotNotices;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
+using Trax.StateMachine.Persistence.FromIr;
 using Trax.StateMachine.Persistence.Mutations;
 
 namespace Trax.StateMachine.Persistence;
@@ -101,6 +102,19 @@ public static class StateMachinesBuilderExtensions
     {
         var options = new StateMachineOptions();
         configure?.Invoke(options);
+
+        // Machines served from features are registered as the host's own, before discovery reads them.
+        if (options.FeaturesDirectory is { } features)
+            services.AddIrMachinesFrom(
+                features,
+                options.ConfigurePolicyRunner,
+                options.FeatureTrainAssemblies
+            );
+        else if (options.ConfigurePolicyRunner is not null)
+            throw new InvalidOperationException(
+                "StateMachineOptions.PolicyRunner configures the policies of machines served from features, and "
+                    + "ServeFeatures was not called. Call ServeFeatures(\"machines/\") too, or drop PolicyRunner."
+            );
 
         // The InMemory provider has no transactions, so it cannot count a user's drafts and insert one atomically: a
         // cap the host sets there is refused rather than held loosely, and the default is not applied.

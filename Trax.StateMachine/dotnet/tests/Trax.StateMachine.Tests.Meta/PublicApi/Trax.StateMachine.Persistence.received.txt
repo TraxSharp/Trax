@@ -331,6 +331,13 @@ namespace Trax.StateMachine.Persistence
         public string ExportIr() { }
         public System.Collections.Generic.IReadOnlyList<string> SelfCheck() { }
     }
+    public sealed class PolicyRunnerOptions
+    {
+        public PolicyRunnerOptions() { }
+        public int BatchSize { get; set; }
+        public int FanOutCap { get; set; }
+        public System.TimeSpan Interval { get; set; }
+    }
     public sealed class RecordedRequest : System.IEquatable<Trax.StateMachine.Persistence.RecordedRequest>
     {
         public RecordedRequest(string RequestId, string Fingerprint, long Revision, string ResultSnapshot) { }
@@ -418,6 +425,8 @@ namespace Trax.StateMachine.Persistence
         public System.TimeSpan? MaxDraftLifetime { get; set; }
         public int? MaxDraftsPerUser { get; set; }
         public Trax.StateMachine.Persistence.StateMachineOptions ExposeGenericStateMachineMutations(System.Action<Trax.StateMachine.Persistence.GenericStateMachineMutationOptions> configure) { }
+        public Trax.StateMachine.Persistence.StateMachineOptions PolicyRunner(System.Action<Trax.StateMachine.Persistence.PolicyRunnerOptions> configure) { }
+        public Trax.StateMachine.Persistence.StateMachineOptions ServeFeatures(string directory, params System.Reflection.Assembly[] trainAssemblies) { }
     }
     public static class StateMachinesBuilderExtensions
     {

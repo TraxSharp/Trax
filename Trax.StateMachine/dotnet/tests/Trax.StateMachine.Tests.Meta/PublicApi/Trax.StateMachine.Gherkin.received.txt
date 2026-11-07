@@ -1,0 +1,121 @@
+namespace Trax.StateMachine.Gherkin
+{
+    public sealed class DerivedMachines : System.IEquatable<Trax.StateMachine.Gherkin.DerivedMachines>
+    {
+        public DerivedMachines(System.Collections.Generic.IReadOnlyDictionary<string, string> Irs, string? Host, string? Access, System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureProblem> Problems, System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureProblem> UiSteps) { }
+        public string? Access { get; init; }
+        public string? Host { get; init; }
+        public System.Collections.Generic.IReadOnlyDictionary<string, string> Irs { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureProblem> Problems { get; init; }
+        public bool Succeeded { get; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureProblem> UiSteps { get; init; }
+    }
+    public sealed class FeatureBoard : System.IEquatable<Trax.StateMachine.Gherkin.FeatureBoard>
+    {
+        public FeatureBoard(System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureSticky> Stickies, System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureLink> Links) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureLink> Links { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureSticky> Stickies { get; init; }
+    }
+    public sealed class FeatureFile : System.IEquatable<Trax.StateMachine.Gherkin.FeatureFile>
+    {
+        public FeatureFile(string Path, string Text) { }
+        public string Path { get; init; }
+        public string Text { get; init; }
+    }
+    public sealed class FeatureGap : System.IEquatable<Trax.StateMachine.Gherkin.FeatureGap>
+    {
+        public FeatureGap(string Kind, string Machine, string What, string Message, string? Stub) { }
+        public string Kind { get; init; }
+        public string Machine { get; init; }
+        public string Message { get; init; }
+        public string? Stub { get; init; }
+        public string What { get; init; }
+    }
+    public sealed class FeatureGlossary
+    {
+        public static Trax.StateMachine.Gherkin.FeatureGlossary Read(string json) { }
+    }
+    public sealed class FeatureLink : System.IEquatable<Trax.StateMachine.Gherkin.FeatureLink>
+    {
+        public FeatureLink(string From, string To) { }
+        public string From { get; init; }
+        public string To { get; init; }
+    }
+    public static class FeatureMachines
+    {
+        public static Trax.StateMachine.Gherkin.FeatureBoard Board(System.Collections.Generic.IReadOnlyDictionary<string, string> irs, string host) { }
+        public static Trax.StateMachine.Gherkin.DerivedMachines Derive(Trax.StateMachine.Gherkin.FeatureGlossary glossary, System.Collections.Generic.IEnumerable<Trax.StateMachine.Gherkin.FeatureFile> features) { }
+        public static System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureGap> Missing(Trax.StateMachine.Gherkin.FeatureGlossary glossary, System.Collections.Generic.IEnumerable<Trax.StateMachine.Gherkin.FeatureFile> features) { }
+        public static Trax.StateMachine.Gherkin.FeatureRunReport Run(Trax.StateMachine.Gherkin.FeatureGlossary glossary, System.Collections.Generic.IEnumerable<Trax.StateMachine.Gherkin.FeatureFile> features, Trax.StateMachine.Gherkin.DerivedMachines machines, Trax.StateMachine.Gherkin.FeatureRunOptions? options = null) { }
+        public static Trax.StateMachine.Gherkin.FeatureRunReport Run(Trax.StateMachine.Gherkin.FeatureGlossary glossary, System.Collections.Generic.IEnumerable<Trax.StateMachine.Gherkin.FeatureFile> features, System.Collections.Generic.IReadOnlyDictionary<string, string> irs, string host, Trax.StateMachine.Gherkin.FeatureRunOptions? options = null) { }
+    }
+    public sealed class FeatureProblem : System.IEquatable<Trax.StateMachine.Gherkin.FeatureProblem>
+    {
+        public FeatureProblem(string File, long Line, string Message) { }
+        public string File { get; init; }
+        public long Line { get; init; }
+        public string Message { get; init; }
+        public override string ToString() { }
+    }
+    public sealed class FeatureRunOptions : System.IEquatable<Trax.StateMachine.Gherkin.FeatureRunOptions>
+    {
+        public FeatureRunOptions() { }
+        public bool DryRun { get; init; }
+        public bool FailFast { get; init; }
+        [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "File",
+                "Line"})]
+        public System.Collections.Generic.IReadOnlyList<System.ValueTuple<string, long>> Locations { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Names { get; init; }
+        public string? Tags { get; init; }
+    }
+    public sealed class FeatureRunReport : System.IEquatable<Trax.StateMachine.Gherkin.FeatureRunReport>
+    {
+        public FeatureRunReport(System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureScenarioResult> Scenarios, System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureProblem> Problems) { }
+        public bool Passed { get; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureProblem> Problems { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureScenarioResult> Scenarios { get; init; }
+    }
+    public sealed class FeatureScenarioRef : System.IEquatable<Trax.StateMachine.Gherkin.FeatureScenarioRef>
+    {
+        public FeatureScenarioRef(string File, long Line, string Scenario) { }
+        public string File { get; init; }
+        public long Line { get; init; }
+        public string Scenario { get; init; }
+    }
+    public sealed class FeatureScenarioResult : System.IEquatable<Trax.StateMachine.Gherkin.FeatureScenarioResult>
+    {
+        public FeatureScenarioResult(string File, long Line, string Name, System.Collections.Generic.IReadOnlyList<string> Tags, Trax.StateMachine.Gherkin.FeatureStatus Status, System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureStepResult> Steps) { }
+        public string File { get; init; }
+        public long Line { get; init; }
+        public string Name { get; init; }
+        public Trax.StateMachine.Gherkin.FeatureStatus Status { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureStepResult> Steps { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Tags { get; init; }
+    }
+    public enum FeatureStatus
+    {
+        Passed = 0,
+        Failed = 1,
+        Undefined = 2,
+        Skipped = 3,
+    }
+    public sealed class FeatureStepResult : System.IEquatable<Trax.StateMachine.Gherkin.FeatureStepResult>
+    {
+        public FeatureStepResult(long Line, string Keyword, string Text, Trax.StateMachine.Gherkin.FeatureStatus Status, string? Message) { }
+        public string Keyword { get; init; }
+        public long Line { get; init; }
+        public string? Message { get; init; }
+        public Trax.StateMachine.Gherkin.FeatureStatus Status { get; init; }
+        public string Text { get; init; }
+    }
+    public sealed class FeatureSticky : System.IEquatable<Trax.StateMachine.Gherkin.FeatureSticky>
+    {
+        public FeatureSticky(string Id, string Kind, string Machine, string Label, System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureScenarioRef> Scenarios) { }
+        public string Id { get; init; }
+        public string Kind { get; init; }
+        public string Label { get; init; }
+        public string Machine { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureScenarioRef> Scenarios { get; init; }
+    }
+}

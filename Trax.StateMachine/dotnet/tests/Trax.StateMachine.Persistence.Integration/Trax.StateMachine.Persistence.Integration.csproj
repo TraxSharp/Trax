@@ -28,6 +28,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.StateMachine.Persistence/Trax.StateMachine.Persistence.csproj" />
+    <!-- Derives a machines directory from features, to serve it with ServeFeatures. -->
+    <ProjectReference Include="../../src/Trax.StateMachine.Gherkin/Trax.StateMachine.Gherkin.csproj" />
     <!-- MachineConformance is the Testing package's helper over IMachine, so its tests live with the
          Machine<,> fakes here rather than duplicating them in the engine test project. -->
     <ProjectReference Include="../../src/Trax.StateMachine.Testing/Trax.StateMachine.Testing.csproj" />
