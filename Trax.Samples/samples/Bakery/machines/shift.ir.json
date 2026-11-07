@@ -1,0 +1,1 @@
+{"committedStates":[],"context":{"Off":{"fields":[]},"On":{"fields":[]}},"id":"shift","initialContext":{},"initialState":"Off","inputs":{},"states":["Off","On"],"transitions":[{"from":"Off","to":"On","trigger":"ClockIn"}],"triggers":["ClockIn"],"version":1}

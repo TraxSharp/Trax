@@ -1,0 +1,13 @@
+@baker: roles baker
+@customer: roles customer
+order Bake: the server only
+order Order: customer
+order Place: customer
+order read: customer
+order start: customer
+shift ClockIn: baker
+shift read: baker
+shift start: baker
+shop Open: the server only
+view orders: customer
+view shop sign: baker, customer

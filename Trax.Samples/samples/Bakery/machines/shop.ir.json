@@ -1,0 +1,1 @@
+{"committedStates":[],"context":{"Closed":{"fields":[]},"Open":{"fields":[]}},"id":"shop","initialContext":{},"initialState":"Closed","inputs":{},"states":["Closed","Open"],"timers":[{"after":"PT5S","rules":["undeclared"],"state":"Open","target":"Closed","trigger":"Open.after"}],"transitions":[{"from":"Closed","to":"Open","trigger":"Open"}],"triggers":["Open"],"version":1}
