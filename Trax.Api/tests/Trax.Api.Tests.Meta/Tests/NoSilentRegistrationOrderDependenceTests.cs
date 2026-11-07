@@ -64,8 +64,10 @@ public class NoSilentRegistrationOrderDependenceTests
         // TrainRegistrationOrderValidator backs at startup. The broadcaster branch
         // and the three subscription-interceptor branches are gone: the handlers and the
         // composite socket interceptor are registered unconditionally and decide from the
-        // finished container, so there is no order-dependent decision left in either.
-        ["src/Trax.Api.GraphQL/Extensions/GraphQLServiceExtensions.cs"] = 2,
+        // finished container, so there is no order-dependent decision left in either. Whether
+        // views of machines served from features were registered, which
+        // ViewRegistrationOrderValidator backs at startup.
+        ["src/Trax.Api.GraphQL/Extensions/GraphQLServiceExtensions.cs"] = 3,
     };
 
     [Test]

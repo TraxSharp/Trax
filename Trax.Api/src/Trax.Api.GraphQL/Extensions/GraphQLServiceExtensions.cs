@@ -187,6 +187,12 @@ public static class GraphQLServiceExtensions
                 sp.GetServices<IMachine>()
             ));
 
+        // Views AddTraxGraphQL could not see would be left without the views root. Refuse the host, naming them.
+        if (!viewsExposed)
+            services.AddHostedService(sp => new ViewRegistrationOrderValidator(
+                sp.GetService<Trax.StateMachine.Persistence.FromIr.MachineViewCatalog>()
+            ));
+
         // A train mutation that can queue, on a host whose store is in memory, is refused per
         // request; this names them once at startup (docs/adr/0038).
         var queueCapableMutations = trainRegistrations
