@@ -42,4 +42,13 @@
     />
     <None Include="reqnroll.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- The page's committed client manifest: ProductionPostureTests reads a view by the id the page holds. -->
+  <ItemGroup>
+    <None
+      Include="..\..\samples\Bakery\Trax.Samples.Bakery.Web\src\trax\manifest.json"
+      Link="client\manifest.json"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+  </ItemGroup>
 </Project>

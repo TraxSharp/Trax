@@ -8,7 +8,7 @@ namespace Trax.Samples.Bakery.E2E.Fixtures;
 /// hand-written documents, since the feature bindings send each step as one, and sweeps for due timers every 200 ms, so
 /// the shop's closing time is seen when it falls due.
 /// </summary>
-public sealed class BakeryApiFactory : SampleApiFactory<Api.Program>
+public class BakeryApiFactory : SampleApiFactory<Api.Program>
 {
     public const string DefaultConnectionString =
         "Host=localhost;Port=5432;Database=bakery_e2e_tests;Username=trax;Password=trax123;"
