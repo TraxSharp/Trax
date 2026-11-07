@@ -223,4 +223,35 @@ public class MachineBrowserTests : ConsoleTest
             .Expect(page.Commands)
             .ToContainTextAsync(nameof(GateTrigger.Close), new() { Timeout = Render });
     }
+
+    [Test]
+    [Covers("route:/machines/:name")]
+    public async Task A_machine_served_from_features_shows_its_board_and_the_scenarios_behind_a_command()
+    {
+        var page = new MachinePage(Console, FeatureShelf.Id);
+        await page.OpenAsync(Caller.Operator);
+
+        await page.Tab("Board").ClickAsync();
+        await Assertions
+            .Expect(Page)
+            .ToHaveURLAsync(new System.Text.RegularExpressions.Regex("[?&]tab=board"));
+        await page.Sticky("Shelve").ClickAsync(new() { Timeout = Render });
+
+        var scenarios = Page.GetByLabel("Scenarios behind it");
+        await Assertions
+            .Expect(scenarios)
+            .ToContainTextAsync(FeatureShelf.Scenario, new() { Timeout = Render });
+        await Assertions.Expect(scenarios).ToContainTextAsync("shelving.feature:2");
+    }
+
+    [Test]
+    [Covers("route:/machines/:name")]
+    public async Task A_machine_not_served_from_features_has_no_board_tab()
+    {
+        var page = new MachinePage(Console, ReminderMachine.Id);
+        await page.OpenAsync(Caller.Operator);
+
+        await Assertions.Expect(page.Diagram).ToBeVisibleAsync(new() { Timeout = Render });
+        await Assertions.Expect(page.Tab("Board")).ToHaveCountAsync(0);
+    }
 }

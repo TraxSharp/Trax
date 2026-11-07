@@ -24,6 +24,8 @@
     <ProjectReference Include="..\..\..\Trax.Effect\src\Trax.Effect.JunctionProvider.Progress\Trax.Effect.JunctionProvider.Progress.csproj" />
     <ProjectReference Include="..\..\..\Trax.Effect\src\Trax.Effect.Provider.Parameter\Trax.Effect.Provider.Parameter.csproj" />
     <ProjectReference Include="..\..\lib\Trax.Samples.Shared.Testing\Trax.Samples.Shared.Testing.csproj" />
+    <!-- Derives the machine the Board tab draws (Host/FeatureShelf.cs). -->
+    <ProjectReference Include="..\..\..\Trax.StateMachine\dotnet\src\Trax.StateMachine.Gherkin\Trax.StateMachine.Gherkin.csproj" />
   </ItemGroup>
 
   <ItemGroup>

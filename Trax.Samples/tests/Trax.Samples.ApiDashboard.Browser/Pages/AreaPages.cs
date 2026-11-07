@@ -305,6 +305,25 @@ public sealed class MachinePage : AreaPage
 
     public ILocator Instances => Page.GetByRole(AriaRole.Region, new() { Name = "Instances" });
 
+    /// <summary>A tab of the page: <c>State diagram</c> or <c>Board</c>.</summary>
+    public ILocator Tab(string name) =>
+        Page.GetByRole(AriaRole.Tab, new() { Name = name, Exact = true });
+
+    public ILocator Board =>
+        Page.GetByRole(AriaRole.Group, new() { Name = $"Board of {machine}", Exact = true });
+
+    /// <summary>A sticky on the board: a button named by its label.</summary>
+    public ILocator Sticky(string label) =>
+        Board.GetByRole(
+            AriaRole.Button,
+            new()
+            {
+                NameRegex = new System.Text.RegularExpressions.Regex(
+                    $"^{System.Text.RegularExpressions.Regex.Escape(label)}\\b"
+                ),
+            }
+        );
+
     public ILocator StuckOnly => Page.GetByRole(AriaRole.Checkbox, new() { Name = "Stuck only" });
 
     /// <summary>The row of one instance, by the link its id is.</summary>
