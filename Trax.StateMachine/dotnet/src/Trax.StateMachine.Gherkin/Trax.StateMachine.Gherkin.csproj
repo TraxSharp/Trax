@@ -23,5 +23,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.StateMachine.Tests" />
+    <!-- `trax machine from-gherkin` derives and writes the directory. Until the package's public surface is settled,
+         the CLI, which ships built against this commit, is the one outside caller. Its assembly is named `trax`. -->
+    <InternalsVisibleTo Include="trax" />
   </ItemGroup>
 </Project>

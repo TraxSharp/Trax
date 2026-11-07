@@ -18,6 +18,7 @@ internal static class MachineCommand
             CreateCheck(),
             CreateShow(),
             CreateMigrate(),
+            CreateFromGherkin(),
         };
 
     private static Command CreateNew()
@@ -286,6 +287,118 @@ internal static class MachineCommand
         catch (InvalidOperationException ex)
         {
             Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    private static Command CreateFromGherkin()
+    {
+        var featuresOption = new Option<DirectoryInfo>("--features")
+        {
+            Description = "Directory of .feature files, read recursively.",
+            Required = true,
+        };
+        var glossaryOption = new Option<FileInfo?>("--glossary")
+        {
+            Description =
+                "The glossary's JSON file (default: glossary.json in the features directory).",
+        };
+        var outOption = new Option<DirectoryInfo>("--out")
+        {
+            Description =
+                "Directory the command owns: one <machine>.ir.json per machine, host.json and access.txt. A machine that no longer derives has its file removed.",
+            Required = true,
+        };
+        var checkOption = new Option<bool>("--check")
+        {
+            Description =
+                "Write nothing; exit 1 if any file in --out differs from what the features derive, access.txt included.",
+        };
+        var command = new Command(
+            "from-gherkin",
+            "Derive machines from features and a glossary: their IRs, the host file and the access report."
+        )
+        {
+            featuresOption,
+            glossaryOption,
+            outOption,
+            checkOption,
+        };
+        command.SetAction(parseResult =>
+        {
+            var features = parseResult.GetRequiredValue(featuresOption).FullName;
+            return RunFromGherkin(
+                features,
+                parseResult.GetValue(glossaryOption)?.FullName
+                    ?? Path.Combine(features, "glossary.json"),
+                parseResult.GetRequiredValue(outOption).FullName,
+                parseResult.GetValue(checkOption),
+                Console.Out,
+                Console.Error
+            );
+        });
+        return command;
+    }
+
+    internal static int RunFromGherkin(
+        string featuresDir,
+        string glossaryPath,
+        string outDir,
+        bool check,
+        TextWriter stdout,
+        TextWriter stderr
+    )
+    {
+        try
+        {
+            FeatureMachines.RefuseForeign(outDir);
+            var result = FeatureMachines.Derive(featuresDir, glossaryPath);
+            foreach (var step in result.UiSteps)
+                stdout.WriteLine($"not derived (about the UI): {step}");
+            if (result.Problems.Count > 0)
+            {
+                foreach (var problem in result.Problems)
+                    stderr.WriteLine(problem);
+                stderr.WriteLine(
+                    $"{result.Problems.Count} problem(s); nothing was {(check ? "checked" : "written")}."
+                );
+                return 1;
+            }
+            if (check)
+            {
+                var drift = FeatureMachines.Check(outDir, result.Files);
+                foreach (var line in drift)
+                    stderr.WriteLine(line);
+                if (drift.Count > 0)
+                {
+                    stderr.WriteLine(
+                        "Run `trax machine from-gherkin` without --check and commit what it writes."
+                    );
+                    return 1;
+                }
+                stdout.WriteLine($"{outDir} is up to date.");
+                return 0;
+            }
+            var changes = FeatureMachines.Write(outDir, result.Files);
+            foreach (var line in changes)
+                stdout.WriteLine(line);
+            if (changes.Count == 0)
+                stdout.WriteLine($"{outDir} is up to date.");
+            return 0;
+        }
+        catch (FeatureMachinesException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (IOException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            stderr.WriteLine(ex.Message);
             return 1;
         }
     }

@@ -30,8 +30,9 @@ internal sealed class Access
     internal IReadOnlyDictionary<string, JsonObject> Entries { get; }
 
     /// <summary>
-    /// The report: one sorted line per start, read and trigger, with the actors its rule admits. An actor the rule
-    /// admits that no scenario shows is marked, so a grant nobody meant is seen in review.
+    /// The report: each actor's roles (<c>@customer: roles customer</c>), then one sorted line per start, read, trigger
+    /// and view, with the actors its rule admits. An actor the rule admits that no scenario shows is marked, so a grant
+    /// nobody meant is seen in review.
     /// </summary>
     internal string Table { get; }
 
@@ -146,6 +147,23 @@ internal sealed class Access
         )
         {
             var view = glossary.Views[group.Key];
+            var unused = view.Reads.FirstOrDefault(r => !irs.ContainsKey(r.Machine));
+            if (unused is not null)
+            {
+                var first = group
+                    .OrderBy(v => v.Scenario.File, StringComparer.Ordinal)
+                    .ThenBy(v => v.Line)
+                    .First();
+                problems.Add(
+                    new Problem(
+                        first.Scenario.File,
+                        first.Line,
+                        $"The view '{view.Name}' reads the machine '{unused.Machine}', which no scenario "
+                            + "uses, so it is not derived. Show it in a scenario."
+                    )
+                );
+                continue;
+            }
             var readers = group
                 .Select(v => glossary.Actors[v.Actor])
                 .DistinctBy(a => a.Name)
@@ -204,6 +222,13 @@ internal sealed class Access
 
         if (problems.Count > before)
             return null;
+        // Each actor's roles first, so a role an actor gains or loses changes the report as a new grant would.
+        foreach (var actor in glossary.Actors.Values)
+            lines.Add(
+                actor.AnyAuthenticated
+                    ? $"@{actor.Name}: anyone signed in"
+                    : $"@{actor.Name}: roles {string.Join(", ", actor.Roles.Order(StringComparer.Ordinal))}"
+            );
         var table = new StringBuilder();
         foreach (var line in lines.Order(StringComparer.Ordinal))
             table.Append(line).Append('\n');

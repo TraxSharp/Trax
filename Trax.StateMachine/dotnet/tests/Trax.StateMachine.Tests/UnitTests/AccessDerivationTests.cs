@@ -89,6 +89,14 @@ public class AccessDerivationTests
     }
 
     [Test]
+    public void The_table_lists_each_actors_roles_so_a_changed_role_shows_in_review()
+    {
+        var derived = Derive(People);
+
+        derived.Access.Should().StartWith("@").And.Contain("@customer: roles customer\n");
+    }
+
+    [Test]
     public void An_actor_a_rule_admits_that_no_scenario_shows_is_marked_in_the_table()
     {
         var derived = Derive(People);

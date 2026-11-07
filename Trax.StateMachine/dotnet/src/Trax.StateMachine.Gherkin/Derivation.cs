@@ -38,8 +38,11 @@ internal static class FeatureDerivation
         var uiSteps = walks.SelectMany(w => w.UiSteps).ToList();
 
         var irs = new SortedDictionary<string, JsonObject>(StringComparer.Ordinal);
+        // A machine no scenario uses is not derived, as a view no scenario reads is not served: its IR would serve
+        // states nothing shows.
+        var used = Used(walks);
         if (problems.Count == 0)
-            foreach (var machine in glossary.Machines.Values)
+            foreach (var machine in glossary.Machines.Values.Where(m => used.Contains(m.Id)))
             {
                 var ir = Merge.Machine(machine, walks, problems);
                 if (ir is not null)
@@ -72,22 +75,56 @@ internal static class FeatureDerivation
         );
         return new Derived(
             written,
-            Host(glossary, written, access, policies),
+            Host(glossary, walks, written, access, policies),
             access.Table,
             [],
             Sorted(uiSteps)
         );
     }
 
-    // The host file: its machines, then its policies and views when it has any.
-    private static JsonObject Document(JsonObject machines, JsonArray policies, JsonObject views)
+    // The host file: its machines, then its policies, views and provenance when it has any.
+    private static JsonObject Document(
+        JsonObject machines,
+        JsonArray policies,
+        JsonObject views,
+        JsonObject provenance
+    )
     {
         var document = new JsonObject { ["version"] = HostFile.Version, ["machines"] = machines };
         if (policies.Count > 0)
             document["policies"] = policies.DeepClone();
         if (views.Count > 0)
             document["views"] = views.DeepClone();
+        if (provenance.Count > 0)
+            document["provenance"] = provenance;
         return document;
+    }
+
+    private static HashSet<string> Used(IEnumerable<Walk> walks)
+    {
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var walk in walks)
+        {
+            used.UnionWith(walk.Observations.Select(o => o.Machine));
+            used.UnionWith(walk.Starts.Select(s => s.Machine));
+            used.UnionWith(walk.Policies.SelectMany(p => new[] { p.When, p.Target }));
+            foreach (var (_, meaning) in walk.Steps)
+                if (
+                    meaning switch
+                    {
+                        Meaning.Start m => m.Machine,
+                        Meaning.Act m => m.Machine,
+                        Meaning.Happens m => m.Machine,
+                        Meaning.InState m => m.Machine,
+                        Meaning.Guard m => m.Machine,
+                        Meaning.Outcome m => m.Machine,
+                        _ => null,
+                    } is
+                    { } machine
+                )
+                    used.Add(machine);
+        }
+        return used;
     }
 
     private static List<Problem> Sorted(IEnumerable<Problem> problems) =>
@@ -102,6 +139,7 @@ internal static class FeatureDerivation
     // Who may start, read and fire each machine is the access derivation's.
     private static string Host(
         Glossary glossary,
+        IReadOnlyList<Walk> walks,
         IReadOnlyDictionary<string, string> irs,
         Access access,
         JsonArray policies
@@ -150,7 +188,14 @@ internal static class FeatureDerivation
             }
             machines[id] = entry;
         }
-        return CanonicalJson.Serialize(Document(machines, policies, access.Views));
+        return CanonicalJson.Serialize(
+            Document(
+                machines,
+                policies,
+                access.Views,
+                Provenance.Derive(glossary, walks, irs.Keys.ToList(), access.Views)
+            )
+        );
     }
 }
 
@@ -647,7 +692,7 @@ internal sealed class Walk
         if (!shown.Contains(v.Value))
             Fail(
                 step.Line,
-                $"'{step.Text}': {v.Person}'s {v.View} show {v.Field} {(shown.Count == 0 ? "nothing here" : string.Join(" or ", shown.Select(s => $"\"{s}\"")))}."
+                $"'{step.Text}': {v.Person}'s {v.View} show {v.Field} {(shown.Count == 0 ? "nothing, since the scenario has no instance it reads" : string.Join(" or ", shown.Select(s => $"\"{s}\"")))}."
             );
     }
 

@@ -35,5 +35,8 @@
          every scenario on what it derived with the engine's own rule and reduction readers. -->
     <InternalsVisibleTo Include="Trax.StateMachine.Gherkin" />
     <InternalsVisibleTo Include="Trax.Api.Tests.StateMachine.E2E" />
+    <!-- `trax machine from-gherkin` reads the glossary it derives from, to name a bad one's key. The CLI's assembly is
+         named `trax`. -->
+    <InternalsVisibleTo Include="trax" />
   </ItemGroup>
 </Project>

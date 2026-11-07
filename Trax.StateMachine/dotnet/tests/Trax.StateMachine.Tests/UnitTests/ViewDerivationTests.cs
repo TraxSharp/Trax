@@ -92,6 +92,34 @@ public class ViewDerivationTests
     }
 
     [Test]
+    public void A_machine_no_scenario_uses_is_not_derived()
+    {
+        var derived = Derive(Ordering);
+
+        derived.Irs.Keys.Should().Equal("order");
+        HostFile.Read(derived.Host!).Machines.Keys.Should().Equal("order");
+    }
+
+    [Test]
+    public void A_view_reading_a_machine_the_scenario_never_shows_is_a_problem()
+    {
+        var derived = Derive(
+            Ordering
+                + """
+
+                  Scenario: Ada reads the sign
+                    Then Ada's shop sign shows open "Closed"
+                """
+        );
+
+        derived
+            .Problems.Should()
+            .ContainSingle()
+            .Which.Message.Should()
+            .Contain("show open nothing, since the scenario has no instance it reads");
+    }
+
+    [Test]
     public void A_view_shows_a_person_their_own_instances_only()
     {
         var derived = Derive(
