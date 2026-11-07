@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Trax.Cli.Machines;
+using Trax.StateMachine.Gherkin;
 
 namespace Trax.Cli.Commands;
 
@@ -19,6 +20,10 @@ internal static class MachineCommand
             CreateShow(),
             CreateMigrate(),
             CreateFromGherkin(),
+            CreateRun(),
+            CreateMissing(),
+            CreateUsage(),
+            CreateDiagram(),
         };
 
     private static Command CreateNew()
@@ -387,6 +392,473 @@ internal static class MachineCommand
             return 0;
         }
         catch (FeatureMachinesException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (IOException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    private static Command CreateRun()
+    {
+        var featuresOption = new Option<DirectoryInfo>("--features")
+        {
+            Description = "Directory of .feature files, read recursively.",
+            Required = true,
+        };
+        var glossaryOption = new Option<FileInfo?>("--glossary")
+        {
+            Description =
+                "The glossary's JSON file (default: glossary.json in the features directory).",
+        };
+        var machinesOption = new Option<DirectoryInfo>("--machines")
+        {
+            Description =
+                "The directory from-gherkin wrote, as committed: the features run on these machines.",
+            Required = true,
+        };
+        var locationsArgument = new Argument<string[]>("locations")
+        {
+            Description =
+                "Scenarios to run, as file:line relative to --features (a scenario's or an example row's line).",
+            Arity = ArgumentArity.ZeroOrMore,
+        };
+        var tagsOption = new Option<string?>("--tags")
+        {
+            Description =
+                "A tag expression: @smoke, '@smoke and not @slow', '(@a or @b) and not @c'.",
+        };
+        var nameOption = new Option<string[]>("--name")
+        {
+            Description =
+                "Run only scenarios whose name matches this regular expression. Repeat for any of several.",
+            AllowMultipleArgumentsPerToken = false,
+        };
+        var formatOption = new Option<string>("--format")
+        {
+            Description = "pretty (default), json or junit.",
+            DefaultValueFactory = _ => "pretty",
+        };
+        formatOption.AcceptOnlyFromAmong(RunReportWriter.Formats);
+        var reportOption = new Option<FileInfo?>("--report")
+        {
+            Description = "Write the report to this file instead of standard output.",
+        };
+        var strictOption = new Option<bool>("--strict")
+        {
+            Description =
+                "Also fail on steps about the UI, which are not checked here. An undefined step always fails.",
+        };
+        var dryRunOption = new Option<bool>("--dry-run")
+        {
+            Description = "Read every step and run none: shows undefined steps.",
+        };
+        var failFastOption = new Option<bool>("--fail-fast")
+        {
+            Description = "Stop at the first scenario that does not pass.",
+        };
+        var command = new Command(
+            "run",
+            "Run features in memory on the machines a directory serves, access included, answering as the host does."
+        )
+        {
+            featuresOption,
+            glossaryOption,
+            machinesOption,
+            locationsArgument,
+            tagsOption,
+            nameOption,
+            formatOption,
+            reportOption,
+            strictOption,
+            dryRunOption,
+            failFastOption,
+        };
+        command.SetAction(parseResult =>
+        {
+            var features = parseResult.GetRequiredValue(featuresOption).FullName;
+            return RunRun(
+                new RunArguments(
+                    features,
+                    parseResult.GetValue(glossaryOption)?.FullName
+                        ?? Path.Combine(features, "glossary.json"),
+                    parseResult.GetRequiredValue(machinesOption).FullName,
+                    parseResult.GetValue(locationsArgument) ?? [],
+                    parseResult.GetValue(tagsOption),
+                    parseResult.GetValue(nameOption) ?? [],
+                    parseResult.GetValue(formatOption) ?? "pretty",
+                    parseResult.GetValue(reportOption)?.FullName,
+                    parseResult.GetValue(strictOption),
+                    parseResult.GetValue(dryRunOption),
+                    parseResult.GetValue(failFastOption)
+                ),
+                Console.Out,
+                Console.Error
+            );
+        });
+        return command;
+    }
+
+    internal sealed record RunArguments(
+        string FeaturesDir,
+        string GlossaryPath,
+        string MachinesDir,
+        IReadOnlyList<string> Locations,
+        string? Tags = null,
+        IReadOnlyList<string>? Names = null,
+        string Format = "pretty",
+        string? ReportPath = null,
+        bool Strict = false,
+        bool DryRun = false,
+        bool FailFast = false
+    );
+
+    internal static int RunRun(RunArguments args, TextWriter stdout, TextWriter stderr)
+    {
+        try
+        {
+            var (glossary, features) = FeatureMachines.Read(args.FeaturesDir, args.GlossaryPath);
+            var (host, irs) = Trax.StateMachine.Persistence.FromIr.IrDirectory.Read(
+                args.MachinesDir
+            );
+            var locations = new List<(string File, long Line)>();
+            foreach (var location in args.Locations)
+            {
+                var colon = location.LastIndexOf(':');
+                if (colon <= 0 || !long.TryParse(location[(colon + 1)..], out var line) || line < 1)
+                {
+                    stderr.WriteLine(
+                        $"'{location}' is not file:line, such as ordering.feature:12."
+                    );
+                    return 1;
+                }
+                locations.Add((location[..colon].Replace('\\', '/'), line));
+            }
+            if (args.Names is { } names)
+                foreach (var name in names)
+                    try
+                    {
+                        _ = new System.Text.RegularExpressions.Regex(name);
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        stderr.WriteLine(
+                            $"--name '{name}' is not a regular expression: {ex.Message}"
+                        );
+                        return 1;
+                    }
+            if (args.Tags is { } tags)
+                try
+                {
+                    TagExpression.Parse(tags);
+                }
+                catch (FormatException ex)
+                {
+                    stderr.WriteLine($"--tags {ex.Message}");
+                    return 1;
+                }
+
+            var report = FeatureRun.Run(
+                glossary,
+                features,
+                irs,
+                host,
+                new RunSelection(args.Tags, args.Names, locations),
+                args.DryRun,
+                args.FailFast
+            );
+            foreach (var problem in report.Problems)
+                stderr.WriteLine(problem);
+            var text = RunReportWriter.Write(report, args.Format);
+            if (args.ReportPath is { } path)
+                File.WriteAllText(path, text, new System.Text.UTF8Encoding(false));
+            else
+                stdout.Write(text);
+
+            var passed =
+                report.Problems.Count == 0
+                && report.Scenarios.All(s =>
+                    s.Status == ScenarioStatus.Passed
+                    && (!args.Strict || !s.Skipped.Any(x => x.Message != "not run"))
+                );
+            if (report.Scenarios.Count == 0)
+                stderr.WriteLine("No scenario matched.");
+            return passed ? 0 : 1;
+        }
+        catch (FeatureMachinesException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (InvalidOperationException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (IOException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    private static (Option<DirectoryInfo> Features, Option<FileInfo?> Glossary) FeatureOptions() =>
+        (
+            new Option<DirectoryInfo>("--features")
+            {
+                Description = "Directory of .feature files, read recursively.",
+                Required = true,
+            },
+            new Option<FileInfo?>("--glossary")
+            {
+                Description =
+                    "The glossary's JSON file (default: glossary.json in the features directory).",
+            }
+        );
+
+    private static (string Features, string Glossary) FeaturePaths(
+        ParseResult parseResult,
+        (Option<DirectoryInfo> Features, Option<FileInfo?> Glossary) options
+    )
+    {
+        var features = parseResult.GetRequiredValue(options.Features).FullName;
+        return (
+            features,
+            parseResult.GetValue(options.Glossary)?.FullName
+                ?? Path.Combine(features, "glossary.json")
+        );
+    }
+
+    private static Command CreateMissing()
+    {
+        var paths = FeatureOptions();
+        var kindOption = new Option<string[]>("--kind")
+        {
+            Description =
+                "Only these gaps: machine, trigger, state, guard, refusal, outcome, view, grant. Repeat for several.",
+        };
+        kindOption.AcceptOnlyFromAmong(
+            Enum.GetNames<GapKind>().Select(n => n.ToLowerInvariant()).ToArray()
+        );
+        var outOption = new Option<FileInfo?>("--out")
+        {
+            Description = "Also write the stubs to this file, as one feature to paste from.",
+        };
+        var command = new Command(
+            "missing",
+            "List what the glossary names and no scenario shows, each with a scenario to paste that is checked green first."
+        )
+        {
+            paths.Features,
+            paths.Glossary,
+            kindOption,
+            outOption,
+        };
+        command.SetAction(parseResult =>
+        {
+            var (features, glossary) = FeaturePaths(parseResult, paths);
+            return RunMissing(
+                features,
+                glossary,
+                parseResult.GetValue(kindOption) ?? [],
+                parseResult.GetValue(outOption)?.FullName,
+                Console.Out,
+                Console.Error
+            );
+        });
+        return command;
+    }
+
+    internal static int RunMissing(
+        string featuresDir,
+        string glossaryPath,
+        IReadOnlyList<string> kinds,
+        string? outPath,
+        TextWriter stdout,
+        TextWriter stderr
+    )
+    {
+        try
+        {
+            var (glossary, features) = FeatureMachines.Read(featuresDir, glossaryPath);
+            var (gaps, problems) = Missing.Find(glossary, features);
+            if (problems.Count > 0)
+            {
+                foreach (var problem in problems)
+                    stderr.WriteLine(problem);
+                stderr.WriteLine("The features do not derive: fix these first.");
+                return 1;
+            }
+            var wanted = gaps.Where(g =>
+                    kinds.Count == 0
+                    || kinds.Contains(g.Kind.ToString(), StringComparer.OrdinalIgnoreCase)
+                )
+                .ToList();
+            foreach (var gap in wanted)
+            {
+                stdout.WriteLine($"# {gap.Message}");
+                stdout.Write(gap.Stub ?? "#   (no scenario can be written for this one)\n");
+                stdout.WriteLine();
+            }
+            stdout.WriteLine($"{wanted.Count} gap(s).");
+            if (outPath is not null)
+            {
+                var file = new System.Text.StringBuilder("Feature: Missing scenarios\n");
+                foreach (var gap in wanted.Where(g => g.Stub is not null))
+                    file.Append($"\n  # {gap.Message}\n").Append(gap.Stub);
+                File.WriteAllText(outPath, file.ToString(), new System.Text.UTF8Encoding(false));
+            }
+            return 0;
+        }
+        catch (FeatureMachinesException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (IOException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    private static Command CreateUsage()
+    {
+        var paths = FeatureOptions();
+        var unusedOption = new Option<bool>("--unused")
+        {
+            Description = "Only the phrases no step says.",
+        };
+        var command = new Command("usage", "List each glossary phrase and the steps that say it.")
+        {
+            paths.Features,
+            paths.Glossary,
+            unusedOption,
+        };
+        command.SetAction(parseResult =>
+        {
+            var (features, glossary) = FeaturePaths(parseResult, paths);
+            return RunUsage(
+                features,
+                glossary,
+                parseResult.GetValue(unusedOption),
+                Console.Out,
+                Console.Error
+            );
+        });
+        return command;
+    }
+
+    internal static int RunUsage(
+        string featuresDir,
+        string glossaryPath,
+        bool unusedOnly,
+        TextWriter stdout,
+        TextWriter stderr
+    )
+    {
+        try
+        {
+            var (glossary, features) = FeatureMachines.Read(featuresDir, glossaryPath);
+            var (phrases, problems) = Usage.Find(glossary, features);
+            foreach (var problem in problems)
+                stderr.WriteLine(problem);
+            foreach (var use in phrases.Where(p => !unusedOnly || p.Steps.Count == 0))
+            {
+                stdout.WriteLine($"{use.Part} \"{use.Phrase}\": {use.Steps.Count}");
+                foreach (var (file, line) in use.Steps)
+                    stdout.WriteLine($"  {file}:{line}");
+            }
+            return problems.Count == 0 ? 0 : 1;
+        }
+        catch (FeatureMachinesException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (IOException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    private static Command CreateDiagram()
+    {
+        var machinesOption = new Option<DirectoryInfo>("--machines")
+        {
+            Description = "The directory from-gherkin wrote.",
+            Required = true,
+        };
+        var formatOption = new Option<string>("--format")
+        {
+            Description = "html (default, one page that needs no network), mermaid or json.",
+            DefaultValueFactory = _ => "html",
+        };
+        formatOption.AcceptOnlyFromAmong(BoardWriter.Formats);
+        var outOption = new Option<FileInfo?>("--out")
+        {
+            Description = "Write the board to this file instead of standard output.",
+        };
+        var command = new Command(
+            "diagram",
+            "Draw the event-storming board of a machines directory: actors, commands, events, policies, views, and the scenarios behind each."
+        )
+        {
+            machinesOption,
+            formatOption,
+            outOption,
+        };
+        command.SetAction(parseResult =>
+            RunDiagram(
+                parseResult.GetRequiredValue(machinesOption).FullName,
+                parseResult.GetValue(formatOption) ?? "html",
+                parseResult.GetValue(outOption)?.FullName,
+                Console.Out,
+                Console.Error
+            )
+        );
+        return command;
+    }
+
+    internal static int RunDiagram(
+        string machinesDir,
+        string format,
+        string? outPath,
+        TextWriter stdout,
+        TextWriter stderr
+    )
+    {
+        try
+        {
+            var (host, irs) = Trax.StateMachine.Persistence.FromIr.IrDirectory.Read(machinesDir);
+            var text = BoardWriter.Write(Trax.StateMachine.Features.Board.Draw(irs, host), format);
+            if (outPath is null)
+                stdout.Write(text);
+            else
+                File.WriteAllText(outPath, text, new System.Text.UTF8Encoding(false));
+            return 0;
+        }
+        catch (InvalidOperationException ex)
         {
             stderr.WriteLine(ex.Message);
             return 1;

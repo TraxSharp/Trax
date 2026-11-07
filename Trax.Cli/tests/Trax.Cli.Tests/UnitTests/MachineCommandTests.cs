@@ -41,7 +41,18 @@ public class MachineCommandTests
         command
             .Subcommands.Select(c => c.Name)
             .Should()
-            .BeEquivalentTo(["new", "generate", "check", "show", "migrate", "from-gherkin"]);
+            .BeEquivalentTo([
+                "new",
+                "generate",
+                "check",
+                "show",
+                "migrate",
+                "from-gherkin",
+                "run",
+                "missing",
+                "usage",
+                "diagram",
+            ]);
 
         var generate = command.Subcommands.Single(c => c.Name == "generate");
         generate

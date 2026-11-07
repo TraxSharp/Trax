@@ -200,6 +200,226 @@ public class FromGherkinCommandTests
             .And.NotContain(_dir);
     }
 
+    [Test]
+    public void Run_passes_the_features_on_the_committed_machines()
+    {
+        Run();
+
+        var (exit, stdout, err) = RunFeatures();
+
+        exit.Should().Be(0, err);
+        stdout.Should().Contain("ordering.feature:2 Ada places her order  passed");
+        stdout.Should().Contain("2 scenario(s): 2 passed");
+    }
+
+    [Test]
+    public void Run_fails_a_scenario_the_committed_machines_answer_differently()
+    {
+        Run();
+        File.AppendAllText(
+            Path.Combine(Features, "ordering.feature"),
+            """
+
+              Scenario: Placing twice
+                Given Ada is a customer
+                And Ada's order is placed
+                When Ada places her order
+                Then Ada's order is placed
+            """
+        );
+
+        var (exit, stdout, _) = RunFeatures();
+
+        exit.Should().Be(1);
+        stdout.Should().Contain("Placing twice  failed").And.Contain("NO_TRANSITION");
+    }
+
+    [Test]
+    public void Run_selects_by_location_and_writes_junit()
+    {
+        Run();
+        var report = Path.Combine(_dir, "report.xml");
+
+        var (exit, _, err) = RunFeatures(
+            new MachineCommand.RunArguments(
+                Features,
+                Path.Combine(Features, "glossary.json"),
+                Out,
+                ["opening.feature:2"],
+                Format: "junit",
+                ReportPath: report
+            )
+        );
+
+        exit.Should().Be(0, err);
+        var xml = File.ReadAllText(report);
+        xml.Should().Contain("The shop opens (line 2)").And.NotContain("Ada places her order");
+    }
+
+    [Test]
+    public void Run_refuses_a_machines_directory_whose_host_file_was_derived_from_other_irs()
+    {
+        Run();
+        var ir = Path.Combine(Out, "order.ir.json");
+        File.WriteAllText(ir, File.ReadAllText(ir).Replace("\"Placed\"", "\"Sent\""));
+
+        var (exit, _, err) = RunFeatures();
+
+        exit.Should().Be(1);
+        err.Should().Contain("order");
+    }
+
+    [Test]
+    public void Run_refuses_a_bad_tag_expression_and_a_bad_location()
+    {
+        Run();
+
+        RunFeatures(
+            new MachineCommand.RunArguments(
+                Features,
+                Path.Combine(Features, "glossary.json"),
+                Out,
+                [],
+                Tags: "@a and"
+            )
+        )
+            .Err.Should()
+            .Contain("--tags");
+        RunFeatures(
+            new MachineCommand.RunArguments(
+                Features,
+                Path.Combine(Features, "glossary.json"),
+                Out,
+                ["ordering"]
+            )
+        )
+            .Err.Should()
+            .Contain("is not file:line");
+    }
+
+    [Test]
+    public void Missing_lists_each_gap_with_a_stub_and_writes_them_to_paste()
+    {
+        File.WriteAllText(
+            Path.Combine(Features, "glossary.json"),
+            Glossary.Replace(
+                "\"Place\": { \"phrase\": \"places {subject}\" }",
+                "\"Place\": { \"phrase\": \"places {subject}\" }, \"Cancel\": { \"phrase\": \"cancels {subject}\" }"
+            )
+        );
+        var stubs = Path.Combine(_dir, "missing.feature");
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+
+        var exit = MachineCommand.RunMissing(
+            Features,
+            Path.Combine(Features, "glossary.json"),
+            ["trigger"],
+            stubs,
+            stdout,
+            stderr
+        );
+
+        exit.Should().Be(0, stderr.ToString());
+        stdout
+            .ToString()
+            .Should()
+            .Contain("# order Cancel: no scenario fires it")
+            .And.Contain("1 gap(s).");
+        File.ReadAllText(stubs)
+            .Should()
+            .StartWith("Feature: Missing scenarios")
+            .And.Contain("When Ada cancels their order");
+    }
+
+    [Test]
+    public void Usage_lists_each_phrase_with_the_steps_that_say_it()
+    {
+        var stdout = new StringWriter();
+
+        var exit = MachineCommand.RunUsage(
+            Features,
+            Path.Combine(Features, "glossary.json"),
+            false,
+            stdout,
+            new StringWriter()
+        );
+
+        exit.Should().Be(0);
+        stdout
+            .ToString()
+            .Should()
+            .Contain("order trigger Place \"places {subject}\": 1\n  ordering.feature:5");
+    }
+
+    [TestCase("json")]
+    [TestCase("mermaid")]
+    [TestCase("html")]
+    public void Diagram_draws_the_board_with_the_scenarios_behind_each_sticky(string format)
+    {
+        Run();
+        var stdout = new StringWriter();
+
+        var exit = MachineCommand.RunDiagram(Out, format, null, stdout, new StringWriter());
+
+        exit.Should().Be(0);
+        stdout.ToString().Should().Contain("Place");
+        if (format != "html")
+            stdout.ToString().Should().Contain("Draft → Placed");
+        if (format != "mermaid")
+            stdout.ToString().Should().Contain("Ada places her order");
+    }
+
+    [Test]
+    public void The_html_board_never_parses_a_label_as_markup()
+    {
+        File.WriteAllText(
+            Path.Combine(Features, "ordering.feature"),
+            Ordering.Replace(
+                "Scenario: Ada places her order",
+                "Scenario: Ada places </script><b>x</b>"
+            )
+        );
+        Run();
+        var stdout = new StringWriter();
+
+        MachineCommand.RunDiagram(Out, "html", null, stdout, new StringWriter()).Should().Be(0);
+
+        var html = stdout.ToString();
+        html.Should().NotContain("</script><b>").And.NotContain("innerHTML");
+        html.Should().Contain("\\u003C/script\\u003E");
+    }
+
+    [Test]
+    public void Diagram_refuses_a_directory_with_no_host_file()
+    {
+        var stderr = new StringWriter();
+
+        MachineCommand
+            .RunDiagram(Features, "json", null, new StringWriter(), stderr)
+            .Should()
+            .Be(1);
+        stderr.ToString().Should().Contain("has no host.json");
+    }
+
+    private (int Exit, string Out, string Err) RunFeatures(MachineCommand.RunArguments? args = null)
+    {
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var exit = MachineCommand.RunRun(
+            args
+                ?? new MachineCommand.RunArguments(
+                    Features,
+                    Path.Combine(Features, "glossary.json"),
+                    Out,
+                    []
+                ),
+            stdout,
+            stderr
+        );
+        return (exit, stdout.ToString(), stderr.ToString());
+    }
+
     private (int Exit, string Out, string Err) Run(bool check = false, string? outDir = null)
     {
         var stdout = new StringWriter();

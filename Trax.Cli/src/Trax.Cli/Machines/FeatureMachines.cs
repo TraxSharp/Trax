@@ -27,6 +27,18 @@ internal static class FeatureMachines
     /// <exception cref="FeatureMachinesException">A path is wrong, or the glossary is not one.</exception>
     internal static Result Derive(string featuresDir, string glossaryPath)
     {
+        var (glossary, features) = Read(featuresDir, glossaryPath);
+        var derived = FeatureDerivation.Derive(glossary, features);
+        return Derived(derived);
+    }
+
+    /// <summary>The glossary and every <c>*.feature</c> under the features directory, by relative path.</summary>
+    /// <exception cref="FeatureMachinesException">A path is wrong, or the glossary is not one.</exception>
+    internal static (Glossary Glossary, List<(string Path, string Text)> Features) Read(
+        string featuresDir,
+        string glossaryPath
+    )
+    {
         if (!Directory.Exists(featuresDir))
             throw new FeatureMachinesException(
                 File.Exists(featuresDir)
@@ -63,8 +75,11 @@ internal static class FeatureMachines
             .ToList();
         if (features.Count == 0)
             throw new FeatureMachinesException($"{featuresDir} holds no .feature files.");
+        return (glossary, features);
+    }
 
-        var derived = FeatureDerivation.Derive(glossary, features);
+    private static Result Derived(Derived derived)
+    {
         var uiSteps = derived.UiSteps.Select(p => p.ToString()).ToList();
         if (derived.Problems.Count > 0)
             return new Result(
