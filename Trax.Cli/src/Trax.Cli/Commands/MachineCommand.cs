@@ -596,6 +596,13 @@ internal static class MachineCommand
                 stderr.WriteLine("No scenario matched.");
             return passed ? 0 : 1;
         }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException ex)
+        {
+            stderr.WriteLine(
+                $"--name '{ex.Pattern}' took longer than {ex.MatchTimeout.TotalSeconds:0.#} s to match a scenario's name; give a simpler expression."
+            );
+            return 1;
+        }
         catch (FeatureMachinesException ex)
         {
             stderr.WriteLine(ex.Message);
@@ -798,6 +805,11 @@ internal static class MachineCommand
             return 1;
         }
         catch (IOException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (UnauthorizedAccessException ex)
         {
             stderr.WriteLine(ex.Message);
             return 1;

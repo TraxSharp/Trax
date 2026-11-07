@@ -317,6 +317,29 @@ public class FromGherkinCommandTests
     }
 
     [Test]
+    public void Run_refuses_a_name_that_takes_too_long_to_match()
+    {
+        File.WriteAllText(
+            Path.Combine(Features, "opening.feature"),
+            Opening.Replace("Scenario: The shop opens", "Scenario: " + new string('a', 40) + "!")
+        );
+        Run();
+
+        var (exit, _, err) = RunFeatures(
+            new MachineCommand.RunArguments(
+                Features,
+                Path.Combine(Features, "glossary.json"),
+                Out,
+                [],
+                Names: ["(a+)+$"]
+            )
+        );
+
+        exit.Should().Be(1);
+        err.Should().Contain("--name '(a+)+$'");
+    }
+
+    [Test]
     public void Check_and_write_read_a_crlf_checkout_as_unchanged()
     {
         Run();
@@ -384,6 +407,36 @@ public class FromGherkinCommandTests
             .ToString()
             .Should()
             .Contain("order trigger Place \"places {subject}\": 1\n  ordering.feature:5");
+    }
+
+    [Test]
+    public void Usage_reports_a_feature_it_cannot_read()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Ignore("file modes are Unix-only");
+            return;
+        }
+        var feature = Path.Combine(Features, "ordering.feature");
+        File.SetUnixFileMode(feature, UnixFileMode.None);
+        var stderr = new StringWriter();
+        try
+        {
+            var exit = MachineCommand.RunUsage(
+                Features,
+                Path.Combine(Features, "glossary.json"),
+                false,
+                new StringWriter(),
+                stderr
+            );
+
+            exit.Should().Be(1);
+            stderr.ToString().Should().Contain("ordering.feature");
+        }
+        finally
+        {
+            File.SetUnixFileMode(feature, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
     }
 
     [TestCase("json")]
