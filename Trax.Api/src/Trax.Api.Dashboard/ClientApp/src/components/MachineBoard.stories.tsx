@@ -40,7 +40,7 @@ export const WithProvenance: Story = {
   args: { board },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    await userEvent.click(await c.findByRole("button", { name: /Place/ }));
+    await userEvent.click(await c.findByRole("button", { name: /^Place(?!d)/ }));
     await expect(await c.findByText("Ada places her order")).toBeInTheDocument();
     await expect(c.getByText("ordering.feature:6")).toBeInTheDocument();
   },

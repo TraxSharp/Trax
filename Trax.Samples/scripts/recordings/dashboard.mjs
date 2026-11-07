@@ -846,6 +846,8 @@ async function snapshot() {
     const instances = new Map();
     for (const m of machines) {
       const counts = (await record(name, "MachineInstanceStuckCounts", { machine: m.name })).operations.machineInstanceCounts;
+      // Its Board tab's read: null for a machine not served from features, as every recorded host's are.
+      await record(name, "MachineBoard", { machine: m.name });
       const states = [null, ...new Set([...m.states.map((s) => s.name), ...counts.map((c) => c.state)])];
       for (const state of states)
         for (const ownerKind of [null, "SYSTEM", "USER"])
