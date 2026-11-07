@@ -22,7 +22,7 @@ public class InvokedTrainBoardTests
               "start": "has an order",
               "initial": "Draft",
               "context": [ { "name": "approved", "type": "boolean", "nullable": true, "constraints": [] } ],
-              "states": { "Draft": "is a draft", "Paying": "is being paid for", "Placed": "is placed", "Declined": "was declined" },
+              "states": { "Draft": "is a draft", "Paying": "is being paid for", "Placed": "is placed", "Declined": "was declined", "Unpaid": "is unpaid" },
               "triggers": { "Place": { "phrase": "places {subject}" } },
               "invokes": {
                 "Paying": {
@@ -65,8 +65,8 @@ public class InvokedTrainBoardTests
         "Feature: Paying\n  Background:\n    Given Ada is a customer\n    And Ada has an order\n"
         + Paying("the payment goes through", "is placed")
         + Paying("the payment is declined", "was declined")
-        + Paying("the payment cannot be taken", "is a draft")
-        + Paying("the payment is called off", "is a draft");
+        + Paying("the payment cannot be taken", "is unpaid")
+        + Paying("the payment is called off", "is unpaid");
 
     [Test]
     public void The_board_draws_each_outcomes_move()
@@ -84,7 +84,7 @@ public class InvokedTrainBoardTests
             .Stickies.Where(s => s.Kind == "event")
             .Select(s => s.Label)
             .Should()
-            .Contain(["Paying done → Placed", "Paying done → Declined", "Paying failed → Draft"]);
+            .Contain(["Paying done → Placed", "Paying done → Declined", "Paying failed → Unpaid"]);
     }
 
     [Test]
@@ -96,5 +96,24 @@ public class InvokedTrainBoardTests
         );
 
         gaps.Should().NotContain(g => g.Kind == "state");
+    }
+
+    [Test]
+    public void An_outcome_back_to_the_start_is_refused_as_the_host_refuses_it()
+    {
+        var derived = FeatureMachines.Derive(
+            FeatureGlossary.Read(Glossary),
+            [
+                new FeatureFile(
+                    "paying.feature",
+                    Ordering.Replace("Then Ada's order is unpaid", "Then Ada's order is a draft")
+                ),
+            ]
+        );
+
+        derived.Succeeded.Should().BeFalse();
+        derived
+            .Problems.Should()
+            .Contain(p => p.Message.Contains("starts at Draft, and an outcome"));
     }
 }

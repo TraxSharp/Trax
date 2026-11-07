@@ -227,6 +227,13 @@ internal static class Merge
 
         var outcomes = Outcomes(machine, walks, problems);
         var timers = Timers(machine, walks, problems);
+        ReservedTargets(
+            machine,
+            walks,
+            edges.Select(e => (e.From, e.Trigger, e.To)),
+            outcomes,
+            problems
+        );
         if (problems.Count > before)
             return null;
 
@@ -285,6 +292,62 @@ internal static class Merge
 
     // Each invoking state's three outcome triggers, their edges in the glossary's order of outcomes. Every kind needs
     // somewhere to go, or the machine cannot be built; a scenario says where.
+    // The host's rule for an invoked train's outcome targets (Fluent.RefuseOtherEdgesIntoOutcomeTargets), said first
+    // here: a target means "the train produced this", so the machine may not start in one, and no ordinary move may
+    // enter one, unless the target invokes a train itself. A self-loop does not enter it.
+    private static void ReservedTargets(
+        GlossaryMachine machine,
+        IReadOnlyList<Walk> walks,
+        IEnumerable<(string From, string Trigger, string To)> edges,
+        JsonObject outcomes,
+        List<Problem> problems
+    )
+    {
+        var observed = walks
+            .SelectMany(w => w.Outcomes)
+            .Where(o => o.Machine == machine.Id)
+            .ToList();
+        foreach (var (_, outcome) in outcomes)
+        foreach (var edge in outcome!["edges"]!.AsArray())
+        {
+            var target = edge!["to"]!.GetValue<string>();
+            if (machine.Invokes.ContainsKey(target))
+                continue;
+            var state = outcome["state"]!.GetValue<string>();
+            var at = observed.FirstOrDefault(o => o.State == state && o.To == target);
+            if (target == machine.Initial)
+                problems.Add(
+                    new Problem(
+                        at?.Scenario.File ?? "glossary",
+                        at?.Line ?? 0,
+                        $"{machine.Id} starts at {target}, and an outcome of the train {state} invokes goes there. An "
+                            + "outcome's state is reserved for what the train produced, so no instance could be started. "
+                            + "Send the outcome to a state of its own, with a move from there back if the flow returns."
+                    )
+                );
+            foreach (var into in edges.Where(e => e.To == target && e.From != target))
+            {
+                var by = walks
+                    .SelectMany(w => w.Observations)
+                    .FirstOrDefault(o =>
+                        o.Machine == machine.Id
+                        && o.From == into.From
+                        && o.Trigger == into.Trigger
+                        && o.Result is Result.Moved
+                    );
+                problems.Add(
+                    new Problem(
+                        by?.Scenario.File ?? "glossary",
+                        by?.Line ?? 0,
+                        $"{into.Trigger} moves {machine.Id} from {into.From} to {target}, where an outcome of the "
+                            + $"train {state} invokes goes. An outcome's state is reserved for what the train "
+                            + "produced: give the move a state of its own."
+                    )
+                );
+            }
+        }
+    }
+
     private static JsonObject Outcomes(
         GlossaryMachine machine,
         IReadOnlyList<Walk> walks,
