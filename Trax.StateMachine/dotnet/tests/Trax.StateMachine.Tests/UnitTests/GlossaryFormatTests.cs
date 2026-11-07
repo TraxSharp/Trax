@@ -8,8 +8,8 @@ namespace Trax.StateMachine.Tests.UnitTests;
 /// <summary>
 /// The glossary is read strictly (<c>Trax.Docs/adr/0058</c>): a version, no key it does not know, no actor without
 /// roles unless it says any signed-in caller, no phrase two things could mean, and no phrase that speaks as "I", since
-/// features name their people. Each of these was a way, in the
-/// proof of concept, for a typo to open a trigger to everyone or send a step to the wrong machine.
+/// features name their people. Read loosely, each would let a typo open a trigger to everyone or send a step to the
+/// wrong machine.
 /// </summary>
 public class GlossaryFormatTests
 {

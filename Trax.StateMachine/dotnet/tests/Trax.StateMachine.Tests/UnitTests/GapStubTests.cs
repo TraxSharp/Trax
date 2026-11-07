@@ -5,8 +5,8 @@ namespace Trax.StateMachine.Tests.UnitTests;
 
 /// <summary>
 /// What the glossary names and no scenario shows is a gap, and a gap's stub is green when pasted and changes only what
-/// it claims (ADR <c>Trax.Docs/adr/0058</c>). The proof of concept offered stubs in the first person, which recorded new
-/// access when pasted, and "guard fails" stubs that went red.
+/// it claims (ADR <c>Trax.Docs/adr/0058</c>). A stub never speaks in the first person, which would record new access
+/// when pasted, and never offers a "guard fails" scenario that goes red.
 /// </summary>
 public class GapStubTests
 {

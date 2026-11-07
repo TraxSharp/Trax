@@ -9,8 +9,8 @@ namespace Trax.StateMachine.Tests.UnitTests;
 /// <summary>
 /// Time in features is derived as timers (ADR <c>Trax.Docs/adr/0058</c>): a scenario keeps a clock, an instance counts
 /// from when it entered its state, a Then after time passes is a timer firing or a stay, and every stay is shorter than
-/// the timer. The proof of concept took each wait on its own, skipped "still", and gave a second machine a timer of its
-/// own where a policy reacts to the first.
+/// the timer. Waits add up rather than each counting on its own, "still" is read rather than skipped, and a second
+/// machine that reacts to the first through a policy gets no timer of its own.
 /// </summary>
 public class TimerDerivationTests
 {

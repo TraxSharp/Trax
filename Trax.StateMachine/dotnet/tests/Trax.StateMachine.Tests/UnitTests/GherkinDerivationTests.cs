@@ -8,8 +8,8 @@ namespace Trax.StateMachine.Tests.UnitTests;
 
 /// <summary>
 /// Machines are derived from features and a glossary, and derivation never writes a machine its own features fail
-/// (ADR <c>Trax.Docs/adr/0058</c>). Each test is one of the ways the proof of concept wrote a wrong machine or skipped
-/// what it could not read; after the fix each is a problem naming the step, or the machine its scenarios describe.
+/// (ADR <c>Trax.Docs/adr/0058</c>). Each test is a way a reader could write a wrong machine or skip what it cannot
+/// read; derivation answers each with a problem naming the step, or with the machine its scenarios describe.
 /// </summary>
 public class GherkinDerivationTests
 {

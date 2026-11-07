@@ -18,8 +18,8 @@ namespace Trax.StateMachine.Persistence.Integration;
 /// <summary>
 /// A policy between machines is the server acting, as a timer is (ADR <c>Trax.Docs/adr/0058</c>): it fires a
 /// server-only trigger on the instance its shape names, never another user's, records the fire as the policy's, and
-/// fires once for each transition that sets it off, whenever and on whichever host. The proof of concept fired on every
-/// user's instance in the state, as that user, from a cursor that lost what happened while it was down.
+/// fires once for each transition that sets it off, whenever and on whichever host. It never fires on every user's
+/// instance in the state, never as that user, and never from a cursor that loses what happened while it was down.
 /// </summary>
 [TestFixture(StoreProvider.Postgres)]
 [TestFixture(StoreProvider.Sqlite)]

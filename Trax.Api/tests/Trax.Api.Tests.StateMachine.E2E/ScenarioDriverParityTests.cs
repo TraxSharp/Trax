@@ -13,8 +13,8 @@ namespace Trax.Api.StateMachine.E2E;
 
 /// <summary>
 /// The same scenarios, run on the derived machines in memory and against a host serving them, answer the same (ADR
-/// <c>Trax.Docs/adr/0058</c>): the same refusal codes and messages, the same states, the same views. The proof of
-/// concept's in-memory runner refused with words the host does not send, and its host bindings passed a denial on a
+/// <c>Trax.Docs/adr/0058</c>): the same refusal codes and messages, the same states, the same views. The in-memory
+/// runner never refuses with words the host does not send, and the host bindings never pass a denial on a
 /// <c>NOT_FOUND</c>.
 /// </summary>
 [TestFixture]

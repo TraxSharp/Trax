@@ -15,8 +15,8 @@ namespace Trax.Api.StateMachine.E2E;
 /// <summary>
 /// Views of machines served from features are served by Trax under the read rule the features derive (ADR
 /// <c>Trax.Docs/adr/0058</c>): a reader sees their own instances and the system instance at its key, anyone else is
-/// refused <c>FORBIDDEN</c>, and a system instance is started by the host. The proof of concept served a view to any
-/// signed-in caller and read the newest row of whichever user had started one.
+/// refused <c>FORBIDDEN</c>, and a system instance is started by the host. A view is never served to any signed-in
+/// caller, and never reads the newest row of whichever user started one.
 /// </summary>
 [TestFixture]
 [NonParallelizable]

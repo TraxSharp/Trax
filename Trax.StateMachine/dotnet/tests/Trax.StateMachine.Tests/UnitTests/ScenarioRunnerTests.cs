@@ -9,7 +9,7 @@ namespace Trax.StateMachine.Tests.UnitTests;
 /// The runner runs features on derived machines in memory and answers as the host does (ADR
 /// <c>Trax.Docs/adr/0058</c>): a trigger no client is served is not served, another owner's instance is
 /// <c>NOT_FOUND</c>, a caller the rule does not admit is <c>FORBIDDEN</c> in the host's words, and a Given arranges the
-/// instance without firing anything. The proof of concept fired a guard's trigger to make a Given hold, and refused with
+/// instance without firing anything: it never fires a guard's trigger to make a Given hold, and never refuses with
 /// words the host does not send.
 /// </summary>
 public class ScenarioRunnerTests
