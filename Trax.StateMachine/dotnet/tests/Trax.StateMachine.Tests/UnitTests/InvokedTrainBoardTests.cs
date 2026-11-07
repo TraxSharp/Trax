@@ -23,7 +23,11 @@ public class InvokedTrainBoardTests
               "initial": "Draft",
               "context": [ { "name": "approved", "type": "boolean", "nullable": true, "constraints": [] } ],
               "states": { "Draft": "is a draft", "Paying": "is being paid for", "Placed": "is placed", "Declined": "was declined", "Unpaid": "is unpaid" },
-              "triggers": { "Place": { "phrase": "places {subject}" } },
+              "triggers": {
+                "Place": { "phrase": "places {subject}" },
+                "Cancel": { "phrase": "cancels {subject}" },
+                "Nudge": { "phrase": "nudges {subject}" }
+              },
               "invokes": {
                 "Paying": {
                   "train": "Shop.ITakePayment",
@@ -136,6 +140,54 @@ public class InvokedTrainBoardTests
             .ContainSingle()
             .Which.Message.Should()
             .Contain("Time takes order from Draft to Unpaid, where an outcome");
+    }
+
+    [Test]
+    public void An_ordinary_move_into_an_outcomes_state_is_refused_as_the_host_refuses_it()
+    {
+        var feature =
+            Ordering
+            + """
+
+                  Scenario: Ada cancels her draft
+                    When Ada cancels her order
+                    Then Ada's order is unpaid
+                """;
+
+        var derived = Derive(feature);
+
+        derived.Succeeded.Should().BeFalse();
+        var problem = derived.Problems.Should().ContainSingle().Subject;
+        problem
+            .Message.Should()
+            .Contain(
+                "Cancel moves order from Draft to Unpaid, where an outcome of the train Paying"
+            );
+        feature
+            .Split('\n')[(int)problem.Line - 1]
+            .Trim()
+            .Should()
+            .Be("When Ada cancels her order", "the problem names the When's line");
+    }
+
+    [Test]
+    public void A_move_that_stays_in_an_outcomes_state_is_allowed()
+    {
+        var derived = Derive(
+            Ordering
+                + """
+
+                  Scenario: Ada nudges an unpaid order
+                    When Ada places her order
+                    Then Ada's order is being paid for
+                    When the payment cannot be taken
+                    Then Ada's order is unpaid
+                    When Ada nudges her order
+                    Then Ada's order is unpaid
+                """
+        );
+
+        derived.Problems.Should().BeEmpty("a self-loop does not enter the state");
     }
 
     private static DerivedMachines Derive(string feature) =>
