@@ -69,7 +69,7 @@ internal static class IrMachines
         // The host entry was derived from this IR, by its hash, not a hash of the file's bytes: the canonical IR's,
         // which the store writes to every instance's ir_hash.
         var canonical = CanonicalJson.Serialize(Canonicalizable(ir));
-        var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
+        var hash = Hash(canonical);
         if (host.SchemaHash != hash)
             throw new InvalidOperationException(
                 Refuse(
@@ -297,4 +297,11 @@ internal static class IrMachines
             text.Substring(Math.Max(0, at - 40), Math.Min(80, text.Length - Math.Max(0, at - 40)));
         return $"the file has ...{Around(expected)}... and the machine ...{Around(actual)}...";
     }
+
+    /// <summary>The hash a host entry names its IR by: the canonical IR's, which the store writes to every instance.</summary>
+    internal static string Hash(JsonObject ir) =>
+        Hash(CanonicalJson.Serialize(Canonicalizable(ir)));
+
+    private static string Hash(string canonical) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
 }

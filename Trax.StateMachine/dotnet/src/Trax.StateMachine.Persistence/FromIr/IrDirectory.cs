@@ -26,6 +26,22 @@ internal static class IrDirectory
     /// <param name="trainAssemblies">Where the trains the machines invoke are looked for, by their full name.</param>
     internal static Loaded Load(string directory, IReadOnlyCollection<Assembly> trainAssemblies)
     {
+        var (host, irs) = Read(directory);
+        var machines = IrMachines.Create(
+            irs.Select(kv => new IrMachines.Source(kv.Value, host.Machines[kv.Key])).ToList(),
+            trainAssemblies
+        );
+        return new Loaded(machines, host);
+    }
+
+    /// <summary>
+    /// Reads and checks the host file and every IR of <paramref name="directory"/>, building nothing: what
+    /// <c>trax machine run</c> runs the features on.
+    /// </summary>
+    internal static (HostFile Host, IReadOnlyDictionary<string, JsonObject> Irs) Read(
+        string directory
+    )
+    {
         if (!Directory.Exists(directory))
             throw new InvalidOperationException(
                 $"The machines directory '{directory}' does not exist."
@@ -75,11 +91,13 @@ internal static class IrDirectory
         }
 
         Check(directory, host, irs);
-        var machines = IrMachines.Create(
-            irs.Select(kv => new IrMachines.Source(kv.Value, host.Machines[kv.Key])).ToList(),
-            trainAssemblies
-        );
-        return new Loaded(machines, host);
+        foreach (var (id, ir) in irs)
+            if (host.Machines[id].SchemaHash != IrMachines.Hash(ir))
+                throw new InvalidOperationException(
+                    $"{Path.Combine(directory, id + IrSuffix)}: {HostFileName} was derived from another IR of '{id}'. "
+                        + "Derive them again together."
+                );
+        return (host, irs);
     }
 
     /// <summary>

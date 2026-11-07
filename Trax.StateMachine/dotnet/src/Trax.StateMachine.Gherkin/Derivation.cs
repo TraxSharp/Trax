@@ -52,10 +52,6 @@ internal static class FeatureDerivation
         var policies =
             problems.Count == 0 ? PolicyMerge.Derive(glossary, walks, irs, problems) : [];
 
-        if (problems.Count == 0)
-            foreach (var walk in walks)
-                problems.AddRange(SelfCheck.Replay(walk, glossary, irs, policies));
-
         var access = problems.Count == 0 ? Access.Derive(glossary, walks, irs, problems) : null;
         if (problems.Count > 0 || access is null)
             return new Derived(
@@ -73,13 +69,37 @@ internal static class FeatureDerivation
             kv => CanonicalJson.Serialize(kv.Value),
             StringComparer.Ordinal
         );
-        return new Derived(
-            written,
-            Host(glossary, walks, written, access, policies),
-            access.Table,
-            [],
-            Sorted(uiSteps)
-        );
+        var host = Host(glossary, walks, written, access, policies);
+
+        // Every scenario is run on what was derived, access included, as the host would answer it. A derivation its
+        // own features fail is a problem, never a machine.
+        var hostFile = HostFile.Read(host);
+        foreach (var walk in walks)
+        {
+            var run = ScenarioRunner
+                .Run(walk, glossary, new MemoryDriver(irs, hostFile, glossary))
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+            if (run.Failure is { } failure)
+                problems.Add(
+                    new Problem(
+                        walk.Scenario.File,
+                        failure.Step.Line,
+                        $"The derived machine answers this differently: {failure.Message} (scenario '{walk.Scenario.Name}', {walk.Scenario.Id})"
+                    )
+                );
+        }
+        if (problems.Count > 0)
+            return new Derived(
+                new Dictionary<string, string>(),
+                null,
+                null,
+                Sorted(problems),
+                Sorted(uiSteps)
+            );
+
+        return new Derived(written, host, access.Table, [], Sorted(uiSteps));
     }
 
     // The host file: its machines, then its policies, views and provenance when it has any.

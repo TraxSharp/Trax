@@ -25,7 +25,8 @@ internal sealed record FeatureScenario(
     long Line,
     string Name,
     long? OutlineLine,
-    IReadOnlyList<FeatureStep> Steps
+    IReadOnlyList<FeatureStep> Steps,
+    IReadOnlyList<string> Tags
 )
 {
     internal string Id => $"{File}:{Line}";
@@ -131,7 +132,8 @@ internal static class FeatureFiles
                         pickle.Location?.Line ?? scenarioLine,
                         pickle.Name,
                         pickle.AstNodeIds.Count > 1 ? scenarioLine : null,
-                        steps
+                        steps,
+                        pickle.Tags.Select(t => t.Name).ToList()
                     )
                 );
             }
