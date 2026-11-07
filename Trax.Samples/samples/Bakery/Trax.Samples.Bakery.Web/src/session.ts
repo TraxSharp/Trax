@@ -23,11 +23,21 @@ export async function signIn(name: string, role: Role): Promise<Person> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, role }),
   });
-  const body = (await response.json()) as { token?: string; error?: string };
+  const body = await readBody(response);
   if (!response.ok || !body.token) throw new Error(body.error ?? `Sign-in failed (${response.status}).`);
   const person = { name, role, token: body.token };
   sessionStorage.setItem(KEY, JSON.stringify(person));
   return person;
+}
+
+/** The answer's JSON, or nothing when it has none: an unmapped endpoint answers 404 with no body. */
+async function readBody(response: Response): Promise<{ token?: string; error?: string }> {
+  if (!response.headers.get("Content-Type")?.includes("application/json")) return {};
+  try {
+    return (await response.json()) as { token?: string; error?: string };
+  } catch {
+    return {};
+  }
 }
 
 export function signedIn(): Person | null {

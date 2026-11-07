@@ -895,7 +895,7 @@ jobs:
 
   # The Bakery sample's page (Trax.Samples/samples/Bakery/Trax.Samples.Bakery.Web), its own npm project
   # on the client `trax client` generated from the host, whose machines are written only as features.
-  # Besides its lint and build, it exports the host's client manifest and runs `trax client --check`
+  # Besides its lint, tests and build, it exports the host's client manifest and runs `trax client --check`
   # over the committed client, and fails when they differ.
   bakery-web:
     needs: changes
@@ -956,6 +956,9 @@ jobs:
       - name: Lint
         working-directory: ${{ env.WEB }}
         run: npm run lint
+      - name: Test
+        working-directory: ${{ env.WEB }}
+        run: npm test
       - name: Audit runtime dependencies
         working-directory: ${{ env.WEB }}
         run: npm audit --omit=dev --audit-level=high
