@@ -584,8 +584,10 @@ internal static class MachineCommand
             else
                 stdout.Write(text);
 
+            // A selection that runs nothing is a typo in a tag or a location, never a pass.
             var passed =
                 report.Problems.Count == 0
+                && report.Scenarios.Count > 0
                 && report.Scenarios.All(s =>
                     s.Status == ScenarioStatus.Passed
                     && (!args.Strict || !s.Skipped.Any(x => x.Message != "not run"))

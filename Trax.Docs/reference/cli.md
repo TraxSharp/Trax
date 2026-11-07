@@ -504,7 +504,7 @@ trax machine diagram --machines ./machines --format html --out board.html
 | Command | Options |
 | --- | --- |
 | `from-gherkin` | `--features` (required), `--glossary` (default `glossary.json` in the features directory), `--out` (required: a directory holding only what the command writes; a machine that no longer derives has its IR removed), `--check`. |
-| `run` | `--features`, `--glossary`, `--machines` (required), locations as `file:line`, `--tags` (a tag expression), `--name` (a regular expression, repeatable), `--format` (`pretty`, `json` or `junit`), `--report` (a file), `--strict` (fail on steps about the UI too), `--dry-run`, `--fail-fast`. An undefined step always fails. |
+| `run` | `--features`, `--glossary`, `--machines` (required), locations as `file:line`, `--tags` (a tag expression), `--name` (a regular expression, repeatable), `--format` (`pretty`, `json` or `junit`), `--report` (a file), `--strict` (fail on steps about the UI too), `--dry-run`, `--fail-fast`. An undefined step always fails, and so does a selection that runs no scenario. |
 | `missing` | `--features`, `--glossary`, `--kind` (`machine`, `trigger`, `state`, `guard`, `refusal`, `outcome`, `view` or `grant`, repeatable), `--out` (the stubs, as one feature). It refuses features that do not derive. |
 | `usage` | `--features`, `--glossary`, `--unused`. |
 | `diagram` | `--machines` (required), `--format` (`html`, `mermaid` or `json`), `--out`. |

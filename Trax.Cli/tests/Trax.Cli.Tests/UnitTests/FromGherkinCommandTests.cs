@@ -298,6 +298,25 @@ public class FromGherkinCommandTests
     }
 
     [Test]
+    public void Run_fails_when_no_scenario_matches()
+    {
+        Run();
+        var glossary = Path.Combine(Features, "glossary.json");
+
+        var tag = RunFeatures(
+            new MachineCommand.RunArguments(Features, glossary, Out, [], Tags: "@smok")
+        );
+        var location = RunFeatures(
+            new MachineCommand.RunArguments(Features, glossary, Out, ["ordering.feature:99"])
+        );
+
+        tag.Exit.Should().Be(1, "a selection that runs nothing is not a pass");
+        tag.Err.Should().Contain("No scenario matched");
+        location.Exit.Should().Be(1, "a location that names no scenario is not a pass");
+        location.Err.Should().Contain("No scenario matched");
+    }
+
+    [Test]
     public void Missing_lists_each_gap_with_a_stub_and_writes_them_to_paste()
     {
         File.WriteAllText(
