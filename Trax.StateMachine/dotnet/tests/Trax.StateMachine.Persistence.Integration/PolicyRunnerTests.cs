@@ -50,9 +50,14 @@ public class PolicyRunnerTests(StoreProvider provider)
     [TearDown]
     public void TearDown() => _host.Dispose();
 
-    private InstanceHost Host(IReadOnlyList<IMachine> machines, int cap) =>
+    private InstanceHost Host(
+        IReadOnlyList<IMachine> machines,
+        int cap,
+        InstanceHost? sameDatabaseAs = null
+    ) =>
         InstanceHost.Create(
             provider,
+            sameDatabaseAs: sameDatabaseAs,
             services: s =>
             {
                 s.AddIrMachines(machines);
@@ -162,20 +167,38 @@ public class PolicyRunnerTests(StoreProvider provider)
         (await Owed()).Should().ContainSingle();
 
         // Another host, as after a restart, over the same database.
-        using var next = Host(Machines().Machines, cap: 3);
+        using var next = Host(Machines().Machines, cap: 3, sameDatabaseAs: _host);
+        (await Owed(next)).Should().ContainSingle("the next host reads the same database");
         await Runner(next).PassOnce(CancellationToken.None);
         await Runner(_host).PassOnce(CancellationToken.None);
 
         (await StateOf(receipt)).Should().Be("Void");
-        var row = (await _host.Rows(receipt)).Single().RowId;
-        using var scope = _host.Scope();
-        (
-            await scope
-                .ServiceProvider.GetRequiredService<IDataContext>()
-                .SnapshotTransitions.CountAsync(t =>
-                    t.DraftRowId == row && t.Actor == SnapshotTransitionActor.Policy
-                )
-        )
+        (await PolicyFires(receipt))
+            .Should()
+            .Be(1, "a fire happens once, whichever host claims it");
+    }
+
+    [Test]
+    public async Task Two_hosts_passing_at_once_fire_a_fire_once()
+    {
+        var ada = NewUser();
+        var order = await Start(ada, "p-order");
+        var receipt = await Start(ada, "p-receipt");
+        await Advance(
+            ada,
+            "p-receipt",
+            receipt,
+            "Attach",
+            new JsonObject { ["orderId"] = order.ToString() }
+        );
+        await Advance(ada, "p-order", order, "Expire");
+        using var other = Host(Machines().Machines, cap: 3, sameDatabaseAs: _host);
+
+        // A pass that loses SQLite's write lock throws and is tried again, so each host passes until nothing is owed.
+        await Task.WhenAll(Drain(_host), Drain(other));
+
+        (await StateOf(receipt)).Should().Be("Void");
+        (await PolicyFires(receipt))
             .Should()
             .Be(1, "a fire happens once, whichever host claims it");
     }
@@ -332,9 +355,9 @@ public class PolicyRunnerTests(StoreProvider provider)
 
     private async Task<string> StateOf(Guid id) => (await _host.Rows(id)).Single().State;
 
-    private async Task<List<MachinePolicyFire>> Owed()
+    private async Task<List<MachinePolicyFire>> Owed(InstanceHost? host = null)
     {
-        using var scope = _host.Scope();
+        using var scope = (host ?? _host).Scope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await context.MachinePolicyFires.AsNoTracking().ToListAsync();
     }
@@ -349,21 +372,39 @@ public class PolicyRunnerTests(StoreProvider provider)
             .ExecuteUpdateAsync(u => u.SetProperty(d => d.EffectToken, token));
     }
 
-    private async Task Queue(string policy)
+    private async Task<long> Queue(string policy)
     {
         using var scope = _host.Scope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        context.MachinePolicyFires.Add(
-            new MachinePolicyFire
-            {
-                Policy = policy,
-                SourceRowId = -1,
-                SourceInstanceId = Guid.NewGuid(),
-                SourceRevision = 1,
-                CreatedAt = DateTimeOffset.UtcNow,
-            }
-        );
+        var fire = new MachinePolicyFire
+        {
+            Policy = policy,
+            SourceRowId = -1,
+            SourceInstanceId = Guid.NewGuid(),
+            SourceRevision = 1,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        context.MachinePolicyFires.Add(fire);
         await context.SaveChanges(CancellationToken.None);
+        return fire.Id;
+    }
+
+    // Passes until nothing is owed, as the runner's loop does, within a bound.
+    private async Task Drain(InstanceHost host)
+    {
+        for (var i = 0; i < 20 && (await Owed(host)).Count > 0; i++)
+            await Runner(host).PassOnce(CancellationToken.None);
+    }
+
+    private async Task<int> PolicyFires(Guid id)
+    {
+        var row = (await _host.Rows(id)).Single().RowId;
+        using var scope = _host.Scope();
+        return await scope
+            .ServiceProvider.GetRequiredService<IDataContext>()
+            .SnapshotTransitions.CountAsync(t =>
+                t.DraftRowId == row && t.Actor == SnapshotTransitionActor.Policy
+            );
     }
 
     // An order a customer may expire, place, and have baked by the shop; a receipt that names an order and is voided

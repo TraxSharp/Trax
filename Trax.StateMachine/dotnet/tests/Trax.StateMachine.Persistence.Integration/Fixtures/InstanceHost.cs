@@ -26,11 +26,13 @@ public sealed class InstanceHost : IDisposable
 {
     private readonly ServiceProvider _provider;
     private readonly string? _sqliteFile;
+    private readonly bool _ownsFile;
 
-    private InstanceHost(ServiceProvider provider, string? sqliteFile)
+    private InstanceHost(ServiceProvider provider, string? sqliteFile, bool ownsFile)
     {
         _provider = provider;
         _sqliteFile = sqliteFile;
+        _ownsFile = ownsFile;
     }
 
     internal static InstanceHost Create(
@@ -40,12 +42,15 @@ public sealed class InstanceHost : IDisposable
         IInvokedTrainLauncher? launcher = null,
         Action<StateMachineOptions>? options = null,
         Action<IServiceCollection>? services = null,
-        string? postgresConnectionString = null
+        string? postgresConnectionString = null,
+        InstanceHost? sameDatabaseAs = null
     )
     {
+        // A second host over another's database, as after a restart: on SQLite the same file, which the first owns.
         var file =
             provider == StoreProvider.Sqlite
-                ? Path.Combine(Path.GetTempPath(), $"sm_instances_{Guid.NewGuid():N}.db")
+                ? sameDatabaseAs?._sqliteFile
+                    ?? Path.Combine(Path.GetTempPath(), $"sm_instances_{Guid.NewGuid():N}.db")
                 : null;
 
         var collection = new ServiceCollection();
@@ -75,7 +80,11 @@ public sealed class InstanceHost : IDisposable
             collection.AddSingleton(launcher);
         services?.Invoke(collection);
 
-        return new InstanceHost(collection.BuildServiceProvider(), file);
+        return new InstanceHost(
+            collection.BuildServiceProvider(),
+            file,
+            ownsFile: sameDatabaseAs is null
+        );
     }
 
     public IServiceScope Scope() => _provider.CreateScope();
@@ -260,7 +269,7 @@ public sealed class InstanceHost : IDisposable
     {
         // Async: a test that resolves the outcome reconciler builds the Postgres listener, which only disposes async.
         _provider.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        if (_sqliteFile is null)
+        if (_sqliteFile is null || !_ownsFile)
             return;
         SqliteConnection.ClearAllPools();
         try
