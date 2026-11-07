@@ -11,7 +11,7 @@
 //   docker compose up -d database
 //   dotnet run --project samples/Bakery/Trax.Samples.Bakery.Api
 //   cd samples/Bakery/Trax.Samples.Bakery.Web && npm ci && npm run dev
-// Then open http://localhost:5174 once per person, and sign in with a name and a role. samples/Bakery/demo.sh runs it
+// Then open http://localhost:5281 once per person, and sign in with a name and a role. samples/Bakery/demo.sh runs it
 // all. After editing a feature: trax machine from-gherkin --features samples/Bakery/features --out samples/Bakery/machines
 //
 // Auth: a token per person from POST /dev/token { "name": "Ada", "role": "customer" }, Development only, signed with a
@@ -113,9 +113,12 @@ builder.Services.AddTraxGraphQL(graphql =>
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
+// The page's origin: the Vite dev server unless Bakery:PageOrigin names another (the browser tests serve the built page
+// from one of their own).
+var pageOrigin = builder.Configuration["Bakery:PageOrigin"] ?? "http://localhost:5281";
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
-        policy.WithOrigins("http://localhost:5174").AllowAnyHeader().AllowAnyMethod()
+        policy.WithOrigins(pageOrigin).AllowAnyHeader().AllowAnyMethod()
     )
 );
 

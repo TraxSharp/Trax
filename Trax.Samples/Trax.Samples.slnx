@@ -74,6 +74,7 @@
     <Project Path="tests/Trax.Samples.Auth.E2E/Trax.Samples.Auth.E2E.csproj" />
     <Project Path="tests/Trax.Samples.Board.E2E/Trax.Samples.Board.E2E.csproj" />
     <Project Path="tests/Trax.Samples.Bakery.E2E/Trax.Samples.Bakery.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.Bakery.Browser/Trax.Samples.Bakery.Browser.csproj" />
     <Project Path="tests/Trax.Samples.Recovery.E2E/Trax.Samples.Recovery.E2E.csproj" />
     <Project Path="tests/Trax.Samples.Recovery.Browser/Trax.Samples.Recovery.Browser.csproj" />
     <Project Path="tests/Trax.Samples.ApiDashboard.Browser/Trax.Samples.ApiDashboard.Browser.csproj" />

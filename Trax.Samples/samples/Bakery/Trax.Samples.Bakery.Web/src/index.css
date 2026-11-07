@@ -1,0 +1,6 @@
+body { font: 16px/1.5 system-ui, sans-serif; margin: 0; background: #faf7f2; color: #2b2118; }
+main { max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+.card { background: #fff; border: 1px solid #e6dccd; border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; }
+.sign { font-size: 1.5rem; font-weight: 600; }
+.problem { color: #a02c2c; }
+button { padding: 0.25rem 0.75rem; }
