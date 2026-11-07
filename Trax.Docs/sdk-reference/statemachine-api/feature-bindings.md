@@ -17,7 +17,9 @@ source:
 
 `Trax.StateMachine.Gherkin.Reqnroll` runs a team's features against a host in the test process with Reqnroll. It
 holds one binding for every step: each step is read as [derivation](/docs/sdk-reference/statemachine-api/feature-machines)
-reads it, so a feature means the same here as in `trax machine run`. There is no step code to write.
+reads it, so a feature means the same here as in `trax machine run`. There is no step code to write. The how-to is
+[Write machines as features](/docs/statemachine/write-machines-as-features), and why it is so is
+[ADR 0058](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0058-features-and-a-glossary-are-a-source-of-machines.md).
 
 ## Members
 

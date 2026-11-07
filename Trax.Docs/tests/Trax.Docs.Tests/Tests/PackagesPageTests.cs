@@ -41,6 +41,8 @@ public class PackagesPageTests
         "Trax.StateMachine",
         "Trax.Client",
         "Trax.StateMachine.Client",
+        "Trax.StateMachine.Gherkin",
+        "Trax.StateMachine.Gherkin.Reqnroll",
         "Trax.StateMachine.Persistence",
         "Trax.StateMachine.Testing",
         // Trax.Mediator

@@ -479,6 +479,36 @@ the IR (a stored snapshot whose version does not match is rejected and the clien
 prints that notice to stderr and exits 1, which fails a CI step that runs it rather than reporting a migration
 that never happened.
 
+### Machines from features
+
+`trax machine from-gherkin`, `run`, `missing`, `usage` and `diagram` work on
+[machines written as features](/docs/statemachine/write-machines-as-features), from a features directory with its
+`glossary.json` ([feature files](/docs/reference/feature-files)). Each exits 1 with a message for a bad path or a bad
+glossary.
+
+```bash
+# Derive one IR per machine, host.json and access.txt into a directory the command owns.
+trax machine from-gherkin --features ./features --out ./machines
+# The CI gate: write nothing, fail when any committed file differs.
+trax machine from-gherkin --features ./features --out ./machines --check
+# Run the features in memory on the committed machines, as the host answers.
+trax machine run --features ./features --machines ./machines --tags "@smoke and not @slow" --format junit --report results.xml
+# What the glossary names and no scenario shows, each with a scenario to paste.
+trax machine missing --features ./features --out missing.feature
+# Each glossary phrase and the steps that say it.
+trax machine usage --features ./features --unused
+# The event-storming board, with the scenarios behind each sticky.
+trax machine diagram --machines ./machines --format html --out board.html
+```
+
+| Command | Options |
+| --- | --- |
+| `from-gherkin` | `--features` (required), `--glossary` (default `glossary.json` in the features directory), `--out` (required: a directory holding only what the command writes; a machine that no longer derives has its IR removed), `--check`. |
+| `run` | `--features`, `--glossary`, `--machines` (required), locations as `file:line`, `--tags` (a tag expression), `--name` (a regular expression, repeatable), `--format` (`pretty`, `json` or `junit`), `--report` (a file), `--strict` (fail on steps about the UI too), `--dry-run`, `--fail-fast`. An undefined step always fails. |
+| `missing` | `--features`, `--glossary`, `--kind` (`machine`, `trigger`, `state`, `guard`, `refusal`, `outcome`, `view` or `grant`, repeatable), `--out` (the stubs, as one feature). It refuses features that do not derive. |
+| `usage` | `--features`, `--glossary`, `--unused`. |
+| `diagram` | `--machines` (required), `--format` (`html`, `mermaid` or `json`), `--out`. |
+
 ## Frontend clients (`trax client`)
 
 `trax client` generates a frontend's typed client from the [client manifest](/docs/sdk-reference/statemachine-api/client-manifest)

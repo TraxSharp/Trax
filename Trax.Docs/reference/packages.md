@@ -8,7 +8,7 @@ nav_order: 3
 
 # Packages
 
-Trax ships as 46 NuGet packages from one repository, [TraxSharp/Trax](https://github.com/TraxSharp/Trax). Most applications install four or five of them. This page lists every one: what it is for, the namespace you import to use it, the methods it adds, and what it needs beside it.
+Trax ships as 48 NuGet packages from one repository, [TraxSharp/Trax](https://github.com/TraxSharp/Trax). Most applications install four or five of them. This page lists every one: what it is for, the namespace you import to use it, the methods it adds, and what it needs beside it.
 
 Every package releases at the same version, so install them all at one version. The site is published from the latest release, and the nuget.org link shows that release and its dependencies.
 
@@ -97,6 +97,8 @@ dotnet add package Trax.Api.Dashboard
 | [Trax.StateMachine.Client](https://www.nuget.org/packages/Trax.StateMachine.Client) | Drives a machine a host serves from .NET (Blazor, MAUI, Avalonia, WPF, another service): persisted ids from the client manifest, the change stream over a socket, each event predicted with the C# engine. See [.NET client](/docs/sdk-reference/statemachine-api/dotnet-client). | `Trax.StateMachine.Client` | `Trax.StateMachine` and `Trax.Client`, which it brings with it, and the host's client manifest. |
 | [Trax.Client](https://www.nuget.org/packages/Trax.Client) | Sends a Trax host's GraphQL documents from .NET: queries and mutations over HTTP POST, subscriptions over one graphql-transport-ws socket, each by persisted id or as text. Every refusal or failure is a value. The typed documents `trax client --operations --lang csharp` generates are written against it. No dependencies. See [.NET client](/docs/sdk-reference/client-api/dotnet-client). | `Trax.Client` | The documents `trax client` generates, or a `TraxDocument` of your own. |
 | [Trax.StateMachine.Testing](https://www.nuget.org/packages/Trax.StateMachine.Testing) | Replays the differential corpus produced by the TypeScript engine through the C# engine and returns the cases it fails to reproduce, proving the two engines agree. See [Codegen Pipeline](/docs/statemachine/codegen-pipeline). | `Trax.StateMachine.Testing` | A test project, and the corpus `trax machine generate` writes. |
+| [Trax.StateMachine.Gherkin](https://www.nuget.org/packages/Trax.StateMachine.Gherkin) | Derives state machines from Gherkin features and a glossary: each machine's IR, the host file that says who may use it, and the access report; runs the features on them in memory, lists what they leave out, and draws the event-storming board. `trax machine from-gherkin` is built on it. See [Feature machines](/docs/sdk-reference/statemachine-api/feature-machines). | `Trax.StateMachine.Gherkin` | Usually nothing: the CLI writes the files and `ServeFeatures` serves them. |
+| [Trax.StateMachine.Gherkin.Reqnroll](https://www.nuget.org/packages/Trax.StateMachine.Gherkin.Reqnroll) | Reqnroll bindings that run the same features against a host in the test process, each person a user of their own. See [Feature bindings](/docs/sdk-reference/statemachine-api/feature-bindings). | `Trax.StateMachine.Gherkin.Reqnroll` | A Reqnroll test project. |
 
 ## Trax.Mediator
 

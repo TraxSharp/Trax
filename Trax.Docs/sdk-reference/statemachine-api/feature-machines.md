@@ -17,7 +17,10 @@ source:
 `Trax.StateMachine.Gherkin` derives state machines from Gherkin features and a glossary: each machine's IR, the host
 file that says who may use it, and the access report. `trax machine from-gherkin`, `run`, `missing` and `diagram` are
 these calls, and a host serves what they write with
-[`ServeFeatures`](/docs/sdk-reference/statemachine-api/add-state-machines).
+[`ServeFeatures`](/docs/sdk-reference/statemachine-api/add-state-machines). The files are in the
+[feature files reference](/docs/reference/feature-files), the how-to is
+[Write machines as features](/docs/statemachine/write-machines-as-features), and why it is so is
+[ADR 0058](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0058-features-and-a-glossary-are-a-source-of-machines.md).
 
 ## Members
 
