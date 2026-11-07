@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.MachinePolicyFire;
@@ -201,6 +202,47 @@ public class PolicyRunnerTests(StoreProvider provider)
         (await PolicyFires(receipt))
             .Should()
             .Be(1, "a fire happens once, whichever host claims it");
+    }
+
+    [Test]
+    public async Task Two_hosts_expanding_one_broadcast_do_not_wait_on_each_other()
+    {
+        if (provider != StoreProvider.Postgres)
+            Assert.Ignore(
+                "SQLite holds one write lock for the database; no two expansions overlap."
+            );
+        var user = NewUser();
+        var order = await Start(user, "p-order");
+        await Advance(user, "p-order", order, "Place");
+        await Queue(Broadcast);
+        var held = await Queue(Broadcast);
+
+        // Another host holds the second row, as it would while expanding it.
+        await using var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using (
+            var hold = new NpgsqlCommand(
+                "SELECT id FROM trax.machine_policy_fire WHERE id = @id FOR UPDATE",
+                connection,
+                transaction
+            )
+        )
+        {
+            hold.Parameters.AddWithValue("id", held);
+            await hold.ExecuteScalarAsync();
+        }
+
+        var pass = Runner(_host).PassOnce(CancellationToken.None);
+        // negative-wait: a pass that waits on the held row never ends while it is held.
+        var finished = await Task.WhenAny(pass, Task.Delay(TimeSpan.FromSeconds(10))) == pass;
+        await transaction.RollbackAsync();
+        await pass;
+
+        finished.Should().BeTrue("a host coalesces only the rows it can claim");
+        await Drain(_host);
+        (await StateOf(order)).Should().Be("Baking");
+        (await Owed()).Should().BeEmpty();
     }
 
     [Test]

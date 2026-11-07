@@ -24,8 +24,8 @@ namespace Trax.StateMachine.Persistence.FromIr;
 /// A row with no target is one policy's reaction to one transition. A linked policy fires on the source owner's
 /// instances whose context holds the source's id at the policy's link field, a system policy on the instance at its
 /// key: those fire in the same transaction. A broadcast is expanded into one row per instance waiting in its state, at
-/// most <see cref="PolicyRunnerOptions.FanOutCap"/>, and every other unexpanded row of the same policy is coalesced into
-/// it, since they would reach the same instances. Its rows are then fired <see cref="PolicyRunnerOptions.BatchSize"/>
+/// most <see cref="PolicyRunnerOptions.FanOutCap"/>, and every other unexpanded row of the same policy that no other host
+/// holds is coalesced into it, since they would reach the same instances. Its rows are then fired <see cref="PolicyRunnerOptions.BatchSize"/>
 /// at a time.
 /// </remarks>
 internal sealed class MachinePolicyRunner(
@@ -143,7 +143,8 @@ internal sealed class MachinePolicyRunner(
         return true;
     }
 
-    // A broadcast's targets, each a row of its own, and this policy's other unexpanded rows coalesced into them.
+    // A broadcast's targets, each a row of its own, and this policy's other unexpanded rows coalesced into them. A row
+    // another host holds is left to it: waiting on it while that host waits on this row would deadlock.
     private async Task Expand(
         IDataContext context,
         MachinePolicyFire row,
@@ -170,8 +171,9 @@ internal sealed class MachinePolicyRunner(
             );
             waiting.RemoveAt(waiting.Count - 1);
         }
+        var coalesced = await LockUnexpanded(context, row.Policy, cancellationToken);
         await context
-            .MachinePolicyFires.Where(f => f.Policy == row.Policy && f.TargetRowId == null)
+            .MachinePolicyFires.Where(f => coalesced.Contains(f.Id))
             .ExecuteDeleteAsync(cancellationToken);
         await Owe(context, row, waiting, cancellationToken);
     }
@@ -338,6 +340,33 @@ internal sealed class MachinePolicyRunner(
         return await context
             .MachinePolicyFires.AsNoTracking()
             .AnyAsync(f => f.Id == id, cancellationToken);
+    }
+
+    // The policy's unexpanded rows this transaction can claim, its own among them: on Postgres a row another host
+    // holds is passed over; on SQLite the transaction's write lock covers them all.
+    private static async Task<List<long>> LockUnexpanded(
+        IDataContext context,
+        string policy,
+        CancellationToken cancellationToken
+    )
+    {
+        var database = ((DbContext)context).Database;
+        if (database.ProviderName?.Contains("Npgsql", StringComparison.Ordinal) == true)
+            return await database
+                .SqlQueryRaw<long>(
+                    """
+                    SELECT id AS "Value" FROM trax.machine_policy_fire
+                    WHERE policy = {0} AND target_row_id IS NULL
+                    FOR UPDATE SKIP LOCKED
+                    """,
+                    policy
+                )
+                .ToListAsync(cancellationToken);
+        return await context
+            .MachinePolicyFires.AsNoTracking()
+            .Where(f => f.Policy == policy && f.TargetRowId == null)
+            .Select(f => f.Id)
+            .ToListAsync(cancellationToken);
     }
 
     private static Task<int> Delete(
