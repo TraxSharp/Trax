@@ -317,6 +317,21 @@ public class FromGherkinCommandTests
     }
 
     [Test]
+    public void Check_and_write_read_a_crlf_checkout_as_unchanged()
+    {
+        Run();
+        foreach (var path in Directory.EnumerateFiles(Out))
+            File.WriteAllText(path, File.ReadAllText(path).Replace("\n", "\r\n"));
+
+        var check = Run(check: true);
+        var write = Run();
+
+        check.Exit.Should().Be(0, check.Err);
+        write.Exit.Should().Be(0, write.Err);
+        write.Out.Should().NotContain("updated", "a CRLF checkout is not a change to write");
+    }
+
+    [Test]
     public void Missing_lists_each_gap_with_a_stub_and_writes_them_to_paste()
     {
         File.WriteAllText(

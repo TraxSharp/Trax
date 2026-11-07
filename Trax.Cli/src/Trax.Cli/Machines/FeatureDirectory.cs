@@ -109,7 +109,7 @@ internal static class FeatureDirectory
         foreach (var (name, text) in files)
         {
             var path = Path.Combine(outDir, name);
-            var before = File.Exists(path) ? File.ReadAllText(path) : null;
+            var before = File.Exists(path) ? Lf(File.ReadAllText(path)) : null;
             if (before == text)
                 continue;
             File.WriteAllText(path, text, new UTF8Encoding(false));
@@ -136,7 +136,7 @@ internal static class FeatureDirectory
             var path = Path.Combine(outDir, name);
             if (!File.Exists(path))
                 drift.Add($"{name} is missing");
-            else if (File.ReadAllText(path) != text)
+            else if (Lf(File.ReadAllText(path)) != text)
                 drift.Add(
                     name == AccessFileName
                         ? $"{name} is stale: who may do what has changed"
@@ -147,6 +147,9 @@ internal static class FeatureDirectory
             drift.Add($"{stale} no longer derives");
         return drift;
     }
+
+    // A checkout that writes CRLF holds the same file, as trax client --check and trax machine check read it.
+    private static string Lf(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal);
 
     /// <summary>Refuses an <c>--out</c> that is a file or holds files this command does not write.</summary>
     internal static void RefuseForeign(string outDir) => Owned(outDir);
