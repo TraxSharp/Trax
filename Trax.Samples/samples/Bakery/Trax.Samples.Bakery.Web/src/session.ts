@@ -39,7 +39,10 @@ export function signOut(): void {
   sessionStorage.removeItem(KEY);
 }
 
-/** Points the generated client at the host as this person: the token on each request and on the socket. */
+/**
+ * Points the generated client at the host as this person: the token on each request and on the socket. The client
+ * refuses cleartext to any host but loopback, so a build pointed at another machine needs https.
+ */
 export function connect(person: Person): void {
   configureTrax({
     url: `${API_ORIGIN}/trax/graphql`,
@@ -47,6 +50,5 @@ export function connect(person: Person): void {
     headers: () => ({ Authorization: `Bearer ${person.token}` }),
     connectionParams: () => ({ authToken: person.token }),
     user: `${person.role}:${person.name}`,
-    allowInsecureTransport: true,
   });
 }
