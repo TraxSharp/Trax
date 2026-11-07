@@ -4,9 +4,9 @@ using Microsoft.Playwright;
 namespace Trax.Samples.Bakery.Browser;
 
 /// <summary>
-/// The bakery's page in a browser, each person on a page of their own (SAM-61): a customer places an order, a baker
-/// clocking in opens the shop, and the customer's page shows the order in the oven. No page carries a credential it
-/// was not given at sign-in.
+/// The bakery's page in a browser, each person on a page of their own: a customer places an order, a baker clocking
+/// in opens the shop, and the customer's page shows the order in the oven. No page carries a credential it was not
+/// given at sign-in.
 /// </summary>
 [TestFixture]
 public class BakeryPageTests
