@@ -47,7 +47,8 @@ internal sealed class HostDriver(
             $"mutation {{ machines {{ {FieldOf(machine)} {{ start(requestId: \"{RequestId()}\") {{ id state problem {{ code message }} }} }} }} }}",
             ["machines", FieldOf(machine), "start"]
         );
-        if (answer is { Result: { } result })
+        // A refused start answers a problem and no id.
+        if (answer is { Answer: Answer.Moved, Result: { } result })
             _ids[new InstanceKey(machine, person.Name)] = Guid.Parse(
                 result["id"]!.GetValue<string>()
             );

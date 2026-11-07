@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.StateMachine;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Gherkin.Reqnroll;
@@ -13,9 +14,10 @@ namespace Trax.Api.StateMachine.E2E;
 
 /// <summary>
 /// The same scenarios, run on the derived machines in memory and against a host serving them, answer the same (ADR
-/// <c>Trax.Docs/adr/0058</c>): the same refusal codes and messages, the same states, the same views. The in-memory
-/// runner never refuses with words the host does not send, and the host bindings never pass a denial on a
-/// <c>NOT_FOUND</c>.
+/// <c>Trax.Docs/adr/0058</c>): the same refusal codes and messages, the same states, the same views, the same policies
+/// and timers. Every person signs in as a user of their own, so another owner's instance, a start or a view the rule
+/// does not admit are answered by the host as it answers its clients. The in-memory runner never refuses with words the
+/// host does not send, and the host bindings never pass a denial on a <c>NOT_FOUND</c>.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -26,7 +28,10 @@ public class ScenarioDriverParityTests
     private const string Glossary = """
         {
           "version": 1,
-          "actors": { "payer": { "noun": "a payer", "roles": ["Payer"] } },
+          "actors": {
+            "payer": { "noun": "a payer", "roles": ["Payer"] },
+            "baker": { "noun": "a baker", "roles": ["Operator"] }
+          },
           "machines": {
             "p-order": {
               "ownedBy": "payer",
@@ -34,7 +39,7 @@ public class ScenarioDriverParityTests
               "start": "has an order",
               "initial": "Draft",
               "context": [ { "name": "loaves", "type": "integer", "nullable": false, "constraints": [] } ],
-              "states": { "Draft": "is a draft", "Placed": "is placed" },
+              "states": { "Draft": "is a draft", "Placed": "is placed", "Baking": "is baking" },
               "triggers": {
                 "Order": {
                   "phrase": "orders {loaves} loaves for {subject}",
@@ -42,7 +47,8 @@ public class ScenarioDriverParityTests
                   "reduce": { "reduce": "set", "steps": [ { "field": "loaves", "value": { "input": "loaves" } } ] }
                 },
                 "Place": { "phrase": "places {subject}" },
-                "Rush": { "phrase": "rushes {subject}" }
+                "Rush": { "phrase": "rushes {subject}" },
+                "Bake": { "phrase": "{subject} starts baking" }
               },
               "guards": {
                 "hasLoaves": {
@@ -51,12 +57,27 @@ public class ScenarioDriverParityTests
                   "rule": { "rule": "compare", "source": "context", "field": "loaves", "op": "gt", "value": 0 }
                 }
               }
+            },
+            "p-shift": {
+              "ownedBy": "baker",
+              "noun": "shift",
+              "start": "has a shift",
+              "initial": "Off",
+              "states": { "Off": "is not started", "On": "is on" },
+              "triggers": { "ClockIn": { "phrase": "clocks in for {subject}" } }
+            },
+            "p-shop": {
+              "system": "p-shop/main",
+              "name": "the shop",
+              "initial": "Closed",
+              "states": { "Closed": "is closed", "Open": "is open" },
+              "triggers": { "Open": { "phrase": "the shop opens" } }
             }
           },
           "views": {
             "orders": {
               "reads": [ { "machine": "p-order" } ],
-              "fields": { "status": { "from": "p-order.state", "labels": { "Draft": "Not sent", "Placed": "Sent" } } }
+              "fields": { "status": { "from": "p-order.state", "labels": { "Draft": "Not sent", "Placed": "Sent", "Baking": "In the oven" } } }
             }
           }
         }
@@ -91,23 +112,89 @@ public class ScenarioDriverParityTests
             Then Ada is not allowed
         """;
 
+    // A shift going on opens the system shop (a policy to a system machine), the shop opening starts every order
+    // waiting for it (a broadcast from a system machine), and the shop closes on a timer.
+    private const string Shop = """
+        Feature: The shop
+          Scenario: A baker clocking in opens the shop
+            Given Kit is a baker
+            And Kit has a shift
+            And the shop is closed
+            When Kit clocks in for his shift
+            Then Kit's shift is on
+            And the shop is open
+
+          Scenario: Waiting orders start baking when the shop opens
+            Given Ada is a payer
+            And Ada has an order
+            And Ada's order is placed
+            And Kit is a baker
+            And Kit has a shift
+            And the shop is closed
+            When Kit clocks in for his shift
+            Then Kit's shift is on
+            And the shop is open
+            And Ada's order is baking
+            And Ada's orders show status "In the oven"
+
+          Scenario: The shop opens
+            Given the shop is closed
+            When the shop opens
+            Then the shop is open
+
+          Scenario: An order goes in the oven
+            Given Ada is a payer
+            And Ada has an order
+            And Ada's order is placed
+            When Ada's order starts baking
+            Then Ada's order is baking
+
+          Scenario: The shop is still open before closing time
+            Given the shop is open
+            When 2 seconds pass
+            Then the shop is still open
+
+          Scenario: The shop closes after hours
+            Given the shop is open
+            When 4 seconds pass
+            Then the shop is closed
+        """;
+
+    private static readonly (string File, string Text)[] Features =
+    [
+        ("ordering.feature", Ordering),
+        ("shop.feature", Shop),
+    ];
+
+    // Each person signs in as a user of their own, with their actor's roles, so an owner's instance is theirs alone.
+    private static readonly Dictionary<string, (string Key, string Id)> Keys = new()
+    {
+        ["Ada"] = (E2EHost.AliceKey, "alice"),
+        ["Bo"] = (E2EHost.CarolKey, "carol"),
+        ["Kit"] = (E2EHost.OperatorKey, "operator"),
+    };
+
     private IHost _host = null!;
     private Glossary _glossary = null!;
     private Dictionary<string, JsonObject> _irs = null!;
     private HostFile _hostFile = null!;
+    private string _directory = null!;
 
     [OneTimeSetUp]
     public async Task Up()
     {
         _glossary = Trax.StateMachine.Features.Glossary.Read(Glossary);
-        var derived = FeatureDerivation.Derive(_glossary, [("ordering.feature", Ordering)]);
+        var derived = FeatureDerivation.Derive(_glossary, Features);
         derived.Problems.Should().BeEmpty();
         _irs = derived.Irs.ToDictionary(kv => kv.Key, kv => JsonNode.Parse(kv.Value)!.AsObject());
         _hostFile = HostFile.Read(derived.Host!);
-        var machines = IrMachines.Create(
-            _irs.Select(kv => new IrMachines.Source(kv.Value, _hostFile.Machines[kv.Key])).ToList(),
-            []
-        );
+        _hostFile.Policies.Select(p => p.Shape).Should().BeEquivalentTo(["toSystem", "broadcast"]);
+
+        // Served as from-gherkin writes it, so the policies, the system instance and the views run as on a host.
+        _directory = Directory.CreateTempSubdirectory("trax-parity-").FullName;
+        File.WriteAllText(Path.Combine(_directory, "host.json"), derived.Host!);
+        foreach (var (id, ir) in derived.Irs)
+            File.WriteAllText(Path.Combine(_directory, $"{id}.ir.json"), ir);
 
         await E2EHost.RecreateDatabaseAsync(Database);
         _host = await E2EHost.StartAsync(
@@ -115,9 +202,13 @@ public class ScenarioDriverParityTests
             new CountingCharge(),
             new E2EHostOptions
             {
-                Instances = machines,
-                Views = new MachineViewCatalog(_hostFile.Views),
-                Services = s => s.AddSingleton(_hostFile),
+                // The sweep fires due timers; the default would let the shop's close outlast the driver's slack.
+                Machines = o =>
+                {
+                    o.ServeFeatures(_directory);
+                    o.InvokeOutcomeSweepInterval = TimeSpan.FromMilliseconds(500);
+                    o.InvokeOutcomeSweepIntervalWhileListening = TimeSpan.FromMilliseconds(500);
+                },
             }
         );
     }
@@ -127,12 +218,13 @@ public class ScenarioDriverParityTests
     {
         _host.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
+        Directory.Delete(_directory, recursive: true);
     }
 
     [Test]
     public async Task Every_scenario_answers_the_same_in_memory_and_on_the_host()
     {
-        var (scenarios, problems) = FeatureFiles.Parse([("ordering.feature", Ordering)]);
+        var (scenarios, problems) = FeatureFiles.Parse(Features);
         problems.Should().BeEmpty();
         var resolver = new StepResolver(_glossary);
         foreach (var scenario in scenarios)
@@ -190,6 +282,86 @@ public class ScenarioDriverParityTests
             .BeOfType<Answer.NotServed>();
     }
 
+    [Test]
+    public async Task Another_owners_instance_is_not_found_on_both()
+    {
+        var answers = await BothAnswer(
+            Payer("Ada"),
+            async driver => await driver.Fire(Payer("Bo"), Adas, "Order", Loaves(2))
+        );
+
+        answers[0]
+            .Should()
+            .Be(new Answer.Refused(RefusalCode.NotFound, MemoryDriver.NotFoundMessage));
+        answers[1].Should().Be(answers[0]);
+    }
+
+    [Test]
+    public async Task Another_actors_fire_on_a_users_instance_answers_the_same_on_both()
+    {
+        var answers = await BothAnswer(
+            Payer("Ada"),
+            async driver => await driver.Fire(Baker("Kit"), Adas, "Order", Loaves(2))
+        );
+
+        answers[0].Should().BeOfType<Answer.Refused>();
+        answers[1].Should().Be(answers[0]);
+    }
+
+    [Test]
+    public async Task A_start_the_rule_does_not_admit_is_forbidden_on_both()
+    {
+        var answers = await BothAnswer(
+            null,
+            async driver => await driver.Start(Baker("Kit"), "p-order")
+        );
+
+        answers[0]
+            .Should()
+            .Be(new Answer.Refused(RefusalCode.Forbidden, MemoryDriver.ForbiddenStartMessage));
+        answers[1].Should().Be(answers[0]);
+    }
+
+    [Test]
+    public async Task A_view_the_rule_does_not_admit_is_forbidden_on_both()
+    {
+        var answers = new List<Answer?>();
+        foreach (var driver in Drivers("view"))
+            answers.Add((await driver.View(Baker("Kit"), "orders", "status")).Refused);
+
+        answers[0]
+            .Should()
+            .Be(new Answer.Refused(RefusalCode.Forbidden, MemoryDriver.ForbiddenMessage));
+        answers[1].Should().Be(answers[0]);
+    }
+
+    private static readonly InstanceKey Adas = new("p-order", "Ada");
+
+    private Person Payer(string name) => new(name, _glossary.Actors["payer"]);
+
+    private Person Baker(string name) => new(name, _glossary.Actors["baker"]);
+
+    private static JsonObject Loaves(int loaves) => new() { ["loaves"] = loaves };
+
+    private IScenarioDriver[] Drivers(string scenario) =>
+        [new MemoryDriver(_irs, _hostFile, _glossary), HostDriver(scenario)];
+
+    // What each driver answers, memory first, after the owner, when there is one, started their order.
+    private async Task<List<Answer>> BothAnswer(
+        Person? owner,
+        Func<IScenarioDriver, Task<Answer>> act
+    )
+    {
+        var answers = new List<Answer>();
+        foreach (var driver in Drivers(TestContext.CurrentContext.Test.Name))
+        {
+            if (owner is not null)
+                (await driver.Start(owner, "p-order")).Should().BeOfType<Answer.Moved>();
+            answers.Add(await act(driver));
+        }
+        return answers;
+    }
+
     private HostDriver HostDriver(string scenario) =>
         new(
             new TraxFeatureDriverOptions
@@ -197,10 +369,10 @@ public class ScenarioDriverParityTests
                 Host = _host.Services,
                 Client = _host.GetTestServer().CreateClient(),
                 Glossary = FeatureGlossary.Read(Glossary),
-                Credential = (_, _, _) =>
+                Credential = (_, person, _) =>
                     new FeatureCredential(
-                        new Dictionary<string, string> { ["X-Api-Key"] = E2EHost.AliceKey },
-                        "TraxApiKey:alice"
+                        new Dictionary<string, string> { ["X-Api-Key"] = Keys[person].Key },
+                        $"TraxApiKey:{Keys[person].Id}"
                     ),
             },
             _glossary,
