@@ -40,5 +40,7 @@
     <InternalsVisibleTo Include="trax" />
     <!-- The Reqnroll bindings read the glossary and host file. -->
     <InternalsVisibleTo Include="Trax.StateMachine.Gherkin.Reqnroll" />
+    <!-- The operations service draws the board of machines served from features from their host file. -->
+    <InternalsVisibleTo Include="Trax.Scheduler" />
   </ItemGroup>
 </Project>

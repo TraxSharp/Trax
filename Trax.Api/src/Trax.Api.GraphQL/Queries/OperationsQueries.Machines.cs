@@ -22,4 +22,21 @@ public partial class OperationsQueries
         [Service] IOperationsService operationsService,
         CancellationToken ct
     ) => (await operationsService.GetMachinesAsync(ct)).Select(MachineDefinition.From).ToList();
+
+    /// <summary>
+    /// The event-storming board of a machine this host serves from features: who acts, what they ask, what happens,
+    /// the rules between, the views, and the scenarios behind each, one lane per machine it joins. Null for a machine
+    /// not served from features. A scenario is its file, line and name, never its steps.
+    /// </summary>
+    /// <param name="machine">The machine's id.</param>
+    /// <param name="operationsService">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the read.</param>
+    public async Task<MachineBoard?> GetMachineBoard(
+        string machine,
+        [Service] IOperationsService operationsService,
+        CancellationToken ct
+    ) =>
+        await operationsService.GetMachineBoardAsync(machine, ct) is { } board
+            ? MachineBoard.From(board)
+            : null;
 }

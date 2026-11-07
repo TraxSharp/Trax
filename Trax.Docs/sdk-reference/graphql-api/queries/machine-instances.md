@@ -58,6 +58,36 @@ query {
 It carries what a machine declares and nothing about any instance: the counts and the instances are
 the fields below.
 
+## machineBoard
+
+The event-storming board of a machine the host serves from features: who acts, what they ask, what happens, the
+rules between, the views, and the scenarios behind each, one lane per machine it joins. It reads through
+`IOperationsService.GetMachineBoardAsync`, which the console's Board tab draws.
+
+```graphql
+query {
+  operations {
+    machineBoard(machine: "order") {
+      machine lanes
+      stickies { id kind machine label scenarios { file line scenario } }
+      links { from to }
+    }
+  }
+}
+```
+
+**Returns**: `MachineBoard`, null for a machine not served from features.
+
+| Field | Type | Value |
+|---|---|---|
+| `machine` | `String!` | The machine asked for |
+| `lanes` | `[String!]!` | The machines on the board, the asked-for one first |
+| `stickies` | `[MachineSticky!]!` | Each sticky: `id`, `kind` (`actor`, `command`, `event`, `policy`, `aggregate` or `view`), `machine`, `label` and `scenarios`, each a `MachineScenario` (`file`, `line`, `scenario`), empty when the host file has no provenance |
+| `links` | `[MachineBoardLink!]!` | Each arrow, `from` one sticky's `id` `to` another's |
+
+A scenario is named by its file, line and name, never by its steps. Like every `operations` field, it is refused to
+anyone the operations gate does not admit.
+
 ## machineInstances
 
 The instances of every [persisted state machine](/docs/statemachine) on the host, system-owned and

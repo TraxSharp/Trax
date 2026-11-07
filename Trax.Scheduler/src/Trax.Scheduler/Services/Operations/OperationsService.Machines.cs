@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Services.Operations;
@@ -27,6 +29,71 @@ public partial class OperationsService
             .OrderBy(d => d.Name, StringComparer.Ordinal)
             .ToList();
         return Task.FromResult(described);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Drawn from the host file the host serves and the IRs of its machines, so it shows what runs, not what the
+    /// features say today. The lanes are the machine's own and each machine an arrow on the whole board joins it to.
+    /// </remarks>
+    public Task<MachineBoardDescription?> GetMachineBoardAsync(string machine, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (
+            _services is not { } services
+            || services.GetService<HostFile>() is not { } host
+            || !host.Machines.ContainsKey(machine)
+        )
+            return Task.FromResult<MachineBoardDescription?>(null);
+        var irs = RegisteredMachines
+            .Distinct(services.GetServices<IMachine>())
+            .Where(m => host.Machines.ContainsKey(m.Name))
+            .DistinctBy(m => m.Name, StringComparer.Ordinal)
+            .ToDictionary(
+                m => m.Name,
+                m => JsonNode.Parse(m.ExportIr())!.AsObject(),
+                StringComparer.Ordinal
+            );
+        var drawn = Board.Draw(irs, host);
+        var lane = drawn
+            .Stickies.Where(s => s.Machine == machine)
+            .Select(s => s.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        var joined = drawn
+            .Links.Where(l => lane.Contains(l.From) || lane.Contains(l.To))
+            .SelectMany(l => new[] { l.From, l.To })
+            .Select(id => drawn.Stickies.First(s => s.Id == id).Machine)
+            .Append(machine)
+            .ToHashSet(StringComparer.Ordinal);
+        var stickies = drawn.Stickies.Where(s => joined.Contains(s.Machine)).ToList();
+        var shown = stickies.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+        return Task.FromResult<MachineBoardDescription?>(
+            new MachineBoardDescription(
+                machine,
+                joined
+                    .OrderBy(m => m == machine ? 0 : 1)
+                    .ThenBy(m => m, StringComparer.Ordinal)
+                    .ToList(),
+                stickies
+                    .Select(s => new MachineStickyDescription(
+                        s.Id,
+                        s.Kind.ToString().ToLowerInvariant(),
+                        s.Machine,
+                        s.Label,
+                        s.Scenarios.Select(p => new MachineScenarioDescription(
+                                p.File,
+                                p.Line,
+                                p.Scenario
+                            ))
+                            .ToList()
+                    ))
+                    .ToList(),
+                drawn
+                    .Links.Where(l => shown.Contains(l.From) && shown.Contains(l.To))
+                    .Select(l => new MachineBoardLinkDescription(l.From, l.To))
+                    .ToList()
+            )
+        );
     }
 
     private static readonly ConditionalWeakTable<IMachine, MachineDescription> Descriptions = new();

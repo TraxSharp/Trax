@@ -50,6 +50,12 @@ under an earlier version, are counted under the diagram, each a filter.
 A machine whose rules are written as code the host cannot describe has no diagram; the page says so,
 with what the host reports and a link to [declared rules and code rules](/docs/statemachine/delegates-and-declarative-rules).
 
+A machine the host serves from features has two tabs, **State diagram** and **Board**. The board is its
+event-storming board: actors, commands, events, policies and views, across each machine a policy or a view joins
+it to, each sticky with its flow role written on it. Clicking a sticky lists the scenarios that put it there, by
+feature file, line and name. A host file written without provenance draws the board without them, and says so.
+The tab is in the address (`tab=board`).
+
 **Instances** lists them newest first by last write, 20 a page, filtered by **State**, **Owner**
 (System or User) and **Stuck only**, each in the address (`state`, `owner`, `stuck`).
 

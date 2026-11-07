@@ -444,6 +444,21 @@ namespace Trax.Api.DTOs
         public string Category { get; init; }
         public Microsoft.Extensions.Logging.LogLevel Level { get; init; }
     }
+    public class MachineBoard : System.IEquatable<Trax.Api.DTOs.MachineBoard>
+    {
+        public MachineBoard(string Machine, System.Collections.Generic.IReadOnlyList<string> Lanes, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineSticky> Stickies, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineBoardLink> Links) { }
+        public System.Collections.Generic.IReadOnlyList<string> Lanes { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineBoardLink> Links { get; init; }
+        public string Machine { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineSticky> Stickies { get; init; }
+        public static Trax.Api.DTOs.MachineBoard From(Trax.Scheduler.Services.Operations.MachineBoardDescription board) { }
+    }
+    public class MachineBoardLink : System.IEquatable<Trax.Api.DTOs.MachineBoardLink>
+    {
+        public MachineBoardLink(string From, string To) { }
+        public string From { get; init; }
+        public string To { get; init; }
+    }
     public class MachineDefinition : System.IEquatable<Trax.Api.DTOs.MachineDefinition>
     {
         public MachineDefinition(string Name, int Version, bool SystemOwned) { }
@@ -617,6 +632,22 @@ namespace Trax.Api.DTOs
         public long? ExecutionId { get; init; }
         public Trax.Effect.Enums.TrainState? TrainState { get; init; }
         public long? WorkQueueEntryId { get; init; }
+    }
+    public class MachineScenario : System.IEquatable<Trax.Api.DTOs.MachineScenario>
+    {
+        public MachineScenario(string File, long Line, string Scenario) { }
+        public string File { get; init; }
+        public long Line { get; init; }
+        public string Scenario { get; init; }
+    }
+    public class MachineSticky : System.IEquatable<Trax.Api.DTOs.MachineSticky>
+    {
+        public MachineSticky(string Id, string Kind, string Machine, string Label, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineScenario> Scenarios) { }
+        public string Id { get; init; }
+        public string Kind { get; init; }
+        public string Label { get; init; }
+        public string Machine { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineScenario> Scenarios { get; init; }
     }
     public class ManifestDetail : System.IEquatable<Trax.Api.DTOs.ManifestDetail>
     {
