@@ -39,21 +39,69 @@ public class ServeFeaturesTests
             Then Ada's order is placed
         """;
 
+    // An order whose expiry voids the receipt that links it: a linked policy.
+    private const string WithPolicy = """
+        {
+          "version": 1,
+          "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
+          "machines": {
+            "order": {
+              "ownedBy": "customer",
+              "noun": "order",
+              "start": "has an order",
+              "initial": "Draft",
+              "states": { "Draft": "is a draft", "Expired": "has expired" },
+              "triggers": { "Expire": { "phrase": "lets {subject} expire" } }
+            },
+            "receipt": {
+              "ownedBy": "customer",
+              "noun": "receipt",
+              "start": "has a receipt",
+              "initial": "Issued",
+              "context": [ { "name": "orderId", "type": "string", "nullable": true, "format": "uuid", "constraints": [] } ],
+              "states": { "Issued": "is issued", "Void": "is void" },
+              "triggers": { "Cancel": { "phrase": "{subject} is voided" } },
+              "links": { "the receipt for {subject}": { "machine": "order", "field": "orderId" } }
+            }
+          }
+        }
+        """;
+
+    private const string Expiring = """
+        Feature: Expiring
+          Background:
+            Given Ada is a customer
+            And Ada has an order
+            And Ada has a receipt
+
+          Scenario: A receipt is voided
+            When Ada's receipt is voided
+            Then Ada's receipt is void
+
+          Scenario: An expired order voids its receipt
+            When Ada lets her order expire
+            Then Ada's order has expired
+            And Ada's receipt is void
+        """;
+
     private string _dir = null!;
 
     [SetUp]
-    public void SetUp()
+    public void SetUp() => _dir = Write(Glossary, Ordering);
+
+    private static string Write(string glossary, string feature)
     {
-        _dir = Path.Combine(Path.GetTempPath(), $"trax-serve-features-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_dir);
+        var dir = Path.Combine(Path.GetTempPath(), $"trax-serve-features-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
         var derived = FeatureMachines.Derive(
-            FeatureGlossary.Read(Glossary),
-            [new FeatureFile("ordering.feature", Ordering)]
+            FeatureGlossary.Read(glossary),
+            [new FeatureFile("machines.feature", feature)]
         );
         derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
         foreach (var (id, ir) in derived.Irs)
-            File.WriteAllText(Path.Combine(_dir, id + ".ir.json"), ir);
-        File.WriteAllText(Path.Combine(_dir, "host.json"), derived.Host);
+            File.WriteAllText(Path.Combine(dir, id + ".ir.json"), ir);
+        File.WriteAllText(Path.Combine(dir, "host.json"), derived.Host);
+        return dir;
     }
 
     [TearDown]
@@ -105,6 +153,30 @@ public class ServeFeaturesTests
         act.Should()
             .Throw<InvalidOperationException>()
             .WithMessage("*ServeFeatures was not called*");
+    }
+
+    [Test]
+    public void Policies_on_the_InMemory_provider_are_refused()
+    {
+        var dir = Write(WithPolicy, Expiring);
+        try
+        {
+            var services = new ServiceCollection();
+
+            var act = () =>
+                services.AddTrax(trax =>
+                    trax.AddEffects(e => e.UseInMemory())
+                        .AddStateMachines(o => o.ServeFeatures(dir))
+                );
+
+            act.Should()
+                .Throw<InvalidOperationException>()
+                .WithMessage("*policies*InMemory*UsePostgres(...) or UseSqlite(...)*");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     [Test]

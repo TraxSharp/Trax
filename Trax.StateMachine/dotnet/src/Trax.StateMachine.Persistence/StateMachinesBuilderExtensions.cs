@@ -127,6 +127,15 @@ public static class StateMachinesBuilderExtensions
                         + "cap together. Use UsePostgres(...) or UseSqlite(...), or leave MaxDraftsPerUser unset."
                 );
             options.CapUnavailable = true;
+
+            // A policy's fire is queued in the transaction of the transition that owes it, which InMemory does not
+            // have: the runner would start and never fire anything.
+            if (services.Any(d => d.ServiceType == typeof(FromIr.MachinePolicies)))
+                throw new InvalidOperationException(
+                    "The machines served from features have policies, but the data provider is InMemory, which has "
+                        + "no transactions to queue a policy's fire with the transition that owes it: no policy would "
+                        + "ever fire. Use UsePostgres(...) or UseSqlite(...)."
+                );
         }
 
         // A TTL the host set longer than the lifetime would never be reached: the lifetime deletes the draft first.
