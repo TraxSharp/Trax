@@ -66,6 +66,7 @@ purpose is fixtures has not been left off the list. Both are review's job.
 
 ## Changelog
 
+- **2026-11-07**: Reqnroll counts as a test framework in every repo's guard, and
+  `Trax.StateMachine.Gherkin.Reqnroll`, whose product is step bindings (ADR 0058), is sanctioned in
+  the state machines' guard.
 - **2026-09-14**: Recorded.
-- **2026-11-07**: Reqnroll counts as a test framework, and `Trax.StateMachine.Gherkin.Reqnroll`, whose
-  product is step bindings (ADR 0058), is sanctioned in the state machines' guard.
