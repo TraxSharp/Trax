@@ -13,11 +13,18 @@ namespace Trax.StateMachine.Gherkin;
 /// </summary>
 internal sealed class Access
 {
-    private Access(Dictionary<string, JsonObject> entries, string table)
+    private Access(Dictionary<string, JsonObject> entries, JsonObject views, string table)
     {
         Entries = entries;
+        Views = views;
         Table = table;
     }
+
+    /// <summary>
+    /// The views a scenario reads, as the host file serves them: what each reads, the fields it shows, and its readers,
+    /// the actors whose people read it. A view no scenario reads is not served.
+    /// </summary>
+    internal JsonObject Views { get; }
 
     /// <summary>Each machine's <c>start</c>, <c>read</c> and <c>triggers</c> entries of the host file, by machine.</summary>
     internal IReadOnlyDictionary<string, JsonObject> Entries { get; }
@@ -130,12 +137,77 @@ internal sealed class Access
                 entry["triggers"] = triggers;
         }
 
+        var views = new JsonObject();
+        foreach (
+            var group in walks
+                .SelectMany(w => w.Views)
+                .GroupBy(v => v.View)
+                .OrderBy(g => g.Key, StringComparer.Ordinal)
+        )
+        {
+            var view = glossary.Views[group.Key];
+            var readers = group
+                .Select(v => glossary.Actors[v.Actor])
+                .DistinctBy(a => a.Name)
+                .OrderBy(a => a.Name, StringComparer.Ordinal)
+                .ToList();
+            var rule = readers.Any(a => a.AnyAuthenticated)
+                ? new JsonObject { ["anyAuthenticated"] = true }
+                : new JsonObject
+                {
+                    ["roles"] = new JsonArray(
+                        new JsonArray(
+                            readers
+                                .SelectMany(a => a.Roles)
+                                .Distinct()
+                                .Order(StringComparer.Ordinal)
+                                .Select(r => (JsonNode?)r)
+                                .ToArray()
+                        )
+                    ),
+                };
+            var reads = new JsonArray();
+            foreach (var read in view.Reads)
+                reads.Add(
+                    read.Key is { } key
+                        ? new JsonObject { ["machine"] = read.Machine, ["key"] = key }
+                        : new JsonObject { ["machine"] = read.Machine }
+                );
+            var fields = new JsonObject();
+            foreach (var field in view.Fields)
+            {
+                var shown = new JsonObject { ["from"] = $"{field.Machine}.{field.Source}" };
+                if (field.Labels is { } labels)
+                {
+                    var written = new JsonObject();
+                    foreach (
+                        var (state, label) in labels.OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                    )
+                        written[state] = label;
+                    shown["labels"] = written;
+                }
+                fields[field.Name] = shown;
+            }
+            views[group.Key] = new JsonObject
+            {
+                ["reads"] = reads,
+                ["fields"] = fields,
+                ["readers"] = rule,
+            };
+            var others = glossary
+                .Actors.Values.Where(a => readers.All(r => r.Name != a.Name) && Admits(rule, a))
+                .Select(a => $"{a.Name} (no scenario)");
+            lines.Add(
+                $"view {group.Key}: {string.Join(", ", readers.Select(r => r.Name).Concat(others.Order(StringComparer.Ordinal)))}"
+            );
+        }
+
         if (problems.Count > before)
             return null;
         var table = new StringBuilder();
         foreach (var line in lines.Order(StringComparer.Ordinal))
             table.Append(line).Append('\n');
-        return new Access(entries, table.ToString());
+        return new Access(entries, views, table.ToString());
     }
 
     // The owner's actor as a rule: any one of its roles, or any signed-in caller.

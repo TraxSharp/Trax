@@ -46,6 +46,10 @@ internal abstract record Meaning
 
     /// <summary><c>5 minutes pass</c></summary>
     internal sealed record Passes(TimeSpan Time) : Meaning;
+
+    /// <summary><c>Ada's orders show status "In the oven"</c>: a person reads one field of a view.</summary>
+    internal sealed record ViewShows(string Person, string View, string Field, string Value)
+        : Meaning;
 }
 
 /// <summary>
@@ -139,6 +143,19 @@ internal sealed partial class StepResolver
             foreach (var phrase in invoke.Outcomes.Keys)
                 Add(Words(phrase), _ => new Meaning.Outcome(machine.Id, invoke.State, phrase));
         }
+
+        // A person reading one field of a view, the field named: "Ada's orders show status "In the oven"".
+        foreach (var view in glossary.Views.Values)
+        foreach (var field in view.Fields)
+            Add(
+                $@"(?<person>{NamePattern})'s\s+{Words(view.Name)}\s+shows?\s+{Words(field.Name)}\s+""(?<value>[^""]*)""",
+                m => new Meaning.ViewShows(
+                    m.Groups["person"].Value,
+                    view.Name,
+                    field.Name,
+                    m.Groups["value"].Value
+                )
+            );
     }
 
     /// <summary>
@@ -230,6 +247,7 @@ internal sealed partial class StepResolver
             Meaning.Act a => a.Owner is { } o ? [a.Person, o] : [a.Person],
             Meaning.Told t => [t.Person],
             Meaning.Denied d => [d.Person],
+            Meaning.ViewShows v => [v.Person],
             _ => OwnerOf(meaning) is (_, { } owner) ? [owner] : [],
         };
 

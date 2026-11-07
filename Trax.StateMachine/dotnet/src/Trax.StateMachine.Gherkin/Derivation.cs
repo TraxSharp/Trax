@@ -79,6 +79,17 @@ internal static class FeatureDerivation
         );
     }
 
+    // The host file: its machines, then its policies and views when it has any.
+    private static JsonObject Document(JsonObject machines, JsonArray policies, JsonObject views)
+    {
+        var document = new JsonObject { ["version"] = HostFile.Version, ["machines"] = machines };
+        if (policies.Count > 0)
+            document["policies"] = policies.DeepClone();
+        if (views.Count > 0)
+            document["views"] = views.DeepClone();
+        return document;
+    }
+
     private static List<Problem> Sorted(IEnumerable<Problem> problems) =>
         problems
             .Distinct()
@@ -139,16 +150,7 @@ internal static class FeatureDerivation
             }
             machines[id] = entry;
         }
-        return CanonicalJson.Serialize(
-            policies.Count > 0
-                ? new JsonObject
-                {
-                    ["version"] = HostFile.Version,
-                    ["machines"] = machines,
-                    ["policies"] = policies.DeepClone(),
-                }
-                : new JsonObject { ["version"] = HostFile.Version, ["machines"] = machines }
-        );
+        return CanonicalJson.Serialize(Document(machines, policies, access.Views));
     }
 }
 
@@ -251,6 +253,9 @@ internal sealed class Walk
     // The scenario's clock, which only time passing moves, and whether the last When was time passing.
     private TimeSpan _clock;
     private bool _afterTime;
+
+    // View steps after a When, read once it is settled.
+    private readonly List<(FeatureStep Step, Meaning.ViewShows View)> _views = [];
     private InstanceKey? _timed;
 
     private Walk(FeatureScenario scenario, Glossary glossary)
@@ -268,6 +273,7 @@ internal sealed class Walk
     internal List<TimerObservation> Timers { get; } = [];
     internal List<StayObservation> Stays { get; } = [];
     internal List<PolicyObservation> Policies { get; } = [];
+    internal List<ViewObservation> Views { get; } = [];
 
     /// <summary>Each step with its meaning, for the replay; a step with none is left out.</summary>
     internal List<(FeatureStep Step, Meaning Meaning)> Steps { get; } = [];
@@ -537,6 +543,13 @@ internal sealed class Walk
                         $"'{step.Text}': {Name(key)} is {(instance?.State ?? "not started")} here, and nothing in this scenario moves it."
                     );
                 break;
+            case Meaning.ViewShows v when _pending is not null:
+                // Read once the When is settled, so the view shows what the When did.
+                _views.Add((step, v));
+                break;
+            case Meaning.ViewShows v:
+                CheckView(step, v);
+                break;
             case Meaning.Guard g:
                 var guarded = InstanceAt(new InstanceKey(g.Machine, g.Owner));
                 var guard = _glossary.Machines[g.Machine].Guards[g.Name];
@@ -614,6 +627,31 @@ internal sealed class Walk
 
     // What the When did, from its Thens: moved to the state they name, refused (told or still), or not allowed.
     private void Settle()
+    {
+        SettleWhen();
+        foreach (var (step, view) in _views)
+            CheckView(step, view);
+        _views.Clear();
+    }
+
+    // A person reading a view: recorded for its readers, and the value checked against what their instances show.
+    private void CheckView(FeatureStep step, Meaning.ViewShows v)
+    {
+        Views.Add(new ViewObservation(v.View, _people[v.Person], _scenario, step.Line));
+        var shown = ViewValues.Shown(
+            _glossary.Views[v.View],
+            v.Field,
+            v.Person,
+            _instances.Select(i => (i.Key, i.Value.State, i.Value.Context))
+        );
+        if (!shown.Contains(v.Value))
+            Fail(
+                step.Line,
+                $"'{step.Text}': {v.Person}'s {v.View} show {v.Field} {(shown.Count == 0 ? "nothing here" : string.Join(" or ", shown.Select(s => $"\"{s}\"")))}."
+            );
+    }
+
+    private void SettleWhen()
     {
         if (_pending is not { } pending)
             return;

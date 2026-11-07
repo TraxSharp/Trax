@@ -655,6 +655,19 @@ internal static class SelfCheck
                             $"'{step.Text}', and the machine has it in {Of(at).State}."
                         );
                     break;
+                case (StepKind.Then, Meaning.ViewShows v):
+                    var values = ViewValues.Shown(
+                        glossary.Views[v.View],
+                        v.Field,
+                        v.Person,
+                        snapshots.Select(kv => (kv.Key, (string?)kv.Value.State, kv.Value.Context))
+                    );
+                    if (!values.Contains(v.Value))
+                        Fail(
+                            step.Line,
+                            $"'{step.Text}', and the view shows {string.Join(" or ", values)}."
+                        );
+                    break;
                 case (StepKind.Then, Meaning.Told t):
                     if (
                         last?.Result
