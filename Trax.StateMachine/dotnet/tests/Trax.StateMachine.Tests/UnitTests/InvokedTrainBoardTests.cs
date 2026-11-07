@@ -116,4 +116,31 @@ public class InvokedTrainBoardTests
             .Problems.Should()
             .Contain(p => p.Message.Contains("starts at Draft, and an outcome"));
     }
+
+    [Test]
+    public void A_timer_into_an_outcomes_state_is_refused_as_the_host_refuses_it()
+    {
+        var derived = Derive(
+            Ordering
+                + """
+
+                  Scenario: A draft left alone
+                    When 5 minutes pass
+                    Then Ada's order is unpaid
+                """
+        );
+
+        derived.Succeeded.Should().BeFalse();
+        derived
+            .Problems.Should()
+            .ContainSingle()
+            .Which.Message.Should()
+            .Contain("Time takes order from Draft to Unpaid, where an outcome");
+    }
+
+    private static DerivedMachines Derive(string feature) =>
+        FeatureMachines.Derive(
+            FeatureGlossary.Read(Glossary),
+            [new FeatureFile("paying.feature", feature)]
+        );
 }

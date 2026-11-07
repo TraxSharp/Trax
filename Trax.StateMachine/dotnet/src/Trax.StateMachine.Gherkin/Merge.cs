@@ -232,6 +232,7 @@ internal static class Merge
             walks,
             edges.Select(e => (e.From, e.Trigger, e.To)),
             outcomes,
+            timers,
             problems
         );
         if (problems.Count > before)
@@ -294,12 +295,14 @@ internal static class Merge
     // somewhere to go, or the machine cannot be built; a scenario says where.
     // The host's rule for an invoked train's outcome targets (Fluent.RefuseOtherEdgesIntoOutcomeTargets), said first
     // here: a target means "the train produced this", so the machine may not start in one, and no ordinary move may
-    // enter one, unless the target invokes a train itself. A self-loop does not enter it.
+    // enter one, unless the target invokes a train itself. A self-loop does not enter it. A timer may not enter one
+    // either (Fluent.BuildTimers).
     private static void ReservedTargets(
         GlossaryMachine machine,
         IReadOnlyList<Walk> walks,
         IEnumerable<(string From, string Trigger, string To)> edges,
         JsonObject outcomes,
+        JsonArray timers,
         List<Problem> problems
     )
     {
@@ -307,13 +310,23 @@ internal static class Merge
             .SelectMany(w => w.Outcomes)
             .Where(o => o.Machine == machine.Id)
             .ToList();
-        foreach (var (_, outcome) in outcomes)
-        foreach (var edge in outcome!["edges"]!.AsArray())
+        // Two outcomes of one run going to the same state reserve it once.
+        var reserved = outcomes
+            .SelectMany(o =>
+                o.Value!["edges"]!
+                    .AsArray()
+                    .Select(e =>
+                        (
+                            State: o.Value["state"]!.GetValue<string>(),
+                            Target: e!["to"]!.GetValue<string>()
+                        )
+                    )
+            )
+            .Where(r => !machine.Invokes.ContainsKey(r.Target))
+            .Distinct()
+            .ToList();
+        foreach (var (state, target) in reserved)
         {
-            var target = edge!["to"]!.GetValue<string>();
-            if (machine.Invokes.ContainsKey(target))
-                continue;
-            var state = outcome["state"]!.GetValue<string>();
             var at = observed.FirstOrDefault(o => o.State == state && o.To == target);
             if (target == machine.Initial)
                 problems.Add(
@@ -342,6 +355,24 @@ internal static class Merge
                         $"{into.Trigger} moves {machine.Id} from {into.From} to {target}, where an outcome of the "
                             + $"train {state} invokes goes. An outcome's state is reserved for what the train "
                             + "produced: give the move a state of its own."
+                    )
+                );
+            }
+            foreach (var timer in timers.Where(t => t!["target"]!.GetValue<string>() == target))
+            {
+                var from = timer!["state"]!.GetValue<string>();
+                var by = walks
+                    .SelectMany(w => w.Timers)
+                    .FirstOrDefault(o =>
+                        o.Machine == machine.Id && o.From == from && o.To == target
+                    );
+                problems.Add(
+                    new Problem(
+                        by?.Scenario.File ?? "glossary",
+                        by?.Line ?? 0,
+                        $"Time takes {machine.Id} from {from} to {target}, where an outcome of the train {state} "
+                            + "invokes goes. An outcome's state is reserved for what the train produced: send the "
+                            + "timer to a state of its own."
                     )
                 );
             }
