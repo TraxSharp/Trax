@@ -18,4 +18,31 @@ public sealed class PolicyRunnerOptions
 
     /// <summary>How long the runner waits between passes when nothing is owed. Defaults to one second.</summary>
     public TimeSpan Interval { get; set; } = TimeSpan.FromSeconds(1);
+
+    // The longest wait Task.Delay takes.
+    private static readonly TimeSpan LongestInterval = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
+
+    // Refuses a value the runner cannot work with: no rows per pass, a cap it cannot read one past, or a wait
+    // Task.Delay throws on, which would stop the runner.
+    internal void Validate()
+    {
+        if (BatchSize < 1)
+            throw new ArgumentOutOfRangeException(
+                nameof(BatchSize),
+                BatchSize,
+                "PolicyRunnerOptions.BatchSize must be at least 1."
+            );
+        if (FanOutCap is < 0 or int.MaxValue)
+            throw new ArgumentOutOfRangeException(
+                nameof(FanOutCap),
+                FanOutCap,
+                "PolicyRunnerOptions.FanOutCap must be at least 0 and less than int.MaxValue."
+            );
+        if (Interval <= TimeSpan.Zero || Interval > LongestInterval)
+            throw new ArgumentOutOfRangeException(
+                nameof(Interval),
+                Interval,
+                $"PolicyRunnerOptions.Interval must be more than zero and at most {LongestInterval}."
+            );
+    }
 }

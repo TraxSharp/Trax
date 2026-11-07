@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Data.Sqlite.Extensions;
 using Trax.Effect.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
@@ -172,6 +173,54 @@ public class ServeFeaturesTests
             act.Should()
                 .Throw<InvalidOperationException>()
                 .WithMessage("*policies*InMemory*UsePostgres(...) or UseSqlite(...)*");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [TestCase("BatchSize", 0)]
+    [TestCase("BatchSize", -1)]
+    [TestCase("FanOutCap", -1)]
+    [TestCase("FanOutCap", int.MaxValue)]
+    [TestCase("Interval", 0)]
+    [TestCase("Interval", -1)]
+    [TestCase("Interval", 50 * 24 * 3600)]
+    public void A_policy_runner_option_out_of_range_is_refused_naming_it(string option, int value)
+    {
+        var dir = Write(WithPolicy, Expiring);
+        try
+        {
+            var services = new ServiceCollection();
+            var file = Path.Combine(dir, "store.db");
+
+            var act = () =>
+                services.AddTrax(trax =>
+                    trax.AddEffects(e => e.UseSqlite($"Data Source={file}"))
+                        .AddStateMachines(o =>
+                            o.ServeFeatures(dir)
+                                .PolicyRunner(p =>
+                                {
+                                    switch (option)
+                                    {
+                                        case "BatchSize":
+                                            p.BatchSize = value;
+                                            break;
+                                        case "FanOutCap":
+                                            p.FanOutCap = value;
+                                            break;
+                                        default:
+                                            p.Interval = TimeSpan.FromSeconds(value);
+                                            break;
+                                    }
+                                })
+                        )
+                );
+
+            act.Should()
+                .Throw<ArgumentOutOfRangeException>()
+                .WithMessage($"*PolicyRunnerOptions.{option}*");
         }
         finally
         {

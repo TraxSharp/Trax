@@ -132,6 +132,7 @@ internal static class IrDirectory
         {
             var options = new PolicyRunnerOptions();
             policies?.Invoke(options);
+            options.Validate();
             services.AddSingleton(new MachinePolicies(loaded.Host.Policies));
             services.AddSingleton(options);
             services.AddSingleton<MachinePolicyRunner>();
