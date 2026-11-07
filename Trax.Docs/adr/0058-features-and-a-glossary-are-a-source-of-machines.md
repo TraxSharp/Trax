@@ -27,7 +27,8 @@ failure rather than a bug.
   never a client-breaking change. The host loads the directory in one call and checks `host.json` against every IR.
 - **Both formats are versioned and have a schema.** `glossary.schema.json` and `host.schema.json` sit beside
   `ir.schema.json` in `Trax.StateMachine/conformance/`. A reader refuses an unknown key, an actor with no roles that
-  does not say `anyAuthenticated`, and a phrase or action word used twice. A step two machines could own is
+  does not say `anyAuthenticated`, and two phrases that make the same step. Phrases are compared as the step they
+  make, so two machines may share an action word their nouns tell apart. A step two machines could own is
   ambiguous, never resolved to the first.
 - **Features name their people, and an actor's own act grants access.** A scenario names each person from an actor's
   noun (`Given Ada is a customer`) and refers to a user's instance by its owner (`Ada's order`, or `her order` for the
@@ -95,13 +96,27 @@ written), `AccessDerivationTests` (grants from an actor's own act, nothing widen
 across hosts and restarts, a broadcast capped and coalesced, a server-only trigger refused to a client). Views are held by
 `ViewDerivationTests` (readers from the people who read a view, a person's own instances only) and
 `IrMachineViewsE2ETests` in Trax.Api (a reader's own rows, `FORBIDDEN` for anyone else, the system instance started by
-the host).
+the host), and their generated persisted documents by `MachineViewDocumentsTests` there (the text sent raw refused, the
+document run by its id, the read rule still applied). `ProvenanceDerivationTests` holds the scenarios behind each part
+(by file and line, in a stable order) and `CascadePolicyTests` a chain's moves read from the chain. Running features is
+held by `ScenarioRunnerTests` (in memory, answering as the host does), `GapStubTests` (a gap's stub green when pasted),
+`FeatureMachinesTests` (the package's public calls), `ScenarioDriverParityTests` in Trax.Api (the same scenarios answer
+the same in memory and against a host) and `FromGherkinCommandTests` in Trax.Cli (the directory the command owns).
+`ServeFeaturesTests` in `Trax.StateMachine.Persistence.Integration` holds a host serving that directory with one option.
+The board is held by `BoardTests` and `InvokedTrainBoardTests` (stickies from the files alone, an invoked train's
+outcomes) and `MachineBoardE2ETests` in Trax.Api (`operations.machineBoard`, behind the operations gate).
 
-Not covered: persisted documents for the `views` root are not generated yet, so a host that requires persisted
-operations cannot serve views.
+Not covered: features run in memory and against a host, never through a page. A page's browser tests are written by
+hand, so nothing checks that a page tells the same story as its features.
 
 ## Changelog
 
+- **2026-11-07**: The Bakery sample: machines written only as features, run in memory and against its host.
+- **2026-11-07**: The console's Board tab draws a machine's board from `operations.machineBoard`.
+- **2026-11-07**: Reqnroll bindings run features against a host, and the Gherkin package has public calls.
+- **2026-11-06**: Persisted documents for views: a host that requires persisted operations serves them.
+- **2026-11-06**: The CLI's `trax machine from-gherkin`, `run`, `missing`, `usage` and `diagram`.
+- **2026-11-06**: Features run in memory as the host answers; missing scenarios are listed with stubs checked green.
 - **2026-11-06**: Views land: derived readers, the `views` root, system instances started by the host.
 - **2026-11-06**: Policies land: server-only triggers, the fire table, the runner, derived policies.
 - **2026-11-06**: Derivation, access and timers land; their tests named in Exemplars.
