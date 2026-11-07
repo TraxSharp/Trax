@@ -94,12 +94,16 @@ internal static class BoardWriter
             text.Append(
                 $"  classDef {kind.ToString().ToLowerInvariant()} fill:{colour},stroke:#555,color:#111\n"
             );
-        foreach (var group in board.Stickies.GroupBy(s => s.Machine))
+        // A machine id may be a word Mermaid reads (end) or a sticky's node id (n0), so each subgraph has an id of
+        // its own and the machine as its title.
+        foreach (
+            var (group, index) in board.Stickies.GroupBy(s => s.Machine).Select((g, i) => (g, i))
+        )
         {
-            text.Append($"  subgraph {Escape(group.Key)}\n");
+            text.Append($"  subgraph m{index}[\"{MachineRenderer.MermaidText(group.Key)}\"]\n");
             foreach (var sticky in group)
                 text.Append(
-                    $"    {ids[sticky.Id]}[\"{Escape(sticky.Label)}\"]:::{sticky.Kind.ToString().ToLowerInvariant()}\n"
+                    $"    {ids[sticky.Id]}[\"{MachineRenderer.MermaidText(sticky.Label)}\"]:::{sticky.Kind.ToString().ToLowerInvariant()}\n"
                 );
             text.Append("  end\n");
         }
@@ -107,12 +111,6 @@ internal static class BoardWriter
             text.Append($"  {ids[link.From]} --> {ids[link.To]}\n");
         return text.ToString();
     }
-
-    // Mermaid reads a quoted label up to the next quote; entity codes keep quotes and brackets in it as text.
-    private static string Escape(string text) =>
-        text.Replace("\"", "#quot;", StringComparison.Ordinal)
-            .Replace("<", "#lt;", StringComparison.Ordinal)
-            .Replace(">", "#gt;", StringComparison.Ordinal);
 
     private static string Html(Board.Drawn board)
     {

@@ -478,6 +478,38 @@ public class FromGherkinCommandTests
     }
 
     [Test]
+    public void The_mermaid_board_quotes_each_machine_and_keeps_each_label_on_its_line()
+    {
+        File.WriteAllText(
+            Path.Combine(Features, "glossary.json"),
+            Glossary
+                .Replace("\"shop\": {", "\"end\": {")
+                .Replace("shop/main", "end/main")
+                .Replace("\"order\": {", "\"n0\": {")
+                .Replace("\"roles\": [\"customer\"]", "\"roles\": [\"cus\\ntomer#1\"]")
+        );
+        var derived = Run();
+        derived.Exit.Should().Be(0, derived.Err);
+        var stdout = new StringWriter();
+
+        MachineCommand.RunDiagram(Out, "mermaid", null, stdout, new StringWriter()).Should().Be(0);
+
+        var lines = stdout.ToString().Split('\n');
+        lines
+            .Where(l => l.TrimStart().StartsWith("subgraph", StringComparison.Ordinal))
+            .Should()
+            .Equal("  subgraph m0[\"end\"]", "  subgraph m1[\"n0\"]");
+        lines.Should().Contain(l => l.Contains("[\"cus tomer#35;1\"]"));
+        lines
+            .Where(l => l.Length > 0)
+            .Should()
+            .OnlyContain(
+                l => l == "flowchart LR" || l.StartsWith("  ", StringComparison.Ordinal),
+                "no label breaks its line"
+            );
+    }
+
+    [Test]
     public void Diagram_refuses_a_directory_with_no_host_file()
     {
         var stderr = new StringWriter();
