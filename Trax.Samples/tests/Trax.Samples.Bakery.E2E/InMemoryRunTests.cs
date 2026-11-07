@@ -55,14 +55,17 @@ public class InMemoryRunTests
 
         derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
         foreach (var (id, ir) in derived.Irs)
-            File.ReadAllText(Path.Combine(Machines, id + ".ir.json"))
+            Lf(File.ReadAllText(Path.Combine(Machines, id + ".ir.json")))
                 .Should()
                 .Be(ir + "\n", $"{id}.ir.json is stale: run trax machine from-gherkin");
-        File.ReadAllText(Path.Combine(Machines, "host.json")).Should().Be(derived.Host + "\n");
-        File.ReadAllText(Path.Combine(Machines, "access.txt")).Should().Be(derived.Access);
+        Lf(File.ReadAllText(Path.Combine(Machines, "host.json"))).Should().Be(derived.Host + "\n");
+        Lf(File.ReadAllText(Path.Combine(Machines, "access.txt"))).Should().Be(derived.Access);
     }
 
     [Test]
     public void Nothing_the_glossary_names_is_left_out_of_the_features() =>
         FeatureMachines.Missing(Glossary, Files).Should().BeEmpty();
+
+    // A checkout with CRLF line endings holds the same files, as trax machine from-gherkin --check reads them.
+    private static string Lf(string text) => text.Replace("\r\n", "\n");
 }
