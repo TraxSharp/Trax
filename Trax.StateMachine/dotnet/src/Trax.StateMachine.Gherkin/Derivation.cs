@@ -842,8 +842,13 @@ internal sealed class Walk
 
     // What the When set off in other instances: each is a policy reacting to the When's instance entering its new
     // state. A When that moved nothing sets nothing off.
+    // Each instance a When's Thens show moving too was moved by a policy. Its cause is the When's instance, unless the
+    // instance is another person's and a system instance moved before it in the same cascade: then the system
+    // instance entering its state moved it, as a broadcast does (a baker opening the shop bakes the waiting orders).
     private void Cascade(Pending pending, string? entered)
     {
+        (InstanceKey Key, string Entered)? system =
+            pending.Key.Owner is null && entered is not null ? (pending.Key, entered) : null;
         foreach (var (key, to, line) in pending.Cascades)
         {
             if (entered is null)
@@ -855,11 +860,15 @@ internal sealed class Walk
                 continue;
             }
             var target = _instances[key];
+            var (cause, causeEntered) =
+                key.Owner is not null && key.Owner != pending.Key.Owner && system is { } moved
+                    ? (moved.Key, moved.Entered)
+                    : (pending.Key, entered);
             Policies.Add(
                 new PolicyObservation(
-                    pending.Key.Machine,
-                    pending.Key.Owner,
-                    entered,
+                    cause.Machine,
+                    cause.Owner,
+                    causeEntered,
                     key.Machine,
                     key.Owner,
                     target.State!,
@@ -869,6 +878,8 @@ internal sealed class Walk
                 )
             );
             target.Enter(to, _clock);
+            if (key.Owner is null)
+                system = (key, to);
         }
     }
 

@@ -131,7 +131,8 @@ internal static class Board
                 links.Add(new Link(happened, aggregate));
             }
 
-            foreach (var outcome in ir["outcomes"]?.AsArray() ?? [])
+            // The IR keys outcomes by "<state>.<kind>".
+            foreach (var (_, outcome) in ir["outcomes"] as JsonObject ?? [])
             {
                 var state = outcome!["state"]!.GetValue<string>();
                 var kind = outcome["outcome"]!.GetValue<string>();

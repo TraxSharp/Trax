@@ -615,11 +615,11 @@ internal static class Missing
     private static string Scenario(string name, IEnumerable<string> steps) =>
         $"  Scenario: {name}\n" + string.Concat(steps.Select(s => $"    {s}\n"));
 
-    // The states an invoked train's outcomes move an instance to.
+    // The states an invoked train's outcomes move an instance to. The IR keys outcomes by "<state>.<kind>".
     private static IEnumerable<string> OutcomeTargets(JsonObject ir) =>
-        ir["outcomes"] is JsonArray outcomes
+        ir["outcomes"] is JsonObject outcomes
             ? outcomes.SelectMany(o =>
-                o!["edges"]!.AsArray().Select(e => e!["to"]!.GetValue<string>())
+                o.Value!["edges"]!.AsArray().Select(e => e!["to"]!.GetValue<string>())
             )
             : [];
 
