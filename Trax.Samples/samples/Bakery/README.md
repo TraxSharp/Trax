@@ -64,7 +64,7 @@ CI runs both with `--check` and fails when a committed file is out of date.
 
 ## Tests
 
-The same features run three ways:
+The same features run two ways:
 
 - **In memory**, on the committed machines, as `trax machine run` runs them:
   [`InMemoryRunTests`](../../tests/Trax.Samples.Bakery.E2E/InMemoryRunTests.cs). It also checks the committed machines
@@ -73,5 +73,8 @@ The same features run three ways:
   their own: [`Hooks`](../../tests/Trax.Samples.Bakery.E2E/Hooks.cs) and the feature files themselves. The two
   scenarios whose outcome the real payment train never produces by itself (a payment that fails, one that is called
   off) are tagged `@in-memory` and run in memory only.
-- **In the browser**, on the built page: [`BakeryPageTests`](../../tests/Trax.Samples.Bakery.Browser/BakeryPageTests.cs),
-  a customer and a baker on pages of their own, and the built page carrying no credential.
+
+The page has browser tests of its own, written by hand rather than run from the features:
+[`BakeryPageTests`](../../tests/Trax.Samples.Bakery.Browser/BakeryPageTests.cs), a customer and a baker on pages of
+their own telling the same story, and the built page carrying no credential. A new scenario is not checked on the page
+until a test there is written for it.

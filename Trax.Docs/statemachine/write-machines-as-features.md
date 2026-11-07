@@ -1,6 +1,6 @@
 ---
 title: Write machines as features
-description: "Write machines as Gherkin features and a glossary, derive them with trax machine from-gherkin, serve them, and run the features three ways."
+description: "Write machines as Gherkin features and a glossary, derive them with trax machine from-gherkin, serve them, and run the features in memory and against the host."
 type: how-to
 area: machines
 nav_order: 24
@@ -85,7 +85,7 @@ machine with its access, the policies between them, the views and the system ins
 disagree refuses the host at startup. Copy `machines/` into the build output, and export the client manifest and run
 `trax client` as for any machine.
 
-## Run the features three ways
+## Run the features
 
 - **In memory**, on the committed machines: `trax machine run --features features --machines machines`, or
   [`FeatureMachines.Run`](/docs/sdk-reference/statemachine-api/feature-machines) from a test. Each answer is the
@@ -93,8 +93,10 @@ disagree refuses the host at startup. Copy `machines/` into the build output, an
 - **Against the host**, with [Reqnroll](/docs/sdk-reference/statemachine-api/feature-bindings): reference
   `Trax.StateMachine.Gherkin.Reqnroll`, include the feature files, and configure the bindings with the host in the
   test process and a credential per person per scenario. There is no step code to write.
-- **In the browser**, on the built page, with Playwright: two people on pages of their own, as the Bakery's
-  `BakeryPageTests` does.
+
+Nothing runs a feature through a page yet. A page's browser tests are written by hand, as the Bakery's
+`BakeryPageTests` are: two people on pages of their own, telling the same story as the features. Nothing checks that
+they still do when a scenario changes.
 
 ## SDK Reference
 
