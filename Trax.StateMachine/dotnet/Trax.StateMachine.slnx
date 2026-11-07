@@ -6,6 +6,7 @@
     <Project Path="src/Trax.StateMachine.Client/Trax.StateMachine.Client.csproj" />
     <Project Path="src/Trax.Client/Trax.Client.csproj" />
     <Project Path="src/Trax.StateMachine.Gherkin/Trax.StateMachine.Gherkin.csproj" />
+    <Project Path="src/Trax.StateMachine.Gherkin.Reqnroll/Trax.StateMachine.Gherkin.Reqnroll.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Trax.StateMachine.Tests/Trax.StateMachine.Tests.csproj" />

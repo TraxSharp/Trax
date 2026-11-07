@@ -42,10 +42,12 @@ public class PublicApiSurfaceTests
         yield return new TestCaseData(typeof(Trax.Client.TraxClient).Assembly).SetName(
             "Trax.Client"
         );
-        // Everything in it is internal until its public surface is decided; loaded by name, since no public type names it.
         yield return new TestCaseData(
-            Assembly.Load(new AssemblyName("Trax.StateMachine.Gherkin"))
+            typeof(Trax.StateMachine.Gherkin.FeatureMachines).Assembly
         ).SetName("Trax.StateMachine.Gherkin");
+        yield return new TestCaseData(
+            typeof(Trax.StateMachine.Gherkin.Reqnroll.TraxFeatures).Assembly
+        ).SetName("Trax.StateMachine.Gherkin.Reqnroll");
     }
 
     /// <summary>

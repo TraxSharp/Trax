@@ -38,5 +38,7 @@
     <!-- `trax machine from-gherkin` reads the glossary it derives from, to name a bad one's key. The CLI's assembly is
          named `trax`. -->
     <InternalsVisibleTo Include="trax" />
+    <!-- The Reqnroll bindings read the glossary and host file. -->
+    <InternalsVisibleTo Include="Trax.StateMachine.Gherkin.Reqnroll" />
   </ItemGroup>
 </Project>

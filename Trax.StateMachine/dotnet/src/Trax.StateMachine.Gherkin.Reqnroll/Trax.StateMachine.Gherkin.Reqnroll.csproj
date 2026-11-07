@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Trax.StateMachine.Gherkin.Reqnroll</AssemblyName>
+    <!-- A new package id, so nuget.org has no release to validate against yet. Remove after the first release that
+         ships it (Directory.Build.props). -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+    <Description>Reqnroll bindings that run Trax .NET features against a host in the test process: one binding for every step the glossary reads, each person a user of their own, Givens arranged through the host's store and everything else sent over GraphQL as a client sends it.</Description>
+    <PackageTags>trax;statemachine;gherkin;reqnroll;bdd;testing</PackageTags>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.StateMachine.Gherkin/Trax.StateMachine.Gherkin.csproj" />
+    <ProjectReference Include="../Trax.StateMachine.Persistence/Trax.StateMachine.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The bindings are the product: a consumer's Reqnroll test project finds them in this assembly. -->
+    <PackageReference Include="Reqnroll" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.StateMachine.Persistence.Integration" />
+    <InternalsVisibleTo Include="Trax.Api.Tests.StateMachine.E2E" />
+  </ItemGroup>
+</Project>

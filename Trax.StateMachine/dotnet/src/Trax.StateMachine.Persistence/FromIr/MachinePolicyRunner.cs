@@ -259,66 +259,27 @@ internal sealed class MachinePolicyRunner(
         HostPolicy policy,
         long target,
         CancellationToken cancellationToken
-    )
-    {
-        var outbox = services.GetRequiredService<InvokeOutbox>();
-        var store = outbox.StoreOver(context, services.GetService<ISqlDialect>());
-        var due = await context
-            .SnapshotDrafts.AsNoTracking()
-            .Where(d => d.RowId == target)
-            .Select(x => new DueRow(
-                x.RowId,
-                x.Id,
-                x.Machine,
-                x.OwnerKind,
-                x.UserKey,
-                x.Version,
-                x.State,
-                x.Context,
-                x.Revision,
-                x.InvokeToken
-            ))
-            .FirstOrDefaultAsync(cancellationToken);
-        if (due is null)
-            return "the instance is gone";
-        if (policy.Shape == "broadcast" && due.State != policy.By)
-            return $"it left {policy.By} before the policy reached it";
-        if (!_byName.Value.TryGetValue(due.Machine, out var machine))
-            return $"this host does not serve {due.Machine}";
-        if (!await store.LockDue(due, cancellationToken))
-            return "another write holds it";
-        if (machine.Rehydrate(due.Json) is not RehydrationResult.Ok readable)
-            return "this host cannot read it";
-
-        var current = readable.Snapshot;
-        switch (machine.Advance(current, policy.Trigger, null))
+    ) =>
+        await ServerFire.Fire(
+            services,
+            context,
+            _byName.Value,
+            target,
+            policy.Trigger,
+            null,
+            TransitionNote.Policy(policy.Trigger),
+            state =>
+                policy.Shape == "broadcast" && state != policy.By
+                    ? $"it left {policy.By} before the policy reached it"
+                    : null,
+            cancellationToken
+        ) switch
         {
-            case AdvanceResult.Transitioned transitioned:
-                var next = transitioned.Snapshot;
-                var write = await outbox.FireTimer(
-                    context,
-                    store,
-                    due,
-                    next,
-                    leaving: machine.Entering(current.State) is not null
-                        && next.State != current.State,
-                    entering: machine.Entering(next.State),
-                    cancellationToken,
-                    policy.Trigger,
-                    TransitionNote.Policy(policy.Trigger)
-                );
-                return write switch
-                {
-                    InvokeWrite.Written => null,
-                    InvokeWrite.Refused refused => refused.Exception?.Message ?? refused.Message,
-                    _ => "another write reached it first",
-                };
-            case AdvanceResult.Rejected rejected:
-                return $"{rejected.Reason.ToWire()}: {rejected.Detail}";
-            default:
-                return "unknown result";
-        }
-    }
+            ServerFire.Fired.Moved => null,
+            ServerFire.Fired.Refused refused => $"{refused.Code.ToWire()}: {refused.Message}",
+            ServerFire.Fired.Failed failed => failed.Why,
+            _ => "unknown result",
+        };
 
     // Claims a fire row for this transaction: on Postgres a row another host holds is passed over, not waited on.
     private static async Task<bool> Lock(

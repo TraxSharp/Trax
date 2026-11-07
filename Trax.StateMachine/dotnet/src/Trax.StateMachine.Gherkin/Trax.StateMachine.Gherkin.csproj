@@ -26,5 +26,8 @@
     <!-- The `trax machine` commands report more than the public calls return (step usage, the run's step kinds), and
          the CLI ships built against this commit. Its assembly is named `trax`. -->
     <InternalsVisibleTo Include="trax" />
+    <!-- The Reqnroll bindings step through the runner with a host driver. -->
+    <InternalsVisibleTo Include="Trax.StateMachine.Gherkin.Reqnroll" />
+    <InternalsVisibleTo Include="Trax.Api.Tests.StateMachine.E2E" />
   </ItemGroup>
 </Project>

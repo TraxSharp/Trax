@@ -1,0 +1,45 @@
+namespace Trax.StateMachine.Gherkin.Reqnroll
+{
+    public sealed class FeatureActor : System.IEquatable<Trax.StateMachine.Gherkin.Reqnroll.FeatureActor>
+    {
+        public FeatureActor(string Name, System.Collections.Generic.IReadOnlyList<string> Roles, bool AnyAuthenticated) { }
+        public bool AnyAuthenticated { get; init; }
+        public string Name { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Roles { get; init; }
+    }
+    public sealed class FeatureCredential : System.IEquatable<Trax.StateMachine.Gherkin.Reqnroll.FeatureCredential>
+    {
+        public FeatureCredential(System.Collections.Generic.IReadOnlyDictionary<string, string> Headers, string UserKey) { }
+        public System.Collections.Generic.IReadOnlyDictionary<string, string> Headers { get; init; }
+        public string UserKey { get; init; }
+    }
+    public sealed class FeatureStepFailedException : System.Exception
+    {
+        public FeatureStepFailedException(string message) { }
+    }
+    public sealed class TraxFeatureDriverOptions
+    {
+        public TraxFeatureDriverOptions() { }
+        public System.Net.Http.HttpClient Client { get; set; }
+        public System.Func<Trax.StateMachine.Gherkin.Reqnroll.FeatureActor, string, string, Trax.StateMachine.Gherkin.Reqnroll.FeatureCredential> Credential { get; set; }
+        public Trax.StateMachine.Gherkin.FeatureGlossary Glossary { get; set; }
+        public string GraphQLPath { get; set; }
+        public System.IServiceProvider Host { get; set; }
+        public System.TimeSpan Slack { get; set; }
+    }
+    [Reqnroll.Binding]
+    public sealed class TraxFeatureSteps
+    {
+        public TraxFeatureSteps(Reqnroll.ScenarioContext scenario, Reqnroll.FeatureContext feature) { }
+        [Reqnroll.Given("^(.*)$")]
+        public System.Threading.Tasks.Task Given(string text) { }
+        [Reqnroll.Then("^(.*)$")]
+        public System.Threading.Tasks.Task Then(string text) { }
+        [Reqnroll.When("^(.*)$")]
+        public System.Threading.Tasks.Task When(string text) { }
+    }
+    public static class TraxFeatures
+    {
+        public static void Configure(System.Action<Trax.StateMachine.Gherkin.Reqnroll.TraxFeatureDriverOptions> configure) { }
+    }
+}

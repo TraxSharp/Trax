@@ -43,6 +43,8 @@ public class NoTestFrameworkInSrcTests
         "Trax.Effect.Data.Testing",
         "Trax.Mediator.Testing",
         "Trax.Api.GraphQL.Testing",
+        // Its product is the step bindings a consumer's Reqnroll test project runs.
+        "Trax.StateMachine.Gherkin.Reqnroll",
     ];
 
     private static readonly string[] TestFrameworkPackages =
@@ -53,6 +55,7 @@ public class NoTestFrameworkInSrcTests
         "xunit.runner.visualstudio",
         "MSTest.TestFramework",
         "Microsoft.NET.Test.Sdk",
+        "Reqnroll",
     ];
 
     private static bool IsSanctioned(string projectPath) =>
