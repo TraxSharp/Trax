@@ -91,6 +91,29 @@ internal static class PolicyMerge
                 continue;
             }
 
+            // The host refuses a user's machine whose server-only trigger starts a train, as it refuses a timer that
+            // does: no user is there to run it as.
+            if (
+                target.SystemKey is null
+                && irs[targetId]["transitions"]!
+                    .AsArray()
+                    .Select(e => e!)
+                    .FirstOrDefault(e =>
+                        e["trigger"]!.GetValue<string>() == trigger[0]
+                        && target.Invokes.ContainsKey(e["to"]!.GetValue<string>())
+                    )
+                    is { } invoking
+            )
+            {
+                problems.Add(
+                    At(
+                        first,
+                        $"{when} entering {enters} moves {targetId} into {invoking["to"]}, which runs a train, and a user's machine never starts a train on a policy: the host refuses it, since no user is there to run it as. Let a person's trigger enter {invoking["to"]}."
+                    )
+                );
+                continue;
+            }
+
             var policy = new JsonObject
             {
                 ["when"] = new JsonObject { ["machine"] = when, ["enters"] = enters },

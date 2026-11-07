@@ -12,7 +12,7 @@ namespace Trax.StateMachine.Persistence;
 /// (<c>Ends()</c> or <c>Fails()</c>), and its initial state neither invokes a train nor spawns a child, since a
 /// spawned child is inserted in its initial state and nothing would start that work. Drafts are stored on a provider
 /// with transactions (not InMemory), so the child and the parent's move are one write. A user-owned parent may not
-/// enter a spawning state through an outcome or a timer, with no user present. See
+/// enter a spawning state through an outcome, a timer or a server-only trigger, with no user present. See
 /// <c>Trax.Docs/adr/0052-a-state-spawns-a-child-machine-as-it-invokes-a-train.md</c>.
 /// </summary>
 internal sealed class SpawnsStartupValidator(
@@ -97,6 +97,13 @@ internal sealed class SpawnsStartupValidator(
                             + "a child. The child would be started by the server with no user present. Let an event "
                             + "the user sends enter it, or declare the machine SystemOwned()."
                     );
+            foreach (var edge in internals.ServerEdges.Where(e => spawning.Contains(e.To)))
+                problems.Add(
+                    $"The machine '{name}' is user-owned, and the server-only trigger {edge.Trigger} enters "
+                        + $"{edge.To} from {edge.From}, which spawns a child. The child would be started by the "
+                        + "server with no user present. Let an event the user sends enter it, or declare the machine "
+                        + "SystemOwned()."
+                );
         }
 
         foreach (var spawn in spawns)

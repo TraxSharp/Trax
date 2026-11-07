@@ -121,6 +121,62 @@ public class PolicyDerivationTests
     }
 
     [Test]
+    public void A_policy_into_a_state_of_a_users_machine_that_runs_a_train_is_refused()
+    {
+        var glossary = JsonNode.Parse(Glossary)!;
+        var order = glossary["machines"]!["order"]!.AsObject();
+        order["states"]!["Baked"] = "is baked";
+        order["states"]!["Burnt"] = "is burnt";
+        order["invokes"] = JsonNode.Parse(
+            """
+            {
+              "Baking": {
+                "train": "Shop.IBake",
+                "outcomes": {
+                  "the bread is done": { "outcome": "done" },
+                  "the oven fails": { "outcome": "failed" },
+                  "the baking is called off": { "outcome": "cancelled" }
+                }
+              }
+            }
+            """
+        );
+        static string Outcome(string said, string then) =>
+            $"""
+
+                  Scenario: {said}
+                    Given Ada's order is placed
+                    When Ada's order starts baking
+                    Then Ada's order is baking
+                    When {said}
+                    Then Ada's order {then}
+
+                """;
+
+        var derived = Derive(
+            Background
+                + Outcome("the bread is done", "is baked")
+                + Outcome("the oven fails", "is burnt")
+                + Outcome("the baking is called off", "is burnt")
+                + """
+                  Scenario: The shop opening starts the waiting orders
+                    Given the shop is closed
+                    And Ada's order is placed
+                    When the shop opens
+                    Then the shop is open
+                    And Ada's order is baking
+                """,
+            glossary.ToJsonString()
+        );
+
+        derived
+            .Problems.Should()
+            .ContainSingle()
+            .Which.Message.Should()
+            .Contain("Baking, which runs a train");
+    }
+
+    [Test]
     public void A_derived_directory_with_policies_is_served_whole()
     {
         var derived = Derive(Background + Expiring);

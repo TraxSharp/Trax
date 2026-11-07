@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Ingest.Contracts;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Attributes;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence;
@@ -232,6 +233,52 @@ public class MachineFromIrTests
             .ExportIr()
             .Should()
             .Be(CanonicalJson.Serialize(ir), "the IR still has Push; only its serving changes");
+    }
+
+    [Test]
+    public void A_server_only_trigger_into_an_invoking_state_of_a_user_machine_refuses_startup()
+    {
+        var ir = Ir("ingest");
+        var host = Hosts["ingest"](ir) with
+        {
+            Triggers = new Dictionary<string, TriggerAccess>
+            {
+                ["Start"] = TriggerAccess.Server,
+                ["Abandon"] = new(AccessRule.AnyAuthenticated),
+                ["Approve"] = new(AccessRule.AnyAuthenticated),
+                ["Retry"] = new(AccessRule.AnyAuthenticated),
+            },
+        };
+        var machine = IrMachines.Create(new IrMachines.Source(ir, host), Trains);
+
+        var problems = InvokesStartupValidator.Problems(
+            machine,
+            new ServiceCollection().BuildServiceProvider()
+        );
+
+        problems
+            .Should()
+            .Contain(
+                p => p.Contains("Start enters Fetching"),
+                "a policy firing Start would queue the run with no user present to authorize it"
+            );
+    }
+
+    [Test]
+    public void A_server_only_trigger_into_an_invoking_state_of_a_system_machine_is_allowed()
+    {
+        var ir = Ir("ingest");
+        var host = Hosts["ingest"](ir) with
+        {
+            SystemKey = "ingest/main",
+            Triggers = new Dictionary<string, TriggerAccess> { ["Start"] = TriggerAccess.Server },
+        };
+        var machine = IrMachines.Create(new IrMachines.Source(ir, host), Trains);
+
+        InvokesStartupValidator
+            .Problems(machine, new ServiceCollection().BuildServiceProvider())
+            .Should()
+            .NotContain(p => p.Contains("Start enters"));
     }
 
     [Test]

@@ -15,7 +15,8 @@ namespace Trax.StateMachine.Persistence;
 /// lets leaving a state cancel its run from any host (<c>AddJunctionProgress</c>), and the train's output reaches no
 /// <c>[TraxSensitive]</c> member, because the output is reduced into a context stored as plain JSON. A user-owned
 /// machine may not chain runs through outcomes: no outcome of an invoking state enters another invoking state,
-/// since that run would be queued with no user present to authorize it. The launcher then
+/// since that run would be queued with no user present to authorize it, and neither a timer nor a server-only trigger
+/// (a policy's) enters an invoking state, for the same reason. The launcher then
 /// checks the train itself: that it is a registered <c>ServiceTrain</c> built only from effect junctions, with no
 /// deferred promotion or <c>OnQueue</c> hook, and authorized compatibly with the machine's owner.
 /// </summary>
@@ -101,6 +102,15 @@ internal sealed class InvokesStartupValidator(
                             + "authorize it. Let an event the user sends enter it, or declare the machine "
                             + "SystemOwned()."
                     );
+
+            // A server-only trigger is a policy's, fired with nobody present, so it may not enter one either.
+            foreach (var edge in internals.ServerEdges.Where(e => invoking.Contains(e.To)))
+                problems.Add(
+                    $"The machine '{name}' is user-owned, and the server-only trigger {edge.Trigger} enters "
+                        + $"{edge.To} from {edge.From}, which invokes a train. Its run would be queued by the "
+                        + "server with no user present to authorize it. Let an event the user sends enter it, or "
+                        + "declare the machine SystemOwned()."
+                );
         }
 
         var launcher = services.GetService<IInvokedTrainLauncher>();

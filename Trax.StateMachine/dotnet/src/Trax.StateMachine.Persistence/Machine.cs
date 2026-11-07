@@ -460,6 +460,17 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
     IReadOnlySet<string> IMachineInternals.ServerTriggers =>
         Built.ServerOnly.Select(t => t.ToString()).ToHashSet(StringComparer.Ordinal);
 
+    IReadOnlyList<ServerEdge> IMachineInternals.ServerEdges =>
+        Built
+            .Definition.Transitions.Where(t => Built.ServerOnly.Contains(t.Trigger))
+            .Select(t => new ServerEdge(
+                t.From.ToString()!,
+                t.Trigger.ToString()!,
+                t.To.ToString()!
+            ))
+            .Distinct()
+            .ToList();
+
     IReadOnlySet<string> IMachineInternals.TimedStates =>
         Built.Timers.Keys.Select(s => s.ToString()).ToHashSet(StringComparer.Ordinal);
 

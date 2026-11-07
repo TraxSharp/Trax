@@ -401,6 +401,12 @@ internal interface IMachineInternals
     /// </summary>
     IReadOnlySet<string> ServerTriggers { get; }
 
+    /// <summary>
+    /// The edges a server-only trigger fires, in declaration order: what a policy can move an instance through. Empty
+    /// for a machine with no server-only trigger.
+    /// </summary>
+    IReadOnlyList<ServerEdge> ServerEdges { get; }
+
     /// <summary>Where each timed state's timer goes, by the timed state's name.</summary>
     IReadOnlyDictionary<string, string> TimerTargets { get; }
 
@@ -435,6 +441,9 @@ internal interface IMachineInternals
 /// <param name="Outcome">The outcome, <c>OnDone</c>, <c>OnFailed</c> or <c>OnCancelled</c>.</param>
 /// <param name="Target">The state the outcome enters, which invokes a train of its own.</param>
 internal sealed record ChainedOutcome(string State, string Outcome, string Target);
+
+/// <summary>An edge a server-only trigger fires, as the startup checks read it.</summary>
+internal sealed record ServerEdge(string From, string Trigger, string To);
 
 /// <summary>A state that spawns a child machine, as the startup check reads it.</summary>
 /// <param name="Machine">The parent machine's id.</param>
