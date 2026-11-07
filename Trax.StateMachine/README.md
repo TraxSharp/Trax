@@ -9,7 +9,7 @@ of its own:
 
 | Directory | What it is | Package |
 | --- | --- | --- |
-| [dotnet](dotnet) | The C# engine, its persistence, its test helpers and its client | `Trax.StateMachine`, `Trax.StateMachine.Persistence`, `Trax.StateMachine.Testing`, `Trax.StateMachine.Client` on NuGet |
+| [dotnet](dotnet) | The C# engine, its persistence, its test helpers, its client, and machines derived from Gherkin features | `Trax.StateMachine`, `Trax.StateMachine.Persistence`, `Trax.StateMachine.Testing`, `Trax.StateMachine.Client`, `Trax.StateMachine.Gherkin`, `Trax.StateMachine.Gherkin.Reqnroll` on NuGet |
 | [ts](ts) | The TypeScript engine, and the client a page drives a served machine through | `@traxsharp/state-machine` on npm |
 | [rust](rust) | The engine in Rust, which the other languages' bindings are built on | not published yet |
 | [conformance](conformance) | The cases every engine must answer the same way, and the runner that sends them | not published |
