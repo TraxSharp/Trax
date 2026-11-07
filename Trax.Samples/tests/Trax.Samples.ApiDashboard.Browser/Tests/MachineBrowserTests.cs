@@ -249,8 +249,23 @@ public class MachineBrowserTests : ConsoleTest
     public async Task A_machine_not_served_from_features_has_no_board_tab()
     {
         var page = new MachinePage(Console, ReminderMachine.Id);
+        // The tab is drawn once the board's own read answers, which the diagram does not wait for.
+        var boardRead = Page.WaitForResponseAsync(
+            r =>
+                r.Url.EndsWith("/trax/graphql")
+                && r.Request.Method == "POST"
+                && r.Request.PostData?.Contains("\"operationName\":\"MachineBoard\"") == true,
+            new() { Timeout = Render }
+        );
         await page.OpenAsync(Caller.Operator);
 
+        var answer = await (await boardRead).JsonAsync();
+        answer!
+            .Value.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("machineBoard")
+            .ValueKind.Should()
+            .Be(System.Text.Json.JsonValueKind.Null);
         await Assertions.Expect(page.Diagram).ToBeVisibleAsync(new() { Timeout = Render });
         await Assertions.Expect(page.Tab("Board")).ToHaveCountAsync(0);
     }
