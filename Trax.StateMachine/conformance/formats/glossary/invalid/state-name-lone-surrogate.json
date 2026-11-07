@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "actors": {
+    "member": {
+      "noun": "a member",
+      "anyAuthenticated": true
+    }
+  },
+  "machines": {
+    "note": {
+      "ownedBy": "member",
+      "noun": "note",
+      "initial": "Open",
+      "states": {
+        "Op\ud800en": "is open"
+      }
+    }
+  }
+}

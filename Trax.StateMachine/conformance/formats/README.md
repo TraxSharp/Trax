@@ -7,7 +7,7 @@ Documents in the two formats a machine derived from features is written in, the 
 | --- | --- | --- |
 | `valid/` | accepts | accepts |
 | `invalid/` | refuses | refuses |
-| `refused/` | accepts | refuses: names in it disagree (an owner that is not an actor, a phrase two steps could mean), which a schema cannot say, or a key given twice, which `JSON.parse` drops silently |
+| `refused/` | accepts | refuses: names in it disagree (an owner that is not an actor, a phrase two steps could mean), which a schema cannot say, a key given twice, which `JSON.parse` drops silently, or an escaped lone surrogate, which is not text |
 
 `FormatCorpusTests` (C#) and `src/formatSchemas.conformance.test.ts` (TypeScript) fail on a file in the wrong
 directory, so the reader and the schema cannot drift. A new rule in either gets a file here in the same change.

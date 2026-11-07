@@ -36,7 +36,42 @@ internal readonly record struct At(string Document, string Pointer)
         {
             throw at.Fail($"is not JSON: {ex.Message}");
         }
-        return at.Object(node);
+        catch (InvalidOperationException)
+        {
+            // The check for a key given twice decodes every key, and throws on one that is not text.
+            throw at.Fail("has a key that is not valid UTF-16 text.");
+        }
+        var root = at.Object(node);
+        Decoded(at, root);
+        return root;
+    }
+
+    // JsonNode.Parse decodes a string only when it is read, and an escaped lone surrogate (\ud800) then throws
+    // InvalidOperationException. Every one is read here first, so it is refused as a FormatException naming where it
+    // is, as every other refusal is. Keys are decoded by Parse, which checks them for duplicates.
+    private static void Decoded(At at, JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject value:
+                foreach (var (key, child) in value)
+                    Decoded(at[key], child);
+                break;
+            case JsonArray list:
+                for (var i = 0; i < list.Count; i++)
+                    Decoded(at[i], list[i]);
+                break;
+            case JsonValue text when text.GetValueKind() == JsonValueKind.String:
+                try
+                {
+                    _ = text.GetValue<string>();
+                }
+                catch (InvalidOperationException)
+                {
+                    throw at.Fail("is not valid UTF-16 text.");
+                }
+                break;
+        }
     }
 
     internal At this[string key] =>
