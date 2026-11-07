@@ -423,6 +423,56 @@ public partial class ClientGeneratorTests
     }
 
     [Test]
+    public void A_host_serving_views_gets_a_read_function_per_view_sent_by_its_id()
+    {
+        const string text = "query OrdersView { views { orders { vOrder { id status } } } }";
+        var manifest = ClientManifests.Sample() with
+        {
+            Views =
+            [
+                new ClientManifestDocument
+                {
+                    Id = "trax_view_orders_" + new string('a', 64) + new string('b', 16),
+                    Operation = "orders",
+                    Document = text,
+                },
+            ],
+            Types =
+                ClientManifests.Sample().Types
+                + """
+
+                    type OrdersView {
+                      vOrder: [OrdersVOrderRow!]!
+                    }
+
+                    type OrdersVOrderRow {
+                      id: UUID!
+                      status: String
+                    }
+
+                    scalar UUID
+                    """,
+        };
+
+        var files = Render(manifest);
+        var views = Text(files, "views.g.ts");
+
+        FirstImport(views).Should().Match("*format.g\";");
+        views
+            .Should()
+            .Contain("export type OrdersViewResult = ")
+            .And.Contain("export const ordersViewDocumentId = \"trax_view_orders_")
+            .And.Contain("export function readOrdersView(): Promise<OrdersViewResult>")
+            .And.Contain("sendDocument(ordersViewDocumentId, {}, [\"views\", \"orders\"])")
+            .And.NotContain(text, "a document is sent by its id, never its text");
+        Text(files, "index.g.ts")
+            .Should()
+            .Contain(
+                "export { readOrdersView, type OrdersViewResult, ordersViewDocumentId } from \"./views.g\";"
+            );
+    }
+
+    [Test]
     public void A_host_without_one_gets_none()
     {
         var files = Render(ClientManifests.Sample() with { Progress = [] });

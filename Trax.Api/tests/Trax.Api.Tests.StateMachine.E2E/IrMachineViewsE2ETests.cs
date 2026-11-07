@@ -128,7 +128,7 @@ public class IrMachineViewsE2ETests
 
     // An order Payers keep, with a count of loaves, and a shop the host opens; the orders view, for Payers, and the shop
     // sign, for anyone signed in.
-    private static (
+    internal static (
         IReadOnlyList<Trax.StateMachine.Persistence.IMachine> Machines,
         HostFile Host
     ) Machines()

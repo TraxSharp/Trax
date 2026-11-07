@@ -165,7 +165,7 @@ public class ClientManifestTests
     [Test]
     public void A_manifest_without_query_models_reads_as_none()
     {
-        var read = ClientManifest.Read("""{ "format": 3, "trains": [] }""");
+        var read = ClientManifest.Read("""{ "format": 4, "trains": [] }""");
 
         read.QueryModels.Should().BeEmpty();
         read.FilterInputs.Should().BeEmpty();
@@ -195,13 +195,13 @@ public class ClientManifestTests
         read.FilterInputs.Should().Equal("OrderFilterInput");
     }
 
-    [TestCase("""{ "format": 3, "queryModels": [null] }""")]
-    [TestCase("""{ "format": 3, "machines": [null] }""")]
+    [TestCase("""{ "format": 4, "queryModels": [null] }""")]
+    [TestCase("""{ "format": 4, "machines": [null] }""")]
     [TestCase(
-        """{ "format": 3, "trains": [{ "field": "a", "root": "mutation", "arguments": [null] }] }"""
+        """{ "format": 4, "trains": [{ "field": "a", "root": "mutation", "arguments": [null] }] }"""
     )]
-    [TestCase("""{ "format": 3, "types": null }""")]
-    [TestCase("""{ "format": 3, "machines": [{ "id": "m", "irHash": "h", "ir": 3 }] }""")]
+    [TestCase("""{ "format": 4, "types": null }""")]
+    [TestCase("""{ "format": 4, "machines": [{ "id": "m", "irHash": "h", "ir": 3 }] }""")]
     public void A_null_or_a_value_of_another_kind_is_refused_with_a_message(string text)
     {
         var read = () => ClientManifest.Read(text);

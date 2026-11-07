@@ -103,6 +103,7 @@ internal sealed class MachineDocumentRegistration(
         [
             .. (exposed.Count == 0 ? [] : MachineDocuments.Generate(executor.Schema, exposed)),
             .. ProgressDocuments.Generate(executor.Schema),
+            .. ViewDocuments.Generate(executor.Schema),
         ];
         var clientDocuments = LoadClientDocuments();
         // What a client document may reach, decided from what the host registered: the same reach judges the stored

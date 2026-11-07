@@ -32,6 +32,7 @@ internal static class GeneratedDocuments
         MachineDocuments.IsReserved(id)
         || TrainDocuments.IsReserved(id)
         || ProgressDocuments.IsReserved(id)
+        || ViewDocuments.IsReserved(id)
         || ClientDocuments.IsReserved(id)
         || ConsoleDocuments.IsReserved(id);
 
@@ -48,6 +49,7 @@ internal static class GeneratedDocuments
         MachineDocuments.IsReserved(id) ? MachineDocuments.ReservedIdPrefix
         : TrainDocuments.IsReserved(id) ? TrainDocuments.ReservedIdPrefix
         : ProgressDocuments.IsReserved(id) ? ProgressDocuments.ReservedIdPrefix
+        : ViewDocuments.IsReserved(id) ? ViewDocuments.ReservedIdPrefix
         : ClientDocuments.IsReserved(id) ? ClientDocuments.ReservedIdPrefix
         : ConsoleDocuments.IsReserved(id) ? ConsoleDocuments.ReservedIdPrefix
         : null;
@@ -86,6 +88,11 @@ internal static class GeneratedDocuments
             return
                 ProgressDocuments.SlotOf(id) is { } slot
                 && slots.Contains(slot, StringComparer.Ordinal)
+                ? slot
+                : null;
+        if (ViewDocuments.IsReserved(id))
+            return
+                ViewDocuments.SlotOf(id) is { } slot && slots.Contains(slot, StringComparer.Ordinal)
                 ? slot
                 : null;
         if (ClientDocuments.IsReserved(id))

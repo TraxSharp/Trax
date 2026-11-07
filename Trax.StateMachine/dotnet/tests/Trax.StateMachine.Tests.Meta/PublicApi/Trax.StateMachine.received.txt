@@ -28,7 +28,7 @@ namespace Trax.StateMachine
     }
     public sealed class ClientManifest : System.IEquatable<Trax.StateMachine.ClientManifest>
     {
-        public const int CurrentFormat = 3;
+        public const int CurrentFormat = 4;
         public ClientManifest() { }
         public System.Collections.Generic.IReadOnlyList<string> FilterInputs { get; init; }
         public int Format { get; init; }
@@ -37,6 +37,7 @@ namespace Trax.StateMachine
         public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestQueryModel> QueryModels { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestTrain> Trains { get; init; }
         public string Types { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestDocument> Views { get; init; }
         public static Trax.StateMachine.ClientManifest Read(string text) { }
         public static string Write(Trax.StateMachine.ClientManifest manifest) { }
     }
