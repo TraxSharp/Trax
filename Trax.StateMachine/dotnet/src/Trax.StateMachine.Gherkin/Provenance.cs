@@ -7,7 +7,7 @@ namespace Trax.StateMachine.Gherkin;
 /// Which scenarios produced each part of each machine (ADR <c>Trax.Docs/adr/0058</c>), for the host file's
 /// <c>provenance</c>: a scenario is its file, line and name, never its steps. A part is named by what it is:
 /// <c>start</c>, <c>command Place</c>, <c>edge Draft Place Placed</c>, <c>guard Draft Place</c>, <c>timer Baking</c>,
-/// <c>outcome Baking Ready</c>, <c>policy order Paid</c> (on the machine the policy moves) and <c>view orders</c> (on
+/// <c>outcome Baking succeeded</c> (by the outcome's kind), <c>policy order Paid</c> (on the machine the policy moves) and <c>view orders</c> (on
 /// each machine the view reads). Parts and scenarios are sorted, so the file does not depend on file names' order.
 /// </summary>
 internal static class Provenance
@@ -58,7 +58,11 @@ internal static class Provenance
             foreach (var s in walk.Stays)
                 Add(s.Machine, $"timer {s.State}", s.Scenario);
             foreach (var o in walk.Outcomes)
-                Add(o.Machine, $"outcome {o.State} {o.To}", o.Scenario);
+                Add(
+                    o.Machine,
+                    $"outcome {o.State} {glossary.Machines[o.Machine].Invokes[o.State].Outcomes[o.Phrase].Kind}",
+                    o.Scenario
+                );
             foreach (var p in walk.Policies)
                 Add(p.Target, $"policy {p.When} {p.Enters}", p.Scenario);
             foreach (var v in walk.Views)
