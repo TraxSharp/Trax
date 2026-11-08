@@ -99,7 +99,10 @@ internal sealed partial record Glossary(
             "triggers",
             "guards",
             "invokes",
-            "links"
+            "links",
+            "version",
+            "initialContext",
+            "differential"
         );
         var owned = machine.ContainsKey("ownedBy");
         var system = machine.ContainsKey("system");
@@ -140,11 +143,28 @@ internal sealed partial record Glossary(
         if (given.Count == 0)
             throw statesAt.Fail("must hold at least 1.");
         var states = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (name, phrase) in given)
+        var shapes = new Dictionary<string, GlossaryState>(StringComparer.Ordinal);
+        foreach (var (name, node) in given)
         {
             Names.MemberAt(statesAt[name], JsonValue.Create(name));
-            states[name] = Names.PhraseAt(statesAt[name], phrase);
+            var shape = ReadState(statesAt[name], name, node);
+            states[name] = shape.Phrase;
+            shapes[name] = shape;
         }
+        var version = 1;
+        if (machine.ContainsKey("version"))
+        {
+            var number = at["version"].Integer(machine["version"]);
+            if (number < 1 || number > int.MaxValue)
+                throw at["version"].Fail($"must be from 1 to {int.MaxValue}.");
+            version = (int)number;
+        }
+        var initialContext = machine.ContainsKey("initialContext")
+            ? (JsonObject)at["initialContext"].Object(machine["initialContext"]).DeepClone()
+            : null;
+        var differential = machine.ContainsKey("differential");
+        if (differential)
+            at["differential"].True(machine["differential"]);
 
         var triggers = machine.ContainsKey("triggers")
             ? Map(at["triggers"], machine["triggers"], 0, Names.MemberAt, ReadTrigger)
@@ -176,7 +196,37 @@ internal sealed partial record Glossary(
         )
         {
             KeyedBy = keyedBy,
+            Version = version,
+            InitialContext = initialContext,
+            Differential = differential,
+            Shapes = shapes,
         };
+    }
+
+    // A state is its phrase, or { phrase, committed, requires, context }: committed, the rule its context must meet, and
+    // a context of its own in place of the machine's.
+    private static GlossaryState ReadState(At at, string name, JsonNode? node)
+    {
+        if (node is not JsonObject shape)
+            return new GlossaryState(name, Names.PhraseAt(at, node), false, null, null, null);
+        at.Closed(shape, "phrase", "committed", "requires", "context");
+        var phrase = Names.PhraseAt(at["phrase"], at.Required(shape, "phrase"));
+        if (shape.ContainsKey("committed"))
+            at["committed"].True(shape["committed"]);
+        var requires = shape.ContainsKey("requires")
+            ? IrShapes.Rule(at["requires"], shape["requires"])
+            : null;
+        var (context, contextNames) = shape.ContainsKey("context")
+            ? IrShapes.Fields(at["context"], shape["context"])
+            : ((JsonArray?)null, (List<string>?)null);
+        return new GlossaryState(
+            name,
+            phrase,
+            shape.ContainsKey("committed"),
+            requires,
+            context,
+            contextNames
+        );
     }
 
     /// <summary>The most parts a keyed system machine's key has.</summary>
@@ -323,7 +373,7 @@ internal sealed partial record Glossary(
                 throw m["initial"].Fail($"'{machine.Initial}' is not one of its states.");
 
             Distinct(m["context"], machine.ContextNames);
-            if (machine.ContextNames.Contains(HostInvoke.Owner))
+            if (machine.AllContextNames.Contains(HostInvoke.Owner))
                 throw m["context"]
                     .Fail(
                         $"has a field named '{HostInvoke.Owner}', which a train's input reads as the owner."
@@ -331,6 +381,15 @@ internal sealed partial record Glossary(
             if (machine.ContextNames.Contains(ViewField.State))
                 throw m["context"]
                     .Fail("has a field named 'state', which a view reads as the machine's state.");
+            foreach (var shape in machine.Shapes.Values.Where(s => s.ContextNames is not null))
+            {
+                var c = m["states"][shape.Name]["context"];
+                Distinct(c, shape.ContextNames!);
+                if (shape.ContextNames!.Contains(ViewField.State))
+                    throw c.Fail(
+                        "has a field named 'state', which a view reads as the machine's state."
+                    );
+            }
 
             Unique(references, ReferenceAt(m, machine), machine.Reference);
             if (machine.Start is { } start)
@@ -398,7 +457,7 @@ internal sealed partial record Glossary(
                                     $"a system machine has no owner, so nothing is {HostInvoke.Owner}."
                                 );
                     }
-                    else if (!machine.ContextNames.Contains(from))
+                    else if (!machine.AllContextNames.Contains(from))
                         throw v["input"]
                             [field]
                             .Fail($"'{from}' is not one of the machine's context fields.");
@@ -432,7 +491,7 @@ internal sealed partial record Glossary(
                         .Fail(
                             $"'{link.Machine}' is a system machine, reached at its key, never by a link."
                         );
-                if (!machine.ContextNames.Contains(link.Field))
+                if (!machine.AllContextNames.Contains(link.Field))
                     throw l["field"]
                         .Fail($"'{link.Field}' is not one of the machine's context fields.");
             }
@@ -461,7 +520,7 @@ internal sealed partial record Glossary(
             {
                 var machine = Machines[field.Machine];
                 var f = v["fields"][field.Name];
-                if (!field.IsState && !machine.ContextNames.Contains(field.Source))
+                if (!field.IsState && !machine.AllContextNames.Contains(field.Source))
                     throw f["from"]
                         .Fail($"'{field.Source}' is not a context field of '{machine.Id}'.");
                 if (field.Labels is not null)
@@ -609,7 +668,57 @@ internal sealed record GlossaryMachine(
 
     /// <summary>Whether the system owns the machine's instances, at a fixed key or keyed.</summary>
     internal bool IsSystem => SystemKey is not null || KeyedBy is not null;
+
+    /// <summary>The machine's definition version, which its snapshots carry and migrations step from. Defaults to 1.</summary>
+    internal int Version { get; init; } = 1;
+
+    /// <summary>The context a new instance starts with, when the glossary gives one; else each field's zero.</summary>
+    internal JsonObject? InitialContext { get; init; }
+
+    /// <summary>Whether derivation writes the IR's differential block from the scenarios' walks.</summary>
+    internal bool Differential { get; init; }
+
+    /// <summary>Each state's shape: its phrase, whether it is committed, its rule and its own context.</summary>
+    internal IReadOnlyDictionary<string, GlossaryState> Shapes { get; init; } =
+        new Dictionary<string, GlossaryState>(StringComparer.Ordinal);
+
+    /// <summary>A state's context fields: its own, or the machine's.</summary>
+    internal JsonArray ContextOf(string state) =>
+        Shapes.TryGetValue(state, out var shape) && shape.Context is { } own ? own : Context;
+
+    /// <summary>Every context field name of the machine, its own and its states'.</summary>
+    internal IReadOnlySet<string> AllContextNames =>
+        ContextNames
+            .Concat(Shapes.Values.SelectMany(s => s.ContextNames ?? []))
+            .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The type of a context field, from the machine's context and then its states' in name order, or null when no
+    /// context has it.
+    /// </summary>
+    internal string? FieldType(string field) =>
+        Context
+            .Concat(
+                Shapes
+                    .Values.OrderBy(s => s.Name, StringComparer.Ordinal)
+                    .SelectMany(s => s.Context ?? [])
+            )
+            .FirstOrDefault(f => f!["name"]!.GetValue<string>() == field)
+            ?["type"]?.GetValue<string>();
 }
+
+/// <summary>
+/// One state of a glossary machine: <see cref="Phrase"/>, whether it is <see cref="Committed"/>, the rule its context
+/// <see cref="Requires"/>, and its own <see cref="Context"/>, null when it has the machine's.
+/// </summary>
+internal sealed record GlossaryState(
+    string Name,
+    string Phrase,
+    bool Committed,
+    JsonObject? Requires,
+    JsonArray? Context,
+    IReadOnlyList<string>? ContextNames
+);
 
 internal sealed record GlossaryTrigger(
     string Name,

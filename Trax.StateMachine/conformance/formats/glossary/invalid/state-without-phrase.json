@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "actors": {
+    "customer": {
+      "noun": "a customer",
+      "anyAuthenticated": true
+    }
+  },
+  "machines": {
+    "checkout": {
+      "ownedBy": "customer",
+      "noun": "checkout",
+      "start": "has a checkout",
+      "version": 2,
+      "initial": "Cart",
+      "initialContext": {
+        "items": [],
+        "receipt": null
+      },
+      "differential": true,
+      "context": [
+        {
+          "name": "items",
+          "type": "array",
+          "nullable": false,
+          "constraints": [],
+          "values": {
+            "type": "string",
+            "nullable": false
+          }
+        },
+        {
+          "name": "receipt",
+          "type": "string",
+          "nullable": true,
+          "constraints": []
+        }
+      ],
+      "states": {
+        "Cart": "is in the cart",
+        "Paid": {
+          "committed": true,
+          "requires": {
+            "rule": "nonEmpty",
+            "source": "context",
+            "field": "receipt"
+          },
+          "context": [
+            {
+              "name": "items",
+              "type": "array",
+              "nullable": false,
+              "constraints": [],
+              "values": {
+                "type": "string",
+                "nullable": false
+              }
+            },
+            {
+              "name": "receipt",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            }
+          ]
+        }
+      }
+    }
+  }
+}

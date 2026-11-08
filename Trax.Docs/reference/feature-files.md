@@ -32,9 +32,12 @@ A machine is a user's or the system's:
 | --- | --- |
 | `ownedBy` | The actor whose people own its instances, or a list of them (`["triage", "fixer"]`): each person owns their own instances whichever actor they are. With it, `noun` is how a step names one (`order`, as `Ada's order` says it) and `start` the phrase a person has one with (`has an order`). |
 | `system`, `name` | A system machine: its fixed key (`shop/main`) and its name in a step (`the shop`). The host starts its one instance; only the server moves it. Or `{ "keyedBy": ["id"] }`, a keyed system machine: one instance per key, which host code starts and moves (see below). |
+| `version` | The machine's definition version, which its snapshots carry. Defaults to `1`. |
 | `initial` | The state an instance starts in. |
-| `context` | The fields of its context, as the IR declares fields. |
-| `states` | Each state by name, with its phrase (`is a draft`). |
+| `initialContext` | The context a new instance starts with. Without it, each field of the initial state's context starts at its zero, and a nullable one at `null`. |
+| `context` | The fields of its context, as the IR declares fields: every state's, unless the state gives its own. |
+| `states` | Each state by name, with its phrase (`is a draft`), or with `{ "phrase", "committed", "requires", "context" }`: `committed: true` (the IR's `committedStates`), the rule its context must meet (the IR's `invariants`), and a context of its own in place of the machine's. |
+| `differential` | `true` to write the IR's `differential` block from the scenarios (below). |
 | `triggers` | Each trigger by name: its `phrase`, with `{subject}` where the instance is named and `{field}` for each of its `input` fields, and a `reduce` that sets context from the input. A phrase that starts with `{subject}` is something that happens to the instance, fired by no person. |
 | `guards` | Each guard by name: its `holds` and `fails` phrases and its `rule`, which the features set up with Givens. |
 | `invokes` | Each state that runs a train: the `train`'s interface full name, its `input` from context fields (or from `$owner`, below), its `output` fields, its `outcomes` by phrase (`done`, `failed` or `cancelled`, a `when` rule on the output, a `reduce`), and `examples`, the output an in-memory run answers with. |
@@ -75,6 +78,22 @@ A scenario names its people, never "I". The step's own person is `her`, `his` or
 Derivation refuses a data table, a DocString, a `*` step, a first-person step, a step two phrases match, a Given or
 When no phrase matches, and two scenarios that disagree. A Then no phrase matches is about the UI: it is reported and
 left alone, and `trax machine run --strict` fails on it.
+
+### The differential block
+
+With `differential: true`, derivation writes the IR's `differential` block from what the scenarios did, so the
+engines can be held to each other on the machine (the corpus `trax machine generate --corpus-out` writes from it):
+
+| Key | From |
+| --- | --- |
+| `samples.<Trigger>` | Every input a scenario sent the trigger with, a trigger served to someone. |
+| `samples.<State>.done` | The `example` of every `done` outcome a scenario gave. |
+| `seeds.<State>` | Every context a Given put an instance in before a When fired from it, but the initial one. |
+
+Each list holds each value once, in canonical order, so the block (and the IR's hash) moves only when a scenario
+changes what it sends. Nothing writes `contexts`, a probe of contexts no scenario reaches: a value a scenario cannot
+send, a hostile one, is for a machine written in C#. A machine that asks for a block and whose scenarios give nothing
+to put in it is a problem.
 
 ## host.json
 

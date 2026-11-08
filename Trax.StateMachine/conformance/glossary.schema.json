@@ -184,6 +184,12 @@
         "name": {
           "$ref": "#/$defs/phrase"
         },
+        "version": {
+          "description": "The machine's definition version, which its snapshots carry and a migration steps from. Defaults to 1.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
         "start": {
           "description": "What follows a person's name to give them a new instance: `has an order`.",
           "$ref": "#/$defs/phrase"
@@ -194,6 +200,10 @@
         "context": {
           "$ref": "#/$defs/fields"
         },
+        "initialContext": {
+          "description": "The context a new instance starts with. Without it, each field of the initial state's context starts at its zero (null for a nullable one).",
+          "type": "object"
+        },
         "states": {
           "type": "object",
           "minProperties": 1,
@@ -201,7 +211,14 @@
             "$ref": "#/$defs/member"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/phrase"
+            "oneOf": [
+              {
+                "$ref": "#/$defs/phrase"
+              },
+              {
+                "$ref": "#/$defs/state"
+              }
+            ]
           }
         },
         "triggers": {
@@ -239,6 +256,10 @@
           "additionalProperties": {
             "$ref": "#/$defs/link"
           }
+        },
+        "differential": {
+          "description": "Write the IR's differential block from the scenarios: each input a served trigger is sent with, each output an outcome is given, and each context a Given sets an instance up in.",
+          "const": true
         }
       },
       "additionalProperties": false,
@@ -264,6 +285,28 @@
           }
         }
       ]
+    },
+    "state": {
+      "description": "A state with more than its phrase: committed (only the effect runner enters it, and a save never leaves it), the rule its context must meet, and a context of its own in place of the machine's.",
+      "type": "object",
+      "required": [
+        "phrase"
+      ],
+      "properties": {
+        "phrase": {
+          "$ref": "#/$defs/phrase"
+        },
+        "committed": {
+          "const": true
+        },
+        "requires": {
+          "$ref": "urn:trax:state-machine:ir-format:1#/$defs/rule"
+        },
+        "context": {
+          "$ref": "#/$defs/fields"
+        }
+      },
+      "additionalProperties": false
     },
     "trigger": {
       "description": "A trigger and its phrase. A person's act is the phrase after their name (`places {subject}`); anything else is the whole step (`{subject} starts baking`, `the shop opens`). `{subject}` is where a user machine's instance is named, and every other {placeholder} names an input field.",

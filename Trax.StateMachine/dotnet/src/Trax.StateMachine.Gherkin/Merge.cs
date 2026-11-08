@@ -41,9 +41,7 @@ internal static class Satisfy
                 : $"'{phrase}' reads the step's input, not the context, so it is said in the When, not a Given.";
             return null;
         }
-        var type = machine
-            .Context.FirstOrDefault(f => f!["name"]!.GetValue<string>() == field)
-            ?["type"]?.GetValue<string>();
+        var type = machine.FieldType(field);
         if (type is null)
         {
             why =
@@ -238,10 +236,9 @@ internal static class Merge
         if (problems.Count > before)
             return null;
 
-        var fields = new JsonArray(machine.Context.Select(f => f!.DeepClone()).ToArray());
         var context = new JsonObject();
         foreach (var state in machine.States.Keys.Order(StringComparer.Ordinal))
-            context[state] = new JsonObject { ["fields"] = fields.DeepClone() };
+            context[state] = new JsonObject { ["fields"] = machine.ContextOf(state).DeepClone() };
         var inputs = new JsonObject();
         // A trigger's input is declared on its edges, so a trigger no scenario fires has no input to declare.
         var fired = edges.Select(e => e.Trigger).ToHashSet(StringComparer.Ordinal);
@@ -271,21 +268,123 @@ internal static class Merge
         var ir = new JsonObject
         {
             ["id"] = machine.Id,
-            ["version"] = 1,
+            ["version"] = machine.Version,
             ["initialState"] = machine.Initial,
             ["initialContext"] = Walk.InitialContext(machine),
             ["states"] = Sorted(machine.States.Keys),
             ["triggers"] = Sorted(served),
-            ["committedStates"] = new JsonArray(),
+            ["committedStates"] = Sorted(
+                machine.Shapes.Values.Where(s => s.Committed).Select(s => s.Name)
+            ),
             ["context"] = context,
             ["inputs"] = inputs,
             ["transitions"] = transitions,
         };
+        var invariants = new JsonObject();
+        foreach (
+            var shape in machine
+                .Shapes.Values.Where(s => s.Requires is not null)
+                .OrderBy(s => s.Name, StringComparer.Ordinal)
+        )
+            invariants[shape.Name] = shape.Requires!.DeepClone();
+        if (invariants.Count > 0)
+            ir["invariants"] = invariants;
         if (outcomes.Count > 0)
             ir["outcomes"] = outcomes;
         if (timers.Count > 0)
             ir["timers"] = timers;
+        if (machine.Differential)
+        {
+            var differential = Differential(machine, walks, served, outcomes);
+            if (differential.Count == 0)
+            {
+                problems.Add(
+                    new Problem(
+                        "glossary",
+                        0,
+                        $"{machine.Id} asks for a differential block, and no scenario sends it an input, gives an "
+                            + "outcome's output or sets an instance up in a state, so there is nothing to write."
+                    )
+                );
+                return null;
+            }
+            ir["differential"] = differential;
+        }
         return ir;
+    }
+
+    // The differential block, from what the scenarios did: every input a trigger the machine serves was sent with, every
+    // output an outcome it routes was given, and every context a Given put an instance in before a When fired from it,
+    // so the enumerator starts from the states the scenarios set up as well as the initial one. Each list is distinct
+    // and in canonical order, so the block, and the IR's hash, move only when a scenario changes what it sends.
+    private static JsonObject Differential(
+        GlossaryMachine machine,
+        IReadOnlyList<Walk> walks,
+        IReadOnlyCollection<string> served,
+        JsonObject outcomes
+    )
+    {
+        var samples = new SortedDictionary<string, SortedDictionary<string, JsonNode>>(
+            StringComparer.Ordinal
+        );
+        void Add(
+            SortedDictionary<string, SortedDictionary<string, JsonNode>> into,
+            string key,
+            JsonNode value
+        )
+        {
+            if (!into.TryGetValue(key, out var list))
+                into[key] = list = new SortedDictionary<string, JsonNode>(StringComparer.Ordinal);
+            list.TryAdd(CanonicalJson.Serialize(value), value);
+        }
+
+        var observations = walks
+            .SelectMany(w => w.Observations)
+            .Where(o => o.Machine == machine.Id)
+            .ToList();
+        foreach (
+            var o in observations.Where(o => o.Input is not null && served.Contains(o.Trigger))
+        )
+            Add(samples, o.Trigger, o.Input!);
+        foreach (var o in walks.SelectMany(w => w.Outcomes).Where(o => o.Machine == machine.Id))
+        {
+            var invoke = machine.Invokes[o.State];
+            if (
+                invoke.Outcomes[o.Phrase].Kind == "done"
+                && outcomes.ContainsKey($"{o.State}.done")
+                && invoke.Examples.TryGetValue(o.Phrase, out var example)
+            )
+                Add(samples, $"{o.State}.done", example);
+        }
+
+        var initial = CanonicalJson.Serialize(Walk.InitialContext(machine));
+        var seeds = new SortedDictionary<string, SortedDictionary<string, JsonNode>>(
+            StringComparer.Ordinal
+        );
+        foreach (var o in observations.Where(o => o.Arranged))
+            if (!(o.From == machine.Initial && CanonicalJson.Serialize(o.Context) == initial))
+                Add(seeds, o.From, o.Context);
+
+        var block = new JsonObject();
+        if (samples.Count > 0)
+        {
+            var written = new JsonObject();
+            foreach (var (key, list) in samples)
+                written[key] = new JsonArray(list.Values.Select(v => v.DeepClone()).ToArray());
+            block["samples"] = written;
+        }
+        if (seeds.Count > 0)
+        {
+            // One seed is written as the context itself and several as a list, as the exporter writes them.
+            var written = new JsonObject();
+            foreach (var (state, list) in seeds)
+                written[state] =
+                    list.Count == 1
+                        ? list.Values.First().DeepClone()
+                        : new JsonArray(list.Values.Select(v => v.DeepClone()).ToArray());
+            block["seeds"] = written;
+        }
+        return block;
     }
 
     private static bool Holds(Rule rule, Observation o) =>

@@ -272,7 +272,10 @@ internal abstract record Result
     internal sealed record Denied(string Person) : Result;
 }
 
-/// <summary>One trigger fired in a scenario, the context and input it was fired with, and what it did.</summary>
+/// <summary>
+/// One trigger fired in a scenario, the context and input it was fired with, and what it did. <see cref="Arranged"/> is
+/// whether a Given put the instance where it was fired from, rather than a move.
+/// </summary>
 internal sealed record Observation(
     string Machine,
     string From,
@@ -283,7 +286,8 @@ internal sealed record Observation(
     string? Actor,
     Result Result,
     FeatureScenario Scenario,
-    long Line
+    long Line,
+    bool Arranged = false
 );
 
 /// <summary>A person starting an instance of their own: <c>Given Ada has an order</c>.</summary>
@@ -388,6 +392,9 @@ internal sealed class Walk
         public string? State { get; private set; } = state;
         public JsonObject Context { get; set; } = context;
 
+        /// <summary>Whether a Given set the instance's state or context since it last moved.</summary>
+        public bool Arranged { get; set; }
+
         /// <summary>When, on the scenario's clock, the instance entered its state: a timer counts from here.</summary>
         public TimeSpan Entered { get; private set; } = entered;
 
@@ -395,6 +402,7 @@ internal sealed class Walk
         {
             State = state;
             Entered = at;
+            Arranged = false;
         }
     }
 
@@ -404,7 +412,8 @@ internal sealed class Walk
         string From,
         JsonObject Context,
         JsonObject? Input,
-        long Line
+        long Line,
+        bool Arranged = false
     )
     {
         public List<Meaning> Thens { get; } = [];
@@ -493,7 +502,9 @@ internal sealed class Walk
                 );
                 break;
             case Meaning.InState { Still: false } s:
-                InstanceAt(new InstanceKey(s.Machine, s.Owner, s.Key)).Enter(s.State, _clock);
+                var arranged = InstanceAt(new InstanceKey(s.Machine, s.Owner, s.Key));
+                arranged.Enter(s.State, _clock);
+                arranged.Arranged = true;
                 break;
             case Meaning.Guard g:
                 var instance = InstanceAt(new InstanceKey(g.Machine, g.Owner, g.Key));
@@ -507,7 +518,10 @@ internal sealed class Walk
                     ) is
                     { } context
                 )
+                {
                     instance.Context = context;
+                    instance.Arranged = true;
+                }
                 else
                     Fail(step.Line, why!);
                 break;
@@ -568,7 +582,8 @@ internal sealed class Walk
                     instance.State,
                     (JsonObject)instance.Context.DeepClone(),
                     input,
-                    step.Line
+                    step.Line,
+                    instance.Arranged
                 );
                 break;
             case Meaning.Outcome o:
@@ -874,7 +889,8 @@ internal sealed class Walk
                 person is null ? null : _people[person],
                 result,
                 _scenario,
-                pending.Line
+                pending.Line,
+                pending.Arranged
             )
         );
 
@@ -957,13 +973,16 @@ internal sealed class Walk
         : _glossary.Machines[key.Machine].Reference;
 
     /// <summary>
-    /// A machine's initial context: each field's zero (null for a nullable one, an empty string, list or record, zero,
-    /// false). The replay refuses one its own schema does not accept.
+    /// A machine's initial context: the one the glossary gives, or each field of the initial state's context at its zero
+    /// (null for a nullable one, an empty string, list or record, zero, false). The replay refuses one its own schema
+    /// does not accept.
     /// </summary>
     internal static JsonObject InitialContext(GlossaryMachine machine)
     {
+        if (machine.InitialContext is { } given)
+            return (JsonObject)given.DeepClone();
         var context = new JsonObject();
-        foreach (var field in machine.Context)
+        foreach (var field in machine.ContextOf(machine.Initial))
             context[field!["name"]!.GetValue<string>()] = field["nullable"]!.GetValue<bool>()
                 ? null
                 : field["type"]!.GetValue<string>() switch
