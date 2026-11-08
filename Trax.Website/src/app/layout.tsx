@@ -32,7 +32,7 @@ const jetbrainsMono = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "Trax .NET: the backend that checks the client's work",
+    default: "Trax .NET: one description of your app, for the whole team",
     template: "%s | Trax .NET",
   },
   description: SITE_DESCRIPTION,
