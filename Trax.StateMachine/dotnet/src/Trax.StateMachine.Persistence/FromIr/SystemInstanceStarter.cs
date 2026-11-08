@@ -11,15 +11,11 @@ namespace Trax.StateMachine.Persistence.FromIr;
 /// instance of <c>shop</c> for <c>MachineKey.Of("main")</c>. <c>AddStateMachines</c> registers it after the startup
 /// validators, whose <c>StartingAsync</c> run first, so a host they refuse writes no instance.
 /// </summary>
-internal sealed class SystemInstanceStarter(
-    IServiceScopeFactory scopes,
-    IEnumerable<IMachine> machines,
-    HostFile host
-) : IHostedLifecycleService
+internal sealed class SystemInstanceStarter(IServiceScopeFactory scopes, HostFile host)
+    : IHostedLifecycleService
 {
     public async Task StartingAsync(CancellationToken cancellationToken)
     {
-        var start = typeof(IMachineInstances).GetMethod(nameof(IMachineInstances.Start))!;
         await using var scope = scopes.CreateAsyncScope();
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
         foreach (
@@ -28,13 +24,9 @@ internal sealed class SystemInstanceStarter(
                 .OrderBy(m => m.Id, StringComparer.Ordinal)
         )
         {
-            var machine = machines.First(m => m.Name == entry.Id);
             var systemKey = entry.SystemKey!;
             var key = MachineKey.Of(systemKey[(systemKey.IndexOf('/') + 1)..]);
-            await (Task)
-                start
-                    .MakeGenericMethod(machine.GetType())
-                    .Invoke(instances, [key, null, cancellationToken])!;
+            await instances.Start(entry.Id, key, null, cancellationToken);
         }
     }
 

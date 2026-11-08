@@ -98,6 +98,50 @@ public interface IMachineInstances
     )
         where TMachine : IMachine =>
         throw new NotSupportedException($"{GetType().Name} cannot advance an instance by its id.");
+
+    /// <summary>
+    /// <see cref="Start{TMachine}"/> for the machine whose id is <paramref name="machineId"/>, for a machine with no C#
+    /// type of its own: one served from its IR (<c>ServeFeatures</c>), whose type is emitted when the host starts. The
+    /// typed overload calls this. A service that does not implement it throws <see cref="NotSupportedException"/>.
+    /// </summary>
+    /// <param name="machineId">The machine's id (<see cref="IMachine.Name"/>), as its IR and the host file name it.</param>
+    /// <param name="key">What the instance is for: one or more parts, such as a source and a partition.</param>
+    /// <param name="context">The initial context, or null for the machine's declared one. Ignored when the instance exists.</param>
+    /// <param name="cancellationToken">Cancels the database calls.</param>
+    /// <returns>The instance: its id, its machine, the state it is in now, and whether this call created it.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// No registered machine has the id <paramref name="machineId"/>, it is not system-owned, or its initial state
+    /// invokes a train whose run could not be queued.
+    /// </exception>
+    Task<MachineInstance> Start(
+        string machineId,
+        MachineKey key,
+        JsonObject? context = null,
+        CancellationToken cancellationToken = default
+    ) => throw new NotSupportedException($"{GetType().Name} cannot start a machine by its id.");
+
+    /// <summary>
+    /// <see cref="Advance{TMachine}(MachineKey, string, JsonNode?, CancellationToken)"/> for the machine whose id is
+    /// <paramref name="machineId"/>, for a machine served from its IR. A trigger only the server fires (a policy's) is
+    /// fired here like any other: this is the server's call, never a client's. The typed overload calls this. A
+    /// service that does not implement it throws <see cref="NotSupportedException"/>.
+    /// </summary>
+    /// <param name="machineId">The machine's id (<see cref="IMachine.Name"/>).</param>
+    /// <param name="key">The instance's key, as it was started with.</param>
+    /// <param name="trigger">The trigger to fire, by name.</param>
+    /// <param name="input">The trigger's input, when it takes one.</param>
+    /// <param name="cancellationToken">Cancels the database calls.</param>
+    /// <returns>As the typed overload returns.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// No registered machine has the id <paramref name="machineId"/>, or it is not system-owned.
+    /// </exception>
+    Task<AdvanceOutcome> Advance(
+        string machineId,
+        MachineKey key,
+        string trigger,
+        JsonNode? input = null,
+        CancellationToken cancellationToken = default
+    ) => throw new NotSupportedException($"{GetType().Name} cannot advance a machine by its id.");
 }
 
 /// <summary>A system-owned machine instance, as <see cref="IMachineInstances.Start{TMachine}"/> returns it.</summary>
@@ -475,16 +519,24 @@ internal sealed class MachineInstances(
     IServiceProvider services
 ) : IMachineInstances
 {
-    public async Task<MachineInstance> Start<TMachine>(
+    public Task<MachineInstance> Start<TMachine>(
         MachineKey key,
         JsonObject? context = null,
         CancellationToken cancellationToken = default
     )
-        where TMachine : IMachine
+        where TMachine : IMachine =>
+        Start(SystemMachine<TMachine>("start").Machine.Name, key, context, cancellationToken);
+
+    public async Task<MachineInstance> Start(
+        string machineId,
+        MachineKey key,
+        JsonObject? context = null,
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        var (machine, internals) = SystemMachine<TMachine>("start");
+        var (machine, internals) = SystemMachine(machineId, "start");
         var name = machine.Name;
         var id = MachineInstanceId.For(name, key);
 
@@ -521,19 +573,36 @@ internal sealed class MachineInstances(
             );
     }
 
-    public async Task<AdvanceOutcome> Advance<TMachine>(
+    public Task<AdvanceOutcome> Advance<TMachine>(
         MachineKey key,
         string trigger,
         JsonNode? input = null,
         CancellationToken cancellationToken = default
     )
-        where TMachine : IMachine
+        where TMachine : IMachine =>
+        Advance(
+            SystemMachine<TMachine>("advance").Machine.Name,
+            key,
+            trigger,
+            input,
+            cancellationToken
+        );
+
+    public Task<AdvanceOutcome> Advance(
+        string machineId,
+        MachineKey key,
+        string trigger,
+        JsonNode? input = null,
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentException.ThrowIfNullOrWhiteSpace(trigger);
 
-        var (machine, _) = SystemMachine<TMachine>("advance");
-        return await Advance<TMachine>(
+        var (machine, internals) = SystemMachine(machineId, "advance");
+        return Advance(
+            machine,
+            internals,
             MachineInstanceId.For(machine.Name, key),
             trigger,
             input,
@@ -541,7 +610,7 @@ internal sealed class MachineInstances(
         );
     }
 
-    public async Task<AdvanceOutcome> Advance<TMachine>(
+    public Task<AdvanceOutcome> Advance<TMachine>(
         Guid id,
         string trigger,
         JsonNode? input = null,
@@ -552,6 +621,18 @@ internal sealed class MachineInstances(
         ArgumentException.ThrowIfNullOrWhiteSpace(trigger);
 
         var (machine, internals) = SystemMachine<TMachine>("advance");
+        return Advance(machine, internals, id, trigger, input, cancellationToken);
+    }
+
+    private async Task<AdvanceOutcome> Advance(
+        IMachine machine,
+        IMachineInternals internals,
+        Guid id,
+        string trigger,
+        JsonNode? input,
+        CancellationToken cancellationToken
+    )
+    {
         var name = machine.Name;
 
         // Host code is trusted for rules, never for input: an oversized input is refused before anything is read,
@@ -672,16 +753,42 @@ internal sealed class MachineInstances(
                 $"{typeof(TMachine).Name} is not registered. Pass its assembly to AddStateMachines before "
                     + $"you {action} an instance of it."
             );
+        return Checked(machine, typeof(TMachine).Name, action);
+    }
+
+    // The registered, system-owned machine whose id is machineId, or why there is none. An id no machine is
+    // registered under is refused: host code never reaches an instance of a machine the host does not serve.
+    private (IMachine Machine, IMachineInternals Internals) SystemMachine(
+        string machineId,
+        string action
+    )
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(machineId);
+        var machine =
+            machines.FirstOrDefault(m => string.Equals(m.Name, machineId, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                $"No machine '{machineId}' is served, so the system cannot {action} an instance of it. Register "
+                    + "it with AddStateMachines (its assembly, or ServeFeatures for a machine derived from features)."
+            );
+        return Checked(machine, $"'{machineId}'", action);
+    }
+
+    private static (IMachine Machine, IMachineInternals Internals) Checked(
+        IMachine machine,
+        string named,
+        string action
+    )
+    {
         if (machine is not IMachineInternals internals)
             throw new InvalidOperationException(
-                $"{typeof(TMachine).Name} does not derive from Machine<TState, TTrigger>, so the system cannot "
+                $"{named} does not derive from Machine<TState, TTrigger>, so the system cannot "
                     + $"{action} an instance of it."
             );
         if (!internals.SystemOwned)
             throw new InvalidOperationException(
-                $"{typeof(TMachine).Name} ('{machine.Name}') is a user-owned machine, so the system cannot "
-                    + $"{action} an instance of it. Declare SystemOwned() in its Configure for its instances to "
-                    + "belong to the system; its users then reach none of them."
+                $"{named} ('{machine.Name}') is a user-owned machine, so the system cannot "
+                    + $"{action} an instance of it. Declare SystemOwned() in its Configure (or system in its "
+                    + "glossary) for its instances to belong to the system; its users then reach none of them."
             );
         return (machine, internals);
     }
