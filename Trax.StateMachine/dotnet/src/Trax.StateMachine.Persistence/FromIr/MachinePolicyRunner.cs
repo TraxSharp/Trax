@@ -268,8 +268,7 @@ internal sealed class MachinePolicyRunner(
             .FirstOrDefaultAsync(cancellationToken);
         if (source is not { OwnerKind: SnapshotOwnerKind.User, UserKey: { } owner })
             return [];
-        var candidates = await context
-            .SnapshotDrafts.AsNoTracking()
+        var candidates = await Linking(context, policy.By, row.SourceInstanceId)
             .Where(d =>
                 d.Machine == policy.Target
                 && d.OwnerKind == SnapshotOwnerKind.User
@@ -277,6 +276,7 @@ internal sealed class MachinePolicyRunner(
             )
             .Select(d => new { d.RowId, d.Context })
             .ToListAsync(cancellationToken);
+        // The database narrowed the rows to those whose link field spells the id; the id is matched as a Guid here.
         return candidates
             .Where(c =>
                 JsonNode.Parse(c.Context)?[policy.By] is JsonValue value
@@ -286,6 +286,52 @@ internal sealed class MachinePolicyRunner(
             )
             .Select(c => c.RowId)
             .ToList();
+    }
+
+    // The instances whose context field `field` spells `id` in a form Guid.TryParse reads (with hyphens or without, in
+    // braces or parentheses, any case), matched in the database so the owner's other instances are not read. The
+    // field is read from the stored JSON: Postgres's jsonb ->>, SQLite's json_extract. InMemory, which no host with
+    // policies runs on, reads every row and leaves the match to the caller.
+    private static IQueryable<global::Trax.Effect.Models.SnapshotDraft.SnapshotDraft> Linking(
+        IDataContext context,
+        string field,
+        Guid id
+    )
+    {
+        var database = ((DbContext)context).Database;
+        var d = id.ToString("D");
+        var n = id.ToString("N");
+        var b = id.ToString("B");
+        var p = id.ToString("P");
+        if (database.ProviderName?.Contains("Npgsql", StringComparison.Ordinal) == true)
+            return context
+                .SnapshotDrafts.FromSqlRaw(
+                    """
+                    SELECT * FROM trax.snapshot_draft
+                    WHERE lower(btrim(context ->> {0})) IN ({1}, {2}, {3}, {4})
+                    """,
+                    field,
+                    d,
+                    n,
+                    b,
+                    p
+                )
+                .AsNoTracking();
+        if (database.IsRelational())
+            return context
+                .SnapshotDrafts.FromSqlRaw(
+                    """
+                    SELECT * FROM snapshot_draft
+                    WHERE lower(trim(json_extract(context, {0}))) IN ({1}, {2}, {3}, {4})
+                    """,
+                    "$.\"" + field + "\"",
+                    d,
+                    n,
+                    b,
+                    p
+                )
+                .AsNoTracking();
+        return context.SnapshotDrafts.AsNoTracking();
     }
 
     // Fires the policy's trigger on one instance, as the server: the engine's advance, then the timer's write path,

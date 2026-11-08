@@ -124,6 +124,37 @@ public class PolicyRunnerTests(StoreProvider provider)
     }
 
     [Test]
+    public async Task A_linked_policy_matches_the_link_in_the_database_whatever_its_case()
+    {
+        // The link is matched in SQL, not after reading every receipt the owner holds: the id still matches as a Guid,
+        // in upper case as in lower.
+        var ada = NewUser();
+        var order = await Start(ada, "p-order");
+        var receipt = await Start(ada, "p-receipt");
+        var other = await Start(ada, "p-receipt");
+        await Advance(
+            ada,
+            "p-receipt",
+            receipt,
+            "Attach",
+            new JsonObject { ["orderId"] = order.ToString().ToUpperInvariant() }
+        );
+        await Advance(
+            ada,
+            "p-receipt",
+            other,
+            "Attach",
+            new JsonObject { ["orderId"] = Guid.NewGuid().ToString().ToUpperInvariant() }
+        );
+
+        await Advance(ada, "p-order", order, "Expire");
+        await Runner(_host).PassOnce(CancellationToken.None);
+
+        (await StateOf(receipt)).Should().Be("Void");
+        (await StateOf(other)).Should().Be("Issued", "it links another order");
+    }
+
+    [Test]
     public async Task A_policys_fire_is_recorded_as_the_policys_never_the_owners()
     {
         var ada = NewUser();

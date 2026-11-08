@@ -260,6 +260,26 @@ public sealed class StateMachineOptions
         return this;
     }
 
+    /// <summary>The most instances of one machine a view returns unless the host sets <see cref="ViewRowLimit"/>: 100.</summary>
+    public const int DefaultViewRowLimit = 100;
+
+    /// <summary>
+    /// The most instances of each user machine one read of a view returns (the views <see cref="ServeFeatures"/>
+    /// serves): the caller's newest, by when each was created, listed oldest first. An instance older than those is
+    /// not in the view; the machine's own <c>get</c> still reads it. Defaults to <see cref="DefaultViewRowLimit"/>; must
+    /// be positive. A system machine's instance is one row and is not counted.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value set is less than 1.</exception>
+    public int ViewRowLimit
+    {
+        get;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
+            field = value;
+        }
+    } = DefaultViewRowLimit;
+
     /// <summary>The directory <see cref="ServeFeatures"/> named, as a full path, or null.</summary>
     internal string? FeaturesDirectory { get; private set; }
 

@@ -16,7 +16,8 @@ internal sealed class MachineViewCatalog(IReadOnlyDictionary<string, HostView> v
 }
 
 /// <summary>
-/// Reads one view for one caller: the caller's own instances of each user machine it reads, newest last, and the system
+/// Reads one view for one caller: the caller's newest instances of each user machine it reads, at most a limit of them,
+/// newest last, and the system
 /// instance of each system machine at its key, never anyone else's. Each instance is its id and the view's fields of that
 /// machine: a state as its label when the view gives one, a context field as stored. The view's read rule is checked by
 /// the caller of this, before it reads; each user machine's own read rule is checked here, as its <c>get</c> checks it,
@@ -25,14 +26,15 @@ internal sealed class MachineViewCatalog(IReadOnlyDictionary<string, HostView> v
 internal static class MachineViewReader
 {
     /// <summary>
-    /// The view as JSON: one key per machine it reads, a list of rows for a user machine and one row (or null) for a
-    /// system machine.
+    /// The view as JSON: one key per machine it reads, a list of at most <paramref name="rowLimit"/> rows for a user
+    /// machine and one row (or null) for a system machine.
     /// </summary>
     internal static async Task<JsonObject> Read(
         IDataContext context,
         HostView view,
         Actor.Client caller,
         IReadOnlyDictionary<string, IMachine> machines,
+        int rowLimit,
         CancellationToken cancellationToken
     )
     {
@@ -80,7 +82,8 @@ internal static class MachineViewReader
                     && d.OwnerKind == SnapshotOwnerKind.User
                     && d.UserKey == userKey
                 )
-                .OrderBy(d => d.RowId)
+                .OrderByDescending(d => d.RowId)
+                .Take(rowLimit)
                 .Select(d => new
                 {
                     d.Id,
@@ -88,6 +91,8 @@ internal static class MachineViewReader
                     d.Context,
                 })
                 .ToListAsync(cancellationToken);
+            // Read newest first to take the newest; listed oldest first, as a view always lists them.
+            rows.Reverse();
             result[read.Machine] = new JsonArray(
                 rows.Select(r => (JsonNode?)Row(r.Id, r.State, r.Context, fields)).ToArray()
             );

@@ -413,6 +413,7 @@ namespace Trax.StateMachine.Persistence
     public sealed class StateMachineOptions
     {
         public const int DefaultMaxDraftsPerUser = 50;
+        public const int DefaultViewRowLimit = 100;
         public static readonly System.TimeSpan DefaultDraftTtl;
         public static readonly System.TimeSpan DefaultMaxDraftLifetime;
         public static readonly System.TimeSpan MinimumChangeFeedPollInterval;
@@ -424,6 +425,7 @@ namespace Trax.StateMachine.Persistence
         public System.TimeSpan InvokeOutcomeSweepIntervalWhileListening { get; set; }
         public System.TimeSpan? MaxDraftLifetime { get; set; }
         public int? MaxDraftsPerUser { get; set; }
+        public int ViewRowLimit { get; set; }
         public Trax.StateMachine.Persistence.StateMachineOptions ExposeGenericStateMachineMutations(System.Action<Trax.StateMachine.Persistence.GenericStateMachineMutationOptions> configure) { }
         public Trax.StateMachine.Persistence.StateMachineOptions PolicyRunner(System.Action<Trax.StateMachine.Persistence.PolicyRunnerOptions> configure) { }
         public Trax.StateMachine.Persistence.StateMachineOptions ServeFeatures(string directory, params System.Reflection.Assembly[] trainAssemblies) { }

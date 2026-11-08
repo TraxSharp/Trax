@@ -117,6 +117,7 @@ hand, so nothing checks that a page tells the same story as its features.
 
 ## Changelog
 
+- **2026-11-08**: A view returns at most the newest `ViewRowLimit` instances of each user machine.
 - **2026-11-08**: A view holds each user machine it reads to that machine's own read rule.
 - **2026-11-08**: A host refuses policies that set each other off with no timer between them, as derivation does, through one check.
 - **2026-11-07**: The Bakery sample: machines written only as features, run in memory and against its host.

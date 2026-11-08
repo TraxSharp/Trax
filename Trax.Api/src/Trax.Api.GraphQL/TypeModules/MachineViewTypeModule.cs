@@ -17,7 +17,8 @@ namespace Trax.Api.GraphQL.TypeModules;
 
 /// <summary>
 /// Builds the <c>views</c> root (ADR <c>Trax.Docs/adr/0058</c>): one query field per view a host serves from features.
-/// In each, a user machine the view reads is a list of the caller's own instances, its <c>id</c> and the view's fields
+/// In each, a user machine the view reads is a list of the caller's own instances (the newest
+/// <see cref="StateMachineOptions.ViewRowLimit"/> of them), its <c>id</c> and the view's fields
 /// of it, and a system machine is the one instance at its key. A view is read only by its readers, the actors the
 /// features show reading it: every other caller is refused <c>FORBIDDEN</c> before anything is read. Each user machine
 /// the view reads also holds the caller to its own read rule, as its <c>get</c> does: a machine whose rule refuses the
@@ -217,6 +218,8 @@ internal sealed class MachineViewTypeModule(
             view,
             CallerRules.Client(userKey, caller),
             byName,
+            ctx.Services.GetService<StateMachineOptions>()?.ViewRowLimit
+                ?? StateMachineOptions.DefaultViewRowLimit,
             ctx.RequestAborted
         );
     }

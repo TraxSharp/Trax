@@ -29,7 +29,7 @@ features show reading it ([feature files](/docs/reference/feature-files)). The d
 | --- | --- | --- |
 | `views` | `ViewsQueries!` | The views, on the query root only. There is no `views` field on a host that registers none. |
 | `views.<view>` | `<View>View!` | The view, for the caller. The field is the view's name in camelCase (`shop sign` is `shopSign`), its type the name in PascalCase with `View` after it (`ShopSignView`). |
-| `views.<view>.<machine>` | `[<View><Machine>Row!]!` | For a user machine: the caller's own instances, oldest first. The field is the machine's field under `machines` (`v-order` is `vOrder`). |
+| `views.<view>.<machine>` | `[<View><Machine>Row!]!` | For a user machine: the caller's newest instances, at most `ViewRowLimit` of them, oldest first. The field is the machine's field under `machines` (`v-order` is `vOrder`). |
 | `views.<view>.<machine>` | `<View><Machine>Row` | For a system machine: its instance at the view's key, or null before the host has started it. |
 | `<row>.id` | `UUID!` | The instance's id. |
 | `<row>.<field>` | see below | One field per field the view shows of that machine, under the view's name for it. |
@@ -56,6 +56,10 @@ query {
   before anything is read. Both are GraphQL errors whose `extensions.code` is the code.
 - **What is read.** Only the caller's own instances (owner `user`, with the caller's user key), and the system
   instance at the key the view names. Another user's instance is never in a view.
+- **How many.** A user machine's list is the caller's newest instances, by when each was created, at most
+  [`StateMachineOptions.ViewRowLimit`](/docs/sdk-reference/statemachine-api/add-state-machines#options) of them
+  (100 unless the host sets it), listed oldest first. An older instance is not in the view, and there is no paging
+  argument; the machine's own `get` still reads it by id.
 - **Each machine's read rule.** A user machine the view reads holds the caller to its own read rule too, checked as
   its `get` checks it, at every read. A caller the view admits but the machine's rule refuses (an owner who lost a
   role the machine's `read` names) gets an empty list for that machine, not an error, and the rest of the view reads
