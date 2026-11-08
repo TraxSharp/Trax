@@ -24,6 +24,10 @@ dotnet add package Trax.StateMachine.Gherkin   # to derive machines from feature
 dotnet add package Trax.StateMachine.Gherkin.Reqnroll   # in a Reqnroll test project that runs them on a host
 ```
 
+Reqnroll itself, which `Trax.StateMachine.Gherkin.Reqnroll` brings in, sends usage telemetry when it generates a
+project's feature code and when a test run starts. Set `REQNROLL_TELEMETRY_ENABLED=0` where those builds and tests run
+to turn it off. The Trax bindings send nothing.
+
 ## Example
 
 From [Author and serve a machine](https://traxsharp.net/docs/statemachine/authoring):

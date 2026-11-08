@@ -19,6 +19,12 @@ on:
 # Default to no permissions; each job widens only what it needs.
 permissions: {}
 
+env:
+  # Reqnroll sends usage telemetry from its feature generation at build time and when a test run
+  # starts, unless this is set to anything but 1. The Reqnroll projects (the Gherkin bindings and the
+  # test projects that run features) build and test in several jobs, so it is set for all of them.
+  REQNROLL_TELEMETRY_ENABLED: '0'
+
 concurrency:
   # A release's run must not cancel, or be cancelled by, a pull request's.
   group: ci-${{ github.workflow_ref }}-${{ github.ref }}

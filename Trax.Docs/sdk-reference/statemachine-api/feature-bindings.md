@@ -44,6 +44,10 @@ reads it, so a feature means the same here as in `trax machine run`. There is no
 - **Time is waited for exactly.** `5 seconds pass` waits five seconds, then the host gets `Slack` to fire what fell due
   and run the policies it owes. A Then after an invoked train reads the instance's transition history for where the
   train's outcome took it.
+- **Reqnroll sends telemetry; the bindings do not.** Reqnroll, which this package brings in, sends usage data when
+  it generates a test project's feature code at build time and when a test run starts. Set the environment variable
+  `REQNROLL_TELEMETRY_ENABLED` to `0` (any value but `1` turns it off) for the build and the tests, on developer
+  machines and in CI.
 
 ## Example
 
