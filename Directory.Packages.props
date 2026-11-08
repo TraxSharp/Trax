@@ -30,7 +30,10 @@
     <PackageVersion Include="dbup-sqlite" Version="6.0.4" />
     <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.5" />
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
-    <PackageVersion Include="Gherkin" Version="42.0.1" />
+    <!-- Held at the Gherkin major Reqnroll is built against (Reqnroll 3.3.4 declares Gherkin 35.0.0 and
+         Cucumber.Messages 30.1.0). A higher pin lifts both under Reqnroll, which then runs against majors it
+         was not built for. Move it with Reqnroll, by hand; Dependabot ignores its majors. -->
+    <PackageVersion Include="Gherkin" Version="35.0.0" />
     <PackageVersion Include="GraphQL" Version="8.8.5" />
     <PackageVersion Include="GraphQL-Parser" Version="9.5.1" />
     <PackageVersion Include="GraphQL.Client" Version="6.1.0" />

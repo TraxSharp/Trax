@@ -130,8 +130,8 @@
       },
       "Cucumber.Messages": {
         "type": "Transitive",
-        "resolved": "34.2.0",
-        "contentHash": "H5/5UjkGJQ/VpYgYIw29JfanjtShnE5QrY2KjfbKywvHTppKCzCjsG/LktSLIdHD93ejVwKl0pxQTc30imqvlw=="
+        "resolved": "30.1.0",
+        "contentHash": "HDfIzDd7JFDEwiNHpgOHBPEiyVjXQws+CEnVb+Lwiq58jHNA/xYwmTswbqknOxcAejCRFP1de/hHHw+ZuTzV6A=="
       },
       "GreenDonut": {
         "type": "Transitive",
@@ -1078,7 +1078,7 @@
       "trax.statemachine.gherkin": {
         "type": "Project",
         "dependencies": {
-          "Gherkin": "[42.0.1, )",
+          "Gherkin": "[35.0.0, )",
           "Trax.StateMachine": "[1.99.99, )"
         }
       },
@@ -1140,11 +1140,11 @@
       },
       "Gherkin": {
         "type": "CentralTransitive",
-        "requested": "[42.0.1, )",
-        "resolved": "42.0.1",
-        "contentHash": "GR1a9ts67OMUECpwxsQS0AOojq5ranIpyro0X6fCd/e3BncuhwIdM8dm9DplKs4W5Js7ReSgXz8VNSZJzYDGiQ==",
+        "requested": "[35.0.0, )",
+        "resolved": "35.0.0",
+        "contentHash": "ha+QNevQsXEESbzazUceHTCtKOjoBTBa8kLFdKpu6vSEbb3UMt3a55RG78tIoU/C4qzIqX3jQxaIdIcYGO+IWQ==",
         "dependencies": {
-          "Cucumber.Messages": "34.2.0"
+          "Cucumber.Messages": "29.0.1"
         }
       },
       "HotChocolate": {

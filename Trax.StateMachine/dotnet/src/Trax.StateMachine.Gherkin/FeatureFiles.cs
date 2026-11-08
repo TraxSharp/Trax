@@ -125,11 +125,13 @@ internal static class FeatureFiles
                         )
                     );
                 }
+                // A pickle's line is its example row's for an outline and its scenario's otherwise. Read from
+                // the ids, since the Cucumber.Messages major Reqnroll is built against has no Pickle.Location.
                 var scenarioLine = lines.GetValueOrDefault(pickle.AstNodeIds[0]);
                 scenarios.Add(
                     new FeatureScenario(
                         path,
-                        pickle.Location?.Line ?? scenarioLine,
+                        lines.GetValueOrDefault(pickle.AstNodeIds[^1], scenarioLine),
                         pickle.Name,
                         pickle.AstNodeIds.Count > 1 ? scenarioLine : null,
                         steps,
