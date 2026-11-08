@@ -174,16 +174,31 @@ public class CustomStepsTests
         header.Should().Be(E2EHost.AliceKey);
     }
 
-    [Test]
-    public async Task A_person_the_scenario_did_not_introduce_has_no_credential()
+    // Every member that takes a person refuses one the scenario never introduced, InstanceOf too: a misspelt name is
+    // not the same as a person with no instance yet.
+    [TestCase("Credential")]
+    [TestCase("InstanceOf")]
+    [TestCase("SendAsync")]
+    public async Task A_person_the_scenario_did_not_introduce_is_refused(string member)
     {
         var options = Options()
             .When(
                 @"Cy notes it",
-                (scenario, _) =>
+                async (scenario, _) =>
                 {
-                    scenario.Credential("Cy");
-                    return Task.CompletedTask;
+                    switch (member)
+                    {
+                        case "Credential":
+                            scenario.Credential("Cy");
+                            break;
+                        case "InstanceOf":
+                            scenario.InstanceOf("Cy", "c-order");
+                            break;
+                        default:
+                            using (var request = new HttpRequestMessage(HttpMethod.Get, "/"))
+                                (await scenario.SendAsync("Cy", request)).Dispose();
+                            break;
+                    }
                 }
             );
         var run = Run(options, machineFeature: false);

@@ -64,10 +64,11 @@ public sealed class FeatureScenario
     /// The id of <paramref name="person"/>'s instance of <paramref name="machine"/> (its id in the glossary), or null
     /// when the scenario has not started one for them.
     /// </summary>
+    /// <exception cref="ArgumentException">The scenario has not introduced <paramref name="person"/>.</exception>
     public Guid? InstanceOf(string person, string machine)
     {
-        ArgumentNullException.ThrowIfNull(person);
         ArgumentNullException.ThrowIfNull(machine);
+        ActorOf(person);
         return _driver.InstanceOf(new InstanceKey(machine, person));
     }
 
