@@ -99,16 +99,17 @@ internal static class ScenarioExplanation
         }
     }
 
-    private static string Rule(JsonNode? rule) =>
+    // Every role set must be met, by any one role in it, as the host admits a caller.
+    internal static string Rule(JsonNode? rule) =>
         rule switch
         {
             null => "nobody",
             JsonObject o when o["server"] is not null => "the server only",
             JsonObject o when o["anyAuthenticated"] is not null => "any signed-in person",
             JsonObject o when o["roles"] is JsonArray sets => string.Join(
-                " or ",
+                " and ",
                 sets.Select(set =>
-                    string.Join(" and ", set!.AsArray().Select(r => r!.GetValue<string>()))
+                    string.Join(" or ", set!.AsArray().Select(r => r!.GetValue<string>()))
                 )
             ),
             _ => rule.ToJsonString(),

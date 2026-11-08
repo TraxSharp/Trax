@@ -1,5 +1,7 @@
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Cli.Commands;
+using Trax.Cli.Machines;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -111,6 +113,24 @@ public class MachineExplainTests
             .Contain("policy: when shift enters On, the server fires Open on shop/main (toSystem)");
         output.Should().Contain("timer: shop leaves Firing after 4 s for Open");
         output.Should().Contain("edge: shop Open --Open--> Open (a self-transition");
+    }
+
+    [Test]
+    public void A_rule_is_every_role_set_and_any_one_role_within_a_set()
+    {
+        File.WriteAllText(
+            Path.Combine(Features, "glossary.json"),
+            Glossary.Replace("\"roles\": [\"baker\"]", "\"roles\": [\"baker\", \"staff\"]")
+        );
+
+        var (exit, output, err) = Run();
+
+        exit.Should().Be(0, err);
+        output.Should().Contain("grant: shift ClockIn is served to baker or staff");
+        ScenarioExplanation
+            .Rule(JsonNode.Parse("""{ "roles": [["customer", "baker"], ["staff"]] }"""))
+            .Should()
+            .Be("customer or baker and staff");
     }
 
     [Test]
