@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Baker } from "./Baker";
 import { Customer } from "./Customer";
-import { connect, signIn, signOut, signedIn, type Person, type Role } from "./session";
+import { connect, signIn, signOut, signedIn, whenSignedOut, type Person, type Role } from "./session";
 import { ShopSign } from "./ShopSign";
 
 const restored = signedIn();
@@ -14,6 +14,16 @@ export function App() {
   const [role, setRole] = useState<Role>("customer");
   const [error, setError] = useState<string | null>(null);
 
+  // A read refused for a person the host no longer knows (their token expired) signs them out: show the form again.
+  useEffect(
+    () =>
+      whenSignedOut(() => {
+        setPerson(null);
+        setError("Your sign-in has expired. Sign in again.");
+      }),
+    [],
+  );
+
   if (!person)
     return (
       <main>
@@ -25,6 +35,7 @@ export function App() {
             signIn(name, role).then(
               (p) => {
                 connect(p);
+                setError(null);
                 setPerson(p);
               },
               (err: unknown) => setError(err instanceof Error ? err.message : String(err)),

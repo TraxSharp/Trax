@@ -1,4 +1,4 @@
-import { configureTrax } from "./trax/index.g";
+import { configureTrax, TraxOperationError } from "./trax/index.g";
 
 // The host: localhost:5280 in development, or what the build was given (the browser tests point it at their host).
 export const API_ORIGIN: string = import.meta.env.VITE_BAKERY_API ?? "http://localhost:5280";
@@ -40,13 +40,53 @@ async function readBody(response: Response): Promise<{ token?: string; error?: s
   }
 }
 
+/** The person stored by the last sign-in, or nothing once their token has expired: the host would refuse it. */
 export function signedIn(): Person | null {
   const stored = sessionStorage.getItem(KEY);
-  return stored ? (JSON.parse(stored) as Person) : null;
+  if (!stored) return null;
+  const person = JSON.parse(stored) as Person;
+  const expires = expiresAt(person.token);
+  if (expires === null || expires <= Date.now()) {
+    signOut();
+    return null;
+  }
+  return person;
 }
+
+/** When the token stops being good, in milliseconds since the epoch, read from its `exp`; null when it has none. */
+function expiresAt(token: string): number | null {
+  try {
+    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const { exp } = JSON.parse(atob(payload)) as { exp?: unknown };
+    return typeof exp === "number" ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+const signedOutListeners = new Set<() => void>();
 
 export function signOut(): void {
   sessionStorage.removeItem(KEY);
+}
+
+/** Calls `listener` when a refusal signs the person out, until the function it returns is called. */
+export function whenSignedOut(listener: () => void): () => void {
+  signedOutListeners.add(listener);
+  return () => {
+    signedOutListeners.delete(listener);
+  };
+}
+
+/**
+ * Signs the person out when the host refused a read because it does not know them: their token expired, or the host
+ * no longer takes it. True when it did, so the caller shows the sign-in form rather than the refusal.
+ */
+export function signOutOnRefusal(error: unknown): boolean {
+  if (!(error instanceof TraxOperationError) || error.code !== "UNAUTHENTICATED") return false;
+  signOut();
+  for (const listener of [...signedOutListeners]) listener();
+  return true;
 }
 
 /**
