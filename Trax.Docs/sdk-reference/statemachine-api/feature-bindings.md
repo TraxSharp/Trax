@@ -93,7 +93,8 @@ public sealed class Hooks
             o.Then(@"(?<person>[A-Z][a-z]+)'s charges list (?<n>\d+) charges?", async (scenario, match) =>
             {
                 var person = match.Groups["person"].Value;
-                using var response = await scenario.SendAsync(person, new HttpRequestMessage(HttpMethod.Get, "/charges"));
+                // A request message is a GET until told otherwise.
+                using var response = await scenario.SendAsync(person, new HttpRequestMessage { RequestUri = new("/charges", UriKind.Relative) });
                 var charges = await response.Content.ReadFromJsonAsync<Charge[]>();
                 Assert.That(charges, Has.Length.EqualTo(int.Parse(match.Groups["n"].Value)));
             });
