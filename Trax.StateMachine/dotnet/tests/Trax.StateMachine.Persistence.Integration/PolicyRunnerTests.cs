@@ -341,6 +341,41 @@ public class PolicyRunnerTests(StoreProvider provider)
     }
 
     [Test]
+    public async Task A_broadcast_owed_after_its_expansion_read_the_waiting_instances_still_fires()
+    {
+        if (provider != StoreProvider.Postgres)
+            Assert.Ignore(
+                "SQLite holds one write lock for the database; nothing commits while a broadcast expands."
+            );
+        var first = NewUser();
+        var second = NewUser();
+        var early = await Start(first, "p-order");
+        var late = await Start(second, "p-order");
+        await Advance(first, "p-order", early, "Place");
+        await Queue(Broadcast);
+
+        // While the runner expands the first fire, the second order enters Placed and the shop owes the broadcast again:
+        // the second fire reaches an instance the first read did not see, so it must not be coalesced into the first.
+        var runner = Runner(_host);
+        var once = false;
+        runner.AfterWaitingRead = async () =>
+        {
+            if (once)
+                return;
+            once = true;
+            await Advance(second, "p-order", late, "Place");
+            await Queue(Broadcast);
+        };
+        await Drain(_host);
+
+        (await StateOf(early)).Should().Be("Baking");
+        (await StateOf(late))
+            .Should()
+            .Be("Baking", "it was waiting when the shop owed the second broadcast");
+        (await Owed()).Should().BeEmpty();
+    }
+
+    [Test]
     public async Task A_client_cannot_fire_a_server_only_trigger()
     {
         var ada = NewUser();

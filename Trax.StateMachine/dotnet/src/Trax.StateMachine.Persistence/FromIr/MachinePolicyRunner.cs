@@ -43,6 +43,12 @@ internal sealed class MachinePolicyRunner(
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal)
     );
 
+    /// <summary>
+    /// Called right after an expansion reads the instances waiting in the broadcast's state, inside its transaction. A
+    /// test seam, to commit a write between that read and the rest of the expansion; null outside tests.
+    /// </summary>
+    internal Func<Task>? AfterWaitingRead { get; set; }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -152,6 +158,12 @@ internal sealed class MachinePolicyRunner(
         CancellationToken cancellationToken
     )
     {
+        // Claimed before the waiting instances are read: a row committed after the read could owe a fire to an instance
+        // that entered the state after it, so only rows already there when the read starts are coalesced.
+        var coalesced = await LockUnexpanded(context, row.Policy, cancellationToken);
+        await context
+            .MachinePolicyFires.Where(f => coalesced.Contains(f.Id))
+            .ExecuteDeleteAsync(cancellationToken);
         var waiting = await context
             .SnapshotDrafts.AsNoTracking()
             .Where(d => d.Machine == policy.Target && d.State == policy.By)
@@ -171,10 +183,8 @@ internal sealed class MachinePolicyRunner(
             );
             waiting.RemoveAt(waiting.Count - 1);
         }
-        var coalesced = await LockUnexpanded(context, row.Policy, cancellationToken);
-        await context
-            .MachinePolicyFires.Where(f => coalesced.Contains(f.Id))
-            .ExecuteDeleteAsync(cancellationToken);
+        if (AfterWaitingRead is { } after)
+            await after();
         await Owe(context, row, waiting, cancellationToken);
     }
 
