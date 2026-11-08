@@ -104,6 +104,24 @@
           "Yarp.ReverseProxy": "2.3.0"
         }
       },
+      "Cucumber.CucumberExpressions": {
+        "type": "Transitive",
+        "resolved": "17.1.0",
+        "contentHash": "IZFDLLwrUCKuGDXQzmAWZa+kQFpVmVwWD8wEl0UWGOR83UQfzqg8hZeSSNUOXlW0Kh3vMO6kEm3FpNC4amKMaw=="
+      },
+      "Cucumber.HtmlFormatter": {
+        "type": "Transitive",
+        "resolved": "22.2.0",
+        "contentHash": "hlP9GGzRADDKh0/GEt2aWD9G08qEDD4z6TC6iqJt3xH8kiU3iAbg1rOCtorN13zNdaaVxdraHzznWTMT/DnM1g==",
+        "dependencies": {
+          "Cucumber.Messages": "30.1.0"
+        }
+      },
+      "Cucumber.Messages": {
+        "type": "Transitive",
+        "resolved": "30.1.0",
+        "contentHash": "HDfIzDd7JFDEwiNHpgOHBPEiyVjXQws+CEnVb+Lwiq58jHNA/xYwmTswbqknOxcAejCRFP1de/hHHw+ZuTzV6A=="
+      },
       "GreenDonut": {
         "type": "Transitive",
         "resolved": "16.6.7",
@@ -509,6 +527,11 @@
         "type": "Transitive",
         "resolved": "2.23.0",
         "contentHash": "nWArUZTdU7iqZLycLKWe0TDms48KKGE6pONH2terYNa8REXiqixrMOkf1sk5DHGMaUTqONU2YkS4SAXBhLStgw=="
+      },
+      "Microsoft.Bcl.AsyncInterfaces": {
+        "type": "Transitive",
+        "resolved": "9.0.6",
+        "contentHash": "82rLw487j5jBXEi2r3WvA/cagOhcRREVRtet6izzjDMY+i392W5oNSN2KCtuIvlTpyMONEUD0MIlGAgDdsvQ/w=="
       },
       "Microsoft.CodeAnalysis.Common": {
         "type": "Transitive",
@@ -1058,6 +1081,12 @@
           "Trax.Scheduler": "[1.99.99, )"
         }
       },
+      "trax.samples.shared": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth.Jwt": "[1.99.99, )"
+        }
+      },
       "trax.samples.shared.testing": {
         "type": "Project",
         "dependencies": {
@@ -1067,7 +1096,9 @@
           "Microsoft.EntityFrameworkCore.InMemory": "[10.0.12, )",
           "Microsoft.EntityFrameworkCore.Sqlite": "[10.0.12, )",
           "NUnit": "[5.0.0, )",
-          "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )"
+          "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )",
+          "Trax.Samples.Shared": "[1.99.99, )",
+          "Trax.StateMachine.Gherkin.Reqnroll": "[1.99.99, )"
         }
       },
       "trax.scheduler": {
@@ -1083,6 +1114,21 @@
         "type": "Project",
         "dependencies": {
           "Trax.Effect": "[1.99.99, )"
+        }
+      },
+      "trax.statemachine.gherkin": {
+        "type": "Project",
+        "dependencies": {
+          "Gherkin": "[35.0.0, )",
+          "Trax.StateMachine": "[1.99.99, )"
+        }
+      },
+      "trax.statemachine.gherkin.reqnroll": {
+        "type": "Project",
+        "dependencies": {
+          "Reqnroll": "[3.3.4, )",
+          "Trax.StateMachine.Gherkin": "[1.99.99, )",
+          "Trax.StateMachine.Persistence": "[1.99.99, )"
         }
       },
       "trax.statemachine.persistence": {
@@ -1131,6 +1177,15 @@
           "Microsoft.EntityFrameworkCore": "[10.0.1, 11.0.0)",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.1, 11.0.0)",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.1"
+        }
+      },
+      "Gherkin": {
+        "type": "CentralTransitive",
+        "requested": "[35.0.0, )",
+        "resolved": "35.0.0",
+        "contentHash": "ha+QNevQsXEESbzazUceHTCtKOjoBTBa8kLFdKpu6vSEbb3UMt3a55RG78tIoU/C4qzIqX3jQxaIdIcYGO+IWQ==",
+        "dependencies": {
+          "Cucumber.Messages": "29.0.1"
         }
       },
       "HotChocolate": {
@@ -1460,6 +1515,20 @@
         "contentHash": "k4b6RnTXpLbsF96V93ooNYxgPMnoA2tEm24B6AXNJr1mG8wwNYdA1XJtgU66L5xqeGyveS7SJriRzlX3cbqQNA==",
         "dependencies": {
           "System.Threading.RateLimiting": "8.0.0"
+        }
+      },
+      "Reqnroll": {
+        "type": "CentralTransitive",
+        "requested": "[3.3.4, )",
+        "resolved": "3.3.4",
+        "contentHash": "tFFx0xACekjT9F/aFZjQMNTbaxy7zNU4uXFXvU1Eybuko2Rx1RLCAzN+uPDiDxsGB/Nd0wZC0M8Ho5i9xm8Jdg==",
+        "dependencies": {
+          "Cucumber.CucumberExpressions": "17.1.0",
+          "Cucumber.HtmlFormatter": "22.2.0",
+          "Cucumber.Messages": "30.1.0",
+          "Gherkin": "35.0.0",
+          "Microsoft.Bcl.AsyncInterfaces": "9.0.6",
+          "Microsoft.Extensions.DependencyModel": "8.0.2"
         }
       },
       "SQLitePCLRaw.bundle_e_sqlite3": {

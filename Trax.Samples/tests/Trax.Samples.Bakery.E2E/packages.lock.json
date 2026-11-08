@@ -1045,7 +1045,14 @@
           "Trax.Effect.Data.Postgres": "[1.99.99, )",
           "Trax.Effect.JunctionProvider.Progress": "[1.99.99, )",
           "Trax.Effect.Provider.Json": "[1.99.99, )",
+          "Trax.Samples.Shared": "[1.99.99, )",
           "Trax.Scheduler": "[1.99.99, )"
+        }
+      },
+      "trax.samples.shared": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth.Jwt": "[1.99.99, )"
         }
       },
       "trax.samples.shared.testing": {
@@ -1057,7 +1064,9 @@
           "Microsoft.EntityFrameworkCore.InMemory": "[10.0.12, )",
           "Microsoft.EntityFrameworkCore.Sqlite": "[10.0.12, )",
           "NUnit": "[5.0.0, )",
-          "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )"
+          "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )",
+          "Trax.Samples.Shared": "[1.99.99, )",
+          "Trax.StateMachine.Gherkin.Reqnroll": "[1.99.99, )"
         }
       },
       "trax.scheduler": {

@@ -18,7 +18,6 @@
 // demo key that refuses to start anywhere else. Outside Development the host has no sign-in, so nothing is served.
 // ─────────────────────────────────────────────────────────────────────────────
 
-using Trax.Api.Auth.Jwt;
 using Trax.Api.Dashboard.Extensions;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
@@ -32,6 +31,7 @@ using Trax.Mediator.Extensions;
 using Trax.Samples.Bakery.Api;
 using Trax.Samples.Bakery.Api.Auth;
 using Trax.Samples.Bakery.Trains;
+using Trax.Samples.Shared.Auth;
 using Trax.Scheduler.Extensions;
 using Trax.StateMachine.Persistence;
 
@@ -82,10 +82,7 @@ builder.Services.AddTrax(trax =>
 );
 
 // ── Sign-in: one token per person, Development only ─────────────────────────
-if (builder.Environment.IsDevelopment())
-    builder.Services.AddTraxJwtAuth(jwt =>
-        jwt.UseSymmetricKey(DemoTokens.Issuer, DemoTokens.Audience, DemoTokens.SigningKey)
-    );
+builder.AddDemoSignIn(DemoTokens.Issuer);
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
@@ -130,24 +127,11 @@ app.UseAuthorization();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
+// A token for one person: a name and a role, nothing else. Development only, like the key that signs it.
+app.MapDemoSignIn(DemoTokens.Issuer);
+
 if (app.Environment.IsDevelopment())
 {
-    // A token for one person: a name and a role, nothing else. Development only, like the key that signs it.
-    app.MapPost(
-            "/dev/token",
-            (SignIn request) =>
-            {
-                try
-                {
-                    return Results.Ok(new { token = DemoTokens.Mint(request.Name, request.Role) });
-                }
-                catch (ArgumentException ex)
-                {
-                    return Results.BadRequest(new { error = ex.Message });
-                }
-            }
-        )
-        .AllowAnonymous();
     // The operations console, its Board tab included. It asks for an operator's token on every load.
     app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 }
@@ -156,8 +140,5 @@ await app.RunTraxAsync(args);
 
 namespace Trax.Samples.Bakery.Api
 {
-    /// <summary>What the page sends to sign one person in.</summary>
-    public sealed record SignIn(string Name, string Role);
-
     public partial class Program;
 }

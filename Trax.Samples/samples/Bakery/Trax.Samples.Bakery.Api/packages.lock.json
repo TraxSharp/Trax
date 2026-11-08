@@ -579,6 +579,12 @@
           "Trax.StateMachine.Persistence": "[1.99.99, )"
         }
       },
+      "trax.samples.shared": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth.Jwt": "[1.99.99, )"
+        }
+      },
       "trax.scheduler": {
         "type": "Project",
         "dependencies": {

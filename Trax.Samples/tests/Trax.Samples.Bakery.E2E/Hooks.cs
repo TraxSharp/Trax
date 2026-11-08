@@ -1,6 +1,7 @@
 using Reqnroll;
 using Trax.Samples.Bakery.Api.Auth;
 using Trax.Samples.Bakery.E2E.Fixtures;
+using Trax.Samples.Shared.Testing;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Gherkin.Reqnroll;
 
@@ -29,16 +30,7 @@ public sealed class Hooks
                     Path.Combine(AppContext.BaseDirectory, "features", "glossary.json")
                 )
             );
-            o.Credential = (actor, person, scenario) =>
-            {
-                var subject = $"{person}-{Math.Abs(scenario.GetHashCode()):x8}";
-                return new FeatureCredential(
-                    new Dictionary<string, string>
-                    {
-                        ["Authorization"] = "Bearer " + DemoTokens.Mint(subject, actor.Roles[0]),
-                    }
-                );
-            };
+            o.Credential = DemoFeatureCredentials.PerPerson(DemoTokens.Issuer);
         });
     }
 

@@ -834,7 +834,14 @@
           "Trax.Effect.Data.Postgres": "[1.99.99, )",
           "Trax.Effect.JunctionProvider.Progress": "[1.99.99, )",
           "Trax.Effect.Provider.Json": "[1.99.99, )",
+          "Trax.Samples.Shared": "[1.99.99, )",
           "Trax.Scheduler": "[1.99.99, )"
+        }
+      },
+      "trax.samples.shared": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth.Jwt": "[1.99.99, )"
         }
       },
       "trax.scheduler": {

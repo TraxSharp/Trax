@@ -63,7 +63,7 @@ public class ProductionPostureTests
     public async Task A_demo_token_reads_no_view_in_Production()
     {
         var body = new { id = OrdersViewId(), variables = new { } };
-        var token = DemoTokens.Mint("Ada", "customer");
+        var token = DemoTokens.Issuer.Mint("Ada", "customer");
 
         using var development = await PostAsync(_development, body, token);
         development.RootElement.TryGetProperty("errors", out _).Should().BeFalse(Show(development));

@@ -58,6 +58,7 @@
     <Project Path="samples/Scheduling/Trax.Samples.Scheduling.Host/Trax.Samples.Scheduling.Host.csproj" />
   </Folder>
   <Folder Name="/lib/">
+    <Project Path="lib/Trax.Samples.Shared/Trax.Samples.Shared.csproj" />
     <Project Path="lib/Trax.Samples.Shared.Testing/Trax.Samples.Shared.Testing.csproj" />
   </Folder>
   <Folder Name="/tests/">

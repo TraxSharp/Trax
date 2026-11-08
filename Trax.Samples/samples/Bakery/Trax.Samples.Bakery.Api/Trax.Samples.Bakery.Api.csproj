@@ -18,6 +18,7 @@
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
     <ProjectReference Include="../../../../Trax.Scheduler/src/Trax.Scheduler/Trax.Scheduler.csproj" />
+    <ProjectReference Include="../../../lib/Trax.Samples.Shared/Trax.Samples.Shared.csproj" />
   </ItemGroup>
 
   <!-- The machines trax machine from-gherkin derives from ../features, as committed: the host serves them as they
