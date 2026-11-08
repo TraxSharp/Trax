@@ -5,9 +5,9 @@ using Microsoft.Playwright;
 namespace Trax.Samples.Bakery.Browser;
 
 /// <summary>
-/// The bakery's page in a browser, each person on a page of their own: a customer places an order, a baker clocking
-/// in opens the shop, and the customer's page shows the order in the oven. No page carries a credential it was not
-/// given at sign-in.
+/// The bakery's page in a browser, each person on a page of their own: a customer places an order, a baker clocks in
+/// and fires the oven, and the customer's page shows the order in the oven and lights the step of the feature that says
+/// so. No page carries a credential it was not given at sign-in.
 /// </summary>
 [TestFixture]
 public class BakeryPageTests
@@ -30,6 +30,7 @@ public class BakeryPageTests
         await Assertions
             .Expect(ada.GetByRole(AriaRole.Region, new() { Name = "Your orders" }))
             .ToContainTextAsync(new Regex("3 loaves.*Waiting for the oven"), Soon);
+        await ExpectSourceAsync(ada, "ordering.feature", "Ada's order is placed");
 
         await Assertions.Expect(kit.Locator("[data-shift-state]")).ToContainTextAsync("Off", Soon);
         await kit.GetByRole(AriaRole.Button, new() { Name = "Clock in" }).ClickAsync();
@@ -41,6 +42,7 @@ public class BakeryPageTests
         await Assertions
             .Expect(ada.GetByRole(AriaRole.Region, new() { Name = "Your orders" }))
             .ToContainTextAsync(new Regex("3 loaves.*In the oven"), Soon);
+        await ExpectSourceAsync(ada, "shop.feature", "Ada's order is baking");
     }
 
     [Test]
@@ -71,6 +73,16 @@ public class BakeryPageTests
 
         bundle.Should().NotContain("do-not-use-in-production");
         bundle.Should().NotContain("eyJ", "a JSON web token starts so");
+    }
+
+    // The feature-source panel shows the file whose scenario ends where the order is now, and marks that step.
+    private static async Task ExpectSourceAsync(IPage page, string file, string step)
+    {
+        var source = page.GetByRole(AriaRole.Region, new() { Name = "Feature source" });
+        await Assertions
+            .Expect(source.GetByRole(AriaRole.Tab, new() { Selected = true }))
+            .ToHaveTextAsync(file, new() { Timeout = 15_000 });
+        await Assertions.Expect(source.Locator(".hit").First).ToContainTextAsync(step, Soon);
     }
 
     private static async Task<IPage> SignInAsync(string name, string role)

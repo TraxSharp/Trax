@@ -55,7 +55,12 @@ public class BrowserSetup
         await WaitForHealth();
         Dist = await Build();
         s_playwright = await Playwright.CreateAsync();
-        Browser = await s_playwright.Chromium.LaunchAsync(new() { Headless = true });
+        // With the page's files fulfilled by the route, chromium's local network access check refuses the page's
+        // subscription socket to 127.0.0.1, and the page never hears the server move its machines. A deployed page and
+        // its API share one real origin, so the check is turned off here rather than worked around in the page.
+        Browser = await s_playwright.Chromium.LaunchAsync(
+            new() { Headless = true, Args = ["--disable-features=LocalNetworkAccessChecks"] }
+        );
     }
 
     [OneTimeTearDown]
