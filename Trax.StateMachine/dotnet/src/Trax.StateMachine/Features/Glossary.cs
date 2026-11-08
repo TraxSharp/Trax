@@ -400,6 +400,7 @@ internal sealed partial record Glossary(
         foreach (var actor in Actors.Values)
             FirstPerson(at["actors"][actor.Name]["noun"], actor.Noun);
 
+        Features.Views.CheckNames(at["views"], Views.Values.Select(v => (v.Name, v.Reads)));
         foreach (var view in Views.Values)
         {
             var v = at["views"][view.Name];

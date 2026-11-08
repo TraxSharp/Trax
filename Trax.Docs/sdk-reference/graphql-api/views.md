@@ -56,7 +56,11 @@ query {
   before anything is read. Both are GraphQL errors whose `extensions.code` is the code.
 - **What is read.** Only the caller's own instances (owner `user`, with the caller's user key), and the system
   instance at the key the view names. Another user's instance is never in a view.
-- **Names.** A view's name is words of letters and digits, the first starting with a letter. A field it shows is a
+- **Names.** A view's name is words of ASCII letters and digits split by spaces, hyphens or underscores, the first
+  starting with a letter. No two views fold to one PascalCase name (`order status` and `order-status`), and no two
+  name one row type (`pinned sticky` reading `note` and `pinned` reading `sticky-note` are both
+  `PinnedStickyNoteRow`). The glossary's and the host file's readers refuse a view that breaks either rule, so
+  `from-gherkin --check` fails on it, naming the view. A field it shows is a
   GraphQL name (letters, digits and `_`, not starting with a digit or `__`) and is not `id`, which is the instance's.
   Any other name refuses the host with an `InvalidOperationException` naming the view and the field when the schema
   builds.

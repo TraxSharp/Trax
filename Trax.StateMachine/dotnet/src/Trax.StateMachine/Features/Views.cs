@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace Trax.StateMachine.Features;
 
@@ -26,7 +27,7 @@ internal sealed record ViewField(
 /// need the machines (that a read machine exists and is read with its key exactly when it is a system machine) are
 /// <see cref="Check"/>'s, given each machine's system key or null.
 /// </summary>
-internal static class Views
+internal static partial class Views
 {
     internal static (List<ViewRead> Reads, List<ViewField> Fields) Read(At at, JsonObject view)
     {
@@ -77,6 +78,72 @@ internal static class Views
             shown.Add(new ViewField(name, match.Groups[1].Value, match.Groups[2].Value, labels));
         }
         return (list, shown);
+    }
+
+    /// <summary>
+    /// The stem of a view's GraphQL names: its words in PascalCase, split at spaces, hyphens and underscores
+    /// (<c>the shop sign</c> is <c>TheShopSign</c>). Its type is <c>{stem}View</c>, its field on <c>views</c> the stem in
+    /// camelCase, and each machine it reads a row type <see cref="RowTypeName"/>.
+    /// </summary>
+    internal static string Pascal(string name) =>
+        string.Concat(
+            name.Split(' ', '-', '_')
+                .Where(w => w.Length > 0)
+                .Select(w => char.ToUpperInvariant(w[0]) + w[1..])
+        );
+
+    /// <summary>The type one machine's instances have in a view: <c>{view stem}{machine in PascalCase}Row</c>.</summary>
+    internal static string RowTypeName(string pascal, string machine) =>
+        pascal
+        + string.Concat(
+            machine
+                .Split('-', StringSplitOptions.RemoveEmptyEntries)
+                .Select(part => char.ToUpperInvariant(part[0]) + part[1..])
+        )
+        + "Row";
+
+    /// <summary>Whether <paramref name="pascal"/> is a GraphQL name a view's types can start with.</summary>
+    internal static bool IsGraphQLStem(string pascal) => GraphQLStem().IsMatch(pascal);
+
+    [GeneratedRegex(@"\A[A-Za-z][A-Za-z0-9]*\z", RegexOptions.CultureInvariant)]
+    private static partial Regex GraphQLStem();
+
+    /// <summary>
+    /// Refuses a view whose name GraphQL cannot carry: one that is not words of ASCII letters and digits, the first
+    /// starting with a letter, or two views whose names are one stem once <see cref="Pascal"/> folds them, or whose row
+    /// types are named the same (<c>pinned sticky</c> reading <c>note</c> and <c>pinned</c> reading
+    /// <c>sticky-note</c>). The host would otherwise fail to build its schema, naming neither view.
+    /// </summary>
+    internal static void CheckNames(
+        At at,
+        IEnumerable<(string Name, IReadOnlyList<ViewRead> Reads)> views
+    )
+    {
+        var stems = new Dictionary<string, string>(StringComparer.Ordinal);
+        var rows = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (name, reads) in views)
+        {
+            var v = at[name];
+            var pascal = Pascal(name);
+            if (!IsGraphQLStem(pascal))
+                throw v.Fail(
+                    "has no GraphQL name: a view's name is words of ASCII letters and digits, the first starting "
+                        + "with a letter, split by spaces, hyphens or underscores."
+                );
+            if (!stems.TryAdd(pascal, name))
+                throw v.Fail(
+                    $"is {pascal} in GraphQL, as the view '{stems[pascal]}' is: name the two apart by more than "
+                        + "case, spaces, hyphens and underscores."
+                );
+            foreach (var read in reads)
+            {
+                var row = RowTypeName(pascal, read.Machine);
+                if (!rows.TryAdd(row, name))
+                    throw v.Fail(
+                        $"reads '{read.Machine}' as the type {row}, which the view '{rows[row]}' names too."
+                    );
+            }
+        }
     }
 
     /// <summary>

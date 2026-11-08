@@ -317,6 +317,7 @@ internal sealed record HostFile(
             m => m.Value.SystemKey,
             StringComparer.Ordinal
         );
+        Features.Views.CheckNames(at["views"], Views.Values.Select(v => (v.Name, v.Reads)));
         foreach (var view in Views.Values)
             Features.Views.Check(at["views"][view.Name], view.Reads, view.Fields, systemKeys);
 

@@ -55,6 +55,26 @@ public class FormatCorpusTests
             );
     }
 
+    // A refused document is refused for the one thing its name says, not for a mistake made while writing it.
+    [TestCase("glossary", "view-name-not-a-graphql-name", "has no GraphQL name")]
+    [TestCase("glossary", "view-names-fold-together", "is TheShopSign in GraphQL")]
+    [TestCase("glossary", "view-row-types-collide", "PinnedStickyNoteRow")]
+    [TestCase("host", "view-name-not-a-graphql-name", "has no GraphQL name")]
+    [TestCase("host", "view-names-fold-together", "is TheShop in GraphQL")]
+    [TestCase("host", "view-row-types-collide", "PinnedStickyNoteRow")]
+    public void A_refused_document_is_refused_for_what_it_is_named(
+        string format,
+        string name,
+        string reason
+    )
+    {
+        var text = File.ReadAllText(
+            Path.Combine(FixturePaths.ConformanceRoot, "formats", format, "refused", name + ".json")
+        );
+
+        Why(format, text).Should().Contain(reason);
+    }
+
     [TestCaseSource(nameof(Formats))]
     public void Every_corpus_directory_holds_documents(string format)
     {

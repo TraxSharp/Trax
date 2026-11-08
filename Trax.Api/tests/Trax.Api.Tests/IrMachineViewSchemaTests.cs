@@ -34,9 +34,36 @@ public class IrMachineViewSchemaTests
         refusal!.ToString().Should().Contain("'turnstile'").And.Contain($"'{field}'");
     }
 
-    // A host serving the turnstile from its IR and the view 'turnstile', its state under the field named field.
-    private static Task<Exception?> RefusalAsync(string field)
+    [TestCase("shop's sign")]
+    [TestCase("café")]
+    [TestCase("2 turnstiles")]
+    public async Task A_view_GraphQL_cannot_name_refuses_the_host_naming_it(string name)
     {
+        var refusal = await RefusalAsync("status", name);
+
+        refusal.Should().NotBeNull();
+        refusal!.ToString().Should().Contain($"'{name}'").And.Contain("has no GraphQL name");
+    }
+
+    [Test]
+    public async Task Two_views_that_are_one_GraphQL_name_refuse_the_host_naming_both()
+    {
+        var refusal = await RefusalAsync("status", "the turnstile", "the-turnstile");
+
+        refusal.Should().NotBeNull();
+        refusal!
+            .ToString()
+            .Should()
+            .Contain("'the turnstile'")
+            .And.Contain("'the-turnstile'")
+            .And.Contain("TheTurnstile");
+    }
+
+    // A host serving the turnstile from its IR and the given views, each its state under the field named field.
+    private static Task<Exception?> RefusalAsync(string field, params string[] names)
+    {
+        if (names.Length == 0)
+            names = ["turnstile"];
         var ir = JsonNode
             .Parse(File.ReadAllText(IrMachineSchemaTests.IrFile("turnstile")))!
             .AsObject();
@@ -57,22 +84,21 @@ public class IrMachineViewSchemaTests
             new Dictionary<string, HostInvoke>()
         );
         var machines = IrMachines.Create([new IrMachines.Source(ir, host)], []);
-        var view = new HostView(
-            "turnstile",
-            [new ViewRead("ir-turnstile", null)],
-            [new ViewField(field, "ir-turnstile", ViewField.State, null)],
-            AccessRule.AnyAuthenticated
+        var views = names.ToDictionary(
+            name => name,
+            name => new HostView(
+                name,
+                [new ViewRead("ir-turnstile", null)],
+                [new ViewField(field, "ir-turnstile", ViewField.State, null)],
+                AccessRule.AnyAuthenticated
+            )
         );
         return MachineSchemaHost.RefusalAsync(
             [],
             services: s =>
             {
                 s.AddIrMachines(machines);
-                s.AddSingleton(
-                    new MachineViewCatalog(
-                        new Dictionary<string, HostView> { ["turnstile"] = view }
-                    )
-                );
+                s.AddSingleton(new MachineViewCatalog(views));
             }
         );
     }

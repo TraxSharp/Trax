@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "machines": {
+    "note": {
+      "schemaHash": "h",
+      "owner": "user"
+    },
+    "sticky-note": {
+      "schemaHash": "h-sticky",
+      "owner": "user"
+    }
+  },
+  "views": {
+    "pinned sticky": {
+      "reads": [
+        {
+          "machine": "note"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "note.state"
+        }
+      },
+      "readers": {
+        "anyAuthenticated": true
+      }
+    },
+    "pinned": {
+      "reads": [
+        {
+          "machine": "sticky-note"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "sticky-note.state"
+        }
+      },
+      "readers": {
+        "anyAuthenticated": true
+      }
+    }
+  }
+}

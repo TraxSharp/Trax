@@ -44,14 +44,28 @@ internal sealed class MachineViewTypeModule(
         var byName = machines.ToDictionary(m => m.Name, StringComparer.Ordinal);
 
         var fields = new List<(string Field, string Type, HostView View)>();
+        // The host file's reader refuses all of these (Views.CheckNames); a catalog built some other way still names
+        // the views, not HotChocolate's duplicate type.
+        var stems = new Dictionary<string, string>(StringComparer.Ordinal);
+        var rows = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var view in catalog.Views.Values.OrderBy(v => v.Name, StringComparer.Ordinal))
         {
-            var pascal = Pascal(view.Name);
-            if (!System.Text.RegularExpressions.Regex.IsMatch(pascal, @"\A[A-Za-z][A-Za-z0-9]*\z"))
+            var pascal = Views.Pascal(view.Name);
+            if (!Views.IsGraphQLStem(pascal))
                 throw new InvalidOperationException(
-                    $"The view '{view.Name}' has no GraphQL name: a view's name is words of letters and digits, the first "
-                        + "starting with a letter."
+                    $"The view '{view.Name}' has no GraphQL name: a view's name is words of ASCII letters and digits, "
+                        + "the first starting with a letter."
                 );
+            if (!stems.TryAdd(pascal, view.Name))
+                throw new InvalidOperationException(
+                    $"The views '{stems[pascal]}' and '{view.Name}' are both {pascal} in GraphQL: name them apart by "
+                        + "more than case, spaces, hyphens and underscores."
+                );
+            foreach (var row in view.Reads.Select(r => RowTypeName(pascal, r.Machine)))
+                if (!rows.TryAdd(row, view.Name))
+                    throw new InvalidOperationException(
+                        $"The views '{rows[row]}' and '{view.Name}' both name the type {row}."
+                    );
             // A field is a field of the row type beside the instance's id: it cannot be the id, and GraphQL has to name it.
             foreach (var field in view.Fields)
                 if (
@@ -197,15 +211,7 @@ internal sealed class MachineViewTypeModule(
     }
 
     private static string RowTypeName(string view, string machine) =>
-        $"{view}{MachineSurface.PascalName(machine)}Row";
-
-    // "shop sign" is ShopSign, and its field shopSign.
-    private static string Pascal(string name) =>
-        string.Concat(
-            name.Split(' ', '-', '_')
-                .Where(w => w.Length > 0)
-                .Select(w => char.ToUpperInvariant(w[0]) + w[1..])
-        );
+        Views.RowTypeName(view, machine);
 
     private static string Camel(string pascal) => char.ToLowerInvariant(pascal[0]) + pascal[1..];
 }
