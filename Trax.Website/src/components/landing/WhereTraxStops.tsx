@@ -8,7 +8,7 @@ const limits: {
 }[] = [
   {
     title: "A crash reruns from the last checkpoint",
-    body: "If a process dies halfway through a run, the run is marked failed and retried from its last checkpoint, or from its first junction if it declares none. Junctions after that point run again, so ones that call other systems should be safe to repeat.",
+    body: "If a process dies halfway through a run, the run is marked failed and retried from its last checkpoint, or from its first step if it declares none. Steps after that point run again, so ones that call other systems should be safe to repeat.",
   },
   {
     title: "Postgres in production",
@@ -20,7 +20,7 @@ const limits: {
   },
   {
     title: "One language, one region",
-    body: "Trains are C#, and one Postgres database coordinates them. Workflows written in several languages, or replicated across regions, are outside what Trax does.",
+    body: "Workflows are written in C#, and one Postgres database coordinates them. Workflows in several languages, or replicated across regions, are outside what Trax does.",
   },
   {
     title: "Schedules run in UTC",

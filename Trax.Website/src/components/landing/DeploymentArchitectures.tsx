@@ -33,7 +33,7 @@ const architectures: Architecture[] = [
   },
   {
     name: "Just the scheduler",
-    description: "No API at all. One process runs trains on a schedule.",
+    description: "No API at all. One process runs workflows on a schedule.",
     processes: [[{ label: "Scheduler" }]],
   },
 ];
@@ -70,7 +70,7 @@ export default function DeploymentArchitectures() {
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
         <h2 className="text-2xl font-semibold text-text-primary">Deploy it however you want</h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          Start in one process and split it out as load grows, without rewriting your trains.
+          Start in one process and split it out as load grows, without rewriting your workflows.
         </p>
         <Link href="/docs/scheduler/remote-execution" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
           Running work on other machines &rarr;

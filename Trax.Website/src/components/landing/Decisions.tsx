@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Arrow, Box, Figure } from "./Diagram";
 
 // The support-ticket example from the Decisions pages in Trax.Docs (core/decisions.md, effect/decisions.md), drawn as
-// the fork the train takes. The row below is the record of the same decision. The code is on the linked pages.
+// the fork the workflow takes. The row below is the record of the same decision. The code is on the linked pages.
 const tracks: { label: string; note: string; taken?: boolean; fallback?: boolean }[] = [
   { label: "Refund", note: "needs 0.7 sure", taken: true },
   { label: "Escalate", note: "open an incident" },
@@ -27,14 +27,14 @@ export default function Decisions() {
   return (
     <section className="border-b border-border py-24">
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
-        <h2 className="text-2xl font-semibold text-text-primary">A train can choose its track at run time</h2>
+        <h2 className="text-2xl font-semibold text-text-primary">A workflow can choose its path at run time</h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          A train names every track it can take. At run time a decider, from a decision model to a rule table, answers a typed
-          question about the work, and the train takes the matching track. An answer that is not sure enough takes the
-          fallback instead.
+          A workflow lists every path it can take. At run time a decision model or a rule table answers a typed question
+          about the work, and the workflow takes the matching path. An answer that is not sure enough takes the fallback
+          instead.
         </p>
 
-        <Figure caption="The model answered Refund, 0.86 sure, so the ticket took the refund track.">
+        <Figure caption="The model answered Refund, 0.86 sure, so the ticket took the refund path.">
           <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
             <Box label="A ticket" className="sm:w-36" />
             <Arrow />
@@ -54,8 +54,8 @@ export default function Decisions() {
               Every decision is recorded, and a requeue replays it
             </h3>
             <p>
-              Each answer is saved before the train acts on it. Run it again
-              and it takes the same tracks from the saved answers, without
+              Each answer is saved before the workflow acts on it. Run it again
+              and it takes the same paths from the saved answers, without
               asking the model. If the data changed since, the model is asked
               again.
             </p>
@@ -64,13 +64,13 @@ export default function Decisions() {
                 href="/docs/core/decisions"
                 className="text-accent hover:text-accent-hover"
               >
-                Decisions: questions, tracks and deciders &rarr;
+                How a workflow asks a question &rarr;
               </Link>
               <Link
                 href="/docs/effect/decisions"
                 className="text-accent hover:text-accent-hover"
               >
-                Recording, replay and Nimble &rarr;
+                How answers are recorded and replayed &rarr;
               </Link>
             </div>
           </div>

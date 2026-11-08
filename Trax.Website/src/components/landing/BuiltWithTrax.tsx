@@ -53,7 +53,7 @@ const samples: Sample[] = [
       files: [
         { path: "Trax.Samples.Recovery/Machines/OrderMachine.cs", label: "the order: its states, events and timer" },
         { path: "Trax.Samples.Recovery/Trains/Order/DeliverOrderTrain.cs", label: "the delivery the order runs" },
-        { path: "Trax.Samples.Recovery.Api/Program.cs", label: "the host: machines, junction events and pushes" },
+        { path: "Trax.Samples.Recovery.Api/Program.cs", label: "the host: machines, step events and pushes" },
       ],
       docs: "/docs/samples/recovery",
       run: [
@@ -73,7 +73,7 @@ const samples: Sample[] = [
         { path: "Trax.Samples.Recovery/Trains/Refund/ApproveRefundTrain.cs", label: "the refund: two questions and a checkpoint" },
         { path: "Trax.Samples.Recovery/Trains/Refund/RefundModel.cs", label: "the questions the model is asked" },
         { path: "Trax.Samples.Recovery/Model/DemoDecider.cs", label: "the stand-in decision model" },
-        { path: "Trax.Samples.Recovery.Api/Program.cs", label: "the host: decision recording, junction events, the scheduler" },
+        { path: "Trax.Samples.Recovery.Api/Program.cs", label: "the host: decision recording, step events, the scheduler" },
       ],
       docs: "/docs/samples/recovery",
       run: [
@@ -85,13 +85,13 @@ const samples: Sample[] = [
   },
   {
     tab: "Live Updates",
-    blurb: "Each chat message runs a train and is pushed to the room.",
+    blurb: "Each chat message runs a workflow and is pushed to the room.",
     href: "/docs/samples/chat-service",
     source: {
       folder: "ChatService",
       files: [
-        { path: "Trax.Samples.ChatService/Trains/SendMessage/SendMessageTrain.cs", label: "the train each message runs" },
-        { path: "Trax.Samples.ChatService/Hooks/ChatLifecycleHook.cs", label: "publishes a completed train's output to the room's topic" },
+        { path: "Trax.Samples.ChatService/Trains/SendMessage/SendMessageTrain.cs", label: "the workflow each message runs" },
+        { path: "Trax.Samples.ChatService/Hooks/ChatLifecycleHook.cs", label: "publishes each finished message to the room's topic" },
         { path: "Trax.Samples.ChatService/Subscriptions/ChatSubscriptions.cs", label: "onChatEvent, admitting only the room's participants" },
         { path: "Trax.Samples.ChatService.Api/Program.cs", label: "API keys, the hook and the subscription wired up" },
       ],
