@@ -1468,11 +1468,22 @@ internal sealed partial class ClientGenerator
     ];
 
     // A view's exports: its read function, its result type and its document's id. The result is not named for the
-    // view's GraphQL type ({Pascal}View), which types.g.ts declares.
+    // view's GraphQL type ({Pascal}View), which types.g.ts declares. The view's own name is only ever part of these or
+    // a string, so a reserved word ("new") names a view; what is checked is each name the module declares.
     private static string[] ViewNames(ClientManifestDocument view)
     {
-        var pascal = TypeScript.Upper(TypeScript.Identifier(view.Operation, "view"));
-        return [$"read{pascal}View", $"{pascal}ViewResult", $"{Lower(pascal)}ViewDocumentId"];
+        if (!TypeScript.IsIdentifier(view.Operation))
+            throw new InvalidOperationException(
+                $"The view '{view.Operation}' cannot name generated TypeScript: it is not an identifier. Rename it "
+                    + "on the host."
+            );
+        var pascal = TypeScript.Upper(view.Operation);
+        return
+        [
+            TypeScript.Identifier($"read{pascal}View", "view's read function"),
+            TypeScript.TypeName($"{pascal}ViewResult", "view's result type"),
+            TypeScript.Identifier($"{Lower(pascal)}ViewDocumentId", "view's document id"),
+        ];
     }
 
     // One function per view the host serves from features, each sending the view's persisted document.

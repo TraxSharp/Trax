@@ -472,6 +472,53 @@ public partial class ClientGeneratorTests
             );
     }
 
+    // The view's name is only ever written inside longer names (readNewView) or as a string, so a word TypeScript
+    // reserves names a view as well as any other.
+    [TestCase("new", "New")]
+    [TestCase("default", "Default")]
+    [TestCase("type", "Type")]
+    [TestCase("delete", "Delete")]
+    public void A_view_named_for_a_reserved_word_is_generated(string operation, string pascal)
+    {
+        var text = $"query {pascal}View {{ views {{ {operation} {{ vOrder {{ id status }} }} }} }}";
+        var manifest = ClientManifests.Sample() with
+        {
+            Views =
+            [
+                new ClientManifestDocument
+                {
+                    Id = $"trax_view_{operation}_" + new string('a', 64) + new string('b', 16),
+                    Operation = operation,
+                    Document = text,
+                },
+            ],
+            Types =
+                ClientManifests.Sample().Types
+                + $$"""
+
+                    type {{pascal}}View {
+                      vOrder: [{{pascal}}VOrderRow!]!
+                    }
+
+                    type {{pascal}}VOrderRow {
+                      id: UUID!
+                      status: String
+                    }
+
+                    scalar UUID
+                    """,
+        };
+
+        var views = Text(Render(manifest), "views.g.ts");
+
+        views
+            .Should()
+            .Contain($"export type {pascal}ViewResult = ")
+            .And.Contain($"export const {operation}ViewDocumentId = \"trax_view_{operation}_")
+            .And.Contain($"export function read{pascal}View(): Promise<{pascal}ViewResult>")
+            .And.Contain($"[\"views\", \"{operation}\"]");
+    }
+
     [Test]
     public void A_host_without_one_gets_none()
     {
