@@ -77,13 +77,15 @@ internal static class FeatureRun
         return new RunReport(results, problems);
     }
 
-    // Every step read, none run: an undefined Given or When still shows.
+    // Every step read, none run: an undefined Given or When, or a step the walk refused, still shows.
     private static ScenarioResult DryRun(Walk walk)
     {
         var meanings = walk.Steps.Select(s => s.Step).ToHashSet();
         var steps = walk
             .Scenario.Steps.Select(step =>
-                meanings.Contains(step) ? new StepResult(step, null, "not run")
+                walk.Problems.FirstOrDefault(p => p.Line == step.Line) is { } problem
+                    ? new StepResult(step, ScenarioStatus.Undefined, problem.Message)
+                : meanings.Contains(step) ? new StepResult(step, null, "not run")
                 : step.Kind == StepKind.Then
                     ? new StepResult(step, null, "about the UI: not checked here")
                 : new StepResult(

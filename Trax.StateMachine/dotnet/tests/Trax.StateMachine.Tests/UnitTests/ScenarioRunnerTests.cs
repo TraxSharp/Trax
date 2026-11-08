@@ -188,6 +188,53 @@ public class ScenarioRunnerTests
     }
 
     [Test]
+    public void A_scenario_whose_steps_the_walk_refused_is_undefined_not_passed()
+    {
+        var report = Run(
+            """
+            Feature: Odd
+              Scenario: A guard checked that does not hold
+                Given Ada is a customer
+                And Ada has an order
+                Then Ada's order has something in it
+
+              Scenario: An act given
+                Given Ada is a customer
+                And Ada has an order
+                And Ada places her order
+                Then Ada's order is a draft
+            """
+        );
+
+        report.Scenarios.Should().HaveCount(2);
+        report.Scenarios.Should().OnlyContain(s => s.Status == ScenarioStatus.Undefined);
+        report.Scenarios.Select(s => s.Failure!.Step.Line).Should().Equal(5, 10);
+    }
+
+    [Test]
+    public async Task A_session_checks_a_guard_then_and_fails_a_step_it_has_no_case_for()
+    {
+        var glossary = Features.Glossary.Read(Glossary);
+        var resolver = new StepResolver(glossary);
+        var session = new ScenarioSession(glossary, Driver());
+        async Task<string?> Step(StepKind kind, string text) =>
+            await session.Step(
+                new FeatureStep(kind, text, 0),
+                resolver.Resolve(text, session.People, out _, out _)!
+            );
+
+        (await Step(StepKind.Given, "Ada is a customer")).Should().BeNull();
+        (await Step(StepKind.Given, "Ada has an order")).Should().BeNull();
+
+        (await Step(StepKind.Then, "Ada's order has something in it"))
+            .Should()
+            .Contain("does not hold");
+        (await Step(StepKind.Then, "Ada's order has nothing in it")).Should().BeNull();
+        (await Step(StepKind.Given, "Ada places her order")).Should().Contain("Given");
+        (await Step(StepKind.Then, "Ada places her order")).Should().Contain("Then");
+    }
+
+    [Test]
     public void A_run_selects_scenarios_as_cucumber_does()
     {
         Names(Run(Ordering, selection: new RunSelection(Tags: "@ordering and not @slow")))

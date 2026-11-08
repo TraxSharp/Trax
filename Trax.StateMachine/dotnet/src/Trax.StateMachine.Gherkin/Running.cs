@@ -93,12 +93,18 @@ internal static class ScenarioRunner
         var meanings = walk.Steps.ToDictionary(s => s.Step, s => s.Meaning);
         var results = new List<StepResult>();
 
-        var undefined = scenario.Steps.FirstOrDefault(s =>
-            s.Kind != StepKind.Then && !meanings.ContainsKey(s)
-        );
+        // A Given or When with no meaning, or any step the walk refused, means the scenario does not read: it is not
+        // run, as derivation would not derive from it.
+        var undefined =
+            scenario.Steps.FirstOrDefault(s =>
+                (s.Kind != StepKind.Then && !meanings.ContainsKey(s))
+                || walk.Problems.Any(p => p.Line == s.Line)
+            ) ?? (walk.Problems.Count > 0 ? scenario.Steps.FirstOrDefault() : null);
         if (undefined is not null)
         {
-            var why = walk.Problems.FirstOrDefault(p => p.Line == undefined.Line)?.Message;
+            var why =
+                walk.Problems.FirstOrDefault(p => p.Line == undefined.Line)?.Message
+                ?? walk.Problems.FirstOrDefault()?.Message;
             foreach (var step in scenario.Steps)
                 results.Add(
                     step == undefined
@@ -301,8 +307,21 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
                     ? null
                     : $"'{step.Text}', and the answer was {ScenarioRunner.Describe(last?.Answer)}.";
 
+            case (StepKind.Then, Meaning.Guard g):
+            {
+                var now = await driver.Read(new InstanceKey(g.Machine, g.Owner));
+                if (now is null)
+                    return $"'{step.Text}', and it is not started.";
+                var rule = glossary.Machines[g.Machine].Guards[g.Name].Rule;
+                return
+                    RuleEvaluator.Evaluate(IrMachine.ReadRule(rule), now.Value.Context, null)
+                    == g.Holds
+                    ? null
+                    : $"'{step.Text}' does not hold.";
+            }
+
             default:
-                return null;
+                return $"'{step.Text}' is not something a {step.Kind} step can say.";
         }
     }
 }
