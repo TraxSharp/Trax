@@ -4,20 +4,10 @@ import { MemoryRouter } from "react-router-dom";
 import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient } from "../mock";
-import { machineQueryResolvers } from "../mock/scenarios";
+import { MACHINE_BOARD, machineQueryResolvers } from "../mock/scenarios";
 import type { Board } from "../lib/machineBoard";
 
 afterEach(cleanup);
-
-const BOARD: Board = {
-  machine: "topic-map",
-  lanes: ["topic-map"],
-  stickies: [
-    { id: "command:topic-map:Build", kind: "command", machine: "topic-map", label: "Build", scenarios: [] },
-    { id: "aggregate:topic-map", kind: "aggregate", machine: "topic-map", label: "topic-map", scenarios: [] },
-  ],
-  links: [{ from: "command:topic-map:Build", to: "aggregate:topic-map" }],
-};
 
 function open(board: Board | null) {
   const client = createMockClient({
@@ -45,7 +35,7 @@ function expectWired(tab: HTMLElement) {
 }
 
 test("each tab of a machine with a board controls a panel labelled by it", async () => {
-  open(BOARD);
+  open(MACHINE_BOARD);
 
   const states = await screen.findByRole("tab", { name: "State diagram" });
   expectWired(states);
