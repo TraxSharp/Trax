@@ -6,8 +6,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax/blob/main/Trax.Mediator/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs/mediator)
 
-> Part of [Trax .NET](https://github.com/TraxSharp): a .NET framework for processes the server enforces. Any client,
-> a browser, a script or an AI agent, can drive them; the server checks every move and records every run. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
+> Part of [Trax .NET](https://github.com/TraxSharp): one description of your app, for the whole team. Every part of the
+> app has a place, so you only have to write what it does. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
 
 Trax.Mediator is the train bus for Trax: run a train by its input type, with every chain checked at host startup. It
 builds on [Trax.Effect](https://github.com/TraxSharp/Trax/tree/main/Trax.Effect), and Trax.Scheduler and Trax.Api run their trains

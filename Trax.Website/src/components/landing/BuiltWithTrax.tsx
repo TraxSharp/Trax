@@ -17,6 +17,8 @@ const boardRecordings = boardData as unknown as BoardRecordings;
 // its --copy-to option. Re-record a sample when its code or its page changes.
 interface Sample {
   tab: string;
+  /** One line under the tab's name, saying what the demo shows. */
+  blurb: string;
   href: string;
   source: SampleSourceProps;
 }
@@ -24,6 +26,7 @@ interface Sample {
 const samples: Sample[] = [
   {
     tab: "Agents",
+    blurb: "Scripted agents work a ticket board. The server runs every check itself.",
     href: "/docs/samples/board",
     source: {
       folder: "Board",
@@ -43,13 +46,14 @@ const samples: Sample[] = [
   },
   {
     tab: "State Machines",
+    blurb: "An order moves through states the server enforces, with a delivery timer.",
     href: "/docs/samples/recovery",
     source: {
       folder: "Recovery",
       files: [
         { path: "Trax.Samples.Recovery/Machines/OrderMachine.cs", label: "the order: its states, events and timer" },
         { path: "Trax.Samples.Recovery/Trains/Order/DeliverOrderTrain.cs", label: "the delivery the order runs" },
-        { path: "Trax.Samples.Recovery.Api/Program.cs", label: "the host: machines, junction events and pushes" },
+        { path: "Trax.Samples.Recovery.Api/Program.cs", label: "the host: machines, step events and pushes" },
       ],
       docs: "/docs/samples/recovery",
       run: [
@@ -61,6 +65,7 @@ const samples: Sample[] = [
   },
   {
     tab: "Workflows",
+    blurb: "A refund asks a model two questions and resumes from a checkpoint.",
     href: "/docs/samples/recovery",
     source: {
       folder: "Recovery",
@@ -68,7 +73,7 @@ const samples: Sample[] = [
         { path: "Trax.Samples.Recovery/Trains/Refund/ApproveRefundTrain.cs", label: "the refund: two questions and a checkpoint" },
         { path: "Trax.Samples.Recovery/Trains/Refund/RefundModel.cs", label: "the questions the model is asked" },
         { path: "Trax.Samples.Recovery/Model/DemoDecider.cs", label: "the stand-in decision model" },
-        { path: "Trax.Samples.Recovery.Api/Program.cs", label: "the host: decision recording, junction events, the scheduler" },
+        { path: "Trax.Samples.Recovery.Api/Program.cs", label: "the host: decision recording, step events, the scheduler" },
       ],
       docs: "/docs/samples/recovery",
       run: [
@@ -80,12 +85,13 @@ const samples: Sample[] = [
   },
   {
     tab: "Live Updates",
+    blurb: "Each chat message runs a workflow and is pushed to the room.",
     href: "/docs/samples/chat-service",
     source: {
       folder: "ChatService",
       files: [
-        { path: "Trax.Samples.ChatService/Trains/SendMessage/SendMessageTrain.cs", label: "the train each message runs" },
-        { path: "Trax.Samples.ChatService/Hooks/ChatLifecycleHook.cs", label: "publishes a completed train's output to the room's topic" },
+        { path: "Trax.Samples.ChatService/Trains/SendMessage/SendMessageTrain.cs", label: "the workflow each message runs" },
+        { path: "Trax.Samples.ChatService/Hooks/ChatLifecycleHook.cs", label: "publishes each finished message to the room's topic" },
         { path: "Trax.Samples.ChatService/Subscriptions/ChatSubscriptions.cs", label: "onChatEvent, admitting only the room's participants" },
         { path: "Trax.Samples.ChatService.Api/Program.cs", label: "API keys, the hook and the subscription wired up" },
       ],
@@ -98,6 +104,7 @@ const samples: Sample[] = [
   },
   {
     tab: "Persisted Operations",
+    blurb: "Only stored queries run, and only the operator can edit them.",
     href: "/docs/samples/persisted-operations",
     source: {
       folder: "PersistedOperations",
@@ -143,9 +150,18 @@ export default function BuiltWithTrax() {
     };
   }, []);
   const sample = samples[active];
+  const next = samples[(active + 1) % samples.length];
+
+  const section = useRef<HTMLElement>(null);
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+  const go = (step: number) => {
+    const i = (active + step + samples.length) % samples.length;
+    setActive(i);
+    if (tabs.current.some((t) => t === document.activeElement)) tabs.current[i]?.focus();
+  };
 
   return (
-    <section className="border-b border-border pb-24 pt-8">
+    <section ref={section} className="scroll-mt-20 border-b border-border pb-24 pt-8">
       {/* Wider than the rest of the page, so a demo fits on one screen without scrolling between its steps. */}
       <div className="mx-auto max-w-[1280px] px-4 sm:px-8">
         <h2 className="text-2xl font-semibold text-text-primary">Built with Trax</h2>
@@ -154,25 +170,71 @@ export default function BuiltWithTrax() {
           code underneath.
         </p>
 
-        <div className="mt-8 flex flex-wrap items-end gap-x-6 gap-y-3 border-b border-border">
-          <div role="tablist" className="flex flex-wrap gap-1">
-            {samples.map((s, i) => (
-              <button
-                key={s.tab}
-                role="tab"
-                aria-selected={i === active}
-                onClick={() => setActive(i)}
-                className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                  i === active
-                    ? "border-accent text-text-primary"
-                    : "border-transparent text-text-muted hover:text-text-secondary"
-                }`}
-              >
-                {s.tab}
-              </button>
-            ))}
+        {/* Cards rather than underlined tabs: readers took the old tab row for a heading and never switched. */}
+        <div
+          role="tablist"
+          aria-label="Sample apps"
+          className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight") go(1);
+            else if (e.key === "ArrowLeft") go(-1);
+            else return;
+            e.preventDefault();
+          }}
+        >
+          {samples.map((s, i) => (
+            <button
+              key={s.tab}
+              ref={(node) => {
+                tabs.current[i] = node;
+              }}
+              role="tab"
+              aria-selected={i === active}
+              tabIndex={i === active ? 0 : -1}
+              onClick={() => setActive(i)}
+              className={`group flex flex-col rounded-lg border p-4 text-left transition-colors ${
+                i === active
+                  ? "border-accent bg-accent-muted"
+                  : "cursor-pointer border-border bg-bg-secondary hover:border-border-hover hover:bg-bg-hover"
+              }`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className={`text-sm font-semibold ${i === active ? "text-text-primary" : "text-text-secondary group-hover:text-text-primary"}`}>
+                  {s.tab}
+                </span>
+                <span className={`font-mono text-[11px] ${i === active ? "text-accent" : "text-text-muted"}`}>
+                  {i + 1}/{samples.length}
+                </span>
+              </span>
+              <span className="mt-1.5 text-xs leading-snug text-text-muted">{s.blurb}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => go(-1)}
+              aria-label={`Previous sample: ${samples[(active + samples.length - 1) % samples.length].tab}`}
+              className="rounded border border-border px-2 py-0.5 text-text-secondary hover:border-border-hover hover:text-text-primary"
+            >
+              &lsaquo;
+            </button>
+            <span className="min-w-[3.5rem] text-center font-mono text-xs text-text-muted">
+              {active + 1} / {samples.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => go(1)}
+              aria-label={`Next sample: ${next.tab}`}
+              className="rounded border border-border px-2 py-0.5 text-text-secondary hover:border-border-hover hover:text-text-primary"
+            >
+              &rsaquo;
+            </button>
           </div>
-          <div className="ml-auto flex items-center gap-x-5 pb-2 text-sm">
+          <span className="font-medium text-text-primary">{sample.tab}</span>
+          <div className="ml-auto flex items-center gap-x-5">
             <Link href={sample.href} className="font-medium text-accent hover:text-accent-hover">
               Read the sample &rarr;
             </Link>
@@ -182,7 +244,7 @@ export default function BuiltWithTrax() {
           </div>
         </div>
 
-        <div role="tabpanel" ref={panel} className="pt-8" style={minHeight ? { minHeight } : undefined}>
+        <div role="tabpanel" ref={panel} className="pt-4" style={minHeight ? { minHeight } : undefined}>
           <div>
             {sample.tab === "Agents" ? (
               <BoardReplay recordings={boardRecordings} />
@@ -196,6 +258,24 @@ export default function BuiltWithTrax() {
               <PersistedOperationsReplay />
             )}
             <SampleSource {...sample.source} />
+            {/* Someone who watched a demo to the end is below the cards, so the next one is offered here too. */}
+            <button
+              type="button"
+              onClick={() => {
+                go(1);
+                section.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              className="mt-4 flex w-full items-center justify-between gap-4 rounded-lg border border-border bg-bg-secondary px-4 py-3 text-left hover:border-accent hover:bg-bg-hover"
+            >
+              <span>
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                  Next sample, {active + 2 > samples.length ? 1 : active + 2} of {samples.length}
+                </span>
+                <span className="mt-0.5 block text-sm font-semibold text-text-primary">{next.tab}</span>
+                <span className="block text-xs text-text-muted">{next.blurb}</span>
+              </span>
+              <span className="text-lg text-accent">&rarr;</span>
+            </button>
           </div>
         </div>
       </div>

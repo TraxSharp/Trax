@@ -8,18 +8,18 @@ const starters = [
   { label: "A worker", note: "on another machine" },
 ];
 
-// One train and the four things that can start it. The code for each is on the linked page.
+// One workflow and the four things that can start it. The code for each is on the linked page.
 export default function FourWays() {
   return (
     <section className="border-b border-border py-24">
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
-        <h2 className="text-2xl font-semibold text-text-primary">One train, four ways to start it</h2>
+        <h2 className="text-2xl font-semibold text-text-primary">One workflow, four ways to start it</h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          A train is a chain of steps the server runs. It is written once, and a request, a schedule, a state machine or
+          A workflow is a series of steps the server runs. It is written once, and a request, a schedule, a state machine or
           a worker on another machine can start it.
         </p>
         <Link href="/docs/core/trains-and-junctions" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
-          How a train is built &rarr;
+          How a workflow is built &rarr;
         </Link>
 
         <Figure caption="Every start runs the same steps and leaves the same record.">

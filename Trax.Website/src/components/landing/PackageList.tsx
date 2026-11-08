@@ -13,9 +13,9 @@ interface Folder {
 const folders: Folder[] = [
   {
     folder: "Trax.Core",
-    summary: "Trains, junctions and the chain",
+    summary: "Workflows and their steps",
     packages: [
-      { name: "Trax.Core", desc: "Trains, junctions, decisions and railway error handling" },
+      { name: "Trax.Core", desc: "Workflows, steps, decisions and railway error handling" },
       {
         name: "Trax.Core.Testing",
         desc: "Architecture-guard base classes and hygiene checks for NUnit",
@@ -42,15 +42,15 @@ const folders: Folder[] = [
       { name: "Trax.Effect.Provider.Json", desc: "Logs state changes as JSON" },
       {
         name: "Trax.Effect.JunctionProvider.Logging",
-        desc: "Logs each junction as it runs",
+        desc: "Logs each step as it runs",
       },
       {
         name: "Trax.Effect.JunctionProvider.Progress",
-        desc: "Records the running junction and checks for cancellation between junctions",
+        desc: "Records the running step and checks for cancellation between steps",
       },
       {
         name: "Trax.Effect.Decisions.SystemOne",
-        desc: "Answers a train's decisions with Nimble or another System One model",
+        desc: "Answers a workflow's decisions with Nimble or another System One model",
       },
       {
         name: "Trax.Effect.Broadcaster.RabbitMQ",
@@ -78,19 +78,27 @@ const folders: Folder[] = [
         name: "Trax.StateMachine.Testing",
         desc: "Conformance tests that hold every engine to the same answers",
       },
+      {
+        name: "Trax.StateMachine.Gherkin",
+        desc: "State machines and their access rules from plain-English features",
+      },
+      {
+        name: "Trax.StateMachine.Gherkin.Reqnroll",
+        desc: "Runs the same features as tests against the real host",
+      },
     ],
   },
   {
     folder: "Trax.Mediator",
-    summary: "The train bus",
+    summary: "Running workflows by their input",
     packages: [
       {
         name: "Trax.Mediator",
-        desc: "Dispatch by input type, and the chain check at startup",
+        desc: "Dispatch by input type, and the startup check of every workflow's steps",
       },
       {
         name: "Trax.Mediator.Testing",
-        desc: "Architecture guards for trains and their interfaces",
+        desc: "Architecture guards for workflows and their interfaces",
       },
     ],
   },
@@ -104,15 +112,15 @@ const folders: Folder[] = [
       },
       { name: "Trax.Scheduler.Sqs", desc: "Dispatch jobs through Amazon SQS" },
       { name: "Trax.Scheduler.Lambda", desc: "Dispatch jobs and runs to AWS Lambda" },
-      { name: "Trax.Runner.Lambda", desc: "Base class for a Lambda function that runs trains" },
+      { name: "Trax.Runner.Lambda", desc: "Base class for a Lambda function that runs workflows" },
     ],
   },
   {
     folder: "Trax.Api",
     summary: "GraphQL, authentication, the client and the operations console",
     packages: [
-      { name: "Trax.Api", desc: "Train catalog, health checks and shared types" },
-      { name: "Trax.Api.GraphQL", desc: "Typed GraphQL generated from your trains" },
+      { name: "Trax.Api", desc: "Workflow catalog, health checks and shared types" },
+      { name: "Trax.Api.GraphQL", desc: "Typed GraphQL generated from your workflows" },
       { name: "Trax.Api.Dashboard", desc: "The operations console your API host serves" },
       {
         name: "Trax.Api.GraphQL.PersistedOperations",
@@ -133,7 +141,7 @@ const folders: Folder[] = [
       },
       {
         name: "Trax.Api.GraphQL.Client.Trax",
-        desc: "Run GraphQL queries as junctions",
+        desc: "Run GraphQL queries as steps",
       },
       { name: "Trax.Api.Auth", desc: "The principal and claim types the auth packages share" },
       { name: "Trax.Api.Auth.ApiKey", desc: "API key authentication" },
@@ -192,7 +200,7 @@ export default function PackageList() {
           there will not be one.
         </p>
         <Link href="/docs/getting-started" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
-          Install it and write your first train &rarr;
+          Install it and write your first workflow &rarr;
         </Link>
 
         <div className="mt-8 divide-y divide-border/50 border-y border-border/50">

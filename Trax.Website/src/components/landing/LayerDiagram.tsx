@@ -5,7 +5,7 @@ const layers = [
     rung: "Write it",
     name: "Core",
     cmd: "dotnet add package Trax.Core",
-    desc: "Typed pipelines of junctions. A failing step skips the rest and the train arrives carrying the exception. No database and no DI container, just the pipeline.",
+    desc: "Typed pipelines of steps. A failing step skips the rest, and the run ends carrying the exception. No database and no DI container, just the pipeline.",
     replaces: "if-checks between service calls",
     href: "/docs/core",
   },
@@ -13,7 +13,7 @@ const layers = [
     rung: "Record it",
     name: "Effect",
     cmd: "dotnet add package Trax.Effect",
-    desc: "Every run gets a row: when it started, how it ended, which junction failed and why. Stored in PostgreSQL, SQLite or memory, and wired into .NET dependency injection.",
+    desc: "Every run gets a row: when it started, how it ended, which step failed and why. Stored in PostgreSQL, SQLite or memory, and wired into .NET dependency injection.",
     replaces: "hand-rolled run logging",
     href: "/docs/effect",
   },
@@ -21,7 +21,7 @@ const layers = [
     rung: "Call it",
     name: "Mediator",
     cmd: "dotnet add package Trax.Mediator",
-    desc: "Run a train by handing over its input. The host checks every registered chain at startup and refuses to start if a junction's input can never be provided.",
+    desc: "Run a workflow by handing over its input. The host checks every workflow at startup and refuses to start if a step's input can never be provided.",
     replaces: "hand-written dispatch",
     href: "/docs/mediator",
   },
@@ -29,7 +29,7 @@ const layers = [
     rung: "Schedule it",
     name: "Scheduler",
     cmd: "dotnet add package Trax.Scheduler",
-    desc: "Cron, intervals and one-off delays. Retries with backoff, dead letters, trains that wait on other trains, and workers on other machines or in Lambda.",
+    desc: "Cron, intervals and one-off delays. Retries with backoff, dead letters, workflows that wait on other workflows, and workers on other machines or in Lambda.",
     replaces: "a separate job scheduler",
     href: "/docs/scheduler",
   },
@@ -37,7 +37,7 @@ const layers = [
     rung: "Serve it",
     name: "API",
     cmd: "dotnet add package Trax.Api.GraphQL",
-    desc: "Typed GraphQL queries and mutations generated from your trains, with per-train authorization and lifecycle subscriptions. A train that does not say who may call it stops the host from starting.",
+    desc: "Typed GraphQL queries and mutations generated from your workflows, with per-workflow authorization and lifecycle subscriptions. A workflow that does not say who may call it stops the host from starting.",
     replaces: "controllers written by hand",
     href: "/docs/api",
   },
@@ -53,9 +53,17 @@ const layers = [
     rung: "Walk a user through it",
     name: "State machines",
     cmd: "dotnet add package Trax.StateMachine.Persistence",
-    desc: "A checkout or a form as named states the server stores after every move. Each move is a typed mutation the server applies or refuses, and a state can run a train.",
+    desc: "A checkout or a form as named states the server stores after every move. Each move is a typed mutation the server applies or refuses, and a state can run a workflow.",
     replaces: "status columns and hand-written transition checks",
     href: "/docs/statemachine",
+  },
+  {
+    rung: "Describe it",
+    name: "Features",
+    cmd: "dotnet add package Trax.StateMachine.Gherkin",
+    desc: "Write the behaviour as plain-English scenarios and a glossary of the words they use. The state machines, who may do what and the API come from them, and the same scenarios run as tests against the server.",
+    replaces: "machines and access rules written by hand",
+    href: "/docs/statemachine/write-machines-as-features",
   },
 ];
 
@@ -67,7 +75,7 @@ export default function LayerDiagram() {
           What you get
         </h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          Take the parts you need. Each package adds one thing, and the trains you already wrote do not change.
+          Take the parts you need. Each package adds one thing, and the workflows you already wrote do not change.
         </p>
         <Link href="/docs/reference/packages" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
           Every package and what it adds &rarr;

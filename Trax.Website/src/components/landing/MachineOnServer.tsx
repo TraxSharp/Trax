@@ -27,7 +27,7 @@ export default function MachineOnServer() {
           caption={
             <>
               The page never sends a price. The server reads it from its own menu when an item is added, and only the
-              delivery train&apos;s outcome moves an order past Ordered.
+              outcome of the delivery workflow moves an order past Ordered.
             </>
           }
         >

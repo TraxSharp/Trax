@@ -9,7 +9,7 @@ export default function Footer() {
           <div>
             <TraxLogo maskId="footer" className="h-7 w-auto text-brand" />
             <p className="mt-1 max-w-xs text-sm text-text-muted">
-              The backend that checks the client&apos;s work. MIT licensed.
+              One description of your app, for the whole team. MIT licensed.
             </p>
             <p className="mt-3 max-w-xs text-sm text-text-muted">
               Sponsored by{" "}

@@ -6,8 +6,8 @@
 </h1>
 
 <p align="center">
-  <b>The backend that checks the client's work.</b><br>
-  Workflows the server enforces, whoever drives them: a browser, a script or an AI agent.
+  <b>One description of your app, for the whole team.</b><br>
+  Every part of the app has a place, so you only have to write what it does.
 </p>
 
 <p align="center">
