@@ -257,6 +257,47 @@ public class FromGherkinCommandTests
     }
 
     [Test]
+    public void Run_writes_junit_for_names_and_steps_xml_cannot_hold()
+    {
+        Run();
+        File.WriteAllText(
+            Path.Combine(Features, "odd.feature"),
+            "Feature: Odd\n"
+                + "  Scenario: The shop\u000Bopens\n"
+                + "    Given Kit is a baker\n"
+                + "    And the shop is closed\n"
+                + "    When the shop opens\n"
+                + "    Then the shop\u000Bis closed\n"
+        );
+        var report = Path.Combine(_dir, "report.xml");
+
+        var (exit, _, err) = RunFeatures(
+            new MachineCommand.RunArguments(
+                Features,
+                Path.Combine(Features, "glossary.json"),
+                Out,
+                ["odd.feature:2"],
+                Format: "junit",
+                ReportPath: report
+            )
+        );
+
+        err.Should().NotContain("Exception");
+        File.Exists(report).Should().BeTrue(err);
+        exit.Should().Be(1, "the shop is open, not closed");
+        var xml = File.ReadAllText(report);
+        System.Xml.Linq.XDocument.Parse(xml);
+        xml.Should().Contain("The shop?opens (line 2)").And.Contain("the shop?is closed");
+    }
+
+    [Test]
+    public void The_junit_report_keeps_surrogate_pairs_and_replaces_lone_surrogates() =>
+        Trax
+            .Cli.Machines.RunReportWriter.Xml("a\uD83D\uDE00b\uD800c\uDE00\uFFFE")
+            .Should()
+            .Be("a\uD83D\uDE00b?c??");
+
+    [Test]
     public void Run_refuses_a_machines_directory_whose_host_file_was_derived_from_other_irs()
     {
         Run();

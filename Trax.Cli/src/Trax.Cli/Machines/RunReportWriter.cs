@@ -101,7 +101,7 @@ internal static class RunReportWriter
         {
             var suite = new XElement(
                 "testsuite",
-                new XAttribute("name", file.Key),
+                new XAttribute("name", Xml(file.Key)),
                 new XAttribute("tests", file.Count()),
                 new XAttribute("failures", file.Count(s => s.Status == ScenarioStatus.Failed)),
                 new XAttribute("errors", file.Count(s => s.Status == ScenarioStatus.Undefined))
@@ -110,18 +110,20 @@ internal static class RunReportWriter
             {
                 var test = new XElement(
                     "testcase",
-                    new XAttribute("classname", file.Key),
+                    new XAttribute("classname", Xml(file.Key)),
                     new XAttribute(
                         "name",
-                        $"{scenario.Scenario.Name} (line {scenario.Scenario.Line})"
+                        Xml($"{scenario.Scenario.Name} (line {scenario.Scenario.Line})")
                     )
                 );
                 if (scenario.Failure is { } failure)
                     test.Add(
                         new XElement(
                             scenario.Status == ScenarioStatus.Undefined ? "error" : "failure",
-                            new XAttribute("message", failure.Message ?? ""),
-                            $"{file.Key}:{failure.Step.Line} {failure.Step.Kind} {failure.Step.Text}"
+                            new XAttribute("message", Xml(failure.Message ?? "")),
+                            Xml(
+                                $"{file.Key}:{failure.Step.Line} {failure.Step.Kind} {failure.Step.Text}"
+                            )
                         )
                     );
                 suite.Add(test);
@@ -132,5 +134,37 @@ internal static class RunReportWriter
             + "\n"
             + suites
             + "\n";
+    }
+
+    /// <summary>
+    /// <paramref name="text"/> with every character XML 1.0 cannot hold, such as U+000B or a lone surrogate, written as
+    /// '?'. A scenario's name, its steps and a failure's message come from the features as written, and one such
+    /// character would otherwise make the whole report fail to write.
+    /// </summary>
+    internal static string Xml(string text)
+    {
+        System.Text.StringBuilder? safe = null;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (
+                char.IsHighSurrogate(c)
+                && i + 1 < text.Length
+                && System.Xml.XmlConvert.IsXmlSurrogatePair(text[i + 1], c)
+            )
+            {
+                safe?.Append(c).Append(text[i + 1]);
+                i++;
+                continue;
+            }
+            if (System.Xml.XmlConvert.IsXmlChar(c))
+            {
+                safe?.Append(c);
+                continue;
+            }
+            safe ??= new System.Text.StringBuilder(text.Length).Append(text, 0, i);
+            safe.Append('?');
+        }
+        return safe?.ToString() ?? text;
     }
 }
