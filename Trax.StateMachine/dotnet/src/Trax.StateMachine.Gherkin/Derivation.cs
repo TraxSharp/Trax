@@ -76,11 +76,27 @@ internal static class FeatureDerivation
         var hostFile = HostFile.Read(host);
         foreach (var walk in walks)
         {
-            var run = ScenarioRunner
-                .Run(walk, glossary, new MemoryDriver(irs, hostFile, glossary))
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
+            ScenarioResult run;
+            try
+            {
+                run = ScenarioRunner
+                    .Run(walk, glossary, new MemoryDriver(irs, hostFile, glossary))
+                    .AsTask()
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch (Exception e) when (e is not OutOfMemoryException)
+            {
+                // A replay that cannot run is a problem with this scenario, not a crash of the whole derivation.
+                problems.Add(
+                    new Problem(
+                        walk.Scenario.File,
+                        walk.Scenario.Line,
+                        $"The derived machine could not be run on this scenario: {e.Message} (scenario '{walk.Scenario.Name}', {walk.Scenario.Id})"
+                    )
+                );
+                continue;
+            }
             if (run.Failure is { } failure)
                 problems.Add(
                     new Problem(

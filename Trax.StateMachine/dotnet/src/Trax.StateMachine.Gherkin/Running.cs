@@ -208,7 +208,13 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
             {
                 var key = new InstanceKey(g.Machine, g.Owner);
                 Know(key);
-                var now = await driver.Read(key) ?? throw new InvalidOperationException();
+                // An instance no step has started yet is arranged from its initial state and context, as the walk
+                // reads it; a later Given puts it in the state the scenario names.
+                if (await driver.Read(key) is null)
+                    await driver.Seed(key, glossary.Machines[g.Machine].Initial, null);
+                var now =
+                    await driver.Read(key)
+                    ?? throw new InvalidOperationException($"{key.Machine} could not be arranged.");
                 var context = Satisfy.Context(
                     glossary.Machines[g.Machine],
                     g.Name,

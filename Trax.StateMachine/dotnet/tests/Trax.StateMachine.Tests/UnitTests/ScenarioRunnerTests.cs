@@ -235,6 +235,32 @@ public class ScenarioRunnerTests
     }
 
     [Test]
+    public void A_guard_given_on_an_order_not_yet_started_is_arranged_from_its_initial_context()
+    {
+        var derived = FeatureDerivation.Derive(
+            Features.Glossary.Read(Glossary),
+            [
+                ("ordering.feature", Ordering),
+                (
+                    "unstarted.feature",
+                    """
+                    Feature: Unstarted
+                      Scenario: Placing an empty order no one started
+                        Given Ada is a customer
+                        And Ada's order has nothing in it
+                        And Ada's order is a draft
+                        When Ada places her order
+                        Then Ada is told "Add something first."
+                    """
+                ),
+            ]
+        );
+
+        derived.Problems.Should().BeEmpty();
+        derived.Irs.Should().ContainKey("order");
+    }
+
+    [Test]
     public void A_run_selects_scenarios_as_cucumber_does()
     {
         Names(Run(Ordering, selection: new RunSelection(Tags: "@ordering and not @slow")))
