@@ -118,6 +118,9 @@ internal sealed class HostFeatureRun
             );
         if (matches.Count == 1)
         {
+            // A registered When is a When like any other: the Thens after it read only what it set off.
+            if (kind == StepKind.When)
+                await _session.BeginWhen();
             await matches[0].Step.Run(_scenario, matches[0].Match);
             return;
         }

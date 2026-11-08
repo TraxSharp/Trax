@@ -190,7 +190,10 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
     // one of them reads on from here, so the Thens follow the cascade in order.
     private readonly Dictionary<InstanceKey, int> cursors = [];
 
-    private async ValueTask BeginWhen()
+    /// <summary>
+    /// Starts a When: the cascade the Thens after it read is this When's alone. A test project's own When starts one too.
+    /// </summary>
+    internal async ValueTask BeginWhen()
     {
         cursors.Clear();
         await driver.BeginWhen();
