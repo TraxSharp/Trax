@@ -535,6 +535,19 @@ public class PolicyRunnerTests(StoreProvider provider)
     // when that order expires; and the shop, whose opening starts every placed order baking.
     private static (IReadOnlyList<IMachine> Machines, HostFile Host) Machines()
     {
+        var (irs, host) = Definitions();
+        var file = HostFile.Read(host.ToJsonString());
+        IrDirectory.Check("test", file, irs);
+        var machines = IrMachines.Create(
+            irs.Select(kv => new IrMachines.Source(kv.Value, file.Machines[kv.Key])).ToList(),
+            []
+        );
+        return (machines, file);
+    }
+
+    /// <summary>The machines' IRs and their host file, as a directory derived from features holds them.</summary>
+    internal static (Dictionary<string, JsonObject> Irs, JsonObject Host) Definitions()
+    {
         var order = Ir(
             "p-order",
             "Draft",
@@ -643,19 +656,13 @@ public class PolicyRunnerTests(StoreProvider provider)
                 }
             ),
         };
-        var file = HostFile.Read(host.ToJsonString());
         var irs = new Dictionary<string, JsonObject>
         {
             ["p-order"] = order,
             ["p-receipt"] = receipt,
             ["p-shop"] = shop,
         };
-        IrDirectory.Check("test", file, irs);
-        var machines = IrMachines.Create(
-            irs.Select(kv => new IrMachines.Source(kv.Value, file.Machines[kv.Key])).ToList(),
-            []
-        );
-        return (machines, file);
+        return (irs, host);
     }
 
     private static JsonObject Ir(

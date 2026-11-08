@@ -11,6 +11,7 @@ using Trax.Effect.Data.Services.SnapshotNotices;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
+using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence.FromIr;
 using Trax.StateMachine.Persistence.Mutations;
 
@@ -316,6 +317,19 @@ public static class StateMachinesBuilderExtensions
             sp.GetService<ISnapshotNoticeSource>(),
             sp.GetService<ILogger<ChangeFeedStartupValidator>>()
         ));
+
+        // A system machine served from features is started at its key once every check above has passed: hosted
+        // services start in the order they are registered, so a host they refuse writes nothing. It still runs in
+        // StartingAsync, before any StartAsync, so the instance is there before the policy runner, the sweeps or the
+        // server start.
+        if (
+            options.FeaturesDirectory is not null
+            && services.Any(d =>
+                d.ImplementationInstance is HostFile host
+                && host.Machines.Values.Any(m => m.SystemKey is not null)
+            )
+        )
+            services.AddHostedService<SystemInstanceStarter>();
         services.AddSingleton<ISnapshotChangeListener>(sp =>
             sp.GetRequiredService<SnapshotChangeListener>()
         );
