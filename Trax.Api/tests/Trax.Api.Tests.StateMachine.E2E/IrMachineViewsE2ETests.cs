@@ -30,7 +30,7 @@ public class IrMachineViewsE2ETests
     public async Task Up()
     {
         await E2EHost.RecreateDatabaseAsync(Database);
-        var (machines, host) = Machines();
+        var (machines, host) = Machines(receipts: true);
         _host = await E2EHost.StartAsync(
             Database,
             new CountingCharge(),
@@ -106,16 +106,41 @@ public class IrMachineViewsE2ETests
         sign.GetProperty("open").GetString().Should().Be("Closed for now");
     }
 
-    private async Task<string> Start(string key) =>
+    [Test]
+    public async Task A_reader_the_machines_read_rule_refuses_sees_none_of_its_instances()
+    {
+        // Bob may start a receipt and read the view, but a receipt is read only by Payers, which he is not.
+        await Start(E2EHost.BobKey, "vReceipt");
+        var order = await Start(E2EHost.BobKey);
+
+        var view = (
+            await Post(E2EHost.BobKey, "{ views { myThings { vReceipt { id } vOrder { id } } } }")
+        )
+            .GetProperty("data")
+            .GetProperty("views")
+            .GetProperty("myThings");
+
+        view.GetProperty("vReceipt")
+            .GetArrayLength()
+            .Should()
+            .Be(0, "the receipt's read rule refuses Bob, as its get does");
+        view.GetProperty("vOrder")
+            .EnumerateArray()
+            .Select(r => r.GetProperty("id").GetString())
+            .Should()
+            .Equal([order], "the order's read rule admits him");
+    }
+
+    private async Task<string> Start(string key, string machine = "vOrder") =>
         (
             await Post(
                 key,
-                $$"""mutation { machines { vOrder { start(requestId: "s-{{Guid.NewGuid():N}}") { id } } } }"""
+                $$"""mutation { machines { {{machine}} { start(requestId: "s-{{Guid.NewGuid():N}}") { id } } } }"""
             )
         )
             .GetProperty("data")
             .GetProperty("machines")
-            .GetProperty("vOrder")
+            .GetProperty(machine)
             .GetProperty("start")
             .GetProperty("id")
             .GetString()!;
@@ -127,11 +152,12 @@ public class IrMachineViewsE2ETests
     }
 
     // An order Payers keep, with a count of loaves, and a shop the host opens; the orders view, for Payers, and the shop
-    // sign, for anyone signed in.
+    // sign, for anyone signed in. With receipts, a receipt only Payers read and a view of receipts and orders for anyone
+    // signed in.
     internal static (
         IReadOnlyList<Trax.StateMachine.Persistence.IMachine> Machines,
         HostFile Host
-    ) Machines()
+    ) Machines(bool receipts = false)
     {
         var loaves = new JsonObject
         {
@@ -188,80 +214,139 @@ public class IrMachineViewsE2ETests
                 }
             ),
         };
+        var receipt = new JsonObject
+        {
+            ["id"] = "v-receipt",
+            ["version"] = 1,
+            ["initialState"] = "Issued",
+            ["initialContext"] = new JsonObject(),
+            ["states"] = new JsonArray("Issued", "Void"),
+            ["triggers"] = new JsonArray("Cancel"),
+            ["committedStates"] = new JsonArray(),
+            ["context"] = new JsonObject
+            {
+                ["Issued"] = new JsonObject { ["fields"] = new JsonArray() },
+                ["Void"] = new JsonObject { ["fields"] = new JsonArray() },
+            },
+            ["inputs"] = new JsonObject(),
+            ["transitions"] = new JsonArray(
+                new JsonObject
+                {
+                    ["from"] = "Issued",
+                    ["trigger"] = "Cancel",
+                    ["to"] = "Void",
+                }
+            ),
+        };
         var payers = new JsonObject
         {
             ["roles"] = new JsonArray(new JsonArray(WizardMachine.PayerRole)),
         };
-        var host = HostFile.Read(
-            new JsonObject
+        var file = new JsonObject
+        {
+            ["version"] = 1,
+            ["machines"] = new JsonObject
             {
-                ["version"] = 1,
-                ["machines"] = new JsonObject
+                ["v-order"] = new JsonObject
                 {
-                    ["v-order"] = new JsonObject
+                    ["schemaHash"] = Hash(order),
+                    ["owner"] = "user",
+                    ["start"] = new JsonObject { ["anyAuthenticated"] = true },
+                    ["read"] = new JsonObject { ["anyAuthenticated"] = true },
+                    ["triggers"] = new JsonObject
                     {
-                        ["schemaHash"] = Hash(order),
-                        ["owner"] = "user",
-                        ["start"] = new JsonObject { ["anyAuthenticated"] = true },
-                        ["read"] = new JsonObject { ["anyAuthenticated"] = true },
-                        ["triggers"] = new JsonObject
-                        {
-                            ["Place"] = new JsonObject { ["anyAuthenticated"] = true },
-                        },
-                    },
-                    ["v-shop"] = new JsonObject
-                    {
-                        ["schemaHash"] = Hash(shop),
-                        ["owner"] = new JsonObject { ["system"] = "v-shop/main" },
-                        ["triggers"] = new JsonObject
-                        {
-                            ["Open"] = new JsonObject { ["server"] = true },
-                        },
+                        ["Place"] = new JsonObject { ["anyAuthenticated"] = true },
                     },
                 },
-                ["views"] = new JsonObject
+                ["v-receipt"] = new JsonObject
                 {
-                    ["orders"] = new JsonObject
+                    ["schemaHash"] = Hash(receipt),
+                    ["owner"] = "user",
+                    ["start"] = new JsonObject { ["anyAuthenticated"] = true },
+                    ["read"] = payers.DeepClone(),
+                    ["triggers"] = new JsonObject
                     {
-                        ["reads"] = new JsonArray(new JsonObject { ["machine"] = "v-order" }),
-                        ["fields"] = new JsonObject
-                        {
-                            ["status"] = new JsonObject
-                            {
-                                ["from"] = "v-order.state",
-                                ["labels"] = new JsonObject
-                                {
-                                    ["Draft"] = "Not sent",
-                                    ["Placed"] = "Placed!",
-                                },
-                            },
-                            ["loaves"] = new JsonObject { ["from"] = "v-order.loaves" },
-                        },
-                        ["readers"] = payers,
-                    },
-                    ["shop sign"] = new JsonObject
-                    {
-                        ["reads"] = new JsonArray(
-                            new JsonObject { ["machine"] = "v-shop", ["key"] = "v-shop/main" }
-                        ),
-                        ["fields"] = new JsonObject
-                        {
-                            ["open"] = new JsonObject
-                            {
-                                ["from"] = "v-shop.state",
-                                ["labels"] = new JsonObject
-                                {
-                                    ["Closed"] = "Closed for now",
-                                    ["Opened"] = "Open",
-                                },
-                            },
-                        },
-                        ["readers"] = new JsonObject { ["anyAuthenticated"] = true },
+                        ["Cancel"] = new JsonObject { ["anyAuthenticated"] = true },
                     },
                 },
-            }.ToJsonString()
-        );
-        var irs = new Dictionary<string, JsonObject> { ["v-order"] = order, ["v-shop"] = shop };
+                ["v-shop"] = new JsonObject
+                {
+                    ["schemaHash"] = Hash(shop),
+                    ["owner"] = new JsonObject { ["system"] = "v-shop/main" },
+                    ["triggers"] = new JsonObject
+                    {
+                        ["Open"] = new JsonObject { ["server"] = true },
+                    },
+                },
+            },
+            ["views"] = new JsonObject
+            {
+                ["orders"] = new JsonObject
+                {
+                    ["reads"] = new JsonArray(new JsonObject { ["machine"] = "v-order" }),
+                    ["fields"] = new JsonObject
+                    {
+                        ["status"] = new JsonObject
+                        {
+                            ["from"] = "v-order.state",
+                            ["labels"] = new JsonObject
+                            {
+                                ["Draft"] = "Not sent",
+                                ["Placed"] = "Placed!",
+                            },
+                        },
+                        ["loaves"] = new JsonObject { ["from"] = "v-order.loaves" },
+                    },
+                    ["readers"] = payers,
+                },
+                // Read by anyone signed in, over a machine only Payers read.
+                ["my things"] = new JsonObject
+                {
+                    ["reads"] = new JsonArray(
+                        new JsonObject { ["machine"] = "v-receipt" },
+                        new JsonObject { ["machine"] = "v-order" }
+                    ),
+                    ["fields"] = new JsonObject
+                    {
+                        ["receipt"] = new JsonObject { ["from"] = "v-receipt.state" },
+                        ["order"] = new JsonObject { ["from"] = "v-order.state" },
+                    },
+                    ["readers"] = new JsonObject { ["anyAuthenticated"] = true },
+                },
+                ["shop sign"] = new JsonObject
+                {
+                    ["reads"] = new JsonArray(
+                        new JsonObject { ["machine"] = "v-shop", ["key"] = "v-shop/main" }
+                    ),
+                    ["fields"] = new JsonObject
+                    {
+                        ["open"] = new JsonObject
+                        {
+                            ["from"] = "v-shop.state",
+                            ["labels"] = new JsonObject
+                            {
+                                ["Closed"] = "Closed for now",
+                                ["Opened"] = "Open",
+                            },
+                        },
+                    },
+                    ["readers"] = new JsonObject { ["anyAuthenticated"] = true },
+                },
+            },
+        };
+        var irs = new Dictionary<string, JsonObject>
+        {
+            ["v-order"] = order,
+            ["v-receipt"] = receipt,
+            ["v-shop"] = shop,
+        };
+        if (!receipts)
+        {
+            file["machines"]!.AsObject().Remove("v-receipt");
+            file["views"]!.AsObject().Remove("my things");
+            irs.Remove("v-receipt");
+        }
+        var host = HostFile.Read(file.ToJsonString());
         IrDirectory.Check("test", host, irs);
         var machines = IrMachines.Create(
             irs.Select(kv => new IrMachines.Source(kv.Value, host.Machines[kv.Key])).ToList(),

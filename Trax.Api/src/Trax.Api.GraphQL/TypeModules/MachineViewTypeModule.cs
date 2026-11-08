@@ -19,7 +19,9 @@ namespace Trax.Api.GraphQL.TypeModules;
 /// Builds the <c>views</c> root (ADR <c>Trax.Docs/adr/0058</c>): one query field per view a host serves from features.
 /// In each, a user machine the view reads is a list of the caller's own instances, its <c>id</c> and the view's fields
 /// of it, and a system machine is the one instance at its key. A view is read only by its readers, the actors the
-/// features show reading it: every other caller is refused <c>FORBIDDEN</c> before anything is read. A state is shown
+/// features show reading it: every other caller is refused <c>FORBIDDEN</c> before anything is read. Each user machine
+/// the view reads also holds the caller to its own read rule, as its <c>get</c> does: a machine whose rule refuses the
+/// caller is an empty list, and the rest of the view still reads. A state is shown
 /// as a String, its label when the view gives one; a context field has the type its machine's record gives it.
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/views">SDK reference</seealso>
@@ -41,7 +43,10 @@ internal sealed class MachineViewTypeModule(
             NamespaceTypes.Base(QueriesType),
             NamespaceTypes.Field("RootQuery", RootField, QueriesType),
         };
-        var byName = machines.ToDictionary(m => m.Name, StringComparer.Ordinal);
+        IReadOnlyDictionary<string, IMachine> byName = machines.ToDictionary(
+            m => m.Name,
+            StringComparer.Ordinal
+        );
 
         var fields = new List<(string Field, string Type, HostView View)>();
         // The host file's reader refuses all of these (Views.CheckNames); a catalog built some other way still names
@@ -134,7 +139,7 @@ internal sealed class MachineViewTypeModule(
                             $"Reads the view '{view.Name}' for the caller, if the caller is one of its readers."
                         )
                         .Type(new NonNullTypeNode(new NamedTypeNode(type)))
-                        .Resolve(ctx => ReadAsync(ctx, view));
+                        .Resolve(ctx => ReadAsync(ctx, view, byName));
             })
         );
         return new ValueTask<IReadOnlyCollection<ITypeSystemMember>>(types);
@@ -176,9 +181,13 @@ internal sealed class MachineViewTypeModule(
         });
     }
 
-    // The read rule first, then the caller's own rows and the system's. A caller who is not a reader is refused before
-    // anything is read.
-    private static async Task<JsonObject> ReadAsync(IResolverContext ctx, HostView view)
+    // The view's read rule first, then the caller's own rows and the system's, each user machine under its own read
+    // rule. A caller who is not a reader is refused before anything is read.
+    private static async Task<JsonObject> ReadAsync(
+        IResolverContext ctx,
+        HostView view,
+        IReadOnlyDictionary<string, IMachine> byName
+    )
     {
         var userKey = ctx.Services.GetService<ISnapshotPrincipal>()?.CurrentUserKey;
         if (string.IsNullOrWhiteSpace(userKey))
@@ -189,11 +198,12 @@ internal sealed class MachineViewTypeModule(
                     .SetCode("UNAUTHENTICATED")
                     .Build()
             );
+        // Without a caller authorization the caller holds no role, as a machine's own rules read it.
+        var caller = ctx.Services.GetService<ICallerAuthorization>();
         if (!view.Readers.IsAnyAuthenticated)
         {
-            var caller = ctx.Services.GetRequiredService<ICallerAuthorization>();
             foreach (var set in view.Readers.RoleSets)
-                if (!set.Any(caller.IsInRole))
+                if (caller is null || !set.Any(caller.IsInRole))
                     throw new GraphQLException(
                         ErrorBuilder
                             .New()
@@ -205,7 +215,8 @@ internal sealed class MachineViewTypeModule(
         return await MachineViewReader.Read(
             ctx.Services.GetRequiredService<IDataContext>(),
             view,
-            userKey,
+            CallerRules.Client(userKey, caller),
+            byName,
             ctx.RequestAborted
         );
     }

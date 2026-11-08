@@ -18,8 +18,9 @@ internal sealed class MachineViewCatalog(IReadOnlyDictionary<string, HostView> v
 /// <summary>
 /// Reads one view for one caller: the caller's own instances of each user machine it reads, newest last, and the system
 /// instance of each system machine at its key, never anyone else's. Each instance is its id and the view's fields of that
-/// machine: a state as its label when the view gives one, a context field as stored. The read rule is checked by the
-/// caller of this, before it reads.
+/// machine: a state as its label when the view gives one, a context field as stored. The view's read rule is checked by
+/// the caller of this, before it reads; each user machine's own read rule is checked here, as its <c>get</c> checks it,
+/// and a machine that refuses the caller reads as no instances. A system machine declares no read rule of its own.
 /// </summary>
 internal static class MachineViewReader
 {
@@ -30,10 +31,12 @@ internal static class MachineViewReader
     internal static async Task<JsonObject> Read(
         IDataContext context,
         HostView view,
-        string userKey,
+        Actor.Client caller,
+        IReadOnlyDictionary<string, IMachine> machines,
         CancellationToken cancellationToken
     )
     {
+        var userKey = caller.UserKey;
         var result = new JsonObject();
         foreach (var read in view.Reads)
         {
@@ -58,6 +61,16 @@ internal static class MachineViewReader
                 result[read.Machine] = row is null
                     ? null
                     : Row(row.Id, row.State, row.Context, fields);
+                continue;
+            }
+            // A machine served some other way than from features has no rules to hold the caller to: it is left out.
+            if (
+                !machines.TryGetValue(read.Machine, out var machine)
+                || machine is not IMachineInternals internals
+                || !await CallerRules.MayRead(caller, internals.Rules, cancellationToken)
+            )
+            {
+                result[read.Machine] = new JsonArray();
                 continue;
             }
             var rows = await context

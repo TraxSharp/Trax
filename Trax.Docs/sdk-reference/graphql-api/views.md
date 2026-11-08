@@ -56,6 +56,10 @@ query {
   before anything is read. Both are GraphQL errors whose `extensions.code` is the code.
 - **What is read.** Only the caller's own instances (owner `user`, with the caller's user key), and the system
   instance at the key the view names. Another user's instance is never in a view.
+- **Each machine's read rule.** A user machine the view reads holds the caller to its own read rule too, checked as
+  its `get` checks it, at every read. A caller the view admits but the machine's rule refuses (an owner who lost a
+  role the machine's `read` names) gets an empty list for that machine, not an error, and the rest of the view reads
+  as usual. A system machine has no read rule of its own: its instance is read under the view's readers alone.
 - **Names.** A view's name is words of ASCII letters and digits split by spaces, hyphens or underscores, the first
   starting with a letter. No two views fold to one PascalCase name (`order status` and `order-status`), and no two
   name one row type (`pinned sticky` reading `note` and `pinned` reading `sticky-note` are both

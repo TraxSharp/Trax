@@ -1310,7 +1310,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // than an unknown id would tell it.
         if (SystemOwned || Owner(actor) is not { } client)
             return new LoadResult.NotFound();
-        if (Rules.Get is { } rule && !await CallerRules.Admits(client, rule, cancellationToken))
+        if (!await CallerRules.MayRead(client, Rules, cancellationToken))
             return new LoadResult.NotFound();
         return await Load(client.UserKey, id, cancellationToken);
     }

@@ -51,7 +51,9 @@ failure rather than a bug.
   allowed.
 - **Trax serves the views, under a derived read rule.** A view is read by the actors whose scenarios read it, and by
   no one else. It reads only the caller's own instances and system instances at their fixed keys, and shows only the
-  fields the glossary lists. A view no scenario reads is not served.
+  fields the glossary lists. Each user machine a view reads also holds the caller to its own read rule, as its `get`
+  does, so a view never shows an instance its machine would refuse to; a machine that refuses the caller reads as no
+  instances, and the rest of the view still reads. A view no scenario reads is not served.
 - **Features are read by Cucumber's own parser,** in a derivation package of its own, so the engine takes no new
   dependency. A value in a step is quoted and read as its field's type (`When Ada orders "3" loaves`). The fixed steps
   (`Ada is told "..."`, `Ada is not allowed`, `5 minutes pass`, `still`) are English only in this version.
@@ -99,8 +101,8 @@ written), `AccessDerivationTests` (grants from an actor's own act, nothing widen
 across hosts and restarts, a fire left for the host that serves its policy and target, a broadcast capped and coalesced,
 a server-only trigger refused to a client). Views are held by
 `ViewDerivationTests` (readers from the people who read a view, a person's own instances only) and
-`IrMachineViewsE2ETests` in Trax.Api (a reader's own rows, `FORBIDDEN` for anyone else, the system instance started by
-the host), and their generated persisted documents by `MachineViewDocumentsTests` there (the text sent raw refused, the
+`IrMachineViewsE2ETests` in Trax.Api (a reader's own rows, `FORBIDDEN` for anyone else, no rows of a machine whose
+read rule refuses the reader, the system instance started by the host), and their generated persisted documents by `MachineViewDocumentsTests` there (the text sent raw refused, the
 document run by its id, the read rule still applied). `ProvenanceDerivationTests` holds the scenarios behind each part
 (by file and line, in a stable order) and `CascadePolicyTests` a chain's moves read from the chain. Running features is
 held by `ScenarioRunnerTests` (in memory, answering as the host does), `GapStubTests` (a gap's stub green when pasted),
@@ -115,6 +117,7 @@ hand, so nothing checks that a page tells the same story as its features.
 
 ## Changelog
 
+- **2026-11-08**: A view holds each user machine it reads to that machine's own read rule.
 - **2026-11-08**: A host refuses policies that set each other off with no timer between them, as derivation does, through one check.
 - **2026-11-07**: The Bakery sample: machines written only as features, run in memory and against its host.
 - **2026-11-07**: The console's Board tab draws a machine's board from `operations.machineBoard`.
