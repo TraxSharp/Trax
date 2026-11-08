@@ -41,11 +41,12 @@ public class PolicyRunnerTests(StoreProvider provider)
     private MachinePolicies _policies = null!;
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
         var (machines, host) = Machines();
         _policies = new MachinePolicies(host.Policies);
         _host = Host(machines, cap: 3);
+        await Clean();
     }
 
     [TearDown]
@@ -393,6 +394,21 @@ public class PolicyRunnerTests(StoreProvider provider)
         )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
+    }
+
+    // Postgres is one database for the whole run: what an earlier test owed or left in a state a broadcast reaches would
+    // be read by this one. SQLite is a new file per test, so this finds nothing there.
+    private async Task Clean()
+    {
+        using var scope = _host.Scope();
+        var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
+        string[] ours = ["p-order", "p-receipt", "p-shop"];
+        var rows = context.SnapshotDrafts.Where(d => ours.Contains(d.Machine)).Select(d => d.RowId);
+        await context
+            .SnapshotTransitions.Where(t => rows.Contains(t.DraftRowId))
+            .ExecuteDeleteAsync();
+        await context.SnapshotDrafts.Where(d => ours.Contains(d.Machine)).ExecuteDeleteAsync();
+        await context.MachinePolicyFires.ExecuteDeleteAsync();
     }
 
     private async Task<string> StateOf(Guid id) => (await _host.Rows(id)).Single().State;
