@@ -299,8 +299,7 @@ internal static class IrMachines
     }
 
     /// <summary>The hash a host entry names its IR by: the canonical IR's, which the store writes to every instance.</summary>
-    internal static string Hash(JsonObject ir) =>
-        Hash(CanonicalJson.Serialize(Canonicalizable(ir)));
+    internal static string Hash(JsonObject ir) => MachineFiles.Hash(ir);
 
     private static string Hash(string canonical) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));

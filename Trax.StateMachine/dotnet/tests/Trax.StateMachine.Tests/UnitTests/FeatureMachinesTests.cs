@@ -99,6 +99,82 @@ public class FeatureMachinesTests
     }
 
     [Test]
+    public void An_ir_that_is_not_json_is_a_format_error_naming_the_machine()
+    {
+        var glossary = FeatureGlossary.Read(Glossary);
+        var derived = FeatureMachines.Derive(glossary, Features);
+        var irs = new Dictionary<string, string> { ["order"] = "{ not json" };
+
+        FluentActions
+            .Invoking(() => FeatureMachines.Run(glossary, Features, irs, derived.Host!))
+            .Should()
+            .Throw<FormatException>()
+            .WithMessage("*'order'*");
+        FluentActions
+            .Invoking(() => FeatureMachines.Board(irs, derived.Host!))
+            .Should()
+            .Throw<FormatException>()
+            .WithMessage("*'order'*");
+    }
+
+    [Test]
+    public void A_host_machine_with_no_ir_is_refused_before_any_scenario_runs()
+    {
+        var glossary = FeatureGlossary.Read(Glossary);
+        var derived = FeatureMachines.Derive(glossary, Features);
+        var none = new Dictionary<string, string>();
+
+        FluentActions
+            .Invoking(() => FeatureMachines.Run(glossary, Features, none, derived.Host!))
+            .Should()
+            .Throw<FormatException>()
+            .WithMessage("*serves 'order'*");
+        FluentActions
+            .Invoking(() => FeatureMachines.Board(none, derived.Host!))
+            .Should()
+            .Throw<FormatException>()
+            .WithMessage("*serves 'order'*");
+    }
+
+    [Test]
+    public void An_ir_the_host_file_was_not_derived_from_is_refused()
+    {
+        var glossary = FeatureGlossary.Read(Glossary);
+        var derived = FeatureMachines.Derive(glossary, Features);
+        var ir = System.Text.Json.Nodes.JsonNode.Parse(derived.Irs["order"])!.AsObject();
+        ir["description"] = "edited by hand";
+        var irs = new Dictionary<string, string> { ["order"] = ir.ToJsonString() };
+
+        FluentActions
+            .Invoking(() => FeatureMachines.Run(glossary, Features, irs, derived.Host!))
+            .Should()
+            .Throw<FormatException>()
+            .WithMessage("*derived from another IR of 'order'*");
+    }
+
+    [Test]
+    public void A_name_pattern_that_is_not_a_regular_expression_is_an_argument_error()
+    {
+        var glossary = FeatureGlossary.Read(Glossary);
+        var derived = FeatureMachines.Derive(glossary, Features);
+
+        FluentActions
+            .Invoking(() =>
+                FeatureMachines.Run(
+                    glossary,
+                    Features,
+                    derived,
+                    new FeatureRunOptions { Names = ["(unclosed"] }
+                )
+            )
+            .Should()
+            .Throw<ArgumentException>()
+            .WithMessage("*'(unclosed'*")
+            .Which.ParamName.Should()
+            .Be("options");
+    }
+
+    [Test]
     public void A_glossary_that_is_not_one_is_refused_naming_its_key() =>
         FluentActions
             .Invoking(() => FeatureGlossary.Read("""{ "version": 2 }"""))

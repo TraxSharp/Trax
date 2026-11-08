@@ -1,4 +1,6 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -187,7 +189,12 @@ public static class FeatureMachines
     /// Runs features in memory on machines: their IRs, by id, and their host file, as <see cref="Derive"/> writes them.
     /// Each answer is the host's, access included.
     /// </summary>
-    /// <exception cref="FormatException">The host file or an IR is not one.</exception>
+    /// <exception cref="FormatException">
+    /// The host file or an IR is not one, or they are not a pair: a machine of one is missing from the other, a name the
+    /// host file gives is not in its IR, or the host file was derived from another IR. Or the options' tag expression
+    /// is not one.
+    /// </exception>
+    /// <exception cref="ArgumentException">One of the options' name patterns is not a regular expression.</exception>
     public static FeatureRunReport Run(
         FeatureGlossary glossary,
         IEnumerable<FeatureFile> features,
@@ -201,12 +208,25 @@ public static class FeatureMachines
         ArgumentNullException.ThrowIfNull(irs);
         ArgumentNullException.ThrowIfNull(host);
         options ??= new FeatureRunOptions();
-        var parsed = Parse(irs);
+        foreach (var name in options.Names)
+            try
+            {
+                _ = new Regex(name, RegexOptions.None, TimeSpan.FromSeconds(1));
+            }
+            catch (ArgumentException ex)
+            {
+                throw new ArgumentException(
+                    $"The name pattern '{name}' is not a regular expression: {ex.Message}",
+                    nameof(options),
+                    ex
+                );
+            }
+        var (parsed, hostFile) = Paired(irs, host);
         var report = FeatureRun.Run(
             glossary.Inner,
             Files(features),
             parsed,
-            HostFile.Read(host),
+            hostFile,
             new RunSelection(options.Tags, options.Names, options.Locations),
             options.DryRun,
             options.FailFast
@@ -261,12 +281,16 @@ public static class FeatureMachines
     /// The event-storming board of machines, from their IRs, by id, and their host file alone: who acts, what they ask,
     /// what happens, the rules between, the views, and the scenarios behind each.
     /// </summary>
-    /// <exception cref="FormatException">The host file or an IR is not one.</exception>
+    /// <exception cref="FormatException">
+    /// The host file or an IR is not one, or they are not a pair: a machine of one is missing from the other, a name the
+    /// host file gives is not in its IR, or the host file was derived from another IR.
+    /// </exception>
     public static FeatureBoard Board(IReadOnlyDictionary<string, string> irs, string host)
     {
         ArgumentNullException.ThrowIfNull(irs);
         ArgumentNullException.ThrowIfNull(host);
-        var drawn = Features.Board.Draw(Parse(irs), HostFile.Read(host));
+        var (parsed, hostFile) = Paired(irs, host);
+        var drawn = Features.Board.Draw(parsed, hostFile);
         return new FeatureBoard(
             drawn
                 .Stickies.Select(s => new FeatureSticky(
@@ -282,14 +306,45 @@ public static class FeatureMachines
         );
     }
 
-    private static Dictionary<string, JsonObject> Parse(IReadOnlyDictionary<string, string> irs) =>
-        irs.ToDictionary(
-            kv => kv.Key,
-            kv =>
-                JsonNode.Parse(kv.Value) as JsonObject
-                ?? throw new FormatException($"The IR of '{kv.Key}' is not a JSON object."),
-            StringComparer.Ordinal
-        );
+    // The IRs and the host file, read and checked as a host checks them before it serves them, so a machine with no
+    // IR, or an IR from another derivation, is refused here and not partway through a scenario.
+    private static (Dictionary<string, JsonObject> Irs, HostFile Host) Paired(
+        IReadOnlyDictionary<string, string> irs,
+        string host
+    )
+    {
+        var parsed = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+        foreach (var (id, text) in irs)
+        {
+            JsonNode? node;
+            try
+            {
+                node = JsonNode.Parse(text);
+            }
+            catch (JsonException ex)
+            {
+                throw new FormatException($"The IR of '{id}' is not JSON: {ex.Message}", ex);
+            }
+            parsed[id] =
+                node as JsonObject
+                ?? throw new FormatException($"The IR of '{id}' is not a JSON object.");
+        }
+        var hostFile = HostFile.Read(host);
+        var problems = MachineFiles.Problems(hostFile, parsed);
+        if (problems.Count == 0)
+            problems.AddRange(
+                parsed
+                    .Select(kv => MachineFiles.Mismatch(hostFile, kv.Key, kv.Value))
+                    .OfType<string>()
+            );
+        if (problems.Count > 0)
+            throw new FormatException(
+                "The machines are not a pair of IRs and their host file:"
+                    + Environment.NewLine
+                    + string.Join(Environment.NewLine, problems.Select(p => "  - " + p))
+            );
+        return (parsed, hostFile);
+    }
 
     private static List<(string Path, string Text)> Files(IEnumerable<FeatureFile> features) =>
         features.Select(f => (f.Path, f.Text)).ToList();
