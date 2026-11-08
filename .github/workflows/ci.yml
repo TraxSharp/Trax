@@ -962,6 +962,11 @@ jobs:
       - name: Audit runtime dependencies
         working-directory: ${{ env.WEB }}
         run: npm audit --omit=dev --audit-level=high
+      - name: Install the API dashboard (locked, no install scripts)
+        # The Bakery host serves the console, and a build without the app refuses to start, so
+        # exporting its client manifest below needs the app embedded.
+        working-directory: Trax.Api/src/Trax.Api.Dashboard/ClientApp
+        run: npm ci --ignore-scripts
       - name: The committed client matches the host
         run: |
           api=Trax.Samples/samples/Bakery/Trax.Samples.Bakery.Api
