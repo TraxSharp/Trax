@@ -88,14 +88,21 @@ public class EffectBindingTests(StoreProvider provider)
     public async Task A_client_cannot_fire_the_effects_trigger_itself()
     {
         var ada = DeskRoles.Client($"ada-{Guid.NewGuid():N}");
+        var before = _charge.Calls;
         using var scope = _host.Scope();
         var service = _host.Service(scope, "feature-checkout");
         var id = (await service.Start(ada, new JsonObject(), requestId: "s1"))
             .Should()
             .BeOfType<StartOutcome.Started>()
             .Subject.Id;
-        await service.Advance(ada, id, "AddItem", new JsonObject { ["item"] = "bread" }, "a1");
-        await service.Advance(ada, id, "Next", requestId: "a2");
+        (await service.Advance(ada, id, "AddItem", new JsonObject { ["item"] = "bread" }, "a1"))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
+        (await service.Advance(ada, id, "Next", requestId: "a2"))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>()
+            .Which.Snapshot.State.Should()
+            .Be("Review", "Pay has an edge from Review, so only its gate can refuse it");
 
         var fired = await service.Advance(
             ada,
@@ -107,7 +114,16 @@ public class EffectBindingTests(StoreProvider provider)
 
         fired
             .Should()
-            .BeOfType<AdvanceOutcome.Rejected>("only a send runs the charge and fires Pay");
+            .BeOfType<AdvanceOutcome.Rejected>("only a send runs the charge and fires Pay")
+            .Which.Reason.Should()
+            .Be(RefusalCode.EffectBound);
+        _charge.Calls.Should().Be(before, "a refused Pay charges nothing");
+        var loaded = (await service.Load(ada, id))
+            .Should()
+            .BeOfType<LoadResult.Loaded>()
+            .Subject.Snapshot;
+        loaded.State.Should().Be("Review");
+        loaded.Context["receipt"].Should().BeNull("no receipt was recorded");
     }
 
     [Test]
