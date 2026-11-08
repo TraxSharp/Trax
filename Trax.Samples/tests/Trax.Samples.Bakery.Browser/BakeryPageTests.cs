@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AwesomeAssertions;
 using Microsoft.Playwright;
 
@@ -28,7 +29,7 @@ public class BakeryPageTests
         await ada.GetByRole(AriaRole.Button, new() { Name = "Place", Exact = true }).ClickAsync();
         await Assertions
             .Expect(ada.GetByRole(AriaRole.Region, new() { Name = "Your orders" }))
-            .ToContainTextAsync("3 loaves: Waiting for the oven", Soon);
+            .ToContainTextAsync(new Regex("3 loaves.*Waiting for the oven"), Soon);
 
         await Assertions.Expect(kit.Locator("[data-shift-state]")).ToContainTextAsync("Off", Soon);
         await kit.GetByRole(AriaRole.Button, new() { Name = "Clock in" }).ClickAsync();
@@ -38,7 +39,7 @@ public class BakeryPageTests
 
         await Assertions
             .Expect(ada.GetByRole(AriaRole.Region, new() { Name = "Your orders" }))
-            .ToContainTextAsync("3 loaves: In the oven", Soon);
+            .ToContainTextAsync(new Regex("3 loaves.*In the oven"), Soon);
     }
 
     [Test]

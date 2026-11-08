@@ -1,7 +1,7 @@
 // Takes the screenshot each GUI sample's README shows, by driving the running sample through what it
 // demonstrates. One sample at a time: start it the way its README says, then run
 //
-//   node shoot.mjs <recovery|chat-service|state-machine|signalr-broadcaster> [--copy-to <dir>]
+//   node shoot.mjs <recovery|chat-service|state-machine|signalr-broadcaster|bakery> [--copy-to <dir>]
 //
 // The image is written to samples/<Sample>/screenshot.png. --copy-to also writes it to <dir>/<scene>.png.
 //
@@ -108,6 +108,39 @@ const scenes = {
         await page.waitForTimeout(900);
       }
       return page;
+    },
+  },
+
+  // Ada orders three loaves and places them; Kit clocks in, the shop opens and her order goes in the oven. The shot
+  // is Ada's page, with the scenario that ends where her order is lit in its feature. BAKERY_URL points it at a page
+  // served elsewhere.
+  bakery: {
+    folder: "Bakery",
+    url: process.env.BAKERY_URL ?? "http://localhost:5281",
+    viewport: { width: 1600, height: 1000 },
+    async play(browser) {
+      const signIn = async (name, role) => {
+        const page = await open(browser);
+        await page.getByLabel("Name").fill(name);
+        await page.getByLabel("Role").selectOption(role);
+        await page.getByRole("button", { name: "Sign in" }).click();
+        await page.getByText(`Signed in as ${name}`).waitFor();
+        return page;
+      };
+      const ada = await signIn("Ada", "customer");
+      await ada.locator("[data-order-state]", { hasText: "Draft" }).waitFor({ timeout: 15_000 });
+      await ada.getByLabel("Loaves").fill("3");
+      await ada.getByRole("button", { name: "Order", exact: true }).click();
+      await ada.getByRole("button", { name: "Place", exact: true }).click();
+      await ada.getByRole("region", { name: "Your orders" }).getByText("Waiting for the oven").waitFor({ timeout: 15_000 });
+      // A shop still open from an earlier run would not open again, and nothing would bake: wait for it to close.
+      await ada.locator("[data-shop-sign]", { hasText: "Closed" }).waitFor({ timeout: 180_000 });
+      const kit = await signIn("Kit", "baker");
+      await kit.getByRole("button", { name: "Clock in" }).click();
+      await ada.locator("[data-order-state]", { hasText: "Baking" }).waitFor({ timeout: 30_000 });
+      await ada.waitForTimeout(1200);
+      await kit.close();
+      return ada;
     },
   },
 };
