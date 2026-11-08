@@ -27,9 +27,9 @@ internal sealed class HostDriver(
 {
     private readonly HostFile _host = options.Host.GetRequiredService<HostFile>();
     private readonly Dictionary<InstanceKey, Guid> _ids = [];
-    private readonly Dictionary<string, FeatureCredential> _credentials = new(
-        StringComparer.Ordinal
-    );
+
+    // A credential is made for a person as one actor: a person named again as another actor gets another.
+    private readonly Dictionary<(string Person, string Actor), FeatureCredential> _credentials = [];
     private readonly Dictionary<string, GlossaryActor> _actors = new(StringComparer.Ordinal);
 
     // The newest history row when the current When began: what any instance entered after it is the When's cascade.
@@ -42,12 +42,14 @@ internal sealed class HostDriver(
             .GroupBy(m => ((IMachine)m).Name, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
 
+    public void Introduce(Person person) => _actors[person.Name] = person.Actor;
+
     public async ValueTask<Answer> Start(Person person, string machine)
     {
         _actors[person.Name] = person.Actor;
         var requestId = RequestId();
         var answer = await Send(
-            person.Name,
+            person,
             new Operation(
                 machine,
                 "start",
@@ -143,7 +145,7 @@ internal sealed class HostDriver(
         if (input is not null)
             variables["input"] = input.DeepClone();
         var answer = await Send(
-            person.Name,
+            person,
             new Operation(
                 key.Machine,
                 operation,
@@ -276,7 +278,7 @@ internal sealed class HostDriver(
         var viewField = ViewFieldOf(view);
         var machineField = FieldOf(shown.Machine);
         var answer = await Send(
-            person.Name,
+            person,
             new Operation(
                 null,
                 viewField,
@@ -390,27 +392,32 @@ internal sealed class HostDriver(
         return _ids[key];
     }
 
-    private GlossaryActor Actor(string person, string machine) =>
-        _actors.TryGetValue(person, out var actor)
-            ? actor
-            : glossary.Actors[glossary.Machines[machine].OwnedBy![0]];
-
-    /// <summary>A person's credential, as their own steps send it, for a step the sample registered.</summary>
-    internal FeatureCredential CredentialOf(string person, GlossaryActor actor)
+    // The actor the scenario introduced the owner as. A machine one actor owns can only be theirs; one several actors own
+    // is never guessed, since the actor decides the credential the instance is started and moved with.
+    private GlossaryActor Actor(string person, string machine)
     {
-        _actors.TryAdd(person, actor);
-        return CredentialOf(person);
+        if (_actors.TryGetValue(person, out var actor))
+            return actor;
+        var ownedBy = glossary.Machines[machine].OwnedBy!;
+        if (ownedBy.Count == 1)
+            return glossary.Actors[ownedBy[0]];
+        throw new InvalidOperationException(
+            $"{person}'s {machine} cannot be arranged before the scenario says who {person} is: several actors own a {machine}."
+        );
     }
 
     /// <summary>The id of an instance the scenario started, or null if it started none.</summary>
     internal Guid? InstanceOf(InstanceKey key) => _ids.TryGetValue(key, out var id) ? id : null;
 
-    private FeatureCredential CredentialOf(string person)
+    /// <summary>
+    /// A person's credential as <paramref name="actor"/>, as their own steps send it: made once per scenario for each
+    /// actor the person is.
+    /// </summary>
+    internal FeatureCredential CredentialOf(string person, GlossaryActor actor)
     {
-        if (_credentials.TryGetValue(person, out var credential))
+        if (_credentials.TryGetValue((person, actor.Name), out var credential))
             return credential;
-        var actor = _actors[person];
-        return _credentials[person] = options.Credential(
+        return _credentials[(person, actor.Name)] = options.Credential(
             new FeatureActor(actor.Name, actor.Roles, actor.AnyAuthenticated),
             person,
             scenarioId
@@ -463,7 +470,7 @@ internal sealed class HostDriver(
 
     // Sends the operation as the person, by its persisted id when a manifest is set and as its document when not; the
     // answer at path. A field the schema does not have for them is not served.
-    private async Task<Sent> Send(string person, Operation operation, string[] path)
+    private async Task<Sent> Send(Person person, Operation operation, string[] path)
     {
         JsonObject sent;
         if (options.Manifest is { } manifest)
@@ -484,7 +491,7 @@ internal sealed class HostDriver(
         {
             Content = new StringContent(sent.ToJsonString(), Encoding.UTF8, "application/json"),
         };
-        foreach (var (name, value) in CredentialOf(person).Headers)
+        foreach (var (name, value) in CredentialOf(person.Name, person.Actor).Headers)
             request.Headers.TryAddWithoutValidation(name, value);
         using var response = await options.Client.SendAsync(request);
         var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())?.AsObject() ?? [];

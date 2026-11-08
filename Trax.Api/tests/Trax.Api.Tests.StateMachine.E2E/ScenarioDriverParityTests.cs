@@ -67,6 +67,17 @@ public class ScenarioDriverParityTests
               "states": { "Off": "is not started", "On": "is on" },
               "triggers": { "ClockIn": { "phrase": "clocks in for {subject}" } }
             },
+            "p-pan": {
+              "ownedBy": ["payer", "baker"],
+              "noun": "pan",
+              "start": "has a pan",
+              "initial": "Bare",
+              "states": { "Bare": "is bare", "Greased": "is greased", "Baked": "is baked" },
+              "triggers": {
+                "Grease": { "phrase": "greases {subject}" },
+                "Bake": { "phrase": "bakes {subject}" }
+              }
+            },
             "p-shop": {
               "system": "p-shop/main",
               "name": "the shop",
@@ -245,20 +256,45 @@ public class ScenarioDriverParityTests
             And Ada's tray is full
         """;
 
+    // A machine two actors own, each firing their own trigger. Kit's pan is arranged before Kit starts, fires or reads
+    // anything, so the host must start it as the baker the scenario says Kit is.
+    private const string Pans = """
+        Feature: Pans
+          Scenario: A payer greases a pan
+            Given Ada is a payer
+            And Ada has a pan
+            When Ada greases her pan
+            Then Ada's pan is greased
+
+          Scenario: A baker has a pan
+            Given Kit is a baker
+            And Kit has a pan
+            Then Kit's pan is bare
+
+          Scenario: A baker bakes a pan arranged greased
+            Given Kit is a baker
+            And Kit's pan is greased
+            When Kit bakes his pan
+            Then Kit's pan is baked
+        """;
+
     private static readonly (string File, string Text)[] Features =
     [
         ("ordering.feature", Ordering),
         ("shop.feature", Shop),
         ("tickets.feature", Tickets),
         ("oven.feature", Oven),
+        ("pans.feature", Pans),
     ];
 
-    // Each person signs in as a user of their own, with their actor's roles, so an owner's instance is theirs alone.
-    private static readonly Dictionary<string, (string Key, string Id)> Keys = new()
+    // Each person signs in as a user of their own, with the roles of the actor they sign in as, so an owner's instance is
+    // theirs alone. Kit as a payer is a user with the payer's roles, as a credential minted from the actor would be.
+    private static readonly Dictionary<(string Person, string Actor), string> Keys = new()
     {
-        ["Ada"] = (E2EHost.AliceKey, "alice"),
-        ["Bo"] = (E2EHost.CarolKey, "carol"),
-        ["Kit"] = (E2EHost.OperatorKey, "operator"),
+        [("Ada", "payer")] = E2EHost.AliceKey,
+        [("Bo", "payer")] = E2EHost.CarolKey,
+        [("Kit", "baker")] = E2EHost.OperatorKey,
+        [("Kit", "payer")] = E2EHost.CarolKey,
     };
 
     private IHost _host = null!;
@@ -569,9 +605,12 @@ public class ScenarioDriverParityTests
                 Client = (host ?? _host).GetTestServer().CreateClient(),
                 Manifest = manifest,
                 Glossary = FeatureGlossary.Read(Glossary),
-                Credential = (_, person, _) =>
+                Credential = (actor, person, _) =>
                     new FeatureCredential(
-                        new Dictionary<string, string> { ["X-Api-Key"] = Keys[person].Key }
+                        new Dictionary<string, string>
+                        {
+                            ["X-Api-Key"] = Keys[(person, actor.Name)],
+                        }
                     ),
             },
             _glossary,

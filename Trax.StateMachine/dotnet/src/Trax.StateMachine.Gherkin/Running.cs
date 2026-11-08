@@ -26,6 +26,12 @@ internal abstract record Answer
 /// </summary>
 internal interface IScenarioDriver
 {
+    /// <summary>
+    /// A person the scenario introduced (<c>Given Ada is a customer</c>), before any step names them, so a Given that
+    /// arranges their instance acts as their actor.
+    /// </summary>
+    void Introduce(Person person) { }
+
     ValueTask<Answer> Start(Person person, string machine);
 
     /// <summary>Puts an instance in a state with a context, starting it first if it has none.</summary>
@@ -207,6 +213,7 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
         {
             case (_, Meaning.Named n):
                 people[n.Name] = new Person(n.Name, glossary.Actors[n.Actor]);
+                driver.Introduce(people[n.Name]);
                 return null;
 
             case (StepKind.Given, Meaning.Start s):
