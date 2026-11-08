@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "actors": {
+    "member": {
+      "noun": "a member",
+      "anyAuthenticated": true
+    }
+  },
+  "machines": {
+    "loan": {
+      "initial": "Open",
+      "states": {
+        "Open": "is open",
+        "Borrowing": "is being borrowed"
+      },
+      "invokes": {
+        "Borrowing": {
+          "train": "Library.Trains.IBorrow",
+          "input": {
+            "memberId": "$owner"
+          },
+          "outcomes": {
+            "the loan goes through": {
+              "outcome": "done"
+            }
+          }
+        }
+      },
+      "ownedBy": "member",
+      "noun": "loan",
+      "context": [
+        {
+          "name": "$owner",
+          "type": "string",
+          "nullable": true,
+          "constraints": []
+        }
+      ]
+    }
+  }
+}

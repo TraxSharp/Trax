@@ -128,14 +128,15 @@ internal sealed record SpawnDefinition(
 
 /// <summary>
 /// A state's invoked train and where each outcome goes. The input mapping is server-only: the TypeScript twin
-/// never starts a train, so <see cref="CreateInput"/> is never exported.
+/// never starts a train, so <see cref="CreateInput"/> is never exported. It is given the context the state is entered
+/// with and the instance owner's user key, null for a system instance.
 /// </summary>
 internal sealed record InvokeDefinition<TState>(
     TState State,
     Type TrainType,
     Type InputType,
     Type OutputType,
-    Func<JsonObject, object?> CreateInput,
+    Func<JsonObject, string?, object?> CreateInput,
     IReadOnlyList<OutcomeEdge<TState>> Done,
     OutcomeEdge<TState> Failed,
     OutcomeEdge<TState> Cancelled

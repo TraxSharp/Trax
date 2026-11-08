@@ -293,6 +293,11 @@ internal sealed partial record Glossary(
                 throw m["initial"].Fail($"'{machine.Initial}' is not one of its states.");
 
             Distinct(m["context"], machine.ContextNames);
+            if (machine.ContextNames.Contains(HostInvoke.Owner))
+                throw m["context"]
+                    .Fail(
+                        $"has a field named '{HostInvoke.Owner}', which a train's input reads as the owner."
+                    );
             if (machine.ContextNames.Contains(ViewField.State))
                 throw m["context"]
                     .Fail("has a field named 'state', which a view reads as the machine's state.");
@@ -346,7 +351,17 @@ internal sealed partial record Glossary(
                 if (!machine.States.ContainsKey(invoke.State))
                     throw v.Fail($"'{invoke.State}' is not one of the machine's states.");
                 foreach (var (field, from) in invoke.Input)
-                    if (!machine.ContextNames.Contains(from))
+                    if (from == HostInvoke.Owner)
+                    {
+                        // The owner's id is the server's to give, and a system machine has none.
+                        if (machine.SystemKey is not null)
+                            throw v["input"]
+                                [field]
+                                .Fail(
+                                    $"a system machine has no owner, so nothing is {HostInvoke.Owner}."
+                                );
+                    }
+                    else if (!machine.ContextNames.Contains(from))
                         throw v["input"]
                             [field]
                             .Fail($"'{from}' is not one of the machine's context fields.");

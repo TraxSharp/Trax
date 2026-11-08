@@ -340,6 +340,16 @@ internal interface IIrStateBuilder<TState, TTrigger>
     where TTrigger : struct, Enum
 {
     IStateBuilder<TState, TTrigger> Context(Type record, ContextSchema schema);
+
+    /// <summary>
+    /// <see cref="IStateBuilder{TState,TTrigger}.Invokes{TTrain,TInput,TOutput}"/> with an input built from the
+    /// context and the instance owner's user key (null for a system instance), which the host file's <c>$owner</c>
+    /// maps a train field to. The owner is the server's to give: no client writes it.
+    /// </summary>
+    IInvokeBuilder<TState, TTrigger> InvokesAsOwner<TTrain, TInput, TOutput>(
+        Func<JsonObject, string?, TInput> input
+    )
+        where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>;
 }
 
 /// <summary>
@@ -2278,7 +2288,24 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                 typeof(TTrain),
                 typeof(TInput),
                 typeof(TOutput),
-                context => input(context)
+                (context, _) => input(context)
+            );
+            owner._invokes.Add(draft);
+            return new InvokeBuilder(owner, this, draft);
+        }
+
+        public IInvokeBuilder<TState, TTrigger> InvokesAsOwner<TTrain, TInput, TOutput>(
+            Func<JsonObject, string?, TInput> input
+        )
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            var draft = new InvokeDraft(
+                state,
+                typeof(TTrain),
+                typeof(TInput),
+                typeof(TOutput),
+                (context, ownerKey) => input(context, ownerKey)
             );
             owner._invokes.Add(draft);
             return new InvokeBuilder(owner, this, draft);
@@ -2296,7 +2323,7 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                 typeof(TChild),
                 typeof(JsonObject),
                 typeof(TOutput),
-                _ => null
+                (_, _) => null
             )
             {
                 Spawn = new SpawnDefinition(typeof(TChild), MemberPath.Of(childId), context),
@@ -2343,7 +2370,7 @@ public sealed partial class MachineBuilder<TState, TTrigger>
         Type TrainType,
         Type InputType,
         Type OutputType,
-        Func<JsonObject, object?> CreateInput
+        Func<JsonObject, string?, object?> CreateInput
     )
     {
         /// <summary>The child machine a spawning state starts; null for a state that invokes a train.</summary>

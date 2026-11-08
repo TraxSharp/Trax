@@ -14,14 +14,16 @@ namespace Trax.StateMachine.Persistence;
 
 /// <summary>The invoking state a write enters: its train, how the run's input is built, and the owner's cap.</summary>
 /// <param name="TrainType">The train's interface.</param>
-/// <param name="CreateInput">Builds the run's input from the context the state is entered with.</param>
+/// <param name="CreateInput">
+/// Builds the run's input from the context the state is entered with and the owner's user key (null for the system).
+/// </param>
 /// <param name="Limit">
 /// The most live invoked runs the entering user may already hold, across every machine, for the entry to be allowed;
 /// system owners are not capped.
 /// </param>
 internal sealed record EnteringInvoke(
     Type TrainType,
-    Func<JsonObject, object?> CreateInput,
+    Func<JsonObject, string?, object?> CreateInput,
     int Limit
 )
 {
@@ -529,7 +531,10 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         object? input;
         try
         {
-            input = entering.CreateInput(snapshot.Context);
+            input = entering.CreateInput(
+                snapshot.Context,
+                owner.Kind == SnapshotOwnerKind.User ? owner.UserKey : null
+            );
         }
         catch (Exception ex)
         {

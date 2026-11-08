@@ -92,6 +92,26 @@ public class InvokedTrainBoardTests
     }
 
     [Test]
+    public void An_input_from_the_owner_is_copied_to_the_host_file_and_kept_out_of_the_ir()
+    {
+        var glossary = Glossary.Replace(
+            "\"train\": \"Shop.ITakePayment\",",
+            "\"train\": \"Shop.ITakePayment\", \"input\": { \"customerId\": \"$owner\" },"
+        );
+        var derived = FeatureMachines.Derive(
+            FeatureGlossary.Read(glossary),
+            [new FeatureFile("paying.feature", Ordering)]
+        );
+        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+
+        JsonNode.Parse(derived.Host!)!["machines"]!["order"]!["invokes"]!["Paying"]!["input"]!
+            .ToJsonString()
+            .Should()
+            .Be("""{"customerId":"$owner"}""");
+        derived.Irs["order"].Should().NotContain("$owner", "the IR ships to clients");
+    }
+
+    [Test]
     public void The_states_outcomes_reach_are_not_missing()
     {
         var gaps = FeatureMachines.Missing(

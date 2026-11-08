@@ -284,7 +284,7 @@
           "maxLength": 512
         },
         "input": {
-          "description": "Each field of the train's input, by name, from the context field named.",
+          "description": "Each field of the train's input, by name, from the context field named, or from \"$owner\": the instance owner's qualified principal id, which the server sets and no client can write. A system machine has no owner, and no context field may be named \"$owner\".",
           "type": "object",
           "propertyNames": {
             "$ref": "urn:trax:state-machine:ir-format:1#/$defs/fieldName"

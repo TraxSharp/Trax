@@ -254,6 +254,12 @@ internal sealed record HostFile(
                     throw m["triggers"]
                         [name]
                         .Fail("a system machine's triggers are fired by the server only.");
+            foreach (var invoke in machine.Invokes.Values)
+            foreach (var (field, from) in invoke.Input)
+                if (from == HostInvoke.Owner)
+                    throw m["invokes"]
+                        [invoke.State]["input"][field]
+                        .Fail($"a system machine has no owner, so nothing is {HostInvoke.Owner}.");
         }
 
         var seen = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -357,11 +363,21 @@ internal sealed record TriggerAccess(AccessRule? Client)
     internal bool IsServer => Client is null;
 }
 
+/// <summary>
+/// The train a state invokes and its input: each train field from a context field, or from <see cref="Owner"/>.
+/// </summary>
 internal sealed record HostInvoke(
     string State,
     string Train,
     IReadOnlyDictionary<string, string> Input
-);
+)
+{
+    /// <summary>
+    /// The source that gives a train field the instance owner's qualified principal id (its user key). It is the
+    /// server's to set: no context holds it, so no client can write it. A system machine has no owner.
+    /// </summary>
+    internal const string Owner = "$owner";
+}
 
 /// <summary>
 /// The server acting when <see cref="When"/> enters <see cref="Enters"/>: on <see cref="Target"/> by

@@ -37,8 +37,14 @@ A machine is a user's or the system's:
 | `states` | Each state by name, with its phrase (`is a draft`). |
 | `triggers` | Each trigger by name: its `phrase`, with `{subject}` where the instance is named and `{field}` for each of its `input` fields, and a `reduce` that sets context from the input. A phrase that starts with `{subject}` is something that happens to the instance, fired by no person. |
 | `guards` | Each guard by name: its `holds` and `fails` phrases and its `rule`, which the features set up with Givens. |
-| `invokes` | Each state that runs a train: the `train`'s interface full name, its `input` from context fields, its `output` fields, its `outcomes` by phrase (`done`, `failed` or `cancelled`, a `when` rule on the output, a `reduce`), and `examples`, the output an in-memory run answers with. |
+| `invokes` | Each state that runs a train: the `train`'s interface full name, its `input` from context fields (or from `$owner`, below), its `output` fields, its `outcomes` by phrase (`done`, `failed` or `cancelled`, a `when` rule on the output, a `reduce`), and `examples`, the output an in-memory run answers with. |
 | `links` | Each phrase that names another machine's instance through a context field holding its id. |
+
+A train that reads who it is acting for takes them as input: `"input": { "memberId": "$owner" }` gives the train's
+`memberId` the instance owner's qualified principal id (`{scheme}:{id}`, the owner's user key). The server sets it when
+the state is entered; it is in no context, so no client writes it, and a save that puts it in the context is refused as
+any unknown field is. A system machine has no owner, so `$owner` there is refused, and so is a context field named
+`$owner`. Derivation copies the mapping to `host.json`.
 
 ## The steps
 
@@ -69,7 +75,7 @@ Written by `from-gherkin`, never by hand. Everything only the server reads:
 
 | Key | What it is |
 | --- | --- |
-| `machines` | Each machine's `schemaHash` (the IR it was derived with), `owner` (`user`, or `{ "system": "<key>" }`), who may `start` and `read` it, each trigger's rule (`roles`, `anyAuthenticated`, or `server`), and the train each invoking state runs. A trigger with no entry is not served. |
+| `machines` | Each machine's `schemaHash` (the IR it was derived with), `owner` (`user`, or `{ "system": "<key>" }`), who may `start` and `read` it, each trigger's rule (`roles`, `anyAuthenticated`, or `server`), and the train each invoking state runs, with its input from context fields or `$owner`. A trigger with no entry is not served. |
 | `policies` | The server acting when a machine enters a state: `linked` (the same owner's instance through a link), `broadcast` (from a system machine, every instance waiting in a state) or `toSystem` (a user's machine moving the system's at its key). |
 | `views` | Each view a scenario reads, its fields and its readers. A view no scenario reads is not served. |
 | `provenance` | For each part of each machine, the scenarios that produced it, by file, line and name, never by step text. The console's Board tab shows them. |

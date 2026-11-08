@@ -133,12 +133,15 @@ internal sealed class IrReplay(
                 .GetMethod(nameof(InputOf), BindingFlags.NonPublic | BindingFlags.Static)!
                 .MakeGenericMethod(input)
                 .Invoke(null, [invoke.Input])!;
-            var invokes = typeof(IStateBuilder<TState, TTrigger>)
-                .GetMethod(nameof(IStateBuilder<TState, TTrigger>.Invokes))!
+            var invokes = typeof(IIrStateBuilder<TState, TTrigger>)
+                .GetMethod(nameof(IIrStateBuilder<TState, TTrigger>.InvokesAsOwner))!
                 .MakeGenericMethod(train, input, output);
             var builder =
                 (IInvokeBuilder<TState, TTrigger>)
-                    invokes.Invoke(m.In(State<TState>(outcomes.Key)), [mapper])!;
+                    invokes.Invoke(
+                        (IIrStateBuilder<TState, TTrigger>)m.In(State<TState>(outcomes.Key)),
+                        [mapper]
+                    )!;
 
             foreach (var outcome in outcomes)
             foreach (var node in outcome["edges"]!.AsArray())
@@ -166,15 +169,27 @@ internal sealed class IrReplay(
         }
     }
 
-    // The train's input, from the context fields the host file maps onto its fields.
-    private static Func<JsonObject, TInput> InputOf<TInput>(
+    // The train's input, from the context fields the host file maps onto its fields. A field mapped from $owner is
+    // given the instance owner's user key, which only the server holds: it is in no context, so no client writes it.
+    // A system instance has no owner, and the host file refuses $owner on one; an input that still asks for it is
+    // refused here rather than given an empty subject.
+    private static Func<JsonObject, string?, TInput> InputOf<TInput>(
         IReadOnlyDictionary<string, string> mapping
     ) =>
-        context =>
+        (context, owner) =>
         {
             var input = new JsonObject();
             foreach (var (field, from) in mapping)
-                input[field] = context[from]?.DeepClone();
+                input[field] =
+                    from == HostInvoke.Owner
+                        ? JsonValue.Create(
+                            owner
+                                ?? throw new InvalidOperationException(
+                                    $"The train input field '{field}' is mapped from {HostInvoke.Owner}, and the "
+                                        + "instance has no owner."
+                                )
+                        )
+                        : context[from]?.DeepClone();
             return input.Deserialize<TInput>(TrainInputJson)!;
         };
 

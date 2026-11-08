@@ -65,9 +65,22 @@ internal static class MachineFiles
                     problems.Add(
                         $"{HostFileName} names a train for '{id}' in '{state}', which is not one of its states."
                     );
-                foreach (var from in invoke.Input.Values.Where(f => !names.Fields.Contains(f)))
+                foreach (
+                    var from in invoke.Input.Values.Where(f =>
+                        f != HostInvoke.Owner && !names.Fields.Contains(f)
+                    )
+                )
                     problems.Add(
                         $"{HostFileName} maps '{id}''s train input from '{from}', which no context of '{id}' has."
+                    );
+                // $owner is the server's value; a context field under that name would be one a client writes.
+                if (
+                    invoke.Input.Values.Contains(HostInvoke.Owner)
+                    && names.Fields.Contains(HostInvoke.Owner)
+                )
+                    problems.Add(
+                        $"{id}{IrSuffix} has a context field named '{HostInvoke.Owner}', which {HostFileName} "
+                            + "reads as the instance's owner."
                     );
             }
         }

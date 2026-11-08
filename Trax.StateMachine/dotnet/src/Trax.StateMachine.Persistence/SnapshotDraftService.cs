@@ -2098,7 +2098,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
     private Type InvokeTrain(string state) => Invoke(state).TrainType;
 
-    private Func<JsonObject, object?> InvokeInput(string state) => Invoke(state).CreateInput;
+    private Func<JsonObject, string?, object?> InvokeInput(string state) =>
+        Invoke(state).CreateInput;
 
     /// <summary>
     /// Whether the draft is still exactly as <paramref name="loaded"/> read it. The effect runner asks after it has
