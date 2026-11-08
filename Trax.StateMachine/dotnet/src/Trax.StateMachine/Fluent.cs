@@ -2024,35 +2024,13 @@ public sealed partial class MachineBuilder<TState, TTrigger>
         Converters = { new JsonStringEnumConverter(), new IsoDurationJsonConverter() },
     };
 
-    // Each state has at most one timer, so following timers from any state either ends or comes round to a state it
-    // passed: a cycle no event can break. Each cycle is named once, from its first state in declaration order.
+    // A loop made only of timers, which the instance would go round forever: TimerLoops, which derivation reads too.
     private static IEnumerable<string> TimerCycles(
         IReadOnlyDictionary<TState, TimerDefinition<TState>> timers
-    )
-    {
-        var named = new HashSet<TState>();
-        foreach (var start in Enum.GetValues<TState>())
-        {
-            var path = new List<TState>();
-            var current = start;
-            while (timers.TryGetValue(current, out var timer) && !path.Contains(current))
-            {
-                path.Add(current);
-                current = timer.Target;
-            }
-            if (!path.Contains(current) || named.Contains(current))
-                continue;
-            var cycle = path.SkipWhile(s => !EqualityComparer<TState>.Default.Equals(s, current))
-                .ToList();
-            var first = cycle.MinBy(s => Array.IndexOf(Enum.GetValues<TState>(), s));
-            var at = cycle.IndexOf(first);
-            var ordered = cycle.Skip(at).Concat(cycle.Take(at)).Append(first).ToList();
-            foreach (var s in cycle)
-                named.Add(s);
-            yield return $"the timers of {string.Join(" -> ", ordered)} form a cycle no event breaks, so the "
-                + "instance would go round it forever. Let an event, not a timer, lead out of one of these states.";
-        }
-    }
+    ) =>
+        TimerLoops
+            .Find(timers.ToDictionary(t => t.Key, t => t.Value.Target), Enum.GetValues<TState>())
+            .Select(TimerLoops.Describe);
 
     // A custom rule or reduction with no C# handler would compile to a guard that is always false and a
     // reducer that silently keeps the context, while a TypeScript twin given its handler behaves otherwise.

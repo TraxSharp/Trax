@@ -582,6 +582,7 @@ internal static class Merge
     )
     {
         var timers = new JsonArray();
+        var shown = new Dictionary<string, TimerObservation>(StringComparer.Ordinal);
         var moved = walks.SelectMany(w => w.Timers).Where(o => o.Machine == machine.Id).ToList();
         var stays = walks.SelectMany(w => w.Stays).Where(o => o.Machine == machine.Id).ToList();
         foreach (var state in moved.Select(o => o.From).Distinct().Order(StringComparer.Ordinal))
@@ -648,7 +649,20 @@ internal static class Merge
                     ["after"] = IsoDuration.Format(shortest.Elapsed),
                 }
             );
+            shown[state] = shortest;
         }
+
+        // A loop of timers alone the host refuses to build (EFF-219): say so here, at the scenarios that showed them.
+        var next = shown.ToDictionary(s => s.Key, s => s.Value.To, StringComparer.Ordinal);
+        foreach (var loop in TimerLoops.Find(next, machine.States.Keys.ToList()))
+        foreach (var state in loop.Distinct())
+            problems.Add(
+                new Problem(
+                    shown[state].Scenario.File,
+                    shown[state].Line,
+                    $"{machine.Id}: {TimerLoops.Describe(loop)}"
+                )
+            );
         return timers;
     }
 
