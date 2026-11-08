@@ -117,6 +117,12 @@ internal static class Missing
                 .Select(e => e.To)
                 .Append(machine.Initial)
                 .Concat(OutcomeTargets(ir))
+                // A timer moves an instance as surely as a trigger does.
+                .Concat(
+                    (ir["timers"] as JsonArray ?? [])
+                        .Select(t => t?["target"]?.GetValue<string>())
+                        .OfType<string>()
+                )
                 .ToHashSet(StringComparer.Ordinal);
 
             foreach (

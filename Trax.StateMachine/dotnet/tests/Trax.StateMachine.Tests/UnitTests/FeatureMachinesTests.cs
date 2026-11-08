@@ -99,6 +99,39 @@ public class FeatureMachinesTests
     }
 
     [Test]
+    public void A_state_only_a_timer_reaches_is_not_missing()
+    {
+        var glossary = FeatureGlossary.Read(
+            Glossary.Replace(
+                "\"Placed\": \"is placed\" }",
+                "\"Placed\": \"is placed\", \"Ready\": \"is ready\" }"
+            )
+        );
+        FeatureFile[] features =
+        [
+            Features[0],
+            new(
+                "ready.feature",
+                """
+                Feature: Ready
+                  Scenario: A placed order is ready after a while
+                    Given Ada is a customer
+                    And Ada has an order
+                    And Ada's order is placed
+                    When 10 seconds pass
+                    Then Ada's order is ready
+                """
+            ),
+        ];
+
+        FeatureMachines.Derive(glossary, features).Succeeded.Should().BeTrue();
+        FeatureMachines
+            .Missing(glossary, features)
+            .Should()
+            .NotContain(g => g.Kind == "state" && g.What == "Ready");
+    }
+
+    [Test]
     public void An_ir_that_is_not_json_is_a_format_error_naming_the_machine()
     {
         var glossary = FeatureGlossary.Read(Glossary);
