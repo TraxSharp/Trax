@@ -110,8 +110,10 @@ public interface IMachineInstances
     /// <param name="cancellationToken">Cancels the database calls.</param>
     /// <returns>The instance: its id, its machine, the state it is in now, and whether this call created it.</returns>
     /// <exception cref="InvalidOperationException">
-    /// No registered machine has the id <paramref name="machineId"/>, it is not system-owned, or its initial state
-    /// invokes a train whose run could not be queued.
+    /// No registered machine has the id <paramref name="machineId"/>, it is not system-owned, its initial state
+    /// invokes a train whose run could not be queued, or it is served from features and <paramref name="key"/> is not
+    /// one of its keys: a keyed system machine's key has one part per <c>keyedBy</c> name, and a system machine at a
+    /// fixed key has that one instance.
     /// </exception>
     Task<MachineInstance> Start(
         string machineId,
@@ -133,7 +135,8 @@ public interface IMachineInstances
     /// <param name="cancellationToken">Cancels the database calls.</param>
     /// <returns>As the typed overload returns.</returns>
     /// <exception cref="InvalidOperationException">
-    /// No registered machine has the id <paramref name="machineId"/>, or it is not system-owned.
+    /// No registered machine has the id <paramref name="machineId"/>, it is not system-owned, or <paramref name="key"/>
+    /// is not one of its keys, as <see cref="Start(string, MachineKey, JsonObject?, CancellationToken)"/> refuses it.
     /// </exception>
     Task<AdvanceOutcome> Advance(
         string machineId,
@@ -480,6 +483,16 @@ internal interface IMachineInternals
     AdvanceResult AdvanceTimer(Snapshot snapshot, string trigger);
 }
 
+/// <summary>
+/// A system machine that declares the keys of its instances, as one served from features does: one fixed key, or a
+/// number of named parts (<c>keyedBy</c>).
+/// </summary>
+internal interface IDeclaredSystemKey
+{
+    /// <summary>Why <paramref name="key"/> is not a key of one of the machine's instances, or null when it is.</summary>
+    string? KeyProblem(MachineKey key);
+}
+
 /// <summary>An outcome edge of an invoking state that enters another invoking state.</summary>
 /// <param name="State">The invoking state the run belongs to.</param>
 /// <param name="Outcome">The outcome, <c>OnDone</c>, <c>OnFailed</c> or <c>OnCancelled</c>.</param>
@@ -537,6 +550,7 @@ internal sealed class MachineInstances(
         ArgumentNullException.ThrowIfNull(key);
 
         var (machine, internals) = SystemMachine(machineId, "start");
+        Keyed(machine, key, "start");
         var name = machine.Name;
         var id = MachineInstanceId.For(name, key);
 
@@ -600,6 +614,7 @@ internal sealed class MachineInstances(
         ArgumentException.ThrowIfNullOrWhiteSpace(trigger);
 
         var (machine, internals) = SystemMachine(machineId, "advance");
+        Keyed(machine, key, "advance");
         return Advance(
             machine,
             internals,
@@ -791,6 +806,16 @@ internal sealed class MachineInstances(
                     + "glossary) for its instances to belong to the system; its users then reach none of them."
             );
         return (machine, internals);
+    }
+
+    // A system machine served from features declares its key: one fixed key, or keyedBy parts. A key it never has names
+    // an instance no view, policy or correctly keyed call reaches, so it is refused before anything is read or written.
+    private static void Keyed(IMachine machine, MachineKey key, string action)
+    {
+        if (machine is IDeclaredSystemKey declared && declared.KeyProblem(key) is { } problem)
+            throw new InvalidOperationException(
+                $"'{machine.Name}' {problem}, so the system cannot {action} an instance of it at {key}."
+            );
     }
 
     private static MachineInstance Existing(Guid id, string machine, StoredSnapshot stored) =>

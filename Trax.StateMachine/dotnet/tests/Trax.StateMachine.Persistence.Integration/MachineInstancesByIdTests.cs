@@ -89,19 +89,41 @@ public class MachineInstancesByIdTests
     }
 
     [Test]
-    public async Task Host_code_starts_a_served_machine_by_its_id()
+    public async Task Host_code_starts_a_served_machine_by_its_id_at_its_key()
     {
         await using var scope = _provider.CreateAsyncScope();
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
-        var started = await instances.Start("p-shop", "second");
-        var again = await instances.Start("p-shop", "second");
+        var started = await instances.Start("p-shop", "main");
 
-        started.Created.Should().BeTrue();
+        started.Created.Should().BeFalse("the host started it");
         started.State.Should().Be("Closed");
-        started.Id.Should().Be(MachineInstanceId.For("p-shop", "second"));
-        again.Created.Should().BeFalse();
-        again.Id.Should().Be(started.Id);
+        started.Id.Should().Be(SystemInstanceStarter.IdOf("p-shop", "p-shop/main"));
+    }
+
+    [Test]
+    public async Task A_system_machine_at_a_fixed_key_is_refused_at_another()
+    {
+        await using var scope = _provider.CreateAsyncScope();
+        var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
+
+        var start = () => instances.Start("p-shop", "second");
+        var advance = () => instances.Advance("p-shop", "second", "Open");
+
+        (await start.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should()
+            .Contain("has one instance, at (\"main\")");
+        (await advance.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should()
+            .Contain("has one instance, at (\"main\")");
+        (
+            await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .SnapshotDrafts.AsNoTracking()
+                .CountAsync(d => d.Machine == "p-shop")
+        )
+            .Should()
+            .Be(1);
     }
 
     [Test]

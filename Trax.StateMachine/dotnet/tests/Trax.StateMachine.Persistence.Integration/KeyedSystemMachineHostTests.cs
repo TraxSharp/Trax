@@ -132,4 +132,32 @@ public class KeyedSystemMachineHostTests
             .Should()
             .BeEquivalentTo(["Triaged", "New"]);
     }
+
+    [Test]
+    public async Task A_key_with_another_number_of_parts_is_refused()
+    {
+        await using var scope = _provider.CreateAsyncScope();
+        var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
+        await instances.Start("ticket", "T-12");
+
+        var start = () => instances.Start("ticket", MachineKey.Of("T-12", "extra"));
+        var advance = () => instances.Advance("ticket", MachineKey.Of("T-12", "extra"), "Triage");
+
+        (await start.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should()
+            .Contain("is keyed by id");
+        (await advance.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should()
+            .Contain("is keyed by id");
+        (
+            await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .SnapshotDrafts.AsNoTracking()
+                .Where(d => d.Machine == "ticket")
+                .Select(d => d.State)
+                .ToListAsync()
+        )
+            .Should()
+            .BeEquivalentTo(["New"]);
+    }
 }

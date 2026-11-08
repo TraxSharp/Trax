@@ -25,15 +25,17 @@ internal sealed class SystemInstanceStarter(IServiceScopeFactory scopes, HostFil
                 .OrderBy(m => m.Id, StringComparer.Ordinal)
         )
         {
-            var systemKey = entry.SystemKey!;
-            var key = MachineKey.Of(systemKey[(systemKey.IndexOf('/') + 1)..]);
-            await instances.Start(entry.Id, key, null, cancellationToken);
+            await instances.Start(entry.Id, KeyOf(entry.SystemKey!), null, cancellationToken);
         }
     }
 
+    /// <summary>The key a system machine's fixed key (<c>shop/main</c>) names its instance by: <c>("main")</c>.</summary>
+    internal static MachineKey KeyOf(string systemKey) =>
+        MachineKey.Of(systemKey[(systemKey.IndexOf('/') + 1)..]);
+
     /// <summary>The instance id a system machine's key gives it, as <see cref="StartingAsync"/> starts it.</summary>
     internal static Guid IdOf(string machine, string systemKey) =>
-        MachineInstanceId.For(machine, MachineKey.Of(systemKey[(systemKey.IndexOf('/') + 1)..]));
+        MachineInstanceId.For(machine, KeyOf(systemKey));
 
     public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 

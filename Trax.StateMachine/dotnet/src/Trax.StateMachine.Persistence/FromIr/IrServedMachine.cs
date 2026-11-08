@@ -15,10 +15,14 @@ namespace Trax.StateMachine.Persistence.FromIr;
 /// the file.
 /// </summary>
 internal abstract class IrServedMachine<TState, TTrigger>(IrReplay replay)
-    : Machine<TState, TTrigger>
+    : Machine<TState, TTrigger>,
+        IDeclaredSystemKey
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {
+    /// <inheritdoc/>
+    public string? KeyProblem(MachineKey key) => replay.KeyProblem(key);
+
     /// <inheritdoc/>
     public override string? Corpus => replay.Corpus;
 
@@ -57,6 +61,25 @@ internal sealed class IrReplay(
     private static readonly JsonSerializerOptions TrainInputJson = new(JsonSerializerDefaults.Web);
 
     internal string? Corpus => corpus;
+
+    /// <summary>
+    /// Why <paramref name="key"/> is not a key of one of the machine's instances: a keyed system machine's key has one
+    /// part per <c>keyedBy</c> name, and a system machine at a fixed key has that one instance. Null otherwise.
+    /// </summary>
+    internal string? KeyProblem(MachineKey key)
+    {
+        if (host.KeyedBy is { } parts)
+            return key.Parts.Count == parts.Count
+                ? null
+                : $"is keyed by {string.Join(", ", parts)}, {parts.Count} part{(parts.Count == 1 ? "" : "s")}, "
+                    + $"and the key has {key.Parts.Count}";
+        if (host.SystemKey is { } systemKey)
+        {
+            var fixedKey = SystemInstanceStarter.KeyOf(systemKey);
+            return key.Equals(fixedKey) ? null : $"has one instance, at {fixedKey}";
+        }
+        return null;
+    }
 
     /// <summary>The effects, custom rules, reductions and migrations the host entry binds, by what the IR names them.</summary>
     internal IrHandlers Handlers { get; init; } = IrHandlers.None;
