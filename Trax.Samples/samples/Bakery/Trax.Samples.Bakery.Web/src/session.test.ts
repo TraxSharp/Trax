@@ -121,3 +121,26 @@ describe("a read the host refuses", () => {
     stop();
   });
 });
+
+// The token travels on every request. A build pointed at a host that is not loopback over http must be refused by the
+// client before anything is sent, so the page never lifts the client's cleartext refusal.
+
+describe("connecting", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("refuses cleartext to a host that is not loopback", async () => {
+    vi.stubEnv("VITE_BAKERY_API", "http://bakery.example:5280");
+    vi.resetModules();
+    const session = await import("./session");
+    const client = await import("./trax/index.g");
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+
+    session.connect({ name: "Ada", role: "customer", token: token(Date.now() / 1000 + 3600) });
+
+    await expect(client.readShopSignView()).rejects.toThrow(/cleartext/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
