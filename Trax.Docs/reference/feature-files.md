@@ -81,6 +81,25 @@ Derivation refuses a data table, a DocString, a `*` step, a first-person step, a
 When no phrase matches, and two scenarios that disagree. A Then no phrase matches is about the UI: it is reported and
 left alone, and `trax machine run --strict` fails on it.
 
+## How a scenario is read
+
+Derivation walks each scenario step by step and reads its shape as well as its words. These are the rules a scenario
+has to follow; `trax machine explain` prints what derivation read from each one.
+
+| Rule | Write | Otherwise |
+| --- | --- | --- |
+| A When is followed by a Then about the instance it moved, before the next When. | `When Ada places her order` / `Then Ada's order is being paid for` / `When the payment goes through` | "Nothing after this When says what it did." |
+| An outcome's first Then names the state it took the instance to, and an outcome goes to one state in every scenario. | `When the payment goes through` / `Then Ada's order is placed` | "Say where 'the payment goes through' takes Ada's order", or "goes to Baking here and to Placed elsewhere". |
+| One When leaves an instance in one state. A reaction that comes back to the instance that set it off cannot be written yet. | Reshape so the chain ends on other instances. | "The Thens after this When disagree about what it did to Ada's order." |
+| A later Then about another instance moving is a policy the move set off. A user's machine moving the system's is `toSystem`, the system's moving every user instance in a state is `broadcast`. | `When Kit fires the oven on his shift` / `Then Kit's shift is at the oven` / `And the shop is baking a batch` / `And Ada's order is baking` | Nothing: it is derived as a policy. Check it with `trax machine explain`. |
+| A trigger a policy fires also has a scenario of its own, showing it as a plain move. | `Given the shop is closed` / `When the shop opens` / `Then the shop is open` | "shop goes from Closed to Open when shift enters On, and no scenario shows a trigger doing that." |
+| Two timers falling due at the same moment read as one moving the other. Give them different durations, or show them in different scenarios. | `When 2 seconds pass` / `Then Kit's shift is on` / `And the shop is still baking a batch` | "shop goes from Firing to Open when shift enters On". |
+| `still` after time passing says the timer has not fallen due; after a trigger it says the trigger was refused. | `When 3 seconds pass` / `Then the shop is still open` | Two different facts from one word: read it as the scenario's When decides. |
+| A Then naming the state the trigger left from is a self-transition: it is served, changes nothing and sets no policy off. Use it where a policy may land on a machine already there. | `Given the shop is open` / `When the shop opens` / `Then the shop is open` | Without it the policy's fire is refused and logged each time. |
+| A trigger only some roles may fire does not lead back to the state an instance starts in: whoever may start one could put it there anyway. | Lead it to a state of its own (`On --ClockOut--> Over`). | "the rule would gate nothing, since whoever may start one can put it there." |
+| Timers alone do not form a loop. Let an event lead out of one of the states. | `Open --Batch--> Firing`, `Firing --after 4 s--> Open` | The host refuses to start: "the timers of Firing -> Open -> Firing form a cycle no event breaks". |
+| A person fires triggers on their own instances only, and never on a system machine. | `When the shop opens` (the server), not `When Kit opens the shop`. | "only the server moves a system machine", or "acts on Ada's order". |
+
 ## The C# a machine names
 
 The glossary names the C# behind a machine, and derivation writes what a client sees into the IR (the custom names,

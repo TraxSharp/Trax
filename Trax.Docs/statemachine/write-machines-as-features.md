@@ -69,7 +69,9 @@ would derive a machine the host refuses, naming the file and line. Commit `machi
 pull request: a new grant shows there. `trax machine from-gherkin --check` in CI fails when a committed file is stale.
 
 `trax machine missing --features features` lists what the glossary names and no scenario shows, each with a scenario
-to paste that is checked green first.
+to paste that is checked green first. `trax machine explain --features features` prints each scenario with what
+derivation read from it, a policy in full among them: run it when a scenario does not derive what you meant, and read
+[how a scenario is read](/docs/reference/feature-files#how-a-scenario-is-read).
 
 ## Serve them
 
