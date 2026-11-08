@@ -585,16 +585,23 @@ internal static class MachineCommand
             else
                 stdout.Write(text);
 
-            // A selection that runs nothing is a typo in a tag or a location, never a pass.
+            // A selection that runs nothing is never a pass: no scenario matched (a typo in a tag or a location), or
+            // every one it matched is @host, which only the host bindings run. A @host scenario beside one that ran is
+            // skipped and does not fail the run.
+            var ran = report.Scenarios.Any(s => s.Status is not ScenarioStatus.Skipped);
             var passed =
                 report.Problems.Count == 0
-                && report.Scenarios.Count > 0
+                && ran
                 && report.Scenarios.All(s =>
                     (s.Status is ScenarioStatus.Passed or ScenarioStatus.Skipped)
                     && (!args.Strict || !s.Skipped.Any(x => x.Message != "not run"))
                 );
             if (report.Scenarios.Count == 0)
                 stderr.WriteLine("No scenario matched.");
+            else if (!ran)
+                stderr.WriteLine(
+                    $"Every scenario selected ({report.Scenarios.Count}) is tagged @host, which only the host bindings run, so nothing ran."
+                );
             return passed ? 0 : 1;
         }
         catch (System.Text.RegularExpressions.RegexMatchTimeoutException ex)

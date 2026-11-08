@@ -358,6 +358,34 @@ public class FromGherkinCommandTests
     }
 
     [Test]
+    public void Run_fails_a_selection_whose_every_scenario_is_host_only()
+    {
+        File.WriteAllText(
+            Path.Combine(Features, "hosted.feature"),
+            """
+            Feature: Hosted
+              @host
+              Scenario: Ada places her order on the host
+                Given Ada is a customer
+                And Ada has an order
+                When Ada places her order
+                Then Ada's order is placed
+            """
+        );
+        Run();
+        var glossary = Path.Combine(Features, "glossary.json");
+
+        var hostOnly = RunFeatures(
+            new MachineCommand.RunArguments(Features, glossary, Out, [], Tags: "@host")
+        );
+        var all = RunFeatures();
+
+        hostOnly.Exit.Should().Be(1, "a selection that runs nothing is not a pass");
+        hostOnly.Err.Should().Contain("tagged @host").And.Contain("nothing ran");
+        all.Exit.Should().Be(0, all.Err + all.Out);
+    }
+
+    [Test]
     public void Run_refuses_a_name_that_takes_too_long_to_match()
     {
         File.WriteAllText(
