@@ -6,9 +6,9 @@ namespace Trax.StateMachine.Gherkin.Reqnroll;
 /// The one binding of every step (ADR <c>Trax.Docs/adr/0058</c>): each step is read as derivation reads it and run on
 /// the host, so a feature means the same here as in <c>trax machine run</c>. A step the glossary does not read runs the
 /// test project's own step for it (<see cref="TraxFeatureDriverOptions.Given"/>), if one is registered. A Given or When
-/// neither reads fails. A Then neither reads is about the UI, and is pending in a machine feature, a feature file in a
-/// folder named <c>features</c>, as derivation reads them; in any other feature, a spec under <c>specs/</c> among them, it
-/// fails, so a mistyped check never passes as pending.
+/// neither reads fails. A Then neither reads is about the UI, and is pending in a machine feature, a feature file under a
+/// folder named <c>features</c>, subfolders included, as derivation reads them; in any other feature, a spec under
+/// <c>specs/</c> among them, it fails, so a mistyped check never passes as pending. A feature under both is refused.
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/feature-bindings">SDK reference</seealso>
 [Binding]
@@ -72,13 +72,22 @@ internal sealed class HostFeatureRun
 
     /// <summary>
     /// Whether a feature in <paramref name="folderPath"/> (Reqnroll's <c>FeatureInfo.FolderPath</c>) is a machine
-    /// feature: its folder is named <c>features</c>, whatever its case. Every other feature is a spec.
+    /// feature: a folder on its path is named <c>features</c>, whatever its case, as derivation reads every feature under
+    /// it. Every other feature is a spec. A path through both a <c>features</c> and a <c>specs</c> folder is refused:
+    /// derivation would read the file as a machine feature, and its author meant a spec.
     /// </summary>
     internal static bool IsMachineFeature(string? folderPath)
     {
         var segments = (folderPath ?? "").Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
-        return segments.Length > 0
-            && string.Equals(segments[^1], "features", StringComparison.OrdinalIgnoreCase);
+        var features = segments.Any(s => Named(s, "features"));
+        if (features && segments.Any(s => Named(s, "specs")))
+            throw new InvalidOperationException(
+                $"The feature in '{folderPath}' is under both a features folder and a specs folder. Every feature under features/ is a machine feature, derived and replayed; move a spec out to a specs/ folder beside it."
+            );
+        return features;
+
+        static bool Named(string segment, string name) =>
+            string.Equals(segment, name, StringComparison.OrdinalIgnoreCase);
     }
 
     internal async Task Step(StepKind kind, string text)

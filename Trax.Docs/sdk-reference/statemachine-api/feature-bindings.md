@@ -57,11 +57,12 @@ a feature about what the machines do not cover, registers the few steps the glos
   steps through `TraxFeatures.Configure`, never with Reqnroll's own `[Given]`, `[When]` or `[Then]`: the binding matches
   every step, so Reqnroll would report both as ambiguous. A registered step speaks of people by name, as the glossary
   does; a step that says "I" fails. A glossary Then after a registered When checks the last step the glossary ran.
-- **A spec fails where a machine feature is pending.** A machine feature is one whose file is in a folder named
-  `features`, any case, the folder derivation reads. The folder is the file's own, as Reqnroll's
-  `FeatureInfo.FolderPath` gives it; a `Link` on the item does not change it. Every other feature is a spec: put a
-  sample's in `specs/`, beside `features/`. In a machine feature a Then nothing reads is about the UI and is pending;
-  in a spec it fails, so a mistyped check never passes.
+- **A spec fails where a machine feature is pending.** A machine feature is one whose file is under a folder named
+  `features`, any case, subfolders included, as derivation reads every feature under it. The path is the file's own,
+  as Reqnroll's `FeatureInfo.FolderPath` gives it; a `Link` on the item does not change it. Every other feature is a
+  spec: put a sample's in `specs/`, beside `features/`. A feature whose path has both a `features` and a `specs` folder
+  fails its first step, since derivation would read it as a machine feature. In a machine feature a Then nothing reads
+  is about the UI and is pending; in a spec it fails, so a mistyped check never passes.
 - **Time is waited for exactly.** `5 seconds pass` waits five seconds, then the host gets `Slack` to fire what fell due
   and run the policies it owes. One step waits at most ten minutes; a step that says more is refused, so run a
   scenario with longer waits in memory (`trax machine run`). A Then after an invoked train reads the instance's transition history for where the

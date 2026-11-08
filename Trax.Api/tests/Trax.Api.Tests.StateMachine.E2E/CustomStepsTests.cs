@@ -286,15 +286,29 @@ public class CustomStepsTests
     [TestCase("Features", true)]
     [TestCase("../../samples/Bakery/features", true)]
     [TestCase(@"..\..\samples\Bakery\features\", true)]
+    [TestCase("features/checkout", true)]
+    [TestCase(@"Features\checkout\pay", true)]
+    [TestCase("../../samples/Bakery/features/checkout", true)]
     [TestCase("specs", false)]
     [TestCase("Specs", false)]
-    [TestCase("features/specs", false)]
+    [TestCase("specs/checkout", false)]
+    [TestCase("featuresx", false)]
     [TestCase("", false)]
     [TestCase(null, false)]
-    public void Only_a_feature_in_a_folder_named_features_is_a_machine_feature(
+    public void A_feature_under_a_folder_named_features_is_a_machine_feature(
         string? folder,
         bool machine
     ) => HostFeatureRun.IsMachineFeature(folder).Should().Be(machine);
+
+    [TestCase("features/specs")]
+    [TestCase("specs/features")]
+    [TestCase(@"Specs\checkout\Features")]
+    public void A_feature_under_both_a_features_and_a_specs_folder_is_refused(string folder) =>
+        FluentActions
+            .Invoking(() => HostFeatureRun.IsMachineFeature(folder))
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*both a features folder and a specs folder*");
 
     private TraxFeatureDriverOptions Options() =>
         new()
