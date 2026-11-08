@@ -4,10 +4,10 @@ import FourWays from "@/components/landing/FourWays";
 import RunRecord from "@/components/landing/RunRecord";
 import Decisions from "@/components/landing/Decisions";
 import BuiltWithTrax from "@/components/landing/BuiltWithTrax";
+import ForYourTeam from "@/components/landing/ForYourTeam";
 import LayerDiagram from "@/components/landing/LayerDiagram";
 import DeploymentArchitectures from "@/components/landing/DeploymentArchitectures";
 import WhereTraxStops from "@/components/landing/WhereTraxStops";
-import QuickStart from "@/components/landing/QuickStart";
 import PackageList from "@/components/landing/PackageList";
 
 export default function Home() {
@@ -15,14 +15,14 @@ export default function Home() {
     <main>
       <Hero />
       <BuiltWithTrax />
-      <LayerDiagram />
+      <ForYourTeam />
       <MachineOnServer />
       <RunRecord />
       <Decisions />
       <FourWays />
       <DeploymentArchitectures />
       <WhereTraxStops />
-      <QuickStart />
+      <LayerDiagram />
       <PackageList />
     </main>
   );
