@@ -613,6 +613,15 @@ internal static class Merge
                 );
                 continue;
             }
+            // The host's builder refuses a timer longer than a timer may wait: say so here, as it says it.
+            if (shortest.Elapsed > MachineTimers.MaxDuration)
+                problems.Add(
+                    new Problem(
+                        shortest.Scenario.File,
+                        shortest.Line,
+                        $"{machine.Id}: {MachineTimers.TooLong(state, shortest.Elapsed)}"
+                    )
+                );
             foreach (
                 var stay in stays.Where(s => s.State == state && s.Elapsed >= shortest.Elapsed)
             )

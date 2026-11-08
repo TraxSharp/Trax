@@ -1889,10 +1889,7 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                         $"the timer of {state} waits {fixedDuration}, but a timer waits a positive time."
                     );
                 else if (fixedDuration > MachineTimers.MaxDuration)
-                    problems.Add(
-                        $"the timer of {state} waits {fixedDuration}, longer than the {MachineTimers.MaxDuration.TotalDays} "
-                            + "days a timer may wait (MachineTimers.MaxDuration)."
-                    );
+                    problems.Add(MachineTimers.TooLong(state.ToString(), fixedDuration));
             }
             else
             {

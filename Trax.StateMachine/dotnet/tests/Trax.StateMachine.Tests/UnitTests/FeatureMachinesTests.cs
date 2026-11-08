@@ -185,6 +185,50 @@ public class FeatureMachinesTests
     }
 
     [Test]
+    public void A_timer_longer_than_a_timer_may_wait_is_refused_as_the_host_refuses_it()
+    {
+        var glossary = FeatureGlossary.Read(
+            Glossary.Replace(
+                "\"Placed\": \"is placed\" }",
+                "\"Placed\": \"is placed\", \"Expired\": \"has expired\" }"
+            )
+        );
+        FeatureFile[] features =
+        [
+            Features[0],
+            new(
+                "expiry.feature",
+                """
+                Feature: Expiry
+                  Scenario: A placed order expires after a long while
+                    Given Ada is a customer
+                    And Ada has an order
+                    And Ada's order is placed
+                    When 400 days pass
+                    Then Ada's order has expired
+                """
+            ),
+        ];
+
+        var derived = FeatureMachines.Derive(glossary, features);
+
+        derived.Succeeded.Should().BeFalse();
+        derived.Irs.Should().BeEmpty();
+        derived
+            .Problems.Should()
+            .ContainSingle(p => p.Message.Contains("days a timer may wait"))
+            .Which.Should()
+            .Be(
+                new FeatureProblem(
+                    "expiry.feature",
+                    7,
+                    "order: the timer of Placed waits 400.00:00:00, longer than the 366 days a timer may "
+                        + "wait (MachineTimers.MaxDuration)."
+                )
+            );
+    }
+
+    [Test]
     public void A_cascade_may_come_back_to_the_instance_that_set_it_off()
     {
         var glossary = FeatureGlossary.Read(
