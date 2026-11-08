@@ -55,7 +55,8 @@ public class PolicyRunnerTests(StoreProvider provider)
     private InstanceHost Host(
         IReadOnlyList<IMachine> machines,
         int cap,
-        InstanceHost? sameDatabaseAs = null
+        InstanceHost? sameDatabaseAs = null,
+        MachinePolicies? policies = null
     ) =>
         InstanceHost.Create(
             provider,
@@ -63,7 +64,7 @@ public class PolicyRunnerTests(StoreProvider provider)
             services: s =>
             {
                 s.AddIrMachines(machines);
-                s.AddSingleton(_policies);
+                s.AddSingleton(policies ?? _policies);
                 s.AddSingleton(new PolicyRunnerOptions { BatchSize = 100, FanOutCap = cap });
                 s.AddSingleton<MachinePolicyRunner>();
             }
@@ -178,6 +179,73 @@ public class PolicyRunnerTests(StoreProvider provider)
         (await PolicyFires(receipt))
             .Should()
             .Be(1, "a fire happens once, whichever host claims it");
+    }
+
+    [Test]
+    public async Task A_host_that_does_not_serve_a_policy_leaves_its_fire_for_the_host_that_does()
+    {
+        var ada = NewUser();
+        var order = await Start(ada, "p-order");
+        var receipt = await Start(ada, "p-receipt");
+        await Advance(
+            ada,
+            "p-receipt",
+            receipt,
+            "Attach",
+            new JsonObject { ["orderId"] = order.ToString() }
+        );
+        await Advance(ada, "p-order", order, "Expire");
+
+        // A host from before the policy was added, as in a rolling deploy, passes first.
+        using var older = Host(
+            Machines().Machines,
+            cap: 3,
+            sameDatabaseAs: _host,
+            policies: new MachinePolicies(_policies.ById.Values.Where(p => p.Id != Linked))
+        );
+        (await Runner(older).PassOnce(CancellationToken.None)).Should().Be(0);
+        (await Owed())
+            .Should()
+            .ContainSingle("a host that does not serve the policy leaves its fire")
+            .Which.Policy.Should()
+            .Be(Linked);
+
+        await Runner(_host).PassOnce(CancellationToken.None);
+        (await StateOf(receipt)).Should().Be("Void");
+        (await Owed()).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task A_host_that_does_not_serve_a_policys_target_leaves_its_fire_for_the_host_that_does()
+    {
+        var ada = NewUser();
+        var order = await Start(ada, "p-order");
+        var receipt = await Start(ada, "p-receipt");
+        await Advance(
+            ada,
+            "p-receipt",
+            receipt,
+            "Attach",
+            new JsonObject { ["orderId"] = order.ToString() }
+        );
+        await Advance(ada, "p-order", order, "Expire");
+
+        // It serves the policy but not the receipt it fires on.
+        using var partial = Host(
+            Machines().Machines.Where(m => m.Name != "p-receipt").ToList(),
+            cap: 3,
+            sameDatabaseAs: _host
+        );
+        (await Runner(partial).PassOnce(CancellationToken.None)).Should().Be(0);
+        (await Owed())
+            .Should()
+            .ContainSingle("a host that does not serve the target leaves the fire")
+            .Which.Policy.Should()
+            .Be(Linked);
+
+        await Runner(_host).PassOnce(CancellationToken.None);
+        (await StateOf(receipt)).Should().Be("Void");
+        (await Owed()).Should().BeEmpty();
     }
 
     [Test]

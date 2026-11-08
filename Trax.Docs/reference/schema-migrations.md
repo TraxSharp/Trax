@@ -735,4 +735,6 @@ On Postgres it also adds `'policy'` to `trax.snapshot_transition_actor`, the act
 with. On SQLite the actor is its integer, `3`.
 
 The table is new and starts empty. A host on the previous version writes transitions without queueing policy fires, so
-during a rolling deploy a transition that host writes sets no policy off.
+during a rolling deploy a transition that host writes sets no policy off. A runner reads only the rows of the policies
+its host serves whose target machine it registers, and leaves every other row for a host that does, so a host that
+lacks a newer policy does not drop the fires it owes. A row of a policy no host serves stays in the table.

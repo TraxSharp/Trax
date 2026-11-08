@@ -21,12 +21,19 @@ namespace Trax.StateMachine.Persistence.FromIr;
 /// a later pass.
 /// </summary>
 /// <remarks>
+/// <para>
 /// A row with no target is one policy's reaction to one transition. A linked policy fires on the source owner's
 /// instances whose context holds the source's id at the policy's link field, a system policy on the instance at its
 /// key: those fire in the same transaction. A broadcast is expanded into one row per instance waiting in its state, at
 /// most <see cref="PolicyRunnerOptions.FanOutCap"/>, and every other unexpanded row of the same policy that no other host
 /// holds is coalesced into it, since they would reach the same instances. Its rows are then fired <see cref="PolicyRunnerOptions.BatchSize"/>
 /// at a time.
+/// </para>
+/// <para>
+/// Hosts need not serve the same policies or machines, as during a rolling deploy: a host reads only the rows of the
+/// policies it serves whose target machine it registers, and leaves every other row for a host that does. A row of a
+/// policy no host serves stays in the table.
+/// </para>
 /// </remarks>
 internal sealed class MachinePolicyRunner(
     IServiceScopeFactory scopes,
@@ -75,14 +82,28 @@ internal sealed class MachinePolicyRunner(
         }
     }
 
+    // The policies this host fires: those it serves whose target machine it registers. Another host's rows are not read.
+    private readonly Lazy<List<string>> _served = new(() =>
+        policies
+            .ById.Where(p =>
+                machines.OfType<IMachineInternals>().Any(m => ((IMachine)m).Name == p.Value.Target)
+            )
+            .Select(p => p.Key)
+            .ToList()
+    );
+
     /// <summary>One pass: expands what is owed, then fires one batch. Returns how many rows it worked.</summary>
     internal async Task<int> PassOnce(CancellationToken cancellationToken)
     {
+        var served = _served.Value;
+        if (served.Count == 0)
+            return 0;
         List<MachinePolicyFire> owed;
         await using (var scope = scopes.CreateAsyncScope())
             owed = await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .MachinePolicyFires.AsNoTracking()
+                .Where(f => served.Contains(f.Policy))
                 .OrderBy(f => f.Id)
                 .Take(options.BatchSize)
                 .ToListAsync(cancellationToken);
@@ -106,8 +127,9 @@ internal sealed class MachinePolicyRunner(
         return worked;
     }
 
-    // One row, in its own transaction: expanded or fired, then deleted. False when another host holds it, it is gone, or
-    // its target is busy, so it is kept for a later pass.
+    // One row, in its own transaction: expanded or fired, then deleted. False when another host holds it, it is gone, its
+    // target is busy, or this host does not serve its policy or target machine, so it is kept for a later pass or another
+    // host.
     private async Task<bool> Work(MachinePolicyFire row, CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
@@ -118,16 +140,13 @@ internal sealed class MachinePolicyRunner(
             return false;
         var fired = false;
 
-        if (!policies.ById.TryGetValue(row.Policy, out var policy))
-        {
-            logger.LogWarning(
-                "The policy fire {Row} names {Policy}, which this host does not serve; it is dropped.",
-                row.Id,
-                row.Policy
-            );
-            await Delete(context, row.Id, cancellationToken);
-        }
-        else if (row.TargetRowId is { } target)
+        // The read already passes these over; checked again so a row is never dropped for being another host's.
+        if (
+            !policies.ById.TryGetValue(row.Policy, out var policy)
+            || !_byName.Value.ContainsKey(policy.Target)
+        )
+            return false;
+        if (row.TargetRowId is { } target)
         {
             if (!await Fire(services, context, policy, target, cancellationToken))
                 return false;

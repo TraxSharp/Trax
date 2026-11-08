@@ -96,7 +96,8 @@ written), `AccessDerivationTests` (grants from an actor's own act, nothing widen
 `TimerDerivationTests` (time on a scenario clock, stays, timer rules the host accepts), and policies by
 `PolicyDerivationTests` (the three shapes, what a policy cannot be, a loop with no timer in it) and `PolicyRunnerTests` in
 `Trax.StateMachine.Persistence.Integration` (the owner's linked instance only, the fire recorded as the policy's, once
-across hosts and restarts, a broadcast capped and coalesced, a server-only trigger refused to a client). Views are held by
+across hosts and restarts, a fire left for the host that serves its policy and target, a broadcast capped and coalesced,
+a server-only trigger refused to a client). Views are held by
 `ViewDerivationTests` (readers from the people who read a view, a person's own instances only) and
 `IrMachineViewsE2ETests` in Trax.Api (a reader's own rows, `FORBIDDEN` for anyone else, the system instance started by
 the host), and their generated persisted documents by `MachineViewDocumentsTests` there (the text sent raw refused, the
