@@ -26,6 +26,9 @@ internal sealed class MemoryDriver(
     private readonly Dictionary<InstanceKey, Snapshot> _snapshots = [];
     private readonly Dictionary<InstanceKey, TimeSpan> _entered = [];
     private readonly List<InstanceKey> _order = [];
+
+    // Per instance, the states it entered since its last move that was not a policy's.
+    private readonly Dictionary<InstanceKey, List<string>> _cascaded = [];
     private TimeSpan _clock;
 
     public ValueTask<Answer> Start(Person person, string machine)
@@ -46,6 +49,7 @@ internal sealed class MemoryDriver(
             snapshot = snapshot with { Context = context };
         _snapshots[key] = snapshot;
         _entered[key] = _clock;
+        _cascaded.Remove(key);
         return ValueTask.CompletedTask;
     }
 
@@ -56,6 +60,9 @@ internal sealed class MemoryDriver(
                 // The system's instance at its fixed key is there from the start; a keyed one once arranged.
                 : (key.Owner is null && key.Key is null ? (Of(key).State, Of(key).Context) : null)
         );
+
+    public ValueTask<IReadOnlyList<string>> Cascaded(InstanceKey key) =>
+        new(_cascaded.TryGetValue(key, out var states) ? states.ToList() : []);
 
     public ValueTask<Answer> Fire(
         Person? person,
@@ -133,6 +140,7 @@ internal sealed class MemoryDriver(
             )
                 break;
             Enter(due.Key, timed.Snapshot, fireAt);
+            _cascaded[due.Key] = [timed.Snapshot.State];
             React(due.Key, timed.Snapshot.State, 0);
         }
         return ValueTask.CompletedTask;
@@ -169,6 +177,7 @@ internal sealed class MemoryDriver(
         {
             case AdvanceResult.Transitioned moved:
                 Enter(key, moved.Snapshot, _clock);
+                _cascaded[key] = [moved.Snapshot.State];
                 React(key, moved.Snapshot.State, 0);
                 return new Answer.Moved(moved.Snapshot.State);
             case AdvanceResult.Rejected refused:
@@ -211,6 +220,9 @@ internal sealed class MemoryDriver(
                 )
                 {
                     Enter(key, fired.Snapshot, _clock);
+                    if (!_cascaded.TryGetValue(key, out var states))
+                        _cascaded[key] = states = [];
+                    states.Add(fired.Snapshot.State);
                     React(key, fired.Snapshot.State, depth + 1);
                 }
         }

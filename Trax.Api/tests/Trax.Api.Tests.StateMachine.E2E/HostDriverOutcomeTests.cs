@@ -39,6 +39,21 @@ public class HostDriverOutcomeTests
     }
 
     [Test]
+    public void The_states_since_the_last_own_move_run_from_it_through_the_policy_moves_after_it()
+    {
+        Move[] history =
+        [
+            new(1, null, "Draft"),
+            new(2, "Draft", "Placed"),
+            new(3, "Placed", "Baking", ByPolicy: true),
+        ];
+
+        HostDriver.SinceLastOwnMove(history).Should().Equal("Placed", "Baking");
+        HostDriver.SinceLastOwnMove(history[..2]).Should().Equal("Placed");
+        HostDriver.SinceLastOwnMove([]).Should().BeEmpty();
+    }
+
+    [Test]
     public void A_state_passed_through_is_not_where_the_outcome_went()
     {
         Move[] history = [new(1, null, "Draft"), new(2, "Draft", "Charging")];

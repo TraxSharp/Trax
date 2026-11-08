@@ -730,7 +730,18 @@ internal sealed class Walk
             case Meaning.InState s
                 when _pending is not null
                     && _pending.Key == new InstanceKey(s.Machine, s.Owner, s.Key):
-                _pending.Thens.Add(s);
+                // After another instance moved, a Then naming this one in another state than its first Then is a
+                // policy that came back to it: the Thens follow the cascade in order (EFF-220).
+                if (
+                    !s.Still
+                    && _pending.Cascades.Count > 0
+                    && _pending.Thens.OfType<Meaning.InState>().Any(t => !t.Still)
+                    && _pending.Cascades[^1].Key != _pending.Key
+                    && _pending.Thens.OfType<Meaning.InState>().Last(t => !t.Still).State != s.State
+                )
+                    _pending.Cascades.Add((_pending.Key, s.State, step.Line));
+                else
+                    _pending.Thens.Add(s);
                 break;
             case Meaning.Told or Meaning.Denied:
                 var person = meaning is Meaning.Told t
@@ -1023,8 +1034,12 @@ internal sealed class Walk
                 continue;
             }
             var target = _instances[key];
+            // A user's instance another owner's move reaches, or the acting instance itself coming back, was moved by
+            // the system instance that moved last: a broadcast from it.
             var (cause, causeEntered) =
-                key.Owner is not null && key.Owner != pending.Key.Owner && system is { } moved
+                key.Owner is not null
+                && (key.Owner != pending.Key.Owner || key == pending.Key)
+                && system is { } moved
                     ? (moved.Key, moved.Entered)
                     : (pending.Key, entered);
             Policies.Add(

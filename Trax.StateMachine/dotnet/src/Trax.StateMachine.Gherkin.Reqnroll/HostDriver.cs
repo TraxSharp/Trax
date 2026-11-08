@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Enums;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence;
 using Trax.StateMachine.Persistence.FromIr;
@@ -89,6 +90,13 @@ internal sealed class HostDriver(
             );
     }
 
+    public async ValueTask<IReadOnlyList<string>> Cascaded(InstanceKey key)
+    {
+        if (!_ids.ContainsKey(key) && (key.Owner is not null || key.Key is not null))
+            return [];
+        return SinceLastOwnMove(await History(key, await IdOf(key)));
+    }
+
     public async ValueTask<(string State, JsonObject Context)?> Read(InstanceKey key)
     {
         if (!_ids.ContainsKey(key) && (key.Owner is not null || key.Key is not null))
@@ -168,7 +176,29 @@ internal sealed class HostDriver(
     }
 
     /// <summary>One row of an instance's transition history: its revision and the move it wrote.</summary>
-    internal readonly record struct Move(long Revision, string? From, string To);
+    internal readonly record struct Move(
+        long Revision,
+        string? From,
+        string To,
+        bool ByPolicy = false
+    );
+
+    /// <summary>
+    /// The states entered since the last move that was not a policy's, in order: the newest moves a policy made, and the
+    /// move before them.
+    /// </summary>
+    internal static IReadOnlyList<string> SinceLastOwnMove(IReadOnlyList<Move> history)
+    {
+        var states = new List<string>();
+        foreach (var move in history.OrderByDescending(m => m.Revision))
+        {
+            states.Add(move.To);
+            if (!move.ByPolicy)
+                break;
+        }
+        states.Reverse();
+        return states;
+    }
 
     /// <summary>The revision at which the instance last entered <paramref name="state"/>, or 0 if it never did.</summary>
     internal static long Entered(IReadOnlyList<Move> history, string state) =>
@@ -193,7 +223,12 @@ internal sealed class HostDriver(
         return await data
             .SnapshotTransitions.AsNoTracking()
             .Where(t => t.DraftRowId == row)
-            .Select(t => new Move(t.Revision, t.FromState, t.ToState))
+            .Select(t => new Move(
+                t.Revision,
+                t.FromState,
+                t.ToState,
+                t.Actor == SnapshotTransitionActor.Policy
+            ))
             .ToListAsync();
     }
 

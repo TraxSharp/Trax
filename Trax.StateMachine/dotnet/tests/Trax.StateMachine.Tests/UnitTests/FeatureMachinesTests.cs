@@ -132,6 +132,137 @@ public class FeatureMachinesTests
     }
 
     [Test]
+    public void Timers_that_loop_on_their_own_are_refused_as_the_host_refuses_them()
+    {
+        var glossary = FeatureGlossary.Read(
+            """
+            {
+              "version": 1,
+              "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
+              "machines": {
+                "shop": {
+                  "system": "shop/main",
+                  "name": "the shop",
+                  "initial": "Open",
+                  "states": { "Open": "is open", "Firing": "is baking a batch" },
+                  "triggers": { "Close": { "phrase": "the shop closes" } }
+                }
+              }
+            }
+            """
+        );
+        FeatureFile[] features =
+        [
+            new(
+                "oven.feature",
+                """
+                Feature: Oven
+                  Scenario: The oven fires on its own
+                    Given the shop is open
+                    When 8 seconds pass
+                    Then the shop is baking a batch
+
+                  Scenario: A batch ends on its own
+                    Given the shop is baking a batch
+                    When 4 seconds pass
+                    Then the shop is open
+                """
+            ),
+        ];
+
+        var derived = FeatureMachines.Derive(glossary, features);
+
+        derived.Succeeded.Should().BeFalse();
+        derived.Irs.Should().BeEmpty();
+        var loops = derived
+            .Problems.Where(p => p.Message.Contains("form a cycle no event breaks"))
+            .ToList();
+        loops
+            .Should()
+            .HaveCount(2, "each timer of the loop is named at the scenario that showed it");
+        loops.Should().OnlyContain(p => p.File == "oven.feature");
+        loops.Select(p => p.Line).Should().OnlyHaveUniqueItems();
+    }
+
+    [Test]
+    public void A_cascade_may_come_back_to_the_instance_that_set_it_off()
+    {
+        var glossary = FeatureGlossary.Read(
+            """
+            {
+              "version": 1,
+              "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
+              "machines": {
+                "order": {
+                  "ownedBy": "customer",
+                  "noun": "order",
+                  "start": "has an order",
+                  "initial": "Draft",
+                  "states": { "Draft": "is a draft", "Placed": "is placed", "Baking": "is baking" },
+                  "triggers": {
+                    "Place": { "phrase": "places {subject}" },
+                    "Bake": { "phrase": "{subject} starts baking" }
+                  }
+                },
+                "shop": {
+                  "system": "shop/main",
+                  "name": "the shop",
+                  "initial": "Open",
+                  "states": { "Open": "is open", "Firing": "is baking a batch" },
+                  "triggers": { "Batch": { "phrase": "the oven fires" } }
+                }
+              }
+            }
+            """
+        );
+        FeatureFile[] features =
+        [
+            new(
+                "oven.feature",
+                """
+                Feature: Oven
+                  Scenario: An order placed while the shop is open goes straight in
+                    Given Ada is a customer
+                    And Ada has an order
+                    And the shop is open
+                    When Ada places her order
+                    Then Ada's order is placed
+                    And the shop is baking a batch
+                    And Ada's order is baking
+
+                  Scenario: The oven fires
+                    Given the shop is open
+                    When the oven fires
+                    Then the shop is baking a batch
+
+                  Scenario: An order goes in the oven
+                    Given Ada is a customer
+                    And Ada has an order
+                    And Ada's order is placed
+                    When Ada's order starts baking
+                    Then Ada's order is baking
+                """
+            ),
+        ];
+
+        var derived = FeatureMachines.Derive(glossary, features);
+
+        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived
+            .Host.Should()
+            .Contain("\"shape\":\"toSystem\"")
+            .And.Contain("\"shape\":\"broadcast\"");
+        var report = FeatureMachines.Run(glossary, features, derived);
+        report
+            .Scenarios.Where(s => s.Status != FeatureStatus.Passed)
+            .Select(s =>
+                $"{s.Name}: {s.Steps.FirstOrDefault(x => x.Status == FeatureStatus.Failed)?.Message}"
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Test]
     public void An_ir_that_is_not_json_is_a_format_error_naming_the_machine()
     {
         var glossary = FeatureGlossary.Read(Glossary);

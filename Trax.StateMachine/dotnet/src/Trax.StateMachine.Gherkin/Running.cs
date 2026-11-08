@@ -34,6 +34,12 @@ internal interface IScenarioDriver
     /// <summary>An instance's state and context, or null if it has none.</summary>
     ValueTask<(string State, JsonObject Context)?> Read(InstanceKey key);
 
+    /// <summary>
+    /// The states an instance entered since its last move that was not a policy's, in order: where a When took it, then
+    /// where the policies it set off took it on. Empty when it has not moved.
+    /// </summary>
+    ValueTask<IReadOnlyList<string>> Cascaded(InstanceKey key);
+
     /// <summary>Fires a trigger as <paramref name="person"/>, or as the server when that is null.</summary>
     ValueTask<Answer> Fire(Person? person, InstanceKey key, string trigger, JsonObject? input);
 
@@ -284,9 +290,13 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
                 if (last is { } l && l.Key == key && l.Answer is not Answer.Moved && !s.Still)
                     return $"'{step.Text}', and it was refused: {ScenarioRunner.Describe(l.Answer)}.";
                 var now = await driver.Read(key);
-                return now?.State == s.State
-                    ? null
-                    : $"'{step.Text}', and it is {(now is null ? "not started" : $"in {now.Value.State}")}.";
+                if (now?.State == s.State)
+                    return null;
+                // A Then may name where the When took the instance before a policy it set off moved it on: the
+                // Thens after a When follow the cascade in order (EFF-220).
+                if (!s.Still && (await driver.Cascaded(key)).Contains(s.State))
+                    return null;
+                return $"'{step.Text}', and it is {(now is null ? "not started" : $"in {now.Value.State}")}.";
             }
 
             case (StepKind.Then, Meaning.ViewShows v):
