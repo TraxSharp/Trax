@@ -131,27 +131,18 @@ internal sealed class HostDriver(
         JsonNode? output
     )
     {
-        // The host's own train runs and says how it ended: the first move out of the state, from the instance's history,
-        // so a state it passed through on the way is not mistaken for where the outcome took it.
+        // The host's own train runs and says how it ended: the first move out of the state after the instance last entered
+        // it, from its history, so a state it passed through on the way, or the move out of an earlier visit to the same
+        // state, is not mistaken for where this outcome took it.
         var id = await IdOf(key);
         var deadline = DateTimeOffset.UtcNow + options.Slack;
+        var entered = Entered(await History(key, id), state);
         while (true)
         {
-            await using (var scope = options.Host.CreateAsyncScope())
+            if (Left(await History(key, id), state, entered) is { } left)
             {
-                var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
-                var row = await ServerFire.RowOf(data, key.Machine, id, CancellationToken.None);
-                var left = await data
-                    .SnapshotTransitions.AsNoTracking()
-                    .Where(t => t.DraftRowId == row && t.FromState == state && t.ToState != state)
-                    .OrderByDescending(t => t.Revision)
-                    .Select(t => t.ToState)
-                    .FirstOrDefaultAsync();
-                if (left is not null)
-                {
-                    await Settle();
-                    return new Answer.Moved(left);
-                }
+                await Settle();
+                return new Answer.Moved(left);
             }
             if (DateTimeOffset.UtcNow > deadline)
                 return new Answer.Refused(
@@ -160,6 +151,36 @@ internal sealed class HostDriver(
                 );
             await Task.Delay(100);
         }
+    }
+
+    /// <summary>One row of an instance's transition history: its revision and the move it wrote.</summary>
+    internal readonly record struct Move(long Revision, string? From, string To);
+
+    /// <summary>The revision at which the instance last entered <paramref name="state"/>, or 0 if it never did.</summary>
+    internal static long Entered(IReadOnlyList<Move> history, string state) =>
+        history.Where(m => m.To == state).Select(m => m.Revision).DefaultIfEmpty(0).Max();
+
+    /// <summary>
+    /// Where the instance went when it left <paramref name="state"/> after <paramref name="entered"/>, or null if it has
+    /// not left it since.
+    /// </summary>
+    internal static string? Left(IReadOnlyList<Move> history, string state, long entered) =>
+        history
+            .Where(m => m.Revision > entered && m.From == state && m.To != state)
+            .OrderBy(m => m.Revision)
+            .Select(m => m.To)
+            .FirstOrDefault();
+
+    private async Task<List<Move>> History(InstanceKey key, Guid id)
+    {
+        await using var scope = options.Host.CreateAsyncScope();
+        var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
+        var row = await ServerFire.RowOf(data, key.Machine, id, CancellationToken.None);
+        return await data
+            .SnapshotTransitions.AsNoTracking()
+            .Where(t => t.DraftRowId == row)
+            .Select(t => new Move(t.Revision, t.FromState, t.ToState))
+            .ToListAsync();
     }
 
     public async ValueTask Pass(TimeSpan time)
