@@ -59,9 +59,13 @@ public class FormatCorpusTests
     [TestCase("glossary", "view-name-not-a-graphql-name", "has no GraphQL name")]
     [TestCase("glossary", "view-names-fold-together", "is TheShopSign in GraphQL")]
     [TestCase("glossary", "view-row-types-collide", "PinnedStickyNoteRow")]
+    [TestCase("glossary", "brace-in-state-phrase", "may hold a {placeholder}")]
+    [TestCase("glossary", "invoke-output-field-twice", "repeats the field 'approved'")]
     [TestCase("host", "view-name-not-a-graphql-name", "has no GraphQL name")]
     [TestCase("host", "view-names-fold-together", "is TheShop in GraphQL")]
     [TestCase("host", "view-row-types-collide", "PinnedStickyNoteRow")]
+    [TestCase("host", "policy-broadcast-from-user-machine", "starts from a system machine")]
+    [TestCase("host", "duplicate-json-key", "version")]
     public void A_refused_document_is_refused_for_what_it_is_named(
         string format,
         string name,
