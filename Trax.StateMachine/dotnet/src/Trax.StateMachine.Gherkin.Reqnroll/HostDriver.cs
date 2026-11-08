@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -42,9 +41,15 @@ internal sealed class HostDriver(
     public async ValueTask<Answer> Start(Person person, string machine)
     {
         _actors[person.Name] = person.Actor;
+        var requestId = RequestId();
         var answer = await Send(
             person.Name,
-            $"mutation {{ machines {{ {FieldOf(machine)} {{ start(requestId: \"{RequestId()}\") {{ id state problem {{ code message }} }} }} }} }}",
+            new Operation(
+                machine,
+                "start",
+                $"mutation {{ machines {{ {FieldOf(machine)} {{ start(requestId: \"{requestId}\") {{ id state problem {{ code message }} }} }} }} }}",
+                new JsonObject { ["requestId"] = requestId }
+            ),
             ["machines", FieldOf(machine), "start"]
         );
         // A refused start answers a problem and no id.
@@ -115,9 +120,18 @@ internal sealed class HostDriver(
         var field = FieldOf(key.Machine);
         var operation = char.ToLowerInvariant(trigger[0]) + trigger[1..];
         var inputArgument = input is null ? "" : $"input: {Literal(input)}, ";
+        var requestId = RequestId();
+        var variables = new JsonObject { ["id"] = id.ToString(), ["requestId"] = requestId };
+        if (input is not null)
+            variables["input"] = input.DeepClone();
         var answer = await Send(
             person.Name,
-            $"mutation {{ machines {{ {field} {{ {operation}(id: \"{id}\", {inputArgument}requestId: \"{RequestId()}\") {{ state problem {{ code message }} }} }} }} }}",
+            new Operation(
+                key.Machine,
+                operation,
+                $"mutation {{ machines {{ {field} {{ {operation}(id: \"{id}\", {inputArgument}requestId: \"{requestId}\") {{ state problem {{ code message }} }} }} }} }}",
+                variables
+            ),
             ["machines", field, operation]
         );
         await Settle();
@@ -213,7 +227,12 @@ internal sealed class HostDriver(
         var machineField = FieldOf(shown.Machine);
         var answer = await Send(
             person.Name,
-            $"{{ views {{ {viewField} {{ {machineField} {{ {field} }} }} }} }}",
+            new Operation(
+                null,
+                viewField,
+                $"{{ views {{ {viewField} {{ {machineField} {{ {field} }} }} }} }}",
+                []
+            ),
             ["views", viewField, machineField]
         );
         if (answer.Answer is not Answer.Moved)
@@ -341,12 +360,70 @@ internal sealed class HostDriver(
 
     private sealed record Sent(Answer Answer, JsonObject? Result, JsonNode? Node);
 
-    // Sends a document as the person; the answer at path. A field the schema does not have for them is not served.
-    private async Task<Sent> Send(string person, string document, string[] path)
+    /// <summary>
+    /// One request: a machine's operation (<paramref name="Machine"/> set) or a view's read, as a hand-written document
+    /// and as the variables its persisted document takes.
+    /// </summary>
+    private sealed record Operation(
+        string? Machine,
+        string Name,
+        string Document,
+        JsonObject Variables
+    );
+
+    // The codes a host answers a request with before it reaches a machine or a view: the request is not one it runs,
+    // so no step may read them as the machine's answer (a denial, or a trigger not served).
+    private static readonly HashSet<string> PostureCodes = new(StringComparer.Ordinal)
     {
+        "PERSISTED_OPERATION_REQUIRED",
+        "PERSISTED_OPERATION_ID_MISMATCH",
+        "CLIENT_OUTDATED",
+        "SERVER_OUTDATED",
+        "HC0020",
+    };
+
+    // The persisted id the manifest lists for an operation, or null when it lists none. A machine whose IR the host
+    // serves differently from the one the manifest was exported with is refused: its ids are another version's.
+    private string? PersistedId(ClientManifest manifest, Operation operation)
+    {
+        if (operation.Machine is null)
+            return manifest.Views.FirstOrDefault(v => v.Operation == operation.Name)?.Id;
+        var machine = manifest.Machines.FirstOrDefault(m => m.Id == operation.Machine);
+        if (machine is null)
+            return null;
+        if (
+            Machines.TryGetValue(operation.Machine, out var served)
+            && ((IMachine)served).SchemaHash is { } hash
+            && hash != machine.IrHash
+        )
+            throw new InvalidOperationException(
+                $"The client manifest was exported from another version of {operation.Machine} than the host serves: export it again."
+            );
+        return machine.Documents.FirstOrDefault(d => d.Operation == operation.Name)?.Id;
+    }
+
+    // Sends the operation as the person, by its persisted id when a manifest is set and as its document when not; the
+    // answer at path. A field the schema does not have for them is not served.
+    private async Task<Sent> Send(string person, Operation operation, string[] path)
+    {
+        JsonObject sent;
+        if (options.Manifest is { } manifest)
+        {
+            if (PersistedId(manifest, operation) is not { } id)
+                return new Sent(
+                    new Answer.NotServed(
+                        $"the client manifest has no document for {operation.Machine ?? "the view"} {operation.Name}"
+                    ),
+                    null,
+                    null
+                );
+            sent = new JsonObject { ["id"] = id, ["variables"] = operation.Variables };
+        }
+        else
+            sent = new JsonObject { ["query"] = operation.Document };
         using var request = new HttpRequestMessage(HttpMethod.Post, options.GraphQLPath)
         {
-            Content = JsonContent.Create(new { query = document }),
+            Content = new StringContent(sent.ToJsonString(), Encoding.UTF8, "application/json"),
         };
         foreach (var (name, value) in CredentialOf(person).Headers)
             request.Headers.TryAddWithoutValidation(name, value);
@@ -356,6 +433,15 @@ internal sealed class HostDriver(
         {
             var error = errors[0]!;
             var code = error["extensions"]?["code"]?.GetValue<string>();
+            if (code is not null && PostureCodes.Contains(code))
+                throw new InvalidOperationException(
+                    $"The host did not run {operation.Machine ?? "the view"} {operation.Name}: {code}, {error["message"]?.GetValue<string>()}"
+                        + (
+                            options.Manifest is null
+                                ? " Set TraxFeatureDriverOptions.Manifest to the host's client manifest, so each operation is sent by its persisted id."
+                                : ""
+                        )
+                );
             if (body["data"] is null && code is not ("FORBIDDEN" or "UNAUTHENTICATED"))
                 return new Sent(
                     new Answer.NotServed(error["message"]?.GetValue<string>() ?? "refused"),

@@ -32,6 +32,7 @@ namespace Trax.StateMachine.Gherkin.Reqnroll
         public Trax.StateMachine.Gherkin.FeatureGlossary Glossary { get; set; }
         public string GraphQLPath { get; set; }
         public System.IServiceProvider Host { get; set; }
+        public Trax.StateMachine.ClientManifest? Manifest { get; set; }
         public System.TimeSpan Slack { get; set; }
         public Trax.StateMachine.Gherkin.Reqnroll.TraxFeatureDriverOptions Given(string pattern, System.Func<Trax.StateMachine.Gherkin.Reqnroll.FeatureScenario, System.Text.RegularExpressions.Match, System.Threading.Tasks.Task> step) { }
         public Trax.StateMachine.Gherkin.Reqnroll.TraxFeatureDriverOptions Then(string pattern, System.Func<Trax.StateMachine.Gherkin.Reqnroll.FeatureScenario, System.Text.RegularExpressions.Match, System.Threading.Tasks.Task> step) { }

@@ -40,6 +40,16 @@ public sealed class TraxFeatureDriverOptions
     /// </summary>
     public TimeSpan Slack { get; set; } = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// The host's client manifest, as <c>--trax-export-client</c> writes it. When set, every machine operation and view
+    /// read is sent by the persisted id the manifest lists for it, as a generated client sends it, so the features run
+    /// against a host that requires persisted operations; an operation it lists no document for is not served. When
+    /// null, each is sent as a hand-written document, which only a host that accepts inline documents runs. A host that
+    /// refuses a request before running it (an inline document it requires persisted, an id of another version) fails
+    /// the step, never reads as a denial. Its machines must be the versions the host serves.
+    /// </summary>
+    public ClientManifest? Manifest { get; set; }
+
     internal List<RegisteredStep> Steps { get; } = [];
 
     /// <summary>

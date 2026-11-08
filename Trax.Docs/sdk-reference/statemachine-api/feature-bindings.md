@@ -28,7 +28,7 @@ a feature about what the machines do not cover, registers the few steps the glos
 | Member | Description |
 | --- | --- |
 | `TraxFeatures.Configure(Action<TraxFeatureDriverOptions> configure)` | Sets what the bindings run against. Call it once from a `[BeforeTestRun]` hook, after the host under test has started. Without `Host`, `Client`, `Glossary` and `Credential` it throws an `ArgumentException`. |
-| `TraxFeatureDriverOptions` | `Host`, the host's services; `Client`, an `HttpClient` to it (`WebApplicationFactory.CreateClient()`); `GraphQLPath`, `/trax/graphql` by default; `Glossary`, a `FeatureGlossary`; `Credential`, a person's credential; `Slack`, how long past its due time a timer, policy or invoked train may take on the host before a Then is read anyway, five seconds by default. |
+| `TraxFeatureDriverOptions` | `Host`, the host's services; `Client`, an `HttpClient` to it (`WebApplicationFactory.CreateClient()`); `GraphQLPath`, `/trax/graphql` by default; `Glossary`, a `FeatureGlossary`; `Credential`, a person's credential; `Slack`, how long past its due time a timer, policy or invoked train may take on the host before a Then is read anyway, five seconds by default; `Manifest`, the host's `ClientManifest`, to send every operation by its persisted id. |
 | `TraxFeatureDriverOptions.Given/When/Then(string pattern, Func<FeatureScenario, Match, Task> step)` | Registers a step of the test project's own. `pattern` is a regular expression matched against the whole step text, its groups in the `Match`. Returns the options, so calls chain. A malformed pattern, or one registered twice for the same keyword, throws an `ArgumentException`. |
 | `FeatureScenario` | The scenario a registered step runs in. `Services`, the host's services; `Credential(person)`, the credential the glossary's steps send for that person; `SendAsync(person, request)`, a request sent on `Client` with it; `InstanceOf(person, machine)`, the id of the person's instance of a machine (its glossary id), or null; `Items`, a bag the scenario's steps share. A person the scenario has not introduced throws an `ArgumentException`. |
 | `FeatureActor` | The actor a credential is made for: its `Name`, its `Roles`, and `AnyAuthenticated` for an actor any signed-in caller is. |
@@ -45,6 +45,13 @@ a feature about what the machines do not cover, registers the few steps the glos
   and sets off no policy; the timer and the run of the state it enters start as they would.
 - **Everything a person does goes over GraphQL.** A trigger the host does not serve them is not served, and a rule that
   does not admit them is `FORBIDDEN`, as the host says it. A step no person takes fires as the host's server does.
+- **By persisted id, when the host requires it.** With `Manifest` set (the file `--trax-export-client` writes, the one
+  a page's generated client is built from), each start, trigger and view read is sent as the id the manifest lists for
+  it, with its values as variables, as the page sends it, so the features run against the host's shipped posture. An
+  operation the manifest has no document for is not served. Without it, each is sent as a hand-written document. A
+  request the host refuses before running it (`PERSISTED_OPERATION_REQUIRED`, `CLIENT_OUTDATED`, `SERVER_OUTDATED`, an
+  id it does not hold) fails the step rather than reading as a denial, and a manifest exported from another version of
+  a machine than the host serves fails it too: export it again.
 - **The glossary reads a step first.** A registered step runs only when no glossary phrase matches the text, so it
   never changes what a glossary step means, and a step two registered patterns match fails as ambiguous. Register
   steps through `TraxFeatures.Configure`, never with Reqnroll's own `[Given]`, `[When]` or `[Then]`: the binding matches
@@ -79,6 +86,7 @@ public sealed class Hooks
             o.Host = app.Services;
             o.Client = app.CreateClient();
             o.Glossary = FeatureGlossary.Read(File.ReadAllText("features/glossary.json"));
+            o.Manifest = ClientManifest.Read(File.ReadAllText("client/manifest.json"));
             o.Credential = (actor, person, scenario) =>
                 new(new Dictionary<string, string> { ["Authorization"] = "Bearer " + Tokens.Mint($"{scenario}-{person}", actor.Roles) });
             // A spec's own step: Ada's charges, read as Ada.

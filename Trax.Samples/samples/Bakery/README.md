@@ -72,7 +72,8 @@ The same features run two ways:
   [`InMemoryRunTests`](../../tests/Trax.Samples.Bakery.E2E/InMemoryRunTests.cs). It also checks the committed machines
   are what the features derive, and that the glossary names nothing the features leave out.
 - **Against the host**, through the Reqnroll bindings of `Trax.StateMachine.Gherkin.Reqnroll`, every person a user of
-  their own: [`Hooks`](../../tests/Trax.Samples.Bakery.E2E/Hooks.cs) and the feature files themselves. The two
+  their own: [`Hooks`](../../tests/Trax.Samples.Bakery.E2E/Hooks.cs) and the feature files themselves. The host
+  requires persisted operations as it ships, and the bindings send each step by the id the page's manifest holds. The two
   scenarios whose outcome the real payment train never produces by itself (a payment that fails, one that is called
   off) are tagged `@in-memory` and run in memory only.
 

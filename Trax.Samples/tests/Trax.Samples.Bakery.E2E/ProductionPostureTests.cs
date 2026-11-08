@@ -10,9 +10,9 @@ using Trax.Samples.Bakery.E2E.Fixtures;
 namespace Trax.Samples.Bakery.E2E;
 
 /// <summary>
-/// The same host started in Production: the sign-in endpoint is not mapped, a token signed with the demo key reads
-/// nothing, and a hand-written document is refused even with <c>Bakery:RequirePersistedOperations</c> off. Each read
-/// is checked against the Development host first, so a refusal here is the posture's and not a wrong request.
+/// The same host started in Production: the sign-in endpoint is not mapped and a token signed with the demo key reads
+/// nothing. Each read is checked against the Development host first, so a refusal here is the posture's and not a wrong
+/// request. A hand-written document is refused on both: neither host runs anything but its persisted documents.
 /// </summary>
 [TestFixture]
 public class ProductionPostureTests
@@ -74,17 +74,23 @@ public class ProductionPostureTests
     }
 
     [Test]
-    public async Task A_hand_written_document_is_refused_in_Production()
+    public async Task A_hand_written_document_is_refused_in_Development_and_Production()
     {
         // Anyone may ask for __typename, so only the document's being hand-written can refuse it.
         var body = new { query = "{ __typename }" };
 
-        using var development = await PostAsync(_development, body, token: null);
-        development.RootElement.TryGetProperty("errors", out _).Should().BeFalse(Show(development));
-
-        using var production = await PostAsync(_production, body, token: null);
-        production.RootElement.TryGetProperty("errors", out _).Should().BeTrue(Show(production));
-        production.RootElement.TryGetProperty("data", out _).Should().BeFalse(Show(production));
+        foreach (var factory in new[] { _development, _production })
+        {
+            using var answer = await PostAsync(factory, body, token: null);
+            answer.RootElement.TryGetProperty("data", out _).Should().BeFalse(Show(answer));
+            answer
+                .RootElement.GetProperty("errors")[0]
+                .GetProperty("extensions")
+                .GetProperty("code")
+                .GetString()
+                .Should()
+                .Be("PERSISTED_OPERATION_REQUIRED", Show(answer));
+        }
     }
 
     private static string OrdersViewId()

@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
 using Trax.StateMachine;
 using Trax.StateMachine.Features;
@@ -243,6 +244,69 @@ public class ScenarioDriverParityTests
     }
 
     [Test]
+    public async Task Every_scenario_passes_by_persisted_id_on_a_host_that_requires_them()
+    {
+        const string database = Database + "_persisted";
+        await E2EHost.RecreateDatabaseAsync(database);
+        var host = await E2EHost.StartAsync(
+            database,
+            new CountingCharge(),
+            new E2EHostOptions
+            {
+                Machines = o =>
+                {
+                    o.ServeFeatures(_directory);
+                    o.InvokeOutcomeSweepInterval = TimeSpan.FromMilliseconds(500);
+                    o.InvokeOutcomeSweepIntervalWhileListening = TimeSpan.FromMilliseconds(500);
+                },
+                GraphQL = MachineDocumentOps.Persisted(requirePersisted: true),
+            }
+        );
+        var path = Path.Combine(Path.GetTempPath(), $"trax-parity-{Guid.NewGuid():N}.json");
+        try
+        {
+            await ClientManifestExport.WriteAsync(host.Services, path, CancellationToken.None);
+            var manifest = ClientManifest.Read(await File.ReadAllTextAsync(path));
+            var (scenarios, problems) = FeatureFiles.Parse(Features);
+            problems.Should().BeEmpty();
+            var resolver = new StepResolver(_glossary);
+
+            // Without the manifest every operation is a hand-written document, which this host refuses: the step
+            // throws, and never reads the refusal as the machine's.
+            await FluentActions
+                .Awaiting(async () =>
+                    await HostDriver("inline", host).Start(Payer("Ada"), "p-order")
+                )
+                .Should()
+                .ThrowAsync<InvalidOperationException>()
+                .WithMessage("*PERSISTED_OPERATION_REQUIRED*");
+
+            foreach (var scenario in scenarios)
+            {
+                var result = await ScenarioRunner.Run(
+                    Walk.Run(scenario, _glossary, resolver),
+                    _glossary,
+                    HostDriver(scenario.Name, host, manifest)
+                );
+                result.Status.Should().Be(ScenarioStatus.Passed, Show(result));
+            }
+
+            // A trigger no one is served has no document, so it is not served by id either.
+            var rush = HostDriver("rush-persisted", host, manifest);
+            (await rush.Start(Payer("Ada"), "p-order")).Should().BeOfType<Answer.Moved>();
+            (await rush.Fire(Payer("Ada"), Adas, "Rush", null))
+                .Should()
+                .BeOfType<Answer.NotServed>();
+        }
+        finally
+        {
+            File.Delete(path);
+            host.Dispose();
+            await E2EHost.DropDatabaseAsync(database);
+        }
+    }
+
+    [Test]
     public async Task A_guard_refuses_with_the_same_code_and_message_on_both()
     {
         var ada = new Person("Ada", _glossary.Actors["payer"]);
@@ -374,12 +438,17 @@ public class ScenarioDriverParityTests
         return answers;
     }
 
-    private HostDriver HostDriver(string scenario) =>
+    private HostDriver HostDriver(
+        string scenario,
+        IHost? host = null,
+        ClientManifest? manifest = null
+    ) =>
         new(
             new TraxFeatureDriverOptions
             {
-                Host = _host.Services,
-                Client = _host.GetTestServer().CreateClient(),
+                Host = (host ?? _host).Services,
+                Client = (host ?? _host).GetTestServer().CreateClient(),
+                Manifest = manifest,
                 Glossary = FeatureGlossary.Read(Glossary),
                 Credential = (_, person, _) =>
                     new FeatureCredential(

@@ -2,6 +2,7 @@ using Reqnroll;
 using Trax.Samples.Bakery.Api.Auth;
 using Trax.Samples.Bakery.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
+using Trax.StateMachine;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Gherkin.Reqnroll;
 
@@ -9,7 +10,8 @@ namespace Trax.Samples.Bakery.E2E;
 
 /// <summary>
 /// Starts the Bakery host once and points the Trax feature bindings at it: every person of every scenario signs in
-/// with a token of their own, so no scenario sees another's orders or shifts.
+/// with a token of their own, so no scenario sees another's orders or shifts, and every request goes by the persisted
+/// id the page's client manifest holds, since the host runs no other.
 /// </summary>
 [Binding]
 public sealed class Hooks
@@ -29,6 +31,9 @@ public sealed class Hooks
                 File.ReadAllText(
                     Path.Combine(AppContext.BaseDirectory, "features", "glossary.json")
                 )
+            );
+            o.Manifest = ClientManifest.Read(
+                File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client", "manifest.json"))
             );
             o.Credential = DemoFeatureCredentials.PerPerson(DemoTokens.Issuer);
         });

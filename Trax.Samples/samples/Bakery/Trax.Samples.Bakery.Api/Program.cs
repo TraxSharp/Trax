@@ -88,25 +88,15 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 
 // ── GraphQL ─────────────────────────────────────────────────────────────────
-// Persisted documents only, as in production: Trax generates and registers one per machine operation and per view,
-// and the page holds their ids in its generated client. Bakery:RequirePersistedOperations turns the refusal off, for a
-// test that sends hand-written documents, in Development only.
-var requirePersisted =
-    !builder.Environment.IsDevelopment()
-    || builder.Configuration.GetValue("Bakery:RequirePersistedOperations", true);
+// Persisted documents only, everywhere: Trax generates and registers one per machine operation and per view, the page
+// holds their ids in its generated client, and the feature tests send the same ids from the client manifest.
 builder.Services.AddTraxGraphQL(graphql =>
     graphql
         .ExposeOperationQueries()
         .GateOperations(roles: BakeryRoles.Operator)
         .UsePersistedOperations(persisted =>
-        {
-            persisted
-                .SingleNode()
-                .RequirePersisted(requirePersisted)
-                .LogNonPersistedRequests(!requirePersisted);
-            if (requirePersisted)
-                persisted.DisableIntrospection();
-        })
+            persisted.SingleNode().RequirePersisted(true).DisableIntrospection()
+        )
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 

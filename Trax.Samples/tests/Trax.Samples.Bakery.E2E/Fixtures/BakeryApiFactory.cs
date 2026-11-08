@@ -4,9 +4,9 @@ using Trax.Samples.Shared.Testing;
 namespace Trax.Samples.Bakery.E2E.Fixtures;
 
 /// <summary>
-/// Boots the Bakery host against a dedicated test database (<c>bakery_e2e_tests</c>, which CI provisions). It accepts
-/// hand-written documents, since the feature bindings send each step as one, and sweeps for due timers every 200 ms, so
-/// the shop's closing time is seen when it falls due.
+/// Boots the Bakery host against a dedicated test database (<c>bakery_e2e_tests</c>, which CI provisions), with
+/// persisted operations required as it ships, and sweeps for due timers every 200 ms, so the shop's closing time is
+/// seen when it falls due.
 /// </summary>
 public class BakeryApiFactory : SampleApiFactory<Api.Program>
 {
@@ -20,7 +20,6 @@ public class BakeryApiFactory : SampleApiFactory<Api.Program>
     {
         base.ConfigureWebHost(builder);
         builder.UseEnvironment("Development");
-        builder.UseSetting("Bakery:RequirePersistedOperations", "false");
         builder.UseSetting("Bakery:MachineSweepInterval", "00:00:00.200");
     }
 }
