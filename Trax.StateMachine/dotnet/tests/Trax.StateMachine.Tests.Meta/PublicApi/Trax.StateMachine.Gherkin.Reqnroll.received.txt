@@ -12,6 +12,14 @@ namespace Trax.StateMachine.Gherkin.Reqnroll
         public FeatureCredential(System.Collections.Generic.IReadOnlyDictionary<string, string> Headers) { }
         public System.Collections.Generic.IReadOnlyDictionary<string, string> Headers { get; init; }
     }
+    public sealed class FeatureScenario
+    {
+        public System.Collections.Generic.IDictionary<string, object?> Items { get; }
+        public System.IServiceProvider Services { get; }
+        public Trax.StateMachine.Gherkin.Reqnroll.FeatureCredential Credential(string person) { }
+        public System.Guid? InstanceOf(string person, string machine) { }
+        public System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage> SendAsync(string person, System.Net.Http.HttpRequestMessage request, System.Threading.CancellationToken cancellationToken = default) { }
+    }
     public sealed class FeatureStepFailedException : System.Exception
     {
         public FeatureStepFailedException(string message) { }
@@ -25,6 +33,9 @@ namespace Trax.StateMachine.Gherkin.Reqnroll
         public string GraphQLPath { get; set; }
         public System.IServiceProvider Host { get; set; }
         public System.TimeSpan Slack { get; set; }
+        public Trax.StateMachine.Gherkin.Reqnroll.TraxFeatureDriverOptions Given(string pattern, System.Func<Trax.StateMachine.Gherkin.Reqnroll.FeatureScenario, System.Text.RegularExpressions.Match, System.Threading.Tasks.Task> step) { }
+        public Trax.StateMachine.Gherkin.Reqnroll.TraxFeatureDriverOptions Then(string pattern, System.Func<Trax.StateMachine.Gherkin.Reqnroll.FeatureScenario, System.Text.RegularExpressions.Match, System.Threading.Tasks.Task> step) { }
+        public Trax.StateMachine.Gherkin.Reqnroll.TraxFeatureDriverOptions When(string pattern, System.Func<Trax.StateMachine.Gherkin.Reqnroll.FeatureScenario, System.Text.RegularExpressions.Match, System.Threading.Tasks.Task> step) { }
     }
     [Reqnroll.Binding]
     public sealed class TraxFeatureSteps

@@ -97,7 +97,9 @@ it, and without one the instance waits in that state. See
   host's, access included.
 - **Against the host**, with [Reqnroll](/docs/sdk-reference/statemachine-api/feature-bindings): reference
   `Trax.StateMachine.Gherkin.Reqnroll`, include the feature files, and configure the bindings with the host in the
-  test process and a credential per person per scenario. There is no step code to write.
+  test process and a credential per person per scenario. A machine feature needs no step code. What the machines do not
+  cover goes in specs under `specs/`, which derivation does not read, with the few steps the glossary does not read
+  registered beside the bindings.
 
 Nothing runs a feature through a page yet. A page's browser tests are written by hand, as the Bakery's
 `BakeryPageTests` are: two people on pages of their own, telling the same story as the features. Nothing checks that

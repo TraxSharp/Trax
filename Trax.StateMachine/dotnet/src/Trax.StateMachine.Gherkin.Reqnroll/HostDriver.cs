@@ -317,6 +317,16 @@ internal sealed class HostDriver(
             ? actor
             : glossary.Actors[glossary.Machines[machine].OwnedBy!];
 
+    /// <summary>A person's credential, as their own steps send it, for a step the sample registered.</summary>
+    internal FeatureCredential CredentialOf(string person, GlossaryActor actor)
+    {
+        _actors.TryAdd(person, actor);
+        return CredentialOf(person);
+    }
+
+    /// <summary>The id of an instance the scenario started, or null if it started none.</summary>
+    internal Guid? InstanceOf(InstanceKey key) => _ids.TryGetValue(key, out var id) ? id : null;
+
     private FeatureCredential CredentialOf(string person)
     {
         if (_credentials.TryGetValue(person, out var credential))

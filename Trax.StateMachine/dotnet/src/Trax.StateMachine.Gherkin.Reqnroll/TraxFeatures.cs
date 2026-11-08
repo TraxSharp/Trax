@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Trax.StateMachine.Gherkin.Reqnroll;
 
 /// <summary>An actor of the glossary, as a credential is minted for one: its name, its roles, or any signed-in caller.</summary>
@@ -37,7 +39,71 @@ public sealed class TraxFeatureDriverOptions
     /// own lag.
     /// </summary>
     public TimeSpan Slack { get; set; } = TimeSpan.FromSeconds(5);
+
+    internal List<RegisteredStep> Steps { get; } = [];
+
+    /// <summary>
+    /// Registers a Given of the test project's own, for a step the glossary does not read. The binding reads every step
+    /// with the glossary first and runs a registered step only when no phrase matches, so a registered step never
+    /// changes what a glossary step means. <paramref name="pattern"/> is a regular expression matched against the whole
+    /// step text; its groups are in the <see cref="Match"/> <paramref name="step"/> is given. A step two registered
+    /// patterns match fails as ambiguous.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="pattern"/> is not a regular expression, or is registered twice.</exception>
+    public TraxFeatureDriverOptions Given(
+        string pattern,
+        Func<FeatureScenario, Match, Task> step
+    ) => Register(StepKind.Given, pattern, step);
+
+    /// <summary>Registers a When of the test project's own, read as <see cref="Given"/> reads a Given.</summary>
+    /// <exception cref="ArgumentException"><paramref name="pattern"/> is not a regular expression, or is registered twice.</exception>
+    public TraxFeatureDriverOptions When(string pattern, Func<FeatureScenario, Match, Task> step) =>
+        Register(StepKind.When, pattern, step);
+
+    /// <summary>
+    /// Registers a Then of the test project's own, read as <see cref="Given"/> reads a Given. It holds unless
+    /// <paramref name="step"/> throws.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="pattern"/> is not a regular expression, or is registered twice.</exception>
+    public TraxFeatureDriverOptions Then(string pattern, Func<FeatureScenario, Match, Task> step) =>
+        Register(StepKind.Then, pattern, step);
+
+    private TraxFeatureDriverOptions Register(
+        StepKind kind,
+        string pattern,
+        Func<FeatureScenario, Match, Task> step
+    )
+    {
+        ArgumentException.ThrowIfNullOrEmpty(pattern);
+        ArgumentNullException.ThrowIfNull(step);
+        if (Steps.Any(s => s.Kind == kind && s.Pattern == pattern))
+            throw new ArgumentException(
+                $"The {kind} '{pattern}' is registered twice.",
+                nameof(pattern)
+            );
+        Steps.Add(
+            new RegisteredStep(
+                kind,
+                pattern,
+                new Regex(
+                    $"^(?:{pattern})$",
+                    RegexOptions.CultureInvariant,
+                    TimeSpan.FromSeconds(1)
+                ),
+                step
+            )
+        );
+        return this;
+    }
 }
+
+/// <summary>A step a test project registered, as <see cref="TraxFeatureDriverOptions.Given"/> took it.</summary>
+internal sealed record RegisteredStep(
+    StepKind Kind,
+    string Pattern,
+    Regex Regex,
+    Func<FeatureScenario, Match, Task> Run
+);
 
 /// <summary>
 /// Configures the bindings for a test run. Call <see cref="Configure"/> once, from a <c>[BeforeTestRun]</c> hook, after
