@@ -59,7 +59,9 @@ internal static class Board
                 Kind.Aggregate,
                 id,
                 $"aggregate:{id}",
-                entry.SystemKey is { } key ? $"{id} ({key})" : id,
+                entry.SystemKey is { } key ? $"{id} ({key})"
+                    : entry.KeyedBy is { } by ? $"{id} (by {string.Join(", ", by)})"
+                    : id,
                 "start"
             );
             if (entry.Start is { } start)

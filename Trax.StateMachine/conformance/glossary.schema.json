@@ -153,7 +153,30 @@
           ]
         },
         "system": {
-          "$ref": "#/$defs/systemKey"
+          "description": "A system machine: the fixed key of its one instance, which the host starts, or { \"keyedBy\": [...] }, one instance per key, which host code starts and moves and a step names by its name and key (ticket \"T-12\"). No view reads and no policy moves a keyed one.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/systemKey"
+            },
+            {
+              "type": "object",
+              "required": [
+                "keyedBy"
+              ],
+              "properties": {
+                "keyedBy": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/word"
+                  },
+                  "minItems": 1,
+                  "maxItems": 8,
+                  "uniqueItems": true
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
         },
         "noun": {
           "$ref": "#/$defs/phrase"

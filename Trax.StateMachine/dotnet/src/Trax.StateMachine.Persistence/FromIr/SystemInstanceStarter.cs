@@ -9,7 +9,8 @@ namespace Trax.StateMachine.Persistence.FromIr;
 /// <c>Trax.Docs/adr/0058</c>): no client may start one, and a view or a policy reaches it at its key. Starting is
 /// idempotent, so every host of a cluster runs it and the first creates the instance. The key <c>shop/main</c> is the
 /// instance of <c>shop</c> for <c>MachineKey.Of("main")</c>. <c>AddStateMachines</c> registers it after the startup
-/// validators, whose <c>StartingAsync</c> run first, so a host they refuse writes no instance.
+/// validators, whose <c>StartingAsync</c> run first, so a host they refuse writes no instance. A keyed system machine has
+/// no fixed key and is left alone: host code starts each of its instances through <c>IMachineInstances</c>.
 /// </summary>
 internal sealed class SystemInstanceStarter(IServiceScopeFactory scopes, HostFile host)
     : IHostedLifecycleService

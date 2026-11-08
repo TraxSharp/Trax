@@ -97,7 +97,7 @@ internal static class IrMachines
         }
 
         var replay = new IrReplay(ir, host, types, trains, corpus);
-        var kind = host.SystemKey is null ? typeof(ServedIrMachine<,>) : typeof(SystemIrMachine<,>);
+        var kind = host.IsSystem ? typeof(SystemIrMachine<,>) : typeof(ServedIrMachine<,>);
         var machine = (IMachine)
             Activator.CreateInstance(
                 kind.MakeGenericType(types.State, types.Trigger),

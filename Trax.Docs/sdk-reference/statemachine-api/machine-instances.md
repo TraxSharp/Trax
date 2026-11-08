@@ -142,6 +142,10 @@ name: its type is emitted when the host starts. `Start(machineId, ...)` and `Adv
 machine's id, as its IR and `host.json` give it, and behave as the typed overloads do; the typed overloads call
 them. An id no registered machine has, and a user-owned machine's id, throw `InvalidOperationException`.
 
+A keyed system machine served from features (`"system": { "keyedBy": [...] }` in its glossary) is never started by
+the host: its instances exist only once host code starts them here, one per key, with the key's parts in the order
+`keyedBy` names them.
+
 A trigger only the server fires, such as a policy's, can be fired here: these are the server's calls, never a
 client's, and the history records the host as the actor.
 

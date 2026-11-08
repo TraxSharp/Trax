@@ -73,6 +73,13 @@ public class ScenarioDriverParityTests
               "initial": "Closed",
               "states": { "Closed": "is closed", "Open": "is open" },
               "triggers": { "Open": { "phrase": "the shop opens" } }
+            },
+            "p-ticket": {
+              "system": { "keyedBy": ["id"] },
+              "name": "ticket",
+              "initial": "New",
+              "states": { "New": "is new", "Triaged": "is in triage" },
+              "triggers": { "Triage": { "phrase": "{subject} gets triaged" } }
             }
           },
           "views": {
@@ -161,10 +168,22 @@ public class ScenarioDriverParityTests
             Then the shop is closed
         """;
 
+    // A keyed system machine: an instance per ticket, which host code starts, each moving on its own.
+    private const string Tickets = """
+        Feature: Tickets
+          Scenario: One ticket is triaged and another is not
+            Given ticket "T-12" is new
+            And ticket "T-13" is new
+            When ticket "T-12" gets triaged
+            Then ticket "T-12" is in triage
+            And ticket "T-13" is new
+        """;
+
     private static readonly (string File, string Text)[] Features =
     [
         ("ordering.feature", Ordering),
         ("shop.feature", Shop),
+        ("tickets.feature", Tickets),
     ];
 
     // Each person signs in as a user of their own, with their actor's roles, so an owner's instance is theirs alone.

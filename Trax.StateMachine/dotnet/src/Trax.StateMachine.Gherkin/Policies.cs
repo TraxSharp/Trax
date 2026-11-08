@@ -44,6 +44,20 @@ internal static class PolicyMerge
             var source = glossary.Machines[when];
             var target = glossary.Machines[targetId];
 
+            // A keyed system machine has an instance per key, started and moved by host code. No policy picks one out,
+            // and none is set off by one: the host code that moves it moves what follows.
+            if (source.KeyedBy is not null || target.KeyedBy is not null)
+            {
+                var keyed = source.KeyedBy is not null ? when : targetId;
+                problems.Add(
+                    At(
+                        first,
+                        $"{targetId} moves when {when} enters {enters}, and {keyed} is a keyed system machine, which host code moves: no policy reacts to it or moves it. Show each move as its own When."
+                    )
+                );
+                continue;
+            }
+
             // The trigger: the one edge of the target that goes from where it was to where the scenario says.
             var triggers = group
                 .Select(o =>
@@ -94,7 +108,7 @@ internal static class PolicyMerge
             // The host refuses a user's machine whose server-only trigger starts a train, as it refuses a timer that
             // does: no user is there to run it as.
             if (
-                target.SystemKey is null
+                !target.IsSystem
                 && irs[targetId]["transitions"]!
                     .AsArray()
                     .Select(e => e!)

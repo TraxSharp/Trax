@@ -147,15 +147,16 @@ internal static partial class Views
     }
 
     /// <summary>
-    /// Refuses a view that reads a machine <paramref name="systemKeys"/> does not hold, reads one twice, reads a system
-    /// machine without its key or a user machine with one, or shows a field of a machine it does not read, or labels a
+    /// Refuses a view that reads a machine <paramref name="systemKeys"/> does not hold, reads one twice, reads a keyed
+    /// system machine (<paramref name="keyed"/>), reads a system machine without its key or a user machine with one, or shows a field of a machine it does not read, or labels a
     /// field that is not a state.
     /// </summary>
     internal static void Check(
         At at,
         IReadOnlyList<ViewRead> reads,
         IReadOnlyList<ViewField> fields,
-        IReadOnlyDictionary<string, string?> systemKeys
+        IReadOnlyDictionary<string, string?> systemKeys,
+        IReadOnlySet<string> keyed
     )
     {
         var read = new HashSet<string>(StringComparer.Ordinal);
@@ -165,6 +166,13 @@ internal static partial class Views
             var itemAt = at["reads"][i];
             if (!systemKeys.TryGetValue(machine, out var systemKey))
                 throw itemAt["machine"].Fail($"names '{machine}', which is not a machine here.");
+            // A keyed system machine has an instance per key and no caller owns one, so no view reads it.
+            if (keyed.Contains(machine))
+                throw itemAt["machine"]
+                    .Fail(
+                        $"'{machine}' is a keyed system machine, which a view does not read: host code reads its "
+                            + "instances by key."
+                    );
             if (!read.Add(machine))
                 throw itemAt["machine"].Fail($"reads '{machine}' twice.");
             if (systemKey is null && key is not null)

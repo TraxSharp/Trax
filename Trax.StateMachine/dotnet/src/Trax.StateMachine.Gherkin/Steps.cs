@@ -25,15 +25,31 @@ internal abstract record Meaning
     ) : Meaning;
 
     /// <summary><c>Ada's order starts baking</c>, <c>the shop opens</c>: a trigger no person fires.</summary>
-    internal sealed record Happens(string Machine, string? Owner, string Trigger, JsonObject? Input)
-        : Meaning;
+    internal sealed record Happens(
+        string Machine,
+        string? Owner,
+        string Trigger,
+        JsonObject? Input,
+        string? Key = null
+    ) : Meaning;
 
     /// <summary><c>Ada's order is placed</c>, or with <see cref="Still"/>, <c>is still a draft</c>.</summary>
-    internal sealed record InState(string Machine, string? Owner, string State, bool Still)
-        : Meaning;
+    internal sealed record InState(
+        string Machine,
+        string? Owner,
+        string State,
+        bool Still,
+        string? Key = null
+    ) : Meaning;
 
     /// <summary><c>Ada's order has nothing in it</c>: a guard holds or fails.</summary>
-    internal sealed record Guard(string Machine, string? Owner, string Name, bool Holds) : Meaning;
+    internal sealed record Guard(
+        string Machine,
+        string? Owner,
+        string Name,
+        bool Holds,
+        string? Key = null
+    ) : Meaning;
 
     /// <summary><c>the payment goes through</c>: an invoked train's outcome.</summary>
     internal sealed record Outcome(string Machine, string State, string Phrase) : Meaning;
@@ -103,22 +119,22 @@ internal sealed partial class StepResolver
             {
                 Add(
                     $@"{reference}\s+{Words(phrase)}",
-                    m => new Meaning.InState(machine.Id, Owner(m), state, false)
+                    m => new Meaning.InState(machine.Id, Owner(m), state, false, KeyOf(m))
                 );
                 Add(
                     $@"{reference}\s+{Still(phrase)}",
-                    m => new Meaning.InState(machine.Id, Owner(m), state, true)
+                    m => new Meaning.InState(machine.Id, Owner(m), state, true, KeyOf(m))
                 );
             }
             foreach (var guard in machine.Guards.Values)
             {
                 Add(
                     $@"{reference}\s+{Words(guard.Holds)}",
-                    m => new Meaning.Guard(machine.Id, Owner(m), guard.Name, true)
+                    m => new Meaning.Guard(machine.Id, Owner(m), guard.Name, true, KeyOf(m))
                 );
                 Add(
                     $@"{reference}\s+{Words(guard.Fails)}",
-                    m => new Meaning.Guard(machine.Id, Owner(m), guard.Name, false)
+                    m => new Meaning.Guard(machine.Id, Owner(m), guard.Name, false, KeyOf(m))
                 );
             }
             foreach (var trigger in machine.Triggers.Values)
@@ -136,7 +152,13 @@ internal sealed partial class StepResolver
                 );
                 Add(
                     template,
-                    m => new Meaning.Happens(machine.Id, Owner(m), trigger.Name, Inputs(m, trigger))
+                    m => new Meaning.Happens(
+                        machine.Id,
+                        Owner(m),
+                        trigger.Name,
+                        Inputs(m, trigger),
+                        KeyOf(m)
+                    )
                 );
             }
             foreach (var invoke in machine.Invokes.Values)
@@ -285,11 +307,25 @@ internal sealed partial class StepResolver
         );
 
     // A machine named in a step: a user's by its owner ("Ada's order") or the step's own person ("her order"), a system
-    // machine by its name.
+    // machine by its name, and a keyed one by its name and each part of its key, quoted ('ticket "T-12"').
     private static string Reference(GlossaryMachine machine) =>
-        machine.SystemKey is null
+        machine.KeyedBy is { } parts
+            ? Words(machine.Reference)
+                + string.Concat(parts.Select((_, i) => $@"\s+""(?<key{i}>[^""]*)"""))
+        : machine.SystemKey is null
             ? $@"(?:(?<owner>{NamePattern})'s|(?<pronoun>her|his|their))\s+{Words(machine.Reference)}"
-            : Words(machine.Reference);
+        : Words(machine.Reference);
+
+    // The key a step names a keyed system machine's instance by, as a JSON array of its parts; null when it names none.
+    private static string? KeyOf(Match match)
+    {
+        if (!match.Groups["key0"].Success)
+            return null;
+        var parts = new JsonArray();
+        for (var i = 0; match.Groups[$"key{i}"] is { Success: true } part; i++)
+            parts.Add(part.Value);
+        return parts.ToJsonString();
+    }
 
     private static string? Owner(Match match) =>
         match.Groups["owner"] is { Success: true } owner ? owner.Value

@@ -417,7 +417,7 @@ internal static class Missing
     // A user's machine is set up by its owner having one; a system machine, which the host starts, by a move of its own.
     private static IEnumerable<Claim> MachineStubs(Glossary glossary, GlossaryMachine machine)
     {
-        if (machine.SystemKey is null)
+        if (!machine.IsSystem)
         {
             var lines = Arrange(glossary, machine, machine.Initial);
             lines.Add($"Then {Instance(machine)} {machine.States[machine.Initial]}");
@@ -530,20 +530,14 @@ internal static class Missing
         var read = glossary.Machines[view.Reads[0].Machine];
         var field = view.Fields.First(f => f.Machine == read.Id);
         var lines = Arrange(glossary, read, read.Initial);
-        if (read.SystemKey is not null)
+        if (read.IsSystem)
             lines.Insert(0, $"Given {Person} is {glossary.Actors.Values.First().Noun}");
         var initial = Engine.Initial(baseline, read);
         var shown = ViewValues.Shown(
             view,
             field.Name,
             Person,
-            [
-                (
-                    new InstanceKey(read.Id, read.SystemKey is null ? Person : null),
-                    read.Initial,
-                    initial
-                ),
-            ]
+            [(new InstanceKey(read.Id, read.IsSystem ? null : Person), read.Initial, initial)]
         );
         lines.Add(
             $"Then {Person}'s {view.Name} {(view.Name.EndsWith('s') ? "show" : "shows")} {field.Name} \"{shown.FirstOrDefault()}\""
@@ -560,7 +554,7 @@ internal static class Missing
     private static List<string> Arrange(Glossary glossary, GlossaryMachine machine, string state)
     {
         var lines = new List<string>();
-        if (machine.SystemKey is null)
+        if (!machine.IsSystem)
         {
             lines.Add($"Given {Person} is {glossary.Actors[machine.OwnedBy![0]].Noun}");
             lines.Add($"And {Person} {machine.Start}");
@@ -590,20 +584,21 @@ internal static class Missing
                 return null;
             text = text.Replace("{" + name + "}", $"\"{value}\"", StringComparison.Ordinal);
         }
-        var server =
-            text.StartsWith("{subject}", StringComparison.Ordinal) || machine.SystemKey is not null;
+        var server = text.StartsWith("{subject}", StringComparison.Ordinal) || machine.IsSystem;
         text = text.Replace(
             "{subject}",
-            server || machine.SystemKey is not null
-                ? Instance(machine)
-                : $"their {machine.Reference}",
+            server ? Instance(machine) : $"their {machine.Reference}",
             StringComparison.Ordinal
         );
         return server ? text : $"{Person} {text}";
     }
 
+    // A user's instance by its owner, the system's by its name, and a keyed one by its name and a sample key.
     private static string Instance(GlossaryMachine machine) =>
-        machine.SystemKey is null ? $"{Person}'s {machine.Reference}" : machine.Reference;
+        machine.KeyedBy is { } parts
+            ? $"{machine.Reference} {string.Join(" ", parts.Select(p => $"\"{p}-1\""))}"
+        : machine.IsSystem ? machine.Reference
+        : $"{Person}'s {machine.Reference}";
 
     // "is a draft" as a stay: "is still a draft".
     private static string StillPhrase(string phrase)

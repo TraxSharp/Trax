@@ -197,7 +197,7 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
 
             case (StepKind.Given, Meaning.InState s):
             {
-                var key = new InstanceKey(s.Machine, s.Owner);
+                var key = new InstanceKey(s.Machine, s.Owner, s.Key);
                 Know(key);
                 var context = (await driver.Read(key))?.Context;
                 await driver.Seed(key, s.State, context);
@@ -206,7 +206,7 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
 
             case (StepKind.Given, Meaning.Guard g):
             {
-                var key = new InstanceKey(g.Machine, g.Owner);
+                var key = new InstanceKey(g.Machine, g.Owner, g.Key);
                 Know(key);
                 // An instance no step has started yet is arranged from its initial state and context, as the walk
                 // reads it; a later Given puts it in the state the scenario names.
@@ -239,7 +239,7 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
 
             case (StepKind.When, Meaning.Happens h):
             {
-                var key = new InstanceKey(h.Machine, h.Owner);
+                var key = new InstanceKey(h.Machine, h.Owner, h.Key);
                 Know(key);
                 last = (key, null, await driver.Fire(null, key, h.Trigger, h.Input));
                 return null;
@@ -277,7 +277,7 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
 
             case (StepKind.Then, Meaning.InState s):
             {
-                var key = new InstanceKey(s.Machine, s.Owner);
+                var key = new InstanceKey(s.Machine, s.Owner, s.Key);
                 if (last is { } l && l.Key == key && l.Answer is not Answer.Moved && !s.Still)
                     return $"'{step.Text}', and it was refused: {ScenarioRunner.Describe(l.Answer)}.";
                 var now = await driver.Read(key);
@@ -315,7 +315,7 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
 
             case (StepKind.Then, Meaning.Guard g):
             {
-                var now = await driver.Read(new InstanceKey(g.Machine, g.Owner));
+                var now = await driver.Read(new InstanceKey(g.Machine, g.Owner, g.Key));
                 if (now is null)
                     return $"'{step.Text}', and it is not started.";
                 var rule = glossary.Machines[g.Machine].Guards[g.Name].Rule;

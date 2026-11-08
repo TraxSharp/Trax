@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "machines": {
+    "ticket": {
+      "schemaHash": "h",
+      "owner": {
+        "system": {
+          "keyedBy": [
+            "id"
+          ]
+        }
+      },
+      "triggers": {
+        "Triage": {
+          "server": true
+        }
+      }
+    },
+    "order": {
+      "schemaHash": "h2",
+      "owner": "user",
+      "start": {
+        "anyAuthenticated": true
+      },
+      "read": {
+        "anyAuthenticated": true
+      },
+      "triggers": {
+        "Bake": {
+          "server": true
+        }
+      }
+    }
+  },
+  "policies": [
+    {
+      "shape": "broadcast",
+      "when": {
+        "machine": "ticket",
+        "enters": "Triaged"
+      },
+      "then": {
+        "machine": "order",
+        "inState": "Draft",
+        "trigger": "Bake"
+      }
+    }
+  ]
+}

@@ -116,7 +116,13 @@ internal sealed partial record Glossary(
             : machine["ownedBy"] is JsonArray
                 ? at["ownedBy"].Distinct(machine["ownedBy"], 1, Names.WordAt)
             : [Names.WordAt(at["ownedBy"], machine["ownedBy"])];
-        var key = system ? Names.SystemKeyAt(at["system"], machine["system"]) : null;
+        // A system machine is one instance at a fixed key, or one per key host code starts ({ "keyedBy": [...] }).
+        string? key = null;
+        IReadOnlyList<string>? keyedBy = null;
+        if (system && machine["system"] is JsonObject keyed)
+            keyedBy = KeyedBy(at["system"], keyed);
+        else if (system)
+            key = Names.SystemKeyAt(at["system"], machine["system"]);
         var reference = Names.PhraseAt(
             at[owned ? "noun" : "name"],
             at.Required(machine, owned ? "noun" : "name")
@@ -167,7 +173,23 @@ internal sealed partial record Glossary(
             guards,
             invokes,
             links
-        );
+        )
+        {
+            KeyedBy = keyedBy,
+        };
+    }
+
+    /// <summary>The most parts a keyed system machine's key has.</summary>
+    internal const int MaxKeyParts = 8;
+
+    /// <summary>A keyed system machine's <c>{ "keyedBy": [...] }</c>: the names of its key's parts, in order.</summary>
+    internal static IReadOnlyList<string> KeyedBy(At at, JsonObject keyed)
+    {
+        at.Closed(keyed, "keyedBy");
+        var parts = at["keyedBy"].Distinct(at.Required(keyed, "keyedBy"), 1, Names.WordAt);
+        if (parts.Count > MaxKeyParts)
+            throw at["keyedBy"].Fail($"must hold at most {MaxKeyParts}.");
+        return parts;
     }
 
     private static GlossaryTrigger ReadTrigger(At at, string name, JsonObject trigger)
@@ -287,14 +309,16 @@ internal sealed partial record Glossary(
             foreach (var owner in machine.OwnedBy ?? [])
                 if (!Actors.ContainsKey(owner))
                     throw m["ownedBy"].Fail($"'{owner}' is not an actor.");
-            if (machine.SystemKey is { } key)
-            {
-                if (!key.StartsWith(machine.Id + "/", StringComparison.Ordinal))
-                    throw m["system"].Fail($"must start with the machine's id, '{machine.Id}/'.");
-                if (machine.Start is not null)
-                    throw m["start"]
-                        .Fail("a system machine is started by the host, never by a step.");
-            }
+            if (
+                machine.SystemKey is { } key
+                && !key.StartsWith(machine.Id + "/", StringComparison.Ordinal)
+            )
+                throw m["system"].Fail($"must start with the machine's id, '{machine.Id}/'.");
+            if (machine.IsSystem && machine.Start is not null)
+                throw m["start"]
+                    .Fail(
+                        "a system machine is started by the host (or, keyed, by host code), never by a step."
+                    );
             if (!machine.States.ContainsKey(machine.Initial))
                 throw m["initial"].Fail($"'{machine.Initial}' is not one of its states.");
 
@@ -333,12 +357,19 @@ internal sealed partial record Glossary(
                         );
                 var placeholders = Placeholders(t["phrase"], trigger.Phrase).ToList();
                 var subjects = placeholders.Count(p => p == SubjectSlot);
-                // A user's instance is named by its owner where {subject} is; a system machine is named by its name.
-                if (machine.SystemKey is null && subjects != 1)
+                // A user's instance is named by its owner where {subject} is, a keyed system machine's by its name and
+                // key there; a system machine at a fixed key is named by its name.
+                if (!machine.IsSystem && subjects != 1)
                     throw t["phrase"]
                         .Fail(
                             $"must say where the {machine.Reference} goes, once, as {{{SubjectSlot}}}: "
                                 + $"'places {{{SubjectSlot}}}' is said 'Ada places her {machine.Reference}'."
+                        );
+                if (machine.KeyedBy is not null && subjects != 1)
+                    throw t["phrase"]
+                        .Fail(
+                            $"must say where the {machine.Reference} and its key go, once, as {{{SubjectSlot}}}: "
+                                + $"'{{{SubjectSlot}}} is closed' is said '{machine.Reference} \"T-1\" is closed'."
                         );
                 if (machine.SystemKey is not null && subjects != 0)
                     throw t["phrase"]
@@ -360,7 +391,7 @@ internal sealed partial record Glossary(
                     if (from == HostInvoke.Owner)
                     {
                         // The owner's id is the server's to give, and a system machine has none.
-                        if (machine.SystemKey is not null)
+                        if (machine.IsSystem)
                             throw v["input"]
                                 [field]
                                 .Fail(
@@ -396,7 +427,7 @@ internal sealed partial record Glossary(
                 if (!Machines.TryGetValue(link.Machine, out var linked))
                     throw l["machine"].Fail($"'{link.Machine}' is not a machine.");
                 Unique(steps, l, Said(link.Phrase, linked));
-                if (linked.SystemKey is not null)
+                if (linked.IsSystem)
                     throw l["machine"]
                         .Fail(
                             $"'{link.Machine}' is a system machine, reached at its key, never by a link."
@@ -425,7 +456,7 @@ internal sealed partial record Glossary(
         foreach (var view in Views.Values)
         {
             var v = at["views"][view.Name];
-            Features.Views.Check(v, view.Reads, view.Fields, systemKeys);
+            Features.Views.Check(v, view.Reads, view.Fields, systemKeys, Keyed());
             foreach (var field in view.Fields)
             {
                 var machine = Machines[field.Machine];
@@ -443,6 +474,9 @@ internal sealed partial record Glossary(
         }
     }
 
+    private HashSet<string> Keyed() =>
+        Machines.Values.Where(m => m.KeyedBy is not null).Select(m => m.Id).ToHashSet();
+
     /// <summary>Where a phrase names the machine it is about: <c>places {subject}</c>.</summary>
     internal const string SubjectSlot = "subject";
 
@@ -451,7 +485,7 @@ internal sealed partial record Glossary(
         phrase.Replace($"{{{SubjectSlot}}}", $"{{{machine.Reference}}}", StringComparison.Ordinal);
 
     private static At ReferenceAt(At m, GlossaryMachine machine) =>
-        m[machine.SystemKey is null ? "noun" : "name"];
+        m[machine.IsSystem ? "name" : "noun"];
 
     private static readonly HashSet<string> FirstPersonWords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -565,7 +599,17 @@ internal sealed record GlossaryMachine(
     IReadOnlyDictionary<string, GlossaryGuard> Guards,
     IReadOnlyDictionary<string, GlossaryInvoke> Invokes,
     IReadOnlyDictionary<string, GlossaryLink> Links
-);
+)
+{
+    /// <summary>
+    /// A keyed system machine's key parts by name: one instance per key, started and moved by host code and never by
+    /// the host at startup. Null for a user's machine and for a system machine at a fixed <see cref="SystemKey"/>.
+    /// </summary>
+    internal IReadOnlyList<string>? KeyedBy { get; init; }
+
+    /// <summary>Whether the system owns the machine's instances, at a fixed key or keyed.</summary>
+    internal bool IsSystem => SystemKey is not null || KeyedBy is not null;
+}
 
 internal sealed record GlossaryTrigger(
     string Name,

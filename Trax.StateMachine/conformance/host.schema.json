@@ -54,6 +54,21 @@
       "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*$",
       "maxLength": 129
     },
+    "keyedBy": {
+      "description": "The names of a keyed system machine's key parts, in order.",
+      "type": "object",
+      "required": ["keyedBy"],
+      "properties": {
+        "keyedBy": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*$", "maxLength": 64 },
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
     "fieldName": { "$ref": "urn:trax:state-machine:ir-format:1#/$defs/fieldName" },
     "rule": {
       "description": "Who is admitted. Every role set must be met, by any one role within it; or any signed-in caller.",
@@ -111,7 +126,15 @@
             {
               "type": "object",
               "required": ["system"],
-              "properties": { "system": { "$ref": "#/$defs/systemKey" } },
+              "properties": {
+                "system": {
+                  "description": "The fixed key of its one instance, which the host starts, or { \"keyedBy\": [...] }: one instance per key, which host code starts and moves, and which no policy or view reaches.",
+                  "oneOf": [
+                    { "$ref": "#/$defs/systemKey" },
+                    { "$ref": "#/$defs/keyedBy" }
+                  ]
+                }
+              },
               "additionalProperties": false
             }
           ]

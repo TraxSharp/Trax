@@ -190,8 +190,18 @@ internal static class FeatureDerivation
                 ["schemaHash"] = Convert.ToHexStringLower(
                     SHA256.HashData(Encoding.UTF8.GetBytes(ir))
                 ),
-                ["owner"] = machine.SystemKey is { } key
-                    ? new JsonObject { ["system"] = key }
+                ["owner"] =
+                    machine.SystemKey is { } key ? new JsonObject { ["system"] = key }
+                    : machine.KeyedBy is { } keyedBy
+                        ? new JsonObject
+                        {
+                            ["system"] = new JsonObject
+                            {
+                                ["keyedBy"] = new JsonArray(
+                                    keyedBy.Select(p => (JsonNode?)p).ToArray()
+                                ),
+                            },
+                        }
                     : "user",
             };
             foreach (var (name, value) in access.Entries[id])
@@ -236,7 +246,21 @@ internal static class FeatureDerivation
 }
 
 /// <summary>One instance a scenario talks about: a user machine's, by its owner, or a system machine's.</summary>
-internal sealed record InstanceKey(string Machine, string? Owner);
+/// <summary>
+/// An instance a scenario names: a user's by its owner, a system machine's at its fixed key by neither, and a keyed
+/// system machine's by <see cref="Key"/>, its parts as a JSON array (<c>["T-12"]</c>).
+/// </summary>
+internal sealed record InstanceKey(string Machine, string? Owner, string? Key = null)
+{
+    /// <summary>The key's parts, or none for an instance that is not a keyed system machine's.</summary>
+    internal IReadOnlyList<string> Parts =>
+        Key is null
+            ? []
+            : JsonNode.Parse(Key)!.AsArray().Select(p => p!.GetValue<string>()).ToList();
+
+    /// <summary>The key as a step says it: each part quoted, <c>"T-12"</c>.</summary>
+    internal string Said => string.Join(" ", Parts.Select(p => $"\"{p}\""));
+}
 
 /// <summary>What a When did, as its Thens say.</summary>
 internal abstract record Result
@@ -469,10 +493,10 @@ internal sealed class Walk
                 );
                 break;
             case Meaning.InState { Still: false } s:
-                InstanceAt(new InstanceKey(s.Machine, s.Owner)).Enter(s.State, _clock);
+                InstanceAt(new InstanceKey(s.Machine, s.Owner, s.Key)).Enter(s.State, _clock);
                 break;
             case Meaning.Guard g:
-                var instance = InstanceAt(new InstanceKey(g.Machine, g.Owner));
+                var instance = InstanceAt(new InstanceKey(g.Machine, g.Owner, g.Key));
                 if (
                     Satisfy.Context(
                         _glossary.Machines[g.Machine],
@@ -501,10 +525,10 @@ internal sealed class Walk
         switch (meaning)
         {
             case Meaning.Act or Meaning.Happens:
-                var (machine, owner, input) = meaning switch
+                var (machine, owner, instanceKey, input) = meaning switch
                 {
-                    Meaning.Act a => (a.Machine, a.Owner, a.Input),
-                    Meaning.Happens h => (h.Machine, h.Owner, h.Input),
+                    Meaning.Act a => (a.Machine, a.Owner, null, a.Input),
+                    Meaning.Happens h => (h.Machine, h.Owner, h.Key, h.Input),
                     _ => throw new InvalidOperationException(),
                 };
                 // A person acts on their own instance, and a system machine is moved by the server alone (ADR
@@ -512,7 +536,7 @@ internal sealed class Walk
                 if (meaning is Meaning.Act act)
                 {
                     var acted = _glossary.Machines[act.Machine];
-                    if (acted.SystemKey is not null)
+                    if (acted.IsSystem)
                     {
                         Fail(
                             step.Line,
@@ -529,7 +553,7 @@ internal sealed class Walk
                         return;
                     }
                 }
-                var key = new InstanceKey(machine, owner);
+                var key = new InstanceKey(machine, owner, instanceKey);
                 if (!_instances.TryGetValue(key, out var instance) || instance.State is null)
                 {
                     Fail(
@@ -602,7 +626,8 @@ internal sealed class Walk
         switch (meaning)
         {
             case Meaning.InState s
-                when _pending is not null && _pending.Key == new InstanceKey(s.Machine, s.Owner):
+                when _pending is not null
+                    && _pending.Key == new InstanceKey(s.Machine, s.Owner, s.Key):
                 _pending.Thens.Add(s);
                 break;
             case Meaning.Told or Meaning.Denied:
@@ -619,13 +644,18 @@ internal sealed class Walk
                 break;
             case Meaning.InState { Still: false } s
                 when _pending is not null
-                    && _instances.TryGetValue(new InstanceKey(s.Machine, s.Owner), out var other)
+                    && _instances.TryGetValue(
+                        new InstanceKey(s.Machine, s.Owner, s.Key),
+                        out var other
+                    )
                     && other.State is not null
                     && other.State != s.State:
-                _pending.Cascades.Add((new InstanceKey(s.Machine, s.Owner), s.State, step.Line));
+                _pending.Cascades.Add(
+                    (new InstanceKey(s.Machine, s.Owner, s.Key), s.State, step.Line)
+                );
                 break;
             case Meaning.InState s:
-                var key = new InstanceKey(s.Machine, s.Owner);
+                var key = new InstanceKey(s.Machine, s.Owner, s.Key);
                 if (!_instances.TryGetValue(key, out var instance) || instance.State != s.State)
                     Fail(
                         step.Line,
@@ -640,7 +670,7 @@ internal sealed class Walk
                 CheckView(step, v);
                 break;
             case Meaning.Guard g:
-                var guarded = InstanceAt(new InstanceKey(g.Machine, g.Owner));
+                var guarded = InstanceAt(new InstanceKey(g.Machine, g.Owner, g.Key));
                 var guard = _glossary.Machines[g.Machine].Guards[g.Name];
                 if (
                     RuleEvaluator.Evaluate(IrMachine.ReadRule(guard.Rule), guarded.Context, null)
@@ -648,7 +678,7 @@ internal sealed class Walk
                 )
                     Fail(
                         step.Line,
-                        $"'{step.Text}' does not hold of {Name(new InstanceKey(g.Machine, g.Owner))} here."
+                        $"'{step.Text}' does not hold of {Name(new InstanceKey(g.Machine, g.Owner, g.Key))} here."
                     );
                 break;
             default:
@@ -665,7 +695,7 @@ internal sealed class Walk
     // changing after it is a policy reacting to the first.
     private void AfterTime(FeatureStep step, Meaning.InState s)
     {
-        var key = new InstanceKey(s.Machine, s.Owner);
+        var key = new InstanceKey(s.Machine, s.Owner, s.Key);
         if (!_instances.TryGetValue(key, out var instance) || instance.State is null)
         {
             Fail(
@@ -922,9 +952,9 @@ internal sealed class Walk
     private string Initial(string machine) => _glossary.Machines[machine].Initial;
 
     private string Name(InstanceKey key) =>
-        key.Owner is { } owner
-            ? $"{owner}'s {_glossary.Machines[key.Machine].Reference}"
-            : _glossary.Machines[key.Machine].Reference;
+        key.Owner is { } owner ? $"{owner}'s {_glossary.Machines[key.Machine].Reference}"
+        : key.Key is not null ? $"{_glossary.Machines[key.Machine].Reference} {key.Said}"
+        : _glossary.Machines[key.Machine].Reference;
 
     /// <summary>
     /// A machine's initial context: each field's zero (null for a nullable one, an empty string, list or record, zero,

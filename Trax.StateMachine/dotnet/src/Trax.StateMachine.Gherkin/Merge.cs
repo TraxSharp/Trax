@@ -503,7 +503,7 @@ internal static class Merge
                         $"Time takes {machine.Id} from {state} back into {state}, and a timer never enters its own state."
                     )
                 );
-            if (machine.SystemKey is null && machine.Invokes.ContainsKey(targets[0]))
+            if (!machine.IsSystem && machine.Invokes.ContainsKey(targets[0]))
                 problems.Add(
                     new Problem(
                         shortest.Scenario.File,

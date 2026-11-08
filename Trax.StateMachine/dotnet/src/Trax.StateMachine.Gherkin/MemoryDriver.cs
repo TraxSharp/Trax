@@ -53,7 +53,8 @@ internal sealed class MemoryDriver(
         new(
             _snapshots.TryGetValue(key, out var s)
                 ? (s.State, s.Context)
-                : (key.Owner is null ? (Of(key).State, Of(key).Context) : null)
+                // The system's instance at its fixed key is there from the start; a keyed one once arranged.
+                : (key.Owner is null && key.Key is null ? (Of(key).State, Of(key).Context) : null)
         );
 
     public ValueTask<Answer> Fire(
@@ -111,6 +112,7 @@ internal sealed class MemoryDriver(
                 .OrderBy(d => d.At)
                 .ThenBy(d => d.Key.Machine, StringComparer.Ordinal)
                 .ThenBy(d => d.Key.Owner, StringComparer.Ordinal)
+                .ThenBy(d => d.Key.Key, StringComparer.Ordinal)
                 .FirstOrDefault();
             if (due.At is not { } fireAt)
                 break;

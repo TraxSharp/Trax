@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "actors": {
+    "fixer": {
+      "noun": "a fixer",
+      "roles": [
+        "fixer"
+      ]
+    }
+  },
+  "machines": {
+    "ticket": {
+      "system": {
+        "keyedBy": [
+          "id"
+        ]
+      },
+      "name": "ticket",
+      "initial": "New",
+      "states": {
+        "New": "is new",
+        "Triaged": "is in triage"
+      },
+      "triggers": {
+        "Triage": {
+          "phrase": "{subject} is triaged"
+        }
+      }
+    }
+  },
+  "views": {
+    "tickets": {
+      "reads": [
+        {
+          "machine": "ticket"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "ticket.state"
+        }
+      }
+    }
+  }
+}

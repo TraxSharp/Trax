@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "machines": {
+    "ticket": {
+      "schemaHash": "h",
+      "owner": {
+        "system": {
+          "keyedBy": [
+            "id"
+          ]
+        }
+      },
+      "triggers": {
+        "Triage": {
+          "anyAuthenticated": true
+        }
+      }
+    }
+  }
+}

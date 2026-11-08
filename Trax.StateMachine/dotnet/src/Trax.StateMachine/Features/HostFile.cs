@@ -98,7 +98,8 @@ internal sealed record HostFile(
         at.Closed(machine, "schemaHash", "owner", "start", "read", "triggers", "invokes");
         var hash = at["schemaHash"].Text(at.Required(machine, "schemaHash"), 1, 128);
 
-        string? systemKey;
+        string? systemKey = null;
+        IReadOnlyList<string>? keyedBy = null;
         var owner = at.Required(machine, "owner");
         if (
             owner is JsonValue value
@@ -107,13 +108,16 @@ internal sealed record HostFile(
         {
             if (value.GetValue<string>() != "user")
                 throw at["owner"].Fail("must be \"user\" or { \"system\": key }.");
-            systemKey = null;
         }
         else
         {
             var o = at["owner"].Object(owner);
             at["owner"].Closed(o, "system");
-            systemKey = Names.SystemKeyAt(at["owner"]["system"], at["owner"].Required(o, "system"));
+            var system = at["owner"].Required(o, "system");
+            if (system is JsonObject keyed)
+                keyedBy = Glossary.KeyedBy(at["owner"]["system"], keyed);
+            else
+                systemKey = Names.SystemKeyAt(at["owner"]["system"], system);
         }
 
         var start = machine.ContainsKey("start") ? ReadRule(at["start"], machine["start"]) : null;
@@ -158,7 +162,10 @@ internal sealed record HostFile(
                 );
             }
 
-        return new HostMachine(id, hash, systemKey, start, read, triggers, invokes);
+        return new HostMachine(id, hash, systemKey, start, read, triggers, invokes)
+        {
+            KeyedBy = keyedBy,
+        };
     }
 
     /// <summary>A client rule: role sets, each to be met by one of its roles, or any signed-in caller.</summary>
@@ -236,9 +243,12 @@ internal sealed record HostFile(
         foreach (var machine in Machines.Values)
         {
             var m = at["machines"][machine.Id];
-            if (machine.SystemKey is not { } key)
+            if (!machine.IsSystem)
                 continue;
-            if (!key.StartsWith(machine.Id + "/", StringComparison.Ordinal))
+            if (
+                machine.SystemKey is { } key
+                && !key.StartsWith(machine.Id + "/", StringComparison.Ordinal)
+            )
                 throw m["owner"]
                     ["system"]
                     .Fail($"must start with the machine's id, '{machine.Id}/'.");
@@ -285,6 +295,15 @@ internal sealed record HostFile(
                     .Fail(
                         $"'{policy.Trigger}' is a client's trigger; a policy fires a server-only one."
                     );
+            // A keyed system machine has an instance per key, moved by host code; no policy picks one.
+            if (source.KeyedBy is not null)
+                throw p["when"]
+                    ["machine"]
+                    .Fail($"'{source.Id}' is a keyed system machine, which sets off no policy.");
+            if (target.KeyedBy is not null)
+                throw p["then"]
+                    ["machine"]
+                    .Fail($"'{target.Id}' is a keyed system machine, which no policy moves.");
             switch (policy.Shape)
             {
                 case "toSystem":
@@ -325,7 +344,13 @@ internal sealed record HostFile(
         );
         Features.Views.CheckNames(at["views"], Views.Values.Select(v => (v.Name, v.Reads)));
         foreach (var view in Views.Values)
-            Features.Views.Check(at["views"][view.Name], view.Reads, view.Fields, systemKeys);
+            Features.Views.Check(
+                at["views"][view.Name],
+                view.Reads,
+                view.Fields,
+                systemKeys,
+                Machines.Values.Where(m => m.KeyedBy is not null).Select(m => m.Id).ToHashSet()
+            );
 
         foreach (var machine in Provenance.Keys)
             if (!Machines.ContainsKey(machine))
@@ -333,7 +358,10 @@ internal sealed record HostFile(
     }
 }
 
-/// <summary>One machine of a host file. <see cref="SystemKey"/> is null for a machine its users own.</summary>
+/// <summary>
+/// One machine of a host file. <see cref="SystemKey"/> is null for a machine its users own and for a keyed system
+/// machine.
+/// </summary>
 internal sealed record HostMachine(
     string Id,
     string SchemaHash,
@@ -342,7 +370,17 @@ internal sealed record HostMachine(
     AccessRule? Read,
     IReadOnlyDictionary<string, TriggerAccess> Triggers,
     IReadOnlyDictionary<string, HostInvoke> Invokes
-);
+)
+{
+    /// <summary>
+    /// A keyed system machine's key parts by name (<c>{ "system": { "keyedBy": [...] } }</c>): one instance per key,
+    /// which host code starts and moves through <c>IMachineInstances</c>. The host starts none at startup.
+    /// </summary>
+    internal IReadOnlyList<string>? KeyedBy { get; init; }
+
+    /// <summary>Whether the system owns the machine's instances, at a fixed key or keyed.</summary>
+    internal bool IsSystem => SystemKey is not null || KeyedBy is not null;
+}
 
 /// <summary>
 /// Who a client rule admits: every role set met by one of its roles, or, with no sets, any signed-in caller. The

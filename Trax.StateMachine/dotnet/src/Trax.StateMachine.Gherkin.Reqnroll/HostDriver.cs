@@ -91,7 +91,7 @@ internal sealed class HostDriver(
 
     public async ValueTask<(string State, JsonObject Context)?> Read(InstanceKey key)
     {
-        if (!_ids.ContainsKey(key) && key.Owner is not null)
+        if (!_ids.ContainsKey(key) && (key.Owner is not null || key.Key is not null))
             return null;
         var id = await IdOf(key);
         await using var scope = options.Host.CreateAsyncScope();
@@ -316,6 +316,15 @@ internal sealed class HostDriver(
     {
         if (_ids.TryGetValue(key, out var id))
             return id;
+        if (key.Key is not null)
+        {
+            // A keyed system machine's instance is started by host code, as the host's own trains start one.
+            await using var scope = options.Host.CreateAsyncScope();
+            var started = await scope
+                .ServiceProvider.GetRequiredService<IMachineInstances>()
+                .Start(key.Machine, MachineKey.Of([.. key.Parts]));
+            return _ids[key] = started.Id;
+        }
         if (key.Owner is null)
         {
             var systemKey =
@@ -478,7 +487,9 @@ internal sealed class HostDriver(
     private static string RequestId() => $"f-{Guid.NewGuid():N}";
 
     private static string Describe(InstanceKey key) =>
-        key.Owner is null ? key.Machine : $"{key.Owner}'s {key.Machine}";
+        key.Owner is not null ? $"{key.Owner}'s {key.Machine}"
+        : key.Key is not null ? $"{key.Machine} {key.Said}"
+        : key.Machine;
 
     // "v-order" is vOrder, as the machines root names it.
     private static string FieldOf(string machine)

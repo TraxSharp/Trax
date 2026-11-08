@@ -31,7 +31,7 @@ A machine is a user's or the system's:
 | Key | What it is |
 | --- | --- |
 | `ownedBy` | The actor whose people own its instances, or a list of them (`["triage", "fixer"]`): each person owns their own instances whichever actor they are. With it, `noun` is how a step names one (`order`, as `Ada's order` says it) and `start` the phrase a person has one with (`has an order`). |
-| `system`, `name` | A system machine: its fixed key (`shop/main`) and its name in a step (`the shop`). The host starts its one instance; only the server moves it. |
+| `system`, `name` | A system machine: its fixed key (`shop/main`) and its name in a step (`the shop`). The host starts its one instance; only the server moves it. Or `{ "keyedBy": ["id"] }`, a keyed system machine: one instance per key, which host code starts and moves (see below). |
 | `initial` | The state an instance starts in. |
 | `context` | The fields of its context, as the IR declares fields. |
 | `states` | Each state by name, with its phrase (`is a draft`). |
@@ -39,6 +39,13 @@ A machine is a user's or the system's:
 | `guards` | Each guard by name: its `holds` and `fails` phrases and its `rule`, which the features set up with Givens. |
 | `invokes` | Each state that runs a train: the `train`'s interface full name, its `input` from context fields (or from `$owner`, below), its `output` fields, its `outcomes` by phrase (`done`, `failed` or `cancelled`, a `when` rule on the output, a `reduce`), and `examples`, the output an in-memory run answers with. |
 | `links` | Each phrase that names another machine's instance through a context field holding its id. |
+
+A keyed system machine (`"system": { "keyedBy": ["id"] }`) has one instance per key, such as one per ticket. The
+host starts none of them: host code starts and moves each one through
+[`IMachineInstances`](/docs/sdk-reference/statemachine-api/machine-instances) by the machine's id and the key
+(`Start("ticket", "T-12")`). Its trigger phrases say where the instance goes as `{subject}` (`{subject} gets triaged`,
+said `ticket "T-12" gets triaged`), and every trigger is the server's. No view reads one, no policy moves one or is set
+off by one, and no person fires one: each is refused.
 
 A train that reads who it is acting for takes them as input: `"input": { "memberId": "$owner" }` gives the train's
 `memberId` the instance owner's qualified principal id (`{scheme}:{id}`, the owner's user key). The server sets it when
@@ -54,7 +61,7 @@ A scenario names its people, never "I". The step's own person is `her`, `his` or
 | --- | --- |
 | `Given Ada is a customer` | Ada is a person of that actor. |
 | `Given Ada has an order` | Ada starts an instance of her own. |
-| `Given Ada's order is placed`, `Given the shop is open` | The instance is in that state. Arranged, not acted: it fires nothing. |
+| `Given Ada's order is placed`, `Given the shop is open`, `Given ticket "T-12" is new` | The instance is in that state. Arranged, not acted: it fires nothing. A keyed system machine's instance is named by its name and each part of its key, quoted. |
 | `Given Ada's order has something in it` | The guard holds (or, with its `fails` phrase, fails): its context is set so. |
 | `When Ada places her order` | Ada fires the trigger on her instance, which grants her actor the trigger. |
 | `When Ada's order starts baking`, `When the shop opens` | The server fires it: no person is granted it. |
@@ -75,7 +82,7 @@ Written by `from-gherkin`, never by hand. Everything only the server reads:
 
 | Key | What it is |
 | --- | --- |
-| `machines` | Each machine's `schemaHash` (the IR it was derived with), `owner` (`user`, or `{ "system": "<key>" }`), who may `start` and `read` it, each trigger's rule (`roles`, `anyAuthenticated`, or `server`), and the train each invoking state runs, with its input from context fields or `$owner`. A trigger with no entry is not served. |
+| `machines` | Each machine's `schemaHash` (the IR it was derived with), `owner` (`user`, `{ "system": "<key>" }`, or `{ "system": { "keyedBy": [...] } }` for a keyed system machine), who may `start` and `read` it, each trigger's rule (`roles`, `anyAuthenticated`, or `server`), and the train each invoking state runs, with its input from context fields or `$owner`. A trigger with no entry is not served. |
 | `policies` | The server acting when a machine enters a state: `linked` (the same owner's instance through a link), `broadcast` (from a system machine, every instance waiting in a state) or `toSystem` (a user's machine moving the system's at its key). |
 | `views` | Each view a scenario reads, its fields and its readers. A view no scenario reads is not served. |
 | `provenance` | For each part of each machine, the scenarios that produced it, by file, line and name, never by step text. The console's Board tab shows them. |

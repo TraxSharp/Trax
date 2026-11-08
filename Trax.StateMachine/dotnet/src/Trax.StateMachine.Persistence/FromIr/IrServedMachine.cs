@@ -69,7 +69,7 @@ internal sealed class IrReplay(
                 State<TState>(ir["initialState"]),
                 () => (JsonObject)initialContext.DeepClone()
             );
-        if (host.SystemKey is not null)
+        if (host.IsSystem)
             m.SystemOwned();
         // A trigger only the server fires (a policy's) is never served to a client.
         foreach (var (trigger, access) in host.Triggers)
@@ -239,7 +239,7 @@ internal sealed class IrReplay(
         where TState : struct, Enum
         where TTrigger : struct, Enum
     {
-        if (host.SystemKey is not null)
+        if (host.IsSystem)
             return;
         if (host.Start is { } start)
             typeof(IrReplay)
