@@ -1,6 +1,4 @@
 using Reqnroll;
-using Trax.Api.Auth;
-using Trax.Api.Auth.Jwt;
 using Trax.Samples.Bakery.Api.Auth;
 using Trax.Samples.Bakery.E2E.Fixtures;
 using Trax.StateMachine.Gherkin;
@@ -38,8 +36,7 @@ public sealed class Hooks
                     new Dictionary<string, string>
                     {
                         ["Authorization"] = "Bearer " + DemoTokens.Mint(subject, actor.Roles[0]),
-                    },
-                    TraxPrincipalId.Qualify(JwtDefaults.SchemeName, subject)
+                    }
                 );
             };
         });

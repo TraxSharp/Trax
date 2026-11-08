@@ -383,8 +383,7 @@ public class ScenarioDriverParityTests
                 Glossary = FeatureGlossary.Read(Glossary),
                 Credential = (_, person, _) =>
                     new FeatureCredential(
-                        new Dictionary<string, string> { ["X-Api-Key"] = Keys[person].Key },
-                        $"TraxApiKey:{Keys[person].Id}"
+                        new Dictionary<string, string> { ["X-Api-Key"] = Keys[person].Key }
                     ),
             },
             _glossary,

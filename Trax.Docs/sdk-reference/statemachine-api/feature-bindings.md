@@ -28,7 +28,7 @@ reads it, so a feature means the same here as in `trax machine run`. There is no
 | `TraxFeatures.Configure(Action<TraxFeatureDriverOptions> configure)` | Sets what the bindings run against. Call it once from a `[BeforeTestRun]` hook, after the host under test has started. Without `Host`, `Client`, `Glossary` and `Credential` it throws an `ArgumentException`. |
 | `TraxFeatureDriverOptions` | `Host`, the host's services; `Client`, an `HttpClient` to it (`WebApplicationFactory.CreateClient()`); `GraphQLPath`, `/trax/graphql` by default; `Glossary`, a `FeatureGlossary`; `Credential`, a person's credential; `Slack`, how long past its due time a timer, policy or invoked train may take on the host before a Then is read anyway, five seconds by default. |
 | `FeatureActor` | The actor a credential is made for: its `Name`, its `Roles`, and `AnyAuthenticated` for an actor any signed-in caller is. |
-| `FeatureCredential` | A person's `Headers`, sent with each of their requests, and the `UserKey` the host's principal reads from them, which their instances are stored under. |
+| `FeatureCredential` | A person's `Headers`, sent with each of their requests. The host's principal reads the user their instances are stored under from them. |
 | `TraxFeatureSteps` | The binding. Its `Given`, `When` and `Then` take every step. A Given or When the glossary does not read fails; a Then it does not read is about the UI and is pending. |
 | `FeatureStepFailedException` | Thrown by a step whose check did not hold on the host, with the reason. |
 

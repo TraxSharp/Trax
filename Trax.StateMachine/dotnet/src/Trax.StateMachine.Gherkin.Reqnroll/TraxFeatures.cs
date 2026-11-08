@@ -3,11 +3,8 @@ namespace Trax.StateMachine.Gherkin.Reqnroll;
 /// <summary>An actor of the glossary, as a credential is minted for one: its name, its roles, or any signed-in caller.</summary>
 public sealed record FeatureActor(string Name, IReadOnlyList<string> Roles, bool AnyAuthenticated);
 
-/// <summary>
-/// How one person of one scenario calls the host: the headers each request carries, and the user key the host's
-/// principal reads from them, which their instances are stored under.
-/// </summary>
-public sealed record FeatureCredential(IReadOnlyDictionary<string, string> Headers, string UserKey);
+/// <summary>How one person of one scenario calls the host: the headers each of their requests carries.</summary>
+public sealed record FeatureCredential(IReadOnlyDictionary<string, string> Headers);
 
 /// <summary>
 /// What the bindings run features against (ADR <c>Trax.Docs/adr/0058</c>): a host in the test process, its services
