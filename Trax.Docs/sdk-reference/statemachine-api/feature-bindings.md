@@ -42,7 +42,8 @@ reads it, so a feature means the same here as in `trax machine run`. There is no
 - **Everything a person does goes over GraphQL.** A trigger the host does not serve them is not served, and a rule that
   does not admit them is `FORBIDDEN`, as the host says it. A step no person takes fires as the host's server does.
 - **Time is waited for exactly.** `5 seconds pass` waits five seconds, then the host gets `Slack` to fire what fell due
-  and run the policies it owes. A Then after an invoked train reads the instance's transition history for where the
+  and run the policies it owes. One step waits at most ten minutes; a step that says more is refused, so run a
+  scenario with longer waits in memory (`trax machine run`). A Then after an invoked train reads the instance's transition history for where the
   train's outcome took it.
 - **Reqnroll sends telemetry; the bindings do not.** Reqnroll, which this package brings in, sends usage data when
   it generates a test project's feature code at build time and when a test run starts. Set the environment variable

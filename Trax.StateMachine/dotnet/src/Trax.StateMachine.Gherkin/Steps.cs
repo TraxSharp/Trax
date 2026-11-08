@@ -388,14 +388,26 @@ internal sealed partial class StepResolver
         throw new FormatException($"\"{text}\" is not a JSON {type}, which '{field}' is.");
     }
 
-    private static TimeSpan Time(int n, string unit) =>
-        unit.ToLowerInvariant().TrimEnd('s') switch
+    // A wait no TimeSpan holds is refused as the step's problem, not thrown out of the derivation.
+    private static TimeSpan Time(int n, string unit)
+    {
+        try
         {
-            "second" => TimeSpan.FromSeconds(n),
-            "minute" => TimeSpan.FromMinutes(n),
-            "hour" => TimeSpan.FromHours(n),
-            _ => TimeSpan.FromDays(n),
-        };
+            return unit.ToLowerInvariant().TrimEnd('s') switch
+            {
+                "second" => TimeSpan.FromSeconds(n),
+                "minute" => TimeSpan.FromMinutes(n),
+                "hour" => TimeSpan.FromHours(n),
+                _ => TimeSpan.FromDays(n),
+            };
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            throw new FormatException(
+                $"'{n} {unit}' is longer than a clock holds ({TimeSpan.MaxValue.Days} days)."
+            );
+        }
+    }
 
     // A phrase's words, each escaped, any run of whitespace between them.
     private static string Words(string phrase) =>

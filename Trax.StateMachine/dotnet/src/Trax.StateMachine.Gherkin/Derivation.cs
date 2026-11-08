@@ -571,6 +571,14 @@ internal sealed class Walk
                 );
                 break;
             case Meaning.Passes p:
+                if (_clock > TimeSpan.MaxValue - p.Time)
+                {
+                    Fail(
+                        step.Line,
+                        $"'{step.Text}' adds up to more time than a clock holds ({TimeSpan.MaxValue.Days} days)."
+                    );
+                    return;
+                }
                 _clock += p.Time;
                 _afterTime = true;
                 _timed = null;

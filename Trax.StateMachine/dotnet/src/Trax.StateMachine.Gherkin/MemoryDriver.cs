@@ -91,6 +91,10 @@ internal sealed class MemoryDriver(
     // Every timer due by the new time fires, earliest first, and a timer its target starts fires too when it is due.
     public ValueTask Pass(TimeSpan time)
     {
+        if (_clock > TimeSpan.MaxValue - time)
+            throw new InvalidOperationException(
+                $"Waiting {time} more adds up to more time than a clock holds ({TimeSpan.MaxValue.Days} days)."
+            );
         _clock += time;
         for (var fired = 0; fired < 1000; fired++)
         {

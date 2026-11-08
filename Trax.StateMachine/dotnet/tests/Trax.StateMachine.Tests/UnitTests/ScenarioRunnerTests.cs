@@ -102,6 +102,19 @@ public class ScenarioRunnerTests
     }
 
     [Test]
+    public async Task Time_past_what_the_clock_holds_is_refused_naming_the_wait()
+    {
+        var driver = Driver();
+        await driver.Pass(TimeSpan.FromDays(9_000_000));
+
+        await FluentActions
+            .Awaiting(async () => await driver.Pass(TimeSpan.FromDays(9_000_000)))
+            .Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*9000000.00:00:00*");
+    }
+
+    [Test]
     public async Task A_trigger_no_client_is_served_is_not_served()
     {
         var driver = Driver();

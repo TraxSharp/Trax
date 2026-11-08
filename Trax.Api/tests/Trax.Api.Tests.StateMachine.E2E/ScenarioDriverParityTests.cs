@@ -335,6 +335,18 @@ public class ScenarioDriverParityTests
         answers[1].Should().Be(answers[0]);
     }
 
+    [Test]
+    public async Task Time_past_the_bound_is_refused_on_the_host_without_waiting()
+    {
+        var driver = HostDriver("forever");
+
+        await FluentActions
+            .Awaiting(async () => await driver.Pass(TimeSpan.FromDays(999)))
+            .Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*at most 00:10:00*");
+    }
+
     private static readonly InstanceKey Adas = new("p-order", "Ada");
 
     private Person Payer(string name) => new(name, _glossary.Actors["payer"]);

@@ -16,8 +16,8 @@ namespace Trax.StateMachine.Gherkin.Reqnroll;
 /// person's start, triggers and view reads go over GraphQL with that person's own credential, so a trigger the host does
 /// not serve them is not served and a rule that does not admit them is <c>FORBIDDEN</c>, as the host says it. A Given
 /// is written through the host's store and sets off nothing; a step no person takes fires as the host's server does.
-/// Time passing is waited for exactly, then the host is given <see cref="TraxFeatureDriverOptions.Slack"/> to fire
-/// what fell due and run the policies it set off.
+/// Time passing is waited for exactly, at most <see cref="MaxPass"/> a step, then the host is given
+/// <see cref="TraxFeatureDriverOptions.Slack"/> to fire what fell due and run the policies it set off.
 /// </summary>
 internal sealed class HostDriver(
     TraxFeatureDriverOptions options,
@@ -183,8 +183,18 @@ internal sealed class HostDriver(
             .ToListAsync();
     }
 
+    /// <summary>
+    /// The longest one step's time passing may be against a host: it is waited for in real time, so a scenario that
+    /// says more is refused rather than left to block the test run.
+    /// </summary>
+    internal static readonly TimeSpan MaxPass = TimeSpan.FromMinutes(10);
+
     public async ValueTask Pass(TimeSpan time)
     {
+        if (time > MaxPass)
+            throw new InvalidOperationException(
+                $"{time} cannot pass against a host: time passing is waited for in real time, and a step may wait at most {MaxPass}. Run this scenario in memory."
+            );
         await Task.Delay(time);
         await Settle();
     }

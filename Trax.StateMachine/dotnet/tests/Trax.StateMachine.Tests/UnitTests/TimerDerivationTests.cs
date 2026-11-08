@@ -231,6 +231,41 @@ public class TimerDerivationTests
             .Contain("with no time passing there");
     }
 
+    [Test]
+    public void A_wait_longer_than_a_clock_holds_is_refused_as_a_problem()
+    {
+        var derived = Derive(
+            Background
+                + """
+                  Scenario: Forever
+                    Given Cy's door is open
+                    When 999999999 days pass
+                    Then Cy's door is closing
+                """
+        );
+
+        derived
+            .Problems.Should()
+            .Contain(p => p.Message.StartsWith("'999999999 days' is longer than a clock holds"));
+    }
+
+    [Test]
+    public void Waits_that_add_up_past_what_a_clock_holds_are_refused_as_a_problem()
+    {
+        var derived = Derive(
+            Background
+                + """
+                  Scenario: Forever, twice
+                    Given Cy's door is open
+                    When 9999999 days pass
+                    And 9999999 days pass
+                    Then Cy's door is closing
+                """
+        );
+
+        derived.Problems.Should().ContainSingle().Which.Message.Should().Contain("adds up");
+    }
+
     private static JsonNode Timer(Derived derived, string machine, string state) =>
         JsonNode.Parse(derived.Irs[machine])!["timers"]!
             .AsArray()
