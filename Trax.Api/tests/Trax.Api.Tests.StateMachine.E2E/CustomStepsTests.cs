@@ -109,8 +109,10 @@ public class CustomStepsTests
                     var id = scenario.InstanceOf(person, "c-order");
                     id.Should().NotBeNull();
                     var order = await Get(scenario, person, id!.Value);
-                    order
-                        ?["context"]?["loaves"]?.GetValue<int>()
+                    order.Should().NotBeNull("the order is the person's own");
+                    order!["problem"].Should().BeNull();
+                    order["context"]!["loaves"]!
+                        .GetValue<int>()
                         .Should()
                         .Be(int.Parse(match.Groups["n"].Value));
                 }
@@ -125,7 +127,7 @@ public class CustomStepsTests
                         "Bo",
                         scenario.InstanceOf("Ada", "c-order")!.Value
                     );
-                    order?["problem"]?["code"]?.GetValue<string>().Should().Be("NOT_FOUND");
+                    order.Should().BeNull("another user's id is answered as an unknown one");
                 }
             );
         var run = Run(options, machineFeature: false);
@@ -313,7 +315,8 @@ public class CustomStepsTests
             machineFeature
         );
 
-    // The person's read of an order, as a client sends it.
+    // The person's read of an order, as a client sends it: what get answered, null for an order the person cannot see.
+    // A read the host answers with errors fails here, so it is never taken for that null.
     private static async Task<JsonNode?> Get(FeatureScenario scenario, string person, Guid id)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
@@ -326,7 +329,10 @@ public class CustomStepsTests
             ),
         };
         using var response = await scenario.SendAsync(person, request);
-        var body = JsonNode.Parse(await response.Content.ReadAsStringAsync());
-        return body?["data"]?["machines"]?["cOrder"]?["get"];
+        var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsObject();
+        body["errors"].Should().BeNull("the host answers the read");
+        var orders = body["data"]!["machines"]!["cOrder"]!.AsObject();
+        orders.ContainsKey("get").Should().BeTrue();
+        return orders["get"];
     }
 }
