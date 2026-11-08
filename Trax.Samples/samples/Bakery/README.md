@@ -35,7 +35,8 @@ samples/Bakery/demo.sh
 ```
 
 Then open http://localhost:5281 in two windows. Sign in as Ada, a customer, in one, and Kit, a baker, in the other.
-Ada orders loaves and places her order; Kit clocks in; Ada's order goes in the oven. The operations console is at
+Ada orders loaves and places her order. Kit clocks in, which opens the shop, and fires the oven; Ada's order goes
+in, and is ready to collect ten seconds later. The operations console is at
 http://localhost:5280/trax/dashboard: sign in with a token for the `operator` role, and its machine pages have a
 **Board** tab drawn from the features.
 
