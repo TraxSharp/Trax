@@ -20,7 +20,8 @@
         "Placed": "is placed",
         "Declined": "was declined",
         "Unpaid": "is unpaid",
-        "Baking": "is baking"
+        "Baking": "is baking",
+        "Ready": "is ready to collect"
       },
       "triggers": {
         "Order": {
@@ -67,15 +68,23 @@
       "noun": "shift",
       "start": "has a shift",
       "initial": "Off",
-      "states": { "Off": "is not started", "On": "is on" },
-      "triggers": { "ClockIn": { "phrase": "clocks in for {subject}" } }
+      "states": { "Off": "is not started", "On": "is on", "Oven": "is at the oven", "Over": "is over" },
+      "triggers": {
+        "ClockIn": { "phrase": "clocks in for {subject}" },
+        "FireOven": { "phrase": "fires the oven on {subject}" },
+        "ClockOut": { "phrase": "clocks out of {subject}" }
+      }
     },
     "shop": {
       "system": "shop/main",
       "name": "the shop",
       "initial": "Closed",
-      "states": { "Closed": "is closed", "Open": "is open" },
-      "triggers": { "Open": { "phrase": "the shop opens" } }
+      "states": { "Closed": "is closed", "Open": "is open", "Firing": "is baking a batch" },
+      "triggers": {
+        "Open": { "phrase": "the shop opens" },
+        "Close": { "phrase": "the shop closes" },
+        "Batch": { "phrase": "the oven fires" }
+      }
     }
   },
   "views": {
@@ -90,7 +99,8 @@
             "Placed": "Waiting for the oven",
             "Declined": "Payment declined",
             "Unpaid": "Payment not taken",
-            "Baking": "In the oven"
+            "Baking": "In the oven",
+            "Ready": "Ready to collect"
           }
         },
         "loaves": { "from": "order.loaves" }
@@ -98,7 +108,7 @@
     },
     "shop sign": {
       "reads": [ { "machine": "shop", "key": "shop/main" } ],
-      "fields": { "open": { "from": "shop.state", "labels": { "Open": "We're open", "Closed": "Closed" } } }
+      "fields": { "open": { "from": "shop.state", "labels": { "Open": "We're open", "Firing": "We're open, the oven is on", "Closed": "Closed" } } }
     }
   }
 }

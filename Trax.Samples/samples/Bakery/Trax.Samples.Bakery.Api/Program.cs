@@ -55,14 +55,15 @@ builder.Services.AddTrax(trax =>
                 // Reads a run's cancel flag between junctions, so an order leaving Paying stops its payment run.
                 .AddJunctionProgress()
         )
-        // The machines from-gherkin wrote, with their access, the policies between them (a baker clocking in opens the
-        // shop; the shop opening bakes the waiting orders), the shop sign and order views, and the shop itself, the
-        // system instance the host starts. The payment train is found in this assembly by its interface's full name.
+        // The machines from-gherkin wrote, with their access, the policies between them (a baker clocking in or out
+        // opens or closes the shop; firing the oven bakes every waiting order), the shop sign and order views, and the
+        // shop itself, the system instance the host starts. The payment train is found in this assembly by its
+        // interface's full name.
         .AddStateMachines(o =>
         {
             o.ServeFeatures("machines", typeof(TakePaymentTrain).Assembly);
-            // How often the host sweeps for due timers and ended runs it was not told of. The default suits the demo;
-            // the feature tests shorten it, since the shop's five-second closing time is waited for for real.
+            // How often the host sweeps for due timers and ended runs it was not told of. Development and the feature
+            // tests shorten it, since the order's, the shift's and the shop's timers are seconds long.
             if (
                 builder.Configuration.GetValue<TimeSpan?>("Bakery:MachineSweepInterval") is
                 { } sweep

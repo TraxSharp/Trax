@@ -5,6 +5,8 @@ glossary of its words; `trax machine from-gherkin` derives the machines from the
 serves them as committed. There is no C# machine class and no hand-written rule. The one piece of C# behind the
 machines is the payment train an order invokes.
 
+![The Bakery page: Ada's order is in the oven after a baker fired it, and the scenario that says so is lit in shop.feature](screenshot.png)
+
 | You write | Trax derives |
 | --- | --- |
 | [`features/ordering.feature`](features/ordering.feature), [`features/shop.feature`](features/shop.feature) | One IR per machine in [`machines/`](machines/) |
@@ -19,8 +21,9 @@ machines is the payment train an order invokes.
 - 🔵 `Order` and `Place`: an order with nothing in it is refused with "Add something first.", a guard the features
   show.
 - 💟 Placing invokes the payment train: up to a dozen loaves goes through, more is declined.
-- 🟣 A baker clocking in opens the shop (a policy from a user's machine to the system's), the shop opening puts the
-  placed orders in the oven (a broadcast), and the shop closes five seconds after it opens (a timer).
+- 🟣 A baker clocking in opens the shop and clocking out closes it (policies from a user's machine to the system's). A
+  baker firing the oven makes the shop bake a batch, and every paid order waiting for it goes in (a broadcast). An
+  order comes out ready to collect ten seconds later (a timer), and a baker steps back from the oven after two.
 - 🟢 Two views: **orders**, a customer's own orders, and **shop sign**, which every customer and baker reads.
 
 ## Run it

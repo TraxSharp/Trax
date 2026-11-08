@@ -36,6 +36,7 @@ public class BakeryPageTests
         await Assertions
             .Expect(kit.Locator("[data-shop-sign]"))
             .ToContainTextAsync("We're open", Soon);
+        await kit.GetByRole(AriaRole.Button, new() { Name = "Fire the oven" }).ClickAsync();
 
         await Assertions
             .Expect(ada.GetByRole(AriaRole.Region, new() { Name = "Your orders" }))

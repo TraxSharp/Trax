@@ -148,7 +148,7 @@ export function App() {
         <p className="aside-note">
           {person.role === "customer"
             ? "A customer may order and place their own orders, and read the shop sign. Nothing else is served to them."
-            : "A baker may clock in on their own shift, and read the shop sign. Clocking in is all it takes to open the shop."}
+            : "A baker may clock in and out of their own shift, fire the oven, and read the shop sign. They never touch an order: the server moves those."}
         </p>
       </aside>
       <main className="stage">

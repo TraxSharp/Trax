@@ -5,9 +5,10 @@ import { usePoll } from "./usePoll";
 export function ShopSign() {
   const { value, error } = usePoll(readShopSignView);
   const label = value?.shop?.open;
-  const open = label === "We're open";
+  const open = label?.startsWith("We're open") ?? false;
+  const firing = label === "We're open, the oven is on";
   return (
-    <section aria-label="Shop sign" className={`sign${open ? " open" : ""}`}>
+    <section aria-label="Shop sign" className={`sign${open ? " open" : ""}${firing ? " firing" : ""}`}>
       <span className="sign-light" aria-hidden />
       <div className="sign-text">
         <div className="sign-label">The shop</div>
@@ -17,9 +18,11 @@ export function ShopSign() {
       </div>
       <p className="sign-note">
         {error ??
-          (open
-            ? "A baker clocked in. It closes on its own after hours: a timer in the feature, not a cron job."
-            : "Nobody can open it by hand. It opens when a baker clocks in, a policy the features describe.")}
+          (firing
+            ? "A baker fired the oven: every waiting order just went in."
+            : open
+              ? "A baker is in. Paid orders wait until they fire the oven."
+              : "Closed until a baker clocks in. Nobody opens it by hand: it is the system's.")}
       </p>
     </section>
   );

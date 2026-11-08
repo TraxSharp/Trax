@@ -1,6 +1,6 @@
 // AUTO-GENERATED from order.ir.json by generateContextTypes. Do not edit by hand.
 
-export type OrderState = "Baking" | "Declined" | "Draft" | "Paying" | "Placed" | "Unpaid";
+export type OrderState = "Baking" | "Declined" | "Draft" | "Paying" | "Placed" | "Ready" | "Unpaid";
 export type OrderTrigger = "Bake" | "Order" | "Place";
 export type OrderOutcome = "Paying.cancelled" | "Paying.done" | "Paying.failed";
 
@@ -29,6 +29,11 @@ export type OrderPlacedContext = {
   loaves: number;
 };
 
+export type OrderReadyContext = {
+  approved?: boolean | null;
+  loaves: number;
+};
+
 export type OrderUnpaidContext = {
   approved?: boolean | null;
   loaves: number;
@@ -40,6 +45,7 @@ export type OrderContexts = {
   Draft: OrderDraftContext;
   Paying: OrderPayingContext;
   Placed: OrderPlacedContext;
+  Ready: OrderReadyContext;
   Unpaid: OrderUnpaidContext;
 };
 

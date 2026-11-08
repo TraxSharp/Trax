@@ -111,8 +111,8 @@ const scenes = {
     },
   },
 
-  // Ada orders three loaves and places them; Kit clocks in, the shop opens and her order goes in the oven. The shot
-  // is Ada's page, with the scenario that ends where her order is lit in its feature. BAKERY_URL points it at a page
+  // Ada orders three loaves and places them; Kit clocks in and fires the oven, and her order goes in. The shot is
+  // Ada's page, with the scenario that ends where her order is lit in its feature. BAKERY_URL points it at a page
   // served elsewhere.
   bakery: {
     folder: "Bakery",
@@ -133,10 +133,9 @@ const scenes = {
       await ada.getByRole("button", { name: "Order", exact: true }).click();
       await ada.getByRole("button", { name: "Place", exact: true }).click();
       await ada.getByRole("region", { name: "Your orders" }).getByText("Waiting for the oven").waitFor({ timeout: 15_000 });
-      // A shop still open from an earlier run would not open again, and nothing would bake: wait for it to close.
-      await ada.locator("[data-shop-sign]", { hasText: "Closed" }).waitFor({ timeout: 180_000 });
       const kit = await signIn("Kit", "baker");
       await kit.getByRole("button", { name: "Clock in" }).click();
+      await kit.getByRole("button", { name: "Fire the oven" }).click();
       await ada.locator("[data-order-state]", { hasText: "Baking" }).waitFor({ timeout: 30_000 });
       await ada.waitForTimeout(1200);
       await kit.close();

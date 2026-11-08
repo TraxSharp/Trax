@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { FeatureSource } from "./FeatureSource";
 import { statePhrase } from "./features";
-import { readOrdersView, useRememberedOrder } from "./trax/index.g";
+import { readOrdersView, readShopSignView, useRememberedOrder } from "./trax/index.g";
 import { usePoll } from "./usePoll";
 
 const TONE: Record<string, string> = {
@@ -9,6 +9,7 @@ const TONE: Record<string, string> = {
   Paying: " tone-busy",
   Placed: " tone-ok",
   Baking: " tone-oven",
+  Ready: " tone-ok",
   Declined: " tone-fail",
   Unpaid: " tone-fail",
 };
@@ -17,6 +18,7 @@ const STATUS_TONE: Record<string, string> = {
   Paying: " tone-busy",
   "Waiting for the oven": " tone-ok",
   "In the oven": " tone-oven",
+  "Ready to collect": " tone-ok",
   "Payment declined": " tone-fail",
   "Payment not taken": " tone-fail",
 };
@@ -43,12 +45,14 @@ function Edge({ label, avail, server }: { label: string; avail?: boolean; server
 
 /**
  * A customer's page: their order, which they fill and place, and the orders view, every order of theirs as the view
- * shows it. Placing takes payment; when the shop opens, a placed order goes in the oven.
+ * shows it. Placing takes payment; a paid order waits for a baker to fire the oven, and comes out ready to collect.
  */
 export function Customer() {
   const order = useRememberedOrder();
   const [loaves, setLoaves] = useState(3);
   const orders = usePoll(readOrdersView);
+  const sign = usePoll(readShopSignView);
+  const shopOpen = sign.value?.shop?.open?.startsWith("We're open") ?? false;
   const state = order.state ?? undefined;
   const canOrder = order.can("Order", { loaves });
   const canPlace = order.available.includes("Place");
@@ -78,8 +82,10 @@ export function Customer() {
               <Node name="Paying" current={state} />
               <Edge label="paid" server />
               <Node name="Placed" current={state} />
-              <Edge label="shop opens" server />
+              <Edge label="oven" server />
               <Node name="Baking" current={state} />
+              <Edge label="10 s" server />
+              <Node name="Ready" current={state} />
             </div>
             <div className="diagram-side">
               <span className="side-label">Paying ↘</span>
@@ -88,7 +94,18 @@ export function Customer() {
             </div>
           </div>
 
+          {state === "Placed" && (
+            <p className="waiting">
+              {shopOpen
+                ? "Paid. It goes in the next time a baker fires the oven."
+                : "Paid. The shop is closed: it goes in once a baker clocks in and fires the oven."}
+            </p>
+          )}
+          {state === "Baking" && <p className="waiting">In the oven. It comes out ready to collect in 10 seconds.</p>}
+
           <div className="controls">
+            {state === "Draft" && (
+              <>
             <div className="stepper-label">
               <span className="stepper">
                 <button type="button" aria-label="One fewer" onClick={() => setLoaves((n) => Math.max(0, n - 1))}>
@@ -129,6 +146,13 @@ export function Customer() {
                 <span className="trigger-caption">pay, and wait for the oven</span>
               </button>
             </div>
+              </>
+            )}
+            {(state === "Ready" || state === "Declined" || state === "Unpaid") && (
+              <button type="button" className="primary" onClick={() => order.forget()}>
+                New order
+              </button>
+            )}
             {order.problem && (
               <p className="problem" role="alert">
                 {order.problem.message}

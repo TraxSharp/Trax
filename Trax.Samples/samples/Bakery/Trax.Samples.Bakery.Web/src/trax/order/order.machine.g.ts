@@ -90,6 +90,22 @@ const ir = {
         }
       ]
     },
+    "Ready": {
+      "fields": [
+        {
+          "constraints": [],
+          "name": "loaves",
+          "nullable": false,
+          "type": "integer"
+        },
+        {
+          "constraints": [],
+          "name": "approved",
+          "nullable": true,
+          "type": "boolean"
+        }
+      ]
+    },
     "Unpaid": {
       "fields": [
         {
@@ -185,7 +201,19 @@ const ir = {
     "Draft",
     "Paying",
     "Placed",
+    "Ready",
     "Unpaid"
+  ],
+  "timers": [
+    {
+      "after": "PT10S",
+      "rules": [
+        "undeclared"
+      ],
+      "state": "Baking",
+      "target": "Ready",
+      "trigger": "Baking.after"
+    }
   ],
   "transitions": [
     {
@@ -232,7 +260,7 @@ const ir = {
 } as IrDocument;
 
 /** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */
-export const irHash = "7470cd2cddc99237a8d1ffddc22cc731d68de31867f0cc6ab682d782d1727454";
+export const irHash = "b33a6c162e153ed992f1e766efcc16074087e5d8de90482b5f03086d94716725";
 
 /** The order machine, built from the IR and typed by OrderSpec. No hand-written twin. */
 export const order = typedMachineFromIr<OrderSpec>(ir, irHash);

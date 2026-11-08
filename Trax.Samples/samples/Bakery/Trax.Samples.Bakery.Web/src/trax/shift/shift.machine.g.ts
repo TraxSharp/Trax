@@ -15,6 +15,12 @@ const ir = {
     },
     "On": {
       "fields": []
+    },
+    "Oven": {
+      "fields": []
+    },
+    "Over": {
+      "fields": []
     }
   },
   "id": "shift",
@@ -23,23 +29,48 @@ const ir = {
   "inputs": {},
   "states": [
     "Off",
-    "On"
+    "On",
+    "Oven",
+    "Over"
+  ],
+  "timers": [
+    {
+      "after": "PT2S",
+      "rules": [
+        "Requires(baker)"
+      ],
+      "state": "Oven",
+      "target": "On",
+      "trigger": "Oven.after"
+    }
   ],
   "transitions": [
     {
       "from": "Off",
       "to": "On",
       "trigger": "ClockIn"
+    },
+    {
+      "from": "On",
+      "to": "Over",
+      "trigger": "ClockOut"
+    },
+    {
+      "from": "On",
+      "to": "Oven",
+      "trigger": "FireOven"
     }
   ],
   "triggers": [
-    "ClockIn"
+    "ClockIn",
+    "ClockOut",
+    "FireOven"
   ],
   "version": 1
 } as IrDocument;
 
 /** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */
-export const irHash = "d7e52fc1fc8a6b097da75e5b336077cd81e382baa13e81b5792906e35b7e51ea";
+export const irHash = "f77c9cfa7ce86f89baf4943bfa949913cabaa2bf613b5f6e7bc86d92c42afc00";
 
 /** The shift machine, built from the IR and typed by ShiftSpec. No hand-written twin. */
 export const shift = typedMachineFromIr<ShiftSpec>(ir, irHash);

@@ -192,7 +192,7 @@ button.ghost:hover { background: color-mix(in srgb, var(--accent) 12%, transpare
 .diagram-row { display: flex; align-items: center; }
 .diagram-side { display: flex; gap: 10px; padding-left: 4px; }
 .node {
-  position: relative; flex-shrink: 0; padding: 11px 16px; border-radius: 12px; font: 600 14px var(--mono);
+  position: relative; flex-shrink: 0; padding: 10px 13px; border-radius: 12px; font: 600 13px var(--mono);
   color: var(--muted); background: var(--raised); border: 1px solid var(--line-strong); transition: all 0.3s;
 }
 .node-small { padding: 7px 12px; font-size: 12.5px; border-style: dashed; }
@@ -201,7 +201,7 @@ button.ghost:hover { background: color-mix(in srgb, var(--accent) 12%, transpare
   box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 28px -8px color-mix(in srgb, var(--accent) 80%, transparent);
 }
 .node-current.node-fail { background: linear-gradient(180deg, #fca5a5, var(--fail)); color: #2a0b0b; box-shadow: 0 0 0 5px color-mix(in srgb, var(--fail) 22%, transparent); }
-.edge { flex: 1; min-width: 70px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 6px; }
+.edge { flex: 1; min-width: 46px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 6px; }
 .edge-line { width: 100%; height: 2px; border-radius: 2px; background: var(--line-strong); }
 .edge-label { font: 500 11.5px var(--mono); color: var(--faint); white-space: nowrap; padding: 2px 7px; border-radius: 7px; border: 1px solid transparent; }
 .edge-label.avail { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
@@ -341,3 +341,13 @@ button.ghost:hover { background: color-mix(in srgb, var(--accent) 12%, transpare
   .stage-body { grid-template-columns: 1fr; }
   .sign-note { display: none; }
 }
+
+.waiting {
+  font-size: 13.5px; line-height: 1.5; padding: 10px 12px; border-radius: 11px; color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--warm) 40%, transparent); background: color-mix(in srgb, var(--warm) 8%, transparent);
+  animation: enter 0.2s ease-out;
+}
+.controls .primary { align-self: flex-start; padding: 0 18px; }
+.triggers .trigger.danger.avail { border-color: color-mix(in srgb, var(--fail) 45%, transparent); background: color-mix(in srgb, var(--fail) 8%, var(--raised)); }
+.sign.firing { border-color: color-mix(in srgb, var(--oven) 45%, transparent); background: color-mix(in srgb, var(--oven) 8%, var(--panel)); }
+.sign.firing .sign-light { background: var(--oven); box-shadow: 0 0 0 4px color-mix(in srgb, var(--oven) 25%, transparent), 0 0 18px var(--oven); }
