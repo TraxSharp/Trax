@@ -1019,12 +1019,14 @@ internal sealed class Walk
     // Each instance a When's Thens show moving too was moved by a policy. Its cause is the When's instance, unless the
     // instance is another person's and a system instance moved before it in the same cascade: then the system
     // instance entering its state moved it, as a broadcast does (a baker opening the shop bakes the waiting orders).
+    // The When's instance coming back was moved by the instance that moved just before, whoever owns it.
     private void Cascade(Pending pending, string? entered)
     {
         (InstanceKey Key, string Entered)? system =
             pending.Key.Owner is null && entered is not null ? (pending.Key, entered) : null;
-        foreach (var (key, to, line) in pending.Cascades)
+        for (var i = 0; i < pending.Cascades.Count; i++)
         {
+            var (key, to, line) = pending.Cascades[i];
             if (entered is null)
             {
                 Fail(
@@ -1034,14 +1036,27 @@ internal sealed class Walk
                 continue;
             }
             var target = _instances[key];
-            // A user's instance another owner's move reaches, or the acting instance itself coming back, was moved by
-            // the system instance that moved last: a broadcast from it.
-            var (cause, causeEntered) =
-                key.Owner is not null
-                && (key.Owner != pending.Key.Owner || key == pending.Key)
-                && system is { } moved
-                    ? (moved.Key, moved.Entered)
-                    : (pending.Key, entered);
+            InstanceKey cause;
+            string causeEntered;
+            if (key == pending.Key)
+            {
+                if (i == 0 || pending.Cascades[i - 1].Key == pending.Key)
+                {
+                    Fail(
+                        line,
+                        $"{Name(key)} moves again here, and no other instance moved before it to move it."
+                    );
+                    continue;
+                }
+                (cause, causeEntered) = (pending.Cascades[i - 1].Key, pending.Cascades[i - 1].To);
+            }
+            else
+                // A user's instance another owner's move reaches was moved by the system instance that moved last: a
+                // broadcast from it.
+                (cause, causeEntered) =
+                    key.Owner is not null && key.Owner != pending.Key.Owner && system is { } moved
+                        ? (moved.Key, moved.Entered)
+                        : (pending.Key, entered);
             Policies.Add(
                 new PolicyObservation(
                     cause.Machine,
