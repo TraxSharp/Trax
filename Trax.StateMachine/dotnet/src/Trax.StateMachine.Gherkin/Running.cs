@@ -35,8 +35,13 @@ internal interface IScenarioDriver
     ValueTask<(string State, JsonObject Context)?> Read(InstanceKey key);
 
     /// <summary>
-    /// The states an instance entered since its last move that was not a policy's, in order: where a When took it, then
-    /// where the policies it set off took it on. Empty when it has not moved.
+    /// Marks the start of a When: <see cref="Cascaded"/> reports what the instances enter from here on.
+    /// </summary>
+    ValueTask BeginWhen();
+
+    /// <summary>
+    /// The states an instance entered since the current When began, in order: where the When took it, then where the
+    /// policies it set off took it on. A Given's arranging is not a move and is not in it. Empty when it has not moved.
     /// </summary>
     ValueTask<IReadOnlyList<string>> Cascaded(InstanceKey key);
 
@@ -175,6 +180,16 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
     private readonly List<InstanceKey> known = [];
     private (InstanceKey Key, Person? By, Answer Answer)? last;
 
+    // Per instance, how far the Thens since the last When have read into the states it entered: the next Then naming
+    // one of them reads on from here, so the Thens follow the cascade in order.
+    private readonly Dictionary<InstanceKey, int> cursors = [];
+
+    private async ValueTask BeginWhen()
+    {
+        cursors.Clear();
+        await driver.BeginWhen();
+    }
+
     /// <summary>The people the scenario has introduced, by name, as the step resolver reads them.</summary>
     internal IReadOnlyDictionary<string, string> People =>
         people.ToDictionary(p => p.Key, p => p.Value.Actor.Name);
@@ -242,6 +257,7 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
                 var key = new InstanceKey(a.Machine, a.Owner);
                 Know(key);
                 var actor = people[a.Person];
+                await BeginWhen();
                 last = (key, actor, await driver.Fire(actor, key, a.Trigger, a.Input));
                 return null;
             }
@@ -250,6 +266,7 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
             {
                 var key = new InstanceKey(h.Machine, h.Owner, h.Key);
                 Know(key);
+                await BeginWhen();
                 last = (key, null, await driver.Fire(null, key, h.Trigger, h.Input));
                 return null;
             }
@@ -266,6 +283,7 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
                 if (waiting is null)
                     return $"no {o.Machine} is in {o.State} to be told '{o.Phrase}'.";
                 var invoke = glossary.Machines[o.Machine].Invokes[o.State];
+                await BeginWhen();
                 last = (
                     waiting,
                     null,
@@ -280,6 +298,7 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
             }
 
             case (StepKind.When, Meaning.Passes p):
+                await BeginWhen();
                 await driver.Pass(p.Time);
                 last = null;
                 return null;
@@ -290,11 +309,21 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
                 if (last is { } l && l.Key == key && l.Answer is not Answer.Moved && !s.Still)
                     return $"'{step.Text}', and it was refused: {ScenarioRunner.Describe(l.Answer)}.";
                 var now = await driver.Read(key);
+                // The Thens after a When follow the cascade in order: one may name where the When took the instance
+                // before a policy it set off moved it on, but not a state an earlier Then has read past, nor one a
+                // previous When's cascade entered. A still-Then says it did not move, so only where it is counts.
+                if (!s.Still)
+                {
+                    var cascade = await driver.Cascaded(key);
+                    var from = cursors.GetValueOrDefault(key);
+                    for (var i = from; i < cascade.Count; i++)
+                        if (cascade[i] == s.State)
+                        {
+                            cursors[key] = i + 1;
+                            return null;
+                        }
+                }
                 if (now?.State == s.State)
-                    return null;
-                // A Then may name where the When took the instance before a policy it set off moved it on: the
-                // Thens after a When follow the cascade in order (EFF-220).
-                if (!s.Still && (await driver.Cascaded(key)).Contains(s.State))
                     return null;
                 return $"'{step.Text}', and it is {(now is null ? "not started" : $"in {now.Value.State}")}.";
             }

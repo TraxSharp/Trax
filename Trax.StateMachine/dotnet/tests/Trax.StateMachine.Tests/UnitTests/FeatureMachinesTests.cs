@@ -184,6 +184,63 @@ public class FeatureMachinesTests
         loops.Select(p => p.Line).Should().OnlyHaveUniqueItems();
     }
 
+    private const string CascadeGlossary = """
+        {
+          "version": 1,
+          "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
+          "machines": {
+            "order": {
+              "ownedBy": "customer",
+              "noun": "order",
+              "start": "has an order",
+              "initial": "Draft",
+              "states": { "Draft": "is a draft", "Placed": "is placed", "Baking": "is baking" },
+              "triggers": {
+                "Place": { "phrase": "places {subject}" },
+                "Bake": { "phrase": "{subject} starts baking" }
+              }
+            },
+            "shop": {
+              "system": "shop/main",
+              "name": "the shop",
+              "initial": "Open",
+              "states": { "Open": "is open", "Firing": "is baking a batch" },
+              "triggers": { "Batch": { "phrase": "the oven fires" } }
+            }
+          }
+        }
+        """;
+
+    private static readonly FeatureFile[] CascadeFeatures =
+    [
+        new(
+            "oven.feature",
+            """
+            Feature: Oven
+              Scenario: An order placed while the shop is open goes straight in
+                Given Ada is a customer
+                And Ada has an order
+                And the shop is open
+                When Ada places her order
+                Then Ada's order is placed
+                And the shop is baking a batch
+                And Ada's order is baking
+
+              Scenario: The oven fires
+                Given the shop is open
+                When the oven fires
+                Then the shop is baking a batch
+
+              Scenario: An order goes in the oven
+                Given Ada is a customer
+                And Ada has an order
+                And Ada's order is placed
+                When Ada's order starts baking
+                Then Ada's order is baking
+            """
+        ),
+    ];
+
     [Test]
     public void A_timer_longer_than_a_timer_may_wait_is_refused_as_the_host_refuses_it()
     {
@@ -231,72 +288,16 @@ public class FeatureMachinesTests
     [Test]
     public void A_cascade_may_come_back_to_the_instance_that_set_it_off()
     {
-        var glossary = FeatureGlossary.Read(
-            """
-            {
-              "version": 1,
-              "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
-              "machines": {
-                "order": {
-                  "ownedBy": "customer",
-                  "noun": "order",
-                  "start": "has an order",
-                  "initial": "Draft",
-                  "states": { "Draft": "is a draft", "Placed": "is placed", "Baking": "is baking" },
-                  "triggers": {
-                    "Place": { "phrase": "places {subject}" },
-                    "Bake": { "phrase": "{subject} starts baking" }
-                  }
-                },
-                "shop": {
-                  "system": "shop/main",
-                  "name": "the shop",
-                  "initial": "Open",
-                  "states": { "Open": "is open", "Firing": "is baking a batch" },
-                  "triggers": { "Batch": { "phrase": "the oven fires" } }
-                }
-              }
-            }
-            """
-        );
-        FeatureFile[] features =
-        [
-            new(
-                "oven.feature",
-                """
-                Feature: Oven
-                  Scenario: An order placed while the shop is open goes straight in
-                    Given Ada is a customer
-                    And Ada has an order
-                    And the shop is open
-                    When Ada places her order
-                    Then Ada's order is placed
-                    And the shop is baking a batch
-                    And Ada's order is baking
+        var glossary = FeatureGlossary.Read(CascadeGlossary);
 
-                  Scenario: The oven fires
-                    Given the shop is open
-                    When the oven fires
-                    Then the shop is baking a batch
-
-                  Scenario: An order goes in the oven
-                    Given Ada is a customer
-                    And Ada has an order
-                    And Ada's order is placed
-                    When Ada's order starts baking
-                    Then Ada's order is baking
-                """
-            ),
-        ];
-
-        var derived = FeatureMachines.Derive(glossary, features);
+        var derived = FeatureMachines.Derive(glossary, CascadeFeatures);
 
         derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
         derived
             .Host.Should()
             .Contain("\"shape\":\"toSystem\"")
             .And.Contain("\"shape\":\"broadcast\"");
-        var report = FeatureMachines.Run(glossary, features, derived);
+        var report = FeatureMachines.Run(glossary, CascadeFeatures, derived);
         report
             .Scenarios.Where(s => s.Status != FeatureStatus.Passed)
             .Select(s =>
@@ -304,6 +305,82 @@ public class FeatureMachinesTests
             )
             .Should()
             .BeEmpty();
+    }
+
+    // Each runs on the machines the cascade features derive, after the order is placed and the shop's oven, firing on
+    // it, puts the order in to bake: placed, then baking.
+    [TestCase(
+        "A state the cascade never entered",
+        """
+                Then Ada's order is placed
+                And the shop is baking a batch
+                And Ada's order is a draft
+            """,
+        "Ada's order is a draft"
+    )]
+    [TestCase(
+        "Still, after the cascade moved it",
+        """
+                Then Ada's order is placed
+                And the shop is still open
+            """,
+        "the shop is still open"
+    )]
+    [TestCase(
+        "The cascade read backwards",
+        """
+                Then Ada's order is baking
+                And the shop is baking a batch
+                And Ada's order is placed
+            """,
+        "Ada's order is placed"
+    )]
+    [TestCase(
+        "A cascade an earlier When set off",
+        """
+                Then Ada's order is placed
+                And the shop is baking a batch
+                And Ada's order is baking
+                When Bo places his order
+                Then Bo's order is placed
+                And Ada's order is placed
+            """,
+        "Ada's order is placed"
+    )]
+    public void A_then_after_a_cascade_names_what_it_entered_in_order(
+        string name,
+        string thens,
+        string failing
+    )
+    {
+        var glossary = FeatureGlossary.Read(CascadeGlossary);
+        var derived = FeatureMachines.Derive(glossary, CascadeFeatures);
+        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        FeatureFile probe = new(
+            "probe.feature",
+            $"""
+            Feature: Probe
+              Scenario: {name}
+                Given Ada is a customer
+                And Ada has an order
+                And Bo is a customer
+                And Bo has an order
+                And the shop is open
+                When Ada places her order
+            {thens}
+            """
+        );
+
+        var report = FeatureMachines.Run(glossary, [probe], derived);
+
+        var scenario = report.Scenarios.Should().ContainSingle().Subject;
+        scenario
+            .Status.Should()
+            .Be(
+                FeatureStatus.Failed,
+                string.Join("; ", scenario.Steps.Select(s => $"{s.Text} {s.Status} {s.Message}"))
+            );
+        scenario.Steps.Single(s => s.Status == FeatureStatus.Failed).Text.Should().EndWith(failing);
     }
 
     [Test]

@@ -74,6 +74,24 @@ public class ScenarioDriverParityTests
               "states": { "Closed": "is closed", "Open": "is open" },
               "triggers": { "Open": { "phrase": "the shop opens" } }
             },
+            "p-tray": {
+              "ownedBy": "payer",
+              "noun": "tray",
+              "start": "has a tray",
+              "initial": "Empty",
+              "states": { "Empty": "is empty", "Full": "is full", "Baking": "is in the oven" },
+              "triggers": {
+                "Fill": { "phrase": "fills {subject}" },
+                "Load": { "phrase": "{subject} goes in" }
+              }
+            },
+            "p-oven": {
+              "system": "p-oven/main",
+              "name": "the oven",
+              "initial": "Cold",
+              "states": { "Cold": "is cold", "Warm": "is warm" },
+              "triggers": { "Heat": { "phrase": "the oven warms up" } }
+            },
             "p-ticket": {
               "system": { "keyedBy": ["id"] },
               "name": "ticket",
@@ -179,11 +197,60 @@ public class ScenarioDriverParityTests
             And ticket "T-13" is new
         """;
 
+    // A cascade that comes back: filling a tray warms the system oven (toSystem), and the oven warming takes every
+    // full tray in (a broadcast), the one that set it off included.
+    private const string Oven = """
+        Feature: The oven
+          Scenario: Filling a tray warms the oven, which takes the tray in
+            Given Ada is a payer
+            And Ada has a tray
+            And the oven is cold
+            When Ada fills her tray
+            Then Ada's tray is full
+            And the oven is warm
+            And Ada's tray is in the oven
+
+          Scenario: The oven warms up
+            Given the oven is cold
+            When the oven warms up
+            Then the oven is warm
+
+          Scenario: A full tray goes in
+            Given Ada is a payer
+            And Ada has a tray
+            And Ada's tray is full
+            When Ada's tray goes in
+            Then Ada's tray is in the oven
+        """;
+
+    // Thens the cascade does not bear out: a state it never entered, and the state a Given arranged before the When.
+    private const string NotTheCascade = """
+        Feature: Not the cascade
+          Scenario: A state the cascade never entered
+            Given Ada is a payer
+            And Ada has a tray
+            And the oven is cold
+            When Ada fills her tray
+            Then Ada's tray is full
+            And the oven is warm
+            And Ada's tray is empty
+
+          Scenario: The state a Given arranged
+            Given Ada is a payer
+            And Ada has a tray
+            And Ada's tray is full
+            And the oven is cold
+            When the oven warms up
+            Then the oven is warm
+            And Ada's tray is full
+        """;
+
     private static readonly (string File, string Text)[] Features =
     [
         ("ordering.feature", Ordering),
         ("shop.feature", Shop),
         ("tickets.feature", Tickets),
+        ("oven.feature", Oven),
     ];
 
     // Each person signs in as a user of their own, with their actor's roles, so an owner's instance is theirs alone.
@@ -208,7 +275,15 @@ public class ScenarioDriverParityTests
         derived.Problems.Should().BeEmpty();
         _irs = derived.Irs.ToDictionary(kv => kv.Key, kv => JsonNode.Parse(kv.Value)!.AsObject());
         _hostFile = HostFile.Read(derived.Host!);
-        _hostFile.Policies.Select(p => p.Shape).Should().BeEquivalentTo(["toSystem", "broadcast"]);
+        _hostFile
+            .Policies.Select(p => $"{p.Shape} {p.Id}")
+            .Should()
+            .BeEquivalentTo([
+                "toSystem p-shift.On>p-shop.Open",
+                "broadcast p-shop.Open>p-order.Bake",
+                "toSystem p-tray.Full>p-oven.Heat",
+                "broadcast p-oven.Warm>p-tray.Load",
+            ]);
 
         // Served as from-gherkin writes it, so the policies, the system instance and the views run as on a host.
         _directory = Directory.CreateTempSubdirectory("trax-parity-").FullName;
@@ -259,6 +334,31 @@ public class ScenarioDriverParityTests
 
             memory.Status.Should().Be(ScenarioStatus.Passed, Show(memory));
             host.Status.Should().Be(ScenarioStatus.Passed, Show(host));
+        }
+    }
+
+    [Test]
+    public async Task A_then_the_cascade_does_not_bear_out_fails_at_the_same_step_on_both()
+    {
+        var (scenarios, problems) = FeatureFiles.Parse([
+            ("not-the-cascade.feature", NotTheCascade),
+        ]);
+        problems.Should().BeEmpty();
+        var resolver = new StepResolver(_glossary);
+        foreach (var scenario in scenarios)
+        {
+            var walk = Walk.Run(scenario, _glossary, resolver);
+            var memory = await ScenarioRunner.Run(
+                walk,
+                _glossary,
+                new MemoryDriver(_irs, _hostFile, _glossary)
+            );
+            var host = await ScenarioRunner.Run(walk, _glossary, HostDriver(scenario.Name));
+
+            memory.Status.Should().Be(ScenarioStatus.Failed, Show(memory));
+            host.Status.Should().Be(ScenarioStatus.Failed, Show(host));
+            host.Failure!.Step.Should().Be(memory.Failure!.Step, Show(host));
+            memory.Failure!.Step.Line.Should().Be(scenario.Steps[^1].Line, Show(memory));
         }
     }
 

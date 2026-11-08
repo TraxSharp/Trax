@@ -32,6 +32,9 @@ internal sealed class HostDriver(
     );
     private readonly Dictionary<string, GlossaryActor> _actors = new(StringComparer.Ordinal);
 
+    // The newest history row when the current When began: what any instance entered after it is the When's cascade.
+    private long _when;
+
     private IReadOnlyDictionary<string, IMachineInternals> Machines =>
         options
             .Host.GetServices<IMachine>()
@@ -90,11 +93,18 @@ internal sealed class HostDriver(
             );
     }
 
+    public async ValueTask BeginWhen()
+    {
+        await using var scope = options.Host.CreateAsyncScope();
+        var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
+        _when = await data.SnapshotTransitions.MaxAsync(t => (long?)t.Id) ?? 0;
+    }
+
     public async ValueTask<IReadOnlyList<string>> Cascaded(InstanceKey key)
     {
         if (!_ids.ContainsKey(key) && (key.Owner is not null || key.Key is not null))
             return [];
-        return SinceLastOwnMove(await History(key, await IdOf(key)));
+        return EnteredAfter(await History(key, await IdOf(key)), _when);
     }
 
     public async ValueTask<(string State, JsonObject Context)?> Read(InstanceKey key)
@@ -161,10 +171,13 @@ internal sealed class HostDriver(
         var entered = Entered(await History(key, id), state);
         while (true)
         {
-            if (Left(await History(key, id), state, entered) is { } left)
+            if (LeftBy(await History(key, id), state, entered) is { } left)
             {
+                // The host may have applied the outcome before this When began: its move and what it set off are
+                // still this When's cascade.
+                _when = Math.Min(_when, left.Id - 1);
                 await Settle();
-                return new Answer.Moved(left);
+                return new Answer.Moved(left.To);
             }
             if (DateTimeOffset.UtcNow > deadline)
                 return new Answer.Refused(
@@ -175,30 +188,28 @@ internal sealed class HostDriver(
         }
     }
 
-    /// <summary>One row of an instance's transition history: its revision and the move it wrote.</summary>
+    /// <summary>
+    /// One row of an instance's transition history: its revision and the move it wrote, the row's identity, and whether
+    /// it was an arranging (a start or a save) rather than a move.
+    /// </summary>
     internal readonly record struct Move(
         long Revision,
         string? From,
         string To,
-        bool ByPolicy = false
+        long Id = 0,
+        bool Arranged = false
     );
 
     /// <summary>
-    /// The states entered since the last move that was not a policy's, in order: the newest moves a policy made, and the
-    /// move before them.
+    /// The states entered by the moves written after row <paramref name="mark"/>, in order: what a When and the policies,
+    /// timers and outcomes after it did. A Given's arranging is not a move.
     /// </summary>
-    internal static IReadOnlyList<string> SinceLastOwnMove(IReadOnlyList<Move> history)
-    {
-        var states = new List<string>();
-        foreach (var move in history.OrderByDescending(m => m.Revision))
-        {
-            states.Add(move.To);
-            if (!move.ByPolicy)
-                break;
-        }
-        states.Reverse();
-        return states;
-    }
+    internal static IReadOnlyList<string> EnteredAfter(IReadOnlyList<Move> history, long mark) =>
+        history
+            .Where(m => m.Id > mark && !m.Arranged)
+            .OrderBy(m => m.Revision)
+            .Select(m => m.To)
+            .ToList();
 
     /// <summary>The revision at which the instance last entered <paramref name="state"/>, or 0 if it never did.</summary>
     internal static long Entered(IReadOnlyList<Move> history, string state) =>
@@ -209,10 +220,13 @@ internal sealed class HostDriver(
     /// not left it since.
     /// </summary>
     internal static string? Left(IReadOnlyList<Move> history, string state, long entered) =>
+        LeftBy(history, state, entered)?.To;
+
+    private static Move? LeftBy(IReadOnlyList<Move> history, string state, long entered) =>
         history
             .Where(m => m.Revision > entered && m.From == state && m.To != state)
             .OrderBy(m => m.Revision)
-            .Select(m => m.To)
+            .Select(m => (Move?)m)
             .FirstOrDefault();
 
     private async Task<List<Move>> History(InstanceKey key, Guid id)
@@ -227,7 +241,8 @@ internal sealed class HostDriver(
                 t.Revision,
                 t.FromState,
                 t.ToState,
-                t.Actor == SnapshotTransitionActor.Policy
+                t.Id,
+                t.Kind == SnapshotTransitionKind.Start || t.Kind == SnapshotTransitionKind.Save
             ))
             .ToListAsync();
     }

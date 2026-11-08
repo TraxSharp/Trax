@@ -39,18 +39,21 @@ public class HostDriverOutcomeTests
     }
 
     [Test]
-    public void The_states_since_the_last_own_move_run_from_it_through_the_policy_moves_after_it()
+    public void A_cascade_is_the_moves_written_after_the_when_began_without_the_arranging()
     {
         Move[] history =
         [
-            new(1, null, "Draft"),
-            new(2, "Draft", "Placed"),
-            new(3, "Placed", "Baking", ByPolicy: true),
+            new(1, null, "Draft", Id: 10, Arranged: true),
+            new(2, "Draft", "Placed", Id: 11, Arranged: true),
+            new(3, "Placed", "Placed", Id: 14),
+            new(5, "Baking", "Ready", Id: 19),
+            new(4, "Placed", "Baking", Id: 17),
         ];
 
-        HostDriver.SinceLastOwnMove(history).Should().Equal("Placed", "Baking");
-        HostDriver.SinceLastOwnMove(history[..2]).Should().Equal("Placed");
-        HostDriver.SinceLastOwnMove([]).Should().BeEmpty();
+        HostDriver.EnteredAfter(history, 11).Should().Equal("Placed", "Baking", "Ready");
+        HostDriver.EnteredAfter(history, 14).Should().Equal("Baking", "Ready");
+        HostDriver.EnteredAfter(history, 0).Should().Equal("Placed", "Baking", "Ready");
+        HostDriver.EnteredAfter(history, 19).Should().BeEmpty();
     }
 
     [Test]
