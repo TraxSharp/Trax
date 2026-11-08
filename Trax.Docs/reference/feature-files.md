@@ -74,7 +74,12 @@ Written by `from-gherkin`, never by hand. Everything only the server reads:
 | `views` | Each view a scenario reads, its fields and its readers. A view no scenario reads is not served. |
 | `provenance` | For each part of each machine, the scenarios that produced it, by file, line and name, never by step text. The console's Board tab shows them. |
 
-A host refuses a directory whose IR the host file was not derived from, or whose names disagree with it.
+A host refuses a directory whose IR the host file was not derived from, or whose names disagree with it. It also
+refuses policies that set each other off with no timer between them, as derivation does, through the same check: a
+policy fires a trigger, the trigger can move its machine into a state, a policy waiting for that state fires next, and a
+state that runs a train counts as moving on to wherever its outcomes go. A loop of those moves alone is refused, naming
+its policies. A loop that passes through a timer is paced by it and allowed, so a shop that opens and closes on a timer
+can still have policies on both.
 
 ## access.txt
 

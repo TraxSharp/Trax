@@ -45,7 +45,10 @@ failure rather than a bug.
 - **A policy is the server acting.** It runs as a host actor, never as an instance's owner, on a trigger no client is
   served. Three shapes: user to user, where the target's context holds the source instance's id; system to users,
   every instance in the waiting state, in capped batches; and user to system, a system machine at a fixed key. A
-  trigger that features show both a person and a policy firing is refused, naming both scenarios.
+  trigger that features show both a person and a policy firing is refused, naming both scenarios. Policies that set
+  each other off with no timer between them (counting a train's outcome as a move the invoking state causes) are
+  refused by derivation and by the host at startup, through one check, naming the policies; a loop a timer closes is
+  allowed.
 - **Trax serves the views, under a derived read rule.** A view is read by the actors whose scenarios read it, and by
   no one else. It reads only the caller's own instances and system instances at their fixed keys, and shows only the
   fields the glossary lists. A view no scenario reads is not served.
@@ -87,11 +90,11 @@ trigger, a client rule on a system machine), and `FormatCorpusTests`, which hold
 corpus under `Trax.StateMachine/conformance/formats/`, as `formatSchemas.conformance.test.ts` does for the schemas.
 Serving from the IR is held by `MachineFromIrTests` there (each conformance machine a file can describe exports exactly
 its file and replays its corpus; what a file cannot describe, a mispaired host entry and access that disagrees with the
-IR's timer rules are refused), `MachineDirectoryTests` there (a directory's host file and IRs list the same machines and name only what the IRs have), `IrMachineHostTests` in `Trax.StateMachine.Persistence.Integration`, and
+IR's timer rules are refused), `MachineDirectoryTests` there (a directory's host file and IRs list the same machines and name only what the IRs have, and its policies set each other off only through a timer), `IrMachineHostTests` in `Trax.StateMachine.Persistence.Integration`, and
 `IrMachineSchemaTests` and `IrMachineE2ETests` in Trax.Api. Derivation is held by `GherkinDerivationTests` there (each refusal, the self-check, and a derived machine served as
 written), `AccessDerivationTests` (grants from an actor's own act, nothing widened, the access table) and
 `TimerDerivationTests` (time on a scenario clock, stays, timer rules the host accepts), and policies by
-`PolicyDerivationTests` (the three shapes, what a policy cannot be) and `PolicyRunnerTests` in
+`PolicyDerivationTests` (the three shapes, what a policy cannot be, a loop with no timer in it) and `PolicyRunnerTests` in
 `Trax.StateMachine.Persistence.Integration` (the owner's linked instance only, the fire recorded as the policy's, once
 across hosts and restarts, a broadcast capped and coalesced, a server-only trigger refused to a client). Views are held by
 `ViewDerivationTests` (readers from the people who read a view, a person's own instances only) and
@@ -111,6 +114,7 @@ hand, so nothing checks that a page tells the same story as its features.
 
 ## Changelog
 
+- **2026-11-08**: A host refuses policies that set each other off with no timer between them, as derivation does, through one check.
 - **2026-11-07**: The Bakery sample: machines written only as features, run in memory and against its host.
 - **2026-11-07**: The console's Board tab draws a machine's board from `operations.machineBoard`.
 - **2026-11-07**: Reqnroll bindings run features against a host, and the Gherkin package has public calls.

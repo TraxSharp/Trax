@@ -26,8 +26,9 @@ internal static class MachineFiles
     }
 
     /// <summary>
-    /// What keeps the host file and the IRs from being a pair: a machine of one missing from the other, or a trigger,
-    /// state or field a rule, an invoke, a policy or a view names that its IR does not have. Empty when they are one.
+    /// What keeps the host file and the IRs from being a pair: a machine of one missing from the other, a trigger,
+    /// state or field a rule, an invoke, a policy or a view names that its IR does not have, or policies that set each
+    /// other off with no timer between them (<see cref="PolicyLoops"/>). Empty when they are one.
     /// The hashes are not compared here.
     /// </summary>
     internal static List<string> Problems(
@@ -108,6 +109,9 @@ internal static class MachineFiles
                         $"{HostFileName} view '{view.Name}' labels '{state}', which is not a state of '{field.Machine}'."
                     );
         }
+
+        // Derivation refuses the same loops through the same check, so a hand-edited host file cannot add one.
+        problems.AddRange(PolicyLoops.Find(host.Policies, irs).Select(PolicyLoops.Problem));
         return problems;
     }
 

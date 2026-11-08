@@ -145,6 +145,101 @@ public class MachineDirectoryTests
             .WithMessage("*host.json: host.json /servings:*");
     }
 
+    [Test]
+    public void Two_policies_that_set_each_other_off_refuse_the_host_naming_both()
+    {
+        var host = Valid();
+        host["policies"] = new JsonArray(
+            TurnstilePolicy("Unlocked", "Push"),
+            TurnstilePolicy("Locked", "Coin")
+        );
+        Write(host);
+
+        var load = Load();
+
+        load.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage(
+                "*policies turnstile.Locked>turnstile.Coin and turnstile.Unlocked>turnstile.Push set each other off*"
+            );
+    }
+
+    [Test]
+    public void A_policy_loop_a_timer_closes_is_served()
+    {
+        // The turnstile locks itself a minute after it opens, and locking sets off the policy that opens it again.
+        var turnstile = JsonNode
+            .Parse(File.ReadAllText(FixturePaths.IrFile("turnstile")))!
+            .AsObject();
+        turnstile["timers"] = new JsonArray(
+            new JsonObject
+            {
+                ["after"] = "PT1M",
+                ["rules"] = new JsonArray("undeclared"),
+                ["state"] = "Unlocked",
+                ["target"] = "Locked",
+                ["trigger"] = "Unlocked.after",
+            }
+        );
+        var host = Valid();
+        host["machines"]!["turnstile"]!["schemaHash"] =
+            Trax.StateMachine.Features.MachineFiles.Hash(turnstile);
+        host["policies"] = new JsonArray(TurnstilePolicy("Locked", "Coin"));
+        Write(host);
+        File.WriteAllText(Path.Combine(_directory, "turnstile.ir.json"), turnstile.ToJsonString());
+
+        var loaded = IrDirectory.Load(_directory, [typeof(IFetchTrain).Assembly]);
+
+        loaded.Host.Policies.Should().ContainSingle();
+    }
+
+    [Test]
+    public void A_policy_loop_through_a_trains_outcome_is_refused()
+    {
+        // Entering Fetching runs the train, whose outcome moves the instance into Fetched, which retries the fetch.
+        var host = Valid();
+        host["machines"]!["ingest"]!["owner"] = new JsonObject { ["system"] = "ingest/main" };
+        host["machines"]!["ingest"]!.AsObject().Remove("start");
+        host["machines"]!["ingest"]!.AsObject().Remove("read");
+        host["machines"]!["ingest"]!["triggers"] = new JsonObject
+        {
+            ["Start"] = new JsonObject { ["server"] = true },
+        };
+        host["policies"] = new JsonArray(
+            new JsonObject
+            {
+                ["shape"] = "toSystem",
+                ["when"] = new JsonObject { ["machine"] = "ingest", ["enters"] = "Fetched" },
+                ["then"] = new JsonObject
+                {
+                    ["machine"] = "ingest",
+                    ["key"] = "ingest/main",
+                    ["trigger"] = "Start",
+                },
+            }
+        );
+        Write(host);
+
+        var load = Load();
+
+        load.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*policy ingest.Fetched>ingest.Start sets itself off*");
+    }
+
+    private static JsonObject TurnstilePolicy(string enters, string trigger) =>
+        new()
+        {
+            ["shape"] = "toSystem",
+            ["when"] = new JsonObject { ["machine"] = "turnstile", ["enters"] = enters },
+            ["then"] = new JsonObject
+            {
+                ["machine"] = "turnstile",
+                ["key"] = "turnstile/main",
+                ["trigger"] = trigger,
+            },
+        };
+
     private Action Load() => () => IrDirectory.Load(_directory, [typeof(IFetchTrain).Assembly]);
 
     // The ingest machine, served to its users, and the turnstile as a system machine it opens when a fetch is approved.

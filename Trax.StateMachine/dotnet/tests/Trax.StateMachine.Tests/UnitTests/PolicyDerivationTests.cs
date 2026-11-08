@@ -273,6 +273,125 @@ public class PolicyDerivationTests
             .Contain(p => p.Message.Contains("the When before it moved nothing"));
     }
 
+    // Two system machines: closing the shop rings the bell, and the bell ringing moves the shop. Close and Wake are
+    // the shop's triggers.
+    private const string Bells = """
+        {
+          "version": 1,
+          "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
+          "machines": {
+            "shop": {
+              "system": "shop/main",
+              "name": "the shop",
+              "initial": "Closed",
+              "states": { "Closed": "is closed", "Open": "is open", "Idle": "is idle" },
+              "triggers": {
+                "Close": { "phrase": "the shop closes" },
+                "Wake": { "phrase": "the shop wakes" }
+              }
+            },
+            "bell": {
+              "system": "bell/main",
+              "name": "the bell",
+              "initial": "Quiet",
+              "states": { "Quiet": "is quiet", "Ringing": "is ringing" },
+              "triggers": { "Ring": { "phrase": "the bell rings" } }
+            }
+          }
+        }
+        """;
+
+    private const string Ringing = """
+        Feature: The bell
+          Scenario: Closing the shop rings the bell
+            Given the shop is open
+            And the bell is quiet
+            When the shop closes
+            Then the shop is closed
+            And the bell is ringing
+
+        """;
+
+    [Test]
+    public void Two_policies_that_set_each_other_off_are_refused_naming_both()
+    {
+        // The bell ringing closes the shop, and the shop closing rings the bell.
+        var derived = Derive(
+            Ringing
+                + """
+                  Scenario: The bell closes the shop
+                    Given the shop is open
+                    And the bell is quiet
+                    When the bell rings
+                    Then the bell is ringing
+                    And the shop is closed
+                """,
+            Bells
+        );
+
+        derived
+            .Problems.Should()
+            .ContainSingle()
+            .Which.Message.Should()
+            .Contain(
+                "The policies bell.Ringing>shop.Close and shop.Closed>bell.Ring set each other off"
+            );
+    }
+
+    [Test]
+    public void A_policy_loop_a_timer_closes_is_derived_and_served()
+    {
+        // Closing rings the bell, the bell wakes an idle shop, and the open shop closes after hours: the timer paces
+        // it, as a daily open and close.
+        var derived = Derive(
+            Ringing
+                + """
+                  Scenario: The bell wakes the shop
+                    Given the shop is idle
+                    And the bell is quiet
+                    When the bell rings
+                    Then the bell is ringing
+                    And the shop is open
+
+                  Scenario: The shop wakes
+                    Given the shop is idle
+                    When the shop wakes
+                    Then the shop is open
+
+                  Scenario: The shop is still open before closing time
+                    Given the shop is open
+                    When 3 seconds pass
+                    Then the shop is still open
+
+                  Scenario: The shop closes after hours
+                    Given the shop is open
+                    When 5 seconds pass
+                    Then the shop is closed
+                """,
+            Bells
+        );
+
+        derived.Problems.Should().BeEmpty();
+        HostFile
+            .Read(derived.Host!)
+            .Policies.Select(p => p.Id)
+            .Should()
+            .BeEquivalentTo(["bell.Ringing>shop.Wake", "shop.Closed>bell.Ring"]);
+        var directory = Directory.CreateTempSubdirectory("trax-derived-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(directory, "host.json"), derived.Host!);
+            foreach (var (id, ir) in derived.Irs)
+                File.WriteAllText(Path.Combine(directory, $"{id}.ir.json"), ir);
+
+            IrDirectory.Load(directory, []).Host.Policies.Should().HaveCount(2);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static Derived Derive(string feature, string glossary = Glossary) =>
         FeatureDerivation.Derive(
             Trax.StateMachine.Features.Glossary.Read(glossary),

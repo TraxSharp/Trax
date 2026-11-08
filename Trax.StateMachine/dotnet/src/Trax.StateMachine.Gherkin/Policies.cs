@@ -185,51 +185,23 @@ internal static class PolicyMerge
             policies.Add(policy);
         }
 
-        // A cycle would have the server move instances forever: a policy whose fire enters a state that sets off a
-        // policy that, in the end, sets the first off again. Derivation refuses one.
-        var edges = new List<(string From, string To)>();
-        foreach (var p in policies)
-        {
-            var from = $"{p["when"]!["machine"]}.{p["when"]!["enters"]}";
-            var machine = p["then"]!["machine"]!.GetValue<string>();
-            var fired = p["then"]!["trigger"]!.GetValue<string>();
-            foreach (
-                var edge in irs[machine]["transitions"]!
-                    .AsArray()
-                    .Where(e => e!["trigger"]!.GetValue<string>() == fired)
-            )
-                edges.Add((from, $"{machine}.{edge!["to"]}"));
-        }
-        foreach (var start in edges.Select(e => e.From).Distinct().Order(StringComparer.Ordinal))
-            if (Reaches(start, start, edges, []))
-            {
-                problems.Add(
-                    new Problem(
-                        "glossary",
-                        0,
-                        $"The policies set off when {start} come back to it, so the server would move instances in a loop. Break the cycle."
-                    )
-                );
-                break;
-            }
+        // A loop with no timer in it would have the server move instances forever. The host refuses the same loops
+        // through the same check.
+        var read = policies
+            .Select(p => new HostPolicy(
+                p["shape"]!.GetValue<string>(),
+                p["when"]!["machine"]!.GetValue<string>(),
+                p["when"]!["enters"]!.GetValue<string>(),
+                p["then"]!["machine"]!.GetValue<string>(),
+                p["then"]!["trigger"]!.GetValue<string>(),
+                ((JsonObject)p["then"]!)
+                    .Single(kv => kv.Key is "key" or "inState" or "link")
+                    .Value!.GetValue<string>()
+            ))
+            .ToList();
+        foreach (var loop in PolicyLoops.Find(read, irs))
+            problems.Add(new Problem("glossary", 0, PolicyLoops.Problem(loop)));
 
         return new JsonArray(policies.Select(p => (JsonNode?)p).ToArray());
-    }
-
-    private static bool Reaches(
-        string from,
-        string goal,
-        List<(string From, string To)> edges,
-        HashSet<string> seen
-    )
-    {
-        foreach (var (_, to) in edges.Where(e => e.From == from))
-        {
-            if (to == goal)
-                return true;
-            if (seen.Add(to) && Reaches(to, goal, edges, seen))
-                return true;
-        }
-        return false;
     }
 }
