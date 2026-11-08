@@ -10,7 +10,7 @@ namespace Trax.StateMachine.Tests.UnitTests;
 /// <summary>
 /// A machine several actors own (<c>ownedBy: [actors]</c>): each trigger is granted the actors the scenarios show
 /// firing it, each on their own instances only, and a rule that would admit an actor a scenario denies is a problem,
-/// never a widening.
+/// never a widening (ADR <c>Trax.Docs/adr/0058</c>).
 /// </summary>
 public class MultiActorOwnershipTests
 {

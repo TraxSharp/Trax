@@ -37,11 +37,17 @@ failure rather than a bug.
   machine goes (`places {subject}`), and no glossary phrase speaks as "I". Derivation also writes `access.txt`, one
   sorted line per trigger, start and view with the actors it admits, and it is committed, so a new grant shows in a
   pull request's diff. Its check fails when the file is stale.
-- **Ownership is one of two kinds, and strict.** A machine is `ownedBy: <actor>` or `system`. A user-owned machine is
-  moved by its owner on their own instances, and by the server (timers, train outcomes, policies). A system machine is
-  moved only by the server and read through a served view. A feature in which one actor acts on another's instance,
-  or a person fires a system machine, is a derivation problem, until shared instances give a machine more than one
-  participant.
+- **Ownership is one of two kinds, and strict.** A machine is `ownedBy` one actor or a list of them, or `system`. A
+  user-owned machine is moved by its owner on their own instances, and by the server (timers, train outcomes,
+  policies). With several owning actors, each person owns their own instances whichever actor they are, and each
+  trigger is granted to the owning actors the scenarios show firing it, `start` to those shown starting one and `read`
+  to all of them; a rule whose roles would also admit an owning actor a scenario shows refused is a derivation problem,
+  never a wider grant. A system machine is moved only by the server. It is either one instance at a fixed key, which
+  the host starts and a served view reads, or `keyedBy` its key's parts, one instance per key, which host code starts
+  and moves by the machine's id; every trigger of a keyed one is the server's, and a view reading one, a policy moving
+  one or set off by one, and a person firing one are refused. A feature in which one actor acts on another's
+  instance, or a person fires a system machine, is a derivation problem, until shared instances give a machine more
+  than one participant.
 - **A policy is the server acting.** It runs as a host actor, never as an instance's owner, on a trigger no client is
   served. Three shapes: user to user, where the target's context holds the source instance's id; system to users,
   every instance in the waiting state, in capped batches; and user to system, a system machine at a fixed key. A
@@ -49,6 +55,12 @@ failure rather than a bug.
   each other off with no timer between them (counting a train's outcome as a move the invoking state causes) are
   refused by derivation and by the host at startup, through one check, naming the policies; a loop a timer closes is
   allowed.
+- **An invoked train may take the instance's owner as input, set by the server.** A state's `invokes` maps a train
+  input field to `$owner`, and the server fills it with the owner's qualified principal id (`{scheme}:{id}`) when the
+  state is entered. It is in no context, so no client writes it, and a save that puts it there is refused as any
+  unknown field is. A system machine has no owner, so `$owner` there is refused, as is a context field of that name.
+  The mapping is copied to `host.json`. A train acting for a person then takes who they are from the machine rather
+  than from a field the client set.
 - **Trax serves the views, under a derived read rule.** A view is read by the actors whose scenarios read it, and by
   no one else. It reads only the caller's own instances and system instances at their fixed keys, and shows only the
   fields the glossary lists. Each user machine a view reads also holds the caller to its own read rule, as its `get`
@@ -61,6 +73,10 @@ failure rather than a bug.
   committed, invoking and effect-target states are not discarded whatever the rule.
 - **A trigger the server fires is not a client's.** A policy's trigger is never served, and a trigger no scenario
   fires, or one only ever denied, is not served at all.
+- **The glossary says a machine's shape as the IR holds it.** A machine's `version`, each state's `committed`,
+  invariant (`requires`) and own `context`, and `differential: true` for the IR's `differential` block are glossary
+  keys, written into the IR as the fluent exporter writes them, so a derived machine can carry what a hand-written one
+  does.
 - **The C# behind a machine is named in the glossary and bound by the host file.** A run-once effect, a custom rule or
   reduction and a migration are C# the IR names but cannot carry. The glossary names each type; derivation writes what
   clients see (the custom names, an effect's key prefix) into the IR and the types into `host.json`, and the host finds
@@ -68,12 +84,24 @@ failure rather than a bug.
   a type for nothing, refuses the host. Derivation and an in-memory run load no assembly, so they play the example the
   glossary gives each, and a scenario that needs the real handler is tagged `@host`, read but not derived from, and run
   only against the host.
+- **The Reqnroll bindings run the same features against a host, and a test project may add steps.** Each step is read
+  as derivation reads it; a step no glossary phrase matches may be one the test project registers through
+  `TraxFeatures.Configure`, never with Reqnroll's own attributes, and the glossary always reads first, so a registered
+  step never changes what a glossary step means. A feature in a folder named `features` is a machine feature, where a
+  Then nothing reads is about the UI and pending; any other (a sample's go in `specs/`) is a spec, where such a Then
+  fails. Given the host's client manifest, the bindings send every start, trigger and view read by its persisted id,
+  as a page does, so the features run against the host's shipped posture.
 - **Fail closed everywhere.** No rule means not served. Two scenarios that disagree, or two grants that clash, are a
   derivation problem naming both scenarios, never a rule widened to fit.
 - **The parser checks itself.** Derivation replays every scenario on the machines it derived and fails on any that
   does not pass, so it never writes a machine its own features fail. Gherkin it cannot express (data tables,
   DocStrings, `*` steps) and a Given or When it cannot resolve are refused. A scenario is identified by file and line,
-  never by its name.
+  never by its name. Timers that go round a loop of states with no event leading out are refused at derivation, naming
+  each scenario that showed one of them, by the same search the host's builder refuses them with.
+- **The Thens after a When follow the cascade in order.** The first about the acting instance says where the When
+  took it; one naming it in another state, after another instance moved, says where a policy took it on. The replay
+  and the host bindings accept a Then naming a state the instance entered since its last move that was not a
+  policy's.
 
 ## Considered options
 
@@ -119,6 +147,12 @@ held by `ScenarioRunnerTests` (in memory, answering as the host does), `GapStubT
 `FeatureMachinesTests` (the package's public calls), `ScenarioDriverParityTests` in Trax.Api (the same scenarios answer
 the same in memory and against a host) and `FromGherkinCommandTests` in Trax.Cli (the directory the command owns).
 `ServeFeaturesTests` in `Trax.StateMachine.Persistence.Integration` holds a host serving that directory with one option.
+Ownership and keys are held by `MultiActorOwnershipTests` (each trigger to the owning actors shown firing it, no rule
+widened) and `KeyedSystemMachineTests` (one instance per key, no person, view or policy on one) in
+`Trax.StateMachine.Tests`, `MachineInstancesByIdTests` in `Trax.StateMachine.Persistence.Integration` (host code
+starting and advancing a served machine by its id, a user-owned one refused) and `InvokedOwnerInputTests` there
+(`$owner` as the owner's principal id, never in a context). `CustomStepsTests` in Trax.Api holds the bindings' own
+steps (the glossary first, a registered step acting as the scenario's person, a spec's unread Then failing).
 The board is held by `BoardTests` and `InvokedTrainBoardTests` (stickies from the files alone, an invoked train's
 outcomes) and `MachineBoardE2ETests` in Trax.Api (`operations.machineBoard`, behind the operations gate).
 
@@ -127,6 +161,14 @@ hand, so nothing checks that a page tells the same story as its features.
 
 ## Changelog
 
+- **2026-11-08**: The Thens after a When follow the cascade in order, so a scenario can show a policy taking the acting
+  instance on.
+- **2026-11-08**: Derivation refuses timers that loop with no event leading out, as the host's builder does.
+- **2026-11-08**: The Reqnroll bindings take a test project's own steps, fail a spec's unread Then, and send by
+  persisted id when given the host's manifest.
+- **2026-11-08**: An invoked train may take the instance owner's principal id as `$owner`, set by the server.
+- **2026-11-08**: A system machine may be `keyedBy` its key, one instance per key, started and moved by host code.
+- **2026-11-08**: `ownedBy` may list several actors, each trigger granted to the owners shown firing it.
 - **2026-11-08**: The glossary says a machine's version and each state's shape, and names its effect, custom handlers
   and migrations, which the host file binds.
 - **2026-11-08**: A view returns at most the newest `ViewRowLimit` instances of each user machine.

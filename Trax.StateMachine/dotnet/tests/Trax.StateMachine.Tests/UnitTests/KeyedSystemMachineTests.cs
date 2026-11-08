@@ -10,7 +10,7 @@ namespace Trax.StateMachine.Tests.UnitTests;
 /// <summary>
 /// A keyed system machine (<c>system: { "keyedBy": [...] }</c>): one instance per key, started and moved by host code,
 /// named in a step by its name and key (<c>ticket "T-12"</c>). No person fires it, no view reads it and no policy moves
-/// it or is set off by it.
+/// it or is set off by it (ADR <c>Trax.Docs/adr/0058</c>).
 /// </summary>
 public class KeyedSystemMachineTests
 {

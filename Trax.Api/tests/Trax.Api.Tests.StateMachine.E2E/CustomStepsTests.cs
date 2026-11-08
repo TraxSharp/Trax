@@ -15,7 +15,8 @@ namespace Trax.Api.StateMachine.E2E;
 /// <summary>
 /// A test project's own steps beside the feature bindings: the glossary reads a step first, a registered step runs
 /// only when no phrase matches, and it acts as the scenario's person, with the credential and the instances the
-/// glossary's steps use. A Then nothing reads is pending in a machine feature and fails in a spec.
+/// glossary's steps use. A Then nothing reads is pending in a machine feature and fails in a spec (ADR
+/// <c>Trax.Docs/adr/0058</c>).
 /// </summary>
 [TestFixture]
 [NonParallelizable]

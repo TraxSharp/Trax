@@ -15,7 +15,8 @@ namespace Trax.StateMachine.Persistence.Integration;
 
 /// <summary>
 /// Host code starts and advances a machine served from its IR by the machine's id, since its type is emitted at
-/// startup and no code can name it. An id the host does not serve is refused, and so is a user-owned machine's.
+/// startup and no code can name it. An id the host does not serve is refused, and so is a user-owned machine's
+/// (ADR <c>Trax.Docs/adr/0058</c>).
 /// </summary>
 public class MachineInstancesByIdTests
 {

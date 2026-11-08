@@ -12,7 +12,8 @@ namespace Trax.StateMachine.Persistence.Integration;
 
 /// <summary>
 /// A host file maps a train's input field to <c>$owner</c>, the instance owner's qualified principal id: the train
-/// takes its subject as input and the machine guarantees it. The value is in no context, so no client writes it.
+/// takes its subject as input and the machine guarantees it. The value is in no context, so no client writes it
+/// (ADR <c>Trax.Docs/adr/0058</c>).
 /// </summary>
 [TestFixture(StoreProvider.Postgres)]
 [TestFixture(StoreProvider.Sqlite)]
