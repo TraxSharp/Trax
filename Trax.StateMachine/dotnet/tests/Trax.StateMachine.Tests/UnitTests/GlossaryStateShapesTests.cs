@@ -116,7 +116,8 @@ public class GlossaryStateShapesTests
         act.Should().Throw<FormatException>().WithMessage("*/machines/checkout/states/Paid*final*");
     }
 
-    // The StateMachine sample's turnstile, written in C# as the sample writes it.
+    // A copy of the StateMachine sample's turnstile, written fluently as the sample wrote it. It is not the sample's
+    // class, and a change to the sample does not reach it.
     private sealed record UnlockedContext
     {
         [MinLength(1)]
@@ -213,7 +214,7 @@ public class GlossaryStateShapesTests
         """;
 
     [Test]
-    public void The_sample_turnstile_written_as_features_derives_exactly_the_IR_its_class_exports()
+    public void A_turnstile_written_as_features_derives_exactly_the_IR_its_fluent_copy_exports()
     {
         var derived = Derive(TurnstileGlossary, ("turnstile.feature", Turnstile));
 

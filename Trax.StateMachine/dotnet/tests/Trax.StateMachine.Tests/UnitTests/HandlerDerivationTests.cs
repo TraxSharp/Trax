@@ -12,7 +12,9 @@ namespace Trax.StateMachine.Tests.UnitTests;
 /// A glossary names the C# behind a machine (ADR <c>Trax.Docs/adr/0058</c>): a trigger's run-once effect, its custom
 /// rules and reductions, and its migrations. Derivation writes what clients see into the IR (an effect's key prefix,
 /// the custom names) and the types into the host file, and an in-memory run answers with the glossary's examples, so
-/// the StateMachine sample's checkout written as features derives exactly the IR its class exports.
+/// a checkout written as features derives exactly the IR the same checkout written fluently exports. The fluent one is a
+/// copy, in this file, of the StateMachine sample's checkout: this folder cannot reference Trax.Samples, so a change to
+/// the sample does not reach it.
 /// </summary>
 public class HandlerDerivationTests
 {
@@ -169,7 +171,7 @@ public class HandlerDerivationTests
         """;
 
     [Test]
-    public void The_sample_checkout_written_as_features_derives_exactly_the_IR_its_class_exports()
+    public void A_checkout_written_as_features_derives_exactly_the_IR_its_fluent_copy_exports()
     {
         var derived = Derive(Glossary, Features);
 
@@ -315,7 +317,8 @@ public class HandlerDerivationTests
         }
     }
 
-    // The StateMachine sample's checkout, written in C# as the sample writes it.
+    // A copy of the StateMachine sample's checkout, written fluently as the sample wrote it. It is not the sample's
+    // class, and a change to the sample does not reach it.
     private enum State
     {
         Cart,
