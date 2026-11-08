@@ -19,6 +19,7 @@ naming the call to move. Nothing about registration is allowed to fail silently.
 | `AddTrax()` before `AddTraxGraphQL()` | Throws immediately, naming the missing call. |
 | An authorization posture in the `UseTraxApiDashboard(...)` options | `UseTraxApiDashboard()` throws, naming `RequirePolicy`, `RequireRoles` and `AllowAnonymousShell`. |
 | Trains registered before `AddTraxGraphQL()` | The host refuses to start, naming each `[TraxQuery]`, `[TraxMutation]` or `[TraxBroadcast]` train registered afterwards. `AddTraxGraphQL()` checks each train's authorization posture and name and builds the schema roots from the trains registered before it. |
+| Machines served from features (`ServeFeatures(...)` in `AddStateMachines`) before `AddTraxGraphQL()`, when they declare views | The host refuses to start: `These views of machines served from features are registered, but AddTraxGraphQL() saw none of them, so the schema has no views root to serve them under:` followed by the views, then `Register the machines directory before AddTraxGraphQL().` |
 | Your own `IDecisionObserver` before `AddTrax()`, on a host that calls `AddDecisionRecording()` | The host refuses to start, naming the observer, and every run that would record its decisions refuses too. One registered after `AddTrax()` would replace the composite that tells decision recording. See [Other decision observers](/docs/effect/decisions#other-decision-observers). |
 
 ```csharp fragment

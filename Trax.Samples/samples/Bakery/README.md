@@ -60,7 +60,9 @@ where. `access.txt` changes whenever who may do what does. Then write the page's
   --manifest src/trax/manifest.json --out src/trax)
 ```
 
-CI runs both with `--check` and fails when a committed file is out of date.
+CI runs `trax client --check` and fails when the committed client is out of date. The committed machines are checked
+by [`InMemoryRunTests`](../../tests/Trax.Samples.Bakery.E2E/InMemoryRunTests.cs), which fails when they are not what
+the features derive.
 
 ## Tests
 

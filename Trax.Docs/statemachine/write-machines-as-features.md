@@ -77,13 +77,18 @@ to paste that is checked green first.
 services.AddTrax(trax => trax
     .AddEffects(e => e.UsePostgres(connectionString).AddJunctionProgress())
     .AddStateMachines(o => o.ServeFeatures("machines", typeof(TakePaymentTrain).Assembly))
-    .AddMediator(typeof(TakePaymentTrain).Assembly));
+    .AddMediator(typeof(TakePaymentTrain).Assembly)
+    .AddScheduler());
 ```
 
 [`ServeFeatures`](/docs/sdk-reference/statemachine-api/add-state-machines) serves the directory as committed: each
 machine with its access, the policies between them, the views and the system instances. A directory whose files
 disagree refuses the host at startup. Copy `machines/` into the build output, and export the client manifest and run
 `trax client` as for any machine.
+
+A state that invokes a train only queues its run. `AddScheduler()`, on this host or another sharing the database, runs
+it, and without one the instance waits in that state. See
+[Meet the host's requirements](/docs/statemachine/invoking-trains#3-meet-the-hosts-requirements).
 
 ## Run the features
 
