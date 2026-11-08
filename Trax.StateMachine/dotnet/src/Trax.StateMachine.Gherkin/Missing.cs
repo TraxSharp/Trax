@@ -562,7 +562,7 @@ internal static class Missing
         var lines = new List<string>();
         if (machine.SystemKey is null)
         {
-            lines.Add($"Given {Person} is {glossary.Actors[machine.OwnedBy!].Noun}");
+            lines.Add($"Given {Person} is {glossary.Actors[machine.OwnedBy![0]].Noun}");
             lines.Add($"And {Person} {machine.Start}");
             if (state != machine.Initial)
                 lines.Add($"And {Instance(machine)} {machine.States[state]}");

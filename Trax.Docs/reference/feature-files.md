@@ -30,7 +30,7 @@ A machine is a user's or the system's:
 
 | Key | What it is |
 | --- | --- |
-| `ownedBy` | The actor whose people own its instances. With it, `noun` is how a step names one (`order`, as `Ada's order` says it) and `start` the phrase a person has one with (`has an order`). |
+| `ownedBy` | The actor whose people own its instances, or a list of them (`["triage", "fixer"]`): each person owns their own instances whichever actor they are. With it, `noun` is how a step names one (`order`, as `Ada's order` says it) and `start` the phrase a person has one with (`has an order`). |
 | `system`, `name` | A system machine: its fixed key (`shop/main`) and its name in a step (`the shop`). The host starts its one instance; only the server moves it. |
 | `initial` | The state an instance starts in. |
 | `context` | The fields of its context, as the IR declares fields. |
@@ -90,6 +90,10 @@ can still have policies on both.
 ## access.txt
 
 One sorted line per grant, committed and reviewed: each actor's roles (`@customer: roles customer`), then each
-machine's `start`, `read` and trigger, and each view, with the actors its rule admits. An actor a rule admits by its
+machine's `start`, `read` and trigger, and each view, with the actors its rule admits. A machine several actors own
+grants each trigger to the owning actors the scenarios show firing it (`assignment Triage: triage`,
+`assignment SubmitFix: fixer`), `start` to those shown starting one, and `read` to all of them; each still acts on their
+own instances only. A rule whose roles would also admit an owning actor a scenario shows refused (`Fay is not
+allowed`) is a derivation problem, never a wider grant. An actor a rule admits by its
 roles that no scenario shows is marked `(no scenario)`. `from-gherkin --check` fails when it is stale, so a new grant
 is a line in the pull request.

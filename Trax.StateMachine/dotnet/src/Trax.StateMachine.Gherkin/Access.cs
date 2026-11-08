@@ -7,9 +7,10 @@ namespace Trax.StateMachine.Gherkin;
 /// <summary>
 /// Who may start, read and fire each machine, derived from who the features show doing it (ADR
 /// <c>Trax.Docs/adr/0058</c>), and the table every grant is reported in (<c>access.txt</c>). With strict ownership
-/// (ADR 0058) only a machine's owner acts on an instance, so a trigger is granted to the owning actor when a
-/// scenario shows that actor's person doing it, fired only by the server when only steps with no person fire it, and
-/// otherwise not served. Nothing is widened: a clash is a problem naming both scenarios.
+/// (ADR 0058) only a machine's owner acts on an instance, so a trigger is granted to the owning actors whose people a
+/// scenario shows doing it, fired only by the server when only steps with no person fire it, and otherwise not served.
+/// Nothing is widened: a clash, or a rule whose roles would admit an actor a scenario denies, is a problem naming both
+/// scenarios.
 /// </summary>
 internal sealed class Access
 {
@@ -53,21 +54,26 @@ internal sealed class Access
         {
             var entry = new JsonObject();
             entries[machine.Id] = entry;
-            var owner = machine.OwnedBy is { } o ? glossary.Actors[o] : null;
-            var rule = owner is null ? null : Rule(owner);
+            var owners = machine.OwnedBy?.Select(o => glossary.Actors[o]).ToList();
             var triggers = new JsonObject();
 
-            if (owner is not null && starts.Any(s => s.Machine == machine.Id))
+            if (owners is not null)
             {
-                entry["start"] = rule!.DeepClone();
-                lines.Add(Line(machine, "start", rule!, owner, glossary));
-            }
-            if (owner is not null)
-            {
-                // An owner reads their own instances; the read rule is the owner's actor, which the host narrows to
+                // Start is granted to the owning actors whose people the features show starting one.
+                var starters = owners
+                    .Where(a => starts.Any(s => s.Machine == machine.Id && s.Actor == a.Name))
+                    .ToList();
+                if (starters.Count > 0)
+                {
+                    var start = Rule(starters);
+                    entry["start"] = start;
+                    lines.Add(Line(machine, "start", start, starters, glossary));
+                }
+                // An owner reads their own instances; the read rule is the owning actors', which the host narrows to
                 // owner-only (and discard follows it, ADR 0058).
-                entry["read"] = rule!.DeepClone();
-                lines.Add(Line(machine, "read", rule!, owner, glossary));
+                var read = Rule(owners);
+                entry["read"] = read;
+                lines.Add(Line(machine, "read", read, owners, glossary));
             }
 
             foreach (var trigger in machine.Triggers.Keys.Order(StringComparer.Ordinal))
@@ -93,23 +99,47 @@ internal sealed class Access
                     );
                     continue;
                 }
-                if (allowed.Count > 0 && denied.Count > 0)
+
+                // Each trigger is granted the owning actors shown firing it, and only them.
+                var granted =
+                    owners?.Where(a => allowed.Any(x => x.Actor == a.Name)).ToList() ?? [];
+                var clash = denied.FirstOrDefault(d => granted.Any(a => a.Name == d.Actor));
+                if (clash is not null)
                 {
+                    var also = allowed.First(x => x.Actor == clash.Actor);
                     problems.Add(
                         new Problem(
-                            denied[0].Scenario.File,
-                            denied[0].Line,
-                            $"{denied[0].Person} may not {trigger} here, and {allowed[0].Person}, also {glossary.Actors[allowed[0].Actor!].Noun}, does in '{allowed[0].Scenario.Name}' ({allowed[0].Scenario.Id}). An actor may fire a trigger or not; say which."
+                            clash.Scenario.File,
+                            clash.Line,
+                            $"{clash.Person} may not {trigger} here, and {also.Person}, also {glossary.Actors[also.Actor!].Noun}, does in '{also.Scenario.Name}' ({also.Scenario.Id}). An actor may fire a trigger or not; say which."
                         )
                     );
                     continue;
                 }
 
-                if (allowed.Count > 0)
+                if (granted.Count > 0)
                 {
+                    var rule = Rule(granted);
+                    // The rule is the granted actors' roles, so an actor a scenario denies must hold none of them: a
+                    // rule that admits them too is a widening, and a problem.
+                    var widened = denied.FirstOrDefault(d =>
+                        Admits(rule, glossary.Actors[d.Actor!])
+                    );
+                    if (widened is not null)
+                    {
+                        problems.Add(
+                            new Problem(
+                                widened.Scenario.File,
+                                widened.Line,
+                                $"{widened.Person} may not {trigger} here, and the rule that lets {string.Join(" and ", granted.Select(a => a.Noun))} fire it in '{allowed[0].Scenario.Name}' ({allowed[0].Scenario.Id}) admits {glossary.Actors[widened.Actor!].Noun} too, by its roles. Give the actors roles that tell them apart."
+                            )
+                        );
+                        continue;
+                    }
+
                     // A gated event may not enter the start state: anyone who may start an instance can put one there,
                     // so the rule would gate nothing. The host refuses it; derivation says so first, per edge.
-                    if (!owner!.AnyAuthenticated)
+                    if (!rule.ContainsKey("anyAuthenticated"))
                         foreach (var edge in irs[machine.Id]["transitions"]!.AsArray())
                             if (
                                 edge!["trigger"]!.GetValue<string>() == trigger
@@ -120,11 +150,11 @@ internal sealed class Access
                                     new Problem(
                                         allowed[0].Scenario.File,
                                         allowed[0].Line,
-                                        $"{trigger} from {edge["from"]} goes back to {machine.Initial}, where the {machine.Reference} starts, and only {owner.Noun} may fire it: the rule would gate nothing, since whoever may start one can put it there. Send it to another state, or let any signed-in owner fire it."
+                                        $"{trigger} from {edge["from"]} goes back to {machine.Initial}, where the {machine.Reference} starts, and only {string.Join(" or ", granted.Select(a => a.Noun))} may fire it: the rule would gate nothing, since whoever may start one can put it there. Send it to another state, or let any signed-in owner fire it."
                                     )
                                 );
-                    triggers[trigger] = rule!.DeepClone();
-                    lines.Add(Line(machine, trigger, rule!, owner, glossary));
+                    triggers[trigger] = rule;
+                    lines.Add(Line(machine, trigger, rule, granted, glossary));
                 }
                 else if (byServer.Count > 0)
                 {
@@ -235,14 +265,20 @@ internal sealed class Access
         return new Access(entries, views, table.ToString());
     }
 
-    // The owner's actor as a rule: any one of its roles, or any signed-in caller.
-    private static JsonObject Rule(GlossaryActor actor) =>
-        actor.AnyAuthenticated
+    // The owning actors as a rule: any one of their roles, or any signed-in caller when one of them is.
+    private static JsonObject Rule(IReadOnlyList<GlossaryActor> actors) =>
+        actors.Any(a => a.AnyAuthenticated)
             ? new JsonObject { ["anyAuthenticated"] = true }
             : new JsonObject
             {
                 ["roles"] = new JsonArray(
-                    new JsonArray(actor.Roles.Select(r => (JsonNode?)r).ToArray())
+                    new JsonArray(
+                        actors
+                            .SelectMany(a => a.Roles)
+                            .Distinct(StringComparer.Ordinal)
+                            .Select(r => (JsonNode?)r)
+                            .ToArray()
+                    )
                 ),
             };
 
@@ -251,15 +287,16 @@ internal sealed class Access
         GlossaryMachine machine,
         string what,
         JsonObject rule,
-        GlossaryActor owner,
+        IReadOnlyList<GlossaryActor> actors,
         Glossary glossary
     )
     {
+        var named = actors.Select(a => a.Name).Order(StringComparer.Ordinal).ToList();
         var admitted = glossary
-            .Actors.Values.Where(a => a.Name != owner.Name && Admits(rule, a))
+            .Actors.Values.Where(a => !named.Contains(a.Name) && Admits(rule, a))
             .Select(a => $"{a.Name} (no scenario)")
             .Order(StringComparer.Ordinal);
-        return $"{machine.Id} {what}: {string.Join(", ", new[] { owner.Name }.Concat(admitted))}";
+        return $"{machine.Id} {what}: {string.Join(", ", named.Concat(admitted))}";
     }
 
     private static bool Admits(JsonObject rule, GlossaryActor actor) =>

@@ -110,7 +110,12 @@ internal sealed partial record Glossary(
             throw at["name"].Fail("is a system machine's; a user's machine has a 'noun'.");
         if (system && machine.ContainsKey("noun"))
             throw at["noun"].Fail("is a user's machine's; a system machine has a 'name'.");
-        var ownedBy = owned ? Names.WordAt(at["ownedBy"], machine["ownedBy"]) : null;
+        // One owning actor, or several, each a person of which owns instances of their own.
+        IReadOnlyList<string>? ownedBy =
+            !owned ? null
+            : machine["ownedBy"] is JsonArray
+                ? at["ownedBy"].Distinct(machine["ownedBy"], 1, Names.WordAt)
+            : [Names.WordAt(at["ownedBy"], machine["ownedBy"])];
         var key = system ? Names.SystemKeyAt(at["system"], machine["system"]) : null;
         var reference = Names.PhraseAt(
             at[owned ? "noun" : "name"],
@@ -279,8 +284,9 @@ internal sealed partial record Glossary(
         foreach (var machine in Machines.Values)
         {
             var m = at["machines"][machine.Id];
-            if (machine.OwnedBy is { } owner && !Actors.ContainsKey(owner))
-                throw m["ownedBy"].Fail($"'{owner}' is not an actor.");
+            foreach (var owner in machine.OwnedBy ?? [])
+                if (!Actors.ContainsKey(owner))
+                    throw m["ownedBy"].Fail($"'{owner}' is not an actor.");
             if (machine.SystemKey is { } key)
             {
                 if (!key.StartsWith(machine.Id + "/", StringComparison.Ordinal))
@@ -541,12 +547,13 @@ internal sealed record GlossaryActor(
 );
 
 /// <summary>
-/// One machine of a glossary. <see cref="Reference"/> is a user's machine's noun (<c>order</c>, said as
+/// One machine of a glossary, owned by the actors in <see cref="OwnedBy"/> (one or more) or the system's.
+/// <see cref="Reference"/> is a user's machine's noun (<c>order</c>, said as
 /// <c>Ada's order</c>) or a system machine's name (<c>the shop</c>).
 /// </summary>
 internal sealed record GlossaryMachine(
     string Id,
-    string? OwnedBy,
+    IReadOnlyList<string>? OwnedBy,
     string? SystemKey,
     string Reference,
     string? Start,

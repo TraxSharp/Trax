@@ -334,7 +334,7 @@ internal sealed class HostDriver(
     private GlossaryActor Actor(string person, string machine) =>
         _actors.TryGetValue(person, out var actor)
             ? actor
-            : glossary.Actors[glossary.Machines[machine].OwnedBy!];
+            : glossary.Actors[glossary.Machines[machine].OwnedBy![0]];
 
     /// <summary>A person's credential, as their own steps send it, for a step the sample registered.</summary>
     internal FeatureCredential CredentialOf(string person, GlossaryActor actor)

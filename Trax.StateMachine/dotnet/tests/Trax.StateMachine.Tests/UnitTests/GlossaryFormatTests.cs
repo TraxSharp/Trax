@@ -21,7 +21,7 @@ public class GlossaryFormatTests
         glossary.Actors["customer"].Roles.Should().Equal("customer");
         glossary.Actors["customer"].Noun.Should().Be("a customer");
         var order = glossary.Machines["order"];
-        order.OwnedBy.Should().Be("customer");
+        order.OwnedBy.Should().Equal("customer");
         order.Reference.Should().Be("order");
         order.Initial.Should().Be("Draft");
         order.Triggers["Order"].InputNames.Should().Equal("loaves");

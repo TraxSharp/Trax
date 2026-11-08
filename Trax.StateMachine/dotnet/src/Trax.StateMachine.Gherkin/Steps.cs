@@ -229,11 +229,11 @@ internal sealed partial class StepResolver
             && people.TryGetValue(owner, out var actor)
         )
         {
-            var ownedBy = _glossary.Machines[machine].OwnedBy;
-            if (ownedBy != actor)
+            var ownedBy = _glossary.Machines[machine].OwnedBy ?? [];
+            if (!ownedBy.Contains(actor))
             {
                 problem =
-                    $"'{text}' names {owner}'s {_glossary.Machines[machine].Reference}, and {owner} is {_glossary.Actors[actor].Noun}: a {_glossary.Machines[machine].Reference} belongs to {_glossary.Actors[ownedBy!].Noun}.";
+                    $"'{text}' names {owner}'s {_glossary.Machines[machine].Reference}, and {owner} is {_glossary.Actors[actor].Noun}: a {_glossary.Machines[machine].Reference} belongs to {string.Join(" or ", ownedBy.Select(o => _glossary.Actors[o].Noun))}.";
                 return null;
             }
         }

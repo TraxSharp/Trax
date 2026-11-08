@@ -137,7 +137,20 @@
       ],
       "properties": {
         "ownedBy": {
-          "$ref": "#/$defs/word"
+          "description": "The actor whose people own its instances, or several: each person owns their own, and each trigger is granted the actors the features show firing it.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/word"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/word"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          ]
         },
         "system": {
           "$ref": "#/$defs/systemKey"
