@@ -51,6 +51,7 @@ public class MachineCommandTests
                 "run",
                 "missing",
                 "usage",
+                "explain",
                 "diagram",
             ]);
 

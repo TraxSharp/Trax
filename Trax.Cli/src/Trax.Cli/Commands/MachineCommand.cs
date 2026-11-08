@@ -23,6 +23,7 @@ internal static class MachineCommand
             CreateRun(),
             CreateMissing(),
             CreateUsage(),
+            CreateExplain(),
             CreateDiagram(),
         };
 
@@ -798,6 +799,97 @@ internal static class MachineCommand
                     stdout.WriteLine($"  {file}:{line}");
             }
             return problems.Count == 0 ? 0 : 1;
+        }
+        catch (FeatureMachinesException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (IOException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    private static Command CreateExplain()
+    {
+        var paths = FeatureOptions();
+        var scenarioOption = new Option<string?>("--scenario")
+        {
+            Description =
+                "Only the scenarios whose name contains this text (any case), or the one at this file:line.",
+        };
+        var command = new Command(
+            "explain",
+            "Derive in memory and print, for each scenario, what derivation read from it: edges, guards, outcomes, timers, policies, starts, grants and views."
+        )
+        {
+            paths.Features,
+            paths.Glossary,
+            scenarioOption,
+        };
+        command.SetAction(parseResult =>
+        {
+            var (features, glossary) = FeaturePaths(parseResult, paths);
+            return RunExplain(
+                features,
+                glossary,
+                parseResult.GetValue(scenarioOption),
+                Console.Out,
+                Console.Error
+            );
+        });
+        return command;
+    }
+
+    internal static int RunExplain(
+        string featuresDir,
+        string glossaryPath,
+        string? scenario,
+        TextWriter stdout,
+        TextWriter stderr
+    )
+    {
+        try
+        {
+            var result = FeatureDirectory.Derive(featuresDir, glossaryPath);
+            if (result.Problems.Count > 0)
+            {
+                foreach (var problem in result.Problems)
+                    stderr.WriteLine(problem);
+                stderr.WriteLine(
+                    $"{result.Problems.Count} problem(s): the features do not derive, so there is nothing to explain."
+                );
+                return 1;
+            }
+            var shown = ScenarioExplanation
+                .Explain(result.Files)
+                .Where(s =>
+                    scenario is null
+                    || s.Name.Contains(scenario, StringComparison.OrdinalIgnoreCase)
+                    || $"{s.File}:{s.Line}" == scenario
+                )
+                .ToList();
+            if (scenario is not null && shown.Count == 0)
+            {
+                stderr.WriteLine($"No scenario that derived anything matches '{scenario}'.");
+                return 1;
+            }
+            foreach (var s in shown)
+            {
+                stdout.WriteLine($"{s.File}:{s.Line} {s.Name}");
+                foreach (var fact in s.Facts)
+                    stdout.WriteLine($"  {fact}");
+            }
+            foreach (var step in result.UiSteps)
+                stdout.WriteLine($"not derived (about the UI): {step}");
+            return 0;
         }
         catch (FeatureMachinesException ex)
         {
