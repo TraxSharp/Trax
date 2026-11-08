@@ -61,11 +61,72 @@ public class FormatCorpusTests
     [TestCase("glossary", "view-row-types-collide", "PinnedStickyNoteRow")]
     [TestCase("glossary", "brace-in-state-phrase", "may hold a {placeholder}")]
     [TestCase("glossary", "invoke-output-field-twice", "repeats the field 'approved'")]
+    [TestCase("glossary", "context-field-named-owner", "has a field named '$owner'")]
+    [TestCase("glossary", "effect-trigger-input-not-receipt", "with the receipt alone")]
+    [TestCase(
+        "glossary",
+        "effect-trigger-with-input-placeholder",
+        "an effect's trigger with no input of its own"
+    )]
+    [TestCase(
+        "glossary",
+        "migration-from-own-version",
+        "steps from version 2, and the machine is version 2"
+    )]
+    [TestCase("glossary", "migration-missing", "has none from version 1")]
+    [TestCase("glossary", "owned-by-one-not-an-actor", "'visitor' is not an actor")]
+    [TestCase(
+        "glossary",
+        "reduction-without-handler",
+        "has no 'checkout:add-item', a custom reduction the machine names"
+    )]
+    [TestCase("glossary", "rule-nothing-names", "is a custom rule nothing in the machine names")]
+    [TestCase("glossary", "second-effect", "is a second effect")]
+    [TestCase("glossary", "state-context-field-named-state", "has a field named 'state'")]
+    [TestCase("glossary", "state-context-field-twice", "repeats the field 'receipt'")]
+    [TestCase(
+        "glossary",
+        "system-invoke-input-owner",
+        "a system machine has no owner, so nothing is $owner"
+    )]
+    [TestCase(
+        "glossary",
+        "system-keyed-trigger-without-subject",
+        "must say where the ticket and its key go"
+    )]
+    [TestCase("glossary", "trigger-guard-unknown", "'missing' is not one of the machine's guards")]
+    [TestCase(
+        "glossary",
+        "view-reads-keyed-system-machine",
+        "is a keyed system machine, which a view does not read"
+    )]
     [TestCase("host", "view-name-not-a-graphql-name", "has no GraphQL name")]
     [TestCase("host", "view-names-fold-together", "is TheShop in GraphQL")]
     [TestCase("host", "view-row-types-collide", "PinnedStickyNoteRow")]
     [TestCase("host", "policy-broadcast-from-user-machine", "starts from a system machine")]
     [TestCase("host", "duplicate-json-key", "version")]
+    [TestCase(
+        "host",
+        "keyed-system-machine-client-trigger",
+        "a system machine's triggers are fired by the server only"
+    )]
+    [TestCase("host", "migration-key-past-int", "is not a version a migration steps from")]
+    [TestCase(
+        "host",
+        "policy-from-keyed-system-machine",
+        "is a keyed system machine, which sets off no policy"
+    )]
+    [TestCase("host", "system-machine-effect", "a system machine runs no effect")]
+    [TestCase(
+        "host",
+        "system-machine-invoke-owner",
+        "a system machine has no owner, so nothing is $owner"
+    )]
+    [TestCase(
+        "host",
+        "view-reads-keyed-system-machine",
+        "is a keyed system machine, which a view does not read"
+    )]
     public void A_refused_document_is_refused_for_what_it_is_named(
         string format,
         string name,
