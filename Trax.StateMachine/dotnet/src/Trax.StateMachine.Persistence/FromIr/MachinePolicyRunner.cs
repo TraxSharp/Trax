@@ -116,6 +116,7 @@ internal sealed class MachinePolicyRunner(
         using var transaction = await context.BeginTransaction(cancellationToken);
         if (!await Lock(context, row.Id, cancellationToken))
             return false;
+        var fired = false;
 
         if (!policies.ById.TryGetValue(row.Policy, out var policy))
         {
@@ -130,6 +131,7 @@ internal sealed class MachinePolicyRunner(
         {
             if (!await Fire(services, context, policy, target, cancellationToken))
                 return false;
+            fired = true;
             await Delete(context, row.Id, cancellationToken);
         }
         else if (policy.Shape == "broadcast")
@@ -138,7 +140,9 @@ internal sealed class MachinePolicyRunner(
         {
             var busy = new List<long>();
             foreach (var found in await Targets(context, row, policy, cancellationToken))
-                if (!await Fire(services, context, policy, found, cancellationToken))
+                if (await Fire(services, context, policy, found, cancellationToken))
+                    fired = true;
+                else
                     busy.Add(found);
             // A busy target gets a row of its own, so a later pass fires it and the others are not fired twice.
             if (busy.Count > 0)
@@ -146,6 +150,10 @@ internal sealed class MachinePolicyRunner(
             await Delete(context, row.Id, cancellationToken);
         }
         await transaction.Commit();
+        // The fires were written in this transaction, so the store left the signal to it: a change feed that polls
+        // reads them now rather than at its next interval.
+        if (fired)
+            services.GetService<SnapshotWriteSignal>()?.Written();
         return true;
     }
 

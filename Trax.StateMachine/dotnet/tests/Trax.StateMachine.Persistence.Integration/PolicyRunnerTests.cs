@@ -376,6 +376,37 @@ public class PolicyRunnerTests(StoreProvider provider)
     }
 
     [Test]
+    public async Task A_pass_that_fires_wakes_this_hosts_change_feed()
+    {
+        var ada = NewUser();
+        var order = await Start(ada, "p-order");
+        var receipt = await Start(ada, "p-receipt");
+        await Advance(
+            ada,
+            "p-receipt",
+            receipt,
+            "Attach",
+            new JsonObject { ["orderId"] = order.ToString() }
+        );
+        await Advance(ada, "p-order", order, "Expire");
+        var signal = _host.Services.GetRequiredService<SnapshotWriteSignal>();
+        // The writes above signalled already; take that one so only the pass's can wake the wait below.
+        await signal.WaitAsync(TimeSpan.Zero, CancellationToken.None);
+
+        await Runner(_host).PassOnce(CancellationToken.None);
+
+        (await StateOf(receipt)).Should().Be("Void");
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        await signal.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+        waited
+            .Elapsed.Should()
+            .BeLessThan(
+                TimeSpan.FromSeconds(5),
+                "a poll is woken by the policy's write, not left to its next interval"
+            );
+    }
+
+    [Test]
     public async Task A_client_cannot_fire_a_server_only_trigger()
     {
         var ada = NewUser();
