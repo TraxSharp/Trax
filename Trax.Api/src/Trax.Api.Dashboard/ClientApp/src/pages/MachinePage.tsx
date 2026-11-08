@@ -164,6 +164,9 @@ export function MachinePage() {
       )}
 
       <section
+        id="machine-panel-states"
+        role={board ? "tabpanel" : undefined}
+        aria-labelledby={board ? "machine-tab-states" : undefined}
         aria-label="States"
         hidden={board != null && tab === "board"}
         className="bg-surface rounded-lg border border-line p-5 mb-6"
