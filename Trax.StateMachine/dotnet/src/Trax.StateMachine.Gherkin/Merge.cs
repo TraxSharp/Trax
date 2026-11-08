@@ -191,13 +191,36 @@ internal static class Merge
                 ["trigger"] = pair.Key.Trigger,
                 ["to"] = targets[0],
             };
-            if (refusals.Count > 0)
+            if (machine.Triggers[pair.Key.Trigger].Guard is { } named)
+            {
+                // The glossary names the guard: it must be what the scenarios show.
+                var rule = guards.Single(g => g.Name == named).Rule;
+                var broken =
+                    moves.FirstOrDefault(o => !Holds(machine, rule, o))
+                    ?? refusals.FirstOrDefault(o => Holds(machine, rule, o));
+                if (broken is not null)
+                {
+                    problems.Add(
+                        At(
+                            broken,
+                            $"{pair.Key.Trigger} from {pair.Key.From} is decided by the guard {named}, and it "
+                                + $"{(broken.Result is Result.Moved ? "fails where the trigger works" : "holds where the trigger is refused")} here."
+                        )
+                    );
+                    continue;
+                }
+                edge["guard"] = machine.Guards[named].Rule.DeepClone();
+                if (messages.Count == 1)
+                    edge["guardMessage"] = messages[0];
+            }
+            else if (refusals.Count > 0)
             {
                 // The guard that holds on every move and fails on every refusal; exactly one, or the features do not say
                 // which condition decides.
                 var deciding = guards
                     .Where(g =>
-                        moves.All(o => Holds(g.Rule, o)) && refusals.All(o => !Holds(g.Rule, o))
+                        moves.All(o => Holds(machine, g.Rule, o))
+                        && refusals.All(o => !Holds(machine, g.Rule, o))
                     )
                     .ToList();
                 if (deciding.Count != 1)
@@ -220,6 +243,11 @@ internal static class Merge
             }
             if (machine.Triggers[pair.Key.Trigger].Reduce is { } reduce)
                 edge["reduce"] = reduce.DeepClone();
+            if (machine.Triggers[pair.Key.Trigger].Effect is { } effect)
+                edge["effect"] = new JsonObject
+                {
+                    ["keyPrefix"] = effect.KeyPrefix ?? $"{machine.Id}:{pair.Key.Trigger}",
+                };
             edges.Add((pair.Key.From, pair.Key.Trigger, targets[0], edge));
         }
 
@@ -387,8 +415,8 @@ internal static class Merge
         return block;
     }
 
-    private static bool Holds(Rule rule, Observation o) =>
-        RuleEvaluator.Evaluate(rule, o.Context, o.Input);
+    private static bool Holds(GlossaryMachine machine, Rule rule, Observation o) =>
+        RuleEvaluator.Evaluate(rule, o.Context, o.Input, machine.ExampleRules);
 
     // Each invoking state's three outcome triggers, their edges in the glossary's order of outcomes. Every kind needs
     // somewhere to go, or the machine cannot be built; a scenario says where.

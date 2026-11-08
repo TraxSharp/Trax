@@ -62,7 +62,10 @@ public enum FeatureStatus
     /// <summary>A Given or When derivation cannot read: it did not run.</summary>
     Undefined,
 
-    /// <summary>A step not run: after a failure, in a dry run, or a step about the UI.</summary>
+    /// <summary>
+    /// A step not run: after a failure, in a dry run, or a step about the UI. A scenario tagged <c>@host</c>, which only
+    /// the host bindings run, is skipped by an in-memory run.
+    /// </summary>
     Skipped,
 }
 
@@ -91,9 +94,13 @@ public sealed record FeatureRunReport(
     IReadOnlyList<FeatureProblem> Problems
 )
 {
-    /// <summary>Whether every file was read and every scenario selected passed.</summary>
+    /// <summary>
+    /// Whether every file was read and every scenario selected passed, or was skipped as one only the host runs
+    /// (<c>@host</c>).
+    /// </summary>
     public bool Passed =>
-        Problems.Count == 0 && Scenarios.All(s => s.Status == FeatureStatus.Passed);
+        Problems.Count == 0
+        && Scenarios.All(s => s.Status is FeatureStatus.Passed or FeatureStatus.Skipped);
 }
 
 /// <summary>

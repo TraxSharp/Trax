@@ -102,7 +102,10 @@ internal sealed partial record Glossary(
             "links",
             "version",
             "initialContext",
-            "differential"
+            "differential",
+            "rules",
+            "reductions",
+            "migrations"
         );
         var owned = machine.ContainsKey("ownedBy");
         var system = machine.ContainsKey("system");
@@ -178,6 +181,31 @@ internal sealed partial record Glossary(
         var links = machine.ContainsKey("links")
             ? Map(at["links"], machine["links"], 0, Names.PhraseAt, ReadLink)
             : new();
+        var rules = machine.ContainsKey("rules")
+            ? Map(
+                at["rules"],
+                machine["rules"],
+                0,
+                CustomNameAt,
+                (a, n, o) => ReadHandler(a, n, o, rule: true)
+            )
+            : new();
+        var reductions = machine.ContainsKey("reductions")
+            ? Map(
+                at["reductions"],
+                machine["reductions"],
+                0,
+                CustomNameAt,
+                (a, n, o) => ReadHandler(a, n, o, rule: false)
+            )
+            : new();
+        var migrations = new SortedDictionary<int, string>();
+        if (machine.ContainsKey("migrations"))
+            foreach (var (from, type) in at["migrations"].Object(machine["migrations"]))
+            {
+                var m = at["migrations"][from];
+                migrations[HostFile.MigrationVersionAt(m, from)] = Names.TrainAt(m, type);
+            }
 
         return new GlossaryMachine(
             id,
@@ -200,6 +228,9 @@ internal sealed partial record Glossary(
             InitialContext = initialContext,
             Differential = differential,
             Shapes = shapes,
+            Rules = rules,
+            Reductions = reductions,
+            Migrations = migrations,
         };
     }
 
@@ -242,9 +273,39 @@ internal sealed partial record Glossary(
         return parts;
     }
 
+    // A custom rule's or reduction's name, as the IR carries it (checkout:add-item).
+    private static string CustomNameAt(At at, JsonNode? node) => at.Text(node, 1, 200);
+
+    // A custom rule's or reduction's C# type, and the example an in-memory run answers with in its place: whether the
+    // rule holds, or the fields the reduction sets.
+    private static GlossaryHandler ReadHandler(At at, string name, JsonObject handler, bool rule)
+    {
+        at.Closed(handler, "type", "example");
+        var type = Names.TrainAt(at["type"], at.Required(handler, "type"));
+        var example = at.Required(handler, "example");
+        JsonNode copy = rule
+            ? JsonValue.Create(at["example"].Boolean(example))
+            : at["example"].Object(example).DeepClone();
+        return new GlossaryHandler(name, type, copy);
+    }
+
+    // A run-once effect: its ISnapshotEffect interface, the key its claims are taken under, and the receipt an in-memory
+    // run answers with in its place.
+    private static GlossaryEffect ReadEffect(At at, JsonObject effect)
+    {
+        at.Closed(effect, "type", "keyPrefix", "example");
+        return new GlossaryEffect(
+            Names.TrainAt(at["type"], at.Required(effect, "type")),
+            effect.ContainsKey("keyPrefix")
+                ? at["keyPrefix"].Text(effect["keyPrefix"], 1, 200)
+                : null,
+            at["example"].Text(at.Required(effect, "example"), 1, 200)
+        );
+    }
+
     private static GlossaryTrigger ReadTrigger(At at, string name, JsonObject trigger)
     {
-        at.Closed(trigger, "phrase", "input", "reduce");
+        at.Closed(trigger, "phrase", "input", "reduce", "effect", "guard");
         var phrase = Names.PhraseAt(at["phrase"], at.Required(trigger, "phrase"));
         var (input, inputNames) = trigger.ContainsKey("input")
             ? IrShapes.Fields(at["input"], trigger["input"])
@@ -252,7 +313,17 @@ internal sealed partial record Glossary(
         var reduce = trigger.ContainsKey("reduce")
             ? IrShapes.Reduction(at["reduce"], trigger["reduce"])
             : null;
-        return new GlossaryTrigger(name, phrase, input, inputNames, reduce);
+        var effect = trigger.ContainsKey("effect")
+            ? ReadEffect(at["effect"], at["effect"].Object(trigger["effect"]))
+            : null;
+        var guard = trigger.ContainsKey("guard")
+            ? Names.WordAt(at["guard"], trigger["guard"])
+            : null;
+        return new GlossaryTrigger(name, phrase, input, inputNames, reduce)
+        {
+            Effect = effect,
+            Guard = guard,
+        };
     }
 
     private static GlossaryGuard ReadGuard(At at, string name, JsonObject guard)
@@ -407,6 +478,8 @@ internal sealed partial record Glossary(
             foreach (var trigger in machine.Triggers.Values)
             {
                 var t = m["triggers"][trigger.Name];
+                if (trigger.Guard is { } named && !machine.Guards.ContainsKey(named))
+                    throw t["guard"].Fail($"'{named}' is not one of the machine's guards.");
                 Unique(steps, t["phrase"], Said(trigger.Phrase, machine));
                 Distinct(t["input"], trigger.InputNames);
                 if (trigger.InputNames.Contains(SubjectSlot))
@@ -496,6 +569,8 @@ internal sealed partial record Glossary(
                         .Fail($"'{link.Field}' is not one of the machine's context fields.");
             }
 
+            CheckHandlers(m, machine);
+
             // Only a trigger's or a link's phrase holds a placeholder, so a brace anywhere else is a mistake.
             foreach (var (where, phrase) in OtherPhrases(m, machine))
                 if (phrase.AsSpan().IndexOfAny('{', '}') >= 0)
@@ -535,6 +610,111 @@ internal sealed partial record Glossary(
 
     private HashSet<string> Keyed() =>
         Machines.Values.Where(m => m.KeyedBy is not null).Select(m => m.Id).ToHashSet();
+
+    // Every custom rule and reduction the machine names has a handler, and every handler is named; one trigger at most
+    // runs an effect, sent by a person with no input of theirs; and each version before the machine's has its migration.
+    private static void CheckHandlers(At m, GlossaryMachine machine)
+    {
+        var rules = new SortedSet<string>(StringComparer.Ordinal);
+        var reductions = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var trigger in machine.Triggers.Values)
+            CustomNames(trigger.Reduce, rules, reductions);
+        foreach (var guard in machine.Guards.Values)
+            CustomNames(guard.Rule, rules, reductions);
+        foreach (var shape in machine.Shapes.Values)
+            CustomNames(shape.Requires, rules, reductions);
+        foreach (var invoke in machine.Invokes.Values)
+        foreach (var outcome in invoke.Outcomes.Values)
+        {
+            CustomNames(outcome.When, rules, reductions);
+            CustomNames(outcome.Reduce, rules, reductions);
+        }
+        foreach (var name in rules.Where(n => !machine.Rules.ContainsKey(n)))
+            throw m["rules"].Fail($"has no '{name}', a custom rule the machine names.");
+        foreach (var name in reductions.Where(n => !machine.Reductions.ContainsKey(n)))
+            throw m["reductions"].Fail($"has no '{name}', a custom reduction the machine names.");
+        foreach (var name in machine.Rules.Keys.Where(n => !rules.Contains(n)))
+            throw m["rules"][name].Fail("is a custom rule nothing in the machine names.");
+        foreach (var name in machine.Reductions.Keys.Where(n => !reductions.Contains(n)))
+            throw m["reductions"][name].Fail("is a custom reduction nothing in the machine names.");
+
+        var effects = machine.Triggers.Values.Where(t => t.Effect is not null).ToList();
+        if (effects.Count > 1)
+            throw m["triggers"]
+                [effects[1].Name]["effect"]
+                .Fail(
+                    $"is a second effect; {effects[0].Name} runs one, and a machine runs exactly one."
+                );
+        foreach (var trigger in effects)
+        {
+            var e = m["triggers"][trigger.Name]["effect"];
+            if (machine.IsSystem)
+                throw e.Fail("is on a system machine, and a person sends an effect's trigger.");
+            if (
+                Placeholders(m["triggers"][trigger.Name]["phrase"], trigger.Phrase)
+                    .Any(p => p != SubjectSlot)
+            )
+                throw m["triggers"]
+                    [trigger.Name]["phrase"]
+                    .Fail(
+                        "sends an effect, and a client sends an effect's trigger with no input of its own."
+                    );
+            // The effect runner fires the trigger with the receipt alone.
+            if (
+                trigger.InputNames.Count > 0
+                && (
+                    trigger.InputNames is not [ReceiptField]
+                    || trigger.Input[0]!["type"]!.GetValue<string>() != "string"
+                )
+            )
+                throw m["triggers"]
+                    [trigger.Name]["input"]
+                    .Fail(
+                        $"is fired by the effect runner with the receipt alone: one string field, '{ReceiptField}'."
+                    );
+        }
+
+        for (var from = 1; from < machine.Version; from++)
+            if (!machine.Migrations.ContainsKey(from))
+                throw m["migrations"]
+                    .Fail(
+                        $"has none from version {from}, and the machine is version {machine.Version}."
+                    );
+        foreach (var from in machine.Migrations.Keys.Where(v => v >= machine.Version))
+            throw m["migrations"]
+                [from.ToString(System.Globalization.CultureInfo.InvariantCulture)]
+                .Fail($"steps from version {from}, and the machine is version {machine.Version}.");
+    }
+
+    /// <summary>The input field an effect's receipt reaches its trigger in.</summary>
+    internal const string ReceiptField = "receipt";
+
+    /// <summary>The custom rule and reduction names a rule or reduction holds, wherever they nest.</summary>
+    internal static void CustomNames(JsonNode? node, ISet<string> rules, ISet<string> reductions)
+    {
+        switch (node)
+        {
+            case JsonObject o:
+                if (IsCustom(o, "rule"))
+                    rules.Add(o["name"]!.GetValue<string>());
+                if (IsCustom(o, "reduce"))
+                    reductions.Add(o["name"]!.GetValue<string>());
+                foreach (var (_, value) in o)
+                    CustomNames(value, rules, reductions);
+                break;
+            case JsonArray a:
+                foreach (var item in a)
+                    CustomNames(item, rules, reductions);
+                break;
+        }
+    }
+
+    private static bool IsCustom(JsonObject o, string key) =>
+        o[key] is JsonValue v
+        && v.GetValueKind() == System.Text.Json.JsonValueKind.String
+        && v.GetValue<string>() == "custom"
+        && o["name"] is JsonValue n
+        && n.GetValueKind() == System.Text.Json.JsonValueKind.String;
 
     /// <summary>Where a phrase names the machine it is about: <c>places {subject}</c>.</summary>
     internal const string SubjectSlot = "subject";
@@ -682,6 +862,56 @@ internal sealed record GlossaryMachine(
     internal IReadOnlyDictionary<string, GlossaryState> Shapes { get; init; } =
         new Dictionary<string, GlossaryState>(StringComparer.Ordinal);
 
+    /// <summary>The custom rules the machine names, by name.</summary>
+    internal IReadOnlyDictionary<string, GlossaryHandler> Rules { get; init; } =
+        new Dictionary<string, GlossaryHandler>(StringComparer.Ordinal);
+
+    /// <summary>The custom reductions the machine names, by name.</summary>
+    internal IReadOnlyDictionary<string, GlossaryHandler> Reductions { get; init; } =
+        new Dictionary<string, GlossaryHandler>(StringComparer.Ordinal);
+
+    /// <summary>The C# type of each forward migration, by the version it steps from.</summary>
+    internal IReadOnlyDictionary<int, string> Migrations { get; init; } =
+        new Dictionary<int, string>();
+
+    /// <summary>
+    /// The custom rules as an in-memory run answers them: each with its example. Derivation and <c>trax machine run</c>
+    /// load no assembly, so a scenario that needs the real rule is tagged <c>@host</c>.
+    /// </summary>
+    internal IReadOnlyDictionary<string, Func<JsonObject, JsonNode?, bool>> ExampleRules =>
+        Rules.ToDictionary(
+            r => r.Key,
+            r =>
+            {
+                var holds = r.Value.Example.GetValue<bool>();
+                return (Func<JsonObject, JsonNode?, bool>)((_, _) => holds);
+            },
+            StringComparer.Ordinal
+        );
+
+    /// <summary>The custom reductions as an in-memory run answers them: the context with the example's fields set.</summary>
+    internal IReadOnlyDictionary<
+        string,
+        Func<JsonObject, JsonNode?, JsonObject>
+    > ExampleReductions =>
+        Reductions.ToDictionary(
+            r => r.Key,
+            r =>
+            {
+                var example = r.Value.Example.AsObject();
+                return (Func<JsonObject, JsonNode?, JsonObject>)(
+                    (context, _) =>
+                    {
+                        var next = (JsonObject)context.DeepClone();
+                        foreach (var (name, value) in example)
+                            next[name] = value?.DeepClone();
+                        return next;
+                    }
+                );
+            },
+            StringComparer.Ordinal
+        );
+
     /// <summary>A state's context fields: its own, or the machine's.</summary>
     internal JsonArray ContextOf(string state) =>
         Shapes.TryGetValue(state, out var shape) && shape.Context is { } own ? own : Context;
@@ -726,7 +956,29 @@ internal sealed record GlossaryTrigger(
     JsonArray Input,
     IReadOnlyList<string> InputNames,
     JsonObject? Reduce
-);
+)
+{
+    /// <summary>The run-once effect a send of the trigger runs, or null.</summary>
+    internal GlossaryEffect? Effect { get; init; }
+
+    /// <summary>
+    /// The guard that decides the trigger, when more than one could: its edges take it, and it must hold on every move
+    /// and fail on every refusal the scenarios show.
+    /// </summary>
+    internal string? Guard { get; init; }
+}
+
+/// <summary>
+/// A trigger's run-once effect: the full name of its <c>ISnapshotEffect</c> interface (server-only, written to the host
+/// file), the key prefix its claims are taken under (in the IR), and the receipt an in-memory run answers with.
+/// </summary>
+internal sealed record GlossaryEffect(string Type, string? KeyPrefix, string Example);
+
+/// <summary>
+/// A custom rule or reduction: its name in the IR, the full name of its C# type (server-only, written to the host file),
+/// and the example an in-memory run answers with: whether the rule holds, or the fields the reduction sets.
+/// </summary>
+internal sealed record GlossaryHandler(string Name, string Type, JsonNode Example);
 
 internal sealed record GlossaryGuard(string Name, string Holds, string Fails, JsonObject Rule);
 

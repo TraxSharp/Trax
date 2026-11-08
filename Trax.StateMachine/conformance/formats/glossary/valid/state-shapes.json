@@ -65,6 +65,9 @@
             }
           ]
         }
+      },
+      "migrations": {
+        "1": "Shop.Migrations.CheckoutFromVersion1"
       }
     }
   }

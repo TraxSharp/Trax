@@ -95,7 +95,18 @@ internal sealed record HostFile(
 
     private static HostMachine ReadMachine(At at, string id, JsonObject machine)
     {
-        at.Closed(machine, "schemaHash", "owner", "start", "read", "triggers", "invokes");
+        at.Closed(
+            machine,
+            "schemaHash",
+            "owner",
+            "start",
+            "read",
+            "triggers",
+            "invokes",
+            "effects",
+            "handlers",
+            "migrations"
+        );
         var hash = at["schemaHash"].Text(at.Required(machine, "schemaHash"), 1, 128);
 
         string? systemKey = null;
@@ -162,11 +173,58 @@ internal sealed record HostFile(
                 );
             }
 
+        var effects = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        if (machine.ContainsKey("effects"))
+            foreach (var (trigger, type) in at["effects"].Object(machine["effects"]))
+            {
+                Names.MemberAt(at["effects"][trigger], JsonValue.Create(trigger));
+                effects[trigger] = Names.TrainAt(at["effects"][trigger], type);
+            }
+
+        var rules = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        var reductions = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        if (machine.ContainsKey("handlers"))
+        {
+            var h = at["handlers"];
+            var handlers = h.Object(machine["handlers"]);
+            h.Closed(handlers, "rules", "reductions");
+            foreach (var (kind, into) in new[] { ("rules", rules), ("reductions", reductions) })
+                if (handlers.ContainsKey(kind))
+                    foreach (var (name, type) in h[kind].Object(handlers[kind]))
+                    {
+                        h[kind][name].Text(JsonValue.Create(name), 1, 200);
+                        into[name] = Names.TrainAt(h[kind][name], type);
+                    }
+        }
+
+        var migrations = new SortedDictionary<int, string>();
+        if (machine.ContainsKey("migrations"))
+            foreach (var (from, type) in at["migrations"].Object(machine["migrations"]))
+                migrations[MigrationVersionAt(at["migrations"][from], from)] = Names.TrainAt(
+                    at["migrations"][from],
+                    type
+                );
+
         return new HostMachine(id, hash, systemKey, start, read, triggers, invokes)
         {
+            Effects = effects,
+            Rules = rules,
+            Reductions = reductions,
+            Migrations = migrations,
             KeyedBy = keyedBy,
         };
     }
+
+    /// <summary>The version a migration steps from, as a key: a whole number from 1, with no sign or leading zero.</summary>
+    internal static int MigrationVersionAt(At at, string from) =>
+        from.Length is > 0 and <= 10
+        && from[0] is >= '1' and <= '9'
+        && from.All(char.IsAsciiDigit)
+        && int.TryParse(from, System.Globalization.CultureInfo.InvariantCulture, out var version)
+            ? version
+            : throw at.Fail(
+                "is not a version a migration steps from: a whole number from 1, with no leading zero."
+            );
 
     /// <summary>A client rule: role sets, each to be met by one of its roles, or any signed-in caller.</summary>
     private static AccessRule ReadRule(At at, JsonNode? node)
@@ -245,6 +303,9 @@ internal sealed record HostFile(
             var m = at["machines"][machine.Id];
             if (!machine.IsSystem)
                 continue;
+            // A person sends an effect's trigger, and no person sends a system machine anything.
+            if (machine.Effects.Count > 0)
+                throw m["effects"].Fail("a system machine runs no effect: a person sends one.");
             if (
                 machine.SystemKey is { } key
                 && !key.StartsWith(machine.Id + "/", StringComparison.Ordinal)
@@ -380,6 +441,22 @@ internal sealed record HostMachine(
 
     /// <summary>Whether the system owns the machine's instances, at a fixed key or keyed.</summary>
     internal bool IsSystem => SystemKey is not null || KeyedBy is not null;
+
+    /// <summary>The <c>ISnapshotEffect</c> interface each effect-bound trigger runs, by trigger, as a full name.</summary>
+    internal IReadOnlyDictionary<string, string> Effects { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>The <c>ICustomRule</c> type of each custom rule the IR names, by name, as a full name.</summary>
+    internal IReadOnlyDictionary<string, string> Rules { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>The <c>ICustomReduction</c> type of each custom reduction the IR names, by name, as a full name.</summary>
+    internal IReadOnlyDictionary<string, string> Reductions { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>The <c>IMachineMigration</c> type of each version step, by the version it steps from.</summary>
+    internal IReadOnlyDictionary<int, string> Migrations { get; init; } =
+        new Dictionary<int, string>();
 }
 
 /// <summary>

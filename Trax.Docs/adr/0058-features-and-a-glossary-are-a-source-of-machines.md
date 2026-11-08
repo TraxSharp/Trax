@@ -61,6 +61,13 @@ failure rather than a bug.
   committed, invoking and effect-target states are not discarded whatever the rule.
 - **A trigger the server fires is not a client's.** A policy's trigger is never served, and a trigger no scenario
   fires, or one only ever denied, is not served at all.
+- **The C# behind a machine is named in the glossary and bound by the host file.** A run-once effect, a custom rule or
+  reduction and a migration are C# the IR names but cannot carry. The glossary names each type; derivation writes what
+  clients see (the custom names, an effect's key prefix) into the IR and the types into `host.json`, and the host finds
+  each by its full name in the assemblies it serves from, pairing them one for one with the IR: a name with no type, or
+  a type for nothing, refuses the host. Derivation and an in-memory run load no assembly, so they play the example the
+  glossary gives each, and a scenario that needs the real handler is tagged `@host`, read but not derived from, and run
+  only against the host.
 - **Fail closed everywhere.** No rule means not served. Two scenarios that disagree, or two grants that clash, are a
   derivation problem naming both scenarios, never a rule widened to fit.
 - **The parser checks itself.** Derivation replays every scenario on the machines it derived and fails on any that
@@ -92,10 +99,13 @@ trigger, a client rule on a system machine), and `FormatCorpusTests`, which hold
 corpus under `Trax.StateMachine/conformance/formats/`, as `formatSchemas.conformance.test.ts` does for the schemas.
 Serving from the IR is held by `MachineFromIrTests` there (each conformance machine a file can describe exports exactly
 its file and replays its corpus; what a file cannot describe, a mispaired host entry and access that disagrees with the
-IR's timer rules are refused), `MachineDirectoryTests` there (a directory's host file and IRs list the same machines and name only what the IRs have, and its policies set each other off only through a timer), `IrMachineHostTests` in `Trax.StateMachine.Persistence.Integration`, and
+IR's timer rules are refused), `MachineDirectoryTests` there (a directory's host file and IRs list the same machines and name only what the IRs have, and its policies set each other off only through a timer), `IrMachineHostTests` in `Trax.StateMachine.Persistence.Integration`, `EffectBindingTests` and `MigrationBindingTests`
+there (an effect, custom handlers and a migration the host file names, run as named), and
 `IrMachineSchemaTests` and `IrMachineE2ETests` in Trax.Api. Derivation is held by `GherkinDerivationTests` there (each refusal, the self-check, and a derived machine served as
 written), `AccessDerivationTests` (grants from an actor's own act, nothing widened, the access table) and
-`TimerDerivationTests` (time on a scenario clock, stays, timer rules the host accepts), and policies by
+`TimerDerivationTests` (time on a scenario clock, stays, timer rules the host accepts), `GlossaryStateShapesTests`
+(versions, committed states, rules and contexts per state, the differential block) and `HandlerDerivationTests` (the
+C# a machine names, the examples an in-memory run plays, `@host`), and policies by
 `PolicyDerivationTests` (the three shapes, what a policy cannot be, a loop with no timer in it) and `PolicyRunnerTests` in
 `Trax.StateMachine.Persistence.Integration` (the owner's linked instance only, the fire recorded as the policy's, once
 across hosts and restarts, a fire left for the host that serves its policy and target, a broadcast capped and coalesced,
@@ -117,6 +127,8 @@ hand, so nothing checks that a page tells the same story as its features.
 
 ## Changelog
 
+- **2026-11-08**: The glossary says a machine's version and each state's shape, and names its effect, custom handlers
+  and migrations, which the host file binds.
 - **2026-11-08**: A view returns at most the newest `ViewRowLimit` instances of each user machine.
 - **2026-11-08**: A view holds each user machine it reads to that machine's own read rule.
 - **2026-11-08**: A host refuses policies that set each other off with no timer between them, as derivation does, through one check.

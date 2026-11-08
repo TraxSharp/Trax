@@ -85,6 +85,9 @@ internal static class MachineFiles
             }
         }
 
+        foreach (var (id, machine) in host.Machines)
+            problems.AddRange(HandlerProblems(machine, irs[id]));
+
         for (var i = 0; i < host.Policies.Count; i++)
         {
             var policy = host.Policies[i];
@@ -126,6 +129,71 @@ internal static class MachineFiles
         // Derivation refuses the same loops through the same check, so a hand-edited host file cannot add one.
         problems.AddRange(PolicyLoops.Find(host.Policies, irs).Select(PolicyLoops.Problem));
         return problems;
+    }
+
+    /// <summary>
+    /// What keeps a host entry's handlers from pairing with its IR, one for one: every trigger whose edge runs an effect
+    /// has its effect's type and nothing else does, every custom rule and reduction the IR names has its type and nothing
+    /// else does, and every version step below the IR's has its migration and nothing else does. Empty when they pair.
+    /// </summary>
+    internal static List<string> HandlerProblems(HostMachine machine, JsonObject ir)
+    {
+        var problems = new List<string>();
+        var id = machine.Id;
+        var effects = (ir["transitions"] as JsonArray ?? [])
+            .Where(t => t?["effect"] is JsonObject)
+            .Select(t => t!["trigger"]?.GetValue<string>())
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+        Pair(problems, $"'{id}' runs an effect on", "effect", effects, machine.Effects.Keys);
+
+        var rules = new SortedSet<string>(StringComparer.Ordinal);
+        var reductions = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var (key, value) in ir)
+            if (key != "differential")
+                Glossary.CustomNames(value, rules, reductions);
+        Pair(problems, $"'{id}' names the custom rule", "rule", rules, machine.Rules.Keys);
+        Pair(
+            problems,
+            $"'{id}' names the custom reduction",
+            "reduction",
+            reductions,
+            machine.Reductions.Keys
+        );
+
+        var version = ir["version"] is JsonValue v && v.TryGetValue<int>(out var n) ? n : 1;
+        var steps = Enumerable
+            .Range(1, Math.Max(0, version - 1))
+            .Select(i => i.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            .ToHashSet(StringComparer.Ordinal);
+        Pair(
+            problems,
+            $"'{id}' is version {version}, and steps from version",
+            "migration",
+            steps,
+            machine.Migrations.Keys.Select(k =>
+                k.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            )
+        );
+        return problems;
+    }
+
+    // Each name the IR has needs its host entry, and an entry the IR does not have binds nothing, so it is refused too.
+    private static void Pair(
+        List<string> problems,
+        string what,
+        string kind,
+        IReadOnlySet<string> needed,
+        IEnumerable<string> given
+    )
+    {
+        var have = given.ToHashSet(StringComparer.Ordinal);
+        foreach (var name in needed.Order(StringComparer.Ordinal).Where(n => !have.Contains(n)))
+            problems.Add($"{what} '{name}', and {HostFileName} names no {kind} type for it.");
+        foreach (var name in have.Order(StringComparer.Ordinal).Where(n => !needed.Contains(n)))
+            problems.Add(
+                $"{HostFileName} names a {kind} type for '{name}', which {what.Split(' ')[0]}'s IR does not have."
+            );
     }
 
     /// <summary>Why an IR is not the one its host entry was derived from, or null when it is.</summary>

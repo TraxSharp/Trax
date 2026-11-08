@@ -78,6 +78,16 @@ internal sealed class MemoryDriver(
                 return new(new Answer.Refused(RefusalCode.NotFound, NotFoundMessage));
             if (!Admits(rule, person.Actor))
                 return new(new Answer.Refused(RefusalCode.Forbidden, ForbiddenMessage));
+            // A send: the client gives no input, and the server runs the effect and fires the trigger with its receipt,
+            // here the glossary's example, as derivation reads it.
+            if (
+                glossary
+                    .Machines.GetValueOrDefault(key.Machine)
+                    ?.Triggers.GetValueOrDefault(trigger)
+                    ?.Effect is
+                { } effect
+            )
+                input = new JsonObject { [Glossary.ReceiptField] = effect.Example };
         }
         return new(Moved(key, Engine(key.Machine).Advance(Of(key), trigger, input)));
     }
@@ -226,7 +236,11 @@ internal sealed class MemoryDriver(
     private IrMachine Engine(string machine)
     {
         if (!_engines.TryGetValue(machine, out var engine))
-            _engines[machine] = engine = new IrMachine(irs[machine]);
+            _engines[machine] = engine = new IrMachine(
+                irs[machine],
+                glossary.Machines.GetValueOrDefault(machine)?.ExampleRules,
+                glossary.Machines.GetValueOrDefault(machine)?.ExampleReductions
+            );
         return engine;
     }
 

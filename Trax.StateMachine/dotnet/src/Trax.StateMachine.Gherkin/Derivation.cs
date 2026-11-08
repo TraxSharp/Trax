@@ -32,7 +32,14 @@ internal static class FeatureDerivation
     {
         var (scenarios, problems) = FeatureFiles.Parse(features);
         var resolver = new StepResolver(glossary);
-        var walks = scenarios.Select(s => Walk.Run(s, glossary, resolver)).ToList();
+        // A scenario that needs the host's own handlers says nothing derivation can check with the glossary's examples, so
+        // it shapes no machine and is not replayed; its Givens and Whens must still read.
+        foreach (var scenario in scenarios.Where(s => s.HostOnly))
+            problems.AddRange(Unread(scenario, resolver));
+        var walks = scenarios
+            .Where(s => !s.HostOnly)
+            .Select(s => Walk.Run(s, glossary, resolver))
+            .ToList();
         foreach (var walk in walks)
             problems.AddRange(walk.Problems);
         var uiSteps = walks.SelectMany(w => w.UiSteps).ToList();
@@ -116,6 +123,71 @@ internal static class FeatureDerivation
             );
 
         return new Derived(written, host, access.Table, [], Sorted(uiSteps));
+    }
+
+    // The server half of what the glossary names in C#: the effect each effect-bound edge of the IR runs, the type of each
+    // custom rule and reduction the IR names, and each migration, one entry for each and nothing the IR does not use, as
+    // the host pairs them.
+    private static void Handlers(JsonObject entry, GlossaryMachine machine, JsonObject ir)
+    {
+        var effects = new JsonObject();
+        foreach (
+            var trigger in (ir["transitions"] as JsonArray ?? [])
+                .Where(t => t?["effect"] is JsonObject)
+                .Select(t => t!["trigger"]!.GetValue<string>())
+                .Distinct()
+                .Order(StringComparer.Ordinal)
+        )
+            effects[trigger] = machine.Triggers[trigger].Effect!.Type;
+        if (effects.Count > 0)
+            entry["effects"] = effects;
+
+        var rules = new SortedSet<string>(StringComparer.Ordinal);
+        var reductions = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var (key, value) in ir)
+            if (key != "differential")
+                Glossary.CustomNames(value, rules, reductions);
+        var handlers = new JsonObject();
+        if (rules.Count > 0)
+            handlers["rules"] = new JsonObject(
+                rules.Select(r => KeyValuePair.Create(r, (JsonNode?)machine.Rules[r].Type))
+            );
+        if (reductions.Count > 0)
+            handlers["reductions"] = new JsonObject(
+                reductions.Select(r =>
+                    KeyValuePair.Create(r, (JsonNode?)machine.Reductions[r].Type)
+                )
+            );
+        if (handlers.Count > 0)
+            entry["handlers"] = handlers;
+
+        if (machine.Migrations.Count > 0)
+            entry["migrations"] = new JsonObject(
+                machine.Migrations.Select(m =>
+                    KeyValuePair.Create(
+                        m.Key.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        (JsonNode?)m.Value
+                    )
+                )
+            );
+    }
+
+    // The Givens and Whens of a scenario no phrase reads, with the people it names as it goes.
+    private static IEnumerable<Problem> Unread(FeatureScenario scenario, StepResolver resolver)
+    {
+        var people = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var step in scenario.Steps)
+        {
+            var meaning = resolver.Resolve(step.Text, people, out var problem, out var unresolved);
+            if (meaning is Meaning.Named named)
+                people[named.Name] = named.Actor;
+            else if (meaning is null && !(unresolved && step.Kind == StepKind.Then))
+                yield return new Problem(
+                    scenario.File,
+                    step.Line,
+                    $"{problem} (scenario '{scenario.Name}', {scenario.Id})"
+                );
+        }
     }
 
     // The host file: its machines, then its policies, views and provenance when it has any.
@@ -232,6 +304,7 @@ internal static class FeatureDerivation
                 }
                 entry["invokes"] = invokes;
             }
+            Handlers(entry, machine, JsonNode.Parse(ir)!.AsObject());
             machines[id] = entry;
         }
         return CanonicalJson.Serialize(
@@ -539,10 +612,10 @@ internal sealed class Walk
         switch (meaning)
         {
             case Meaning.Act or Meaning.Happens:
-                var (machine, owner, instanceKey, input) = meaning switch
+                var (machine, owner, instanceKey, trigger, input) = meaning switch
                 {
-                    Meaning.Act a => (a.Machine, a.Owner, null, a.Input),
-                    Meaning.Happens h => (h.Machine, h.Owner, h.Key, h.Input),
+                    Meaning.Act a => (a.Machine, a.Owner, (string?)null, a.Trigger, a.Input),
+                    Meaning.Happens h => (h.Machine, h.Owner, h.Key, h.Trigger, h.Input),
                     _ => throw new InvalidOperationException(),
                 };
                 // A person acts on their own instance, and a system machine is moved by the server alone (ADR
@@ -566,6 +639,20 @@ internal sealed class Walk
                         );
                         return;
                     }
+                }
+                // An effect's trigger is sent by its instance's owner, and the effect runner fires it with the receipt,
+                // which an in-memory run takes from the glossary's example.
+                if (_glossary.Machines[machine].Triggers[trigger].Effect is { } effect)
+                {
+                    if (meaning is Meaning.Happens)
+                    {
+                        Fail(
+                            step.Line,
+                            $"'{step.Text}' sends an effect with no person, and an effect's trigger is sent by its owner."
+                        );
+                        return;
+                    }
+                    input = new JsonObject { [Glossary.ReceiptField] = effect.Example };
                 }
                 var key = new InstanceKey(machine, owner, instanceKey);
                 if (!_instances.TryGetValue(key, out var instance) || instance.State is null)
@@ -688,8 +775,12 @@ internal sealed class Walk
                 var guarded = InstanceAt(new InstanceKey(g.Machine, g.Owner, g.Key));
                 var guard = _glossary.Machines[g.Machine].Guards[g.Name];
                 if (
-                    RuleEvaluator.Evaluate(IrMachine.ReadRule(guard.Rule), guarded.Context, null)
-                    != g.Holds
+                    RuleEvaluator.Evaluate(
+                        IrMachine.ReadRule(guard.Rule),
+                        guarded.Context,
+                        null,
+                        _glossary.Machines[g.Machine].ExampleRules
+                    ) != g.Holds
                 )
                     Fail(
                         step.Line,
@@ -850,7 +941,8 @@ internal sealed class Walk
                     IrMachine.ReadReduction(outcomeReduce),
                     instance.Context,
                     invoke.Examples.GetValueOrDefault(outcome.Phrase),
-                    InitialContext(_glossary.Machines[outcome.Machine])
+                    InitialContext(_glossary.Machines[outcome.Machine]),
+                    _glossary.Machines[outcome.Machine].ExampleReductions
                 );
             instance.Enter(moved[0], _clock);
             Cascade(pending, moved[0]);
@@ -901,7 +993,8 @@ internal sealed class Walk
                     IrMachine.ReadReduction(reduce),
                     instance.Context,
                     pending.Input,
-                    InitialContext(_glossary.Machines[machine])
+                    InitialContext(_glossary.Machines[machine]),
+                    _glossary.Machines[machine].ExampleReductions
                 );
             instance.Enter(m.To, _clock);
             Cascade(pending, m.To);

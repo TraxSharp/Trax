@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "actors": {
+    "shopper": {
+      "noun": "a shopper",
+      "anyAuthenticated": true
+    }
+  },
+  "machines": {
+    "checkout": {
+      "ownedBy": "shopper",
+      "noun": "checkout",
+      "start": "has a checkout",
+      "version": 2,
+      "initial": "Cart",
+      "context": [
+        {
+          "name": "items",
+          "type": "array",
+          "nullable": false,
+          "constraints": [],
+          "values": {
+            "type": "string",
+            "nullable": false
+          }
+        },
+        {
+          "name": "receipt",
+          "type": "string",
+          "nullable": true,
+          "constraints": []
+        }
+      ],
+      "states": {
+        "Cart": {
+          "phrase": "is in the cart",
+          "requires": {
+            "rule": "custom",
+            "name": "checkout:priced"
+          }
+        },
+        "Paid": {
+          "phrase": "is paid",
+          "committed": true
+        }
+      },
+      "triggers": {
+        "AddItem": {
+          "phrase": "adds {item} to {subject}",
+          "input": [
+            {
+              "name": "item",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "reduce": {
+            "reduce": "custom",
+            "name": "checkout:add-item"
+          },
+          "guard": "named"
+        },
+        "Pay": {
+          "phrase": "pays for {subject}",
+          "input": [
+            {
+              "name": "receipt",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "reduce": {
+            "reduce": "set",
+            "steps": [
+              {
+                "field": "receipt",
+                "value": {
+                  "input": "receipt"
+                }
+              }
+            ]
+          },
+          "effect": {
+            "type": "Shop.Effects.ICharge",
+            "keyPrefix": "checkout:charge",
+            "example": "rcpt-1"
+          }
+        }
+      },
+      "guards": {
+        "named": {
+          "holds": "names the item",
+          "fails": "names no item",
+          "rule": {
+            "rule": "nonEmpty",
+            "source": "input",
+            "field": "item"
+          }
+        }
+      },
+      "rules": {
+        "checkout:priced": {
+          "type": "Shop.Rules.TotalIsPriced",
+          "example": true
+        }
+      },
+      "migrations": {
+        "1": "Shop.Migrations.CheckoutFromVersion1"
+      }
+    }
+  }
+}

@@ -66,6 +66,9 @@
           ],
           "final": true
         }
+      },
+      "migrations": {
+        "1": "Shop.Migrations.CheckoutFromVersion1"
       }
     }
   }

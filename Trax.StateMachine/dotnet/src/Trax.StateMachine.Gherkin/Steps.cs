@@ -365,7 +365,8 @@ internal sealed partial class StepResolver
     // Each quoted value of a step, read as its field's type; a field the step leaves unset is refused unless nullable.
     private static JsonObject? Inputs(Match match, GlossaryTrigger trigger)
     {
-        if (trigger.InputNames.Count == 0)
+        // An effect's trigger is sent with no input: the effect runner fires it with the receipt.
+        if (trigger.InputNames.Count == 0 || trigger.Effect is not null)
             return null;
         var input = new JsonObject();
         foreach (var field in trigger.Input)

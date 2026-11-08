@@ -33,11 +33,29 @@ these calls, and a host serves what they write with
 | `FeatureProblem` | A `File`, a `Line` and a `Message`. |
 | `FeatureMachines.Run(glossary, features, irs, host, options)` | Runs the features in memory on machines, given as their IRs by id and their host file. Each answer is the host's, access included: a trigger the host does not serve the caller is not served, another owner's instance is `NOT_FOUND`, and a caller the rule does not admit is `FORBIDDEN`. Each scenario runs on fresh instances. The IRs and the host file are checked as a host checks them before any scenario runs: an IR that is not JSON, a machine of one missing from the other, a name the host file gives that its IR lacks, or an IR the host file was not derived from throws a `FormatException`, as does a tag expression that is not one; a name pattern that is not a regular expression throws an `ArgumentException`. An overload takes the `DerivedMachines` of `Derive` and throws an `ArgumentException` when it did not succeed. Returns `FeatureRunReport`. |
 | `FeatureRunOptions` | `Tags`, a Cucumber tag expression (`@smoke and not @slow`); `Names`, regular expressions any of which a scenario's name matches; `Locations`, file and line pairs; `DryRun`, read every step and run none; `FailFast`, stop at the first scenario that does not pass. |
-| `FeatureRunReport` | `Scenarios`, in file and line order, each a `FeatureScenarioResult`, and `Problems`, files that could not be read. `Passed` is true when there is no problem and every scenario passed. |
+| `FeatureRunReport` | `Scenarios`, in file and line order, each a `FeatureScenarioResult`, and `Problems`, files that could not be read. `Passed` is true when there is no problem and every scenario passed, or was skipped as one only the host runs (`@host`). |
 | `FeatureScenarioResult` | A scenario's `File`, `Line`, `Name`, `Tags`, `Status` and `Steps`, each a `FeatureStepResult` with its `Line`, `Keyword`, `Text`, `Status` and `Message`, why it failed or was skipped. |
-| `FeatureStatus` | `Passed`, `Failed`, `Undefined` (a Given or When derivation cannot read) and `Skipped` (after a failure, in a dry run, or a step about the UI). |
+| `FeatureStatus` | `Passed`, `Failed`, `Undefined` (a Given or When derivation cannot read) and `Skipped` (after a failure, in a dry run, a step about the UI, or a scenario tagged `@host`). |
 | `FeatureMachines.Missing(glossary, features)` | What the glossary names and no scenario shows, each a `FeatureGap`: its `Kind` (`machine`, `trigger`, `state`, `guard`, `refusal`, `outcome`, `view` or `grant`), the `Machine`, `What` it is, a `Message`, and a `Stub`, a scenario to paste, or null when none can be written. A stub is offered only if the features with it pasted derive with no problem and change only what it claims. |
 | `FeatureMachines.Board(irs, host)` | The event-storming board, from the IRs and the host file alone: a `FeatureBoard` of `Stickies` and `Links`. A `FeatureSticky` has an `Id`, a `Kind` (`actor`, `command`, `event`, `policy`, `aggregate` or `view`), its `Machine`, a `Label`, and the `Scenarios` behind it, each a `FeatureScenarioRef` (`File`, `Line`, `Scenario`) when the host file has provenance. A `FeatureLink` goes `From` one sticky's id `To` another's. The files are checked as `Run` checks them, and refused with the same `FormatException`. |
+
+## The C# a host binds
+
+A glossary names the C# behind a machine by its full name, and derivation writes those names to the host file, never
+to the IR (see [the feature files reference](/docs/reference/feature-files#the-c-a-machine-names)). A host serving the
+directory finds each type in the assemblies given to `ServeFeatures`, as it finds the trains, and refuses the host
+when one is missing, of the wrong kind, or does not pair one for one with what the IR names. The three handler kinds
+are interfaces of `Trax.StateMachine`, each created once with its public parameterless constructor, so each answers
+from its arguments alone:
+
+| Interface | Member | Bound as |
+| --- | --- | --- |
+| `ICustomRule` | `bool Holds(JsonObject context, JsonNode? input)` | the handler of a custom rule, as `CustomGuard` binds one |
+| `ICustomReduction` | `JsonObject Reduce(JsonObject context, JsonNode? input)` | the handler of a custom reduction, as `CustomReducer` binds one |
+| `IMachineMigration` | `MigrationResult Migrate(string state, JsonObject context)` | the step from one version to the next, as `MigrateFrom` registers one |
+
+A run-once effect is an interface extending `ISnapshotEffect`, resolved from the host's services when a send runs it,
+as `RunsOnce<TEffect>` binds one.
 
 ## Example
 

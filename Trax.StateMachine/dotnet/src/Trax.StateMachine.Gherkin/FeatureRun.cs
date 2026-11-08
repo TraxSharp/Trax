@@ -62,6 +62,18 @@ internal static class FeatureRun
             )
                 continue;
 
+            if (scenario.HostOnly)
+            {
+                // It needs a handler only the host has, which no in-memory run loads.
+                results.Add(
+                    new ScenarioResult(
+                        scenario,
+                        ScenarioStatus.Skipped,
+                        scenario.Steps.Select(s => new StepResult(s, null, "not run")).ToList()
+                    )
+                );
+                continue;
+            }
             var walk = Walk.Run(scenario, glossary, resolver);
             var result = dryRun
                 ? DryRun(walk)

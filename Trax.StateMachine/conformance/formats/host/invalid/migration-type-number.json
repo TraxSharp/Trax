@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "machines": {
+    "checkout": {
+      "schemaHash": "h",
+      "owner": "user",
+      "start": {
+        "anyAuthenticated": true
+      },
+      "read": {
+        "anyAuthenticated": true
+      },
+      "triggers": {
+        "AddItem": {
+          "anyAuthenticated": true
+        },
+        "Pay": {
+          "anyAuthenticated": true
+        }
+      },
+      "effects": {
+        "Pay": "Shop.Effects.ICharge"
+      },
+      "handlers": {
+        "rules": {
+          "checkout:priced": "Shop.Rules.TotalIsPriced"
+        },
+        "reductions": {
+          "checkout:add-item": "Shop.Rules.AddItem"
+        }
+      },
+      "migrations": {
+        "1": 1
+      }
+    }
+  }
+}

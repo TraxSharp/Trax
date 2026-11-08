@@ -589,7 +589,7 @@ internal static class MachineCommand
                 report.Problems.Count == 0
                 && report.Scenarios.Count > 0
                 && report.Scenarios.All(s =>
-                    s.Status == ScenarioStatus.Passed
+                    (s.Status is ScenarioStatus.Passed or ScenarioStatus.Skipped)
                     && (!args.Strict || !s.Skipped.Any(x => x.Message != "not run"))
                 );
             if (report.Scenarios.Count == 0)

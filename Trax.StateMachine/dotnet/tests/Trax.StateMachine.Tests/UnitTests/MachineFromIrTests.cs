@@ -141,7 +141,7 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void An_edge_that_runs_an_effect_is_refused()
+    public void An_edge_that_runs_an_effect_the_host_entry_names_no_type_for_is_refused()
     {
         var ir = Ir("checkout");
 
@@ -150,11 +150,11 @@ public class MachineFromIrTests
         create
             .Should()
             .Throw<InvalidOperationException>()
-            .WithMessage("*'checkout'*runs an effect*");
+            .WithMessage("*'checkout' runs an effect on*names no effect type*");
     }
 
     [Test]
-    public void A_custom_rule_is_refused_wherever_it_nests()
+    public void A_custom_rule_the_host_entry_names_no_type_for_is_refused_wherever_it_nests()
     {
         var ir = Ir("vault");
 
@@ -163,7 +163,7 @@ public class MachineFromIrTests
         create
             .Should()
             .Throw<InvalidOperationException>()
-            .WithMessage("*'vault'*custom rule or reduction*");
+            .WithMessage("*'vault' names the custom rule*names no rule type*");
     }
 
     [Test]

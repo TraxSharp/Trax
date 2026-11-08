@@ -13,8 +13,9 @@ namespace Trax.StateMachine.Persistence.FromIr;
 /// Builds the machines a host serves from IR files and their entries in a host file, with no C# machine class (ADR
 /// <c>Trax.Docs/adr/0058</c>). Everything is checked before a machine is returned, and every refusal is an
 /// <see cref="InvalidOperationException"/> naming the machine: the IR is one this engine reads and a served machine can
-/// be (no effect, no custom rule or reduction, whose handlers no file can name); it is the IR its host entry was derived
-/// from; every train it invokes is found; and the machine built from it exports exactly the file.
+/// be; it is the IR its host entry was derived from; every train it invokes, and every effect, custom rule, custom
+/// reduction and migration its host entry names for it, one for one, is found; and the machine built from it exports
+/// exactly the file.
 /// </summary>
 internal static class IrMachines
 {
@@ -23,7 +24,10 @@ internal static class IrMachines
 
     /// <summary>Builds every machine of <paramref name="sources"/>, refusing two whose type names would collide.</summary>
     /// <param name="sources">The machines.</param>
-    /// <param name="trainAssemblies">Where the trains the machines invoke are looked for, by their full name.</param>
+    /// <param name="trainAssemblies">
+    /// Where the trains the machines invoke, and the effects, custom rules, reductions and migrations their host entries
+    /// name, are looked for, by their full name.
+    /// </param>
     internal static IReadOnlyList<IMachine> Create(
         IReadOnlyList<Source> sources,
         IReadOnlyCollection<Assembly> trainAssemblies
@@ -78,7 +82,10 @@ internal static class IrMachines
                 )
             );
 
+        foreach (var problem in MachineFiles.HandlerProblems(host, ir))
+            throw new InvalidOperationException(Refuse(problem));
         var trains = Trains(ir, host, trainAssemblies, Refuse);
+        var handlers = Handlers(host, trainAssemblies, Refuse);
 
         IrTypes types;
         try
@@ -96,7 +103,7 @@ internal static class IrMachines
             throw new InvalidOperationException(Refuse(ex.Message), ex);
         }
 
-        var replay = new IrReplay(ir, host, types, trains, corpus);
+        var replay = new IrReplay(ir, host, types, trains, corpus) { Handlers = handlers };
         var kind = host.IsSystem ? typeof(SystemIrMachine<,>) : typeof(ServedIrMachine<,>);
         var machine = (IMachine)
             Activator.CreateInstance(
@@ -159,16 +166,10 @@ internal static class IrMachines
         return (arguments[0], arguments[1]);
     }
 
-    // What no served machine can be: an effect, whose type no file can name; a custom rule or reduction, whose handler
-    // no file can bind; a failed or cancelled outcome edge with a guard, which the builder has no way to declare.
+    // What no served machine can be: a failed or cancelled outcome edge with a guard, which the builder has no way to
+    // declare.
     private static IEnumerable<string> Unservable(JsonObject ir)
     {
-        foreach (var edge in ir["transitions"]!.AsArray())
-            if (edge!["effect"] is not null)
-                yield return $"the edge {edge["from"]} -{edge["trigger"]}-> {edge["to"]} runs an effect, and no file "
-                    + "can name an effect's type.";
-        foreach (var path in CustomPaths(ir, ""))
-            yield return $"{path} is a custom rule or reduction, and no file can bind its handler.";
         foreach (var (name, outcome) in ir["outcomes"] as JsonObject ?? [])
             if (outcome!["outcome"]!.GetValue<string>() != "done")
                 foreach (var edge in outcome["edges"]!.AsArray())
@@ -177,35 +178,83 @@ internal static class IrMachines
                             + "a guard.";
     }
 
-    // Every place a custom rule or reduction is named, as a JSON path, wherever it nests.
-    private static IEnumerable<string> CustomPaths(JsonNode? node, string path)
+    // The C# behind each effect, custom rule, custom reduction and migration the host entry names, each found by its full
+    // name in the assemblies given, of the kind it is named as: an effect's ISnapshotEffect interface, which the host
+    // resolves from its services when it runs; a handler's class, created here with its public parameterless
+    // constructor, since a machine's rules hold no state and reach no service.
+    private static IrHandlers Handlers(
+        HostMachine host,
+        IReadOnlyCollection<Assembly> assemblies,
+        Func<string, string> refuse
+    )
     {
-        switch (node)
+        Type Find(string name, string what)
         {
-            case JsonObject o:
-                if (
-                    (
-                        o["rule"] is JsonValue r
-                        && r.GetValueKind() == System.Text.Json.JsonValueKind.String
-                        && r.GetValue<string>() == "custom"
+            var found = assemblies
+                .Select(a => a.GetType(name, throwOnError: false))
+                .OfType<Type>()
+                .Distinct()
+                .ToList();
+            return found.Count == 1
+                ? found[0]
+                : throw new InvalidOperationException(
+                    refuse(
+                        found.Count == 0
+                            ? $"{what} is {name}, which none of the assemblies given holds."
+                            : $"{what} is {name}, which more than one assembly given holds."
                     )
-                    || (
-                        o["reduce"] is JsonValue d
-                        && d.GetValueKind() == System.Text.Json.JsonValueKind.String
-                        && d.GetValue<string>() == "custom"
-                    )
-                )
-                    yield return path.Length == 0 ? "/" : path;
-                foreach (var (key, value) in o)
-                foreach (var found in CustomPaths(value, $"{path}/{key}"))
-                    yield return found;
-                break;
-            case JsonArray a:
-                for (var i = 0; i < a.Count; i++)
-                    foreach (var found in CustomPaths(a[i], $"{path}/{i}"))
-                        yield return found;
-                break;
+                );
         }
+
+        T Create<T>(string name, string what)
+            where T : class
+        {
+            var type = Find(name, what);
+            if (
+                !typeof(T).IsAssignableFrom(type)
+                || type.IsAbstract
+                || type.IsInterface
+                || type.ContainsGenericParameters
+                || type.GetConstructor(Type.EmptyTypes) is null
+            )
+                throw new InvalidOperationException(
+                    refuse(
+                        $"{what} is {name}, which is not a class implementing {typeof(T).Name} with a public "
+                            + "parameterless constructor."
+                    )
+                );
+            return (T)Activator.CreateInstance(type)!;
+        }
+
+        var effects = new Dictionary<string, Type>(StringComparer.Ordinal);
+        foreach (var (trigger, name) in host.Effects)
+        {
+            var type = Find(name, $"the effect {trigger} runs");
+            if (!type.IsInterface || !typeof(ISnapshotEffect).IsAssignableFrom(type))
+                throw new InvalidOperationException(
+                    refuse(
+                        $"the effect {trigger} runs is {name}, which is not an interface extending ISnapshotEffect."
+                    )
+                );
+            effects[trigger] = type;
+        }
+        return new IrHandlers(
+            effects,
+            host.Rules.ToDictionary(
+                kv => kv.Key,
+                kv => Create<ICustomRule>(kv.Value, $"the custom rule '{kv.Key}'"),
+                StringComparer.Ordinal
+            ),
+            host.Reductions.ToDictionary(
+                kv => kv.Key,
+                kv => Create<ICustomReduction>(kv.Value, $"the custom reduction '{kv.Key}'"),
+                StringComparer.Ordinal
+            ),
+            host.Migrations.ToDictionary(
+                kv => kv.Key,
+                kv => Create<IMachineMigration>(kv.Value, $"the migration from version {kv.Key}")
+            )
+        );
     }
 
     // The train each invoking state runs: named by the host file, found by its full name in the assemblies given, and an

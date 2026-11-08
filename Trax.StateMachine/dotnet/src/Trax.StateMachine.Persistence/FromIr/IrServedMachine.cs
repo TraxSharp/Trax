@@ -58,6 +58,9 @@ internal sealed class IrReplay(
 
     internal string? Corpus => corpus;
 
+    /// <summary>The effects, custom rules, reductions and migrations the host entry binds, by what the IR names them.</summary>
+    internal IrHandlers Handlers { get; init; } = IrHandlers.None;
+
     internal void Configure<TState, TTrigger>(IMachineBuilder<TState, TTrigger> m)
         where TState : struct, Enum
         where TTrigger : struct, Enum
@@ -71,6 +74,12 @@ internal sealed class IrReplay(
             );
         if (host.IsSystem)
             m.SystemOwned();
+        foreach (var (from, migration) in Handlers.Migrations)
+            m.MigrateFrom(from, migration.Migrate);
+        foreach (var (name, rule) in Handlers.Rules)
+            m.CustomGuard(name, rule.Holds);
+        foreach (var (name, reduction) in Handlers.Reductions)
+            m.CustomReducer(name, reduction.Reduce);
         // A trigger only the server fires (a policy's) is never served to a client.
         foreach (var (trigger, access) in host.Triggers)
             if (access.IsServer && Enum.TryParse<TTrigger>(trigger, out var serverOnly))
@@ -105,6 +114,11 @@ internal sealed class IrReplay(
                 t.Reduce(IrMachine.ReadReduction(reduce));
             if (host.Triggers.TryGetValue(trigger, out var access) && access.Client is { } rule)
                 Apply(t, rule);
+            if (edge["effect"] is JsonObject effect)
+                typeof(ITransitionBuilder<TState, TTrigger>)
+                    .GetMethod(nameof(ITransitionBuilder<TState, TTrigger>.RunsOnce))!
+                    .MakeGenericMethod(Handlers.Effects[trigger])
+                    .Invoke(t, [effect["keyPrefix"]!.GetValue<string>()]);
             t.To(State<TState>(edge["to"]));
         }
 
@@ -321,4 +335,23 @@ internal sealed class IrReplay(
         IsoDuration.TryParse(node!.GetValue<string>(), out var duration)
             ? duration
             : throw new InvalidOperationException($"'{node}' is not an ISO-8601 duration.");
+}
+
+/// <summary>
+/// The C# a host entry binds to what a machine's IR names (ADR <c>Trax.Docs/adr/0058</c>): the <c>ISnapshotEffect</c>
+/// interface each effect-bound trigger runs, and the handler of each custom rule, custom reduction and version step.
+/// </summary>
+internal sealed record IrHandlers(
+    IReadOnlyDictionary<string, Type> Effects,
+    IReadOnlyDictionary<string, ICustomRule> Rules,
+    IReadOnlyDictionary<string, ICustomReduction> Reductions,
+    IReadOnlyDictionary<int, IMachineMigration> Migrations
+)
+{
+    internal static readonly IrHandlers None = new(
+        new Dictionary<string, Type>(),
+        new Dictionary<string, ICustomRule>(),
+        new Dictionary<string, ICustomReduction>(),
+        new Dictionary<int, IMachineMigration>()
+    );
 }

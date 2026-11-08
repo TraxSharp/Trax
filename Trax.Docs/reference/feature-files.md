@@ -38,7 +38,9 @@ A machine is a user's or the system's:
 | `context` | The fields of its context, as the IR declares fields: every state's, unless the state gives its own. |
 | `states` | Each state by name, with its phrase (`is a draft`), or with `{ "phrase", "committed", "requires", "context" }`: `committed: true` (the IR's `committedStates`), the rule its context must meet (the IR's `invariants`), and a context of its own in place of the machine's. |
 | `differential` | `true` to write the IR's `differential` block from the scenarios (below). |
-| `triggers` | Each trigger by name: its `phrase`, with `{subject}` where the instance is named and `{field}` for each of its `input` fields, and a `reduce` that sets context from the input. A phrase that starts with `{subject}` is something that happens to the instance, fired by no person. |
+| `rules`, `reductions` | Each custom rule and reduction the machine names, by its name in the IR: its C# `type` (an `ICustomRule` or `ICustomReduction` class) and the `example` an in-memory run answers with, whether the rule holds or the fields the reduction sets. |
+| `migrations` | The C# `type` (an `IMachineMigration` class) of each step to the machine's `version`, by the version it steps from: one for every version below it, and none other. |
+| `triggers` | Each trigger by name: its `phrase`, with `{subject}` where the instance is named and `{field}` for each of its `input` fields, and a `reduce` that sets context from the input. A phrase that starts with `{subject}` is something that happens to the instance, fired by no person. A `guard` names the guard that decides it when more than one tells its moves from its refusals, and an `effect` makes it a send (below). |
 | `guards` | Each guard by name: its `holds` and `fails` phrases and its `rule`, which the features set up with Givens. |
 | `invokes` | Each state that runs a train: the `train`'s interface full name, its `input` from context fields (or from `$owner`, below), its `output` fields, its `outcomes` by phrase (`done`, `failed` or `cancelled`, a `when` rule on the output, a `reduce`), and `examples`, the output an in-memory run answers with. |
 | `links` | Each phrase that names another machine's instance through a context field holding its id. |
@@ -79,7 +81,22 @@ Derivation refuses a data table, a DocString, a `*` step, a first-person step, a
 When no phrase matches, and two scenarios that disagree. A Then no phrase matches is about the UI: it is reported and
 left alone, and `trax machine run --strict` fails on it.
 
-### The differential block
+## The C# a machine names
+
+The glossary names the C# behind a machine, and derivation writes what a client sees into the IR (the custom names,
+an effect's `keyPrefix`) and the types into `host.json`, which a host pairs one for one with the IR.
+
+- An `effect` on a trigger: its `type` (an interface extending `ISnapshotEffect`), its `keyPrefix` (`<machine>:<Trigger>`
+  when not given) and the receipt `example` an in-memory run answers with. A machine runs one. The trigger is a send:
+  its owner sends it with no input of theirs, so its phrase holds no `{field}`, and the server runs the effect and fires
+  the trigger with the receipt, its only input (`receipt`, a string). `When Ada pays for her checkout` is a send.
+- Every custom rule and reduction the machine names has its `rules` or `reductions` entry, and every entry is named.
+
+Derivation and `trax machine run` load no assembly, so they play each handler's `example`. A scenario that needs the
+real handler (two items cost twice one) is tagged `@host`: derivation reads its steps and nothing more, an in-memory
+run lists it as skipped, and the host bindings run it.
+
+## The differential block
 
 With `differential: true`, derivation writes the IR's `differential` block from what the scenarios did, so the
 engines can be held to each other on the machine (the corpus `trax machine generate --corpus-out` writes from it):
@@ -101,12 +118,13 @@ Written by `from-gherkin`, never by hand. Everything only the server reads:
 
 | Key | What it is |
 | --- | --- |
-| `machines` | Each machine's `schemaHash` (the IR it was derived with), `owner` (`user`, `{ "system": "<key>" }`, or `{ "system": { "keyedBy": [...] } }` for a keyed system machine), who may `start` and `read` it, each trigger's rule (`roles`, `anyAuthenticated`, or `server`), and the train each invoking state runs, with its input from context fields or `$owner`. A trigger with no entry is not served. |
+| `machines` | Each machine's `schemaHash` (the IR it was derived with), `owner` (`user`, `{ "system": "<key>" }`, or `{ "system": { "keyedBy": [...] } }` for a keyed system machine), who may `start` and `read` it, each trigger's rule (`roles`, `anyAuthenticated`, or `server`), the train each invoking state runs, with its input from context fields or `$owner`, the `effects` each effect-bound trigger runs, the `handlers` of its custom `rules` and `reductions`, and its `migrations` by the version each steps from, each a type's full name. A trigger with no entry is not served. |
 | `policies` | The server acting when a machine enters a state: `linked` (the same owner's instance through a link), `broadcast` (from a system machine, every instance waiting in a state) or `toSystem` (a user's machine moving the system's at its key). |
 | `views` | Each view a scenario reads, its fields and its readers. A view no scenario reads is not served. |
 | `provenance` | For each part of each machine, the scenarios that produced it, by file, line and name, never by step text. The console's Board tab shows them. |
 
-A host refuses a directory whose IR the host file was not derived from, or whose names disagree with it. It also
+A host refuses a directory whose IR the host file was not derived from, or whose names disagree with it: among them an
+effect, custom rule, custom reduction or version step of the IR with no type, or a type for one the IR does not have. It also
 refuses policies that set each other off with no timer between them, as derivation does, through the same check: a
 policy fires a trigger, the trigger can move its machine into a state, a policy waiting for that state fires next, and a
 state that runs a train counts as moving on to wherever its outcomes go. A loop of those moves alone is refused, naming

@@ -27,6 +27,7 @@ public class GlossaryStateShapesTests
               "noun": "checkout",
               "start": "has a checkout",
               "version": 3,
+              "migrations": { "1": "Trax.StateMachine.Tests.UnitTests.KeepsTheSnapshot", "2": "Trax.StateMachine.Tests.UnitTests.KeepsTheSnapshot" },
               "initial": "Cart",
               "initialContext": { "receipt": null },
               "context": [ { "name": "receipt", "type": "string", "nullable": true, "constraints": [] } ],
@@ -77,7 +78,10 @@ public class GlossaryStateShapesTests
 
         var host = HostFile.Read(derived.Host!);
         IrMachines
-            .Create(new IrMachines.Source(ir, host.Machines["checkout"]), [])
+            .Create(
+                new IrMachines.Source(ir, host.Machines["checkout"]),
+                [typeof(KeepsTheSnapshot).Assembly]
+            )
             .ExportIr()
             .Should()
             .Be(
@@ -295,4 +299,10 @@ public class GlossaryStateShapesTests
 
     private static Derived Derive(string glossary, params (string, string)[] features) =>
         FeatureDerivation.Derive(Glossary.Read(glossary), features);
+}
+
+/// <summary>A migration that keeps the snapshot as it was, for a machine whose versions differ in nothing stored.</summary>
+public sealed class KeepsTheSnapshot : IMachineMigration
+{
+    public MigrationResult Migrate(string state, JsonObject context) => new(state, context);
 }

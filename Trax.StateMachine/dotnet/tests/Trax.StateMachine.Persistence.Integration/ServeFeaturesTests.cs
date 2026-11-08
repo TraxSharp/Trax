@@ -129,7 +129,11 @@ public class ServeFeaturesTests
     public void A_directory_whose_host_file_was_derived_from_another_ir_is_refused()
     {
         var ir = Path.Combine(_dir, "order.ir.json");
-        File.WriteAllText(ir, File.ReadAllText(ir).Replace("\"version\":1", "\"version\":2"));
+        File.WriteAllText(
+            ir,
+            File.ReadAllText(ir)
+                .Replace("\"committedStates\":[]", "\"committedStates\":[\"Placed\"]")
+        );
         var services = new ServiceCollection();
 
         var act = () =>

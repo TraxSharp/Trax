@@ -260,6 +260,41 @@
         "differential": {
           "description": "Write the IR's differential block from the scenarios: each input a served trigger is sent with, each output an outcome is given, and each context a Given sets an instance up in.",
           "const": true
+        },
+        "rules": {
+          "description": "Each custom rule the machine names, by its name in the IR.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/customRule"
+          }
+        },
+        "reductions": {
+          "description": "Each custom reduction the machine names, by its name in the IR.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/customReduction"
+          }
+        },
+        "migrations": {
+          "description": "The IMachineMigration class of each version step below the machine's version, by the version it steps from.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,9}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/typeName"
+          }
         }
       },
       "additionalProperties": false,
@@ -309,7 +344,7 @@
       "additionalProperties": false
     },
     "trigger": {
-      "description": "A trigger and its phrase. A person's act is the phrase after their name (`places {subject}`); anything else is the whole step (`{subject} starts baking`, `the shop opens`). `{subject}` is where a user machine's instance is named, and every other {placeholder} names an input field.",
+      "description": "A trigger and its phrase. A person's act is the phrase after their name (`places {subject}`); anything else is the whole step (`{subject} starts baking`, `the shop opens`). `{subject}` is where a user machine's instance is named, and every other {placeholder} names an input field. A trigger with an `effect` is sent by its instance's owner with no input of theirs: the server runs the effect, then fires the trigger with the effect's receipt (`input.receipt`).",
       "type": "object",
       "required": [
         "phrase"
@@ -323,6 +358,77 @@
         },
         "reduce": {
           "$ref": "urn:trax:state-machine:ir-format:1#/$defs/reduction"
+        },
+        "effect": {
+          "$ref": "#/$defs/effect"
+        },
+        "guard": {
+          "description": "The guard that decides the trigger when more than one guard tells its moves from its refusals: it must hold on every move and fail on every refusal.",
+          "$ref": "#/$defs/word"
+        }
+      },
+      "additionalProperties": false
+    },
+    "typeName": {
+      "description": "A C# type's full name.",
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+      "maxLength": 512
+    },
+    "effect": {
+      "description": "The run-once effect a send of the trigger runs: its ISnapshotEffect interface (written to the host file), the key prefix its claims are taken under (the IR's, `<machine>:<Trigger>` when not given), and the receipt an in-memory run answers with.",
+      "type": "object",
+      "required": [
+        "type",
+        "example"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/typeName"
+        },
+        "keyPrefix": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "example": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "additionalProperties": false
+    },
+    "customRule": {
+      "description": "A custom rule's ICustomRule class (written to the host file) and whether an in-memory run takes it to hold. A scenario that needs the real rule is tagged @host.",
+      "type": "object",
+      "required": [
+        "type",
+        "example"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/typeName"
+        },
+        "example": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "customReduction": {
+      "description": "A custom reduction's ICustomReduction class (written to the host file) and the context fields an in-memory run sets in its place. A scenario that needs the real reduction is tagged @host.",
+      "type": "object",
+      "required": [
+        "type",
+        "example"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/typeName"
+        },
+        "example": {
+          "type": "object"
         }
       },
       "additionalProperties": false

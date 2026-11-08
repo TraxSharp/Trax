@@ -57,6 +57,9 @@ internal enum ScenarioStatus
 
     /// <summary>A Given or When derivation cannot read: the scenario was not run.</summary>
     Undefined,
+
+    /// <summary>A scenario tagged <c>@host</c>, which only the host bindings run.</summary>
+    Skipped,
 }
 
 /// <summary>One step's result: <see cref="Message"/> says why it failed, or that it is about the UI and was skipped.</summary>
@@ -320,8 +323,12 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
                     return $"'{step.Text}', and it is not started.";
                 var rule = glossary.Machines[g.Machine].Guards[g.Name].Rule;
                 return
-                    RuleEvaluator.Evaluate(IrMachine.ReadRule(rule), now.Value.Context, null)
-                    == g.Holds
+                    RuleEvaluator.Evaluate(
+                        IrMachine.ReadRule(rule),
+                        now.Value.Context,
+                        null,
+                        glossary.Machines[g.Machine].ExampleRules
+                    ) == g.Holds
                     ? null
                     : $"'{step.Text}' does not hold.";
             }

@@ -39,6 +39,17 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "typeName": {
+      "description": "A C# type's full name.",
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+      "maxLength": 512
+    },
+    "handlerTypes": {
+      "type": "object",
+      "propertyNames": { "type": "string", "minLength": 1, "maxLength": 200 },
+      "additionalProperties": { "$ref": "#/$defs/typeName" }
+    },
     "machineId": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
@@ -167,6 +178,27 @@
             },
             "additionalProperties": false
           }
+        },
+        "effects": {
+          "description": "The ISnapshotEffect interface each effect-bound trigger runs, by its full name. Paired one for one with the IR's edges that run an effect.",
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/member" },
+          "additionalProperties": { "$ref": "#/$defs/typeName" }
+        },
+        "handlers": {
+          "description": "The ICustomRule and ICustomReduction class of each custom rule and reduction the IR names, by its full name. Paired one for one with the names the IR has.",
+          "type": "object",
+          "properties": {
+            "rules": { "$ref": "#/$defs/handlerTypes" },
+            "reductions": { "$ref": "#/$defs/handlerTypes" }
+          },
+          "additionalProperties": false
+        },
+        "migrations": {
+          "description": "The IMachineMigration class of each version step, by the version it steps from. Paired one for one with the versions below the IR's.",
+          "type": "object",
+          "propertyNames": { "type": "string", "pattern": "^[1-9][0-9]{0,9}$" },
+          "additionalProperties": { "$ref": "#/$defs/typeName" }
         }
       },
       "additionalProperties": false

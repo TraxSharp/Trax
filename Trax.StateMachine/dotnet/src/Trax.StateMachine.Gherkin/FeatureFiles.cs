@@ -30,6 +30,15 @@ internal sealed record FeatureScenario(
 )
 {
     internal string Id => $"{File}:{Line}";
+
+    /// <summary>
+    /// The tag of a scenario that needs a handler only the host has (a custom rule's or reduction's C#, an effect's real
+    /// receipt): derivation reads its steps and nothing more, an in-memory run skips it, and the host bindings run it.
+    /// </summary>
+    internal const string HostOnlyTag = "@host";
+
+    /// <summary>Whether the scenario is tagged <see cref="HostOnlyTag"/>.</summary>
+    internal bool HostOnly => Tags.Contains(HostOnlyTag, StringComparer.Ordinal);
 }
 
 /// <summary>Something derivation cannot accept, at the file and line it is about.</summary>
