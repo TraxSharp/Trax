@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DASHBOARD_URL } from "../connection";
 import { FoodOrder } from "./FoodOrder";
 import { Workflows } from "./Workflows";
 
@@ -26,7 +27,7 @@ export function App() {
             </button>
           ))}
         </div>
-        <a className="dashboard-link" href="http://localhost:5260/trax" target="_blank" rel="noreferrer">
+        <a className="dashboard-link" href={DASHBOARD_URL} target="_blank" rel="noreferrer">
           Open the Trax dashboard ↗
         </a>
       </header>

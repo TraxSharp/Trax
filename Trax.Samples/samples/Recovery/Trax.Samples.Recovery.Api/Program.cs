@@ -243,14 +243,12 @@ builder.Services.AddTraxGraphQL(graphql =>
 builder.Services.AddHostedService<RetiredPageDocuments>();
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
-// ── CORS for the Vite dev server ────────────────────────────────────────────
+// ── CORS for the page ───────────────────────────────────────────────────────
+// The page's origin: the Vite dev server unless Recovery:PageOrigin names another.
+var pageOrigin = builder.Configuration["Recovery:PageOrigin"] ?? "http://localhost:5173";
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
-        policy
-            .WithOrigins("http://localhost:5173")
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials()
+        policy.WithOrigins(pageOrigin).AllowAnyHeader().AllowAnyMethod().AllowCredentials()
     )
 );
 

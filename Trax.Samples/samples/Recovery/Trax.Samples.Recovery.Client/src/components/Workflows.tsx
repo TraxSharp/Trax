@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { DASHBOARD_URL } from "../connection";
 import { COLUMNS, ORDERS, REFUND_CRASHES, SLICES, type RefundCrashKey } from "../cases";
 import { lineOf, SOURCES } from "../sources";
 import type { Attempt, Phase, Scenario, Step } from "../types";
@@ -187,7 +188,7 @@ export function Workflows() {
           </button>
           <p className="hint">
             Asking the model afresh, requeueing and resuming from the checkpoint are an operator&apos;s: open the run in the{" "}
-            <a href="http://localhost:5260/trax" target="_blank" rel="noreferrer">
+            <a href={DASHBOARD_URL} target="_blank" rel="noreferrer">
               dashboard
             </a>
             .
