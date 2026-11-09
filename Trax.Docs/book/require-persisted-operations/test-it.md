@@ -35,8 +35,9 @@ public class DocumentsAsText
 }
 ```
 
-The returns features (chapter 14) send theirs as text too, to a hub of their own. The hook that
-starts it sets the same switch on it:
+The returns features (chapter 14) need no switch. The Trax bindings send each step by the
+persisted id the client manifest holds for it, so their hub runs as it ships. The hook that starts it
+reads the manifest from the copy the test project makes (below):
 
 `tests/Shopfront.Tests/FeatureHooks.cs`:
 
@@ -47,6 +48,7 @@ using Microsoft.EntityFrameworkCore;
 using Reqnroll;
 using Shopfront.Auth;
 using Shopfront.Data;
+using Trax.StateMachine;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Gherkin.Reqnroll;
 
@@ -73,21 +75,21 @@ public sealed class FeatureHooks
             await db.Database.EnsureCreatedAsync();
         }
 
-        // The bindings write their documents as text, which the hub refuses unless the
-        // Development-only switch says otherwise, as DocumentsAsText sets it for the host tests.
         hub = new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
-            host.UseEnvironment("Development")
-                .UseSetting("ConnectionStrings:Shopfront", Database)
-                .UseSetting("PersistedOperations:Require", "false")
+            host.UseEnvironment("Development").UseSetting("ConnectionStrings:Shopfront", Database)
         );
         var client = hub.CreateClient();
         var glossary = Path.Combine(AppContext.BaseDirectory, "features", "glossary.json");
+        // The hub runs only the documents it registered, so the bindings send each step by the
+        // persisted id the storefront's client manifest holds for it.
+        var manifest = Path.Combine(AppContext.BaseDirectory, "manifest.json");
 
         TraxFeatures.Configure(features =>
         {
             features.Host = hub.Services;
             features.Client = client;
             features.Glossary = FeatureGlossary.Read(File.ReadAllText(glossary));
+            features.Manifest = ClientManifest.Read(File.ReadAllText(manifest));
             features.Credential = (actor, person, scenario) =>
                 new FeatureCredential(
                     new Dictionary<string, string>
