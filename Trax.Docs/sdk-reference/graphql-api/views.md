@@ -43,8 +43,8 @@ machine's own operations ([Machines root](/docs/sdk-reference/graphql-api/machin
 ```graphql
 query {
   views {
-    orders { vOrder { id status loaves } }
-    shopSign { vShop { open } }
+    bookings { booking { id seat status } }
+    departures { flight { id status } }
   }
 }
 ```

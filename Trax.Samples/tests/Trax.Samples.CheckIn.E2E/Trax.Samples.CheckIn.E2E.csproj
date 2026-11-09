@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\samples\CheckIn\Trax.Samples.CheckIn.Api\Trax.Samples.CheckIn.Api.csproj" />
+    <ProjectReference Include="..\..\lib\Trax.Samples.Shared.Testing\Trax.Samples.Shared.Testing.csproj" />
+    <ProjectReference Include="..\..\..\Trax.StateMachine\dotnet\src\Trax.StateMachine.Gherkin.Reqnroll\Trax.StateMachine.Gherkin.Reqnroll.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="Microsoft.Testing.Extensions.VSTestBridge" />
+    <PackageReference Include="Microsoft.Testing.Platform.MSBuild" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Reqnroll.NUnit" />
+  </ItemGroup>
+
+  <!-- The sample's own features and glossary, run as they are: in memory (InMemoryRunTests) and against the host
+       (Reqnroll, through the Trax bindings). Nothing here restates a step. -->
+  <ItemGroup>
+    <ReqnrollFeatureFiles
+      Include="..\..\samples\CheckIn\features\*.feature"
+      Link="Features\%(Filename)%(Extension)"
+    />
+    <None
+      Include="..\..\samples\CheckIn\features\*"
+      LinkBase="features"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <None Include="reqnroll.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The page's committed client manifest: the feature bindings send every operation by the id it holds, and
+       ProductionPostureTests reads a view by it. -->
+  <ItemGroup>
+    <None
+      Include="..\..\samples\CheckIn\Trax.Samples.CheckIn.Web\src\trax\manifest.json"
+      Link="client\manifest.json"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+  </ItemGroup>
+</Project>

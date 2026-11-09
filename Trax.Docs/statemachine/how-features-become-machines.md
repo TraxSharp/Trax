@@ -21,22 +21,31 @@ change in one place can be traced to the others. The how-to is
 
 ## One scenario, followed through
 
-The Bakery sample's customer owns an order. The glossary names the words:
+The CheckIn sample's passenger owns a booking. The glossary names the words:
 
 ```json
-"order": {
-  "ownedBy": "customer",
-  "noun": "order",
-  "start": "has an order",
-  "initial": "Draft",
-  "context": [ { "name": "loaves", "type": "integer", "nullable": false, "constraints": [] } ],
-  "states": { "Draft": "is a draft", "Paying": "is being paid for" },
-  "triggers": { "Place": { "phrase": "places {subject}" } },
+"booking": {
+  "ownedBy": "passenger",
+  "noun": "booking",
+  "start": "has a booking",
+  "initial": "Booked",
+  "context": [
+    { "name": "passport", "type": "string", "nullable": false, "constraints": [] },
+    { "name": "seat", "type": "string", "nullable": true, "constraints": [] }
+  ],
+  "states": { "Open": "is open for check-in", "Issuing": "is getting a boarding pass" },
+  "triggers": {
+    "CheckIn": {
+      "phrase": "checks in for {subject} in seat {seat}",
+      "input": [ { "name": "seat", "type": "string", "nullable": false, "constraints": [] } ],
+      "reduce": { "reduce": "set", "steps": [ { "field": "seat", "value": { "input": "seat" } } ] }
+    }
+  },
   "guards": {
-    "hasLoaves": {
-      "holds": "has something in it",
-      "fails": "has nothing in it",
-      "rule": { "rule": "compare", "source": "context", "field": "loaves", "op": "gt", "value": 0 }
+    "hasPassport": {
+      "holds": "has a passport number",
+      "fails": "has no passport number",
+      "rule": { "rule": "nonEmpty", "source": "context", "field": "passport" }
     }
   }
 }
@@ -45,45 +54,48 @@ The Bakery sample's customer owns an order. The glossary names the words:
 Two scenarios use them:
 
 ```gherkin
-Scenario: An order is paid for
-  Given Ada is a customer
-  And Ada has an order
-  And Ada's order has something in it
-  When Ada places her order
-  Then Ada's order is being paid for
+Scenario: A passenger checks in and gets a boarding pass
+  Given Ada is a passenger
+  And Ada has a booking
+  And Ada's booking is open for check-in
+  And Ada's booking has a passport number
+  When Ada checks in for her booking in seat "14C"
+  Then Ada's booking is getting a boarding pass
 
-Scenario: An empty order is refused
-  Given Ada is a customer
-  And Ada has an order
-  And Ada's order has nothing in it
-  When Ada places her order
-  Then Ada is told "Add something first."
-  And Ada's order is still a draft
+Scenario: Checking in with no passport number is refused
+  Given Ada is a passenger
+  And Ada has a booking
+  And Ada's booking is open for check-in
+  And Ada's booking has no passport number
+  When Ada checks in for her booking in seat "14C"
+  Then Ada is told "Add your passport number first."
+  And Ada's booking is still open for check-in
 ```
 
-Derivation reads the steps against the glossary's phrases. `Ada's order` is the order machine, because its `noun` is
-`order`, and it is Ada's instance. `places her order` is the trigger `Place`, fired by Ada. `has nothing in it` is the
-guard `hasLoaves` failing. The first scenario shows `Place` moving `Draft` to `Paying` when the guard holds. The
-second shows it refused when the guard fails, with a message. Merged, they are one guarded edge, written to
-`order.ir.json`:
+Derivation reads the steps against the glossary's phrases. `Ada's booking` is the booking machine, because its
+`noun` is `booking`, and it is Ada's instance. `checks in for her booking in seat "14C"` is the trigger `CheckIn`,
+fired by Ada, with `14C` as its `seat` input. `has no passport number` is the guard `hasPassport` failing. The first
+scenario shows `CheckIn` moving `Open` to `Issuing` when the guard holds. The second shows it refused when the guard
+fails, with a message. Merged, they are one guarded edge, written to `booking.ir.json`:
 
 ```json
-{ "from": "Draft", "trigger": "Place", "to": "Paying",
-  "guard": { "rule": "compare", "source": "context", "field": "loaves", "op": "gt", "value": 0 },
-  "guardMessage": "Add something first." }
+{ "from": "Open", "trigger": "CheckIn", "to": "Issuing",
+  "guard": { "rule": "nonEmpty", "source": "context", "field": "passport" },
+  "guardMessage": "Add your passport number first.",
+  "reduce": { "reduce": "set", "steps": [ { "field": "seat", "value": { "input": "seat" } } ] } }
 ```
 
-Ada fired `Place` herself and Ada is a customer, so customers may fire it. That goes to `host.json`, which clients
-never see:
+Ada fired `CheckIn` herself and Ada is a passenger, so passengers may fire it. That goes to `host.json`, which
+clients never see:
 
 ```json
-"triggers": { "Place": { "roles": [["customer"]] } }
+"triggers": { "CheckIn": { "roles": [["passenger"]] } }
 ```
 
-It also goes to `access.txt`, the line a reviewer reads, as `order Place: customer`. Served with
+It also goes to `access.txt`, the line a reviewer reads, as `booking CheckIn: passenger`. Served with
 [`ServeFeatures`](/docs/sdk-reference/statemachine-api/add-state-machines), the trigger becomes the mutation
-`machines { order { place(id, input, requestId) } }`, held to that rule. A caller who is not a customer is answered
-`FORBIDDEN`, and the empty order is answered with the guard's message.
+`machines { booking { checkIn(id, input, requestId) } }`, held to that rule. A caller who is not a passenger is
+answered `FORBIDDEN`, and a booking with no passport number is answered with the guard's message.
 
 ## Where each part ends up
 
@@ -94,8 +106,8 @@ It also goes to `access.txt`, the line a reviewer reads, as `order Place: custom
 | a machine with `system.keyedBy` | the machine | `owner: { "system": { "keyedBy": [...] } }` | nothing a client calls: host code starts and moves each instance |
 | `states` | `states`, `initialState`, `context`, `committedStates`, `invariants` | | the state enum and context records of the generated client |
 | `context`, `initialContext` | `context` (each state's), `initialContext` | | the context record |
-| a trigger a person fires (`When Ada places her order`) | `triggers`, a transition | `triggers.<T>.roles` (or `anyAuthenticated`) | the mutation `<trigger>` |
-| a trigger no person fires (`When the shop opens`) | a transition, left out of `triggers` | `triggers.<T>.server: true` | nothing: only the server fires it |
+| a trigger a person fires (`When Ada checks in for her booking in seat "14C"`) | `triggers`, a transition | `triggers.<T>.roles` (or `anyAuthenticated`) | the mutation `<trigger>` |
+| a trigger no person fires (`When check-in opens for the flight`) | a transition, left out of `triggers` | `triggers.<T>.server: true` | nothing: only the server fires it |
 | a trigger only ever denied, or never fired | nothing | nothing | nothing |
 | `triggers.<T>.input` and `reduce` | `inputs.<T>`, the transition's `reduce` | | the mutation's `input` |
 | a guard, with a scenario where it holds and one where it fails | the transition's `guard` and `guardMessage` | | the refusal's message |
@@ -119,7 +131,7 @@ Three rules hold across the table:
 - **What no scenario shows is not served.** A trigger, a view or a grant exists because a scenario shows it. A
   glossary entry no scenario uses derives nothing, and
   [`trax machine missing`](/docs/reference/cli#machines-from-features) lists it.
-- **A person acts only on their own instance.** A step where Ada acts on Bo's order, or on a system machine, is a
+- **A person acts only on their own instance.** A step where Ada acts on Bo's booking, or on a system machine, is a
   derivation problem, not a grant.
 
 ## Who acts in a step
@@ -128,9 +140,9 @@ Every When has an actor, and the actor decides what derivation records:
 
 | The When | Who fires it | What it grants |
 | --- | --- | --- |
-| `Ada places her order` | Ada, on her own instance | her actor gets the trigger |
-| `Ada's order starts baking`, `the shop opens` | the server | nothing: the trigger is server-only |
-| `the payment goes through` | the train the state invokes | nothing: an outcome is never a client's |
+| `Ada checks in for her booking in seat "14C"` | Ada, on her own instance | her actor gets the trigger |
+| `Ada's booking misses the flight`, `check-in opens for the flight` | the server | nothing: the trigger is server-only |
+| `the boarding pass is issued` | the train the state invokes | nothing: an outcome is never a client's |
 | `10 seconds pass` | the clock | nothing: a timer is never a client's |
 
 A Then after the When says where each instance went. The first Then about the acting instance is where the When
@@ -147,9 +159,9 @@ IR into the same builder and refuses to start if the result exports a different 
 
 | Glossary | Builder |
 | --- | --- |
-| the machine's id | `Id("order")` |
+| the machine's id | `Id("booking")` |
 | `version` | `Version(2)` |
-| `initial`, `initialContext` | `StartsAt(State.Draft, () => ...)` |
+| `initial`, `initialContext` | `StartsAt(State.Booked, () => ...)` |
 | `context`, a state's own `context` | `In(state).Context<TContext>()` |
 | a state's `committed: true` | `In(state).Committed()` |
 | a state's `requires` | `In(state).Requires(rule)` |

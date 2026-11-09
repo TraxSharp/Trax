@@ -46,7 +46,7 @@ exported manifest (`trax-generate-a-client`).
    what to change for the common ones. `trax machine explain --features features --scenario "<name>"` prints what
    derivation read from one scenario: its edges, guards, timers and policies, and which Then caused which.
 5. Read the diff of `machines/access.txt`. Every added line is a new grant. Tell the user about each one in your
-   summary, in words (`customers may now cancel their own orders`). A grant you did not mean is a scenario that
+   summary, in words (`passengers may now check in on their own bookings`). A grant you did not mean is a scenario that
    shows the wrong person acting.
 6. Run the features on the committed files: `trax machine run --features features --machines machines`.
 7. `trax machine missing --features features` lists what the glossary names and no scenario shows, each with a
@@ -61,23 +61,24 @@ about the UI and leaves alone. So a misspelled Then is skipped, not failed: run 
 fails on every Then it cannot read, and check that each Then you meant to be checked shows up in
 `trax machine explain`.
 
-- **Name people, never "I".** `Given Ada is a customer`, then `Ada ...`. `her`, `his` and `their` mean the step's own
+- **Name people, never "I".** `Given Ada is a passenger`, then `Ada ...`. `her`, `his` and `their` mean the step's own
   person and nobody else.
-- **A person acts on their own instance only.** `When Ada places her order`, never `When Kit places Ada's order`.
-  Nobody fires a system machine: `When the shop opens`, not `When Kit opens the shop`.
-- **A step with no person is the server's.** `When Ada's order starts baking` makes `Bake` server-only. A trigger is
+- **A person acts on their own instance only.** `When Ada checks in for her booking in seat "14C"`, never
+  `When Kit checks in Ada's booking`. Nobody fires a system machine: `When check-in opens for the flight`, not
+  `When Kit opens check-in for the flight`.
+- **A step with no person is the server's.** `When Ada's booking misses the flight` makes `Miss` server-only. A trigger is
   either a person's or the server's, never both: use two triggers.
-- **Quote every value.** `When Ada orders "3" loaves for her order`. An unquoted value is part of the phrase.
+- **Quote every value.** `When Ada gives passport "X1234567" for her booking`. An unquoted value is part of the phrase.
 - **Every When is followed by a Then about the instance it moved**, before the next When.
 - **An outcome's first Then names the state it reached.** Every invoking state shows `done`, `failed` and
   `cancelled` somewhere.
 - **A Then about another instance moving is a policy.** The trigger that policy fires also needs a scenario of its own
-  showing it as a plain move (`Given the shop is closed` / `When the shop opens` / `Then the shop is open`).
+  showing it as a plain move (`Given the flight is scheduled` / `When check-in opens for the flight` / `Then the flight is open for check-in`).
 - **Time passing is a timer:** `When 10 seconds pass` then a Then in a new state. `still` after time passing means
   the timer has not fallen due yet.
 - **A refusal is** `Then Ada is told "..."` (a guard) or `Then Ada is not allowed` (her actor may never fire it). A
   trigger that is only ever denied is not served at all.
-- **A view is read as** `Then Ada's orders show status "In the oven"`. A view no scenario reads is not served.
+- **A view is read as** `Then Ada's bookings show status "Checked in"`. A view no scenario reads is not served.
 - **No data tables, DocStrings or `*` steps.**
 
 [How a scenario is read](https://traxsharp.net/docs/reference/feature-files#how-a-scenario-is-read) has the rest,
@@ -100,10 +101,10 @@ These keep access closed. Do not work around them:
 
 - A field is `{ "name", "type", "nullable", "constraints" }`, as the IR writes one.
 - A guard's `rule`, a state's `requires` and an outcome's `when` are IR rules:
-  `{ "rule": "compare", "source": "context", "field": "loaves", "op": "gt", "value": 0 }`. A trigger's `reduce` is an
-  IR reduction: `{ "reduce": "set", "steps": [ { "field": "loaves", "value": { "input": "loaves" } } ] }`.
+  `{ "rule": "nonEmpty", "source": "context", "field": "passport" }`. A trigger's `reduce` is an IR reduction:
+  `{ "reduce": "set", "steps": [ { "field": "passport", "value": { "input": "passport" } } ] }`.
   [The IR format](https://traxsharp.net/docs/sdk-reference/statemachine-api/ir-format#transitions) lists every kind.
-- A trigger phrase has `{subject}` where the instance goes and `{field}` for each input: `orders {loaves} loaves for
+- A trigger phrase has `{subject}` where the instance goes and `{field}` for each input: `gives passport {passport} for
   {subject}`. A phrase that starts with `{subject}` happens to the instance, with no person.
 - A train's input from `$owner` (`"input": { "memberId": "$owner" }`) gives it the instance owner, set by the server.
   Use it whenever the train checks who it acts for.

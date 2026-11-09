@@ -12,7 +12,7 @@ A team that describes what happens in Gherkin can have Trax derive the machines 
 guards, the timers, the policies between machines, the views, and who may do what. Nothing is written in C# but the
 trains the machines invoke. Why this is a source of machines, and what it refuses, is
 [ADR 0058](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0058-features-and-a-glossary-are-a-source-of-machines.md).
-The [Bakery sample](https://github.com/TraxSharp/Trax/blob/main/Trax.Samples/samples/Bakery/README.md) is this page,
+The [CheckIn sample](https://github.com/TraxSharp/Trax/blob/main/Trax.Samples/samples/CheckIn/README.md) is this page,
 built, and [How features become machines](/docs/statemachine/how-features-become-machines) follows each glossary
 entry and step to the IR, `host.json`, GraphQL and the C# builder.
 
@@ -24,15 +24,22 @@ triggers and guards, and the views. A user's machine is owned by an actor; a sys
 ```json
 {
   "version": 1,
-  "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
+  "actors": { "passenger": { "noun": "a passenger", "roles": ["passenger"] } },
   "machines": {
-    "order": {
-      "ownedBy": "customer",
-      "noun": "order",
-      "start": "has an order",
-      "initial": "Draft",
-      "states": { "Draft": "is a draft", "Placed": "is placed" },
-      "triggers": { "Place": { "phrase": "places {subject}" } }
+    "booking": {
+      "ownedBy": "passenger",
+      "noun": "booking",
+      "start": "has a booking",
+      "initial": "Booked",
+      "context": [ { "name": "passport", "type": "string", "nullable": false, "constraints": [] } ],
+      "states": { "Booked": "is booked", "Open": "is open for check-in" },
+      "triggers": {
+        "GivePassport": {
+          "phrase": "gives passport {passport} for {subject}",
+          "input": [ { "name": "passport", "type": "string", "nullable": false, "constraints": [] } ],
+          "reduce": { "reduce": "set", "steps": [ { "field": "passport", "value": { "input": "passport" } } ] }
+        }
+      }
     }
   }
 }
@@ -46,12 +53,13 @@ Each scenario names its people in the third person, sets up what it needs with G
 happened with Thens:
 
 ```gherkin
-Feature: Ordering bread
-  Scenario: A customer places an order
-    Given Ada is a customer
-    And Ada has an order
-    When Ada places her order
-    Then Ada's order is placed
+Feature: Checking in for a flight
+  Scenario: A passenger gives a passport number
+    Given Ada is a passenger
+    And Ada has a booking
+    And Ada's booking is open for check-in
+    When Ada gives passport "X1234567" for her booking
+    Then Ada's booking is open for check-in
 ```
 
 An actor's own act grants that actor the trigger. A trigger no scenario shows anyone firing is not served at all. The
@@ -60,27 +68,28 @@ about the UI, and is left alone.
 
 ## Add guards, trains, timers, policies and views
 
-Each of these is a glossary entry plus the scenarios that show it. The examples are the Bakery's.
+Each of these is a glossary entry plus the scenarios that show it. The examples are the CheckIn sample's.
 
 **A guard** is a pair of phrases and the rule they stand for. A scenario where it holds and one where it fails, with
 the message, make a guarded move:
 
 ```json
 "guards": {
-  "hasLoaves": {
-    "holds": "has something in it",
-    "fails": "has nothing in it",
-    "rule": { "rule": "compare", "source": "context", "field": "loaves", "op": "gt", "value": 0 }
+  "hasPassport": {
+    "holds": "has a passport number",
+    "fails": "has no passport number",
+    "rule": { "rule": "nonEmpty", "source": "context", "field": "passport" }
   }
 }
 ```
 
 ```gherkin
-Scenario: An empty order is refused
-  Given Ada's order has nothing in it
-  When Ada places her order
-  Then Ada is told "Add something first."
-  And Ada's order is still a draft
+Scenario: Checking in with no passport number is refused
+  Given Ada's booking is open for check-in
+  And Ada's booking has no passport number
+  When Ada checks in for her booking in seat "14C"
+  Then Ada is told "Add your passport number first."
+  And Ada's booking is still open for check-in
 ```
 
 **A train** runs when an instance enters a state. The glossary names its interface, its input from context fields,
@@ -88,29 +97,29 @@ its output, and a phrase for each outcome, with the output an in-memory run answ
 
 ```json
 "invokes": {
-  "Paying": {
-    "train": "Trax.Samples.Bakery.Trains.ITakePaymentTrain",
-    "input": { "loaves": "loaves" },
-    "output": [ { "name": "approved", "type": "boolean", "nullable": false, "constraints": [] } ],
+  "Issuing": {
+    "train": "Trax.Samples.CheckIn.Trains.IIssueBoardingPassTrain",
+    "input": { "passport": "passport" },
+    "output": [ { "name": "accepted", "type": "boolean", "nullable": false, "constraints": [] } ],
     "outcomes": {
-      "the payment goes through": { "outcome": "done", "when": { "rule": "boolEquals", "source": "input", "field": "approved", "value": true } },
-      "the payment is declined": { "outcome": "done", "when": { "rule": "boolEquals", "source": "input", "field": "approved", "value": false } },
-      "the payment cannot be taken": { "outcome": "failed" },
-      "the payment is called off": { "outcome": "cancelled" }
+      "the boarding pass is issued": { "outcome": "done", "when": { "rule": "boolEquals", "source": "input", "field": "accepted", "value": true } },
+      "the passport is turned down": { "outcome": "done", "when": { "rule": "boolEquals", "source": "input", "field": "accepted", "value": false } },
+      "the boarding pass cannot be issued": { "outcome": "failed" },
+      "issuing the boarding pass is called off": { "outcome": "cancelled" }
     },
     "examples": {
-      "the payment goes through": { "approved": true },
-      "the payment is declined": { "approved": false }
+      "the boarding pass is issued": { "accepted": true },
+      "the passport is turned down": { "accepted": false }
     }
   }
 }
 ```
 
 ```gherkin
-When Ada places her order
-Then Ada's order is being paid for
-When the payment goes through
-Then Ada's order is placed
+When Ada checks in for her booking in seat "14C"
+Then Ada's booking is getting a boarding pass
+When the boarding pass is issued
+Then Ada's booking is checked in
 ```
 
 Every invoking state needs a scenario for each of `done`, `failed` and `cancelled`. The train is the one piece of
@@ -119,57 +128,68 @@ C# behind the machine, written as in [Invoke a train from a state](/docs/statema
 **A timer** is time passing in a scenario. There is no glossary entry:
 
 ```gherkin
-Scenario: An order comes out of the oven
-  Given Ada's order is baking
-  When 10 seconds pass
-  Then Ada's order is ready to collect
+Scenario: A gate agent steps away once the gate is closed
+  Given Kit is a gate agent
+  And Kit has a desk
+  And Kit's desk is closing the gate
+  And the flight is closed
+  When 2 seconds pass
+  Then Kit's desk is done
+  And the flight is still closed
 ```
 
 **A policy** is a Then about another instance moving after a When. A system machine has a fixed key and a name, and
 only the server moves it:
 
 ```json
-"shop": {
-  "system": "shop/main",
-  "name": "the shop",
-  "initial": "Closed",
-  "states": { "Closed": "is closed", "Open": "is open" },
-  "triggers": { "Open": { "phrase": "the shop opens" } }
+"flight": {
+  "system": "flight/tx101",
+  "name": "the flight",
+  "initial": "Scheduled",
+  "states": { "Scheduled": "is scheduled", "Open": "is open for check-in", "Closed": "is closed", "Departed": "has departed" },
+  "triggers": {
+    "OpenCheckIn": { "phrase": "check-in opens for the flight" },
+    "CloseGate": { "phrase": "the flight closes its gate" }
+  }
 }
 ```
 
 ```gherkin
-Scenario: A baker clocking in opens the shop
-  Given Kit is a baker
-  And Kit has a shift
-  And the shop is closed
-  When Kit clocks in for his shift
-  Then Kit's shift is on
-  And the shop is open
+Scenario: A gate agent opens check-in for everyone booked
+  Given Ada is a passenger
+  And Ada has a booking
+  And Kit is a gate agent
+  And Kit has a desk
+  And the flight is scheduled
+  When Kit opens his desk
+  Then Kit's desk is open
+  And the flight is open for check-in
+  And Ada's booking is open for check-in
 ```
 
-That derives a `toSystem` policy: when a shift enters `On`, the server fires `Open` on `shop/main`. `Open` also needs
-a scenario of its own (`Given the shop is closed` / `When the shop opens` / `Then the shop is open`). Two machines of
-the same owner need a [link](/docs/reference/feature-files#links), and a system machine moving every waiting user
-instance is a `broadcast`.
+That derives a `toSystem` policy: when a desk enters `Open`, the server fires `OpenCheckIn` on `flight/tx101`. The
+flight entering `Open` then moves every booking still `Booked`, which is a `broadcast`. Each machine's
+`OpenCheckIn` also needs a scenario of its own showing it as a plain move (`When check-in opens for the flight`,
+`When Ada's booking opens for check-in`). Two machines of the same owner need a
+[link](/docs/reference/feature-files#links).
 
 **A view** is what a reader sees across machines, with labels for states. A scenario that reads it makes its actor a
 reader, and a view no scenario reads is not served:
 
 ```json
 "views": {
-  "orders": {
-    "reads": [ { "machine": "order" } ],
+  "bookings": {
+    "reads": [ { "machine": "booking" } ],
     "fields": {
-      "status": { "from": "order.state", "labels": { "Placed": "Waiting for the oven", "Baking": "In the oven" } },
-      "loaves": { "from": "order.loaves" }
+      "status": { "from": "booking.state", "labels": { "CheckedIn": "Checked in", "TurnedDown": "Passport not accepted" } },
+      "seat": { "from": "booking.seat" }
     }
   }
 }
 ```
 
 ```gherkin
-Then Ada's orders show status "In the oven"
+Then Ada's bookings show status "Passport not accepted"
 ```
 
 ## Derive the machines
@@ -193,8 +213,8 @@ derivation read from it, a policy in full among them: run it when a scenario doe
 ```csharp fragment
 services.AddTrax(trax => trax
     .AddEffects(e => e.UsePostgres(connectionString).AddJunctionProgress())
-    .AddStateMachines(o => o.ServeFeatures("machines", typeof(TakePaymentTrain).Assembly))
-    .AddMediator(typeof(TakePaymentTrain).Assembly)
+    .AddStateMachines(o => o.ServeFeatures("machines", typeof(IssueBoardingPassTrain).Assembly))
+    .AddMediator(typeof(IssueBoardingPassTrain).Assembly)
     .AddScheduler());
 ```
 
@@ -218,8 +238,9 @@ it, and without one the instance waits in that state. See
   cover goes in specs under `specs/`, which derivation does not read, with the few steps the glossary does not read
   registered beside the bindings.
 
-Nothing runs a feature through a page yet. A page's browser tests are written by hand, as the Bakery's
-`BakeryPageTests` are: two people on pages of their own, telling the same story as the features. Nothing checks that
+Nothing runs a feature through a page yet. A page's browser tests are written by hand, as the CheckIn sample's
+`CheckInPageTests` are: a gate agent and three passengers on pages of their own, telling the same story as the
+features. Nothing checks that
 they still do when a scenario changes.
 
 ## SDK Reference

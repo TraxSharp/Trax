@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.CheckIn.Trains.IssueBoardingPassTrain",
+  "input": "BoardingPassInput",
+  "output": "BoardingPassOutput",
+  "nodes": [
+    {
+      "id": "CheckPassport#0",
+      "kind": "Chain",
+      "junction": "CheckPassport",
+      "in": "BoardingPassInput",
+      "out": "BoardingPassOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "BoardingPassOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

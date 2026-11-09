@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import ReplayToolbar, { PrimaryButton, ToolButton, ToolSelect, ToolbarPills } from "./ReplayToolbar";
+import CodeFold from "./CodeFold";
+import ReplayToolbar, { PrimaryButton, ToolButton, ToolbarPills } from "./ReplayToolbar";
 import { alignChains, codeLineLayout, useFitCode } from "./useFitCode";
 import data from "@/data/recovery-recordings.json";
 import {
@@ -11,14 +12,11 @@ import {
   keyOf,
   lineOf,
   phaseOf,
-  requeue,
-  takeFork,
   type Phase,
   type Playback,
   type Recording,
   type Scenario,
   type CrashAt,
-  pastCheckpoint,
   withCheckpointPauses,
   type Step,
   trackOf,
@@ -34,16 +32,10 @@ import { REPLAY_PACE } from "@/lib/replay-pace";
 const recordings = (data.recordings as Recording[]).map(withCheckpointPauses);
 const sources = data.sources as Record<Scenario, { file: string; code: string }>;
 
-const ORDERS = [
-  { key: "A-1001", label: "A-1001: $89, arrived broken" },
-  { key: "A-1002", label: "A-1002: $420, never arrived" },
-  { key: "A-1003", label: "A-1003: $35.50, changed my mind, 2 earlier refunds" },
-];
-const CRASHES: { key: CrashAt; label: string }[] = [
-  { key: "emailing", label: "Crash once while emailing" },
-  { key: "paying", label: "Crash once while paying" },
-  { key: "none", label: "Don't crash" },
-];
+// The recording holds three orders, three crash points and the forks a reader can take during the backoff. The home
+// page plays one run: the first order, crashing once while it pays, retried with both answers replayed.
+const ORDER = "A-1001";
+const CRASH: CrashAt = "paying";
 const PHASES: { phases: Phase[]; label: string }[] = [
   { phases: ["starting", "runs"], label: "Runs" },
   { phases: ["breaks"], label: "Breaks" },
@@ -51,8 +43,6 @@ const PHASES: { phases: Phase[]; label: string }[] = [
 ];
 
 export default function RecoveryReplay() {
-  const [order, setOrder] = useState(ORDERS[0].key);
-  const [crash, setCrash] = useState<CrashAt>(CRASHES[0].key);
   const [playback, setPlayback] = useState<Playback | null>(null);
   const [elapsed, setElapsed] = useState(0);
   // The playback clock, in recording time, and the real time it was last moved at. It runs at the replays' slower
@@ -86,46 +76,13 @@ export default function RecoveryReplay() {
     return () => clearInterval(timer);
   }, [active]);
 
-  const run = useCallback(
-    (orderId: string = order, crashAt: CrashAt = crash) => {
-      const recording = recordings.find((r) => r.key === keyOf(orderId, crashAt));
-      if (!recording) return;
-      restart(0);
-      setElapsed(0);
-      setPlayback(begin(recording));
-    },
-    [order, crash],
-  );
-
-  const changeData = () => {
-    if (!playback) return;
-    const taken = takeFork(playback, recordings, "changeData");
-    if (!taken) return;
-    clock.current += taken.shift;
-    setPlayback(taken.playback);
-  };
-
-  const askAfresh = () => {
-    if (!playback) return;
-    if (phase === "breaks") {
-      const taken = takeFork(playback, recordings, "askAfresh");
-      if (!taken) return;
-      clock.current += taken.shift;
-      setPlayback(taken.playback);
-      return;
-    }
-    const asked = requeue(playback);
-    if (!asked) return;
-    restart(asked.at);
-    setElapsed(asked.at);
-    setPlayback(asked.playback);
-  };
-
-  // Changing what to run clears the last run.
-  const choose = (change: () => void) => {
-    change();
-    setPlayback(null);
-  };
+  const run = useCallback(() => {
+    const recording = recordings.find((r) => r.key === keyOf(ORDER, CRASH));
+    if (!recording) return;
+    restart(0);
+    setElapsed(0);
+    setPlayback(begin(recording));
+  }, []);
 
   // Play the default run once, the first time the demo is on screen, unless the reader prefers less motion.
   const root = useRef<HTMLDivElement>(null);
@@ -139,7 +96,7 @@ export default function RecoveryReplay() {
         if (!entry.isIntersecting || autoplayed.current) return;
         autoplayed.current = true;
         observer.disconnect();
-        run(ORDERS[0].key, CRASHES[0].key);
+        run();
       },
       { threshold: 0.2 },
     );
@@ -156,34 +113,18 @@ export default function RecoveryReplay() {
   const step = playback ? currentStep(playback) : null;
   const reached = PHASES.findIndex((p) => p.phases.includes(phase));
   // The timeline is drawn in full before anything plays, for the run chosen.
-  const chosen = recordings.find((r) => r.key === keyOf(order, crash));
-  // A crash after the checkpoint retries from it, with no question left to ask afresh or data to change.
-  const forkable = phase === "breaks" && playback?.forkTaken === "none" && !pastCheckpoint(playback?.recording);
+  const chosen = recordings.find((r) => r.key === keyOf(ORDER, CRASH));
   const lanes = trackOf(playback?.recording ?? chosen, playback, elapsed);
 
   return (
     <div ref={root} className="flex flex-col gap-4">
       <ReplayToolbar
         caption={retryIn != null && playback?.forkTaken === "none" ? `Retrying in ${retryIn.toFixed(1)} s` : null}
-        hint="Pick an order and where it crashes, then Run. During the backoff, change the data or ask the model afresh."
+        hint="Refund A-1001, $89, arrived broken. The payment step is set to crash once. Run it."
       >
-        <Picker label="Order" value={order} options={ORDERS} disabled={locked} onChange={(v) => choose(() => setOrder(v))} />
-        <Picker
-          label="Crash"
-          value={crash}
-          options={CRASHES}
-          disabled={locked}
-          onChange={(v) => choose(() => setCrash(v as CrashAt))}
-        />
         <PrimaryButton onClick={() => run()} disabled={locked}>
           Run
         </PrimaryButton>
-        <ToolButton onClick={changeData} disabled={!forkable}>
-          Change the data during the backoff
-        </ToolButton>
-        <ToolButton onClick={askAfresh} disabled={!forkable && !(playback?.waiting && !playback.requeued)}>
-          Ask afresh
-        </ToolButton>
         <ToolButton onClick={() => setPlayback(null)} disabled={!playback}>
           Reset
         </ToolButton>
@@ -213,34 +154,14 @@ export default function RecoveryReplay() {
         <ModelPanel calls={modelCallsOf(playback)} />
       </div>
 
-      {/* The run is the demo; the train behind it sits below, lit in step with it, for whoever wants to look. */}
-      <CodePanel source={sources.REFUND} step={step} />
+      {/* The run is the demo; the train behind it is folded below it, lit in step with it. */}
+      <CodeFold label="The refund workflow, lit as it runs" pulse={step ? `${playback?.attempts.length}:${step.position}:${step.state}` : null}
+        color={!step ? undefined : step.replayed ? "#d4a24c" : step.state === "FAILED" ? "#c45c5c" : step.state === "COMPLETED" ? "#6cc596" : "#7a9ec2"}
+      >
+        <CodePanel source={sources.REFUND} step={step} />
+      </CodeFold>
 
     </div>
-  );
-}
-
-function Picker({
-  label,
-  value,
-  options,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: { key: string; label: string }[];
-  disabled: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <ToolSelect label={label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-      {options.map((o) => (
-        <option key={o.key} value={o.key}>
-          {o.label}
-        </option>
-      ))}
-    </ToolSelect>
   );
 }
 

@@ -1,7 +1,7 @@
 // Takes the screenshot each GUI sample's README shows, by driving the running sample through what it
 // demonstrates. One sample at a time: start it the way its README says, then run
 //
-//   node shoot.mjs <recovery|chat-service|state-machine|signalr-broadcaster|bakery> [--copy-to <dir>]
+//   node shoot.mjs <recovery|chat-service|state-machine|signalr-broadcaster|check-in> [--copy-to <dir>]
 //
 // The image is written to samples/<Sample>/screenshot.png. --copy-to also writes it to <dir>/<scene>.png.
 //
@@ -111,12 +111,12 @@ const scenes = {
     },
   },
 
-  // Ada orders three loaves and places them; Kit clocks in and fires the oven, and her order goes in. The shot is
-  // Ada's page, with the scenario that ends where her order is lit in its feature. BAKERY_URL points it at a page
-  // served elsewhere.
-  bakery: {
-    folder: "Bakery",
-    url: process.env.BAKERY_URL ?? "http://localhost:5281",
+  // Ada books the flight; Kit opens his desk, and her booking opens for check-in. She gives her passport and checks
+  // in to seat 14C. The shot is Ada's page, with the scenario that ends where her booking is lit in its feature.
+  // CHECKIN_URL points it at a page served elsewhere.
+  "check-in": {
+    folder: "CheckIn",
+    url: process.env.CHECKIN_URL ?? "http://localhost:5281",
     viewport: { width: 1600, height: 1000 },
     async play(browser) {
       const signIn = async (name, role) => {
@@ -127,16 +127,16 @@ const scenes = {
         await page.getByText(`Signed in as ${name}`).waitFor();
         return page;
       };
-      const ada = await signIn("Ada", "customer");
-      await ada.locator("[data-order-state]", { hasText: "Draft" }).waitFor({ timeout: 15_000 });
-      await ada.getByLabel("Loaves").fill("3");
-      await ada.getByRole("button", { name: "Order", exact: true }).click();
-      await ada.getByRole("button", { name: "Place", exact: true }).click();
-      await ada.getByRole("region", { name: "Your orders" }).getByText("Waiting for the oven").waitFor({ timeout: 15_000 });
-      const kit = await signIn("Kit", "baker");
-      await kit.getByRole("button", { name: "Clock in" }).click();
-      await kit.getByRole("button", { name: "Fire the oven" }).click();
-      await ada.locator("[data-order-state]", { hasText: "Baking" }).waitFor({ timeout: 30_000 });
+      const ada = await signIn("Ada", "passenger");
+      await ada.locator("[data-booking-state]", { hasText: "Booked" }).waitFor({ timeout: 15_000 });
+      const kit = await signIn("Kit", "agent");
+      await kit.getByRole("button", { name: "Open the desk" }).click();
+      await ada.locator("[data-booking-state]", { hasText: "Open" }).waitFor({ timeout: 15_000 });
+      await ada.getByLabel("Passport number").fill("X1234567");
+      await ada.getByRole("button", { name: "Give passport" }).click();
+      await ada.getByLabel("Seat").fill("14C");
+      await ada.getByRole("button", { name: "Check in", exact: true }).click();
+      await ada.getByRole("region", { name: "Your bookings" }).getByText("Checked in").waitFor({ timeout: 15_000 });
       await ada.waitForTimeout(1200);
       await kit.close();
       return ada;

@@ -55,6 +55,8 @@ against; that is review.
 
 ## Changelog
 
+- **2026-11-08**: The CheckIn sample replaced the Bakery as the sample for machines written as features, so the
+  feature keeps one sample. Its row links `checking-in.feature` and `gate.feature`.
 - **2026-11-08**: Amended: a row may link a sample's feature file, with the file name as its
   text, and an E2E project counts as named when a row links a feature file it compiles. The
   Bakery's row links its two feature files instead of naming them in prose. The link text is not

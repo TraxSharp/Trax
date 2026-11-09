@@ -67,7 +67,7 @@ function Topology({ arch }: { arch: Architecture }) {
 export default function DeploymentArchitectures() {
   return (
     <section className="border-b border-border py-24">
-      <div className="mx-auto max-w-6xl px-6 sm:px-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-8">
         <h2 className="text-2xl font-semibold text-text-primary">Deploy it however you want</h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
           Start in one process and split it out as load grows, without rewriting your workflows.

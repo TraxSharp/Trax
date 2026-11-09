@@ -263,7 +263,7 @@ public class FeatureCoverageTableTests
         claims
             .Should()
             .NotBeEmpty(
-                $"the table links no feature file; the Bakery's row links its own. See {Adr}."
+                $"the table links no feature file; the CheckIn sample's row links its own. See {Adr}."
             );
 
         var problems = FeatureLinkProblems(claims);
@@ -280,20 +280,22 @@ public class FeatureCoverageTableTests
     [Test]
     public void AFeatureLink_ToAMissingFileOrOutsideASamplesFeatures_IsAProblem()
     {
-        FeatureLinkProblems([new(1, "shop.feature", "samples/Bakery/features/shop.feature")])
+        FeatureLinkProblems([new(1, "gate.feature", "samples/CheckIn/features/gate.feature")])
             .Should()
-            .BeEmpty("the Bakery's shop.feature exists and declares a Feature:");
-        FeatureLinkProblems([new(1, "gone.feature", "samples/Bakery/features/gone.feature")])
+            .BeEmpty("the CheckIn sample's gate.feature exists and declares a Feature:");
+        FeatureLinkProblems([new(1, "gone.feature", "samples/CheckIn/features/gone.feature")])
             .Should()
             .ContainSingle()
             .Which.Should()
             .EndWith("does not exist");
-        FeatureLinkProblems([new(1, "shop.feature", "samples/Bakery/features/ordering.feature")])
+        FeatureLinkProblems([
+                new(1, "gate.feature", "samples/CheckIn/features/checking-in.feature"),
+            ])
             .Should()
             .ContainSingle()
             .Which.Should()
             .EndWith("the link text is not the file's name");
-        FeatureLinkProblems([new(1, "shop.feature", "tests/Trax.Samples.Bakery.E2E/shop.feature")])
+        FeatureLinkProblems([new(1, "gate.feature", "tests/Trax.Samples.CheckIn.E2E/gate.feature")])
             .Should()
             .ContainSingle()
             .Which.Should()

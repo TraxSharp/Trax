@@ -24,7 +24,7 @@ schemas beside the IR's, in
 | Key | What it is |
 | --- | --- |
 | `version` | `1`. |
-| `actors` | Each actor by name: its `noun` (`a customer`, as `Ada is a customer` says it) and the `roles` a caller needs to be it, or `anyAuthenticated: true` for any signed-in caller. |
+| `actors` | Each actor by name: its `noun` (`a passenger`, as `Ada is a passenger` says it) and the `roles` a caller needs to be it, or `anyAuthenticated: true` for any signed-in caller. |
 | `machines` | Each machine by id (kebab-case). |
 | `views` | Each view by name: what it `reads` (a `machine`, and a system machine's `key`) and its `fields`, each `from` a machine's `state` or context field, a state with `labels` to show in its place. |
 
@@ -32,13 +32,13 @@ A machine is a user's or the system's:
 
 | Key | What it is |
 | --- | --- |
-| `ownedBy` | The actor whose people own its instances, or a list of them (`["triage", "fixer"]`): each person owns their own instances whichever actor they are. With it, `noun` is how a step names one (`order`, as `Ada's order` says it) and `start` the phrase a person has one with (`has an order`). |
-| `system`, `name` | A system machine: its fixed key (`shop/main`) and its name in a step (`the shop`). The host starts its one instance; only the server moves it. Or `{ "keyedBy": ["id"] }`, a keyed system machine: one instance per key, which host code starts and moves (see below). |
+| `ownedBy` | The actor whose people own its instances, or a list of them (`["triage", "fixer"]`): each person owns their own instances whichever actor they are. With it, `noun` is how a step names one (`booking`, as `Ada's booking` says it) and `start` the phrase a person has one with (`has a booking`). |
+| `system`, `name` | A system machine: its fixed key (`flight/tx101`) and its name in a step (`the flight`). The host starts its one instance; only the server moves it. Or `{ "keyedBy": ["id"] }`, a keyed system machine: one instance per key, which host code starts and moves (see below). |
 | `version` | The machine's definition version, which its snapshots carry. Defaults to `1`. |
 | `initial` | The state an instance starts in. |
 | `initialContext` | The context a new instance starts with. Without it, each field of the initial state's context starts at its zero, and a nullable one at `null`. |
 | `context` | The fields of its context, as the IR declares fields: every state's, unless the state gives its own. |
-| `states` | Each state by name, with its phrase (`is a draft`), or with `{ "phrase", "committed", "requires", "context" }`: `committed: true` (the IR's `committedStates`), the rule its context must meet (the IR's `invariants`), and a context of its own in place of the machine's. |
+| `states` | Each state by name, with its phrase (`is booked`), or with `{ "phrase", "committed", "requires", "context" }`: `committed: true` (the IR's `committedStates`), the rule its context must meet (the IR's `invariants`), and a context of its own in place of the machine's. |
 | `differential` | `true` to write the IR's `differential` block from the scenarios (below). |
 | `rules`, `reductions` | Each custom rule and reduction the machine names, by its name in the IR: its C# `type` (an `ICustomRule` or `ICustomReduction` class) and the `example` an in-memory run answers with, whether the rule holds or the fields the reduction sets. |
 | `migrations` | The C# `type` (an `IMachineMigration` class) of each step to the machine's `version`, by the version it steps from: one for every version below it, and none other. |
@@ -54,11 +54,11 @@ one of its own:
   `{ "name", "type", "nullable", "constraints" }`, with the optional keys the IR's schemas take
   ([the IR format](/docs/sdk-reference/statemachine-api/ir-format#top-level)).
 - A guard's `rule`, a state's `requires`, an outcome's `when` and a field's `constraints` are IR rules, tagged by
-  `rule`: `{ "rule": "compare", "source": "context", "field": "loaves", "op": "gt", "value": 0 }`. The kinds and their
+  `rule`: `{ "rule": "nonEmpty", "source": "context", "field": "passport" }`. The kinds and their
   keys are in [the IR format's transitions](/docs/sdk-reference/statemachine-api/ir-format#transitions), and the C#
   each one exports from is in [Rules](/docs/sdk-reference/statemachine-api/rules).
 - A trigger's or an outcome's `reduce` is an IR reduction, tagged by `reduce`:
-  `{ "reduce": "set", "steps": [ { "field": "loaves", "value": { "input": "loaves" } } ] }`, or `keep`, `clear`,
+  `{ "reduce": "set", "steps": [ { "field": "passport", "value": { "input": "passport" } } ] }`, or `keep`, `clear`,
   `reset` and `custom`.
 
 ### Links
@@ -112,18 +112,18 @@ A scenario names its people, never "I". The step's own person is `her`, `his` or
 
 | Step | Means |
 | --- | --- |
-| `Given Ada is a customer` | Ada is a person of that actor. |
-| `Given Ada has an order` | Ada starts an instance of her own. |
-| `Given Ada's order is placed`, `Given the shop is open`, `Given ticket "T-12" is new` | The instance is in that state. Arranged, not acted: it fires nothing. A keyed system machine's instance is named by its name and each part of its key, quoted. |
-| `Given Ada's order has something in it` | The guard holds (or, with its `fails` phrase, fails): its context is set so. |
-| `When Ada places her order` | Ada fires the trigger on her instance, which grants her actor the trigger. |
-| `When Ada's order starts baking`, `When the shop opens` | The server fires it: no person is granted it. |
-| `When the payment goes through` | The train the state invokes ends with that outcome. |
+| `Given Ada is a passenger` | Ada is a person of that actor. |
+| `Given Ada has a booking` | Ada starts an instance of her own. |
+| `Given Ada's booking is checked in`, `Given the flight is closed`, `Given ticket "T-12" is new` | The instance is in that state. Arranged, not acted: it fires nothing. A keyed system machine's instance is named by its name and each part of its key, quoted. |
+| `Given Ada's booking has a passport number` | The guard holds (or, with its `fails` phrase, fails): its context is set so. |
+| `When Ada checks in for her booking in seat "14C"` | Ada fires the trigger on her instance, which grants her actor the trigger. |
+| `When Ada's booking misses the flight`, `When check-in opens for the flight` | The server fires it: no person is granted it. |
+| `When the boarding pass is issued` | The train the state invokes ends with that outcome. |
 | `When 5 seconds pass` | Time passes (`seconds`, `minutes`, `hours`, `days`); a timer that falls due fires. |
-| `Then Ada's order is placed`, `Then Ada's order is still a draft` | Where the instance is. A When's Thens that name other instances moving are the policies the move sets off. |
-| `Then Ada is told "Add something first."` | The When was refused by a guard, with that message. |
+| `Then Ada's booking is checked in`, `Then Ada's booking is still open for check-in` | Where the instance is. A When's Thens that name other instances moving are the policies the move sets off. |
+| `Then Ada is told "Add your passport number first."` | The When was refused by a guard, with that message. |
 | `Then Ada is not allowed` | Ada's actor may not fire the When's trigger: it is not served to her. |
-| `Then Ada's orders show status "Placed"` | What one field of a view shows Ada: her own instances and the system's. |
+| `Then Ada's bookings show status "Passport not accepted"` | What one field of a view shows Ada: her own instances and the system's. |
 
 Derivation refuses a data table, a DocString, a `*` step, a first-person step, a step two phrases match, a Given or
 When no phrase matches, and two scenarios that disagree. A Then no phrase matches is about the UI: it is reported and
@@ -136,17 +136,17 @@ has to follow; `trax machine explain` prints what derivation read from each one.
 
 | Rule | Write | Otherwise |
 | --- | --- | --- |
-| A When is followed by a Then about the instance it moved, before the next When. | `When Ada places her order` / `Then Ada's order is being paid for` / `When the payment goes through` | "Nothing after this When says what it did." |
-| An outcome's first Then names the state it took the instance to, and an outcome goes to one state in every scenario. | `When the payment goes through` / `Then Ada's order is placed` | "Say where 'the payment goes through' takes Ada's order", or "goes to Baking here and to Placed elsewhere". |
-| The Thens after a When follow the cascade in order. The first about the acting instance says where the When took it; one naming it in another state, after another instance moved, says where a policy took it on, and is caused by the instance that moved just before it. A run reads each instance's Thens in the order it entered those states during this When; a `still` Then reads only where it is. | `When Ada places her order` / `Then Ada's order is placed` / `And the shop is baking a batch` / `And Ada's order is baking` | Naming it in two states with no other instance moving between: "The Thens after this When disagree about what it did to Ada's order." A run fails a Then naming a state out of that order, or one only an earlier When passed through. |
-| A later Then about another instance moving is a policy the move set off. A user's machine moving the system's is `toSystem`, the system's moving every user instance in a state is `broadcast`. | `When Kit fires the oven on his shift` / `Then Kit's shift is at the oven` / `And the shop is baking a batch` / `And Ada's order is baking` | Nothing: it is derived as a policy. Check it with `trax machine explain`. |
-| A trigger a policy fires also has a scenario of its own, showing it as a plain move. | `Given the shop is closed` / `When the shop opens` / `Then the shop is open` | "shop goes from Closed to Open when shift enters On, and no scenario shows a trigger doing that." |
-| Two timers falling due at the same moment read as one moving the other. Give them different durations, or show them in different scenarios. | `When 2 seconds pass` / `Then Kit's shift is on` / `And the shop is still baking a batch` | "shop goes from Firing to Open when shift enters On". |
-| `still` after time passing says the timer has not fallen due; after a trigger it says the trigger was refused. | `When 3 seconds pass` / `Then the shop is still open` | Two different facts from one word: read it as the scenario's When decides. |
-| A Then naming the state the trigger left from is a self-transition: it is served, changes nothing and sets no policy off. Use it where a policy may land on a machine already there. | `Given the shop is open` / `When the shop opens` / `Then the shop is open` | Without it the policy's fire is refused and logged each time. |
-| A trigger only some roles may fire does not lead back to the state an instance starts in: whoever may start one could put it there anyway. | Lead it to a state of its own (`On --ClockOut--> Over`). | "the rule would gate nothing, since whoever may start one can put it there." |
-| Timers alone do not form a loop. Let an event lead out of one of the states. | `Open --Batch--> Firing`, `Firing --after 4 s--> Open` | "the timers of Firing -> Open -> Firing form a cycle no event breaks", at each scenario that showed one of them; the host refuses the same loop. |
-| A person fires triggers on their own instances only, and never on a system machine. | `When the shop opens` (the server), not `When Kit opens the shop`. | "only the server moves a system machine", or "acts on Ada's order". |
+| A When is followed by a Then about the instance it moved, before the next When. | `When Ada checks in for her booking in seat "14C"` / `Then Ada's booking is getting a boarding pass` / `When the boarding pass is issued` | "Nothing after this When says what it did." |
+| An outcome's first Then names the state it took the instance to, and an outcome goes to one state in every scenario. | `When the boarding pass is issued` / `Then Ada's booking is checked in` | "Say where 'the boarding pass is issued' takes Ada's booking", or "goes to NotIssued here and to CheckedIn elsewhere". |
+| The Thens after a When follow the cascade in order. The first about the acting instance says where the When took it; one naming it in another state, after another instance moved, says where a policy took it on, and is caused by the instance that moved just before it. A run reads each instance's Thens in the order it entered those states during this When; a `still` Then reads only where it is. | `When Kit opens his desk` / `Then Kit's desk is open` / `And the flight is open for check-in` / `And Ada's booking is open for check-in` | Naming it in two states with no other instance moving between: "The Thens after this When disagree about what it did to Kit's desk." A run fails a Then naming a state out of that order, or one only an earlier When passed through. |
+| A later Then about another instance moving is a policy the move set off. A user's machine moving the system's is `toSystem`, the system's moving every user instance in a state is `broadcast`. | `When Kit closes the gate at his desk` / `Then Kit's desk is closing the gate` / `And the flight is closed` / `And Ada's booking missed the flight` | Nothing: it is derived as a policy. Check it with `trax machine explain`. |
+| A trigger a policy fires also has a scenario of its own, showing it as a plain move. | `Given the flight is scheduled` / `When check-in opens for the flight` / `Then the flight is open for check-in` | "flight goes from Scheduled to Open when desk enters Open, and no scenario shows a trigger doing that." |
+| Two timers falling due at the same moment read as one moving the other. Give them different durations, or show them in different scenarios. | `When 2 seconds pass` / `Then Kit's desk is done` / `And the flight is still closed` | "flight goes from Closed to Departed when desk enters Done". |
+| `still` after time passing says the timer has not fallen due; after a trigger it says the trigger was refused. | `When 10 seconds pass` / `Then Ada's booking is still checked in` | Two different facts from one word: read it as the scenario's When decides. |
+| A Then naming the state the trigger left from is a self-transition: it is served, changes nothing and sets no policy off. Use it where a policy may land on a machine already there. | `Given the flight is open for check-in` / `When check-in opens for the flight` / `Then the flight is open for check-in` | Without it the policy's fire is refused and logged each time. |
+| A trigger only some roles may fire does not lead back to the state an instance starts in: whoever may start one could put it there anyway. | Lead it to a state of its own (`Open --CloseGate--> Closing`). | "the rule would gate nothing, since whoever may start one can put it there." |
+| Timers alone do not form a loop. Let an event lead out of one of the states. | `Closed --after 4 s--> Departed`, `Departed --after 10 s--> Scheduled`, `Scheduled --OpenCheckIn--> Open` | "the timers of Closed -> Departed -> Scheduled -> Closed form a cycle no event breaks", at each scenario that showed one of them; the host refuses the same loop. |
+| A person fires triggers on their own instances only, and never on a system machine. | `When check-in opens for the flight` (the server), not `When Kit opens check-in for the flight`. | "only the server moves a system machine", or "acts on Ada's booking". |
 
 ## The C# a machine names
 
@@ -183,8 +183,8 @@ to put in it is a problem.
 
 One tag means something to Trax: `@host`, on a scenario that needs a real handler. Derivation reads its steps, an
 in-memory run skips it, and the host bindings run it. Every other tag is yours, for `trax machine run --tags` and for
-Reqnroll hooks. The Bakery sample's `@in-memory` is one of those: a hook in its test project skips those scenarios on
-the host, because the host's payment train never fails by itself. Trax does nothing with it.
+Reqnroll hooks. The CheckIn sample's `@in-memory` is one of those: a hook in its test project skips those scenarios on
+the host, because the host's boarding pass train never fails by itself. Trax does nothing with it.
 
 ## Problems derivation reports
 
@@ -194,15 +194,15 @@ Each problem names the file and line of the step or scenario it is about. The co
 | --- | --- |
 | No phrase in the glossary says '...' | A Given or When the glossary does not read. Add the phrase to the glossary, or reword the step to one it has. |
 | '...' could mean ... | Two phrases match the step. Reword one of them. |
-| '...' speaks as 'I'. Name the person | Write `Ada ...` after `Given Ada is a customer`. |
-| '...' names Ada, and the scenario never says who Ada is | Add `Given Ada is a customer` before the step. |
-| Nothing after this When says what it did | Add `Then Ada's order is ...` straight after the When. |
-| Say where '...' takes Ada's order | An outcome's When needs a Then naming the state it reached. |
-| ... goes to Paying here and to Placed in '...' | Two scenarios disagree on one trigger from one state. Fix the wrong one, or add a guard that tells them apart. |
+| '...' speaks as 'I'. Name the person | Write `Ada ...` after `Given Ada is a passenger`. |
+| '...' names Ada, and the scenario never says who Ada is | Add `Given Ada is a passenger` before the step. |
+| Nothing after this When says what it did | Add `Then Ada's booking is ...` straight after the When. |
+| Say where '...' takes Ada's booking | An outcome's When needs a Then naming the state it reached. |
+| ... goes to Issuing here and to CheckedIn in '...' | Two scenarios disagree on one trigger from one state. Fix the wrong one, or add a guard that tells them apart. |
 | ... is refused here and works in '...', and no guard in the glossary tells the two apart | Give the two scenarios Givens of a guard's `holds` and `fails` phrases. |
 | ... is the message of a refusal, and no scenario shows ... working | Add a scenario where the trigger is allowed, so there is a guard to carry the message. |
-| ... acts on Bo's order | A person acts only on their own instance. Have the other person act, or make it the server's step. |
-| ... only the server moves a system machine | Write it without a person: `When the shop opens`. |
+| ... acts on Bo's booking | A person acts only on their own instance. Have the other person act, or make it the server's step. |
+| ... only the server moves a system machine | Write it without a person: `When check-in opens for the flight`. |
 | ... is fired by Ada here and by no one in '...' | A person and the server cannot share a trigger. Make them two triggers. |
 | ... is fired by a person in another scenario and by a policy here | Same: two triggers, one for people and one for the policy. |
 | ... moves when ... does, and the same owner alone does not say which ... | Add a [link](#links). |
@@ -210,7 +210,7 @@ Each problem names the file and line of the step or scenario it is about. The co
 | ... no scenario shows a trigger doing that | A trigger a policy fires also needs a scenario of its own showing it as a plain move. |
 | ... leaves ... with no time passing there | Add `When 5 minutes pass` before the Then that shows it leaving. |
 | the timers of ... form a cycle no event breaks | Let a trigger lead out of one of the states. |
-| ... invokes ..., and no scenario says where a failed run takes it | Show each of `done`, `failed` and `cancelled`. If the real train never produces one by itself, show it anyway and skip that scenario on the host with a tag of your own, as the Bakery does. |
+| ... invokes ..., and no scenario says where a failed run takes it | Show each of `done`, `failed` and `cancelled`. If the real train never produces one by itself, show it anyway and skip that scenario on the host with a tag of your own, as the CheckIn sample does. |
 | ... an outcome's state is reserved for what the train produced | Send the outcome to a state of its own. |
 | The derived machine answers this differently | The scenario fails on what was derived from all the scenarios together. Run `trax machine explain` on it. |
 
@@ -233,12 +233,12 @@ effect, custom rule, custom reduction or version step of the IR with no type, or
 refuses policies that set each other off with no timer between them, as derivation does, through the same check: a
 policy fires a trigger, the trigger can move its machine into a state, a policy waiting for that state fires next, and a
 state that runs a train counts as moving on to wherever its outcomes go. A loop of those moves alone is refused, naming
-its policies. A loop that passes through a timer is paced by it and allowed, so a shop that opens and closes on a timer
-can still have policies on both.
+its policies. A loop that passes through a timer is paced by it and allowed, so a flight that a timer schedules again
+after it departs can still have policies on its opening and its closing.
 
 ## access.txt
 
-One sorted line per grant, committed and reviewed: each actor's roles (`@customer: roles customer`), then each
+One sorted line per grant, committed and reviewed: each actor's roles (`@passenger: roles passenger`), then each
 machine's `start`, `read` and trigger, and each view, with the actors its rule admits. A machine several actors own
 grants each trigger to the owning actors the scenarios show firing it (`assignment Triage: triage`,
 `assignment SubmitFix: fixer`), `start` to those shown starting one, and `read` to all of them; each still acts on their

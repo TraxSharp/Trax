@@ -1,0 +1,16 @@
+@agent: roles agent
+@passenger: roles passenger
+booking CheckIn: passenger
+booking GivePassport: passenger
+booking Miss: the server only
+booking OpenCheckIn: the server only
+booking read: passenger
+booking start: passenger
+desk CloseGate: agent
+desk OpenDesk: agent
+desk read: agent
+desk start: agent
+flight CloseGate: the server only
+flight OpenCheckIn: the server only
+view bookings: passenger
+view departures: agent, passenger
