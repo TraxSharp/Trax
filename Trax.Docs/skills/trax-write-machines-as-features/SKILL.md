@@ -16,7 +16,8 @@ and nowhere else. `trax machine from-gherkin` derives `machines/`: one `<machine
 [Feature files](https://traxsharp.net/docs/reference/feature-files) has every key and step, and
 [How features become machines](https://traxsharp.net/docs/statemachine/how-features-become-machines) traces each
 part to the IR, `host.json`, GraphQL and the C# builder. [mapping.md](mapping.md) is that trace as a lookup: what to
-edit for a given change.
+edit for a given change. [Serve features from the hub template](https://traxsharp.net/docs/statemachine/serve-features-from-the-hub-template)
+lists what a `dotnet new trax-hub` host needs to serve them.
 
 ## First: is this app written this way
 
@@ -138,6 +139,10 @@ These keep access closed. Do not work around them:
   and the instance waits. `AddScheduler()`, `AddJunctionProgress()` and a relational provider are required, as for
   any invoking machine.
 - Policies on `UseInMemory()`: refused, since InMemory has no transaction to queue a policy's fire in.
+- A design that needs one policy to land before another: the host runs each policy and each invoked train on its own,
+  in no fixed order, while `trax machine run` plays them in the Thens' order. `from-gherkin` warns about it.
+- An invoked train's integer output with no range in the glossary: the host checks the IR against the train and
+  refuses to start until `minimum`/`maximum` match the CLR type.
 - A long timer tested against the host: on the host time passes on the wall clock, so keep host scenarios to seconds
   and leave long timers to the in-memory run.
 
