@@ -2,12 +2,17 @@ import { useMemo } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { Loading } from "../components/detail";
 import { MachineBoard } from "../components/MachineBoard";
-import { TermHelp } from "../components/TermHelp";
+import { CircleHelp } from "lucide-react";
 import { useTraxQuery } from "../lib/consoleClient";
 import { boardPath, machinePath } from "../lib/machineInstances";
 import { machineBoardDocument, machinesDocument } from "../trax/index.g";
 
 const FEATURES_DOCS = "https://traxsharp.net/docs/statemachine/write-machines-as-features";
+// How to read the board, what each colour is and how the scenarios panel works: more use here than the glossary's
+// entry for a state machine.
+const BOARD_DOCS = "https://traxsharp.net/docs/dashboard/board";
+const READING =
+  "How to read the board: orange events, blue commands, lilac policies, yellow actors and aggregates, green views, and the scenarios behind each note.";
 
 /**
  * The board, at /board and /board/:machine: every machine this host registers on the left, and the chosen one's
@@ -29,7 +34,16 @@ export function BoardPage() {
     <div>
       <div className="flex items-center gap-2">
         <h1 className="text-2xl font-bold text-fg mb-1">Board</h1>
-        <TermHelp term="machine" />
+        <a
+          href={BOARD_DOCS}
+          target="_blank"
+          rel="noreferrer"
+          title={READING}
+          aria-label={READING}
+          className="inline-flex align-middle text-muted hover:text-accent-fg"
+        >
+          <CircleHelp className="size-4" />
+        </a>
       </div>
       <p className="text-sm text-muted mb-6 max-w-3xl">
         What each machine does, as an event-storming board: who acts, what they ask for, what happens, the rules in

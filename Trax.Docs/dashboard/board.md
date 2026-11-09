@@ -30,12 +30,12 @@ the role is written on it:
 
 | Note | Colour | What it is |
 |---|---|---|
-| **Machine** | Yellow, first in its lane | The machine itself, with whoever starts it above |
-| **Actor** | Small, pale yellow | Who sends the command below it, or reads the view below it |
+| **Aggregate** | Large, pale yellow, first in its lane | The machine itself, with whoever starts it above |
+| **Actor** | Small, yellow | Who sends the command below it, or reads the view below it |
 | **Command** | Blue | What an actor or a rule asks the machine to do |
 | **Event** | Orange | What happened: a move from one state to another |
 | **Policy** | Lilac | A rule: a guard on the command below it, a timer, or "when that machine gets here, do this" |
-| **View** | Green, last in its lane | What people read, and who reads it |
+| **View** | Green | The read model: what people read, and who reads it, last in its lane |
 
 Each column is one command: the actors who send it, the rules that send or guard it, the command,
 and the moves it makes. A timer or a run's outcome that moves the machine with no command has a
@@ -43,9 +43,12 @@ column of its own. A rule that starts a command in another machine draws an arro
 sets it off to the rule, in the other machine's lane.
 
 Arrows run down each column. An arrow to another column or lane would cross the notes between, so it
-is drawn only once a note at either end is clicked. Clicking a note lights up the notes it is linked
-to and lists the scenarios it came from, by file, line and name. A host file written without
-provenance draws the board and says it names no scenarios. Step text never reaches the console.
+is drawn only once a note at either end is clicked. The wall scrolls inside its frame, and a panel
+beside it stays in place: with nothing selected it lists every feature file behind the board and its
+scenarios, by file, line and name. Clicking a note lights up the notes it is linked to and lists the
+scenarios it came from; clicking a scenario lights up every note it put on the wall. A host file
+written without provenance draws the board and says it names no scenarios. Step text never reaches
+the console.
 
 The machine's states and instances are on [its page](/docs/dashboard/machines#a-machine), linked
 from the board.

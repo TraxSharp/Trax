@@ -49,7 +49,7 @@ test("a note lists the scenarios behind it", async () => {
   const board = await screen.findByRole("region", { name: "Board of topic-map" });
   fireEvent.click(await within(board).findByRole("button", { name: "Rebuild, command" }));
   expect(await within(board).findByText("Ada builds it again")).toBeInTheDocument();
-  expect(within(board).getByText("topic-map.feature:14")).toBeInTheDocument();
+  expect(within(board).getByLabelText("topic-map.feature line 14")).toBeInTheDocument();
 });
 
 test("a machine with no board says so, and links its states", async () => {
@@ -64,4 +64,25 @@ test("a host with no board at all says how a machine gets one", async () => {
   open("/board", false);
 
   expect(await screen.findByText(/None of this host's machines is served from features/)).toBeInTheDocument();
+});
+
+test("beside the wall, every feature behind the board, and a scenario lights the notes it put there", async () => {
+  open("/board/topic-map");
+
+  const panel = await screen.findByRole("complementary", { name: "Scenarios behind it" });
+  expect(within(panel).getByText("topic-map.feature")).toBeInTheDocument();
+  const rebuildScenario = within(panel).getByRole("button", { name: /Ada builds it again/ });
+
+  fireEvent.click(rebuildScenario);
+  expect(rebuildScenario).toHaveAttribute("aria-pressed", "true");
+  const wall = screen.getByRole("group", { name: "Board of topic-map" });
+  expect(within(wall).getByRole("button", { name: "Rebuild, command" }).className).not.toMatch(/opacity-35/);
+  expect(within(wall).getByRole("button", { name: "Build, command" }).className).toMatch(/opacity-35/);
+});
+
+test("the heading's help opens how to read the board, not the glossary", async () => {
+  open("/board/topic-map");
+
+  const help = await screen.findByRole("link", { name: /^How to read the board/ });
+  expect(help).toHaveAttribute("href", "https://traxsharp.net/docs/dashboard/board");
 });

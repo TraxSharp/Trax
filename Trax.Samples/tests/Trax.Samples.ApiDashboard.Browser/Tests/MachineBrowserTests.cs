@@ -245,7 +245,8 @@ public class MachineBrowserTests : ConsoleTest
         await Assertions
             .Expect(scenarios)
             .ToContainTextAsync(FeatureShelf.Scenario, new() { Timeout = Render });
-        await Assertions.Expect(scenarios).ToContainTextAsync("shelving.feature:2");
+        await Assertions.Expect(scenarios).ToContainTextAsync("shelving.feature");
+        await Assertions.Expect(scenarios.GetByLabel("shelving.feature line 2")).ToBeVisibleAsync();
     }
 
     [Test]

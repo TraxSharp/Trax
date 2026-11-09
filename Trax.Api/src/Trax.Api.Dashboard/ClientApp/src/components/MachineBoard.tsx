@@ -6,18 +6,21 @@ import {
   neighbours,
   type Board,
   type BoardArrow,
+  type BoardScenario,
   type BoardNote,
 } from "../lib/machineBoard";
 
-// Event storming's paper colours. They stay the same in the dark theme, as paper on a wall would, and the role is
-// written on every note, so colour never carries it alone.
+// Event storming's sticky-note colours (Alberto Brandolini's): orange domain events, blue commands, lilac policies,
+// small yellow actors, large pale yellow aggregates, green read models. The machine is the aggregate; a view is the
+// read model. They stay the same in the dark theme, as paper on a wall would, and the role is written on every note,
+// so colour never carries it alone.
 const PAPER: Record<string, { paper: string; role: string }> = {
-  actor: { paper: "#fff3a6", role: "Actor" },
-  command: { paper: "#a9d4ff", role: "Command" },
-  event: { paper: "#ffb877", role: "Event" },
-  policy: { paper: "#d9c4ff", role: "Policy" },
-  aggregate: { paper: "#ffe066", role: "Machine" },
-  view: { paper: "#b9eeb0", role: "View" },
+  actor: { paper: "#fde66b", role: "Actor" },
+  command: { paper: "#8ecdf5", role: "Command" },
+  event: { paper: "#ffa94d", role: "Event" },
+  policy: { paper: "#cfa8f0", role: "Policy" },
+  aggregate: { paper: "#fff4b8", role: "Aggregate" },
+  view: { paper: "#a7e3a1", role: "View" },
 };
 const INK = "#1f2328";
 const LEGEND = ["actor", "command", "event", "policy", "aggregate", "view"] as const;
@@ -36,77 +39,165 @@ function tilt(key: string): number {
  */
 export function MachineBoard({ board, initialStates }: { board: Board; initialStates?: Record<string, string> }) {
   const [selected, setSelected] = useState<string | null>(null);
+  const [scenario, setScenario] = useState<string | null>(null);
   const layout = useMemo(() => layoutBoard(board, initialStates), [board, initialStates]);
-  const near = useMemo(() => (selected ? neighbours(board, selected) : null), [board, selected]);
+  const features = useMemo(() => featuresOf(board), [board]);
+  // What is lit: a note and the notes it is linked to, or every note a scenario put on the wall.
+  const near = useMemo(() => {
+    if (selected) return neighbours(board, selected);
+    if (scenario)
+      return new Set(board.stickies.filter((s) => s.scenarios.some((p) => keyOf(p) === scenario)).map((s) => s.id));
+    return null;
+  }, [board, selected, scenario]);
   const sticky = board.stickies.find((s) => s.id === selected);
   const provenance = hasProvenance(board);
 
   if (layout.notes.length === 0) return <p className="text-sm text-muted">{board.machine} has nothing on its board.</p>;
 
-  return (
-    <div>
-      <ul aria-label="What each colour is" className="flex flex-wrap gap-3 mb-3 text-xs text-fg-2">
-        {LEGEND.map((kind) => (
-          <li key={kind} className="flex items-center gap-1.5">
-            <span aria-hidden className="inline-block w-3.5 h-3.5 rounded-[2px]" style={{ background: PAPER[kind].paper }} />
-            {PAPER[kind].role}
-          </li>
-        ))}
-      </ul>
+  const pickNote = (id: string) => {
+    setScenario(null);
+    setSelected(id === selected ? null : id);
+  };
+  const pickScenario = (key: string) => {
+    setSelected(null);
+    setScenario(key === scenario ? null : key);
+  };
 
-      <div className="overflow-auto rounded-lg border border-line bg-sunken" role="group" aria-label={`Board of ${board.machine}`}>
-        <div className="relative" style={{ width: layout.width, height: layout.height }}>
-          {layout.lanes.map((lane, i) => (
-            <div
-              key={lane.machine}
-              aria-hidden
-              className={`absolute left-0 right-0 ${i > 0 ? "border-t border-dashed border-line-strong" : ""}`}
-              style={{ top: lane.y, height: lane.h }}
-            >
-              {layout.lanes.length > 1 && (
-                <span className="absolute right-3 top-2 text-[11px] uppercase tracking-wider text-muted">{lane.machine}</span>
-              )}
-            </div>
+  return (
+    <div className="flex flex-col xl:flex-row gap-4">
+      <div className="flex-1 min-w-0">
+        <ul aria-label="What each colour is" className="flex flex-wrap gap-3 mb-3 text-xs text-fg-2">
+          {LEGEND.map((kind) => (
+            <li key={kind} className="flex items-center gap-1.5">
+              <span aria-hidden className="inline-block w-3.5 h-3.5 rounded-[2px]" style={{ background: PAPER[kind].paper }} />
+              {PAPER[kind].role}
+            </li>
           ))}
-          <Arrows arrows={layout.arrows} width={layout.width} height={layout.height} near={near} selected={selected} />
-          {layout.notes.map((note) => (
-            <Note
-              key={note.key}
-              note={note}
-              selected={note.sticky.id === selected}
-              faded={near != null && !near.has(note.sticky.id)}
-              onClick={() => setSelected(note.sticky.id === selected ? null : note.sticky.id)}
-            />
-          ))}
+        </ul>
+
+        {/* The wall scrolls inside its frame, so the panel beside it stays where the reader is. */}
+        <div
+          className="overflow-auto rounded-lg border border-line bg-sunken"
+          style={{ height: WALL_HEIGHT, minHeight: 360 }}
+          role="group"
+          aria-label={`Board of ${board.machine}`}
+        >
+          <div className="relative" style={{ width: layout.width, height: layout.height }}>
+            {layout.lanes.map((lane, i) => (
+              <div
+                key={lane.machine}
+                aria-hidden
+                className={`absolute left-0 right-0 ${i > 0 ? "border-t border-dashed border-line-strong" : ""}`}
+                style={{ top: lane.y, height: lane.h }}
+              >
+                {layout.lanes.length > 1 && (
+                  <span className="absolute right-3 top-2 text-[11px] uppercase tracking-wider text-muted">{lane.machine}</span>
+                )}
+              </div>
+            ))}
+            <Arrows arrows={layout.arrows} width={layout.width} height={layout.height} near={near} selected={selected} />
+            {layout.notes.map((note) => (
+              <Note
+                key={note.key}
+                note={note}
+                selected={note.sticky.id === selected}
+                faded={near != null && !near.has(note.sticky.id)}
+                onClick={() => pickNote(note.sticky.id)}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
-      {!provenance && (
-        <p className="mt-2 text-xs text-muted">
-          This host file records no scenarios, so the board does not say which ones produced each note.
-        </p>
-      )}
-      {sticky && provenance && (
-        <div aria-label="Scenarios behind it" className="mt-3 text-sm">
-          <p className="font-medium text-fg">
-            {sticky.label} <span className="text-muted">({PAPER[sticky.kind]?.role.toLowerCase() ?? sticky.kind})</span>
+      <aside
+        aria-label="Scenarios behind it"
+        className="xl:w-80 shrink-0 overflow-y-auto rounded-lg border border-line bg-sunken p-4 text-sm"
+        style={{ maxHeight: `calc(${WALL_HEIGHT} + 2rem)` }}
+      >
+        {!provenance ? (
+          <p className="text-muted">
+            This host file records no scenarios, so the board does not say which ones produced each note.
           </p>
-          {sticky.scenarios.length === 0 ? (
-            <p className="text-muted">No scenario produced this note on its own.</p>
-          ) : (
-            <ul className="mt-1 space-y-0.5 text-fg-2">
-              {sticky.scenarios.map((s) => (
-                <li key={`${s.file}:${s.line}`}>
-                  <span className="font-mono text-xs">
-                    {s.file}:{s.line}
+        ) : sticky ? (
+          <div>
+            <p className="text-[11px] uppercase tracking-wider text-muted">{PAPER[sticky.kind]?.role ?? sticky.kind}</p>
+            <p className="font-medium text-fg mb-2">{sticky.label}</p>
+            {sticky.scenarios.length === 0 ? (
+              <p className="text-muted">No scenario produced this note on its own.</p>
+            ) : (
+              <Features features={featuresOf({ ...board, stickies: [sticky] })} current={null} onPick={pickScenario} />
+            )}
+            <button type="button" onClick={() => setSelected(null)} className="mt-3 text-xs text-accent-fg hover:underline">
+              Every feature
+            </button>
+          </div>
+        ) : (
+          <div>
+            <p className="font-medium text-fg mb-1">Features</p>
+            <p className="text-xs text-muted mb-3">
+              Click a note for the scenarios behind it, or a scenario for the notes it put on the wall.
+            </p>
+            <Features features={features} current={scenario} onPick={pickScenario} />
+          </div>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+// The wall's frame: the viewport, less the page's heading and the board's own, and never taller than the wall.
+const WALL_HEIGHT = "calc(100vh - 22rem)";
+
+const keyOf = (s: BoardScenario) => `${s.file}:${s.line}`;
+
+/** The scenarios behind a board's notes, by feature file, each once, in file and line order. */
+function featuresOf(board: Board): { file: string; scenarios: BoardScenario[] }[] {
+  const byFile = new Map<string, Map<string, BoardScenario>>();
+  for (const sticky of board.stickies)
+    for (const s of sticky.scenarios) {
+      if (!byFile.has(s.file)) byFile.set(s.file, new Map());
+      byFile.get(s.file)!.set(keyOf(s), s);
+    }
+  return [...byFile.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([file, scenarios]) => ({ file, scenarios: [...scenarios.values()].sort((a, b) => a.line - b.line) }));
+}
+
+function Features({
+  features,
+  current,
+  onPick,
+}: {
+  features: { file: string; scenarios: BoardScenario[] }[];
+  current: string | null;
+  onPick: (key: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      {features.map((f) => (
+        <div key={f.file}>
+          <p className="font-mono text-xs text-fg-2 mb-1">{f.file}</p>
+          <ul className="space-y-0.5">
+            {f.scenarios.map((s) => (
+              <li key={keyOf(s)}>
+                <button
+                  type="button"
+                  aria-pressed={current === keyOf(s)}
+                  onClick={() => onPick(keyOf(s))}
+                  className={`w-full text-left rounded px-1.5 py-0.5 hover:bg-hover ${
+                    current === keyOf(s) ? "bg-accent-soft text-accent-fg" : "text-fg"
+                  }`}
+                >
+                  <span className="font-mono text-xs text-muted" aria-label={`${s.file} line ${s.line}`}>
+                    :{s.line}
                   </span>{" "}
                   {s.scenario}
-                </li>
-              ))}
-            </ul>
-          )}
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
-      )}
+      ))}
     </div>
   );
 }
