@@ -1,0 +1,6 @@
+# expect 6: a quote is opened and never closed
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: note
+  State: Open "is open

@@ -1,0 +1,8 @@
+# expect 5: refused beside each other
+Version: 1
+Actor: member "a member"
+  Roles: member
+  Any signed-in
+Machine: note
+  Owned by: member
+  State: Open "is open"

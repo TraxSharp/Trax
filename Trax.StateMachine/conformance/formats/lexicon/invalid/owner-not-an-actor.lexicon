@@ -1,0 +1,7 @@
+# expect 6: 'customer' is not an actor
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: note
+  Owned by: customer
+  State: Open "is open"

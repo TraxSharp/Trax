@@ -1,0 +1,6 @@
+# expect 1: a lexicon starts with 'Version: 1'
+Actor: member "a member"
+  Any signed-in
+Machine: note
+  Owned by: member
+  State: Open "is open"

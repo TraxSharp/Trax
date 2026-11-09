@@ -10,14 +10,9 @@
     "checkout": {
       "ownedBy": "customer",
       "noun": "checkout",
-      "start": "has a checkout",
       "version": 2,
+      "start": "has a checkout",
       "initial": "Cart",
-      "initialContext": {
-        "items": [],
-        "receipt": null
-      },
-      "differential": true,
       "context": [
         {
           "name": "items",
@@ -36,6 +31,10 @@
           "constraints": []
         }
       ],
+      "initialContext": {
+        "items": [],
+        "receipt": null
+      },
       "states": {
         "Cart": "is in the cart",
         "Paid": {
@@ -66,6 +65,7 @@
           ]
         }
       },
+      "differential": true,
       "migrations": {
         "1": "Shop.Migrations.CheckoutFromVersion1"
       }

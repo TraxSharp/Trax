@@ -1,0 +1,11 @@
+# expect 11: has no value for 'board'
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: game
+  Owned by: member
+  State: ComputerTurn "is waiting for the computer"
+  Runs: Games.Trains.IComputerShot in ComputerTurn
+    Returns: result is a string, board is a string
+    Stores: board
+    Outcome: "the computer misses" when result is "miss"

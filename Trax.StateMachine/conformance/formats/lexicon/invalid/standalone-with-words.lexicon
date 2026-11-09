@@ -1,0 +1,8 @@
+# expect 7: 'Differential' stands alone on its line
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: note
+  Owned by: member
+  Differential yes
+  State: Open "is open"

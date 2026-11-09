@@ -1,0 +1,11 @@
+# expect 11: is already defined at line 10
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: loan
+  Owned by: member
+  State: Borrowing "is being borrowed"
+  Runs: Library.Trains.IBorrow in Borrowing
+    Returns: approved is a boolean
+    Outcome: "the loan goes through" when approved is true
+    Outcome: "the loan goes through" when approved is false

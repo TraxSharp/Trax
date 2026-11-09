@@ -8,6 +8,8 @@
   },
   "machines": {
     "loan": {
+      "ownedBy": "member",
+      "noun": "loan",
       "initial": "Open",
       "states": {
         "Open": "is open",
@@ -25,9 +27,7 @@
             }
           }
         }
-      },
-      "ownedBy": "member",
-      "noun": "loan"
+      }
     }
   }
 }

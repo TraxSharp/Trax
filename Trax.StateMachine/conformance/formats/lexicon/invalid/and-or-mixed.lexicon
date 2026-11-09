@@ -1,0 +1,8 @@
+# expect 7: never both on one line
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: note
+  Owned by: member
+  Guard: full when count is at least 1 and count is at most 3 or count is 9
+  State: Open "is open"

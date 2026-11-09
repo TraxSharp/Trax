@@ -1,0 +1,11 @@
+Version: 1
+
+Actor: triage "a triage bot"
+  Roles: triage
+Actor: fixer "a fixer"
+  Roles: fixer
+
+# Each person owns assignments of their own.
+Machine: assignment
+  Owned by: triage, fixer
+  State: New "is new"

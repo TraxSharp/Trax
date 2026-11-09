@@ -1,0 +1,7 @@
+# expect 5: a backslash in quotes escapes only a quote
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: note "a \note"
+  Owned by: member
+  State: Open "is open"

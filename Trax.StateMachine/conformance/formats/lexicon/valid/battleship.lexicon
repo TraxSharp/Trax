@@ -1,0 +1,84 @@
+# The proof of MS-20 (2026-11-09): Battleship's lexicon, cut to two rows of the board.
+Version: 1
+Trains in: Battleship.Hub.Trains
+
+Actor: player "a player"
+  Roles: User
+
+Constant: EmptyBoard is "...................."
+
+Type: Square
+  Values: A to B, each followed by 1 to 10
+
+Machine: game
+  Owned by: player
+  Started by: "starts a game"
+  Begins in: Dealing
+  Context: target may be empty
+  Context: yourShot may be empty
+  Context: computerShot may be empty
+  Context: computerTarget may be empty
+
+  State: Dealing        "is dealing the fleets"
+  State: NotDealt       "could not be dealt"
+  State: PlayerTurn     "is waiting for the player's shot"
+  State: Firing         "is firing the player's shot"
+  State: ComputerTurn   "is waiting for the computer's shot"
+  State: Won            "is won"
+  State: Lost           "is lost"
+  State: ShotLanded     "is showing where the player's shot landed"
+
+  Trigger: Fire         "fires at {square} in {subject}"
+    Input: square is a Square
+    Sets: target to square
+
+  Trigger: PassTurn     "hands {subject} to the computer"
+
+  Runs: DealFleets in Dealing
+    Returns: fleet is a string, board is a string
+    Stores: fleet, board
+    Sets: shots to EmptyBoard
+    Example: fleet is "f-1", board is EmptyBoard
+    Outcome: "the fleets are dealt"                       when it is done
+    Outcome: "dealing the fleets fails"                   when it fails
+    Outcome: "dealing the fleets is called off"           when it is called off
+
+  Runs: FireShot in Firing
+    Takes: fleet, shots, owner
+    Input: square from target
+    Returns: result is a string, shots is a string
+    Stores: shots, result as yourShot
+    Example: shots is EmptyBoard
+    Outcome: "the shot misses"                            when result is "miss"
+    Outcome: "the shot hits a ship"                       when result is "hit"
+    Outcome: "the shot sinks a ship"                      when result is "sunk"
+    Outcome: "the shot sinks the computer's last ship"    when result is "won"
+    Outcome: "the square was already tried"               when result is "repeat"
+    Outcome: "the shot cannot be fired"                   when it fails
+    Outcome: "the shot is called off"                     when it is called off
+
+  Runs: ComputerShot in ComputerTurn
+    Takes: board
+    Returns: result is a string, square is a string, board is a string
+    Stores: board, result as computerShot, square as computerTarget
+    Example: board is EmptyBoard, square is "A1"
+    Outcome: "the computer misses"                        when result is "miss"
+    Outcome: "the computer hits a ship"                   when result is "hit"
+    Outcome: "the computer sinks a ship"                  when result is "sunk"
+    Outcome: "the computer sinks the player's last ship"  when result is "won"
+    Outcome: "the computer cannot fire"                   when it fails
+    Outcome: "the computer's shot is called off"          when it is called off
+
+View: "games"
+  Reads: game
+  Field: status from game's state
+    Label: Dealing        "Dealing the fleets"
+    Label: NotDealt       "Could not be dealt"
+    Label: PlayerTurn     "Your turn"
+    Label: Firing         "Firing"
+    Label: ComputerTurn   "The computer's turn"
+    Label: Won            "You won"
+    Label: Lost           "You lost"
+    Label: ShotLanded     "Your shot landed"
+  Field: shot from game's yourShot
+  Field: reply from game's computerShot

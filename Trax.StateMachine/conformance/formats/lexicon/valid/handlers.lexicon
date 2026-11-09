@@ -1,0 +1,32 @@
+Version: 1
+
+Actor: shopper "a shopper"
+  Any signed-in
+
+Machine: checkout
+  Owned by: shopper
+  Started by: "has a checkout"
+  Version: 2
+  Migrates from: 1 with Shop.Migrations.CheckoutFromVersion1
+  Context: items is a list of strings
+  Context: receipt may be empty
+
+  State: Cart "is in the cart"
+    Requires: checkout:priced holds
+  State: Paid "is paid" committed
+
+  Trigger: AddItem "adds {item} to {subject}"
+    Input: item is a string
+    Reduces with: checkout:add-item
+    Guarded by: named
+  Trigger: Pay "pays for {subject}"
+    Input: receipt is a string
+    Sets: receipt
+    Effect: Shop.Effects.ICharge, key prefix "checkout:charge", example "rcpt-1"
+
+  Guard: named when input item is not empty
+    Holds: "names the item"
+    Fails: "names no item"
+
+  Rule: checkout:priced with Shop.Rules.TotalIsPriced, example true
+  Reduction: checkout:add-item with Shop.Rules.AddItem, example items is ["bread"]

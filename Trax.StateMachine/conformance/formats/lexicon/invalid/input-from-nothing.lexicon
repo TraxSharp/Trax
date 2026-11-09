@@ -1,0 +1,13 @@
+# expect 12: 'square' is not one of the machine's context fields
+Version: 1
+Trains in: Games.Trains
+Actor: member "a member"
+  Any signed-in
+Machine: game
+  Owned by: member
+  State: Firing "is firing"
+  Trigger: Fire "fires at {square} in {subject}"
+    Input: square is a string
+  Runs: FireShot in Firing
+    Input: square from square
+    Outcome: "the shot lands" when it is done

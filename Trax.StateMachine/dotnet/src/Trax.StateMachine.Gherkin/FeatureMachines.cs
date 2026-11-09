@@ -12,13 +12,36 @@ namespace Trax.StateMachine.Gherkin;
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/feature-machines">SDK reference</seealso>
 public sealed class FeatureGlossary
 {
-    private FeatureGlossary(Glossary glossary) => Inner = glossary;
+    private FeatureGlossary(Glossary glossary, LexiconSource? source)
+    {
+        Inner = glossary;
+        Source = source;
+    }
 
     internal Glossary Inner { get; }
 
+    /// <summary>The lexicon the glossary was elaborated from, or null for one read from its JSON.</summary>
+    internal LexiconSource? Source { get; }
+
     /// <summary>Reads a glossary from its JSON text.</summary>
     /// <exception cref="FormatException">The text is not a glossary; the message names the key.</exception>
-    public static FeatureGlossary Read(string json) => new(Glossary.Read(json));
+    public static FeatureGlossary Read(string json) => new(Glossary.Read(json), null);
+
+    internal static FeatureGlossary From(Glossary glossary, LexiconSource source) =>
+        new(glossary, source);
+
+    // A problem derivation found with the glossary rather than a feature, at the lexicon line that wrote the key it is
+    // about, when the glossary came from a lexicon.
+    internal FeatureProblem Locate(Problem problem) =>
+        Source is { } source && problem.File == Problem.Glossary
+            ? new FeatureProblem(
+                source.Path,
+                source.LineOf(problem.Pointer),
+                problem.Pointer is null
+                    ? problem.Message
+                    : source.Message(problem.Pointer, problem.Message)
+            )
+            : FeatureProblem.Of(problem);
 }
 
 /// <summary>One feature file: its path, as provenance and every problem names it, and its text.</summary>
@@ -194,11 +217,11 @@ public static class FeatureMachines
             derived.Irs,
             derived.Host,
             derived.Access,
-            derived.Problems.Select(FeatureProblem.Of).ToList(),
+            derived.Problems.Select(glossary.Locate).ToList(),
             derived.UiSteps.Select(FeatureProblem.Of).ToList()
         )
         {
-            Warnings = derived.Warnings.Select(FeatureProblem.Of).ToList(),
+            Warnings = derived.Warnings.Select(glossary.Locate).ToList(),
         };
     }
 

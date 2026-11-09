@@ -215,7 +215,7 @@ internal static class PolicyMerge
             ))
             .ToList();
         foreach (var loop in PolicyLoops.Find(read, irs))
-            problems.Add(new Problem("glossary", 0, PolicyLoops.Problem(loop)));
+            problems.Add(new Problem(Problem.Glossary, 0, PolicyLoops.Problem(loop)));
 
         // A policy that waits for another's result is green in memory, where a When plays its cascade in the Thens'
         // order, and can miss on the host, where each policy fire and each train runs on its own. A warning, at the

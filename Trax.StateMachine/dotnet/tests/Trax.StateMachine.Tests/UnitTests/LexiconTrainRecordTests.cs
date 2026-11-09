@@ -1,0 +1,137 @@
+using System.Text.Json.Nodes;
+using AwesomeAssertions;
+using Trax.StateMachine.Tests.UnitTests.LexiconTrains;
+
+namespace Trax.StateMachine.Tests.UnitTests
+{
+    /// <summary>
+    /// Given the train assemblies, a lexicon reads each train's fields from its records, as the host does, so a renamed
+    /// output field is caught at the lexicon line that names it and not first at the host's startup check (ADR
+    /// <c>Trax.Docs/adr/0059</c>).
+    /// </summary>
+    public class LexiconTrainRecordTests
+    {
+        private const string Trains = "Trax.StateMachine.Tests.UnitTests.LexiconTrains";
+
+        private static readonly string[] Wiring =
+        [
+            "    Input: square from target",
+            "    Stores: shots, result as lastShot",
+            "    Example: shots is \".\"",
+        ];
+
+        private static Gherkin.LexiconReading Read(string train, params string[] runs) =>
+            Gherkin.Lexicon.Read(
+                "game.lexicon",
+                string.Join(
+                    "\n",
+                    [
+                        "Version: 1",
+                        $"Trains in: {Trains}",
+                        "Actor: player \"a player\"",
+                        "  Roles: User",
+                        "Machine: game",
+                        "  Owned by: player",
+                        "  Context: shots is a string",
+                        "  Context: target is a string",
+                        "  State: Firing \"is firing\"",
+                        $"  Runs: {train} in Firing",
+                        .. runs,
+                        "    Outcome: \"the shot misses\" when result is \"miss\"",
+                        "    Outcome: \"the shot cannot be fired\" when it fails",
+                    ]
+                ),
+                [typeof(IFireShotTrain).Assembly]
+            );
+
+        [Test]
+        public void A_train_without_Returns_takes_its_output_and_input_from_its_records()
+        {
+            var reading = Read("FireShot", Wiring);
+
+            reading.Problems.Should().BeEmpty();
+            var invoke = JsonNode.Parse(reading.Json!)!["machines"]!["game"]!["invokes"]![
+                "Firing"
+            ]!;
+            invoke["train"]!.GetValue<string>().Should().Be($"{Trains}.IFireShotTrain");
+            invoke["output"]!
+                .AsArray()
+                .Select(f => f!["name"]!.GetValue<string>())
+                .Should()
+                .Equal("result", "shots");
+            invoke["input"]!
+                .AsObject()
+                .Select(kv => (kv.Key, kv.Value!.GetValue<string>()))
+                .Should()
+                .Equal(("square", "target"), ("owner", "$owner"), ("shots", "shots"));
+            invoke["examples"]!["the shot misses"]!
+                .ToJsonString()
+                .Should()
+                .Be("""{"result":"miss","shots":"."}""");
+        }
+
+        [Test]
+        public void A_renamed_output_field_is_a_problem_at_the_Stores_line_that_names_it()
+        {
+            var reading = Read("RenamedShot", Wiring);
+
+            reading.Succeeded.Should().BeFalse();
+            reading.Problems[0].Line.Should().Be(12);
+            reading.Problems[0].Message.Should().Contain("returns no 'result'");
+        }
+
+        [Test]
+        public void A_Returns_line_that_disagrees_with_the_record_is_a_problem_at_its_line()
+        {
+            var reading = Read(
+                "FireShot",
+                ["    Returns: result is a boolean, shots is a string", .. Wiring]
+            );
+
+            reading.Succeeded.Should().BeFalse();
+            reading.Problems[0].Line.Should().Be(11);
+            reading
+                .Problems[0]
+                .Message.Should()
+                .Contain("returns 'result' as a string, not a boolean");
+        }
+
+        [Test]
+        public void A_train_input_nothing_feeds_is_a_problem_at_its_Runs_line()
+        {
+            var reading = Read("FireShot", Wiring[1..]);
+
+            reading.Succeeded.Should().BeFalse();
+            reading.Problems[0].Line.Should().Be(10);
+            reading
+                .Problems[0]
+                .Message.Should()
+                .Contain("'square' has no context field to come from");
+        }
+
+        [Test]
+        public void A_train_the_assemblies_do_not_have_is_a_problem_at_its_Runs_line()
+        {
+            var reading = Read("NoSuch", Wiring);
+
+            reading.Succeeded.Should().BeFalse();
+            reading.Problems[0].Line.Should().Be(10);
+            reading.Problems[0].Message.Should().Contain("no train");
+        }
+    }
+}
+
+namespace Trax.StateMachine.Tests.UnitTests.LexiconTrains
+{
+    using Trax.Effect.Services.ServiceTrain;
+
+    public sealed record FireShotInput(string Square, string Shots, string Owner);
+
+    public sealed record FireShotOutput(string Result, string Shots);
+
+    public interface IFireShotTrain : IServiceTrain<FireShotInput, FireShotOutput>;
+
+    public sealed record RenamedOutput(string Outcome, string Shots);
+
+    public interface IRenamedShotTrain : IServiceTrain<FireShotInput, RenamedOutput>;
+}

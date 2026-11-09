@@ -1,0 +1,618 @@
+{
+  "version": 1,
+  "actors": {
+    "player": {
+      "noun": "a player",
+      "roles": [
+        "User"
+      ]
+    }
+  },
+  "machines": {
+    "game": {
+      "ownedBy": "player",
+      "noun": "game",
+      "start": "starts a game",
+      "initial": "Dealing",
+      "context": [
+        {
+          "name": "board",
+          "type": "string",
+          "nullable": false,
+          "constraints": []
+        },
+        {
+          "name": "computerShot",
+          "type": "string",
+          "nullable": true,
+          "constraints": []
+        },
+        {
+          "name": "computerTarget",
+          "type": "string",
+          "nullable": true,
+          "constraints": []
+        },
+        {
+          "name": "fleet",
+          "type": "string",
+          "nullable": false,
+          "constraints": []
+        },
+        {
+          "name": "shots",
+          "type": "string",
+          "nullable": false,
+          "constraints": []
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "nullable": true,
+          "constraints": [],
+          "enum": [
+            "A1",
+            "A2",
+            "A3",
+            "A4",
+            "A5",
+            "A6",
+            "A7",
+            "A8",
+            "A9",
+            "A10",
+            "B1",
+            "B2",
+            "B3",
+            "B4",
+            "B5",
+            "B6",
+            "B7",
+            "B8",
+            "B9",
+            "B10"
+          ]
+        },
+        {
+          "name": "yourShot",
+          "type": "string",
+          "nullable": true,
+          "constraints": []
+        }
+      ],
+      "states": {
+        "Dealing": "is dealing the fleets",
+        "NotDealt": "could not be dealt",
+        "PlayerTurn": "is waiting for the player's shot",
+        "Firing": "is firing the player's shot",
+        "ComputerTurn": "is waiting for the computer's shot",
+        "Won": "is won",
+        "Lost": "is lost",
+        "ShotLanded": "is showing where the player's shot landed"
+      },
+      "triggers": {
+        "Fire": {
+          "phrase": "fires at {square} in {subject}",
+          "input": [
+            {
+              "name": "square",
+              "type": "string",
+              "nullable": false,
+              "constraints": [],
+              "enum": [
+                "A1",
+                "A2",
+                "A3",
+                "A4",
+                "A5",
+                "A6",
+                "A7",
+                "A8",
+                "A9",
+                "A10",
+                "B1",
+                "B2",
+                "B3",
+                "B4",
+                "B5",
+                "B6",
+                "B7",
+                "B8",
+                "B9",
+                "B10"
+              ]
+            }
+          ],
+          "reduce": {
+            "reduce": "set",
+            "steps": [
+              {
+                "field": "target",
+                "value": {
+                  "input": "square"
+                }
+              }
+            ]
+          }
+        },
+        "PassTurn": {
+          "phrase": "hands {subject} to the computer"
+        }
+      },
+      "invokes": {
+        "Dealing": {
+          "train": "Battleship.Hub.Trains.IDealFleetsTrain",
+          "output": [
+            {
+              "name": "board",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            },
+            {
+              "name": "fleet",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "outcomes": {
+            "the fleets are dealt": {
+              "outcome": "done",
+              "reduce": {
+                "reduce": "set",
+                "steps": [
+                  {
+                    "field": "fleet",
+                    "value": {
+                      "input": "fleet"
+                    }
+                  },
+                  {
+                    "field": "board",
+                    "value": {
+                      "input": "board"
+                    }
+                  },
+                  {
+                    "field": "shots",
+                    "value": {
+                      "const": "...................."
+                    }
+                  }
+                ]
+              }
+            },
+            "dealing the fleets fails": {
+              "outcome": "failed"
+            },
+            "dealing the fleets is called off": {
+              "outcome": "cancelled"
+            }
+          },
+          "examples": {
+            "the fleets are dealt": {
+              "board": "....................",
+              "fleet": "f-1"
+            }
+          }
+        },
+        "Firing": {
+          "train": "Battleship.Hub.Trains.IFireShotTrain",
+          "input": {
+            "fleet": "fleet",
+            "shots": "shots",
+            "owner": "$owner",
+            "square": "target"
+          },
+          "output": [
+            {
+              "name": "result",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            },
+            {
+              "name": "shots",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "outcomes": {
+            "the shot misses": {
+              "outcome": "done",
+              "when": {
+                "rule": "oneOf",
+                "source": "input",
+                "field": "result",
+                "values": [
+                  "miss"
+                ]
+              },
+              "reduce": {
+                "reduce": "set",
+                "steps": [
+                  {
+                    "field": "shots",
+                    "value": {
+                      "input": "shots"
+                    }
+                  },
+                  {
+                    "field": "yourShot",
+                    "value": {
+                      "input": "result"
+                    }
+                  }
+                ]
+              }
+            },
+            "the shot hits a ship": {
+              "outcome": "done",
+              "when": {
+                "rule": "oneOf",
+                "source": "input",
+                "field": "result",
+                "values": [
+                  "hit"
+                ]
+              },
+              "reduce": {
+                "reduce": "set",
+                "steps": [
+                  {
+                    "field": "shots",
+                    "value": {
+                      "input": "shots"
+                    }
+                  },
+                  {
+                    "field": "yourShot",
+                    "value": {
+                      "input": "result"
+                    }
+                  }
+                ]
+              }
+            },
+            "the shot sinks a ship": {
+              "outcome": "done",
+              "when": {
+                "rule": "oneOf",
+                "source": "input",
+                "field": "result",
+                "values": [
+                  "sunk"
+                ]
+              },
+              "reduce": {
+                "reduce": "set",
+                "steps": [
+                  {
+                    "field": "shots",
+                    "value": {
+                      "input": "shots"
+                    }
+                  },
+                  {
+                    "field": "yourShot",
+                    "value": {
+                      "input": "result"
+                    }
+                  }
+                ]
+              }
+            },
+            "the shot sinks the computer's last ship": {
+              "outcome": "done",
+              "when": {
+                "rule": "oneOf",
+                "source": "input",
+                "field": "result",
+                "values": [
+                  "won"
+                ]
+              },
+              "reduce": {
+                "reduce": "set",
+                "steps": [
+                  {
+                    "field": "shots",
+                    "value": {
+                      "input": "shots"
+                    }
+                  },
+                  {
+                    "field": "yourShot",
+                    "value": {
+                      "input": "result"
+                    }
+                  }
+                ]
+              }
+            },
+            "the square was already tried": {
+              "outcome": "done",
+              "when": {
+                "rule": "oneOf",
+                "source": "input",
+                "field": "result",
+                "values": [
+                  "repeat"
+                ]
+              },
+              "reduce": {
+                "reduce": "set",
+                "steps": [
+                  {
+                    "field": "shots",
+                    "value": {
+                      "input": "shots"
+                    }
+                  },
+                  {
+                    "field": "yourShot",
+                    "value": {
+                      "input": "result"
+                    }
+                  }
+                ]
+              }
+            },
+            "the shot cannot be fired": {
+              "outcome": "failed"
+            },
+            "the shot is called off": {
+              "outcome": "cancelled"
+            }
+          },
+          "examples": {
+            "the shot misses": {
+              "result": "miss",
+              "shots": "...................."
+            },
+            "the shot hits a ship": {
+              "result": "hit",
+              "shots": "...................."
+            },
+            "the shot sinks a ship": {
+              "result": "sunk",
+              "shots": "...................."
+            },
+            "the shot sinks the computer's last ship": {
+              "result": "won",
+              "shots": "...................."
+            },
+            "the square was already tried": {
+              "result": "repeat",
+              "shots": "...................."
+            }
+          }
+        },
+        "ComputerTurn": {
+          "train": "Battleship.Hub.Trains.IComputerShotTrain",
+          "input": {
+            "board": "board"
+          },
+          "output": [
+            {
+              "name": "board",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            },
+            {
+              "name": "result",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            },
+            {
+              "name": "square",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "outcomes": {
+            "the computer misses": {
+              "outcome": "done",
+              "when": {
+                "rule": "oneOf",
+                "source": "input",
+                "field": "result",
+                "values": [
+                  "miss"
+                ]
+              },
+              "reduce": {
+                "reduce": "set",
+                "steps": [
+                  {
+                    "field": "board",
+                    "value": {
+                      "input": "board"
+                    }
+                  },
+                  {
+                    "field": "computerShot",
+                    "value": {
+                      "input": "result"
+                    }
+                  },
+                  {
+                    "field": "computerTarget",
+                    "value": {
+                      "input": "square"
+                    }
+                  }
+                ]
+              }
+            },
+            "the computer hits a ship": {
+              "outcome": "done",
+              "when": {
+                "rule": "oneOf",
+                "source": "input",
+                "field": "result",
+                "values": [
+                  "hit"
+                ]
+              },
+              "reduce": {
+                "reduce": "set",
+                "steps": [
+                  {
+                    "field": "board",
+                    "value": {
+                      "input": "board"
+                    }
+                  },
+                  {
+                    "field": "computerShot",
+                    "value": {
+                      "input": "result"
+                    }
+                  },
+                  {
+                    "field": "computerTarget",
+                    "value": {
+                      "input": "square"
+                    }
+                  }
+                ]
+              }
+            },
+            "the computer sinks a ship": {
+              "outcome": "done",
+              "when": {
+                "rule": "oneOf",
+                "source": "input",
+                "field": "result",
+                "values": [
+                  "sunk"
+                ]
+              },
+              "reduce": {
+                "reduce": "set",
+                "steps": [
+                  {
+                    "field": "board",
+                    "value": {
+                      "input": "board"
+                    }
+                  },
+                  {
+                    "field": "computerShot",
+                    "value": {
+                      "input": "result"
+                    }
+                  },
+                  {
+                    "field": "computerTarget",
+                    "value": {
+                      "input": "square"
+                    }
+                  }
+                ]
+              }
+            },
+            "the computer sinks the player's last ship": {
+              "outcome": "done",
+              "when": {
+                "rule": "oneOf",
+                "source": "input",
+                "field": "result",
+                "values": [
+                  "won"
+                ]
+              },
+              "reduce": {
+                "reduce": "set",
+                "steps": [
+                  {
+                    "field": "board",
+                    "value": {
+                      "input": "board"
+                    }
+                  },
+                  {
+                    "field": "computerShot",
+                    "value": {
+                      "input": "result"
+                    }
+                  },
+                  {
+                    "field": "computerTarget",
+                    "value": {
+                      "input": "square"
+                    }
+                  }
+                ]
+              }
+            },
+            "the computer cannot fire": {
+              "outcome": "failed"
+            },
+            "the computer's shot is called off": {
+              "outcome": "cancelled"
+            }
+          },
+          "examples": {
+            "the computer misses": {
+              "board": "....................",
+              "result": "miss",
+              "square": "A1"
+            },
+            "the computer hits a ship": {
+              "board": "....................",
+              "result": "hit",
+              "square": "A1"
+            },
+            "the computer sinks a ship": {
+              "board": "....................",
+              "result": "sunk",
+              "square": "A1"
+            },
+            "the computer sinks the player's last ship": {
+              "board": "....................",
+              "result": "won",
+              "square": "A1"
+            }
+          }
+        }
+      }
+    }
+  },
+  "views": {
+    "games": {
+      "reads": [
+        {
+          "machine": "game"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "game.state",
+          "labels": {
+            "Dealing": "Dealing the fleets",
+            "NotDealt": "Could not be dealt",
+            "PlayerTurn": "Your turn",
+            "Firing": "Firing",
+            "ComputerTurn": "The computer's turn",
+            "Won": "You won",
+            "Lost": "You lost",
+            "ShotLanded": "Your shot landed"
+          }
+        },
+        "shot": {
+          "from": "game.yourShot"
+        },
+        "reply": {
+          "from": "game.computerShot"
+        }
+      }
+    }
+  }
+}

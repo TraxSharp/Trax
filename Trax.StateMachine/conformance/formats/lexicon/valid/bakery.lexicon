@@ -1,0 +1,70 @@
+Version: 1
+
+Actor: customer "a customer"
+  Roles: customer
+Actor: baker "a baker"
+  Roles: baker
+
+Machine: order
+  Owned by: customer
+  Started by: "has an order"
+  Context: loaves is an integer
+  Context: approved is a boolean, may be empty
+
+  State: Draft     "is a draft"
+  State: Paying    "is being paid for"
+  State: Placed    "is placed"
+  State: Declined  "was declined"
+  State: Baking    "is baking"
+
+  Trigger: Order "orders {loaves} loaves for {subject}"
+    Input: loaves is an integer
+    Sets: loaves
+  Trigger: Place "places {subject}"
+  Trigger: Bake  "{subject} starts baking"
+
+  Guard: hasLoaves when loaves is more than 0
+    Holds: "has something in it"
+    Fails: "has nothing in it"
+
+  Runs: Bakery.Trains.ITakePayment in Paying
+    Input: amount from loaves
+    Returns: approved is a boolean
+    Outcome: "the payment goes through"     when approved is true
+    Outcome: "the payment is declined"      when approved is false
+    Outcome: "the payment cannot be taken"  when it fails
+
+Machine: receipt
+  Owned by: customer
+  Context: orderId is a uuid
+  State: Issued "is issued"
+  State: Void   "is void"
+  Trigger: Cancel "{subject} is voided"
+  Link: "the receipt for {subject}" to order by orderId
+
+Machine: shift
+  Owned by: baker
+  Started by: "has a shift"
+  State: Off "is not started"
+  State: On  "is on"
+  Trigger: ClockIn "clocks in for {subject}"
+
+Machine: shop "the shop"
+  System
+  State: Closed "is closed"
+  State: Open   "is open"
+  Trigger: Open  "the shop opens"
+  Trigger: Close "the shop closes"
+
+View: "orders"
+  Reads: order
+  Field: status from order's state
+    Label: Draft  "Not sent"
+    Label: Baking "In the oven"
+  Field: loaves from order's loaves
+
+View: "the shop sign"
+  Reads: order, shop
+  Field: open from shop's state
+    Label: Open   "We're open"
+    Label: Closed "Closed"
