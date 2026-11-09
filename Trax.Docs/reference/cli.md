@@ -316,7 +316,7 @@ On success `generate` prints the two project folders and these next steps, and e
 The hub keeps the template's in-memory data provider, so it runs with no database
 ([Switch a template to Postgres](/docs/reference/switch-a-template-to-postgres) moves it), and the
 template's URLs: `http://localhost:5400/trax/graphql` for the GraphQL IDE and
-`http://localhost:5400/trax` for the dashboard (Development only). Every GraphQL operation needs the
+`http://localhost:5400/trax/dashboard` for the operations console (Development only). Every GraphQL operation needs the
 header `X-Api-Key: demo-key-do-not-use-in-production`.
 
 ## State machines (`trax machine`)
@@ -516,6 +516,12 @@ trax machine diagram --machines ./machines --format html --out board.html
 
 `trax client` generates a frontend's typed client from the [client manifest](/docs/sdk-reference/statemachine-api/client-manifest)
 a host exports, and reads nothing else: no running host, no database, no credential.
+
+The host writes the manifest when it is started with `--trax-export-client <path>` and ends with
+`await app.RunTraxAsync(args)` in place of `app.Run()`. `RunTraxAsync` is in the
+`Trax.Api.GraphQL.PersistedOperations` package (`Trax.Api.GraphQL.PersistedOperations.Extensions`), which the
+`trax-hub` template does not reference; [Serve features from the hub template](/docs/statemachine/serve-features-from-the-hub-template#6-export-the-client-manifest)
+adds it.
 
 ```bash
 dotnet run --project Api -- --trax-export-client web/src/trax/manifest.json   # on the host, production configuration
