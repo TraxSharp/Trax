@@ -262,16 +262,22 @@ instance for its owner, and `IOperationsService.WatchMachineInstancesAsync`, the
 
 ### Tables
 
-`snapshot_draft` and `effect_claim` (both in the `trax` schema) ship as migrations in the core data
-providers and apply automatically when you register one. `UsePostgres(...)` runs
-`040_state_machine_snapshots.sql`, `048_snapshot_draft_request_scope.sql`,
-`051_snapshot_draft_machine_key.sql` and `053_effect_claim_content_fingerprint.sql`; `UseSqlite(...)` runs `006`,
-`013`, `015` and `018` of the same names. A host
-that calls `AddStateMachines` gets the tables for free; one that does not just carries two empty tables. You do
-not create or migrate them yourself, and there is no `EnsureCreated` step. Their models are
-`Trax.Effect.Models.SnapshotDraft.SnapshotDraft` and `Trax.Effect.Models.EffectClaim.EffectClaim`, mapped on the
-core data context like every other Trax table, so on SQLite the data context strips the `trax` schema, maps the
-`jsonb` context column to `TEXT`, and stores each timestamp as fixed-width UTC text that sorts in time order.
+The machines are stored in four tables in the `trax` schema:
+
+| Table | Model | Holds |
+|---|---|---|
+| `snapshot_draft` | `Trax.Effect.Models.SnapshotDraft.SnapshotDraft` | One row per instance: its owner, machine, state, context, revision and the timers, runs and effects it is waiting on. |
+| `effect_claim` | `Trax.Effect.Models.EffectClaim.EffectClaim` | The ledger of exactly-once effects: one row per effect key, claimed before the effect runs and completed with its receipt. |
+| `snapshot_transition` | `Trax.Effect.Models.SnapshotTransition.SnapshotTransition` | An instance's history: one row per snapshot the store writes, with the command, actor and states, never the context. |
+| `machine_policy_fire` | `Trax.Effect.Models.MachinePolicyFire.MachinePolicyFire` | The fires machine policies still owe: written with the transition that sets one off, deleted when it fires. |
+
+They ship as migrations in the core data providers, so `UsePostgres(...)` and `UseSqlite(...)` create and update
+them at startup with every other Trax table; [Schema migrations](/docs/reference/schema-migrations) lists the
+scripts that change them. A host that calls `AddStateMachines` gets the tables for free; one that does not carries
+them empty. You do not create or migrate them yourself, and there is no `EnsureCreated` step. Their models are
+mapped on the core data context like every other Trax table, so on SQLite the data context strips the `trax`
+schema, maps the `jsonb` context column to `TEXT`, and stores each timestamp as fixed-width UTC text that sorts in
+time order.
 
 A draft is keyed by its user, its machine and its id, so two machines can each give one user a draft under
 the same well-known id without touching each other's.

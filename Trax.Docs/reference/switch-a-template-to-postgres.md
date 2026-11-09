@@ -51,12 +51,53 @@ With a database, the scheduler queues work in it and runs it on local workers, s
 work. `HelloWorldTrain` exposes `Run` only; change its `[TraxMutation(GraphQLOperation.Run)]` to
 `[TraxMutation]` to serve the queue mode too.
 
-The application context, `AppDbContext`, is separate and stays in memory. To move it, add
-`Npgsql.EntityFrameworkCore.PostgreSQL` and change its `UseInMemoryDatabase("app")` to
-`UseNpgsql(...)`; its tables go under the schema in `Data/AppSchema.cs`.
-
 The schema changes each release applies are listed in
 [Schema migrations](/docs/reference/schema-migrations).
+
+## Move the application context
+
+In the `trax-hub` and `trax-api` templates the application context, `AppDbContext`, is separate
+and stays in memory. Its tables go under the schema in `Data/AppSchema.cs`, and on Postgres they
+need EF Core migrations, as the comment above `EnsureCreated()` in `Program.cs` says.
+`EnsureCreated()` creates nothing in a database that already has tables, and `UsePostgres` has
+created Trax's by the time it runs, so the host starts without error and the first query of
+`AppDbContext` fails with `42P01: relation "app.notes" does not exist`.
+
+1. Add the EF Core packages and the `dotnet ef` tool:
+
+   ```bash
+   dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
+   dotnet add package Microsoft.EntityFrameworkCore.Design
+   dotnet new tool-manifest
+   dotnet tool install dotnet-ef
+   ```
+
+2. Change `UseInMemoryDatabase("app")` to `UseNpgsql`, keeping EF Core's migration history in the
+   application's schema:
+
+   ```csharp fragment
+   builder.Services.AddDbContextFactory<AppDbContext>(options =>
+       options.UseNpgsql(
+           builder.Configuration.GetConnectionString("TraxDatabase"),
+           npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", AppSchema.Name)
+       )
+   );
+   ```
+
+   Without `MigrationsHistoryTable`, the history table goes to the first schema on the
+   connection's `search_path`, which is `trax` when the database user is named `trax`.
+
+3. Replace `db.Database.EnsureCreated();` with `db.Database.Migrate();`.
+
+4. Create the first migration. `dotnet ef` runs `Program.cs` in the Development environment, so
+   it reads `ConnectionStrings:TraxDatabase` from `appsettings.Development.json`:
+
+   ```bash
+   dotnet ef migrations add InitialApp --context AppDbContext
+   ```
+
+The host creates the `app` schema and its tables at startup, and applies each migration you add
+after a model change.
 
 ## SDK Reference
 
