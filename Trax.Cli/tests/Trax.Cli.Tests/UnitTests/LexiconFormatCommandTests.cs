@@ -106,6 +106,22 @@ public class LexiconFormatCommandTests
     }
 
     [Test]
+    public void Build_output_and_dependencies_are_not_formatted()
+    {
+        Format(_dir);
+        foreach (var copy in new[] { "bin", "obj", "node_modules", ".git" })
+        {
+            Directory.CreateDirectory(Path.Combine(_dir, copy));
+            File.WriteAllText(Path.Combine(_dir, copy, "shop.lexicon"), Untidy);
+        }
+
+        var (exit, _, err) = Format(_dir, check: true);
+
+        exit.Should().Be(0, err);
+        File.ReadAllText(Path.Combine(_dir, "bin", "shop.lexicon")).Should().Be(Untidy);
+    }
+
+    [Test]
     public void A_line_it_cannot_read_is_reported_at_its_line_and_the_file_is_left_alone()
     {
         File.WriteAllText(File_, Untidy.Replace("Roles:", "Rolez:"));

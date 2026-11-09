@@ -361,6 +361,23 @@ internal static class MachineCommand
         try
         {
             FeatureDirectory.RefuseForeign(outDir);
+            // --out is the command's: what it does not derive there it removes, a glossary it was told to read included.
+            if (
+                glossaryPath is not null
+                && Path.GetFullPath(glossaryPath)
+                    .StartsWith(
+                        Path.TrimEndingDirectorySeparator(Path.GetFullPath(outDir))
+                            + Path.DirectorySeparatorChar,
+                        StringComparison.Ordinal
+                    )
+            )
+            {
+                stderr.WriteLine(
+                    $"--glossary {glossaryPath} is inside --out {outDir}, which from-gherkin owns and would remove "
+                        + "it from. Keep a hand-written glossary outside --out, or write the lexicon it elaborates from."
+                );
+                return 1;
+            }
             var result = FeatureDirectory.Derive(featuresDir, glossaryPath, trains);
             foreach (var step in result.UiSteps)
                 stdout.WriteLine($"not derived (about the UI): {step}");

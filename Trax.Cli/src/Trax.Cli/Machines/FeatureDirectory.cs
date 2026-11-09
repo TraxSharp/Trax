@@ -72,6 +72,11 @@ internal static class FeatureDirectory
                     ? $"--features is a file, {featuresDir}: give the directory that holds the .feature files."
                     : $"--features does not exist: {featuresDir}."
             );
+        if (glossaryPath is not null && trains is { Count: > 0 })
+            throw new FeatureMachinesException(
+                "--trains is read with a lexicon, and --glossary reads a JSON glossary, which already writes out its "
+                    + "trains' fields. Give one or the other."
+            );
         var (glossary, json) = glossaryPath is null
             ? FromLexicon(featuresDir, trains ?? [])
             : (FromJson(glossaryPath), null);

@@ -97,6 +97,97 @@ public class FromGherkinCommandTests
     public void TearDown() => Directory.Delete(_dir, recursive: true);
 
     [Test]
+    public void A_glossary_json_with_no_lexicon_is_refused_naming_the_way_to_read_it()
+    {
+        var (exit, _, err) = FromLexicon();
+
+        exit.Should().Be(1);
+        err.Should().Contain("holds glossary.json and no lexicon").And.Contain("--glossary");
+        Directory.Exists(Out).Should().BeFalse();
+    }
+
+    [Test]
+    public void A_glossary_inside_out_is_refused_and_left_where_it_is()
+    {
+        Directory.CreateDirectory(Out);
+        var inside = Path.Combine(Out, "glossary.json");
+        File.Move(Path.Combine(Features, "glossary.json"), inside);
+
+        var (exit, _, err) = Run(glossary: inside);
+
+        exit.Should().Be(1);
+        err.Should().Contain("is inside --out");
+        File.ReadAllText(inside).Should().Be(Glossary);
+    }
+
+    [Test]
+    public void Trains_with_a_json_glossary_is_refused()
+    {
+        var (exit, _, err) = Run(
+            trains: [typeof(LexiconTrains.ICheckRefundTrain).Assembly.Location]
+        );
+
+        exit.Should().Be(1);
+        err.Should().Contain("--trains is read with a lexicon");
+    }
+
+    [Test]
+    public void Trains_that_are_not_there_is_a_message()
+    {
+        UseLexicon();
+
+        var stderr = new StringWriter();
+        var exit = MachineCommand.RunFromGherkin(
+            Features,
+            null,
+            Out,
+            false,
+            new StringWriter(),
+            stderr,
+            [Path.Combine(_dir, "Missing.dll")]
+        );
+
+        exit.Should().Be(1);
+        stderr.ToString().Should().Contain("--trains: Assembly not found");
+    }
+
+    [Test]
+    public void Trains_give_a_lexicon_the_fields_its_Runs_lines_leave_out()
+    {
+        UseLexicon(
+            Lexicon
+                + $"""
+
+                Machine: refund
+                  Owned by: customer
+                  Context: reason is a string
+                  State: Asked "is asked for"
+                  State: Checking "is being checked"
+                  Runs: {typeof(LexiconTrains.ICheckRefundTrain).FullName} in Checking
+                    Stores: approved
+                    Outcome: "the refund is approved" when approved is true
+                    Outcome: "the refund cannot be checked" when it fails
+                """
+        );
+        var without = new StringWriter();
+        var withTrains = new StringWriter();
+
+        var refused = MachineCommand.RunUsage(Features, null, false, new StringWriter(), without);
+        var read = MachineCommand.RunUsage(
+            Features,
+            null,
+            false,
+            new StringWriter(),
+            withTrains,
+            [typeof(LexiconTrains.ICheckRefundTrain).Assembly.Location]
+        );
+
+        refused.Should().Be(1);
+        without.ToString().Should().Contain("returns no 'approved'");
+        read.Should().Be(0, withTrains.ToString());
+    }
+
+    [Test]
     public void A_lexicon_is_elaborated_and_its_glossary_written_with_the_machines()
     {
         UseLexicon();
@@ -930,17 +1021,23 @@ public class FromGherkinCommandTests
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
-    private (int Exit, string Out, string Err) Run(bool check = false, string? outDir = null)
+    private (int Exit, string Out, string Err) Run(
+        bool check = false,
+        string? outDir = null,
+        string? glossary = null,
+        IReadOnlyList<string>? trains = null
+    )
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = MachineCommand.RunFromGherkin(
             Features,
-            Path.Combine(Features, "glossary.json"),
+            glossary ?? Path.Combine(Features, "glossary.json"),
             outDir ?? Out,
             check,
             stdout,
-            stderr
+            stderr,
+            trains
         );
         return (exit, stdout.ToString(), stderr.ToString());
     }

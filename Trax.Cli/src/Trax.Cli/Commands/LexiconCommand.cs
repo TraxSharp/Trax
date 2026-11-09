@@ -51,6 +51,28 @@ internal static class LexiconCommand
         return command;
     }
 
+    // Build output and dependencies hold copies of lexicons, never their sources.
+    private static readonly HashSet<string> Skipped = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bin",
+        "obj",
+        "node_modules",
+    };
+
+    private static IEnumerable<string> Lexicons(string directory)
+    {
+        foreach (var file in Directory.EnumerateFiles(directory, "*" + Lexicon.Extension))
+            yield return file;
+        foreach (var child in Directory.EnumerateDirectories(directory))
+        {
+            var name = Path.GetFileName(child);
+            if (Skipped.Contains(name) || name.StartsWith('.'))
+                continue;
+            foreach (var file in Lexicons(child))
+                yield return file;
+        }
+    }
+
     internal static int RunFormat(
         IReadOnlyList<string> paths,
         bool check,
@@ -62,11 +84,7 @@ internal static class LexiconCommand
         foreach (var path in paths)
         {
             if (Directory.Exists(path))
-                files.AddRange(
-                    Directory
-                        .EnumerateFiles(path, "*" + Lexicon.Extension, SearchOption.AllDirectories)
-                        .Order(StringComparer.Ordinal)
-                );
+                files.AddRange(Lexicons(path).Order(StringComparer.Ordinal));
             else if (File.Exists(path))
                 files.Add(path);
             else
