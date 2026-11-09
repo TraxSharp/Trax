@@ -36,8 +36,9 @@ every caller sending a field an older input type does not have, and says nothing
 ## Consequences
 
 This applies to input a caller or operator writes. JSON Trax writes and reads back itself (a work
-queue entry's stored input, manifest properties, metadata input) keeps the system options: it is
-always camelCase, and reading it differently would change nothing.
+queue entry's stored input, manifest properties, metadata input) keeps the system options: its
+member names are camelCase and its dictionary keys are written as given, and reading it differently
+would change nothing.
 
 A dictionary inside an input keeps case-sensitive keys: `PropertyNameCaseInsensitive` matches
 properties only, so `{"a":1,"A":2}` in a `Dictionary<string, int>` is two entries, not a duplicate.
@@ -54,6 +55,9 @@ settings from `ITrainExecutionService.PrepareAsync` instead of repeating them.
 Not covered: nothing checks that a new surface reading caller input uses the same settings.
 
 ## Changelog
+
+- **2026-11-09**: Stored JSON keeps a dictionary's keys as the caller gave them; only member names
+  are camel-cased. Rows written before keep their lowercased keys.
 
 - **2026-10-01**: The dashboard's Run dialog no longer reads the input itself: it passes its JSON
   to `RunTrainAsync`, so it refuses a duplicate property as the API does.
