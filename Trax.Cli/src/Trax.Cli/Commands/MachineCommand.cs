@@ -361,6 +361,9 @@ internal static class MachineCommand
             var result = FeatureDirectory.Derive(featuresDir, glossaryPath);
             foreach (var step in result.UiSteps)
                 stdout.WriteLine($"not derived (about the UI): {step}");
+            // A warning is printed and stops nothing, --check included.
+            foreach (var warning in result.Warnings)
+                stderr.WriteLine($"warning: {warning}");
             if (result.Problems.Count > 0)
             {
                 foreach (var problem in result.Problems)
@@ -896,6 +899,8 @@ internal static class MachineCommand
             }
             foreach (var step in result.UiSteps)
                 stdout.WriteLine($"not derived (about the UI): {step}");
+            foreach (var warning in result.Warnings)
+                stderr.WriteLine($"warning: {warning}");
             return 0;
         }
         catch (FeatureMachinesException ex)

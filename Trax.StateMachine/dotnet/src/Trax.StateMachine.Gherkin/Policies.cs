@@ -18,7 +18,8 @@ internal static class PolicyMerge
         Glossary glossary,
         IReadOnlyList<Walk> walks,
         IReadOnlyDictionary<string, JsonObject> irs,
-        List<Problem> problems
+        List<Problem> problems,
+        List<Problem> warnings
     )
     {
         var policies = new List<JsonObject>();
@@ -215,6 +216,19 @@ internal static class PolicyMerge
             .ToList();
         foreach (var loop in PolicyLoops.Find(read, irs))
             problems.Add(new Problem("glossary", 0, PolicyLoops.Problem(loop)));
+
+        // A policy that waits for another's result is green in memory, where a When plays its cascade in the Thens'
+        // order, and can miss on the host, where each policy fire and each train runs on its own. A warning, at the
+        // scenario that showed the later policy, not a refusal: host code may still keep the order.
+        foreach (var race in PolicyLoops.Races(read, irs))
+        {
+            var shown = observed.First(o =>
+                o.When == race.Later.When
+                && o.Enters == race.Later.Enters
+                && o.Target == race.Later.Target
+            );
+            warnings.Add(new Problem(shown.Scenario.File, shown.Line, PolicyLoops.Warning(race)));
+        }
 
         return new JsonArray(policies.Select(p => (JsonNode?)p).ToArray());
     }

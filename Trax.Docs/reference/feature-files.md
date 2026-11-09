@@ -151,6 +151,14 @@ has to follow; `trax machine explain` prints what derivation read from each one.
 | Timers alone do not form a loop. Let an event lead out of one of the states. | `Closed --after 4 s--> Departed`, `Departed --after 10 s--> Scheduled`, `Scheduled --OpenCheckIn--> Open` | "the timers of Closed -> Departed -> Scheduled -> Closed form a cycle no event breaks", at each scenario that showed one of them; the host refuses the same loop. |
 | A person fires triggers on their own instances only, and never on a system machine. | `When check-in opens for the flight` (the server), not `When Kit opens check-in for the flight`. | "only the server moves a system machine", or "acts on Ada's booking". |
 
+The order of the Thens is not an order on the host. In memory, `trax machine run` plays a When's whole cascade at
+once, in the order its Thens list it. The host runs each policy fire and each invoked train on its own, in no fixed
+order: the policy runner works the fires every `PolicyRunnerOptions.Interval` (1 second by default) and a worker runs
+the train on its own poll. So a policy that moves instances out of a state another policy moves them into, when its own
+state is reached from the other's with no person in between (through a train's outcome or another policy), may run
+first and find none there. Derivation warns of it, naming both policies, and writes the machines all the same: move
+the instances from a state the earlier policy leaves alone, or move them in one policy.
+
 ## The C# a machine names
 
 The glossary names the C# behind a machine, and derivation writes what a client sees into the IR (the custom names,

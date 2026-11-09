@@ -16,11 +16,15 @@ internal static class FeatureDirectory
     internal const string AccessFileName = "access.txt";
     internal const string IrSuffix = ".ir.json";
 
-    /// <summary>What a derivation gave: the files to write, keyed by name, or the problems that stopped it.</summary>
+    /// <summary>
+    /// What a derivation gave: the files to write, keyed by name, or the problems that stopped it, and the warnings,
+    /// which stop nothing.
+    /// </summary>
     internal sealed record Result(
         IReadOnlyDictionary<string, string> Files,
         IReadOnlyList<string> Problems,
-        IReadOnlyList<string> UiSteps
+        IReadOnlyList<string> UiSteps,
+        IReadOnlyList<string> Warnings
     );
 
     /// <summary>Reads the glossary and every <c>*.feature</c> under the features directory, and derives.</summary>
@@ -81,11 +85,13 @@ internal static class FeatureDirectory
     private static Result Derived(Derived derived)
     {
         var uiSteps = derived.UiSteps.Select(p => p.ToString()).ToList();
+        var warnings = derived.Warnings.Select(p => p.ToString()).ToList();
         if (derived.Problems.Count > 0)
             return new Result(
                 new Dictionary<string, string>(),
                 derived.Problems.Select(p => p.ToString()).ToList(),
-                uiSteps
+                uiSteps,
+                warnings
             );
 
         var files = new SortedDictionary<string, string>(StringComparer.Ordinal);
@@ -93,7 +99,7 @@ internal static class FeatureDirectory
             files[id + IrSuffix] = ir + "\n";
         files[HostFileName] = derived.Host! + "\n";
         files[AccessFileName] = derived.Access!;
-        return new Result(files, [], uiSteps);
+        return new Result(files, [], uiSteps, warnings);
     }
 
     /// <summary>Writes the files and removes the IR of every machine that no longer derives.</summary>

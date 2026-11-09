@@ -8,14 +8,16 @@ namespace Trax.StateMachine.Gherkin;
 /// <summary>
 /// What derivation wrote: each machine's IR (canonical JSON, by id) and the host file, or the problems that stopped it.
 /// A derivation with problems writes nothing. <see cref="UiSteps"/> are the Thens no phrase resolves, which are about
-/// the UI and are left to the browser runner.
+/// the UI and are left to the browser runner. <see cref="Warnings"/> are designs that derive and may still not hold on
+/// the host; they write nothing different and stop nothing.
 /// </summary>
 internal sealed record Derived(
     IReadOnlyDictionary<string, string> Irs,
     string? Host,
     string? Access,
     IReadOnlyList<Problem> Problems,
-    IReadOnlyList<Problem> UiSteps
+    IReadOnlyList<Problem> UiSteps,
+    IReadOnlyList<Problem> Warnings
 );
 
 /// <summary>
@@ -56,8 +58,9 @@ internal static class FeatureDerivation
                     irs[machine.Id] = ir;
             }
 
+        var warnings = new List<Problem>();
         var policies =
-            problems.Count == 0 ? PolicyMerge.Derive(glossary, walks, irs, problems) : [];
+            problems.Count == 0 ? PolicyMerge.Derive(glossary, walks, irs, problems, warnings) : [];
 
         var access = problems.Count == 0 ? Access.Derive(glossary, walks, irs, problems) : null;
         if (problems.Count > 0 || access is null)
@@ -66,7 +69,8 @@ internal static class FeatureDerivation
                 null,
                 null,
                 Sorted(problems),
-                Sorted(uiSteps)
+                Sorted(uiSteps),
+                Sorted(warnings)
             );
 
         foreach (var (id, ir) in irs)
@@ -119,10 +123,11 @@ internal static class FeatureDerivation
                 null,
                 null,
                 Sorted(problems),
-                Sorted(uiSteps)
+                Sorted(uiSteps),
+                Sorted(warnings)
             );
 
-        return new Derived(written, host, access.Table, [], Sorted(uiSteps));
+        return new Derived(written, host, access.Table, [], Sorted(uiSteps), Sorted(warnings));
     }
 
     // The server half of what the glossary names in C#: the effect each effect-bound edge of the IR runs, the type of each
