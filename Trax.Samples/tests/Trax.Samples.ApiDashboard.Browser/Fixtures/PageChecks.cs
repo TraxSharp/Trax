@@ -7,7 +7,8 @@ namespace Trax.Samples.ApiDashboard.Browser.Fixtures;
 /// <summary>
 /// What a page did that every test forbids, gathered while the test runs and checked when it ends
 /// (<see cref="ConsoleTest"/>): a console error or an uncaught exception, a Content-Security-Policy violation, a
-/// request to anywhere but the console's origin, and, on a host that requires persisted operations, a GraphQL
+/// request to anywhere but the console's origin, a GraphQL request the host answers with a 4xx, and, on a host that
+/// requires persisted operations, a GraphQL
 /// request or subscription carrying the text of a document the host registered (Api ADR 0042). It also keeps every
 /// GraphQL operation the page sent, for a test to read.
 /// </summary>
@@ -58,6 +59,7 @@ public sealed class PageChecks
         };
         page.PageError += (_, error) => checks.Problem($"uncaught: {error}");
         page.Request += (_, request) => checks.OnRequest(request);
+        page.Response += (_, response) => checks.OnResponse(response);
         page.WebSocket += (_, socket) =>
         {
             if (!checks.SameOrigin(new Uri(socket.Url)))
@@ -218,6 +220,35 @@ public sealed class PageChecks
         {
             Problem($"a GraphQL request that is not JSON: {body}");
         }
+    }
+
+    // A GraphQL request the host answers with a client error is one the console should not have sent:
+    // a refusal or a failed operation is an answer with errors, not a 4xx.
+    private void OnResponse(IResponse response)
+    {
+        if (
+            response.Status < 400
+            || response.Status >= 500
+            || response.Request.Method != "POST"
+            || !Uri.TryCreate(response.Url, UriKind.Absolute, out var url)
+            || !url.AbsolutePath.EndsWith("/trax/graphql")
+        )
+            return;
+        var name = "an unnamed operation";
+        try
+        {
+            using var json = JsonDocument.Parse(response.Request.PostData ?? "{}");
+            if (
+                json.RootElement.TryGetProperty("operationName", out var n)
+                && n.GetString() is { } named
+            )
+                name = named;
+        }
+        catch (JsonException)
+        {
+            // OnRequest reports a body that is not JSON.
+        }
+        Problem($"the host answered HTTP {response.Status} to {name}");
     }
 
     private void OnFrame(string? text)

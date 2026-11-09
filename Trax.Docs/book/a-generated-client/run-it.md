@@ -1,16 +1,16 @@
 ---
-title: "15.7 Run it"
-description: "Chapter 15 of the Trax book, section 7: Run it."
+title: "16.7 Run it"
+description: "Chapter 16 of the Trax book, section 7: Run it."
 type: tutorial
 area: general
-parent: "15. A generated client"
+parent: "16. A generated client"
 grand_parent: The Trax book
 nav_order: 7
 snippet_context: none
 follows: book/a-generated-client/the-page
 ---
 
-# 15.7 Run it
+# 16.7 Run it
 
 Start the hub and the worker, and the storefront:
 
@@ -38,4 +38,4 @@ mode logs only documents sent as text, and the page sent none.
 
 ---
 
-Next: [15.8 Keep it current](/docs/book/a-generated-client/keep-it-current)
+Next: [16.8 Keep it current](/docs/book/a-generated-client/keep-it-current)

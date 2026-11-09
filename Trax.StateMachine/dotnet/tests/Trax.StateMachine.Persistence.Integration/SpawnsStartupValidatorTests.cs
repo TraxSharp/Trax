@@ -40,6 +40,35 @@ public class SpawnsStartupValidatorTests
         }
     }
 
+    // As ParentOf, but Pack is fired only by the server, as a policy's trigger is.
+    private sealed class PolicyPackedParentOf<TChild>
+        : Machine<ConsignmentState, ConsignmentTrigger>
+        where TChild : class
+    {
+        protected override void Configure(IMachineBuilder<ConsignmentState, ConsignmentTrigger> m)
+        {
+            m.Id("policy-packed-parent-of")
+                .Version(1)
+                .StartsAt(
+                    ConsignmentState.Open,
+                    () => new JsonObject { ["parcelId"] = null, ["label"] = "" }
+                );
+            ((IIrMachineBuilder<ConsignmentState, ConsignmentTrigger>)m).ServerOnly(
+                ConsignmentTrigger.Pack
+            );
+            m.In(ConsignmentState.Open)
+                .Context<ConsignmentMachine.OpenContext>()
+                .On(ConsignmentTrigger.Pack)
+                .To(ConsignmentState.Packing);
+            m.In(ConsignmentState.Packing)
+                .Context<ConsignmentMachine.OpenContext>()
+                .Spawns<TChild, ConsignmentMachine.OpenContext, ParcelResult>(c => c.ParcelId)
+                .OnDone(ConsignmentState.Sent)
+                .OnFailed(ConsignmentState.Lost)
+                .OnCancelled(ConsignmentState.Recalled);
+        }
+    }
+
     private sealed class EndlessChild<T> : Machine<InspectionState, InspectionTrigger>
     {
         protected override void Configure(IMachineBuilder<InspectionState, InspectionTrigger> m)
@@ -106,4 +135,15 @@ public class SpawnsStartupValidatorTests
             .ContainSingle()
             .Which.Should()
             .Contain("initial state Building invokes a train");
+
+    [Test]
+    public void A_server_only_trigger_into_a_spawning_state_of_a_user_parent_is_refused() =>
+        Problems(new PolicyPackedParentOf<ParcelMachine>(), new ParcelMachine())
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain(
+                "Pack enters Packing",
+                "the server firing it would start the child with no user present"
+            );
 }

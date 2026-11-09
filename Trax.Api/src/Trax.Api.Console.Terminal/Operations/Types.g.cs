@@ -714,6 +714,9 @@ internal enum SnapshotTransitionActor
     /// <summary>Trax moving the instance itself: a timer, a run's outcome, or a parent spawning it.</summary>
     [global::System.Text.Json.Serialization.JsonStringEnumMemberName("MACHINE")]
     Machine,
+    /// <summary>The server reacting to another instance's transition through a machine policy; never a user.</summary>
+    [global::System.Text.Json.Serialization.JsonStringEnumMemberName("POLICY")]
+    Policy,
 }
 
 /// <summary>What wrote one row of a state-machine instance's history. Stored in trax.snapshot_transition.kind.</summary>

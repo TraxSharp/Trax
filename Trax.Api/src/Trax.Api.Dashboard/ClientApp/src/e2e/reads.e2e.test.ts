@@ -278,8 +278,8 @@ describe("reads (parity surface)", () => {
 
   test("persisted operations: the probe, the filtered list, and one operation with its history", async () => {
     expect(
-      pick(await gql(persistedOperationsAvailableDocument, {}), "persistedOperations.__typename"),
-    ).toBe("PersistedOperationQueries");
+      pick(await gql(persistedOperationsAvailableDocument, {}), "operations.config.canManagePersistedOperations"),
+    ).toBe(true);
     const ids = async (filter: Record<string, unknown> | null) =>
       (
         pick(

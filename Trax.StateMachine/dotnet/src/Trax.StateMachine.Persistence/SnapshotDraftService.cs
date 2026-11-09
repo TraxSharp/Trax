@@ -1310,7 +1310,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // than an unknown id would tell it.
         if (SystemOwned || Owner(actor) is not { } client)
             return new LoadResult.NotFound();
-        if (Rules.Get is { } rule && !await CallerRules.Admits(client, rule, cancellationToken))
+        if (!await CallerRules.MayRead(client, Rules, cancellationToken))
             return new LoadResult.NotFound();
         return await Load(client.UserKey, id, cancellationToken);
     }
@@ -2098,7 +2098,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
     private Type InvokeTrain(string state) => Invoke(state).TrainType;
 
-    private Func<JsonObject, object?> InvokeInput(string state) => Invoke(state).CreateInput;
+    private Func<JsonObject, string?, object?> InvokeInput(string state) =>
+        Invoke(state).CreateInput;
 
     /// <summary>
     /// Whether the draft is still exactly as <paramref name="loaded"/> read it. The effect runner asks after it has

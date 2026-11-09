@@ -21,15 +21,25 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The returns features, run against the hub by the Trax bindings, and the glossary they
+         read. Reqnroll writes a test class for each feature file. -->
+    <ReqnrollFeatureFiles Include="..\..\features\*.feature" Link="Features\%(Filename)%(Extension)" />
+    <None Include="..\..\features\*" LinkBase="features" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="reqnroll.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit.Analyzers" />
     <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="Reqnroll.NUnit" />
     <PackageReference Include="Trax.Core.Testing" />
     <PackageReference Include="Trax.Effect.Data.InMemory" />
     <PackageReference Include="Trax.Effect.Data.Testing" />
+    <PackageReference Include="Trax.StateMachine.Gherkin.Reqnroll" />
     <PackageReference Include="Trax.StateMachine.Testing" />
     <PackageReference Include="Trax.Mediator.Testing" />
   </ItemGroup>

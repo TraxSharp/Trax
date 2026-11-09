@@ -1231,11 +1231,12 @@ export const persistedOperationsScenario: MockSchemaOverrides = {
   }),
 };
 
-/** A host that does not serve persisted-operation management, or a caller outside its gate: the probe fails. */
-export const persistedOperationsUnavailable: MockSchemaOverrides = errorOverride(
-  "RootQuery",
-  "persistedOperations",
-);
+/** A host that does not serve persisted-operation management, or a caller outside its gate: the host says so. */
+export const persistedOperationsUnavailable: MockSchemaOverrides = {
+  resolvers: () => ({
+    ConfigQueries: { canManagePersistedOperations: () => false },
+  }),
+};
 
 // ── State machines ───────────────────────────────────────────────────────
 // Two machines, as the Recovery sample has them. source-partition is system-owned: ...0001 waits on
@@ -1453,7 +1454,7 @@ type TransitionRow = {
   revision: number;
   kind: "START" | "COMMAND" | "SAVE" | "TIMER" | "OUTCOME";
   trigger: string | null;
-  actor: "OWNER" | "HOST" | "MACHINE";
+  actor: "OWNER" | "HOST" | "MACHINE" | "POLICY";
   fromState: string | null;
   toState: string;
   at: string;
@@ -1541,10 +1542,50 @@ export const machineQueryResolvers = {
   machineInstances: (_root: unknown, args: Args) => machineInstancesPage(args),
   machineInstance: (_root: unknown, args: Args) => machineInstanceDetail(args),
   machines: () => MACHINE_DEFINITIONS,
+  // No machine here is served from features, so none has a board. Left out, the auto-mock would invent one.
+  machineBoard: () => null,
 };
 
 export const machineScenario: MockSchemaOverrides = {
   resolvers: () => ({ OperationsQueries: machineQueryResolvers, ...machineInstanceDetailResolvers }),
+};
+
+const boardScenario = (line: number, scenario: string) => ({ file: "topic-map.feature", line, scenario });
+
+/** The board of topic-map, as a host serving it from features draws it: its stickies, and the scenarios behind each. */
+export const MACHINE_BOARD = {
+  machine: "topic-map",
+  lanes: ["topic-map"],
+  stickies: [
+    { id: "actor:analyst", kind: "actor", machine: "topic-map", label: "analyst", scenarios: [] },
+    { id: "command:topic-map:Build", kind: "command", machine: "topic-map", label: "Build", scenarios: [boardScenario(6, "Ada builds a map of a week")] },
+    {
+      id: "event:topic-map:ChoosingRange:Build:Building",
+      kind: "event",
+      machine: "topic-map",
+      label: "ChoosingRange → Building",
+      scenarios: [boardScenario(6, "Ada builds a map of a week")],
+    },
+    { id: "aggregate:topic-map", kind: "aggregate", machine: "topic-map", label: "topic-map", scenarios: [boardScenario(2, "Ada has a topic map")] },
+    { id: "command:topic-map:Rebuild", kind: "command", machine: "topic-map", label: "Rebuild", scenarios: [boardScenario(14, "Ada builds it again")] },
+  ],
+  links: [
+    { from: "actor:analyst", to: "command:topic-map:Build" },
+    { from: "command:topic-map:Build", to: "event:topic-map:ChoosingRange:Build:Building" },
+    { from: "event:topic-map:ChoosingRange:Build:Building", to: "aggregate:topic-map" },
+    { from: "actor:analyst", to: "command:topic-map:Rebuild" },
+  ],
+};
+
+/** {@link machineScenario}, with topic-map served from features: its page has a Board tab. */
+export const machineScenarioWithBoard: MockSchemaOverrides = {
+  resolvers: () => ({
+    OperationsQueries: {
+      ...machineQueryResolvers,
+      machineBoard: (_root: unknown, args: Args) => (args.machine === MACHINE_BOARD.machine ? MACHINE_BOARD : null),
+    },
+    ...machineInstanceDetailResolvers,
+  }),
 };
 
 /** More instances match than the API counts: the total stops at 10,000. */

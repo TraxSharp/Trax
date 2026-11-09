@@ -43,12 +43,15 @@ that page is the one to follow. Find the page, read the entry, then change code.
 | A GraphQL error with an `extensions.code` (`TRAX_AUTHORIZATION`, `TRAX_TRAIN_ERROR`, `TRAX_INVALID_INPUT`, `PERSISTED_OPERATION_REQUIRED`, `CLIENT_OUTDATED`, ...) | [Error codes](https://traxsharp.net/docs/sdk-reference/graphql-api/error-codes) |
 | `Unexpected Execution Error`, or `The train failed.` | The real failure is masked from the caller on purpose. Read the run's record (below) and the server log. [Error codes](https://traxsharp.net/docs/sdk-reference/graphql-api/error-codes) says which exceptions pass through |
 | A machine answer with a `problem` (`GUARD_FAILED`, `NO_TRANSITION`, `FORBIDDEN`, ...) | [Result codes](https://traxsharp.net/docs/sdk-reference/statemachine-api/result-codes): a refusal is data, nothing was written |
+| `trax machine from-gherkin` reports a problem at a file and line | [Problems derivation reports](https://traxsharp.net/docs/reference/feature-files#problems-derivation-reports), then `trax machine explain` on the scenario |
+| `ServeFeatures` refuses the host: an IR the host file was not derived from, names that disagree, a missing train or handler type | Run `from-gherkin` again and commit `machines/` whole; check `machines/` is copied to the build output and the assemblies given to `ServeFeatures` hold the types. [AddStateMachines](https://traxsharp.net/docs/sdk-reference/statemachine-api/add-state-machines) |
+| A trigger or view of a machine written as features is missing from GraphQL, or answers `FORBIDDEN` | No scenario shows that actor firing or reading it, or only the server fires it: read `machines/access.txt`. [How features become machines](https://traxsharp.net/docs/statemachine/how-features-become-machines#where-each-part-ends-up) |
 | A browser WebSocket upgrade answered `403`, while a Node client works | [Allowed origins](https://traxsharp.net/docs/sdk-reference/graphql-api/subscriptions#allowed-origins) |
 | A run shows `Failed` though the train looked fine | [Troubleshooting](https://traxsharp.net/docs/cross-cutting/troubleshooting#train-completes-but-metadata-shows-failed) |
 | Scheduled jobs never run, with no error | [Troubleshooting](https://traxsharp.net/docs/cross-cutting/troubleshooting#scheduled-jobs-dont-execute-no-errors) |
 
 An error from a skill's own area (a train, a machine, the API) usually has a known trap in that
-skill too: `trax-write-a-train`, `trax-design-a-machine`, `trax-expose-over-api`,
+skill too: `trax-write-a-train`, `trax-design-a-machine`, `trax-write-machines-as-features`, `trax-expose-over-api`,
 `trax-schedule-work`.
 
 ## Provider and database problems

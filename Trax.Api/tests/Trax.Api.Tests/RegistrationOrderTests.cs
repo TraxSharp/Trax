@@ -224,6 +224,53 @@ public class RegistrationOrderTests
 
     #endregion
 
+    #region Views — registered after AddTraxGraphQL, they refuse the host
+
+    [Test]
+    public async Task ViewsAfterGraphQL_HostRefusesToStartNamingThem()
+    {
+        var services = BaseServices();
+        AddGraphQL(services);
+        services.AddSingleton(Views());
+
+        var act = async () => await RunHostedServicesAsync(services);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("*'shop sign'*")
+            .WithMessage("*before AddTraxGraphQL()*");
+    }
+
+    [Test]
+    public void ViewsBeforeGraphQL_RegistersNoOrderCheck()
+    {
+        // AddTraxGraphQL saw the views, so the schema serves them under the views root and there is nothing to refuse.
+        var services = BaseServices();
+        services.AddSingleton(Views());
+        AddGraphQL(services);
+
+        services
+            .BuildServiceProvider()
+            .GetServices<IHostedService>()
+            .OfType<Trax.Api.GraphQL.Startup.ViewRegistrationOrderValidator>()
+            .Should()
+            .BeEmpty();
+    }
+
+    private static Trax.StateMachine.Persistence.FromIr.MachineViewCatalog Views() =>
+        new(
+            new Dictionary<string, Trax.StateMachine.Features.HostView>
+            {
+                ["shop sign"] = new(
+                    "shop sign",
+                    [new Trax.StateMachine.Features.ViewRead("shop", "shop/main")],
+                    [new Trax.StateMachine.Features.ViewField("open", "shop", "state", null)],
+                    Trax.StateMachine.Features.AccessRule.AnyAuthenticated
+                ),
+            }
+        );
+
+    #endregion
+
     #region Helpers
 
     private static void AddGraphQL(IServiceCollection services) =>

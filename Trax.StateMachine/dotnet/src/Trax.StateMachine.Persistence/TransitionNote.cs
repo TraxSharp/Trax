@@ -38,6 +38,10 @@ internal readonly record struct TransitionNote(
     public static TransitionNote Timer(string? trigger) =>
         new(SnapshotTransitionKind.Timer, trigger, SnapshotTransitionActor.Machine);
 
+    /// <summary>A policy firing a server-only trigger: a command, made by the server, never a user.</summary>
+    public static TransitionNote Policy(string trigger) =>
+        new(SnapshotTransitionKind.Command, trigger, SnapshotTransitionActor.Policy);
+
     /// <summary>A run's outcome, applied as <paramref name="trigger"/>, or null when it could not be.</summary>
     public static TransitionNote Outcome(string? trigger) =>
         new(SnapshotTransitionKind.Outcome, trigger, SnapshotTransitionActor.Machine);

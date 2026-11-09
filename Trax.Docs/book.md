@@ -36,11 +36,12 @@ quick start, and each chapter compiles as the whole project so far.
 | | [11. A separate worker](/docs/book/a-separate-worker) | fulfilment on its own process | queued work, workers, recovery |
 | Machines | [12. Checkout is a state machine](/docs/book/checkout-is-a-state-machine) | checkout | machines, guards, timers |
 | | [13. The machine places the order](/docs/book/the-machine-places-the-order) | checkout runs the order | invoking a train, child machines |
-| Composition | [14. Checks in parallel, and resuming](/docs/book/checks-in-parallel-and-resuming) | courier rates side by side | `Parallel`, checkpoints |
-| The storefront | [15. A generated client](/docs/book/a-generated-client) | a React storefront | generated clients |
-| | [16. Checkout in the browser](/docs/book/checkout-in-the-browser) | checkout in React | the TypeScript twin |
-| | [17. Require persisted operations](/docs/book/require-persisted-operations) | only known documents run | persisted operations |
-| Shipping it | [18. Deploy](/docs/book/deploy) | a hub and two workers in containers | deployment, health checks |
+| | [14. Returns are written as features](/docs/book/returns-are-written-as-features) | returns | machines derived from Gherkin features |
+| Composition | [15. Checks in parallel, and resuming](/docs/book/checks-in-parallel-and-resuming) | courier rates side by side | `Parallel`, checkpoints |
+| The storefront | [16. A generated client](/docs/book/a-generated-client) | a React storefront | generated clients |
+| | [17. Checkout in the browser](/docs/book/checkout-in-the-browser) | checkout in React | the TypeScript twin |
+| | [18. Require persisted operations](/docs/book/require-persisted-operations) | only known documents run | persisted operations |
+| Shipping it | [19. Deploy](/docs/book/deploy) | a hub and two workers in containers | deployment, health checks |
 
 [What Trax does](/docs/what-trax-does) has the same features grouped by capability, with the page
 that explains each.
@@ -57,6 +58,7 @@ manage stock and see every order. Behind that:
 - a nightly job writes a stock report, and a supplier sync is retried when the supplier is down;
 - fulfilment runs on a separate worker process;
 - checkout is a state machine the browser and the server share;
+- returns are written as Gherkin features, and their machine is derived from them;
 - the storefront is a React app over a client generated from the API.
 
 ## Part 1: Trains
@@ -172,9 +174,18 @@ parcel is a child machine the checkout waits on.
 You learn: invoking a train from a state, routing its outcome back into the machine, idempotent
 charges, and spawning a child machine.
 
+### [14. Returns are written as features](/docs/book/returns-are-written-as-features)
+
+Write returns as a Gherkin feature and a glossary instead of a class. `trax machine from-gherkin`
+derives the machine: its states, its guard and message, who may do what, the train it runs and a
+view of a customer's returns. The hub serves it beside checkout, and the feature runs as its tests.
+
+You learn: features and a glossary as a source of machines, reviewing access as a file, the
+console's event-storming board, and running features in memory and against the hub.
+
 ## Part 5: Composition
 
-### [14. Checks in parallel, and resuming](/docs/book/checks-in-parallel-and-resuming)
+### [15. Checks in parallel, and resuming](/docs/book/checks-in-parallel-and-resuming)
 
 Choose fulfilment's box and ask the courier's rates side by side, then buy the label. Put a
 checkpoint after the label is bought, so a fulfilment that fails later resumes there.
@@ -184,7 +195,7 @@ GraphQL.
 
 ## Part 6: The storefront
 
-### [15. A generated client](/docs/book/a-generated-client)
+### [16. A generated client](/docs/book/a-generated-client)
 
 Write the storefront's GraphQL documents, export the client manifest from the host and generate a
 typed React client with `trax client`. Build the catalogue page and the order page.
@@ -192,14 +203,14 @@ typed React client with `trax client`. Build the catalogue page and the order pa
 You learn: client documents, the client manifest, `trax client`, typed functions, following a run
 from the browser, and `--check` in CI.
 
-### [16. Checkout in the browser](/docs/book/checkout-in-the-browser)
+### [17. Checkout in the browser](/docs/book/checkout-in-the-browser)
 
 Drive checkout from React with the generated hooks. The browser predicts each move with the
 machine's twin and the server confirms it.
 
 You learn: the TypeScript twin and the generated machine hooks.
 
-### [17. Require persisted operations](/docs/book/require-persisted-operations)
+### [18. Require persisted operations](/docs/book/require-persisted-operations)
 
 Turn persisted operations from logging to refusing. Shopfront then runs only the documents its
 storefront wrote, the ones it generates for its machines, and the console's.
@@ -209,7 +220,7 @@ working when text is refused.
 
 ## Part 7: Shipping it
 
-### [18. Deploy](/docs/book/deploy)
+### [19. Deploy](/docs/book/deploy)
 
 Run the hub and two workers in containers against one Postgres and RabbitMQ, in Production.
 Migrate the shop's schema with EF Core, add health checks, and decide what guards the console.

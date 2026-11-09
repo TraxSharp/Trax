@@ -543,6 +543,16 @@ type OperationsQueries {
   graphUnavailableReason instead of a graph.
   """
   machines: [MachineDefinition!]!
+
+  """
+  The event-storming board of a machine this host serves from features: who acts, what they ask, what happens,
+  the rules between, the views, and the scenarios behind each, one lane per machine it joins. Null for a machine
+  not served from features. A scenario is its file, line and name, never its steps.
+  """
+  machineBoard(
+    """The machine's id."""
+    machine: String!
+  ): MachineBoard
 }
 
 """
@@ -804,6 +814,16 @@ type ConfigQueries {
   version.
   """
   version: String!
+
+  """
+  Whether the caller may manage persisted operations on this host: the host serves the
+  persistedOperations root (it calls UsePersistedOperations with
+  GateManagement) and the caller meets that gate. False on a host without persisted
+  operations, on one that declares no management gate, and for a caller the gate refuses. The
+  operations console reads it to decide whether to show its persisted-operation pages, so every
+  host answers the question without an error.
+  """
+  canManagePersistedOperations: Boolean!
 
   """
   The level each category configured under the API host's Logging:LogLevel section
@@ -2435,6 +2455,49 @@ type MachineInstanceCount {
 }
 
 """
+The event-storming board of a machine served from features, as operations.machineBoard serves it: one lane
+per machine it joins, each sticky with its flow role and the scenarios behind it (ADR Trax.Docs/adr/0058).
+"""
+type MachineBoard {
+  """The machine the board was asked for."""
+  machine: String!
+
+  """The machines on the board, the asked-for one first."""
+  lanes: [String!]!
+
+  """Every sticky, by lane and flow role."""
+  stickies: [MachineSticky!]!
+
+  """Every arrow between two stickies."""
+  links: [MachineBoardLink!]!
+}
+
+"""
+One sticky: its flow role (actor, command, event, policy, aggregate or
+view), its lane, its label, and the scenarios that produced it, none when the host file has no provenance.
+"""
+type MachineSticky {
+  id: String!
+  kind: String!
+  machine: String!
+  label: String!
+  scenarios: [MachineScenario!]!
+}
+
+"""A scenario behind a sticky: its feature file, line and name, never its steps."""
+type MachineScenario {
+  file: String!
+  line: Long!
+  scenario: String!
+}
+
+"""An arrow from one sticky's id to another's."""
+type MachineBoardLink {
+  from: String!
+  to: String!
+}
+
+"""
 One state machine the host registers, as operations.machines serves it: its name, version and graph,
 whether or not it has any instances.
 """
@@ -3689,6 +3752,11 @@ enum SnapshotTransitionActor {
   Trax moving the instance itself: a timer, a run's outcome, or a parent spawning it.
   """
   MACHINE
+
+  """
+  The server reacting to another instance's transition through a machine policy; never a user.
+  """
+  POLICY
 }
 
 """

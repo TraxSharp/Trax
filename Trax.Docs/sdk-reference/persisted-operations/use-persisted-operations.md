@@ -65,6 +65,10 @@ A host where a train carries [`[TraxRunProgress]`](/docs/sdk-reference/graphql-a
 two documents of `runProgress`, under `trax_progress_query_<shapeHash><textHash>` and
 `trax_progress_subscription_<shapeHash><textHash>`, hashed the same way. One pair serves every such train.
 
+A host that serves views from features registers one document per view of the
+[`views` root](/docs/sdk-reference/graphql-api/views#persisted-documents), under `trax_view_<view>_<shapeHash><textHash>`,
+hashed the same way.
+
 A host that serves the operations console ([UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard#with-persisted-operations))
 registers the console's own documents too, under `trax_console_<name>_<hash>`, hashed as a client
 document is, and tells the console their ids. Each reaches only `operations` or one of the
@@ -114,7 +118,7 @@ services.AddTraxGraphQL(graphql => graphql
 
 `GateManagement(policy, roles)` puts `@authorize` on both `persistedOperations` fields, with the same rules as [`GateOperations`](/docs/sdk-reference/graphql-api/add-trax-graphql): a policy or roles is required, a comma-separated role list is any of, and repeated calls are all of. `GateManagementToAuthenticatedUsers()` admits any signed-in caller. The gate is separate from the operations gate, so a deploy pipeline that uploads documents holds the management role and none of the operator's, and an operator at the dashboard who manages documents holds both.
 
-Without a management gate the fields are not in the schema and the Trax dashboard shows no management pages. Storage, enforcement, the cache and cross-node invalidation are wired either way, and documents are managed out of band: a deploy step or a migration calling `IPersistedOperationsService`. With a gate, the dashboard's pages check it for the operator through [IPersistedOperationsManagementGate](/docs/sdk-reference/persisted-operations/i-persisted-operations-service#ipersistedoperationsmanagementgate).
+Without a management gate the fields are not in the schema and the Trax dashboard shows no management pages. Storage, enforcement, the cache and cross-node invalidation are wired either way, and documents are managed out of band: a deploy step or a migration calling `IPersistedOperationsService`. With a gate, the dashboard's pages check it for the operator through [IPersistedOperationsManagementGate](/docs/sdk-reference/persisted-operations/i-persisted-operations-service#ipersistedoperationsmanagementgate), which [`operations.config.canManagePersistedOperations`](/docs/sdk-reference/graphql-api/queries/config#canmanagepersistedoperations) answers for the operations console.
 
 ### Validation
 

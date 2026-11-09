@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "version": 1,
+  "actors": {
+    "member": {
+      "noun": "a member",
+      "anyAuthenticated": true
+    }
+  },
+  "machines": {
+    "note": {
+      "ownedBy": "member",
+      "noun": "note",
+      "initial": "Open",
+      "states": {
+        "Open": "is open"
+      }
+    }
+  }
+}

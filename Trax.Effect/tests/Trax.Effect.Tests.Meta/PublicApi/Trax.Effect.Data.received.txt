@@ -111,6 +111,7 @@ namespace Trax.Effect.Data.Services.DataContext
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.HostHeartbeat.HostHeartbeat> HostHeartbeats { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.JunctionRun.JunctionRun> JunctionRuns { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Log.Log> Logs { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.MachinePolicyFire.MachinePolicyFire> MachinePolicyFires { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.ManifestGroup.ManifestGroup> ManifestGroups { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Manifest.Manifest> Manifests { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Metadata.Metadata> Metadatas { get; set; }
@@ -145,6 +146,7 @@ namespace Trax.Effect.Data.Services.DataContext
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.HostHeartbeat.HostHeartbeat> HostHeartbeats { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.JunctionRun.JunctionRun> JunctionRuns { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Log.Log> Logs { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.MachinePolicyFire.MachinePolicyFire> MachinePolicyFires { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.ManifestGroup.ManifestGroup> ManifestGroups { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Manifest.Manifest> Manifests { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Metadata.Metadata> Metadatas { get; }

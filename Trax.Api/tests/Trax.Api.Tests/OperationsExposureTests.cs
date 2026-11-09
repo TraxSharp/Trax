@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
@@ -259,6 +260,54 @@ public class OperationsExposureTests
         var json = opResult.ToJson();
         json.Should().Contain("operations");
         json.Should().NotContain("deadLetters");
+    }
+
+    [Test]
+    public async Task The_consoles_persisted_operations_probe_is_answered_without_an_error_on_a_host_without_them()
+    {
+        var executor = await BuildExecutor(
+            _emptyDiscovery,
+            graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations()
+        );
+        var probe = File.ReadAllText(
+            System.IO.Path.Combine(
+                RepoFolder("Trax.Api"),
+                "src",
+                "Trax.Api.Dashboard",
+                "ClientApp",
+                "src",
+                "graphql",
+                "PersistedOperationsAvailable.graphql"
+            )
+        );
+        var operator_ = new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.Role, "Operator")], "Test")
+        );
+
+        var result = (OperationResult)
+            await executor.ExecuteAsync(
+                OperationRequestBuilder
+                    .New()
+                    .SetDocument(probe)
+                    .SetGlobalState(nameof(ClaimsPrincipal), operator_)
+                    .Build()
+            );
+
+        result
+            .Errors.Should()
+            .BeNullOrEmpty(
+                "the console asks every host whether it may manage persisted operations, so a host "
+                    + "without them answers rather than refusing the document"
+            );
+        using var answer = System.Text.Json.JsonDocument.Parse(result.ToJson());
+        answer
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("config")
+            .GetProperty("canManagePersistedOperations")
+            .GetBoolean()
+            .Should()
+            .BeFalse("this host serves no persisted-operation management");
     }
 
     #endregion
@@ -807,6 +856,24 @@ public class OperationsExposureTests
     }
 
     #endregion
+
+    private static string RepoFolder(string name)
+    {
+        for (
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            dir is not null;
+            dir = dir.Parent
+        )
+        {
+            var candidate = System.IO.Path.Combine(dir.FullName, name);
+            if (
+                Directory.Exists(candidate)
+                && File.Exists(System.IO.Path.Combine(dir.FullName, "global.json"))
+            )
+                return candidate;
+        }
+        throw new DirectoryNotFoundException($"No {name} folder above {AppContext.BaseDirectory}.");
+    }
 
     #region Test types
 

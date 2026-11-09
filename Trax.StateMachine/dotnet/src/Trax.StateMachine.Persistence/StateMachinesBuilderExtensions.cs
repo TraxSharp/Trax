@@ -11,6 +11,8 @@ using Trax.Effect.Data.Services.SnapshotNotices;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
+using Trax.StateMachine.Features;
+using Trax.StateMachine.Persistence.FromIr;
 using Trax.StateMachine.Persistence.Mutations;
 
 namespace Trax.StateMachine.Persistence;
@@ -102,6 +104,19 @@ public static class StateMachinesBuilderExtensions
         var options = new StateMachineOptions();
         configure?.Invoke(options);
 
+        // Machines served from features are registered as the host's own, before discovery reads them.
+        if (options.FeaturesDirectory is { } features)
+            services.AddIrMachinesFrom(
+                features,
+                options.ConfigurePolicyRunner,
+                options.FeatureTrainAssemblies
+            );
+        else if (options.ConfigurePolicyRunner is not null)
+            throw new InvalidOperationException(
+                "StateMachineOptions.PolicyRunner configures the policies of machines served from features, and "
+                    + "ServeFeatures was not called. Call ServeFeatures(\"machines/\") too, or drop PolicyRunner."
+            );
+
         // The InMemory provider has no transactions, so it cannot count a user's drafts and insert one atomically: a
         // cap the host sets there is refused rather than held loosely, and the default is not applied.
         if (inMemory)
@@ -113,6 +128,15 @@ public static class StateMachinesBuilderExtensions
                         + "cap together. Use UsePostgres(...) or UseSqlite(...), or leave MaxDraftsPerUser unset."
                 );
             options.CapUnavailable = true;
+
+            // A policy's fire is queued in the transaction of the transition that owes it, which InMemory does not
+            // have: the runner would start and never fire anything.
+            if (services.Any(d => d.ServiceType == typeof(FromIr.MachinePolicies)))
+                throw new InvalidOperationException(
+                    "The machines served from features have policies, but the data provider is InMemory, which has "
+                        + "no transactions to queue a policy's fire with the transition that owes it: no policy would "
+                        + "ever fire. Use UsePostgres(...) or UseSqlite(...)."
+                );
         }
 
         // A TTL the host set longer than the lifetime would never be reached: the lifetime deletes the draft first.
@@ -214,6 +238,9 @@ public static class StateMachinesBuilderExtensions
         {
             IrHashes = sp.GetRequiredService<MachineIrHashes>().Of,
             Timers = sp.GetRequiredService<MachineTimerLookup>().Of,
+            Policies = sp.GetService<FromIr.MachinePolicies>() is { } policies
+                ? policies.Entered
+                : null,
             Writes = sp.GetRequiredService<SnapshotWriteSignal>(),
         });
         services.AddScoped<IEffectClaimStore>(sp => new EfEffectClaimStore(
@@ -235,6 +262,9 @@ public static class StateMachinesBuilderExtensions
         {
             IrHashes = sp.GetRequiredService<MachineIrHashes>().Of,
             Timers = sp.GetRequiredService<MachineTimerLookup>().Of,
+            Policies = sp.GetService<FromIr.MachinePolicies>() is { } policies
+                ? policies.Entered
+                : null,
             Writes = sp.GetRequiredService<SnapshotWriteSignal>(),
         });
         services.AddScoped<InvokeOutbox>();
@@ -287,6 +317,19 @@ public static class StateMachinesBuilderExtensions
             sp.GetService<ISnapshotNoticeSource>(),
             sp.GetService<ILogger<ChangeFeedStartupValidator>>()
         ));
+
+        // A system machine served from features is started at its key once every check above has passed: hosted
+        // services start in the order they are registered, so a host they refuse writes nothing. It still runs in
+        // StartingAsync, before any StartAsync, so the instance is there before the policy runner, the sweeps or the
+        // server start.
+        if (
+            options.FeaturesDirectory is not null
+            && services.Any(d =>
+                d.ImplementationInstance is HostFile host
+                && host.Machines.Values.Any(m => m.SystemKey is not null)
+            )
+        )
+            services.AddHostedService<SystemInstanceStarter>();
         services.AddSingleton<ISnapshotChangeListener>(sp =>
             sp.GetRequiredService<SnapshotChangeListener>()
         );

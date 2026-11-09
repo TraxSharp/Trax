@@ -102,7 +102,13 @@ builder.Services.AddTrax(trax =>
                 .AddJunctionEvents()
                 .AddLifecycleHook<StaffFailureHook>()
         )
-        .AddStateMachines(typeof(ManifestNames).Assembly)
+        // Checkout and the parcel are classes in the library. Returns are derived from
+        // features/ by trax machine from-gherkin, which writes machines/from-features; the
+        // build copies it to machines/ beside the hub.
+        .AddStateMachines(
+            machines => machines.ServeFeatures("machines", typeof(ManifestNames).Assembly),
+            typeof(ManifestNames).Assembly
+        )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>
         {

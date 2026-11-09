@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "actors": {
+    "triage": {
+      "noun": "a triage bot",
+      "roles": [
+        "triage"
+      ]
+    },
+    "fixer": {
+      "noun": "a fixer",
+      "roles": [
+        "fixer"
+      ]
+    }
+  },
+  "machines": {
+    "assignment": {
+      "ownedBy": [
+        "triage",
+        "triage"
+      ],
+      "noun": "assignment",
+      "initial": "New",
+      "states": {
+        "New": "is new"
+      }
+    }
+  }
+}

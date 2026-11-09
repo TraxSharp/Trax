@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   httpTransport,
-  persistedOperationsAvailableDocument,
+  persistedOperationsDocument,
   serverVersionDocument,
   TraxTransportError,
 } from "../trax/index.g";
@@ -66,10 +66,10 @@ describe("the generated transport", () => {
   test("sends persisted-operation management as text, since no host registers it", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(answer({ persistedOperations: null }));
 
-    await transport().execute({ document: persistedOperationsAvailableDocument, variables: {} });
+    await transport().execute({ document: persistedOperationsDocument, variables: { skip: 0, take: 25 } });
 
-    expect(persistedOperationsAvailableDocument.id).toBeNull();
-    expect(bodies(fetchSpy)[0].query).toBe(persistedOperationsAvailableDocument.text);
+    expect(persistedOperationsDocument.id).toBeNull();
+    expect(bodies(fetchSpy)[0].query).toBe(persistedOperationsDocument.text);
   });
 
   test("a body that is not a GraphQL answer is a transport error naming the status", async () => {

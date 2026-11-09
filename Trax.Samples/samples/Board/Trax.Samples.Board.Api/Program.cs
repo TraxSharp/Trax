@@ -143,14 +143,12 @@ builder.Services.AddTraxGraphQL(graphql =>
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
-// ── CORS for the board page's Vite dev server ───────────────────────────────
+// ── CORS for the board page ─────────────────────────────────────────────────
+// The page's origin: the Vite dev server unless Board:PageOrigin names another.
+var pageOrigin = builder.Configuration["Board:PageOrigin"] ?? "http://localhost:5173";
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
-        policy
-            .WithOrigins("http://localhost:5173")
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials()
+        policy.WithOrigins(pageOrigin).AllowAnyHeader().AllowAnyMethod().AllowCredentials()
     )
 );
 

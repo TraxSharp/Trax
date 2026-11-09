@@ -7,6 +7,11 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// table claiming coverage that is gone. Every E2E project under <c>tests/</c> must be named by at
 /// least one row, so a sample cannot be added without saying which feature it proves.
 ///
+/// <para>A row may also link a sample's feature file, <c>samples/&lt;Sample&gt;/features/</c> or <c>specs/</c>, with
+/// the file name as the link text. The file must exist and declare a <c>Feature:</c>, and an E2E project that
+/// compiles it as a <c>ReqnrollFeatureFiles</c> item counts as named by that row, since its tests are the
+/// file's scenarios.</para>
+///
 /// <para>A row naming a class in another Trax repo is checked for shape only (a known repo, a
 /// path under <c>tests/</c>, a file named after the class). Its existence is not checked: the
 /// sibling repo is not in this checkout in CI, and a local sibling sits on whatever branch its
@@ -39,7 +44,21 @@ public class FeatureCoverageTableTests
         RegexOptions.Compiled
     );
 
+    private static readonly Regex FeatureLink = new(
+        @"\[`(?<file>[^`]+\.feature)`\]\(https://github\.com/TraxSharp/Trax/blob/main/Trax\.Samples/(?<path>[^)\s]+)\)",
+        RegexOptions.Compiled
+    );
+
+    private static readonly Regex FeaturePath = new(
+        @"^samples/[^/]+/(?:features|specs)/(?:[^/]+/)*[^/]+\.feature$",
+        RegexOptions.Compiled
+    );
+
+    private static readonly Regex FeatureKeyword = new(@"^\s*Feature:", RegexOptions.Multiline);
+
     private sealed record Row(int Line, string Feature, string ProvedBy);
+
+    private sealed record FeatureClaim(int Line, string File, string Path);
 
     private sealed record Claim(int Line, string Feature, string Class, string Repo, string Path);
 
@@ -76,6 +95,8 @@ public class FeatureCoverageTableTests
             .SelectMany(r =>
                 TestLink
                     .Matches(r.ProvedBy)
+                    // A feature file's link is a FeatureClaim, checked on its own.
+                    .Where(m => !FeatureLink.IsMatch(m.Value))
                     .Select(m => new Claim(
                         r.Line,
                         r.Feature,
@@ -85,6 +106,66 @@ public class FeatureCoverageTableTests
                     ))
             )
             .ToList();
+
+    private static List<FeatureClaim> FeatureClaims() =>
+        Rows()
+            .SelectMany(r =>
+                FeatureLink
+                    .Matches(r.ProvedBy)
+                    .Select(m => new FeatureClaim(
+                        r.Line,
+                        m.Groups["file"].Value,
+                        m.Groups["path"].Value
+                    ))
+            )
+            .ToList();
+
+    /// <summary>
+    /// What is wrong with each feature-file link: a path outside a sample's <c>features/</c> or <c>specs/</c>, link
+    /// text that is not the file's name, a file that does not exist, or one that declares no <c>Feature:</c>.
+    /// </summary>
+    private static List<string> FeatureLinkProblems(IEnumerable<FeatureClaim> claims)
+    {
+        var problems = new List<string>();
+        foreach (var claim in claims)
+        {
+            var at = $"README.md line {claim.Line}: {claim.File} -> {claim.Path}";
+            var file = RepoRoot.Combine(claim.Path.Split('/'));
+            if (
+                !FeaturePath.IsMatch(claim.Path)
+                || claim.Path.Split('/').Any(segment => segment is "." or "..")
+            )
+                problems.Add($"{at} is not under samples/<Sample>/features/ or specs/");
+            else if (Path.GetFileName(claim.Path) != claim.File)
+                problems.Add($"{at}: the link text is not the file's name");
+            else if (!File.Exists(file))
+                problems.Add($"{at} does not exist");
+            else if (!FeatureKeyword.IsMatch(File.ReadAllText(file)))
+                problems.Add($"{at} declares no Feature:");
+        }
+        return problems;
+    }
+
+    /// <summary>The full path of every feature file a project compiles through <c>ReqnrollFeatureFiles</c>.</summary>
+    private static IEnumerable<string> CompiledFeatureFiles(string projectDir) =>
+        Directory
+            .EnumerateFiles(projectDir, "*.csproj")
+            .SelectMany(csproj => XDocument.Load(csproj).Descendants("ReqnrollFeatureFiles"))
+            .SelectMany(item => ((string?)item.Attribute("Include") ?? "").Split(';'))
+            .Where(include => include.Trim().Length > 0)
+            .SelectMany<string, string>(include =>
+            {
+                var full = Path.GetFullPath(
+                    Path.Combine(projectDir, include.Trim().Replace('\\', '/'))
+                );
+                var dir = Path.GetDirectoryName(full)!;
+                var name = Path.GetFileName(full);
+                if (!name.Contains('*') && !name.Contains('?'))
+                    return [full];
+                return Directory.Exists(dir)
+                    ? Directory.EnumerateFiles(dir, name).Select(Path.GetFullPath)
+                    : [];
+            });
 
     [Test]
     public void TheReadmeHasAFeatureCoverageTable() =>
@@ -101,6 +182,7 @@ public class FeatureCoverageTableTests
         var offenders = Rows()
             .Where(r =>
                 !TestLink.IsMatch(r.ProvedBy)
+                && !FeatureLink.IsMatch(r.ProvedBy)
                 && !r.ProvedBy.Contains(NoE2E, StringComparison.Ordinal)
             )
             .Select(r => $"README.md line {r.Line}: {r.Feature}")
@@ -110,7 +192,9 @@ public class FeatureCoverageTableTests
             .Should()
             .BeEmpty(
                 "each feature-coverage row must link at least one test class as "
-                    + "[`ClassTests`](https://github.com/TraxSharp/Trax/blob/main/<Folder>/tests/...), or say "
+                    + "[`ClassTests`](https://github.com/TraxSharp/Trax/blob/main/<Folder>/tests/...) or "
+                    + "feature file as [`name.feature`](https://github.com/TraxSharp/Trax/blob/main/"
+                    + "Trax.Samples/samples/<Sample>/features/name.feature), or say "
                     + $"'{NoE2E}' when no end-to-end test exists anywhere. See {Adr}:\n"
                     + string.Join("\n", offenders)
             );
@@ -173,21 +257,69 @@ public class FeatureCoverageTableTests
     }
 
     [Test]
+    public void EveryFeatureFileLinked_ExistsInASample()
+    {
+        var claims = FeatureClaims();
+        claims
+            .Should()
+            .NotBeEmpty(
+                $"the table links no feature file; the Bakery's row links its own. See {Adr}."
+            );
+
+        var problems = FeatureLinkProblems(claims);
+        problems
+            .Should()
+            .BeEmpty(
+                "a feature-coverage link to a feature file names the file, under the sample's features/ "
+                    + "or specs/ folder, and the file declares a Feature:. Fix the row when a feature file "
+                    + $"moves or is renamed. See {Adr}:\n"
+                    + string.Join("\n", problems)
+            );
+    }
+
+    [Test]
+    public void AFeatureLink_ToAMissingFileOrOutsideASamplesFeatures_IsAProblem()
+    {
+        FeatureLinkProblems([new(1, "shop.feature", "samples/Bakery/features/shop.feature")])
+            .Should()
+            .BeEmpty("the Bakery's shop.feature exists and declares a Feature:");
+        FeatureLinkProblems([new(1, "gone.feature", "samples/Bakery/features/gone.feature")])
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .EndWith("does not exist");
+        FeatureLinkProblems([new(1, "shop.feature", "samples/Bakery/features/ordering.feature")])
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .EndWith("the link text is not the file's name");
+        FeatureLinkProblems([new(1, "shop.feature", "tests/Trax.Samples.Bakery.E2E/shop.feature")])
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .EndWith("is not under samples/<Sample>/features/ or specs/");
+    }
+
+    [Test]
     public void EveryE2EProject_IsNamedByARow()
     {
         var linked = Claims()
             .Where(c => c.Repo == ThisRepo)
             .Select(c => c.Path.Split('/')[1])
             .ToHashSet(StringComparer.Ordinal);
+        var linkedFeatures = FeatureClaims()
+            .Select(c => Path.GetFullPath(RepoRoot.Combine(c.Path.Split('/'))))
+            .ToHashSet(StringComparer.Ordinal);
 
         var unlisted = Directory
             .EnumerateDirectories(RepoRoot.Combine("tests"))
             // A folder a retired project left behind (bin/ and obj/ only) is not a suite.
             .Where(dir => Directory.EnumerateFiles(dir, "*.csproj").Any())
+            .Where(dir => Path.GetFileName(dir).EndsWith(".E2E", StringComparison.Ordinal))
+            .Where(dir => !linked.Contains(Path.GetFileName(dir)))
+            .Where(dir => !CompiledFeatureFiles(dir).Any(linkedFeatures.Contains))
             .Select(Path.GetFileName)
             .OfType<string>()
-            .Where(name => name.EndsWith(".E2E", StringComparison.Ordinal))
-            .Where(name => !linked.Contains(name))
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
@@ -195,7 +327,8 @@ public class FeatureCoverageTableTests
             .Should()
             .BeEmpty(
                 "every E2E suite proves a feature, so the feature-coverage table must name at least "
-                    + $"one of its classes. See {Adr}. Unlisted:\n"
+                    + "one of its classes, or link a feature file it compiles as ReqnrollFeatureFiles. "
+                    + $"See {Adr}. Unlisted:\n"
                     + string.Join("\n", unlisted)
             );
     }

@@ -1,16 +1,16 @@
 ---
-title: "16.2 The checkout"
-description: "Chapter 16 of the Trax book, section 2: The checkout."
+title: "17.2 The checkout"
+description: "Chapter 17 of the Trax book, section 2: The checkout."
 type: tutorial
 area: general
-parent: "16. Checkout in the browser"
+parent: "17. Checkout in the browser"
 grand_parent: The Trax book
 nav_order: 2
 snippet_context: none
 follows: book/checkout-in-the-browser/the-twin-and-the-hook
 ---
 
-# 16.2 The checkout
+# 17.2 The checkout
 
 `web/src/Checkout.tsx`:
 
@@ -224,4 +224,4 @@ export function App() {
 
 ---
 
-Next: [16.3 Run it](/docs/book/checkout-in-the-browser/run-it)
+Next: [17.3 Run it](/docs/book/checkout-in-the-browser/run-it)

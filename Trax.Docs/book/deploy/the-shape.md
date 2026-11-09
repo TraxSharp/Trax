@@ -1,16 +1,16 @@
 ---
-title: "18.1 The shape"
-description: "Chapter 18 of the Trax book, section 1: The shape."
+title: "19.1 The shape"
+description: "Chapter 19 of the Trax book, section 1: The shape."
 type: tutorial
 area: general
-parent: "18. Deploy"
+parent: "19. Deploy"
 grand_parent: The Trax book
 nav_order: 1
 snippet_context: none
 follows: book/require-persisted-operations/test-it
 ---
 
-# 18.1 The shape
+# 19.1 The shape
 
 This is the [hub and distributed workers](/docs/reference/deployment-topologies) topology, which
 chapter 11 set up on one machine:
@@ -42,4 +42,4 @@ container and nothing else.
 
 ---
 
-Next: [18.2 Migrate the shop's schema](/docs/book/deploy/migrate-the-shops-schema)
+Next: [19.2 Migrate the shop's schema](/docs/book/deploy/migrate-the-shops-schema)

@@ -14,6 +14,7 @@ node shoot.mjs recovery              # samples/Recovery/screenshot.png
 node shoot.mjs chat-service          # samples/ChatService/screenshot.png
 node shoot.mjs state-machine         # samples/StateMachine/screenshot.png
 node shoot.mjs signalr-broadcaster   # samples/SignalRBroadcaster/screenshot.png
+node shoot.mjs bakery                # samples/Bakery/screenshot.png (BAKERY_URL for a page elsewhere)
 ```
 
 `--copy-to <dir>` also writes the image to `<dir>/<scene>.png`. traxsharp.net no longer shows these shots: its landing

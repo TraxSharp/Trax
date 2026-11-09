@@ -94,6 +94,11 @@
           "System.CodeDom": "6.0.0"
         }
       },
+      "Cucumber.Messages": {
+        "type": "Transitive",
+        "resolved": "29.0.1",
+        "contentHash": "R2oo/wR3mXrbdK04Yraf+KhB01f/lyBkLQZcdxYt9XKE6tV+Af45MEk+jfbsew1SVvrAO0WvkIRwGYUozKCJvQ=="
+      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -253,6 +258,7 @@
           "Microsoft.OpenApi.Readers": "[1.6.31, )",
           "Scriban": "[7.5.0, )",
           "System.CommandLine": "[2.0.12, )",
+          "Trax.StateMachine.Gherkin": "[1.99.99, )",
           "Trax.StateMachine.Persistence": "[1.99.99, )"
         }
       },
@@ -293,6 +299,13 @@
           "Trax.Effect": "[1.99.99, )"
         }
       },
+      "trax.statemachine.gherkin": {
+        "type": "Project",
+        "dependencies": {
+          "Gherkin": "[35.0.0, )",
+          "Trax.StateMachine": "[1.99.99, )"
+        }
+      },
       "trax.statemachine.persistence": {
         "type": "Project",
         "dependencies": {
@@ -303,6 +316,15 @@
           "Trax.Effect": "[1.99.99, )",
           "Trax.Effect.Data": "[1.99.99, )",
           "Trax.StateMachine": "[1.99.99, )"
+        }
+      },
+      "Gherkin": {
+        "type": "CentralTransitive",
+        "requested": "[35.0.0, )",
+        "resolved": "35.0.0",
+        "contentHash": "ha+QNevQsXEESbzazUceHTCtKOjoBTBa8kLFdKpu6vSEbb3UMt3a55RG78tIoU/C4qzIqX3jQxaIdIcYGO+IWQ==",
+        "dependencies": {
+          "Cucumber.Messages": "29.0.1"
         }
       },
       "GraphQL-Parser": {

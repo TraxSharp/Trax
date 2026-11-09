@@ -72,6 +72,10 @@ updates:
       # Microsoft.Playwright and the screenshot script's npm playwright must name the same
       # version, so both download one browser build (PlaywrightVersionTests). Bump them together.
       - dependency-name: "Microsoft.Playwright"
+      # Gherkin is held at the major Reqnroll is built against (see Directory.Packages.props). A
+      # major is taken with the Reqnroll release that moves to it, by hand.
+      - dependency-name: "Gherkin"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     # "/" covers .github/workflows only; the local composite actions pin their own steps.
     directories: ["/", "/.github/actions/*"]
@@ -89,6 +93,7 @@ updates:
       - "/Trax.Core/plugins/vscode/trax-hints"
       # Each sample's frontend, and the scripts that record and photograph the samples for
       # traxsharp.net.
+      - "/Trax.Samples/samples/Bakery/Trax.Samples.Bakery.Web"
       - "/Trax.Samples/samples/Board/Trax.Samples.Board.Agents"
       - "/Trax.Samples/samples/Board/Trax.Samples.Board.Client"
       - "/Trax.Samples/samples/ChatService/Trax.Samples.ChatService.Client"

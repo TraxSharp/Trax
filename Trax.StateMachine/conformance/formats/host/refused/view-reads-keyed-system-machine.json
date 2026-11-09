@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "machines": {
+    "ticket": {
+      "schemaHash": "h",
+      "owner": {
+        "system": {
+          "keyedBy": [
+            "id"
+          ]
+        }
+      },
+      "triggers": {
+        "Triage": {
+          "server": true
+        }
+      }
+    }
+  },
+  "views": {
+    "tickets": {
+      "reads": [
+        {
+          "machine": "ticket"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "ticket.state"
+        }
+      },
+      "readers": {
+        "anyAuthenticated": true
+      }
+    }
+  }
+}

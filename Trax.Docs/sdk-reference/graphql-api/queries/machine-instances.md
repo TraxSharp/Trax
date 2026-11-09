@@ -58,6 +58,36 @@ query {
 It carries what a machine declares and nothing about any instance: the counts and the instances are
 the fields below.
 
+## machineBoard
+
+The event-storming board of a machine the host serves from features: who acts, what they ask, what happens, the
+rules between, the views, and the scenarios behind each, one lane per machine it joins. It reads through
+`IOperationsService.GetMachineBoardAsync`, which the console's Board tab draws.
+
+```graphql
+query {
+  operations {
+    machineBoard(machine: "order") {
+      machine lanes
+      stickies { id kind machine label scenarios { file line scenario } }
+      links { from to }
+    }
+  }
+}
+```
+
+**Returns**: `MachineBoard`, null for a machine not served from features.
+
+| Field | Type | Value |
+|---|---|---|
+| `machine` | `String!` | The machine asked for |
+| `lanes` | `[String!]!` | The machines on the board, the asked-for one first |
+| `stickies` | `[MachineSticky!]!` | Each sticky: `id`, `kind` (`actor`, `command`, `event`, `policy`, `aggregate` or `view`), `machine`, `label` and `scenarios`, each a `MachineScenario` (`file`, `line`, `scenario`), empty when the host file has no provenance |
+| `links` | `[MachineBoardLink!]!` | Each arrow, `from` one sticky's `id` `to` another's |
+
+A scenario is named by its file, line and name, never by its steps. Like every `operations` field, it is refused to
+anyone the operations gate does not admit.
+
 ## machineInstances
 
 The instances of every [persisted state machine](/docs/statemachine) on the host, system-owned and
@@ -233,7 +263,7 @@ pass as `after` for the next page, or null on the last. Each `MachineInstanceTra
 | `revision` | `Long!` | The revision the write gave the instance. A write that left the snapshot alone, or one made around Trax's store, has none, so revisions can skip |
 | `kind` | `SnapshotTransitionKind!` | `START` (created: a start, a save that created a draft, or a parent spawning it), `COMMAND` (an event moved it, or an effect it bound ran), `SAVE` (an autosave, or host code writing the snapshot), `TIMER` (its state's timer fired) or `OUTCOME` (a run it invoked ended) |
 | `trigger` | `String` | The command: the event's name, the timer's event, or `State.done`, `State.failed` or `State.cancelled` for an outcome. Null for a creation, a save, and an outcome that could not be applied, which leaves the instance where it was |
-| `actor` | `SnapshotTransitionActor!` | `OWNER` (a client acting for a user's instance), `HOST` (host code driving a system instance) or `MACHINE` (a timer, an outcome, a spawn). Never which user |
+| `actor` | `SnapshotTransitionActor!` | `OWNER` (a client acting for a user's instance), `HOST` (host code driving a system instance) `MACHINE` (a timer, an outcome, a spawn) or `POLICY` (the server reacting to another instance through a machine policy). Never which user |
 | `fromState` | `String` | The state it left; null for its creation |
 | `toState` | `String!` | The state it entered |
 | `at` | `DateTime!` | When it was written |

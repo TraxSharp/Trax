@@ -47,6 +47,9 @@
     <!-- The IR read into states and edges (MachineGraph): `trax machine show` draws it and the operations surface
          serves it, so there is one reading of the IR. The CLI's assembly is named `trax`. -->
     <InternalsVisibleTo Include="trax" />
+    <!-- The Reqnroll host driver arranges a Given through the host's store and fires a step no person takes as the
+         server does (ServerFire). -->
+    <InternalsVisibleTo Include="Trax.StateMachine.Gherkin.Reqnroll" />
     <InternalsVisibleTo Include="Trax.Api" />
     <InternalsVisibleTo Include="Trax.Api.GraphQL" />
     <InternalsVisibleTo Include="Trax.Api.Tests" />

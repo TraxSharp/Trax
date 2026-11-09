@@ -23,6 +23,7 @@ builds a test project step by step.
 | Each track of a train that asks a decider | `ScriptedDecider` (`Trax.Core.Decisions`), plus `ChainVerification.Verify` over `DeclaredChain()` | [Test a train's decisions](https://traxsharp.net/docs/core/test-train-decisions) |
 | A machine's definition against its committed files | `MachineConformance.Check` (`Trax.StateMachine.Testing`) | [Trax.StateMachine.Testing](https://traxsharp.net/docs/sdk-reference/testing/effect-statemachine-testing) |
 | A machine's rules, ownership and refusals as a caller sees them | The host over GraphQL | [12.9 Test it](https://traxsharp.net/docs/book/checkout-is-a-state-machine/test-it) |
+| Machines written as features | The features themselves: `trax machine run` in memory, then `Trax.StateMachine.Gherkin.Reqnroll` against the host (`trax-write-machines-as-features`) | [Write machines as features](https://traxsharp.net/docs/statemachine/write-machines-as-features#run-the-features) |
 | Startup, auth, the Production/Development split, GraphQL, the scheduler | `WebApplicationFactory<Program>` | [Test a host end to end](https://traxsharp.net/docs/cross-cutting/e2e-testing) |
 | Folder and type rules across the project | Guard fixtures, below | [Adopt the architecture guards](https://traxsharp.net/docs/reference/adopt-the-architecture-guards) |
 

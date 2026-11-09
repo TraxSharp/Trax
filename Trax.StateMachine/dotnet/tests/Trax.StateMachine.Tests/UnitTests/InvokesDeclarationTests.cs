@@ -367,7 +367,7 @@ public class InvokesDeclarationTests
         invoke.InputType.Should().Be(typeof(FetchInput));
         invoke.OutputType.Should().Be(typeof(FetchOutput));
         invoke
-            .CreateInput(new JsonObject { ["source"] = "s3://x" })
+            .CreateInput(new JsonObject { ["source"] = "s3://x" }, null)
             .Should()
             .Be(new FetchInput("s3://x"));
     }

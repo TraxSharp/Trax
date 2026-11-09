@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "machines": {
+    "ticket": {
+      "schemaHash": "h",
+      "owner": {
+        "system": {
+          "keyedBy": [
+            "Source"
+          ]
+        }
+      },
+      "triggers": {
+        "Triage": {
+          "server": true
+        }
+      }
+    }
+  }
+}

@@ -1,16 +1,16 @@
 ---
-title: "15.8 Keep it current"
-description: "Chapter 15 of the Trax book, section 8: Keep it current."
+title: "16.8 Keep it current"
+description: "Chapter 16 of the Trax book, section 8: Keep it current."
 type: tutorial
 area: general
-parent: "15. A generated client"
+parent: "16. A generated client"
 grand_parent: The Trax book
 nav_order: 8
 snippet_context: none
 follows: book/a-generated-client/run-it
 ---
 
-# 15.8 Keep it current
+# 16.8 Keep it current
 
 The client is generated from the hub, so any change to a train, a query model, a machine or a
 document means exporting and generating again. Forgetting to is caught in CI: `--check` writes
@@ -35,4 +35,4 @@ refused.
 
 ---
 
-Next: [15.9 Test it](/docs/book/a-generated-client/test-it)
+Next: [16.9 Test it](/docs/book/a-generated-client/test-it)

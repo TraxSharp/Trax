@@ -78,6 +78,17 @@ internal static class CallerRules
         return true;
     }
 
+    /// <summary>
+    /// Whether <paramref name="client"/> may read its own instances of a machine with <paramref name="rules"/>: its
+    /// <c>get</c> rule when it declares one, as <c>get</c> checks it; an owner reads a machine that declares none. A
+    /// view holds each machine it reads to the same check.
+    /// </summary>
+    public static Task<bool> MayRead(
+        Actor.Client client,
+        MachineRules rules,
+        CancellationToken cancellationToken
+    ) => rules.Get is { } rule ? Admits(client, rule, cancellationToken) : Task.FromResult(true);
+
     /// <summary>The refusal of a caller a rule does not admit.</summary>
     public static AdvanceOutcome.Rejected Forbidden() =>
         new(RefusalCode.Forbidden, "You may not do this.");

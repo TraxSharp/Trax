@@ -28,7 +28,7 @@ namespace Trax.StateMachine
     }
     public sealed class ClientManifest : System.IEquatable<Trax.StateMachine.ClientManifest>
     {
-        public const int CurrentFormat = 3;
+        public const int CurrentFormat = 4;
         public ClientManifest() { }
         public System.Collections.Generic.IReadOnlyList<string> FilterInputs { get; init; }
         public int Format { get; init; }
@@ -37,6 +37,7 @@ namespace Trax.StateMachine
         public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestQueryModel> QueryModels { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestTrain> Trains { get; init; }
         public string Types { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestDocument> Views { get; init; }
         public static Trax.StateMachine.ClientManifest Read(string text) { }
         public static string Write(Trax.StateMachine.ClientManifest manifest) { }
     }
@@ -191,6 +192,14 @@ namespace Trax.StateMachine
         public Trax.StateMachine.JsonFieldType Type { get; init; }
         public Trax.StateMachine.FieldSchema? Values { get; init; }
     }
+    public interface ICustomReduction
+    {
+        System.Text.Json.Nodes.JsonObject Reduce(System.Text.Json.Nodes.JsonObject context, System.Text.Json.Nodes.JsonNode? input);
+    }
+    public interface ICustomRule
+    {
+        bool Holds(System.Text.Json.Nodes.JsonObject context, System.Text.Json.Nodes.JsonNode? input);
+    }
     public interface IDifferentialBuilder<TState, TTrigger>
         where TState :  struct, System.Enum
         where TTrigger :  struct, System.Enum
@@ -230,6 +239,10 @@ namespace Trax.StateMachine
         Trax.StateMachine.IMachineBuilder<TState, TTrigger> SystemOwned();
         Trax.StateMachine.IMachineBuilder<TState, TTrigger> Version(int version);
         Trax.StateMachine.IMachineBuilder<TState, TTrigger> Watch(System.Action<Trax.StateMachine.IReadRuleBuilder> rule);
+    }
+    public interface IMachineMigration
+    {
+        Trax.StateMachine.MigrationResult Migrate(string state, System.Text.Json.Nodes.JsonObject context);
     }
     public interface IReadRuleBuilder
     {

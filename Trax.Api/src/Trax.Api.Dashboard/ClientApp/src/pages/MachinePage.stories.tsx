@@ -1,7 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { MachinePage } from "./MachinePage";
-import { MACHINE_DEFINITIONS, MACHINE_IDS, machineQueryResolvers, machineScenario } from "../mock/scenarios";
+import {
+  MACHINE_DEFINITIONS,
+  MACHINE_IDS,
+  machineQueryResolvers,
+  machineScenario,
+  machineScenarioWithBoard,
+} from "../mock/scenarios";
 import type { MockSchemaOverrides } from "../mock/build-mock-schema";
 
 const meta = {
@@ -40,6 +46,27 @@ export const Diagram: Story = {
       "href",
       `/machines/topic-map/user/${MACHINE_IDS.draftIdle}?row=22`,
     );
+  },
+};
+
+// A machine its host serves no board for: the diagram alone, with no tabs.
+export const NoBoard: Story = {
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    expect(await c.findByRole("region", { name: "States" })).toBeInTheDocument();
+    expect(c.queryByRole("tablist")).toBeNull();
+  },
+};
+
+// A machine its host serves from features: a tab for its diagram and one for its board, the stickies in its lane.
+export const Board: Story = {
+  parameters: { mock: machineScenarioWithBoard },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await userEvent.click(await c.findByRole("tab", { name: "Board" }));
+    const board = await c.findByRole("tabpanel", { name: "Board" });
+    await userEvent.click(within(board).getByRole("button", { name: /^Rebuild/ }));
+    expect(await within(board).findByText("Ada builds it again")).toBeInTheDocument();
   },
 };
 

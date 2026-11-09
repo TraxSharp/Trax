@@ -28,6 +28,8 @@
     <ProjectReference Include="../../src/Trax.StateMachine.Testing/Trax.StateMachine.Testing.csproj" />
     <ProjectReference Include="../../src/Trax.StateMachine.Client/Trax.StateMachine.Client.csproj" />
     <ProjectReference Include="../../src/Trax.Client/Trax.Client.csproj" />
+    <ProjectReference Include="../../src/Trax.StateMachine.Gherkin/Trax.StateMachine.Gherkin.csproj" />
+    <ProjectReference Include="../../src/Trax.StateMachine.Gherkin.Reqnroll/Trax.StateMachine.Gherkin.Reqnroll.csproj" />
   </ItemGroup>
 
   <ItemGroup>

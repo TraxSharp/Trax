@@ -41,13 +41,14 @@ public class BookSampleIsTheBookTests
         ("Shopfront.slnx", "dotnet new sln and dotnet sln add, chapters 2 and 11"),
         (
             "dotnet-tools.json",
-            "dotnet new tool-manifest and dotnet tool install, chapters 12 and 18"
+            "dotnet new tool-manifest and dotnet tool install, chapters 12 and 19"
         ),
         ("Shopfront.Hub/Properties/launchSettings.json", "dotnet new web, chapter 1"),
         ("machines/checkout/*", "trax machine generate, chapters 12 and 13"),
-        ("Shopfront.Core/Data/Migrations/*", "dotnet ef migrations add, chapter 18"),
-        ("web/package-lock.json", "npm install, chapter 15"),
-        ("web/src/trax/**", "the hub's --trax-export-client and trax client, chapter 15"),
+        ("machines/from-features/*", "trax machine from-gherkin, chapter 14"),
+        ("Shopfront.Core/Data/Migrations/*", "dotnet ef migrations add, chapter 19"),
+        ("web/package-lock.json", "npm install, chapter 16"),
+        ("web/src/trax/**", "the hub's --trax-export-client and trax client, chapter 16"),
     ];
 
     [Test]

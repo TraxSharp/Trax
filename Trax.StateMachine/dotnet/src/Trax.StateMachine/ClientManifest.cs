@@ -22,9 +22,9 @@ public sealed record ClientManifest
     /// agree on its shape; it moves when a field is added, removed or changes meaning. Format 2 writes an output
     /// schema several outcomes share once, under <c>$defs</c>. Format 3 lists each train's arguments in place of a
     /// generated document, since a frontend writes the documents that reach a train, and lists the query models and
-    /// the filter and sort inputs.
+    /// the filter and sort inputs. Format 4 lists the documents of the views a host serves from features.
     /// </summary>
-    public const int CurrentFormat = 3;
+    public const int CurrentFormat = 4;
 
     /// <summary>The format the file was written in.</summary>
     public int Format { get; init; } = CurrentFormat;
@@ -50,6 +50,12 @@ public sealed record ClientManifest
     /// <c>query</c> that reads it once and the <c>subscription</c> that streams it. Empty when no train sets it.
     /// </summary>
     public IReadOnlyList<ClientManifestDocument> Progress { get; init; } = [];
+
+    /// <summary>
+    /// The document of each view the host serves from features, its <see cref="ClientManifestDocument.Operation"/>
+    /// the view's field under <c>views</c>, ordered by it. Empty when the host serves no view.
+    /// </summary>
+    public IReadOnlyList<ClientManifestDocument> Views { get; init; } = [];
 
     /// <summary>
     /// The GraphQL type definitions the documents reach, and every type an exposed train's or query model's arguments
@@ -214,6 +220,8 @@ public sealed record ClientManifest
             throw Malformed("$.filterInputs", "A filter input's name is null.");
         if (manifest.Progress.Any(d => d is null))
             throw Malformed("$.progress", "A progress document is null.");
+        if (manifest.Views.Any(d => d is null))
+            throw Malformed("$.views", "A view document is null.");
         var requirements = manifest
             .Machines.Select(m => m.Requires)
             .Concat(manifest.Trains.Select(t => t.Requires))
@@ -339,7 +347,10 @@ public sealed record ClientManifestDocument
     /// <summary>The id a client sends in place of the document.</summary>
     public required string Id { get; init; }
 
-    /// <summary>The operation: a machine's field (<c>start</c>, an event, <c>get</c>, <c>changed</c>) or runProgress's.</summary>
+    /// <summary>
+    /// The operation: a machine's field (<c>start</c>, an event, <c>get</c>, <c>changed</c>), runProgress's, or a
+    /// view's field.
+    /// </summary>
     public required string Operation { get; init; }
 
     /// <summary>The document's text, which the host runs for the id.</summary>

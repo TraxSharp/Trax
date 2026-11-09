@@ -1,16 +1,16 @@
 ---
-title: "14.1 The new chain"
-description: "Chapter 14 of the Trax book, section 1: The new chain."
+title: "15.1 The new chain"
+description: "Chapter 15 of the Trax book, section 1: The new chain."
 type: tutorial
 area: general
-parent: "14. Checks in parallel, and resuming"
+parent: "15. Checks in parallel, and resuming"
 grand_parent: The Trax book
 nav_order: 1
 snippet_context: none
-follows: book/the-machine-places-the-order/test-it
+follows: book/returns-are-written-as-features/test-it
 ---
 
-# 14.1 The new chain
+# 15.1 The new chain
 
 ```text
 FulfilOrderInput
@@ -31,4 +31,4 @@ it.
 
 ---
 
-Next: [14.2 The courier and the warehouse](/docs/book/checks-in-parallel-and-resuming/the-courier-and-the-warehouse)
+Next: [15.2 The courier and the warehouse](/docs/book/checks-in-parallel-and-resuming/the-courier-and-the-warehouse)

@@ -1,16 +1,16 @@
 ---
-title: "15.6 The page"
-description: "Chapter 15 of the Trax book, section 6: The page."
+title: "16.6 The page"
+description: "Chapter 16 of the Trax book, section 6: The page."
 type: tutorial
 area: general
-parent: "15. A generated client"
+parent: "16. A generated client"
 grand_parent: The Trax book
 nav_order: 6
 snippet_context: none
 follows: book/a-generated-client/generate-the-client
 ---
 
-# 15.6 The page
+# 16.6 The page
 
 `connection.ts` signs in and points the client at the hub. In Development the token comes from the
 hub's `/dev/token` endpoint, as it has for `curl`. A socket cannot carry a header, so the token goes
@@ -181,4 +181,4 @@ export function MyOrders() {
 
 ---
 
-Next: [15.7 Run it](/docs/book/a-generated-client/run-it)
+Next: [16.7 Run it](/docs/book/a-generated-client/run-it)

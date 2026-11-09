@@ -245,6 +245,7 @@ namespace Trax.Effect.Enums
         Owner = 0,
         Host = 1,
         Machine = 2,
+        Policy = 3,
     }
     public enum SnapshotTransitionKind
     {
@@ -675,6 +676,27 @@ namespace Trax.Effect.Models.Log
         public string? StackTrace { get; set; }
         public override string ToString() { }
         public static Trax.Effect.Models.Log.Log Create(Trax.Effect.Models.Log.DTOs.CreateLog createLog) { }
+    }
+}
+namespace Trax.Effect.Models.MachinePolicyFire
+{
+    public class MachinePolicyFire
+    {
+        public MachinePolicyFire() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
+        public System.DateTimeOffset CreatedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("policy")]
+        public string Policy { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("source_instance_id")]
+        public System.Guid SourceInstanceId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("source_revision")]
+        public long SourceRevision { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("source_row_id")]
+        public long SourceRowId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("target_row_id")]
+        public long? TargetRowId { get; set; }
     }
 }
 namespace Trax.Effect.Models.Manifest.DTOs

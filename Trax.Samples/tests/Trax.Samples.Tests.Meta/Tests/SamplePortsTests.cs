@@ -5,8 +5,9 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// belongs to one sample. A sample on a port outside them collides with whatever else a
 /// developer runs (5000 is the framework default), and
 /// two samples on one port cannot run side by side. The ports are read from each launch profile's
-/// <c>applicationUrl</c> and from every <c>http://localhost:N</c> and <c>port = N</c> in a
-/// sample's C#.
+/// <c>applicationUrl</c>, every Kestrel URL in a sample's <c>appsettings*.json</c>, every
+/// <c>http://localhost:N</c> and <c>port = N</c> in its C#, and every <c>http://localhost:N</c> and
+/// <c>port: N</c> in its pages' TypeScript and Vite configs.
 ///
 /// <para>Not ADR-enforcing: it keeps a numbering convention, not a choice between
 /// alternatives.</para>
@@ -34,6 +35,21 @@ public class SamplePortsTests
         RegexOptions.Compiled
     );
 
+    /// <summary>
+    /// A Kestrel endpoint in <c>appsettings*.json</c>, <c>"Url": "http://localhost:5282"</c>: what the host listens
+    /// on, and not an address it calls (a model's endpoint is a localhost URL too).
+    /// </summary>
+    private static readonly Regex KestrelUrl = new(
+        @"""Url""\s*:\s*""https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|\*|\+):(?<port>\d+)",
+        RegexOptions.Compiled
+    );
+
+    /// <summary>A Vite config's or a script's <c>port: 5281</c>.</summary>
+    private static readonly Regex PortProperty = new(
+        @"\bport:\s*(?<port>\d{4,5})\b",
+        RegexOptions.Compiled
+    );
+
     private static bool InRange(int port) => port is (>= 5200 and <= 5299) or (>= 5310 and <= 5319);
 
     [Test]
@@ -42,10 +58,19 @@ public class SamplePortsTests
         var samples = Path.Combine(RepoRoot.Path, "samples");
         var files = Directory
             .EnumerateFiles(samples, "launchSettings.json", SearchOption.AllDirectories)
+            .Concat(
+                Directory.EnumerateFiles(samples, "appsettings*.json", SearchOption.AllDirectories)
+            )
+            .Concat(Directory.EnumerateFiles(samples, "*.ts", SearchOption.AllDirectories))
+            .Concat(Directory.EnumerateFiles(samples, "*.tsx", SearchOption.AllDirectories))
             .Concat(SourceFiles.CSharp("samples"))
             .Where(f =>
                 !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
                 && !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}"
+                )
+                && !f.Contains($"{Path.DirectorySeparatorChar}dist{Path.DirectorySeparatorChar}")
             );
 
         var offenders = new List<string>();
@@ -54,7 +79,14 @@ public class SamplePortsTests
         {
             var folder = Path.GetRelativePath(samples, file).Split(Path.DirectorySeparatorChar)[0];
             var text = File.ReadAllText(file);
-            foreach (Match match in LocalUrl.Matches(text).Concat(PortVariable.Matches(text)))
+            var matches = Path.GetFileName(file).StartsWith("appsettings", StringComparison.Ordinal)
+                ? KestrelUrl.Matches(text).ToList()
+                : LocalUrl
+                    .Matches(text)
+                    .Concat(PortVariable.Matches(text))
+                    .Concat(PortProperty.Matches(text))
+                    .ToList();
+            foreach (var match in matches)
             {
                 var port = int.Parse(match.Groups["port"].Value);
                 if (port == ViteDevServer)

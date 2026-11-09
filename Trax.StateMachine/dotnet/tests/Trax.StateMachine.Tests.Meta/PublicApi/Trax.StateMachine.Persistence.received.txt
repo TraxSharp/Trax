@@ -189,10 +189,12 @@ namespace Trax.StateMachine.Persistence
     }
     public interface IMachineInstances
     {
+        System.Threading.Tasks.Task<Trax.StateMachine.Persistence.AdvanceOutcome> Advance(string machineId, Trax.StateMachine.Persistence.MachineKey key, string trigger, System.Text.Json.Nodes.JsonNode? input = null, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<Trax.StateMachine.Persistence.AdvanceOutcome> Advance<TMachine>(System.Guid id, string trigger, System.Text.Json.Nodes.JsonNode? input = null, System.Threading.CancellationToken cancellationToken = default)
             where TMachine : Trax.StateMachine.Persistence.IMachine;
         System.Threading.Tasks.Task<Trax.StateMachine.Persistence.AdvanceOutcome> Advance<TMachine>(Trax.StateMachine.Persistence.MachineKey key, string trigger, System.Text.Json.Nodes.JsonNode? input = null, System.Threading.CancellationToken cancellationToken = default)
             where TMachine : Trax.StateMachine.Persistence.IMachine;
+        System.Threading.Tasks.Task<Trax.StateMachine.Persistence.MachineInstance> Start(string machineId, Trax.StateMachine.Persistence.MachineKey key, System.Text.Json.Nodes.JsonObject? context = null, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<Trax.StateMachine.Persistence.MachineInstance> Start<TMachine>(Trax.StateMachine.Persistence.MachineKey key, System.Text.Json.Nodes.JsonObject? context = null, System.Threading.CancellationToken cancellationToken = default)
             where TMachine : Trax.StateMachine.Persistence.IMachine;
     }
@@ -331,6 +333,13 @@ namespace Trax.StateMachine.Persistence
         public string ExportIr() { }
         public System.Collections.Generic.IReadOnlyList<string> SelfCheck() { }
     }
+    public sealed class PolicyRunnerOptions
+    {
+        public PolicyRunnerOptions() { }
+        public int BatchSize { get; set; }
+        public int FanOutCap { get; set; }
+        public System.TimeSpan Interval { get; set; }
+    }
     public sealed class RecordedRequest : System.IEquatable<Trax.StateMachine.Persistence.RecordedRequest>
     {
         public RecordedRequest(string RequestId, string Fingerprint, long Revision, string ResultSnapshot) { }
@@ -406,6 +415,7 @@ namespace Trax.StateMachine.Persistence
     public sealed class StateMachineOptions
     {
         public const int DefaultMaxDraftsPerUser = 50;
+        public const int DefaultViewRowLimit = 100;
         public static readonly System.TimeSpan DefaultDraftTtl;
         public static readonly System.TimeSpan DefaultMaxDraftLifetime;
         public static readonly System.TimeSpan MinimumChangeFeedPollInterval;
@@ -417,7 +427,10 @@ namespace Trax.StateMachine.Persistence
         public System.TimeSpan InvokeOutcomeSweepIntervalWhileListening { get; set; }
         public System.TimeSpan? MaxDraftLifetime { get; set; }
         public int? MaxDraftsPerUser { get; set; }
+        public int ViewRowLimit { get; set; }
         public Trax.StateMachine.Persistence.StateMachineOptions ExposeGenericStateMachineMutations(System.Action<Trax.StateMachine.Persistence.GenericStateMachineMutationOptions> configure) { }
+        public Trax.StateMachine.Persistence.StateMachineOptions PolicyRunner(System.Action<Trax.StateMachine.Persistence.PolicyRunnerOptions> configure) { }
+        public Trax.StateMachine.Persistence.StateMachineOptions ServeFeatures(string directory, params System.Reflection.Assembly[] trainAssemblies) { }
     }
     public static class StateMachinesBuilderExtensions
     {

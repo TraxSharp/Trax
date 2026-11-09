@@ -1,16 +1,16 @@
 ---
-title: "15.4 The hub serves the storefront"
-description: "Chapter 15 of the Trax book, section 4: The hub serves the storefront."
+title: "16.4 The hub serves the storefront"
+description: "Chapter 16 of the Trax book, section 4: The hub serves the storefront."
 type: tutorial
 area: general
-parent: "15. A generated client"
+parent: "16. A generated client"
 grand_parent: The Trax book
 nav_order: 4
 snippet_context: none
 follows: book/a-generated-client/the-documents
 ---
 
-# 15.4 The hub serves the storefront
+# 16.4 The hub serves the storefront
 
 Three things change in the hub. It registers the storefront's documents, it lets the storefront's
 origin call it, and it can write its client manifest.
@@ -94,7 +94,13 @@ builder.Services.AddTrax(trax =>
                 .AddJunctionEvents()
                 .AddLifecycleHook<StaffFailureHook>()
         )
-        .AddStateMachines(typeof(ManifestNames).Assembly)
+        // Checkout and the parcel are classes in the library. Returns are derived from
+        // features/ by trax machine from-gherkin, which writes machines/from-features; the
+        // build copies it to machines/ beside the hub.
+        .AddStateMachines(
+            machines => machines.ServeFeatures("machines", typeof(ManifestNames).Assembly),
+            typeof(ManifestNames).Assembly
+        )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>
         {
@@ -223,6 +229,16 @@ What changed:
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The machines trax machine from-gherkin derives from ../features, as committed. The hub
+         serves them from machines/ beside it, and refuses to start if they disagree. -->
+    <None
+      Include="..\machines\from-features\*"
+      LinkBase="machines"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The storefront's documents, registered at start. trax client writes the file. -->
     <None
       Include="..\web\src\trax\trax.documents.json"
@@ -276,4 +292,4 @@ What changed:
 
 ---
 
-Next: [15.5 Generate the client](/docs/book/a-generated-client/generate-the-client)
+Next: [16.5 Generate the client](/docs/book/a-generated-client/generate-the-client)

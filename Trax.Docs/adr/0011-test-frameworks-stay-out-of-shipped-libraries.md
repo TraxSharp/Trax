@@ -7,10 +7,11 @@ status: accepted
 
 # Test frameworks stay out of shipped libraries, except where fixtures are the product
 
-A project under `src/` does not reference NUnit, xUnit, MSTest or the test SDK. The
+A project under `src/` does not reference NUnit, xUnit, MSTest, Reqnroll or the test SDK. The
 exception is the `Trax.*.Testing` packages, whose product is architecture-guard fixtures: a
 consumer references one, subclasses the fixture and inherits its `[Test]` methods, so the
-attributes have to be in the shipped assembly.
+attributes have to be in the shipped assembly. `Trax.StateMachine.Gherkin.Reqnroll` is the same
+kind of exception: its product is the Reqnroll step bindings a consumer's test project runs.
 
 ## Status
 
@@ -65,4 +66,7 @@ purpose is fixtures has not been left off the list. Both are review's job.
 
 ## Changelog
 
+- **2026-11-07**: Reqnroll counts as a test framework in every repo's guard, and
+  `Trax.StateMachine.Gherkin.Reqnroll`, whose product is step bindings (ADR 0058), is sanctioned in
+  the state machines' guard.
 - **2026-09-14**: Recorded.

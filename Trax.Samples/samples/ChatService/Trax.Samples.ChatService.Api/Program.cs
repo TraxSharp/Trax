@@ -105,16 +105,14 @@ builder.Services.AddTraxGraphQL(graphql => graphql.AddTypeExtension<ChatSubscrip
 
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
-// ── CORS: allow the React dev server ────────────────────────────────────
+// ── CORS: allow the React client ────────────────────────────────────────
+// The page's origin: the Vite dev server unless ChatService:PageOrigin names another.
 // The default policy's origins are also the origins a browser WebSocket upgrade is accepted
 // from, so the React client's subscriptions connect without AllowSocketOrigins(...).
+var pageOrigin = builder.Configuration["ChatService:PageOrigin"] ?? "http://localhost:5173";
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
-        policy
-            .WithOrigins("http://localhost:5173")
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials()
+        policy.WithOrigins(pageOrigin).AllowAnyHeader().AllowAnyMethod().AllowCredentials()
     )
 );
 

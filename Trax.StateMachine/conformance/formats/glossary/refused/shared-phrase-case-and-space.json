@@ -1,0 +1,238 @@
+{
+  "version": 1,
+  "actors": {
+    "customer": {
+      "noun": "a customer",
+      "roles": [
+        "customer"
+      ]
+    },
+    "baker": {
+      "noun": "a baker",
+      "roles": [
+        "baker"
+      ]
+    }
+  },
+  "machines": {
+    "order": {
+      "ownedBy": "customer",
+      "noun": "order",
+      "start": "has an order",
+      "initial": "Draft",
+      "context": [
+        {
+          "name": "loaves",
+          "type": "integer",
+          "nullable": false,
+          "constraints": []
+        },
+        {
+          "name": "approved",
+          "type": "boolean",
+          "nullable": true,
+          "constraints": []
+        }
+      ],
+      "states": {
+        "Draft": "is a draft",
+        "Paying": "is being paid for",
+        "Placed": "is placed",
+        "Declined": "was declined",
+        "Baking": "is baking"
+      },
+      "triggers": {
+        "Order": {
+          "phrase": "orders {loaves} loaves for {subject}",
+          "input": [
+            {
+              "name": "loaves",
+              "type": "integer",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "reduce": {
+            "reduce": "set",
+            "steps": [
+              {
+                "field": "loaves",
+                "value": {
+                  "input": "loaves"
+                }
+              }
+            ]
+          }
+        },
+        "Place": {
+          "phrase": "places {subject}"
+        },
+        "Bake": {
+          "phrase": "{subject} starts baking"
+        }
+      },
+      "guards": {
+        "hasLoaves": {
+          "holds": "has something in it",
+          "fails": "has nothing in it",
+          "rule": {
+            "rule": "compare",
+            "source": "context",
+            "field": "loaves",
+            "op": "gt",
+            "value": 0
+          }
+        }
+      },
+      "invokes": {
+        "Paying": {
+          "train": "Bakery.Trains.ITakePayment",
+          "input": {
+            "amount": "loaves"
+          },
+          "output": [
+            {
+              "name": "approved",
+              "type": "boolean",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "outcomes": {
+            "the payment goes through": {
+              "outcome": "done",
+              "when": {
+                "rule": "boolEquals",
+                "source": "input",
+                "field": "approved",
+                "value": true
+              }
+            },
+            "the payment is declined": {
+              "outcome": "done",
+              "when": {
+                "rule": "boolEquals",
+                "source": "input",
+                "field": "approved",
+                "value": false
+              }
+            },
+            "the payment cannot be taken": {
+              "outcome": "failed"
+            }
+          },
+          "examples": {
+            "the payment goes through": {
+              "approved": true
+            },
+            "the payment is declined": {
+              "approved": false
+            }
+          }
+        }
+      }
+    },
+    "receipt": {
+      "ownedBy": "customer",
+      "noun": "receipt",
+      "initial": "Issued",
+      "context": [
+        {
+          "name": "orderId",
+          "type": "string",
+          "nullable": false,
+          "constraints": [],
+          "format": "uuid"
+        }
+      ],
+      "states": {
+        "Issued": "is issued",
+        "Void": "is void"
+      },
+      "triggers": {
+        "Cancel": {
+          "phrase": "{subject} is voided"
+        }
+      },
+      "links": {
+        "the receipt for {subject}": {
+          "machine": "order",
+          "field": "orderId"
+        }
+      }
+    },
+    "shift": {
+      "ownedBy": "baker",
+      "noun": "shift",
+      "start": "has a shift",
+      "initial": "Off",
+      "states": {
+        "Off": "is not started",
+        "On": "is on"
+      },
+      "triggers": {
+        "ClockIn": {
+          "phrase": "clocks in for {subject}"
+        }
+      }
+    },
+    "shop": {
+      "system": "shop/main",
+      "name": "the shop",
+      "initial": "Closed",
+      "states": {
+        "Closed": "is closed",
+        "Open": "is open"
+      },
+      "triggers": {
+        "Open": {
+          "phrase": "the shop opens"
+        },
+        "Close": {
+          "phrase": "the  Shop OPENS"
+        }
+      }
+    }
+  },
+  "views": {
+    "orders": {
+      "reads": [
+        {
+          "machine": "order"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "order.state",
+          "labels": {
+            "Draft": "Not sent",
+            "Baking": "In the oven"
+          }
+        },
+        "loaves": {
+          "from": "order.loaves"
+        }
+      }
+    },
+    "the shop sign": {
+      "reads": [
+        {
+          "machine": "order"
+        },
+        {
+          "machine": "shop",
+          "key": "shop/main"
+        }
+      ],
+      "fields": {
+        "open": {
+          "from": "shop.state",
+          "labels": {
+            "Open": "We're open",
+            "Closed": "Closed"
+          }
+        }
+      }
+    }
+  }
+}

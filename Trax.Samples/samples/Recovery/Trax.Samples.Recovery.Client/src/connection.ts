@@ -1,7 +1,12 @@
 import { configureTrax, type TraxConnection } from "./trax/index.g";
 
-export const API_URL = "http://localhost:5260/trax/graphql";
-export const SOCKET_URL = "ws://localhost:5260/trax/graphql";
+// The host: localhost:5260 in development, or what the build was given. The socket is the same origin over ws or wss.
+const API_ORIGIN: string = import.meta.env.VITE_RECOVERY_API ?? "http://localhost:5260";
+
+export const API_URL = `${API_ORIGIN}/trax/graphql`;
+export const SOCKET_URL = `${API_ORIGIN.replace(/^http/, "ws")}/trax/graphql`;
+/** The host's dashboard, for an operator's actions the page does not offer. */
+export const DASHBOARD_URL = `${API_ORIGIN}/trax`;
 
 // The demo user's key, registered by the host in Development only. The page is a user's: it starts runs, follows its
 // own runs through runProgress, and drives its own topic map and food order. Nothing it sends is under operations.

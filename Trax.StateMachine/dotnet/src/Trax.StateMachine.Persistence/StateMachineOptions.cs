@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.StateMachine.Persistence;
@@ -220,6 +221,71 @@ public sealed class StateMachineOptions
         GenericMutationsPolicy = options.Policy;
         return this;
     }
+
+    /// <summary>
+    /// Serve the machines <c>trax machine from-gherkin</c> wrote to <paramref name="directory"/> (ADR
+    /// <c>Trax.Docs/adr/0058</c>): each <c>&lt;machine&gt;.ir.json</c> with the access, policies, views and system
+    /// instances its <c>host.json</c> gives. A relative path is read from the application's base directory, where a
+    /// build copies content. The directory is read and checked when <c>AddStateMachines</c> runs, so a host whose files
+    /// disagree, or whose IR the host file was not derived from, refuses to start.
+    /// </summary>
+    /// <param name="directory">The directory <c>from-gherkin</c> writes.</param>
+    /// <param name="trainAssemblies">Where the trains the machines invoke are found, by their full name.</param>
+    /// <exception cref="ArgumentException"><paramref name="directory"/> is empty.</exception>
+    /// <exception cref="InvalidOperationException">It was called twice.</exception>
+    public StateMachineOptions ServeFeatures(string directory, params Assembly[] trainAssemblies)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentNullException.ThrowIfNull(trainAssemblies);
+        if (FeaturesDirectory is not null)
+            throw new InvalidOperationException(
+                "ServeFeatures was called twice. A host serves one directory, which from-gherkin writes whole."
+            );
+        FeaturesDirectory = Path.IsPathRooted(directory)
+            ? directory
+            : Path.Combine(AppContext.BaseDirectory, directory);
+        FeatureTrainAssemblies = trainAssemblies;
+        return this;
+    }
+
+    /// <summary>
+    /// Configure the runner that fires the policies of the machines <see cref="ServeFeatures"/> serves: how many owed
+    /// firings one pass takes, how many instances one broadcast reaches, and how long it waits when nothing is owed.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is null.</exception>
+    public StateMachineOptions PolicyRunner(Action<PolicyRunnerOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        ConfigurePolicyRunner = configure;
+        return this;
+    }
+
+    /// <summary>The most instances of one machine a view returns unless the host sets <see cref="ViewRowLimit"/>: 100.</summary>
+    public const int DefaultViewRowLimit = 100;
+
+    /// <summary>
+    /// The most instances of each user machine one read of a view returns (the views <see cref="ServeFeatures"/>
+    /// serves): the caller's newest, by when each was created, listed oldest first. An instance older than those is
+    /// not in the view; the machine's own <c>get</c> still reads it. Defaults to <see cref="DefaultViewRowLimit"/>; must
+    /// be positive. A system machine's instance is one row and is not counted.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value set is less than 1.</exception>
+    public int ViewRowLimit
+    {
+        get;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
+            field = value;
+        }
+    } = DefaultViewRowLimit;
+
+    /// <summary>The directory <see cref="ServeFeatures"/> named, as a full path, or null.</summary>
+    internal string? FeaturesDirectory { get; private set; }
+
+    internal Assembly[] FeatureTrainAssemblies { get; private set; } = [];
+
+    internal Action<PolicyRunnerOptions>? ConfigurePolicyRunner { get; private set; }
 
     /// <summary>Whether <see cref="ExposeGenericStateMachineMutations"/> opted in to the generic mutations.</summary>
     internal bool GenericMutationsExposed { get; private set; }

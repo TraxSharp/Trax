@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
@@ -122,6 +123,47 @@ public class PersistedOperationBrowserTests : ConsoleTest
         await Assertions.Expect(Console.Button("Deactivate")).ToHaveCountAsync(0);
         await Assertions.Expect(page.Main).Not.ToContainTextAsync(operation.Document);
         (await Stored(operation.Id))!.IsActive.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task The_console_asks_whether_the_caller_may_manage_them_and_is_answered_without_an_error()
+    {
+        foreach (
+            var (caller, manages) in new[] { (Caller.Operator, true), (Caller.NoManagement, false) }
+        )
+        {
+            var answered = Console.AnsweredAsync("PersistedOperationsAvailable");
+            await Console.OpenAsync("/", caller);
+            var response = await answered;
+
+            using var answer = JsonDocument.Parse(await response.TextAsync());
+            answer
+                .RootElement.TryGetProperty("errors", out _)
+                .Should()
+                .BeFalse(
+                    $"the host answers {caller.Id} whether it may manage persisted operations, a field "
+                        + $"every host serves, rather than refusing a probe: {answer.RootElement}"
+                );
+            answer
+                .RootElement.GetProperty("data")
+                .GetProperty("operations")
+                .GetProperty("config")
+                .GetProperty("canManagePersistedOperations")
+                .GetBoolean()
+                .Should()
+                .Be(manages, $"{caller.Id} {(manages ? "holds" : "lacks")} the management role");
+
+            var link = Console.NavLink("Persisted operations");
+            if (manages)
+                await Assertions.Expect(link).ToBeVisibleAsync(new() { Timeout = Render });
+            else
+            {
+                await Assertions
+                    .Expect(Console.NavLink("Hosts"))
+                    .ToBeVisibleAsync(new() { Timeout = Render });
+                await Assertions.Expect(link).ToHaveCountAsync(0);
+            }
+        }
     }
 
     private static Task<Trax.Effect.Models.PersistedOperation.PersistedOperation?> Stored(

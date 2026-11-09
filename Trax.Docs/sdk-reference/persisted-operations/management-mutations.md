@@ -110,7 +110,7 @@ Audit history for an operation, most-recent first. Same `take` / `skip` defaults
 
 ## Reserved ids
 
-Ids starting with `trax_machine_`, `trax_progress_` or `trax_client_` belong to the documents the host registers
+Ids starting with `trax_machine_`, `trax_progress_`, `trax_view_`, `trax_client_` or `trax_console_` belong to the documents the host registers
 itself ([generated documents](/docs/sdk-reference/persisted-operations/use-persisted-operations#generated-documents)),
 and `trax_train_` to the train documents an earlier version generated. Upload,
 deactivate and restore refuse them with the code `RESERVED_ID`, and `IPersistedOperationStore`'s `UpsertAsync`,
@@ -122,7 +122,7 @@ All mutations return errors via the payload `errors[]` array; mutations never th
 
 | Field | Type | Notes |
 |---|---|---|
-| `code` | `String!` | Stable code: `PARSE_FAILED`, `SCHEMA_VALIDATION_FAILED`, `SHAPE_DIFF_VIOLATION`, `NOT_FOUND`, `INVALID_INPUT` (an empty required field, or a document with other than one operation), `RESERVED_ID` (an id under `trax_machine_`, see [Reserved ids](#reserved-ids)), `CHANGE_NOT_BROADCAST` (the change is saved, but the broker did not confirm its broadcast). |
+| `code` | `String!` | Stable code: `PARSE_FAILED`, `SCHEMA_VALIDATION_FAILED`, `SHAPE_DIFF_VIOLATION`, `NOT_FOUND`, `INVALID_INPUT` (an empty required field, or a document with other than one operation), `RESERVED_ID` (an id under a reserved prefix, see [Reserved ids](#reserved-ids)), `CHANGE_NOT_BROADCAST` (the change is saved, but the broker did not confirm its broadcast). |
 | `message` | `String!` | Human-readable message. On `SHAPE_DIFF_VIOLATION` it says to upload again with `bypassShapeDiff: true` if the change is shape-safe. |
 | `locations` | `[Location!]` | 1-based line / column. Present on parse errors and most schema-validation errors. |
 | `path` | `[String!]` | Response path. Present on some schema-validation errors. |

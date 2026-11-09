@@ -64,8 +64,9 @@ publishes is bound to `127.0.0.1`. `DemoKeysCarryTheMarkerTests` checks that eve
 credential a sample registers carries the `do-not-use-in-production` marker.
 `RabbitMqCredentialsMatchComposeTests` keeps the samples' RabbitMQ credentials in step with the
 user `docker-compose.yml` creates. `FeatureCoverageTableTests` checks the README's feature-coverage
-table: every class it names in this folder exists in the file its row links, and every E2E project
-is named by a row. Rows naming another folder's class are checked for shape only.
+table: every class it names in this folder exists in the file its row links, every feature file it
+links is a sample's and declares a `Feature:`, and every E2E project is named by a row, directly or
+by a linked feature file it compiles. Rows naming another folder's class are checked for shape only.
 `SampleDatabasesAreSeparateTests` keeps every sample on a database of its own that
 `docker-compose.yml` creates, since a scheduler fails another sample's manifests in a shared one.
 `RabbitMqExchangePerSampleTests` requires every RabbitMQ sample to name an exchange no other sample

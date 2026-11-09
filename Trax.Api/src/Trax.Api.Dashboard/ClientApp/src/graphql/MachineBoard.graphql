@@ -1,0 +1,23 @@
+query MachineBoard($machine: String!) {
+  operations {
+    machineBoard(machine: $machine) {
+      machine
+      lanes
+      stickies {
+        id
+        kind
+        machine
+        label
+        scenarios {
+          file
+          line
+          scenario
+        }
+      }
+      links {
+        from
+        to
+      }
+    }
+  }
+}

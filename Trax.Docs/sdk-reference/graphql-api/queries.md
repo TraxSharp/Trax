@@ -136,7 +136,7 @@ One bulk operation, with its failures. [operations: bulk operations](/docs/sdk-r
 
 ## config (nested under operations)
 
-`scheduler`, `environmentName`, `version` and `logLevels`: [operations.config queries](/docs/sdk-reference/graphql-api/queries/config).
+`scheduler`, `environmentName`, `version`, `logLevels` and `canManagePersistedOperations`: [operations.config queries](/docs/sdk-reference/graphql-api/queries/config).
 
 ## metrics (nested under operations)
 

@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "actors": {
+    "member": {
+      "noun": "a member",
+      "anyAuthenticated": true
+    }
+  },
+  "machines": {
+    "note": {
+      "ownedBy": "member",
+      "noun": "note",
+      "initial": "Open",
+      "states": {
+        "Open": "is open"
+      }
+    },
+    "sticky-note": {
+      "ownedBy": "member",
+      "noun": "sticky note",
+      "initial": "Open",
+      "states": {
+        "Open": "is open"
+      }
+    }
+  },
+  "views": {
+    "pinned sticky": {
+      "reads": [
+        {
+          "machine": "note"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "note.state"
+        }
+      }
+    },
+    "pinned": {
+      "reads": [
+        {
+          "machine": "sticky-note"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "sticky-note.state"
+        }
+      }
+    }
+  }
+}

@@ -101,11 +101,13 @@ builder.Services.AddTraxGraphQL(graphql =>
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
-// Allow the Vite dev server (the web/ frontend) to call the API. The frontend authenticates with the
-// X-Api-Key header, not cookies, so credentials are not needed.
+// Allow the web/ frontend to call the API: the Vite dev server unless StateMachine:PageOrigin names
+// another origin. The frontend authenticates with the X-Api-Key header, not cookies, so credentials
+// are not needed.
+var pageOrigin = builder.Configuration["StateMachine:PageOrigin"] ?? "http://localhost:5173";
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
-        policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod()
+        policy.WithOrigins(pageOrigin).AllowAnyHeader().AllowAnyMethod()
     )
 );
 

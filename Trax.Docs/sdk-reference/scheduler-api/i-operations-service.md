@@ -60,6 +60,7 @@ public interface IOperationsService
     Task<MachineInstanceCancelResult> CancelMachineInstanceAsync(MachineInstanceKey key, CancellationToken ct);
     IAsyncEnumerable<MachineInstanceRecord> WatchMachineInstancesAsync(string? machine, CancellationToken ct);
     Task<IReadOnlyList<MachineDescription>> GetMachinesAsync(CancellationToken ct);
+    Task<MachineBoardDescription?> GetMachineBoardAsync(string machine, CancellationToken ct);
     Task<DashboardMetrics> GetDashboardMetricsAsync(MetricsRange range, bool hideAdminTrains, CancellationToken ct);
     Task<MetricSeries> GetMetricSeriesAsync(MetricSeriesScope scope, long? id, string? name, MetricSeriesRange range, CancellationToken ct);
     Task<Attention> GetAttentionAsync(CancellationToken ct);
@@ -80,7 +81,7 @@ public record OperationResult(bool Success, long? Id = null, int? Count = null, 
 | [Settings](#settings) | `UpdateManifestGroupAsync`, `GetSchedulerConfig`, `UpdateSchedulerConfigAsync` |
 | [Read models](#read-models) | `GetManifestExecutionStatsAsync`, `GetManifestGroupExecutionStatsAsync`, `GetUpcomingRunsAsync`, `GetLogsAsync`, `CountLogsAsync`, `CountLogsCappedAsync`, `GetWorkQueueEntryDetailAsync`, `GetRecordedDecisionsAsync`, `GetDashboardMetricsAsync`, `GetMetricSeriesAsync`, `GetAttentionAsync`, `GetManifestGroupDependencyGraphAsync`, `GetGlobalManifestGroupGraphAsync` |
 | [State-machine instances](#state-machine-instances) | `GetMachineInstancesAsync`, `CountMachineInstancesAsync`, `GetMachineInstanceAsync`, `GetMachineInstanceStateCountsAsync`, `WatchMachineInstancesAsync`, `GetMachineInstanceRunsAsync`, `GetMachineInstanceTransitionsAsync`, `CancelMachineInstanceAsync` |
-| [State-machine definitions](#state-machine-definitions) | `GetMachinesAsync` |
+| [State-machine definitions](#state-machine-definitions) | `GetMachinesAsync`, `GetMachineBoardAsync` |
 
 ## Queueing and running
 
@@ -740,7 +741,7 @@ The runs the instance invoked, newest first, at most `OperationsService.MachineI
 One page of the instance's history, newest first: a `MachineInstanceTransitionRecord` for every snapshot write Trax
 recorded (`trax.snapshot_transition`), or `null` when no row matches. Each carries the `Revision`, the `Kind`
 (`SnapshotTransitionKind`: `Start`, `Command`, `Save`, `Timer`, `Outcome`), the `Trigger`, the `Actor`
-(`SnapshotTransitionActor`: `Owner`, `Host`, `Machine`, never which user), `FromState`, `ToState`, `At`,
+(`SnapshotTransitionActor`: `Owner`, `Host`, `Machine`, `Policy`, never which user), `FromState`, `ToState`, `At`,
 `PreviousAt` (the transition before it), and what it started: `StartedRun` (`MachineInstanceStartedRun`, with
 `ExecutionId`, `TrainState` and `WorkQueueEntryId`, never the token) or `StartedChild`
 (`MachineInstanceStartedChild`, with `Machine`, `OwnerKind`, `Id` and `RowId`). `take` is clamped to 1 through 500;
@@ -822,6 +823,7 @@ public record MachineTimerDescription(string State, string Command, string Targe
 | Method | Returns |
 |--------|---------|
 | [`GetMachinesAsync(ct)`](#getmachinesasync) | every registered machine, ordered by name |
+| [`GetMachineBoardAsync(machine, ct)`](#getmachineboardasync) | the event-storming board of a machine served from features, or null |
 
 ### GetMachinesAsync
 
@@ -836,6 +838,18 @@ duration (`After`) or the context field and its bounds (`Field`, `Min`, `Max`), 
 machine declared with C# delegates has no IR: it is listed with its name, version and
 `GraphUnavailableReason`, and no states. Each description is built once per machine and kept,
 since a machine's definition does not change while the host runs. It reads no table.
+
+### GetMachineBoardAsync
+
+The event-storming board of a machine the host serves from features
+([`ServeFeatures`](/docs/sdk-reference/statemachine-api/add-state-machines)), drawn from the host file it serves
+and its machines' IRs: a `MachineBoardDescription` of its `Machine`, its `Lanes` (the asked-for machine first, then
+each machine a policy or a view joins it to, by name), its `Stickies` and its `Links`. A `MachineStickyDescription`
+has an `Id`, a `Kind` (`actor`, `command`, `event`, `policy`, `aggregate` or `view`), the `Machine` whose lane it is
+in, a `Label`, and the `Scenarios` that produced it, each a `MachineScenarioDescription` (`File`, `Line`,
+`Scenario`), none when the host file has no provenance. A `MachineBoardLinkDescription` goes `From` one sticky's id
+`To` another's. A machine not served from features answers null. It reads no table. The console's Board tab and
+[`operations.machineBoard`](/docs/sdk-reference/graphql-api/queries/machine-instances#machineboard) read through it.
 
 ## Behavior
 

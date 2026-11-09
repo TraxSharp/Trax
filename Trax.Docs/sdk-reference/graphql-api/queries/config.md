@@ -1,6 +1,6 @@
 ---
 title: "operations.config queries"
-description: "Reference for the operations.config query namespace: the live scheduler settings, the host's environment name, Trax version and log levels."
+description: "Reference for operations.config: live scheduler settings, environment name, Trax version, log levels and whether the caller may manage persisted operations."
 type: reference
 area: api
 surface: graphql
@@ -120,6 +120,31 @@ the configured section as written, with `overridden` always `false`, and `setLog
 | `localWorkerCount` | `Int` | In-process worker thread count. Null when the scheduler runs no local worker pool (no database provider, or a replaced job submitter). Local workers are on by default with a database provider; [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers) tunes them |
 | `metadataCleanupInterval` | `TimeSpan` | Metadata cleanup poll interval. Null when cleanup is not configured |
 | `metadataCleanupRetention` | `TimeSpan` | How long completed metadata is kept. Null when cleanup is not configured |
+
+## canManagePersistedOperations
+
+Whether the caller may manage [persisted operations](/docs/api/persisted-operations) on this host
+(`Boolean!`): the host serves the `persistedOperations` root, which takes `UsePersistedOperations`
+with [`GateManagement`](/docs/sdk-reference/persisted-operations/use-persisted-operations), and the
+caller meets that gate. The operations console reads it to decide whether to show its API admin
+pages.
+
+```graphql
+query {
+  operations {
+    config {
+      canManagePersistedOperations
+    }
+  }
+}
+```
+
+It is `false` on a host without persisted operations, on one that declares no management gate, and
+for a caller the gate refuses, so every host answers it without an error, where selecting
+`persistedOperations` would fail validation on a host that does not serve it. The gate is evaluated
+as [IPersistedOperationsManagementGate](/docs/sdk-reference/persisted-operations/i-persisted-operations-service#ipersistedoperationsmanagementgate)
+evaluates it, which admits the callers the `persistedOperations` fields admit. Like the rest of
+`operations.config` it sits behind the operations gate.
 
 ## See also
 

@@ -103,7 +103,11 @@ internal static class ClientManifestExport
             .ThenBy(m => m.Field, StringComparer.Ordinal)
             .ToList();
         var progressDocuments = ProgressDocuments.Generate(schema);
-        GeneratedDocumentValidation.Validate(schema, [.. documents, .. progressDocuments]);
+        var viewDocuments = ViewDocuments.Generate(schema);
+        GeneratedDocumentValidation.Validate(
+            schema,
+            [.. documents, .. progressDocuments, .. viewDocuments]
+        );
         var machines = exposed
             .OrderBy(m => m.Name, StringComparer.Ordinal)
             .Select(machine => new ClientManifestMachine
@@ -126,7 +130,10 @@ internal static class ClientManifestExport
 
         var types = DocumentTypes.Sdl(
             schema,
-            documents.Select(d => d.Text).Concat(progressDocuments.Select(d => d.Text)),
+            documents
+                .Select(d => d.Text)
+                .Concat(progressDocuments.Select(d => d.Text))
+                .Concat(viewDocuments.Select(d => d.Text)),
             exposedTrains
                 .Select(t => $"{t.Holder}.{t.Field}")
                 .Concat(models.Select(m => $"{m.Holder}.{m.Field}"))
@@ -162,6 +169,14 @@ internal static class ClientManifestExport
                 {
                     Id = d.Id,
                     Operation = d.Operation,
+                    Document = d.Text,
+                })
+                .ToList(),
+            Views = viewDocuments
+                .Select(d => new ClientManifestDocument
+                {
+                    Id = d.Id,
+                    Operation = d.Field,
                     Document = d.Text,
                 })
                 .ToList(),

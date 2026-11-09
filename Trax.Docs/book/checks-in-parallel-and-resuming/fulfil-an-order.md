@@ -1,16 +1,16 @@
 ---
-title: "14.4 Fulfil an order"
-description: "Chapter 14 of the Trax book, section 4: Fulfil an order."
+title: "15.4 Fulfil an order"
+description: "Chapter 15 of the Trax book, section 4: Fulfil an order."
 type: tutorial
 area: general
-parent: "14. Checks in parallel, and resuming"
+parent: "15. Checks in parallel, and resuming"
 grand_parent: The Trax book
 nav_order: 4
 snippet_context: none
 follows: book/checks-in-parallel-and-resuming/the-train
 ---
 
-# 14.4 Fulfil an order
+# 15.4 Fulfil an order
 
 Start the hub and the worker, and place an order as `ada`. The worker's log, as it fulfils it:
 
@@ -39,4 +39,4 @@ The box and the rates were asked for together, and the label was bought when bot
 
 ---
 
-Next: [14.5 Kill the worker mid-pack, and resume](/docs/book/checks-in-parallel-and-resuming/kill-the-worker-mid-pack-and-resume)
+Next: [15.5 Kill the worker mid-pack, and resume](/docs/book/checks-in-parallel-and-resuming/kill-the-worker-mid-pack-and-resume)

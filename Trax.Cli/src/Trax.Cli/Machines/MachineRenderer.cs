@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Machines;
@@ -21,7 +22,7 @@ internal enum MachineFormat
 /// The IR is read by <see cref="MachineGraph"/>, the same reading the operations surface serves a machine's graph
 /// from, so the console and this command never disagree on what a machine is.
 /// </summary>
-internal static class MachineRenderer
+internal static partial class MachineRenderer
 {
     public static string Render(
         string irJson,
@@ -179,13 +180,33 @@ internal static class MachineRenderer
         return string.Join(separator, parts);
     }
 
-    // Mermaid ends a label at ';' and reads '#' as an entity and ':' as a separator, so those are entity-coded.
-    private static string MermaidText(string text) =>
-        text.Replace("#", "#35;")
-            .Replace(";", "#59;")
-            .Replace(":", "#58;")
-            .Replace("\"", "#quot;")
-            .Replace("\n", " ");
+    /// <summary>
+    /// <paramref name="text"/> as Mermaid label text, here and on <c>trax machine diagram</c>'s board. Mermaid ends a
+    /// label at ';' or '"', reads '#' as an entity, ':' as a separator and '&lt;' and '&gt;' as markup, so each is
+    /// entity-coded, in one pass so no code is coded again. A line break would end the line the label is on, so it is a
+    /// space, and any other control character is '?'.
+    /// </summary>
+    internal static string MermaidText(string text)
+    {
+        var sb = new StringBuilder(text.Length);
+        foreach (var c in Safe(LineBreaks().Replace(text, " ")))
+            sb.Append(
+                c switch
+                {
+                    '#' => "#35;",
+                    ';' => "#59;",
+                    ':' => "#58;",
+                    '"' => "#quot;",
+                    '<' => "#lt;",
+                    '>' => "#gt;",
+                    _ => c.ToString(),
+                }
+            );
+        return sb.ToString();
+    }
+
+    [GeneratedRegex(@"\r\n|[\r\n\u0085\u2028\u2029]")]
+    private static partial Regex LineBreaks();
 
     private static string DotText(string text) =>
         text.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n");

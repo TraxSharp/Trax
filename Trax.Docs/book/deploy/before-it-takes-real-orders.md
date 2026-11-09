@@ -1,16 +1,16 @@
 ---
-title: "18.10 Before it takes real orders"
-description: "Chapter 18 of the Trax book, section 10: Before it takes real orders."
+title: "19.10 Before it takes real orders"
+description: "Chapter 19 of the Trax book, section 10: Before it takes real orders."
 type: tutorial
 area: general
-parent: "18. Deploy"
+parent: "19. Deploy"
 grand_parent: The Trax book
 nav_order: 10
 snippet_context: none
 follows: book/deploy/the-console
 ---
 
-# 18.10 Before it takes real orders
+# 19.10 Before it takes real orders
 
 - **HTTPS** in front of the hub, terminated at the ingress or the load balancer.
 - **Secrets** from a secret store, not a file in the repository.

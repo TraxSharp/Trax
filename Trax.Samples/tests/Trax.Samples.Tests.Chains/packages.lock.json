@@ -720,6 +720,11 @@
         "resolved": "8.0.0",
         "contentHash": "ne1843evDugl0md7Fjzy6QjJrzsjh46ZKbhf8GwBXb5f/gw97J4bxMs0NQKifDuThh/f0bZ0e62NPl1jzTuRqA=="
       },
+      "System.Threading.RateLimiting": {
+        "type": "Transitive",
+        "resolved": "8.0.0",
+        "contentHash": "7mu9v0QDv66ar3DpGSZHg9NuNcxDaaAcnMULuZlaTpP9+hwXhrxNGsF5GmLkSHxFdb5bBc1TzeujsRgTrPWi+Q=="
+      },
       "Yarp.ReverseProxy": {
         "type": "Transitive",
         "resolved": "2.3.0",
@@ -756,6 +761,12 @@
           "Trax.Api.Auth": "[1.99.99, )"
         }
       },
+      "trax.api.dashboard": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.GraphQL": "[1.99.99, )"
+        }
+      },
       "trax.api.graphql": {
         "type": "Project",
         "dependencies": {
@@ -774,6 +785,14 @@
         "type": "Project",
         "dependencies": {
           "Trax.Api.Auth": "[1.99.99, )",
+          "Trax.Api.GraphQL": "[1.99.99, )"
+        }
+      },
+      "trax.api.graphql.persistedoperations": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore": "[10.0.12, )",
+          "RabbitMQ.Client": "[7.2.2, )",
           "Trax.Api.GraphQL": "[1.99.99, )"
         }
       },
@@ -837,6 +856,13 @@
           "dbup-sqlite": "[6.0.4, )"
         }
       },
+      "trax.effect.junctionprovider.progress": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Effect": "[1.99.99, )",
+          "Trax.Effect.Data": "[1.99.99, )"
+        }
+      },
       "trax.effect.provider.json": {
         "type": "Project",
         "dependencies": {
@@ -877,6 +903,22 @@
           "Trax.Effect.Provider.Json": "[1.99.99, )",
           "Trax.Effect.Provider.Parameter": "[1.99.99, )",
           "Trax.Mediator": "[1.99.99, )",
+          "Trax.Scheduler": "[1.99.99, )"
+        }
+      },
+      "trax.samples.bakery.api": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api": "[1.99.99, )",
+          "Trax.Api.Auth": "[1.99.99, )",
+          "Trax.Api.Auth.Jwt": "[1.99.99, )",
+          "Trax.Api.Dashboard": "[1.99.99, )",
+          "Trax.Api.GraphQL": "[1.99.99, )",
+          "Trax.Api.GraphQL.PersistedOperations": "[1.99.99, )",
+          "Trax.Effect.Data.Postgres": "[1.99.99, )",
+          "Trax.Effect.JunctionProvider.Progress": "[1.99.99, )",
+          "Trax.Effect.Provider.Json": "[1.99.99, )",
+          "Trax.Samples.Shared": "[1.99.99, )",
           "Trax.Scheduler": "[1.99.99, )"
         }
       },
@@ -1019,6 +1061,12 @@
           "Trax.Effect": "[1.99.99, )",
           "Trax.Mediator": "[1.99.99, )",
           "Trax.Scheduler": "[1.99.99, )"
+        }
+      },
+      "trax.samples.shared": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth.Jwt": "[1.99.99, )"
         }
       },
       "trax.samples.signalrbroadcaster": {
@@ -1343,6 +1391,15 @@
           "Microsoft.EntityFrameworkCore": "[10.0.4, 11.0.0)",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.4, 11.0.0)",
           "Npgsql": "10.0.3"
+        }
+      },
+      "RabbitMQ.Client": {
+        "type": "CentralTransitive",
+        "requested": "[7.2.2, )",
+        "resolved": "7.2.2",
+        "contentHash": "k4b6RnTXpLbsF96V93ooNYxgPMnoA2tEm24B6AXNJr1mG8wwNYdA1XJtgU66L5xqeGyveS7SJriRzlX3cbqQNA==",
+        "dependencies": {
+          "System.Threading.RateLimiting": "8.0.0"
         }
       },
       "SQLitePCLRaw.bundle_e_sqlite3": {

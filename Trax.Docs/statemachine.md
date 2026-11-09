@@ -25,6 +25,11 @@ are covered in [Write guards and reducers as data](/docs/statemachine/declarativ
 a train in [Invoke a train from a state](/docs/statemachine/invoking-trains). A state can also start another machine and wait for
 it to end: [Spawn a child machine from a state](/docs/statemachine/spawning-child-machines).
 
+A machine can also be written as Gherkin features and a glossary instead of a C# class: Trax derives its states,
+moves, guards, timers, access, the policies between machines and the views from the scenarios, and runs the same
+scenarios as tests. See [Write machines as features](/docs/statemachine/write-machines-as-features), and
+[How features become machines](/docs/statemachine/how-features-become-machines) for what each part becomes.
+
 ## The two-document model
 
 A machine has two documents, and most mistakes come from treating them as one.

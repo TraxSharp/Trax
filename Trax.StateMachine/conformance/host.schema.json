@@ -1,0 +1,328 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:trax:state-machine:host:1",
+  "title": "Trax machine host file, version 1",
+  "description": "Everything about a set of derived machines that only the server reads: each machine's owner, who may start, fire and read it, the train each invoking state runs, the policies between machines, the views, and which scenarios produced what. Its machines are paired with their IR files by the IR hash. Derived, never written by hand (Trax.Docs/adr/0058). Normative: the C# reader accepts exactly the documents this schema accepts, then refuses the ones whose names do not agree; the corpus under formats/host holds the two to each other. Every object is closed. A trigger with no entry is not served.",
+  "type": "object",
+  "required": ["version", "machines"],
+  "properties": {
+    "version": { "const": 1 },
+    "machines": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/machineId" },
+      "additionalProperties": { "$ref": "#/$defs/machine" }
+    },
+    "policies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/policy" }
+    },
+    "views": {
+      "type": "object",
+      "propertyNames": { "type": "string", "minLength": 1, "maxLength": 200 },
+      "additionalProperties": { "$ref": "#/$defs/view" }
+    },
+    "provenance": {
+      "description": "For each machine and each part of it, the scenarios that produced the part. Read only by operators.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/machineId" },
+      "additionalProperties": {
+        "type": "object",
+        "propertyNames": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "additionalProperties": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/scenario" }
+        }
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "typeName": {
+      "description": "A C# type's full name.",
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+      "maxLength": 512
+    },
+    "handlerTypes": {
+      "type": "object",
+      "propertyNames": { "type": "string", "minLength": 1, "maxLength": 200 },
+      "additionalProperties": { "$ref": "#/$defs/typeName" }
+    },
+    "machineId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "member": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9]*$",
+      "maxLength": 64
+    },
+    "systemKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 129
+    },
+    "keyedBy": {
+      "description": "The names of a keyed system machine's key parts, in order.",
+      "type": "object",
+      "required": ["keyedBy"],
+      "properties": {
+        "keyedBy": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*$", "maxLength": 64 },
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "fieldName": { "$ref": "urn:trax:state-machine:ir-format:1#/$defs/fieldName" },
+    "rule": {
+      "description": "Who is admitted. Every role set must be met, by any one role within it; or any signed-in caller.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["roles"],
+          "properties": {
+            "roles": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["anyAuthenticated"],
+          "properties": { "anyAuthenticated": { "const": true } },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "triggerRule": {
+      "description": "A client rule, or a trigger only the server fires (a timer or a policy), never served to a client.",
+      "oneOf": [
+        { "$ref": "#/$defs/rule" },
+        {
+          "type": "object",
+          "required": ["server"],
+          "properties": { "server": { "const": true } },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "machine": {
+      "type": "object",
+      "required": ["schemaHash", "owner"],
+      "properties": {
+        "schemaHash": {
+          "description": "The IR's hash (IMachine.SchemaHash), the one the store writes to ir_hash.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "owner": {
+          "oneOf": [
+            { "const": "user" },
+            {
+              "type": "object",
+              "required": ["system"],
+              "properties": {
+                "system": {
+                  "description": "The fixed key of its one instance, which the host starts, or { \"keyedBy\": [...] }: one instance per key, which host code starts and moves, and which no policy or view reaches.",
+                  "oneOf": [
+                    { "$ref": "#/$defs/systemKey" },
+                    { "$ref": "#/$defs/keyedBy" }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "start": { "$ref": "#/$defs/rule" },
+        "read": { "$ref": "#/$defs/rule" },
+        "triggers": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/member" },
+          "additionalProperties": { "$ref": "#/$defs/triggerRule" }
+        },
+        "invokes": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/member" },
+          "additionalProperties": {
+            "type": "object",
+            "required": ["train"],
+            "properties": {
+              "train": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+                "maxLength": 512
+              },
+              "input": {
+                "description": "Each field of the train's input, by name, from the context field named, or from \"$owner\": the instance owner's qualified principal id, which the server sets and no client can write. A system machine has no owner.",
+                "type": "object",
+                "propertyNames": { "$ref": "#/$defs/fieldName" },
+                "additionalProperties": { "$ref": "#/$defs/fieldName" }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "effects": {
+          "description": "The ISnapshotEffect interface each effect-bound trigger runs, by its full name. Paired one for one with the IR's edges that run an effect.",
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/member" },
+          "additionalProperties": { "$ref": "#/$defs/typeName" }
+        },
+        "handlers": {
+          "description": "The ICustomRule and ICustomReduction class of each custom rule and reduction the IR names, by its full name. Paired one for one with the names the IR has.",
+          "type": "object",
+          "properties": {
+            "rules": { "$ref": "#/$defs/handlerTypes" },
+            "reductions": { "$ref": "#/$defs/handlerTypes" }
+          },
+          "additionalProperties": false
+        },
+        "migrations": {
+          "description": "The IMachineMigration class of each version step, by the version it steps from. Paired one for one with the versions below the IR's.",
+          "type": "object",
+          "propertyNames": { "type": "string", "pattern": "^[1-9][0-9]{0,9}$" },
+          "additionalProperties": { "$ref": "#/$defs/typeName" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "when": {
+      "type": "object",
+      "required": ["machine", "enters"],
+      "properties": {
+        "machine": { "$ref": "#/$defs/machineId" },
+        "enters": { "$ref": "#/$defs/member" }
+      },
+      "additionalProperties": false
+    },
+    "policy": {
+      "description": "The server acting when a machine enters a state: on the instance linked by a context field, on every instance in a state, or on a system instance at its key.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["shape", "when", "then"],
+          "properties": {
+            "shape": { "const": "linked" },
+            "when": { "$ref": "#/$defs/when" },
+            "then": {
+              "type": "object",
+              "required": ["machine", "link", "trigger"],
+              "properties": {
+                "machine": { "$ref": "#/$defs/machineId" },
+                "link": { "$ref": "#/$defs/fieldName" },
+                "trigger": { "$ref": "#/$defs/member" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["shape", "when", "then"],
+          "properties": {
+            "shape": { "const": "broadcast" },
+            "when": { "$ref": "#/$defs/when" },
+            "then": {
+              "type": "object",
+              "required": ["machine", "inState", "trigger"],
+              "properties": {
+                "machine": { "$ref": "#/$defs/machineId" },
+                "inState": { "$ref": "#/$defs/member" },
+                "trigger": { "$ref": "#/$defs/member" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["shape", "when", "then"],
+          "properties": {
+            "shape": { "const": "toSystem" },
+            "when": { "$ref": "#/$defs/when" },
+            "then": {
+              "type": "object",
+              "required": ["machine", "key", "trigger"],
+              "properties": {
+                "machine": { "$ref": "#/$defs/machineId" },
+                "key": { "$ref": "#/$defs/systemKey" },
+                "trigger": { "$ref": "#/$defs/member" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "view": {
+      "type": "object",
+      "required": ["reads", "fields", "readers"],
+      "properties": {
+        "reads": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["machine"],
+            "properties": {
+              "machine": { "$ref": "#/$defs/machineId" },
+              "key": { "$ref": "#/$defs/systemKey" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "fields": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/fieldName" },
+          "additionalProperties": {
+            "type": "object",
+            "required": ["from"],
+            "properties": {
+              "from": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*\\.[A-Za-z_][A-Za-z0-9_]*$" },
+              "labels": {
+                "type": "object",
+                "minProperties": 1,
+                "propertyNames": { "$ref": "#/$defs/member" },
+                "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 200 }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "readers": { "$ref": "#/$defs/rule" }
+      },
+      "additionalProperties": false
+    },
+    "scenario": {
+      "type": "object",
+      "required": ["file", "line", "scenario"],
+      "properties": {
+        "file": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "line": { "type": "integer", "minimum": 1 },
+        "scenario": { "type": "string", "maxLength": 400 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

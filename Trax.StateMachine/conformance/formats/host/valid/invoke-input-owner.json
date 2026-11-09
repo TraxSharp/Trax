@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "machines": {
+    "loan": {
+      "schemaHash": "h",
+      "owner": "user",
+      "invokes": {
+        "Borrowing": {
+          "train": "Library.Trains.IBorrow",
+          "input": {
+            "memberId": "$owner"
+          }
+        }
+      }
+    }
+  }
+}

@@ -29,5 +29,18 @@
     <InternalsVisibleTo Include="Trax.Api.GraphQL" />
     <!-- Reads which edges a machine built from the IR cannot evaluate, so the client sends those with no prediction. -->
     <InternalsVisibleTo Include="Trax.StateMachine.Client" />
+    <!-- Serves a machine from its IR and host entry through the GraphQL surface, with no C# class to name. -->
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+    <!-- Derives machines from features: reads the glossary, writes the IR in the exporter's canonical form, and replays
+         every scenario on what it derived with the engine's own rule and reduction readers. -->
+    <InternalsVisibleTo Include="Trax.StateMachine.Gherkin" />
+    <InternalsVisibleTo Include="Trax.Api.Tests.StateMachine.E2E" />
+    <!-- `trax machine from-gherkin` reads the glossary it derives from, to name a bad one's key. The CLI's assembly is
+         named `trax`. -->
+    <InternalsVisibleTo Include="trax" />
+    <!-- The Reqnroll bindings read the glossary and host file. -->
+    <InternalsVisibleTo Include="Trax.StateMachine.Gherkin.Reqnroll" />
+    <!-- The operations service draws the board of machines served from features from their host file. -->
+    <InternalsVisibleTo Include="Trax.Scheduler" />
   </ItemGroup>
 </Project>

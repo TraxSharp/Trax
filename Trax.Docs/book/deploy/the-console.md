@@ -1,16 +1,16 @@
 ---
-title: "18.9 The console"
-description: "Chapter 18 of the Trax book, section 9: The console."
+title: "19.9 The console"
+description: "Chapter 19 of the Trax book, section 9: The console."
 type: tutorial
 area: general
-parent: "18. Deploy"
+parent: "19. Deploy"
 grand_parent: The Trax book
 nav_order: 9
 snippet_context: none
 follows: book/deploy/the-storefront
 ---
 
-# 18.9 The console
+# 19.9 The console
 
 The console is served at `/trax/dashboard` with `AllowAnonymousShell()`, and the hub warns about it
 every time it starts:
@@ -33,4 +33,4 @@ ingress's own sign-in.
 
 ---
 
-Next: [18.10 Before it takes real orders](/docs/book/deploy/before-it-takes-real-orders)
+Next: [19.10 Before it takes real orders](/docs/book/deploy/before-it-takes-real-orders)

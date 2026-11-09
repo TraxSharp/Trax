@@ -1,16 +1,16 @@
 ---
-title: "15.9 Test it"
-description: "Chapter 15 of the Trax book, section 9: Test it."
+title: "16.9 Test it"
+description: "Chapter 16 of the Trax book, section 9: Test it."
 type: tutorial
 area: general
-parent: "15. A generated client"
+parent: "16. A generated client"
 grand_parent: The Trax book
 nav_order: 9
 snippet_context: none
 follows: book/a-generated-client/keep-it-current
 ---
 
-# 15.9 Test it
+# 16.9 Test it
 
 The hub's tests start it, and it now reads `trax.documents.json` as it starts, so they show the
 storefront's documents are valid: a document the hub refuses fails every host test. Nothing in
@@ -38,4 +38,4 @@ client` already generated for the checkout machine.
 
 ---
 
-Next: [16. Checkout in the browser](/docs/book/checkout-in-the-browser)
+Next: [17. Checkout in the browser](/docs/book/checkout-in-the-browser)

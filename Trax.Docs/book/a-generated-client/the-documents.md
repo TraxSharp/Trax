@@ -1,16 +1,16 @@
 ---
-title: "15.3 The documents"
-description: "Chapter 15 of the Trax book, section 3: The documents."
+title: "16.3 The documents"
+description: "Chapter 16 of the Trax book, section 3: The documents."
 type: tutorial
 area: general
-parent: "15. A generated client"
+parent: "16. A generated client"
 grand_parent: The Trax book
 nav_order: 3
 snippet_context: none
 follows: book/a-generated-client/the-storefronts-place
 ---
 
-# 15.3 The documents
+# 16.3 The documents
 
 Each file holds one named operation. The roots are the ones the API already has: `discover` for
 queries, `dispatch` for trains run as mutations.
@@ -71,4 +71,4 @@ customers.
 
 ---
 
-Next: [15.4 The hub serves the storefront](/docs/book/a-generated-client/the-hub-serves-the-storefront)
+Next: [16.4 The hub serves the storefront](/docs/book/a-generated-client/the-hub-serves-the-storefront)

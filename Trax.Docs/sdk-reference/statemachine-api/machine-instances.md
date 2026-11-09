@@ -45,6 +45,21 @@ public interface IMachineInstances
         JsonNode? input = null,
         CancellationToken cancellationToken = default
     ) where TMachine : IMachine;
+
+    Task<MachineInstance> Start(
+        string machineId,
+        MachineKey key,
+        JsonObject? context = null,
+        CancellationToken cancellationToken = default
+    );
+
+    Task<AdvanceOutcome> Advance(
+        string machineId,
+        MachineKey key,
+        string trigger,
+        JsonNode? input = null,
+        CancellationToken cancellationToken = default
+    );
 }
 
 public sealed record MachineInstance(Guid Id, string Machine, string State, bool Created);
@@ -64,6 +79,8 @@ public static class MachineInstanceId
 | `Start<TMachine>(key, context, cancellationToken)` | Creates the instance for `key`, or returns the one that exists. See [Start](#start). |
 | `Advance<TMachine>(key, trigger, input, cancellationToken)` | Fires one trigger on the instance for `key`, as the system. See [Advance](#advance). |
 | `Advance<TMachine>(id, trigger, input, cancellationToken)` | The same, on the instance `id` names: for an instance with no key, a child another system instance's state [spawned](/docs/statemachine/spawning-child-machines), whose id its parent's context holds. An advance that ends the child gives its parent the outcome. |
+| `Start(machineId, key, context, cancellationToken)` | `Start<TMachine>` for the machine whose id is `machineId`. See [By the machine's id](#by-the-machines-id). |
+| `Advance(machineId, key, trigger, input, cancellationToken)` | `Advance<TMachine>` for the machine whose id is `machineId`. See [By the machine's id](#by-the-machines-id). |
 | `MachineInstance` | `Id`, `Machine`, `State`, and `Created`: true when this call created the instance. |
 | `MachineKey.Of(params string[] parts)` | A key of one or more parts. A `string` converts to a one-part key. `Parts` lists them. |
 | `MachineInstanceId.For(machine, key)` | The instance id a key maps to. |
@@ -118,6 +135,22 @@ A machine that is not registered, or not system-owned, throws `InvalidOperationE
 No GraphQL operation calls it. A host that lets a person retry a system instance writes its own operation over it,
 under its own authorization; the [Recovery sample](/docs/samples/recovery) does, for operators only.
 
+### By the machine's id
+
+A machine [served from features](/docs/sdk-reference/statemachine-api/feature-machines) has no C# type a train can
+name: its type is emitted when the host starts. `Start(machineId, ...)` and `Advance(machineId, ...)` take the
+machine's id, as its IR and `host.json` give it, and behave as the typed overloads do; the typed overloads call
+them. An id no registered machine has, and a user-owned machine's id, throw `InvalidOperationException`.
+
+A keyed system machine served from features (`"system": { "keyedBy": [...] }` in its glossary) is never started by
+the host: its instances exist only once host code starts them here, one per key, with the key's parts in the order
+`keyedBy` names them. A key with another number of parts throws `InvalidOperationException`, from `Start` and
+`Advance` alike, and so does any key but its own for a system machine at a fixed key (`shop/main` is
+`MachineKey.Of("main")`): neither would reach an instance a view, a policy or a correctly keyed call reads.
+
+A trigger only the server fires, such as a policy's, can be fired here: these are the server's calls, never a
+client's, and the history records the host as the actor.
+
 ### How the id is derived
 
 The id is an RFC 9562 version 5 UUID, in two steps:
@@ -141,6 +174,9 @@ var instance = await instances.Start<IngestMachine>(MachineKey.Of("orders-db", "
 
 var outcome = await instances.Advance<IngestMachine>(MachineKey.Of("orders-db", "partition-7"), "Retry");
 // AdvanceOutcome.Advanced when the instance was in a state Retry leaves
+
+// A machine served from features, by its id.
+await instances.Advance("shop", MachineKey.Of("main"), "Open");
 ```
 
 ## See also

@@ -1,16 +1,16 @@
 ---
-title: "14.2 The courier and the warehouse"
-description: "Chapter 14 of the Trax book, section 2: The courier and the warehouse."
+title: "15.2 The courier and the warehouse"
+description: "Chapter 15 of the Trax book, section 2: The courier and the warehouse."
 type: tutorial
 area: general
-parent: "14. Checks in parallel, and resuming"
+parent: "15. Checks in parallel, and resuming"
 grand_parent: The Trax book
 nav_order: 2
 snippet_context: none
 follows: book/checks-in-parallel-and-resuming/the-new-chain
 ---
 
-# 14.2 The courier and the warehouse
+# 15.2 The courier and the warehouse
 
 The courier is a new fake, beside the payment provider and the supplier. A real courier keys a
 label by something the shop gives it, so asking twice for the same order's label returns the
@@ -328,4 +328,4 @@ internal class PackOrderJunction(IWarehouse warehouse, ILogger<PackOrderJunction
 
 ---
 
-Next: [14.3 The train](/docs/book/checks-in-parallel-and-resuming/the-train)
+Next: [15.3 The train](/docs/book/checks-in-parallel-and-resuming/the-train)

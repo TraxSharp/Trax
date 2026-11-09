@@ -6,18 +6,31 @@ export type PersistedOperationsAvailableVariables = Record<string, never>;
 
 /** What 'PersistedOperationsAvailable' answers: the fields it selects. */
 export type PersistedOperationsAvailableResult = {
-  /** Persisted-operation management: the stored documents and their history. Behind the management gate the host declared. */
-  persistedOperations: {
-    __typename: "PersistedOperationQueries";
+  operations: {
+    /**
+     * Nested namespace exposing live scheduler runtime config (what the dashboard's
+     * ServerSettingsPage reads).
+     */
+    config: {
+      /**
+       * Whether the caller may manage persisted operations on this host: the host serves the
+       * persistedOperations root (it calls UsePersistedOperations with
+       * GateManagement) and the caller meets that gate. False on a host without persisted
+       * operations, on one that declares no management gate, and for a caller the gate refuses. The
+       * operations console reads it to decide whether to show its persisted-operation pages, so every
+       * host answers the question without an error.
+       */
+      canManagePersistedOperations: boolean;
+    };
   } | null;
 };
 
-/** The query 'PersistedOperationsAvailable' (src/graphql/PersistedOperationsAvailable.graphql). A host runs it as text, behind its own gate, and never registers it. */
+/** The query 'PersistedOperationsAvailable' (src/graphql/PersistedOperationsAvailable.graphql), and the id a host that serves the console registers it under. */
 export const persistedOperationsAvailableDocument: TraxDocument<PersistedOperationsAvailableVariables, PersistedOperationsAvailableResult> = {
   name: "PersistedOperationsAvailable",
   kind: "query",
-  id: null,
-  text: "query PersistedOperationsAvailable {\n  persistedOperations {\n    __typename\n  }\n}\n",
+  id: "trax_console_PersistedOperationsAvailable_ee9243f3583e36b802595971cee75dab52c3143c058be307823b95f9b08ad1e9455e22c06d5f8483",
+  text: "query PersistedOperationsAvailable {\n  operations {\n    config {\n      canManagePersistedOperations\n    }\n  }\n}\n",
 };
 
 /** Sends the document and returns what it answers; throws a TraxOperationError when the host refuses it. */

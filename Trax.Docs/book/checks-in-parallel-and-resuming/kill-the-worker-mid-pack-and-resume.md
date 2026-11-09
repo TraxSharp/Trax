@@ -1,16 +1,16 @@
 ---
-title: "14.5 Kill the worker mid-pack, and resume"
-description: "Chapter 14 of the Trax book, section 5: Kill the worker mid-pack, and resume."
+title: "15.5 Kill the worker mid-pack, and resume"
+description: "Chapter 15 of the Trax book, section 5: Kill the worker mid-pack, and resume."
 type: tutorial
 area: general
-parent: "14. Checks in parallel, and resuming"
+parent: "15. Checks in parallel, and resuming"
 grand_parent: The Trax book
 nav_order: 5
 snippet_context: none
 follows: book/checks-in-parallel-and-resuming/fulfil-an-order
 ---
 
-# 14.5 Kill the worker mid-pack, and resume
+# 15.5 Kill the worker mid-pack, and resume
 
 Place another order, and kill the worker while it packs, as in chapter 11:
 
@@ -96,4 +96,4 @@ A few things decide whether a run can resume:
 
 ---
 
-Next: [14.6 Test it](/docs/book/checks-in-parallel-and-resuming/test-it)
+Next: [15.6 Test it](/docs/book/checks-in-parallel-and-resuming/test-it)

@@ -114,8 +114,18 @@ public partial class GeneratedNamesPropertyTests
         (first, rest) => first + new string(rest)
     );
 
+    // The names views.g.ts writes for a view named foo, which a type or an operation may also take. Drawn by the
+    // properties only, so the seeded sample below draws the names it always drew.
+    private static readonly string[] FooView =
+    [
+        "FooViewResult",
+        "readFooView",
+        "fooViewDocumentId",
+    ];
+
     private static readonly Gen<string> Name = Gen.Frequency(
         (3, Gen.OneOfConst(Hostile)),
+        (1, Gen.OneOfConst(FooView)),
         (1, Random)
     );
 
@@ -206,11 +216,27 @@ public partial class GeneratedNamesPropertyTests
     }
 
     // The client of a host's manifest, with one train a frontend's document sends: the same names, through the
-    // manifest's types, the train's field and the document.
-    private static ClientGenerateOptions ManifestOptions(Case c, string field) =>
+    // manifest's types, the train's field and the document. With a view, the host also serves that view, whose
+    // operation names its read function, its result type and its document's id in views.g.ts.
+    private static ClientGenerateOptions ManifestOptions(
+        Case c,
+        string field,
+        string? view = null
+    ) =>
         new(
             new Trax.StateMachine.ClientManifest
             {
+                Views = view is null
+                    ? []
+                    :
+                    [
+                        new Trax.StateMachine.ClientManifestDocument
+                        {
+                            Id = $"trax_view_{view}_" + new string('a', 80),
+                            Operation = view,
+                            Document = $"query {{ views {{ {view} {{ externalId other }} }} }}",
+                        },
+                    ],
                 Trains =
                 [
                     new Trax.StateMachine.ClientManifestTrain
@@ -233,15 +259,27 @@ public partial class GeneratedNamesPropertyTests
                         ],
                     },
                 ],
-                Types = $$"""
-                type Started { externalId: String! mode: {{c.Enum}} other: {{c.OtherEnum}} }
+                Types =
+                    $$"""
+                    type Started { externalId: String! mode: {{c.Enum}} other: {{c.OtherEnum}} }
 
-                enum {{c.Enum}} { {{string.Join(" ", c.EnumValues)}} }
+                    enum {{c.Enum}} { {{string.Join(" ", c.EnumValues)}} }
 
-                enum {{c.OtherEnum}} { {{string.Join(" ", c.OtherValues)}} }
+                    enum {{c.OtherEnum}} { {{string.Join(" ", c.OtherValues)}} }
 
-                input {{c.Input}} { {{c.InputField}}: {{c.OtherEnum}} }
-                """,
+                    input {{c.Input}} { {{c.InputField}}: {{c.OtherEnum}} }
+                    """
+                    + (
+                        view is null
+                            ? ""
+                            : $$"""
+
+
+                            type {{TypeScript.Upper(
+                                view
+                            )}}View { externalId: String! other: {{c.OtherEnum}} }
+                            """
+                    ),
             },
             Documents:
             [
@@ -260,15 +298,15 @@ public partial class GeneratedNamesPropertyTests
     public void The_manifest_client_is_refused_or_declares_each_name_once_as_an_identifier()
     {
         var written = 0;
-        Gen.Select(Cases, Name)
+        Gen.Select(Cases, Name, Name)
             .Sample(
-                (c, field) =>
+                (c, field, view) =>
                 {
                     IReadOnlyList<ClientFile> files;
                     try
                     {
                         files = new ClientGenerator(new Fakes.FakeNodeRunner()).Render(
-                            ManifestOptions(c, field)
+                            ManifestOptions(c, field, view)
                         );
                     }
                     catch (InvalidOperationException)
@@ -334,6 +372,8 @@ public partial class GeneratedNamesPropertyTests
         try
         {
             var random = new System.Random(20261105);
+            // Views are drawn apart, so adding them left the other names each seed draws as they were.
+            var views = new System.Random(20261107);
             string Pick() =>
                 random.Next(4) == 0
                     ? "abAB_"[random.Next(5)]
@@ -367,7 +407,16 @@ public partial class GeneratedNamesPropertyTests
                     operations++;
                 if (
                     manifests < 40
-                    && TryWrite(root, $"manifest-{i}", ManifestWithProgress(c, Pick(), fragment))
+                    && TryWrite(
+                        root,
+                        $"manifest-{i}",
+                        ManifestWithProgress(
+                            c,
+                            Pick(),
+                            fragment,
+                            Hostile[views.Next(Hostile.Length)]
+                        )
+                    )
                 )
                     manifests++;
             }
@@ -492,10 +541,11 @@ public partial class GeneratedNamesPropertyTests
     private static (Func<IReadOnlyList<ClientFile>>, string) ManifestWithProgress(
         Case c,
         string field,
-        string fragment
+        string fragment,
+        string view
     )
     {
-        var options = ManifestOptions(c, field);
+        var options = ManifestOptions(c, field, view);
         var document = $$"""
             mutation {{c.Operation}}(${{c.InputVariable}}: {{c.Input}}!, ${{c.EnumVariable}}: {{c.Enum}}) {
               dispatch { {{field}}(input: ${{c.InputVariable}}, mode: ${{c.EnumVariable}}) { ...{{fragment}} mode } }
@@ -504,7 +554,7 @@ public partial class GeneratedNamesPropertyTests
             fragment {{fragment}} on Started { externalId other }
             """;
         var sample = Fakes.ClientManifests.Sample();
-        var manifest = new Trax.StateMachine.ClientManifest
+        var manifest = options.Manifest with
         {
             Trains = options.Manifest.Trains.Select(t => t with { Progress = true }).ToList(),
             Progress = sample.Progress,

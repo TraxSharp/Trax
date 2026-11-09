@@ -1,0 +1,231 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using HotChocolate;
+using HotChocolate.Authorization;
+using HotChocolate.Execution.Configuration;
+using HotChocolate.Language;
+using HotChocolate.Resolvers;
+using HotChocolate.Types;
+using HotChocolate.Types.Descriptors;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.StateMachine.Features;
+using Trax.StateMachine.Persistence;
+using Trax.StateMachine.Persistence.FromIr;
+
+namespace Trax.Api.GraphQL.TypeModules;
+
+/// <summary>
+/// Builds the <c>views</c> root (ADR <c>Trax.Docs/adr/0058</c>): one query field per view a host serves from features.
+/// In each, a user machine the view reads is a list of the caller's own instances (the newest
+/// <see cref="StateMachineOptions.ViewRowLimit"/> of them), its <c>id</c> and the view's fields
+/// of it, and a system machine is the one instance at its key. A view is read only by its readers, the actors the
+/// features show reading it: every other caller is refused <c>FORBIDDEN</c> before anything is read. Each user machine
+/// the view reads also holds the caller to its own read rule, as its <c>get</c> does: a machine whose rule refuses the
+/// caller is an empty list, and the rest of the view still reads. A state is shown
+/// as a String, its label when the view gives one; a context field has the type its machine's record gives it.
+/// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/views">SDK reference</seealso>
+internal sealed class MachineViewTypeModule(
+    IEnumerable<IMachine> machines,
+    MachineViewCatalog catalog
+) : TypeModule
+{
+    internal const string RootField = "views";
+    internal const string QueriesType = "ViewsQueries";
+
+    public override ValueTask<IReadOnlyCollection<ITypeSystemMember>> CreateTypesAsync(
+        IDescriptorContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var types = new List<ITypeSystemMember>
+        {
+            NamespaceTypes.Base(QueriesType),
+            NamespaceTypes.Field("RootQuery", RootField, QueriesType),
+        };
+        IReadOnlyDictionary<string, IMachine> byName = machines.ToDictionary(
+            m => m.Name,
+            StringComparer.Ordinal
+        );
+
+        var fields = new List<(string Field, string Type, HostView View)>();
+        // The host file's reader refuses all of these (Views.CheckNames); a catalog built some other way still names
+        // the views, not HotChocolate's duplicate type.
+        var stems = new Dictionary<string, string>(StringComparer.Ordinal);
+        var rows = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var view in catalog.Views.Values.OrderBy(v => v.Name, StringComparer.Ordinal))
+        {
+            var pascal = Views.Pascal(view.Name);
+            if (!Views.IsGraphQLStem(pascal))
+                throw new InvalidOperationException(
+                    $"The view '{view.Name}' has no GraphQL name: a view's name is words of ASCII letters and digits, "
+                        + "the first starting with a letter."
+                );
+            if (!stems.TryAdd(pascal, view.Name))
+                throw new InvalidOperationException(
+                    $"The views '{stems[pascal]}' and '{view.Name}' are both {pascal} in GraphQL: name them apart by "
+                        + "more than case, spaces, hyphens and underscores."
+                );
+            foreach (var row in view.Reads.Select(r => RowTypeName(pascal, r.Machine)))
+                if (!rows.TryAdd(row, view.Name))
+                    throw new InvalidOperationException(
+                        $"The views '{rows[row]}' and '{view.Name}' both name the type {row}."
+                    );
+            // A field is a field of the row type beside the instance's id: it cannot be the id, and GraphQL has to name it.
+            foreach (var field in view.Fields)
+                if (
+                    field.Name == "id"
+                    || field.Name.StartsWith("__", StringComparison.Ordinal)
+                    || !System.Text.RegularExpressions.Regex.IsMatch(
+                        field.Name,
+                        @"\A[_A-Za-z][_0-9A-Za-z]*\z"
+                    )
+                )
+                    throw new InvalidOperationException(
+                        $"The view '{view.Name}' has a field '{field.Name}' it cannot serve: a view's field is a GraphQL "
+                            + "name (letters, digits and _, not starting with a digit or __), and not 'id', which is the "
+                            + "instance's."
+                    );
+            var viewType = $"{pascal}View";
+            foreach (var read in view.Reads)
+                types.Add(RowType(view, read, pascal, byName[read.Machine]));
+            types.Add(
+                new ObjectType(d =>
+                {
+                    d.Name(viewType);
+                    d.Description($"The view '{view.Name}': what it reads, for the caller.");
+                    foreach (var read in view.Reads)
+                    {
+                        var row = RowTypeName(pascal, read.Machine);
+                        var field = d.Field(MachineSurface.FieldName(read.Machine));
+                        if (read.Key is null)
+                            field
+                                .Description($"The caller's own instances of '{read.Machine}'.")
+                                .Type(
+                                    new NonNullTypeNode(
+                                        new ListTypeNode(
+                                            new NonNullTypeNode(new NamedTypeNode(row))
+                                        )
+                                    )
+                                )
+                                .Resolve(ctx =>
+                                    ((JsonArray)ctx.Parent<JsonObject>()[read.Machine]!)
+                                        .Select(n => n!.AsObject())
+                                        .ToList()
+                                );
+                        else
+                            field
+                                .Description(
+                                    $"The instance of '{read.Machine}' at {read.Key}, or null before it is started."
+                                )
+                                .Type(new NamedTypeNode(row))
+                                .Resolve(ctx =>
+                                    ctx.Parent<JsonObject>()[read.Machine] as JsonObject
+                                );
+                    }
+                })
+            );
+            fields.Add((Camel(pascal), viewType, view));
+        }
+
+        types.Add(
+            new ObjectTypeExtension(d =>
+            {
+                d.Name(QueriesType);
+                foreach (var (field, type, view) in fields)
+                    d.Field(field)
+                        .Authorize(ApplyPolicy.BeforeResolver)
+                        .Description(
+                            $"Reads the view '{view.Name}' for the caller, if the caller is one of its readers."
+                        )
+                        .Type(new NonNullTypeNode(new NamedTypeNode(type)))
+                        .Resolve(ctx => ReadAsync(ctx, view, byName));
+            })
+        );
+        return new ValueTask<IReadOnlyCollection<ITypeSystemMember>>(types);
+    }
+
+    // One instance's row: its id, and the view's fields of its machine, each typed as the machine's record types it.
+    private static ObjectType RowType(HostView view, ViewRead read, string pascal, IMachine machine)
+    {
+        var context = MachineContextFields
+            .Of(machine, machine.States)
+            .ToDictionary(f => f.Name, StringComparer.Ordinal);
+        return new ObjectType(d =>
+        {
+            d.Name(RowTypeName(pascal, read.Machine));
+            d.Description($"One instance of '{read.Machine}' as the view '{view.Name}' shows it.");
+            d.Field("id")
+                .Type<NonNullType<UuidType>>()
+                .Resolve(ctx => Guid.Parse(ctx.Parent<JsonObject>()["id"]!.GetValue<string>()));
+            foreach (var field in view.Fields.Where(f => f.Machine == read.Machine))
+            {
+                if (field.IsState || !context.TryGetValue(field.Source, out var typed))
+                    d.Field(field.Name)
+                        .Type<StringType>()
+                        .Resolve(ctx =>
+                            ctx.Parent<JsonObject>()[field.Name] is JsonValue v
+                            && v.GetValueKind() == JsonValueKind.String
+                                ? v.GetValue<string>()
+                                : ctx.Parent<JsonObject>()[field.Name]?.ToJsonString()
+                        );
+                else
+                    d.Field(field.Name)
+                        .Type(typed.GraphQLType)
+                        .Resolve(ctx =>
+                            ctx.Parent<JsonObject>()[field.Name] is { } node
+                                ? node.Deserialize(typed.GraphQLType, MachineSurface.Json)
+                                : null
+                        );
+            }
+        });
+    }
+
+    // The view's read rule first, then the caller's own rows and the system's, each user machine under its own read
+    // rule. A caller who is not a reader is refused before anything is read.
+    private static async Task<JsonObject> ReadAsync(
+        IResolverContext ctx,
+        HostView view,
+        IReadOnlyDictionary<string, IMachine> byName
+    )
+    {
+        var userKey = ctx.Services.GetService<ISnapshotPrincipal>()?.CurrentUserKey;
+        if (string.IsNullOrWhiteSpace(userKey))
+            throw new GraphQLException(
+                ErrorBuilder
+                    .New()
+                    .SetMessage("Sign in to read this.")
+                    .SetCode("UNAUTHENTICATED")
+                    .Build()
+            );
+        // Without a caller authorization the caller holds no role, as a machine's own rules read it.
+        var caller = ctx.Services.GetService<ICallerAuthorization>();
+        if (!view.Readers.IsAnyAuthenticated)
+        {
+            foreach (var set in view.Readers.RoleSets)
+                if (caller is null || !set.Any(caller.IsInRole))
+                    throw new GraphQLException(
+                        ErrorBuilder
+                            .New()
+                            .SetMessage("You may not do this.")
+                            .SetCode("FORBIDDEN")
+                            .Build()
+                    );
+        }
+        return await MachineViewReader.Read(
+            ctx.Services.GetRequiredService<IDataContext>(),
+            view,
+            CallerRules.Client(userKey, caller),
+            byName,
+            ctx.Services.GetService<StateMachineOptions>()?.ViewRowLimit
+                ?? StateMachineOptions.DefaultViewRowLimit,
+            ctx.RequestAborted
+        );
+    }
+
+    private static string RowTypeName(string view, string machine) =>
+        Views.RowTypeName(view, machine);
+
+    private static string Camel(string pascal) => char.ToLowerInvariant(pascal[0]) + pascal[1..];
+}

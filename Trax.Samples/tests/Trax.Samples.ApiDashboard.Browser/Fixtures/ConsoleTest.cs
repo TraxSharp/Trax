@@ -7,8 +7,9 @@ namespace Trax.Samples.ApiDashboard.Browser.Fixtures;
 /// <summary>
 /// The base of every console browser test: a fresh browser context and page on the shared host, a
 /// <see cref="Fixtures.Seed"/> for the states the test needs, and, once the test is over, the checks every test
-/// owes (<see cref="PageChecks"/>): no console error, no CSP violation, no request off the console's origin, and no
-/// document text where the host requires persisted operations. A failed check fails the test.
+/// owes (<see cref="PageChecks"/>): no console error, no CSP violation, no request off the console's origin, no
+/// GraphQL request answered with a 4xx, and no document text where the host requires persisted operations. A failed
+/// check fails the test.
 /// </summary>
 /// <remarks>
 /// Tests run one at a time: they share one host, and a seed such as a paused dispatcher changes it for whoever runs
@@ -60,8 +61,9 @@ public abstract class ConsoleTest
         problems
             .Should()
             .BeEmpty(
-                "a console page logs no error, breaks no Content-Security-Policy, reaches no other origin and, "
-                    + "where persisted operations are required, sends no document text"
+                "a console page logs no error, breaks no Content-Security-Policy, reaches no other origin, sends "
+                    + "nothing the host answers with a 4xx and, where persisted operations are required, sends no "
+                    + "document text"
             );
     }
 }

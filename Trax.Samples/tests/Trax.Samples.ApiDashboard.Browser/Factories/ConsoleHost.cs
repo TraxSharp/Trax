@@ -164,7 +164,10 @@ public sealed class ConsoleHost : IAsyncDisposable
                         // A run's steps, so the run page places them on its graph and timeline.
                         .AddJunctionEvents()
                 )
-                .AddStateMachines(typeof(GateMachine).Assembly)
+                .AddStateMachines(
+                    o => o.ServeFeatures(FeatureShelf.Write()),
+                    typeof(GateMachine).Assembly
+                )
                 .AddMediator(typeof(ConsoleHost).Assembly)
                 .AddScheduler(scheduler =>
                     scheduler

@@ -1,0 +1,613 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:trax:state-machine:glossary:1",
+  "title": "Trax machine glossary, version 1",
+  "description": "What the words of a set of Gherkin features mean: the actors (each with the noun a feature names a person by: `Ada is a customer`), the machines with the noun or name a feature refers to them by, states, triggers, guards, invoked trains and links, and the views. Machines are derived from the features and this file (Trax.Docs/adr/0058). Normative: the C# reader accepts exactly the documents this schema accepts, then refuses the ones whose names do not agree (a phrase used twice, an owner that is not an actor); the corpus under formats/glossary holds the two to each other. Every object is closed. The field, rule and reduction shapes are the IR's own.",
+  "type": "object",
+  "required": [
+    "version",
+    "actors",
+    "machines"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "actors": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/word"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/actor"
+      }
+    },
+    "machines": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/machineId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/machine"
+      }
+    },
+    "views": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/phrase"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/view"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "phrase": {
+      "description": "Words a step is written in. Compared with case and runs of whitespace ignored.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^\\S(.*\\S)?$"
+    },
+    "word": {
+      "description": "A lowercase name: an actor, a guard.",
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9]*$",
+      "maxLength": 64
+    },
+    "machineId": {
+      "description": "A machine's id, lowercase words joined by single hyphens, so no two ids emit the same type names.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "member": {
+      "description": "A state or trigger name, emitted as an enum member.",
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9]*$",
+      "maxLength": 64
+    },
+    "systemKey": {
+      "description": "The fixed key of a system instance: the machine id, a slash, and a name.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 129
+    },
+    "phrases": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/phrase"
+      }
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:trax:state-machine:ir-format:1#/$defs/field"
+      }
+    },
+    "actor": {
+      "description": "An actor, and the noun a feature names a person by: `Given Ada is a customer`. It holds roles, or says it is any signed-in caller; never neither.",
+      "type": "object",
+      "required": [
+        "noun"
+      ],
+      "properties": {
+        "noun": {
+          "$ref": "#/$defs/phrase"
+        },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "anyAuthenticated": {
+          "const": true
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "roles"
+          ]
+        },
+        {
+          "required": [
+            "anyAuthenticated"
+          ]
+        }
+      ]
+    },
+    "machine": {
+      "description": "One machine. A user's machine is owned by an actor and has a noun (`order`: a feature says `Ada's order`, or `her order` for the step's own person); a system machine has a fixed key and a name (`the shop`). Never both.",
+      "type": "object",
+      "required": [
+        "initial",
+        "states"
+      ],
+      "properties": {
+        "ownedBy": {
+          "description": "The actor whose people own its instances, or several: each person owns their own, and each trigger is granted the actors the features show firing it.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/word"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/word"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          ]
+        },
+        "system": {
+          "description": "A system machine: the fixed key of its one instance, which the host starts, or { \"keyedBy\": [...] }, one instance per key, which host code starts and moves and a step names by its name and key (ticket \"T-12\"). No view reads and no policy moves a keyed one.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/systemKey"
+            },
+            {
+              "type": "object",
+              "required": [
+                "keyedBy"
+              ],
+              "properties": {
+                "keyedBy": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/word"
+                  },
+                  "minItems": 1,
+                  "maxItems": 8,
+                  "uniqueItems": true
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "noun": {
+          "$ref": "#/$defs/phrase"
+        },
+        "name": {
+          "$ref": "#/$defs/phrase"
+        },
+        "version": {
+          "description": "The machine's definition version, which its snapshots carry and a migration steps from. Defaults to 1.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "start": {
+          "description": "What follows a person's name to give them a new instance: `has an order`.",
+          "$ref": "#/$defs/phrase"
+        },
+        "initial": {
+          "$ref": "#/$defs/member"
+        },
+        "context": {
+          "$ref": "#/$defs/fields"
+        },
+        "initialContext": {
+          "description": "The context a new instance starts with. Without it, each field of the initial state's context starts at its zero (null for a nullable one).",
+          "type": "object"
+        },
+        "states": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/member"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/phrase"
+              },
+              {
+                "$ref": "#/$defs/state"
+              }
+            ]
+          }
+        },
+        "triggers": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/member"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/trigger"
+          }
+        },
+        "guards": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/word"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/guard"
+          }
+        },
+        "invokes": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/member"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/invoke"
+          }
+        },
+        "links": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/phrase"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/link"
+          }
+        },
+        "differential": {
+          "description": "Write the IR's differential block from the scenarios: each input a served trigger is sent with, each output an outcome is given, and each context a Given sets an instance up in.",
+          "const": true
+        },
+        "rules": {
+          "description": "Each custom rule the machine names, by its name in the IR.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/customRule"
+          }
+        },
+        "reductions": {
+          "description": "Each custom reduction the machine names, by its name in the IR.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/customReduction"
+          }
+        },
+        "migrations": {
+          "description": "The IMachineMigration class of each version step below the machine's version, by the version it steps from.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,9}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/typeName"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "ownedBy",
+            "noun"
+          ],
+          "properties": {
+            "system": false,
+            "name": false
+          }
+        },
+        {
+          "required": [
+            "system",
+            "name"
+          ],
+          "properties": {
+            "ownedBy": false,
+            "noun": false
+          }
+        }
+      ]
+    },
+    "state": {
+      "description": "A state with more than its phrase: committed (only the effect runner enters it, and a save never leaves it), the rule its context must meet, and a context of its own in place of the machine's.",
+      "type": "object",
+      "required": [
+        "phrase"
+      ],
+      "properties": {
+        "phrase": {
+          "$ref": "#/$defs/phrase"
+        },
+        "committed": {
+          "const": true
+        },
+        "requires": {
+          "$ref": "urn:trax:state-machine:ir-format:1#/$defs/rule"
+        },
+        "context": {
+          "$ref": "#/$defs/fields"
+        }
+      },
+      "additionalProperties": false
+    },
+    "trigger": {
+      "description": "A trigger and its phrase. A person's act is the phrase after their name (`places {subject}`); anything else is the whole step (`{subject} starts baking`, `the shop opens`). `{subject}` is where a user machine's instance is named, and every other {placeholder} names an input field. A trigger with an `effect` is sent by its instance's owner with no input of theirs: the server runs the effect, then fires the trigger with the effect's receipt (`input.receipt`).",
+      "type": "object",
+      "required": [
+        "phrase"
+      ],
+      "properties": {
+        "phrase": {
+          "$ref": "#/$defs/phrase"
+        },
+        "input": {
+          "$ref": "#/$defs/fields"
+        },
+        "reduce": {
+          "$ref": "urn:trax:state-machine:ir-format:1#/$defs/reduction"
+        },
+        "effect": {
+          "$ref": "#/$defs/effect"
+        },
+        "guard": {
+          "description": "The guard that decides the trigger when more than one guard tells its moves from its refusals: it must hold on every move and fail on every refusal.",
+          "$ref": "#/$defs/word"
+        }
+      },
+      "additionalProperties": false
+    },
+    "typeName": {
+      "description": "A C# type's full name.",
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+      "maxLength": 512
+    },
+    "effect": {
+      "description": "The run-once effect a send of the trigger runs: its ISnapshotEffect interface (written to the host file), the key prefix its claims are taken under (the IR's, `<machine>:<Trigger>` when not given), and the receipt an in-memory run answers with.",
+      "type": "object",
+      "required": [
+        "type",
+        "example"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/typeName"
+        },
+        "keyPrefix": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "example": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "additionalProperties": false
+    },
+    "customRule": {
+      "description": "A custom rule's ICustomRule class (written to the host file) and whether an in-memory run takes it to hold. A scenario that needs the real rule is tagged @host.",
+      "type": "object",
+      "required": [
+        "type",
+        "example"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/typeName"
+        },
+        "example": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "customReduction": {
+      "description": "A custom reduction's ICustomReduction class (written to the host file) and the context fields an in-memory run sets in its place. A scenario that needs the real reduction is tagged @host.",
+      "type": "object",
+      "required": [
+        "type",
+        "example"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/typeName"
+        },
+        "example": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "guard": {
+      "description": "A condition, with the words for when it holds and when it fails.",
+      "type": "object",
+      "required": [
+        "holds",
+        "fails",
+        "rule"
+      ],
+      "properties": {
+        "holds": {
+          "$ref": "#/$defs/phrase"
+        },
+        "fails": {
+          "$ref": "#/$defs/phrase"
+        },
+        "rule": {
+          "$ref": "urn:trax:state-machine:ir-format:1#/$defs/rule"
+        }
+      },
+      "additionalProperties": false
+    },
+    "invoke": {
+      "description": "The train a state invokes (keyed by the state), what it is given, what it answers, and the words for each outcome.",
+      "type": "object",
+      "required": [
+        "train",
+        "outcomes"
+      ],
+      "properties": {
+        "train": {
+          "description": "The train's canonical name, its interface's full name (Trax.Docs/adr/0007).",
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+          "maxLength": 512
+        },
+        "input": {
+          "description": "Each field of the train's input, by name, from the context field named, or from \"$owner\": the instance owner's qualified principal id, which the server sets and no client can write. A system machine has no owner, and no context field may be named \"$owner\".",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "urn:trax:state-machine:ir-format:1#/$defs/fieldName"
+          },
+          "additionalProperties": {
+            "$ref": "urn:trax:state-machine:ir-format:1#/$defs/fieldName"
+          }
+        },
+        "output": {
+          "$ref": "#/$defs/fields"
+        },
+        "outcomes": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/phrase"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/outcome"
+          }
+        },
+        "examples": {
+          "description": "An output for each done outcome, by its phrase, that a scenario run in memory answers with.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/phrase"
+          },
+          "additionalProperties": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "enum": [
+            "done",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "when": {
+          "$ref": "urn:trax:state-machine:ir-format:1#/$defs/rule"
+        },
+        "reduce": {
+          "$ref": "urn:trax:state-machine:ir-format:1#/$defs/reduction"
+        }
+      },
+      "additionalProperties": false
+    },
+    "link": {
+      "description": "Keyed by its phrase, which names another machine's instance at `{subject}` (`the receipt for {subject}`): the instance whose id this machine's context field holds.",
+      "type": "object",
+      "required": [
+        "machine",
+        "field"
+      ],
+      "properties": {
+        "machine": {
+          "$ref": "#/$defs/machineId"
+        },
+        "field": {
+          "$ref": "urn:trax:state-machine:ir-format:1#/$defs/fieldName"
+        }
+      },
+      "additionalProperties": false
+    },
+    "view": {
+      "description": "A view: what it reads (the caller's own instances of a user machine, a system instance at its key) and the fields it shows.",
+      "type": "object",
+      "required": [
+        "reads",
+        "fields"
+      ],
+      "properties": {
+        "reads": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "machine"
+            ],
+            "properties": {
+              "machine": {
+                "$ref": "#/$defs/machineId"
+              },
+              "key": {
+                "$ref": "#/$defs/systemKey"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "fields": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "urn:trax:state-machine:ir-format:1#/$defs/fieldName"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/viewField"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "viewField": {
+      "description": "One shown field: a machine's state, or one of its context fields. A state may be shown with a label per state.",
+      "type": "object",
+      "required": [
+        "from"
+      ],
+      "properties": {
+        "from": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*\\.[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "labels": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/member"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

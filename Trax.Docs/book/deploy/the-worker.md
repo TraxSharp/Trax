@@ -1,16 +1,16 @@
 ---
-title: "18.4 The worker"
-description: "Chapter 18 of the Trax book, section 4: The worker."
+title: "19.4 The worker"
+description: "Chapter 19 of the Trax book, section 4: The worker."
 type: tutorial
 area: general
-parent: "18. Deploy"
+parent: "19. Deploy"
 grand_parent: The Trax book
 nav_order: 4
 snippet_context: none
 follows: book/deploy/the-hub
 ---
 
-# 18.4 The worker
+# 19.4 The worker
 
 `Shopfront.Worker/Program.cs`:
 
@@ -159,4 +159,4 @@ fail, as chapter 11 showed.
 
 ---
 
-Next: [18.5 The tests migrate too](/docs/book/deploy/the-tests-migrate-too)
+Next: [19.5 The tests migrate too](/docs/book/deploy/the-tests-migrate-too)

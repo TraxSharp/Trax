@@ -127,7 +127,9 @@ internal sealed partial class ClientGenerator
         var progress = Progress(manifest);
         // types.g.ts is exported from the index beside everything else, so its names are claimed with them.
         var typesText =
-            options.Documents is not null || progress is not null ? types.Render() : null;
+            options.Documents is not null || progress is not null || manifest.Views.Count > 0
+                ? types.Render()
+                : null;
         if (typesText is not null)
             foreach (var type in types.Declared)
             {
@@ -181,6 +183,9 @@ internal sealed partial class ClientGenerator
         if (progress is not null)
             foreach (var name in ProgressNames.Concat(ProgressTypeNames))
                 names.Claim(name, "runProgress");
+        foreach (var view in manifest.Views)
+        foreach (var name in ViewNames(view))
+            names.Claim(name, $"the view {view.Operation}");
 
         // The IR is checked before node reads it: its id names the twin's files, and its names are written as code.
         foreach (var (machine, _, _) in machines)
@@ -247,6 +252,14 @@ internal sealed partial class ClientGenerator
             );
             index.Append(
                 $"export {{ {string.Join(", ", ProgressNames)}, {string.Join(", ", ProgressTypeNames.Select(n => "type " + n))} }} from \"./progress.g\";\n"
+            );
+        }
+
+        if (manifest.Views.Count > 0)
+        {
+            files.Add(new("views.g.ts", ViewsModule(manifest, types)));
+            index.Append(
+                $"export {{ {string.Join(", ", manifest.Views.SelectMany(v => ViewNames(v).Select((n, i) => i == 1 ? "type " + n : n)))} }} from \"./views.g\";\n"
             );
         }
 
@@ -1453,6 +1466,78 @@ internal sealed partial class ClientGenerator
         "runProgressDocumentId",
         "runProgressEventsDocumentId",
     ];
+
+    // A view's exports: its read function, its result type and its document's id. The result is not named for the
+    // view's GraphQL type ({Pascal}View), which types.g.ts declares. The view's own name is only ever part of these or
+    // a string, so a reserved word ("new") names a view; what is checked is each name the module declares.
+    private static string[] ViewNames(ClientManifestDocument view)
+    {
+        if (!TypeScript.IsIdentifier(view.Operation))
+            throw new InvalidOperationException(
+                $"The view '{view.Operation}' cannot name generated TypeScript: it is not an identifier. Rename it "
+                    + "on the host."
+            );
+        var pascal = TypeScript.Upper(view.Operation);
+        return
+        [
+            TypeScript.Identifier($"read{pascal}View", "view's read function"),
+            TypeScript.TypeName($"{pascal}ViewResult", "view's result type"),
+            TypeScript.Identifier($"{Lower(pascal)}ViewDocumentId", "view's document id"),
+        ];
+    }
+
+    // One function per view the host serves from features, each sending the view's persisted document.
+    private static string ViewsModule(ClientManifest manifest, SdlTypes types)
+    {
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        var selections = new SelectionTypes(types);
+        var body = new StringBuilder();
+        foreach (var view in manifest.Views.OrderBy(v => v.Operation, StringComparer.Ordinal))
+        {
+            var owner = $"the view {view.Operation}";
+            var names = ViewNames(view);
+            var pascal = TypeScript.Upper(view.Operation);
+            var result = selections.Of(
+                SdlTypes.ParseType($"{pascal}View!", owner)!,
+                SelectionTypes.SelectionAt(
+                    Operation(view, owner),
+                    ["views", view.Operation],
+                    owner
+                ),
+                owner,
+                used
+            );
+            body.Append(
+                $"/** The view '{EscapeDocText(view.Operation)}' as its document selects it. */\n"
+            );
+            body.Append($"export type {names[1]} = {result};\n\n");
+            body.Append(
+                $"/** The persisted id of the view '{EscapeDocText(view.Operation)}', which the host registered. */\n"
+            );
+            body.Append($"export const {names[2]} = {TypeScript.Literal(view.Id)};\n\n");
+            body.Append(
+                TypeScript.Doc(
+                    $"Reads the view '{view.Operation}' for you: your own instances of each machine it reads, and the "
+                        + "system's. A caller who is not one of its readers is refused with `FORBIDDEN`."
+                )
+            );
+            body.Append(
+                $"export function {names[0]}(): Promise<{names[1]}> {{\n"
+                    + $"  return sendDocument({names[2]}, {{}}, [\"views\", {TypeScript.Literal(view.Operation)}]);\n"
+                    + "}\n\n"
+            );
+        }
+        var sb = new StringBuilder(Header);
+        sb.Append("import \"./format.g\";\n");
+        sb.Append("import { sendDocument } from \"./client.g\";\n");
+        if (used.Count > 0)
+            sb.Append(
+                $"import type {{ {string.Join(", ", used.Order(StringComparer.Ordinal))} }} from \"./types.g\";\n"
+            );
+        sb.Append('\n');
+        sb.Append(body.ToString().TrimEnd('\n')).Append('\n');
+        return sb.ToString();
+    }
 
     // The query and the subscription of runProgress, or null when no train lets its starter follow it.
     private static (ClientManifestDocument Query, ClientManifestDocument Stream)? Progress(

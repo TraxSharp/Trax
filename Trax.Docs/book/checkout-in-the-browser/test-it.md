@@ -1,16 +1,16 @@
 ---
-title: "16.4 Test it"
-description: "Chapter 16 of the Trax book, section 4: Test it."
+title: "17.4 Test it"
+description: "Chapter 17 of the Trax book, section 4: Test it."
 type: tutorial
 area: general
-parent: "16. Checkout in the browser"
+parent: "17. Checkout in the browser"
 grand_parent: The Trax book
 nav_order: 4
 snippet_context: none
 follows: book/checkout-in-the-browser/run-it
 ---
 
-# 16.4 Test it
+# 17.4 Test it
 
 The twin can be tested without a hub. A test gives the hook's controller a fake server that
 answers with a snapshot and never answers an event, so what it shows is the twin's prediction. Add
@@ -136,4 +136,4 @@ only thing it accepts.
 
 ---
 
-Next: [17. Require persisted operations](/docs/book/require-persisted-operations)
+Next: [18. Require persisted operations](/docs/book/require-persisted-operations)

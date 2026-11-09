@@ -9,10 +9,8 @@ import { stateMachineListMachinesDocumentId } from "./trax/documents/stateMachin
 import { configureTrax } from "./trax/index.g";
 import manifest from "./trax/manifest.json";
 import pageDocuments from "./trax/trax.documents.json";
+import { ENDPOINT, SOCKET } from "./host";
 import { record } from "./inspectorLog";
-
-export const ENDPOINT = "http://localhost:5280/trax/graphql";
-const SOCKET = "ws://localhost:5280/trax/graphql";
 
 export interface User {
   label: string;

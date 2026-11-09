@@ -142,6 +142,15 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
                 Services.PersistedOperationsManagementGate
             >()
         );
+        // What operations.config.canManagePersistedOperations asks, so the console learns whether
+        // to show its management pages from a field every host serves. The gate answers false
+        // until the fields below are served.
+        services.Replace(
+            ServiceDescriptor.Scoped<
+                Trax.Api.GraphQL.Queries.IPersistedOperationsManagementAccess,
+                Services.PersistedOperationsManagementAccess
+            >()
+        );
 
         // The management fields live at the root, behind the gate the host declared for them, and
         // never under operations: turning on persisted operations exposes nothing of the admin

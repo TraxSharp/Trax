@@ -1,16 +1,16 @@
 ---
-title: "16.3 Run it"
-description: "Chapter 16 of the Trax book, section 3: Run it."
+title: "17.3 Run it"
+description: "Chapter 17 of the Trax book, section 3: Run it."
 type: tutorial
 area: general
-parent: "16. Checkout in the browser"
+parent: "17. Checkout in the browser"
 grand_parent: The Trax book
 nav_order: 3
 snippet_context: none
 follows: book/checkout-in-the-browser/the-checkout
 ---
 
-# 16.3 Run it
+# 17.3 Run it
 
 Start the hub, the worker and `npm run dev`, and open `http://localhost:5173`. Add two mugs. The
 cart shows them before the hub answers, then `(saving)` goes away. Try **Continue** with no
@@ -42,4 +42,4 @@ Reload the page and the checkout is where it was. Sign in as someone else, chang
 
 ---
 
-Next: [16.4 Test it](/docs/book/checkout-in-the-browser/test-it)
+Next: [17.4 Test it](/docs/book/checkout-in-the-browser/test-it)

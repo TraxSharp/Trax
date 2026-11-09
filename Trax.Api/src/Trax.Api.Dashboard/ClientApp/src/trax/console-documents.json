@@ -138,6 +138,10 @@
       "text": "query Lookup($text: String!) {\n  operations {\n    lookup(text: $text) {\n      kind\n      id\n      label\n      matchedOn\n      machine\n      ownerKind\n      rowId\n    }\n  }\n}\n"
     },
     {
+      "name": "MachineBoard",
+      "text": "query MachineBoard($machine: String!) {\n  operations {\n    machineBoard(machine: $machine) {\n      machine\n      lanes\n      stickies {\n        id\n        kind\n        machine\n        label\n        scenarios {\n          file\n          line\n          scenario\n        }\n      }\n      links {\n        from\n        to\n      }\n    }\n  }\n}\n"
+    },
+    {
       "name": "MachineInstance",
       "text": "query MachineInstance($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!, $rowId: Long) {\n  operations {\n    machineInstance(machine: $machine, ownerKind: $ownerKind, id: $id, rowId: $rowId) {\n      machine\n      ownerKind\n      id\n      rowId\n      state\n      version\n      createdAt\n      updatedAt\n      hasLiveInvokedRun\n      queuedInvokedRunEntryId\n      isInvokedRunsCapped\n      inStateSince\n      dueAt\n      overdue\n      stuck\n      waitingOn {\n        executionId\n        trainState\n        workQueueEntryId\n      }\n      invokedRuns {\n        id\n        externalId\n        name\n        trainState\n        startTime\n        endTime\n        failureClass\n        cancellationRequested\n        isLive\n      }\n    }\n  }\n}\n"
     },
@@ -216,6 +220,10 @@
     {
       "name": "Overview",
       "text": "query Overview($range: MetricsRange!, $hideAdmin: Boolean!) {\n  operations {\n    health {\n      status\n      description\n      queueDepth\n      inProgress\n      failedLastHour\n      deadLetters\n    }\n    metrics {\n      server {\n        uptimeSeconds\n        workingSetBytes\n        gcHeapBytes\n      }\n      serverCpuPercent\n      dashboard(range: $range, hideAdminTrains: $hideAdmin) {\n        kpis {\n          executionsToday\n          successRate\n          currentlyRunning\n          unresolvedDeadLetters\n        }\n        executionsOverTime {\n          timestamp\n          completed\n          failed\n          cancelled\n        }\n        topFailures {\n          trainName\n          count\n        }\n        topAverageDurations {\n          trainName\n          averageMilliseconds\n        }\n        throughputSeries {\n          trainName\n          buckets {\n            timestamp\n            count\n          }\n        }\n      }\n    }\n  }\n}\n"
+    },
+    {
+      "name": "PersistedOperationsAvailable",
+      "text": "query PersistedOperationsAvailable {\n  operations {\n    config {\n      canManagePersistedOperations\n    }\n  }\n}\n"
     },
     {
       "name": "QueueTrain",

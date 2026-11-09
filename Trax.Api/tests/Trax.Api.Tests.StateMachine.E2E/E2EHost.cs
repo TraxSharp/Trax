@@ -158,6 +158,10 @@ public static class E2EHost
                         );
                         // The machines, registered by hand: the ones the test serves as their marked subclasses.
                         E2EMachines.Register(services, options.Served);
+                        foreach (var machine in options.Instances)
+                            services.AddSingleton(machine);
+                        if (options.Views is { } views)
+                            services.AddSingleton(views);
 
                         // The two things a machine can't know: map auth to a user key, and the effect impl.
                         services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
@@ -185,7 +189,11 @@ public static class E2EHost
                             // A host that exposes machines needs persisted operations; a test that configures them
                             // itself keeps its own configuration.
                             return
-                                (options.Machines is null && options.Served.Count == 0)
+                                (
+                                    options.Machines is null
+                                    && options.Served.Count == 0
+                                    && options.Instances.Count == 0
+                                )
                                 || services.Any(d =>
                                     d.ServiceType == typeof(IPersistedOperationsCapability)
                                 )
@@ -336,6 +344,15 @@ public sealed record E2EHostOptions
     /// <c>[TraxMachine]</c> (<see cref="E2EMachines"/>). Every other machine of the assembly is registered unmarked.
     /// </summary>
     public IReadOnlyList<Type> Served { get; init; } = [];
+
+    /// <summary>
+    /// Machines the host registers as instances, before <c>AddTraxGraphQL</c> reads them: a machine served from its IR
+    /// has no type of its own to name in <see cref="Served"/>.
+    /// </summary>
+    public IReadOnlyList<Trax.StateMachine.Persistence.IMachine> Instances { get; init; } = [];
+
+    /// <summary>The views of machines served from features, registered before <c>AddTraxGraphQL</c> reads them.</summary>
+    internal Trax.StateMachine.Persistence.FromIr.MachineViewCatalog? Views { get; init; }
 
     /// <summary>Applied to the GraphQL builder after the operations surface, when that is exposed.</summary>
     public Func<TraxGraphQLBuilder, TraxGraphQLBuilder>? GraphQL { get; init; }

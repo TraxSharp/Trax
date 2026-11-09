@@ -1,10 +1,12 @@
 # ── Persisted operations ───────────────────────────────────────────────────
-# The persistedOperations namespace exists only when the host calls UsePersistedOperations(...)
-# and declares GateManagement(...). Selecting only __typename on it reads nothing, so this is a
-# cheap probe: it resolves when the namespace is there and the caller meets its gate, and fails
-# otherwise.
+# Whether this caller may manage persisted operations here: the host serves the persistedOperations
+# root (UsePersistedOperations with GateManagement) and the caller meets its gate. Every host
+# answers it, false where management is not served, so the sidebar and the pages learn it without
+# a request that fails.
 query PersistedOperationsAvailable {
-  persistedOperations {
-    __typename
+  operations {
+    config {
+      canManagePersistedOperations
+    }
   }
 }

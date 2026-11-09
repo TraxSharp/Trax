@@ -53,6 +53,7 @@ public class NoTestFrameworkInSrcTests
         "xunit.runner.visualstudio",
         "MSTest.TestFramework",
         "Microsoft.NET.Test.Sdk",
+        "Reqnroll",
     ];
 
     private static bool IsSanctioned(string projectPath) =>

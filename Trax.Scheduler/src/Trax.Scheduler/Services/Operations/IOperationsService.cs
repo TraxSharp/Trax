@@ -774,6 +774,17 @@ public interface IOperationsService
         throw NotImplementedBy(nameof(GetMachinesAsync));
 
     /// <summary>
+    /// The event-storming board of a machine this host serves from features (ADR <c>Trax.Docs/adr/0058</c>): who acts,
+    /// what they ask, what happens, the rules between, the views, and the scenarios behind each, in one lane per
+    /// machine the board joins. Null for a machine not served from features. The console's Board tab and the API's
+    /// <c>operations.machineBoard</c> both read it here.
+    /// </summary>
+    /// <param name="machine">The machine's id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<MachineBoardDescription?> GetMachineBoardAsync(string machine, CancellationToken ct) =>
+        throw NotImplementedBy(nameof(GetMachineBoardAsync));
+
+    /// <summary>
     /// What needs an operator's attention, in one read: whether the manifest manager and the job
     /// dispatcher are switched on, the dead letters awaiting intervention grouped by train and
     /// reason, the trains failing more in the last hour than over the week before it, the stuck

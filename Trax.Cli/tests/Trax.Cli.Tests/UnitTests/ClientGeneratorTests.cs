@@ -423,6 +423,103 @@ public partial class ClientGeneratorTests
     }
 
     [Test]
+    public void A_host_serving_views_gets_a_read_function_per_view_sent_by_its_id()
+    {
+        const string text = "query OrdersView { views { orders { vOrder { id status } } } }";
+        var manifest = ClientManifests.Sample() with
+        {
+            Views =
+            [
+                new ClientManifestDocument
+                {
+                    Id = "trax_view_orders_" + new string('a', 64) + new string('b', 16),
+                    Operation = "orders",
+                    Document = text,
+                },
+            ],
+            Types =
+                ClientManifests.Sample().Types
+                + """
+
+                    type OrdersView {
+                      vOrder: [OrdersVOrderRow!]!
+                    }
+
+                    type OrdersVOrderRow {
+                      id: UUID!
+                      status: String
+                    }
+
+                    scalar UUID
+                    """,
+        };
+
+        var files = Render(manifest);
+        var views = Text(files, "views.g.ts");
+
+        FirstImport(views).Should().Match("*format.g\";");
+        views
+            .Should()
+            .Contain("export type OrdersViewResult = ")
+            .And.Contain("export const ordersViewDocumentId = \"trax_view_orders_")
+            .And.Contain("export function readOrdersView(): Promise<OrdersViewResult>")
+            .And.Contain("sendDocument(ordersViewDocumentId, {}, [\"views\", \"orders\"])")
+            .And.NotContain(text, "a document is sent by its id, never its text");
+        Text(files, "index.g.ts")
+            .Should()
+            .Contain(
+                "export { readOrdersView, type OrdersViewResult, ordersViewDocumentId } from \"./views.g\";"
+            );
+    }
+
+    // The view's name is only ever written inside longer names (readNewView) or as a string, so a word TypeScript
+    // reserves names a view as well as any other.
+    [TestCase("new", "New")]
+    [TestCase("default", "Default")]
+    [TestCase("type", "Type")]
+    [TestCase("delete", "Delete")]
+    public void A_view_named_for_a_reserved_word_is_generated(string operation, string pascal)
+    {
+        var text = $"query {pascal}View {{ views {{ {operation} {{ vOrder {{ id status }} }} }} }}";
+        var manifest = ClientManifests.Sample() with
+        {
+            Views =
+            [
+                new ClientManifestDocument
+                {
+                    Id = $"trax_view_{operation}_" + new string('a', 64) + new string('b', 16),
+                    Operation = operation,
+                    Document = text,
+                },
+            ],
+            Types =
+                ClientManifests.Sample().Types
+                + $$"""
+
+                    type {{pascal}}View {
+                      vOrder: [{{pascal}}VOrderRow!]!
+                    }
+
+                    type {{pascal}}VOrderRow {
+                      id: UUID!
+                      status: String
+                    }
+
+                    scalar UUID
+                    """,
+        };
+
+        var views = Text(Render(manifest), "views.g.ts");
+
+        views
+            .Should()
+            .Contain($"export type {pascal}ViewResult = ")
+            .And.Contain($"export const {operation}ViewDocumentId = \"trax_view_{operation}_")
+            .And.Contain($"export function read{pascal}View(): Promise<{pascal}ViewResult>")
+            .And.Contain($"[\"views\", \"{operation}\"]");
+    }
+
+    [Test]
     public void A_host_without_one_gets_none()
     {
         var files = Render(ClientManifests.Sample() with { Progress = [] });

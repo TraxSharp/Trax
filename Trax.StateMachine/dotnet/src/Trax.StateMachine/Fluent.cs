@@ -170,6 +170,13 @@ public sealed record BuiltMachine<TState, TTrigger>(
     internal bool SystemOwned { get; init; }
 
     /// <summary>
+    /// The triggers only the server fires (a policy reacting to another machine), never served to a client: they are
+    /// not in <see cref="Triggers"/>, which the typed API and the startup check are built from, and a client sending
+    /// one is refused, since it has no rule. Declared through <see cref="IIrMachineBuilder{TState,TTrigger}"/>.
+    /// </summary>
+    internal IReadOnlySet<TTrigger> ServerOnly { get; init; } = new HashSet<TTrigger>();
+
+    /// <summary>
     /// The most live invoked runs one user may hold, counted across every machine, for entering one of this
     /// machine's invoking states to be allowed. Declared with <see cref="IMachineBuilder{TState,TTrigger}.InvokedRunLimit"/>; system owners are not
     /// capped.
@@ -297,6 +304,7 @@ public sealed record BuiltMachine<TState, TTrigger>(
     /// </summary>
     internal IReadOnlyList<MachineTrigger> Triggers =>
         Enum.GetValues<TTrigger>()
+            .Where(trigger => !ServerOnly.Contains(trigger))
             .Select(trigger => new MachineTrigger(
                 trigger.ToString(),
                 Effects.Any(e => EqualityComparer<TTrigger>.Default.Equals(e.Trigger, trigger))
@@ -320,6 +328,55 @@ public sealed record BuiltMachine<TState, TTrigger>(
                     .Select(t => new MachineTrigger(t.TriggerName, TriggerKind.Timer, null))
             )
             .ToList();
+}
+
+/// <summary>
+/// What a machine replayed from its IR (<c>Trax.StateMachine.Persistence</c>, ADR <c>Trax.Docs/adr/0058</c>) declares a
+/// state's context with: the record the API is typed from, and the IR's own schema, which is what the engines check.
+/// A hand-written machine reflects one from the other with <see cref="IStateBuilder{TState,TTrigger}.Context{TContext}"/>.
+/// </summary>
+internal interface IIrStateBuilder<TState, TTrigger>
+    where TState : struct, Enum
+    where TTrigger : struct, Enum
+{
+    IStateBuilder<TState, TTrigger> Context(Type record, ContextSchema schema);
+
+    /// <summary>
+    /// <see cref="IStateBuilder{TState,TTrigger}.Invokes{TTrain,TInput,TOutput}"/> with an input built from the
+    /// context and the instance owner's user key (null for a system instance), which the host file's <c>$owner</c>
+    /// maps a train field to. The owner is the server's to give: no client writes it.
+    /// </summary>
+    IInvokeBuilder<TState, TTrigger> InvokesAsOwner<TTrain, TInput, TOutput>(
+        Func<JsonObject, string?, TInput> input
+    )
+        where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>;
+}
+
+/// <summary>
+/// What a machine replayed from its IR declares about the machine as a whole beyond the public builder: its server-only
+/// triggers.
+/// </summary>
+internal interface IIrMachineBuilder<TState, TTrigger>
+    where TState : struct, Enum
+    where TTrigger : struct, Enum
+{
+    /// <summary>
+    /// Marks <paramref name="trigger"/> as fired by the server only (ADR 0058): not served, with no client
+    /// rule. Build refuses one that also declares a rule.
+    /// </summary>
+    void ServerOnly(TTrigger trigger);
+}
+
+/// <summary>
+/// What a machine replayed from its IR declares a trigger's input with: the record the API is typed from, and the IR's
+/// own schema. A hand-written machine reflects one from the other with
+/// <see cref="ITransitionBuilder{TState,TTrigger}.WithInput{TInput}"/>.
+/// </summary>
+internal interface IIrTransitionBuilder<TState, TTrigger>
+    where TState : struct, Enum
+    where TTrigger : struct, Enum
+{
+    ITransitionBuilder<TState, TTrigger> WithInput(Type record, ContextSchema schema);
 }
 
 /// <summary>The root of the fluent configuration. See <see cref="MachineBuilder{TState,TTrigger}"/>.</summary>
@@ -777,7 +834,9 @@ public interface ITransitionBuilder<TState, TTrigger>
 /// declared here, on the transition it belongs to, and nothing leaks into the composition root. The result
 /// is the same <see cref="MachineDefinition{TState,TTrigger}"/> the engine already interprets.
 /// </summary>
-public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, TTrigger>
+public sealed partial class MachineBuilder<TState, TTrigger>
+    : IMachineBuilder<TState, TTrigger>,
+        IIrMachineBuilder<TState, TTrigger>
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {
@@ -808,6 +867,11 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         new(StringComparer.Ordinal);
     private bool _usedDeclarative;
     private bool _systemOwned;
+    private readonly HashSet<TTrigger> _serverOnly = [];
+
+    void IIrMachineBuilder<TState, TTrigger>.ServerOnly(TTrigger trigger) =>
+        _serverOnly.Add(trigger);
+
     private StartDeclaration? _start;
     private readonly List<ServerWrite> _serverWrites = [];
     private readonly List<EventWrite> _eventWrites = [];
@@ -1223,9 +1287,18 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                     + string.Join(" ", openWrites.Select(p => char.ToUpperInvariant(p[0]) + p[1..]))
             );
 
+        // A server-only trigger is never a client's, so it declares no client rule.
+        foreach (var trigger in _serverOnly)
+            if (rules.Events.TryGetValue(trigger.ToString(), out var clientRule))
+                throw new InvalidOperationException(
+                    $"The machine '{_id}' cannot be built: {trigger} is fired by the server only, and declares a "
+                        + $"client rule ({clientRule})."
+                );
+
         return new BuiltMachine<TState, TTrigger>(definition, _committed, _effects, declarative)
         {
             SystemOwned = _systemOwned,
+            ServerOnly = new HashSet<TTrigger>(_serverOnly),
             InvokedRunLimit = _invokedRunLimit,
             TriggerInputTypes = declaredInputs.ToDictionary(kv => kv.Key, kv => kv.Value.Type),
             ContextTypes = new Dictionary<TState, Type>(_contextTypes),
@@ -1816,10 +1889,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                         $"the timer of {state} waits {fixedDuration}, but a timer waits a positive time."
                     );
                 else if (fixedDuration > MachineTimers.MaxDuration)
-                    problems.Add(
-                        $"the timer of {state} waits {fixedDuration}, longer than the {MachineTimers.MaxDuration.TotalDays} "
-                            + "days a timer may wait (MachineTimers.MaxDuration)."
-                    );
+                    problems.Add(MachineTimers.TooLong(state.ToString(), fixedDuration));
             }
             else
             {
@@ -1951,35 +2021,13 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         Converters = { new JsonStringEnumConverter(), new IsoDurationJsonConverter() },
     };
 
-    // Each state has at most one timer, so following timers from any state either ends or comes round to a state it
-    // passed: a cycle no event can break. Each cycle is named once, from its first state in declaration order.
+    // A loop made only of timers, which the instance would go round forever: TimerLoops, which derivation reads too.
     private static IEnumerable<string> TimerCycles(
         IReadOnlyDictionary<TState, TimerDefinition<TState>> timers
-    )
-    {
-        var named = new HashSet<TState>();
-        foreach (var start in Enum.GetValues<TState>())
-        {
-            var path = new List<TState>();
-            var current = start;
-            while (timers.TryGetValue(current, out var timer) && !path.Contains(current))
-            {
-                path.Add(current);
-                current = timer.Target;
-            }
-            if (!path.Contains(current) || named.Contains(current))
-                continue;
-            var cycle = path.SkipWhile(s => !EqualityComparer<TState>.Default.Equals(s, current))
-                .ToList();
-            var first = cycle.MinBy(s => Array.IndexOf(Enum.GetValues<TState>(), s));
-            var at = cycle.IndexOf(first);
-            var ordered = cycle.Skip(at).Concat(cycle.Take(at)).Append(first).ToList();
-            foreach (var s in cycle)
-                named.Add(s);
-            yield return $"the timers of {string.Join(" -> ", ordered)} form a cycle no event breaks, so the "
-                + "instance would go round it forever. Let an event, not a timer, lead out of one of these states.";
-        }
-    }
+    ) =>
+        TimerLoops
+            .Find(timers.ToDictionary(t => t.Key, t => t.Value.Target), Enum.GetValues<TState>())
+            .Select(TimerLoops.Describe);
 
     // A custom rule or reduction with no C# handler would compile to a guard that is always false and a
     // reducer that silently keeps the context, while a TypeScript twin given its handler behaves otherwise.
@@ -2124,7 +2172,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         };
 
     private sealed class StateBuilder(MachineBuilder<TState, TTrigger> owner, TState state)
-        : IStateBuilder<TState, TTrigger>
+        : IStateBuilder<TState, TTrigger>,
+            IIrStateBuilder<TState, TTrigger>
     {
         public IStateBuilder<TState, TTrigger> Holds(Func<JsonObject, string?> validator)
         {
@@ -2143,6 +2192,14 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         {
             owner._contextTypes.Remove(state);
             return SetSchema(ContextSchema.Empty);
+        }
+
+        public IStateBuilder<TState, TTrigger> Context(Type record, ContextSchema schema)
+        {
+            ArgumentNullException.ThrowIfNull(record);
+            ArgumentNullException.ThrowIfNull(schema);
+            owner._contextTypes[state] = record;
+            return SetSchema(schema);
         }
 
         private IStateBuilder<TState, TTrigger> SetSchema(ContextSchema schema)
@@ -2206,7 +2263,24 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                 typeof(TTrain),
                 typeof(TInput),
                 typeof(TOutput),
-                context => input(context)
+                (context, _) => input(context)
+            );
+            owner._invokes.Add(draft);
+            return new InvokeBuilder(owner, this, draft);
+        }
+
+        public IInvokeBuilder<TState, TTrigger> InvokesAsOwner<TTrain, TInput, TOutput>(
+            Func<JsonObject, string?, TInput> input
+        )
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            var draft = new InvokeDraft(
+                state,
+                typeof(TTrain),
+                typeof(TInput),
+                typeof(TOutput),
+                (context, ownerKey) => input(context, ownerKey)
             );
             owner._invokes.Add(draft);
             return new InvokeBuilder(owner, this, draft);
@@ -2224,7 +2298,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                 typeof(TChild),
                 typeof(JsonObject),
                 typeof(TOutput),
-                _ => null
+                (_, _) => null
             )
             {
                 Spawn = new SpawnDefinition(typeof(TChild), MemberPath.Of(childId), context),
@@ -2271,7 +2345,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         Type TrainType,
         Type InputType,
         Type OutputType,
-        Func<JsonObject, object?> CreateInput
+        Func<JsonObject, string?, object?> CreateInput
     )
     {
         /// <summary>The child machine a spawning state starts; null for a state that invokes a train.</summary>
@@ -2379,7 +2453,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         IStateBuilder<TState, TTrigger> state,
         TState from,
         TTrigger trigger
-    ) : ITransitionBuilder<TState, TTrigger>
+    ) : ITransitionBuilder<TState, TTrigger>, IIrTransitionBuilder<TState, TTrigger>
     {
         private Func<JsonObject, JsonNode?, bool>? _guard;
         private string? _guardMessage;
@@ -2420,6 +2494,16 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             // naming the record.
             _inputSchema = SchemaReflection.ForInput(typeof(TInput));
             _inputType = typeof(TInput);
+            return this;
+        }
+
+        public ITransitionBuilder<TState, TTrigger> WithInput(Type record, ContextSchema schema)
+        {
+            ArgumentNullException.ThrowIfNull(record);
+            ArgumentNullException.ThrowIfNull(schema);
+            owner._usedDeclarative = true;
+            _inputSchema = schema;
+            _inputType = record;
             return this;
         }
 

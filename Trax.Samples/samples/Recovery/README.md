@@ -46,6 +46,8 @@ Open http://localhost:5173. The host listens on http://localhost:5260; the dashb
 http://localhost:5260/trax and the GraphQL IDE at http://localhost:5260/trax/graphql, both in
 Development only. When your Postgres is not on 5432, start the host with
 `ConnectionStrings__TraxDatabase="Host=localhost;Port=<port>;Database=trax_recovery;Username=trax;Password=trax123"`.
+To serve the page from another origin, build it with `VITE_RECOVERY_API` set to the host's origin and start the host
+with `Recovery__PageOrigin` set to the page's.
 
 ## Try it
 

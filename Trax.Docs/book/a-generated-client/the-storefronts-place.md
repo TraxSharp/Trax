@@ -1,16 +1,16 @@
 ---
-title: "15.2 The storefront's place"
-description: "Chapter 15 of the Trax book, section 2: The storefront's place."
+title: "16.2 The storefront's place"
+description: "Chapter 16 of the Trax book, section 2: The storefront's place."
 type: tutorial
 area: general
-parent: "15. A generated client"
+parent: "16. A generated client"
 grand_parent: The Trax book
 nav_order: 2
 snippet_context: none
 follows: book/a-generated-client/how-it-fits-together
 ---
 
-# 15.2 The storefront's place
+# 16.2 The storefront's place
 
 The storefront is `web/`, beside the hub, a Vite and React project in TypeScript.
 
@@ -124,4 +124,4 @@ dist
 
 ---
 
-Next: [15.3 The documents](/docs/book/a-generated-client/the-documents)
+Next: [16.3 The documents](/docs/book/a-generated-client/the-documents)

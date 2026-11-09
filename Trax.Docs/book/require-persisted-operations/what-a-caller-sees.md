@@ -1,16 +1,16 @@
 ---
-title: "17.3 What a caller sees"
-description: "Chapter 17 of the Trax book, section 3: What a caller sees."
+title: "18.3 What a caller sees"
+description: "Chapter 18 of the Trax book, section 3: What a caller sees."
 type: tutorial
 area: general
-parent: "17. Require persisted operations"
+parent: "18. Require persisted operations"
 grand_parent: The Trax book
 nav_order: 3
 snippet_context: none
 follows: book/require-persisted-operations/make-the-hub-refuse
 ---
 
-# 17.3 What a caller sees
+# 18.3 What a caller sees
 
 Start the hub, and send the catalogue's document as text, as chapter 7 did:
 
@@ -55,4 +55,4 @@ entry page names the ids:
 
 ---
 
-Next: [17.4 What stops working](/docs/book/require-persisted-operations/what-stops-working)
+Next: [18.4 What stops working](/docs/book/require-persisted-operations/what-stops-working)

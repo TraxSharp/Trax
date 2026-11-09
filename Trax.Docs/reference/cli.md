@@ -479,6 +479,39 @@ the IR (a stored snapshot whose version does not match is rejected and the clien
 prints that notice to stderr and exits 1, which fails a CI step that runs it rather than reporting a migration
 that never happened.
 
+### Machines from features
+
+`trax machine from-gherkin`, `run`, `missing`, `usage`, `explain` and `diagram` work on
+[machines written as features](/docs/statemachine/write-machines-as-features), from a features directory with its
+`glossary.json` ([feature files](/docs/reference/feature-files)). Each exits 1 with a message for a bad path or a bad
+glossary.
+
+```bash
+# Derive one IR per machine, host.json and access.txt into a directory the command owns.
+trax machine from-gherkin --features ./features --out ./machines
+# The CI gate: write nothing, fail when any committed file differs.
+trax machine from-gherkin --features ./features --out ./machines --check
+# Run the features in memory on the committed machines, as the host answers.
+trax machine run --features ./features --machines ./machines --tags "@smoke and not @slow" --format junit --report results.xml
+# What the glossary names and no scenario shows, each with a scenario to paste.
+trax machine missing --features ./features --out missing.feature
+# Each glossary phrase and the steps that say it.
+trax machine usage --features ./features --unused
+# What derivation read from each scenario: edges, guards, outcomes, timers, policies, starts, grants and views.
+trax machine explain --features ./features --scenario "fires the oven"
+# The event-storming board, with the scenarios behind each sticky.
+trax machine diagram --machines ./machines --format html --out board.html
+```
+
+| Command | Options |
+| --- | --- |
+| `from-gherkin` | `--features` (required), `--glossary` (default `glossary.json` in the features directory), `--out` (required: a directory holding only what the command writes; a machine that no longer derives has its IR removed), `--check`. |
+| `run` | `--features`, `--glossary`, `--machines` (required), locations as `file:line`, `--tags` (a tag expression), `--name` (a regular expression, repeatable), `--format` (`pretty`, `json` or `junit`), `--report` (a file), `--strict` (fail on steps about the UI too), `--dry-run`, `--fail-fast`. An undefined step always fails, and so does a selection that runs no scenario: one that matches none, or one whose every scenario is tagged `@host`, which only the host bindings run. A `@host` scenario selected beside others is skipped and does not fail the run. |
+| `missing` | `--features`, `--glossary`, `--kind` (`machine`, `trigger`, `state`, `guard`, `refusal`, `outcome`, `view` or `grant`, repeatable), `--out` (the stubs, as one feature). It refuses features that do not derive. |
+| `usage` | `--features`, `--glossary`, `--unused`. |
+| `explain` | `--features`, `--glossary`, `--scenario` (a name to contain, any case, or a `file:line`). It derives in memory and writes nothing; features that do not derive are their problems and exit 1. |
+| `diagram` | `--machines` (required), `--format` (`html`, `mermaid` or `json`), `--out`. |
+
 ## Frontend clients (`trax client`)
 
 `trax client` generates a frontend's typed client from the [client manifest](/docs/sdk-reference/statemachine-api/client-manifest)
@@ -512,6 +545,7 @@ It writes, under `--out`:
 | `<machine>/<machine>.client.g.ts` | The machine's documents by id, `<machine>Server()`, `use<Machine>(options)` over `useServerMachine`, which keeps a start in flight under `trax-start:<machine id>.<user>`, and `useRemembered<Machine>(options)` over `useRememberedMachine`, which keeps the instance of the `user` given to `configureTrax` across visits under `trax.<machine id>.<user>` (`rememberKey` replaces the `trax.<machine id>`). |
 | `types.g.ts` | With `--documents`, or when a train can be followed: the enums and inputs the trains and query models take, as TypeScript, but the filter and sort inputs, which a document writes in its text. A type the manifest declares is written as itself wherever it is used, even when it shares a name with a scalar the generator knows (`enum Duration`), as the C# operations client reads it. An answer's object types are not declared here: each is typed where it is answered, so no type promises a field its document does not fetch. To name a part of an answer, index the result type (`PaymentsListChargesResult["charges"][number]`). |
 | `progress.g.ts` | When a train carries [`[TraxRunProgress]`](/docs/sdk-reference/graphql-api/run-progress): the `RunProgress` and `RunProgressEvent` types its two documents answer, `readRunProgress(runId)`, `followRunProgress(runId, onEvent, onEnd?)`, whose `onEnd` gets a `TraxOperationError` `CONNECTION_CHANGED` when `configureTrax` closes the socket before the run ends, and a `TraxOperationError` with no code, once, when the host sends a frame with neither data nor an error, which stops the stream, and `useRunProgress(runId)`, which reads your run once, follows it until it ends, reads it again after a lost event, and follows a failed run into the retry the scheduler queues (`runId` is the run shown, `earlier` the runs before it). A read that answers after a newer event arrived does not show its state over the event's, but the steps it holds that no event reported are shown. The run is read again once its stream opens and once more after it ends, so a hook mounted mid-run also shows a step the host sent before the stream opened and wrote after the first read. After `configureTrax` the run is read and followed again over the new connection, from an empty view: nothing the hook showed before (its state, steps, `ended` or `problem`) is shown on the new connection. When `configureTrax` names another `user`, the run id given before is the previous user's: the hook follows nothing and shows the empty view until a run id is given again. A token refresh for the same `user` follows the run again. |
+| `views.g.ts` | When the host serves views from [features](/docs/statemachine/write-machines-as-features): for each, `read<View>View()`, which sends the view's persisted document by its id and answers `<View>ViewResult`, the fields it selects, and `<view>ViewDocumentId`. A caller who is not one of the view's readers is refused with `FORBIDDEN`. |
 | `documents/<operation>.g.ts` | With `--documents`: `<operation>(variables, options?)`, the camel-cased operation name, which sends the document's id (`trax_client_<name>_<hash of its text>`) and answers `<Operation>Result`, the fields it selects, typed from the manifest's types, a union or interface as one object per possible type told apart by `__typename`. A query model answers its connection (`nodes`, `pageInfo`, `totalCount` as selected) or its list. A query of several trains and query models answers each under its key, inside its namespace. Its doc comment names what each requires of a caller. This is the only function a train gets: the host generates no document for a train. |
 | `fragments.g.ts` | With `--documents`: each named fragment as a type of its name. Its fields are also written out where it is spread, so a component typed with the fragment takes any answer that has them. |
 | `trax.documents.json` | With `--documents`: every operation as the host registers it, `{ "format": 1, "documents": [{ "name", "source", "text" }] }` in name order. `text` is the operation printed and every fragment it spreads, so reformatting a file or editing a comment keeps its id. The host names it in [`ClientDocuments(path)`](/docs/sdk-reference/persisted-operations/persisted-operations-builder). |

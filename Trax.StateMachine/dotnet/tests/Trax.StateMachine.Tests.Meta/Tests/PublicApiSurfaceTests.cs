@@ -42,6 +42,12 @@ public class PublicApiSurfaceTests
         yield return new TestCaseData(typeof(Trax.Client.TraxClient).Assembly).SetName(
             "Trax.Client"
         );
+        yield return new TestCaseData(
+            typeof(Trax.StateMachine.Gherkin.FeatureMachines).Assembly
+        ).SetName("Trax.StateMachine.Gherkin");
+        yield return new TestCaseData(
+            typeof(Trax.StateMachine.Gherkin.Reqnroll.TraxFeatures).Assembly
+        ).SetName("Trax.StateMachine.Gherkin.Reqnroll");
     }
 
     /// <summary>

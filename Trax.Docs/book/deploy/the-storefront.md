@@ -1,16 +1,16 @@
 ---
-title: "18.8 The storefront"
-description: "Chapter 18 of the Trax book, section 8: The storefront."
+title: "19.8 The storefront"
+description: "Chapter 19 of the Trax book, section 8: The storefront."
 type: tutorial
 area: general
-parent: "18. Deploy"
+parent: "19. Deploy"
 grand_parent: The Trax book
 nav_order: 8
 snippet_context: none
 follows: book/deploy/run-it-as-deployed
 ---
 
-# 18.8 The storefront
+# 19.8 The storefront
 
 The storefront is static files. Build it with the hub's address, and serve `web/dist` from
 wherever the shop's pages are served, at the origin `Storefront:Origin` names:
@@ -61,4 +61,4 @@ token it gets to `configureTrax`, as the page does with the Development token no
 
 ---
 
-Next: [18.9 The console](/docs/book/deploy/the-console)
+Next: [19.9 The console](/docs/book/deploy/the-console)

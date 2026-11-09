@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "machines": {
+    "shop": {
+      "schemaHash": "h",
+      "owner": {
+        "system": "shop/main"
+      },
+      "effects": {
+        "Open": "Shop.Effects.IOpen"
+      }
+    }
+  }
+}

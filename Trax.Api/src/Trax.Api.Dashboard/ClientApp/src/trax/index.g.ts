@@ -36,6 +36,7 @@ export { junctionRuns, junctionRunsDocument, type JunctionRunsVariables, type Ju
 export { logLevels, logLevelsDocument, type LogLevelsVariables, type LogLevelsResult } from "./documents/logLevels.g";
 export { logs, logsDocument, type LogsVariables, type LogsResult } from "./documents/logs.g";
 export { lookup, lookupDocument, type LookupVariables, type LookupResult } from "./documents/lookup.g";
+export { machineBoard, machineBoardDocument, type MachineBoardVariables, type MachineBoardResult } from "./documents/machineBoard.g";
 export { machineInstance, machineInstanceDocument, type MachineInstanceVariables, type MachineInstanceResult } from "./documents/machineInstance.g";
 export { machineInstanceStuckCounts, machineInstanceStuckCountsDocument, type MachineInstanceStuckCountsVariables, type MachineInstanceStuckCountsResult } from "./documents/machineInstanceStuckCounts.g";
 export { machineInstanceTransitions, machineInstanceTransitionsDocument, type MachineInstanceTransitionsVariables, type MachineInstanceTransitionsResult } from "./documents/machineInstanceTransitions.g";

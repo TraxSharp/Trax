@@ -19,6 +19,12 @@ on:
 # Default to no permissions; each job widens only what it needs.
 permissions: {}
 
+env:
+  # Reqnroll sends usage telemetry from its feature generation at build time and when a test run
+  # starts, unless this is set to anything but 1. The Reqnroll projects (the Gherkin bindings and the
+  # test projects that run features) build and test in several jobs, so it is set for all of them.
+  REQNROLL_TELEMETRY_ENABLED: '0'
+
 concurrency:
   # A release's run must not cancel, or be cancelled by, a pull request's.
   group: ci-${{ github.workflow_ref }}-${{ github.ref }}
@@ -39,7 +45,7 @@ jobs:
       coverage: ${{ steps.changes.outputs.coverage }}
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -110,7 +116,7 @@ jobs:
       SOLUTION: ${{ matrix.package.solution }}
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -205,6 +211,11 @@ jobs:
         # from Trax.StateMachine/ts/src, installed above.
         if: matrix.package.playwright
         working-directory: Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client
+        run: npm ci --ignore-scripts
+      - name: Install the Bakery page (locked, no install scripts)
+        # Its browser tests build it with vite too, pointed at the host they start.
+        if: matrix.package.playwright
+        working-directory: Trax.Samples/samples/Bakery/Trax.Samples.Bakery.Web
         run: npm ci --ignore-scripts
       - name: Raise the Postgres connection limit
         # dotnet test runs a solution's test projects in parallel, all against this one service,
@@ -332,7 +343,7 @@ jobs:
       - name: Harden runner
         # The dotnet job's list, less what only another folder's tests reach. chromium and the
         # system libraries it needs come from Playwright's CDN and the Ubuntu archive.
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -489,7 +500,7 @@ jobs:
         package: ${{ fromJSON(needs.changes.outputs.coverage) }}
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -537,7 +548,7 @@ jobs:
         package: ${{ fromJSON(needs.changes.outputs.adr) }}
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -586,7 +597,7 @@ jobs:
         working-directory: Trax.Website
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -637,7 +648,7 @@ jobs:
         working-directory: Trax.Api/src/Trax.Api.Dashboard/ClientApp
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -716,7 +727,7 @@ jobs:
       CLIENT: Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -823,7 +834,7 @@ jobs:
       WEB: Trax.Samples/samples/StateMachine/web
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -888,6 +899,93 @@ jobs:
             --tools-dir "$RUNNER_TEMP/engine" --documents 'src/graphql/*.graphql' --check) \
             || { echo "::error::The StateMachine sample's generated client is out of date. Regenerate it with the commands at the top of $api/Program.cs and commit the result."; exit 1; }
 
+  # The Bakery sample's page (Trax.Samples/samples/Bakery/Trax.Samples.Bakery.Web), its own npm project
+  # on the client `trax client` generated from the host, whose machines are written only as features.
+  # Besides its lint, tests and build, it exports the host's client manifest and runs `trax client --check`
+  # over the committed client, and fails when they differ.
+  bakery-web:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Samples')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      WEB: Trax.Samples/samples/Bakery/Trax.Samples.Bakery.Web
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            aka.ms:443
+            builds.dotnet.microsoft.com:443
+            ci.dot.net:443
+            dot.net:443
+            api.nuget.org:443
+            crl3.digicert.com:80
+            crl4.digicert.com:80
+            crl.globalsign.com:80
+            crl.sectigo.com:80
+            s.symcb.com:80
+            ts-crl.ws.symantec.com:80
+            www.microsoft.com:80
+            registry.npmjs.org:443
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install Trax.StateMachine/ts (locked, no install scripts)
+        # The page builds the engine from its source, and the twin generator is bundled from it.
+        working-directory: Trax.StateMachine/ts
+        run: npm ci --ignore-scripts
+      - name: Install (locked, no install scripts)
+        working-directory: ${{ env.WEB }}
+        run: npm ci --ignore-scripts
+      - name: Build
+        # tsc typechecks it, then vite builds it.
+        working-directory: ${{ env.WEB }}
+        run: npm run build
+      - name: Lint
+        working-directory: ${{ env.WEB }}
+        run: npm run lint
+      - name: Test
+        working-directory: ${{ env.WEB }}
+        run: npm test
+      - name: Audit runtime dependencies
+        working-directory: ${{ env.WEB }}
+        run: npm audit --omit=dev --audit-level=high
+      - name: Install the API dashboard (locked, no install scripts)
+        # The Bakery host serves the console, and a build without the app refuses to start, so
+        # exporting its client manifest below needs the app embedded.
+        working-directory: Trax.Api/src/Trax.Api.Dashboard/ClientApp
+        run: npm ci --ignore-scripts
+      - name: The committed client matches the host
+        run: |
+          api=Trax.Samples/samples/Bakery/Trax.Samples.Bakery.Api
+          dotnet restore "$api" --locked-mode
+          dotnet restore Trax.Cli/src/Trax.Cli --locked-mode
+          node Trax.StateMachine/ts/tools/bundle-cli.mjs --out "$RUNNER_TEMP/engine"
+          dotnet run --project "$api" --no-restore -- --trax-export-client "$RUNNER_TEMP/manifest.json"
+          cli="$PWD/Trax.Cli/src/Trax.Cli"
+          (cd "$WEB" && dotnet run --project "$cli" --no-restore -- client \
+            --manifest "$RUNNER_TEMP/manifest.json" --out src/trax \
+            --tools-dir "$RUNNER_TEMP/engine" --check) \
+            || { echo "::error::The Bakery page's generated client is out of date. Regenerate it with the commands in Trax.Samples/samples/Bakery/README.md and commit the result."; exit 1; }
+
   # The Board sample's agents (Trax.Samples/samples/Board/Trax.Samples.Board.Agents) and page
   # (Trax.Samples.Board.Client), two npm projects, each on the client `trax client` generated from the
   # host. The agents are typechecked and the page built, then the host's manifest is exported and
@@ -904,7 +1002,7 @@ jobs:
       WEB: Trax.Samples/samples/Board/Trax.Samples.Board.Client
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -995,7 +1093,7 @@ jobs:
         working-directory: Trax.StateMachine/ts
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -1051,7 +1149,7 @@ jobs:
         working-directory: Trax.StateMachine/rust
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -1128,7 +1226,7 @@ jobs:
       contents: read
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           disable-telemetry: true
@@ -1157,7 +1255,7 @@ jobs:
   # The coverage upload is not among them: it is information, and it never fails a run.
   result:
     name: CI result
-    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, board-client, state-machine, state-machine-rust, release-tooling]
+    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, bakery-web, board-client, state-machine, state-machine-rust, release-tooling]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
