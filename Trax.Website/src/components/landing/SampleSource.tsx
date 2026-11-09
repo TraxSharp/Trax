@@ -14,8 +14,8 @@ export interface SampleSourceProps {
 }
 
 /**
- * Under every sample on the landing page: where its real C# lives and how to start it yourself. The demo above it
- * is a recording; this is the code that made it.
+ * Under every sample on the landing page, folded: where its real code lives and how to start it yourself. The demo
+ * above it is a recording or the sample's own files; this is the code that made it.
  */
 export default function SampleSource({ folder, files, docs, run }: SampleSourceProps) {
   const tree = `${REPO}/tree/main/Trax.Samples/samples/${folder}`;
@@ -27,9 +27,18 @@ export default function SampleSource({ folder, files, docs, run }: SampleSourceP
     return shared && parts.length > 1 ? parts.slice(-2).join("/") : name;
   };
   return (
-    <div className="mt-4 grid gap-4 rounded-lg border border-border bg-bg-secondary p-4 text-sm lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+    <details className="group mt-4 rounded-lg border border-border bg-bg-secondary text-sm">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-text-secondary hover:text-text-primary">
+        <span>
+          The real code: <span className="font-mono text-xs">samples/{folder}</span>, and how to run it
+        </span>
+        <span aria-hidden="true" className="text-text-muted transition-transform group-open:rotate-90">
+          &rsaquo;
+        </span>
+      </summary>
+    <div className="grid gap-4 border-t border-border p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">The real C#</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Start with</p>
         <ul className="mt-2 space-y-1">
           {files.map((f) => (
             <li key={f.path} className="flex flex-wrap items-baseline gap-x-2">
@@ -66,5 +75,6 @@ export default function SampleSource({ folder, files, docs, run }: SampleSourceP
         </pre>
       </div>
     </div>
+    </details>
   );
 }

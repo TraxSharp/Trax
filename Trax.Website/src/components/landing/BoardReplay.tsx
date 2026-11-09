@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import ReplayToolbar, { PrimaryButton, ToolButton, ToolSelect } from "./ReplayToolbar";
+import CodeFold from "./CodeFold";
+import ReplayToolbar, { PrimaryButton, ToolButton } from "./ReplayToolbar";
 import {
-  ASSIGNMENT_STATES,
   INTENT_TONE,
   clientColor,
   movesOf,
@@ -16,16 +16,16 @@ import {
   type Tone,
 } from "@/lib/board-replay";
 
-// The Board sample's agents, replayed a move at a time: the board the server holds, the pod each agent works in, and
-// what the server answered. It plays itself once the first time it is on screen; Back and Next take over.
+// One of the Board sample's recorded scenarios, replayed a move at a time: the board the server holds, the client each
+// agent works in, and what the server answered. It plays itself once the first time it is on screen; Back and Next
+// take over.
 const TONE: Record<Tone, string> = { ok: "#6cc596", bad: "#d97a7a", warn: "#d4a24c", info: "#7a9ec2", idle: "#8f8b84" };
-const STRIP_TONE: Record<(typeof ASSIGNMENT_STATES)[number], Tone> = { Working: "info", Checking: "info", Accepted: "ok", Rejected: "warn" };
 const PACE_MS = 2600;
-// How a marked move is named: on the ticket it touched, in the rule panel, and in the key under the board.
-const INTENT_TEXT: Record<Intent, { ticket: string; rule: string; key: string }> = {
-  "not-allowed": { ticket: "refused", rule: "Refused by", key: "not allowed: the server refuses the move" },
-  "bad-evidence": { ticket: "rejected", rule: "Rejected by", key: "wrong evidence: the server's check fails it" },
-  finding: { ticket: "found", rule: "Found by", key: "a finding: a negative result that is right" },
+// How a marked move is named: on the ticket it touched, and in the rule panel.
+const INTENT_TEXT: Record<Intent, { ticket: string; rule: string }> = {
+  "not-allowed": { ticket: "refused", rule: "Refused by" },
+  "bad-evidence": { ticket: "rejected", rule: "Rejected by" },
+  finding: { ticket: "found", rule: "Found by" },
 };
 // The rule panel's fixed height, in pixels: room for the longest span (six lines) and the server's message.
 const RULE_HEIGHT = 196;
@@ -34,25 +34,21 @@ const RULE_HEIGHT = 196;
 const CARD_HEIGHT = 160;
 const LANE_CHROME = 70;
 
-export default function BoardReplay({ recordings }: { recordings: BoardRecordings }) {
-  const scenarios = recordings.scenarios;
-  const [key, setKey] = useState(scenarios[0]?.key ?? "");
+export default function BoardReplay({ recordings, scenarioKey }: { recordings: BoardRecordings; scenarioKey: string }) {
   const [move, setMove] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const scenario = scenarios.find((s) => s.key === key);
+  const scenario = recordings.scenarios.find((s) => s.key === scenarioKey);
   const last = movesOf(scenario);
   const view = useMemo(() => viewAt(recordings, scenario, move), [recordings, scenario, move]);
-  // Every lane is as tall as the most tickets any lane holds anywhere in the recording, so no lane ever grows.
+  // Every lane is as tall as the most tickets any lane holds anywhere in the scenario, so no lane ever grows.
   const laneHeight = useMemo(() => {
     let most = 1;
-    for (const s of scenarios) {
-      for (let m = 0; m <= movesOf(s); m++) {
-        const v = viewAt(recordings, s, m);
-        for (const l of recordings.lanes) most = Math.max(most, v.tickets.filter((t) => t.lane === l.key).length);
-      }
+    for (let m = 0; m <= movesOf(scenario); m++) {
+      const v = viewAt(recordings, scenario, m);
+      for (const l of recordings.lanes) most = Math.max(most, v.tickets.filter((t) => t.lane === l.key).length);
     }
     return LANE_CHROME + most * (CARD_HEIGHT + 8);
-  }, [recordings, scenarios]);
+  }, [recordings, scenario]);
 
   // A replay that reaches the last move simply has nothing left to play.
   const running = playing && move < last;
@@ -102,22 +98,6 @@ export default function BoardReplay({ recordings }: { recordings: BoardRecording
       {/* The caption is as tall as the longest the recording gives (177 characters, two lines at full width), so the
           board below never moves as captions change length. */}
       <ReplayToolbar caption={move === 0 ? scenario?.caption : view.caption} reserve="min-h-[7.5em] md:min-h-[4.5em] lg:min-h-[3em]">
-        <ToolSelect
-          label="Scenario"
-          value={key}
-          onChange={(e) => {
-            autoplayed.current = true;
-            setPlaying(false);
-            setKey(e.target.value);
-            setMove(0);
-          }}
-        >
-          {scenarios.map((s) => (
-            <option key={s.key} value={s.key}>
-              {s.title}
-            </option>
-          ))}
-        </ToolSelect>
         <ToolButton onClick={() => step(move - 1)}>Back</ToolButton>
         <PrimaryButton onClick={() => step(move + 1)}>Next move</PrimaryButton>
         <ToolButton onClick={() => step(0)}>Start over</ToolButton>
@@ -126,8 +106,7 @@ export default function BoardReplay({ recordings }: { recordings: BoardRecording
         </span>
       </ReplayToolbar>
 
-      {/* The board across the whole width, then the pods in one row, so the whole demo fits a laptop screen once the
-          tabs are at the top. The other tabs show code; this one shows the clients. */}
+      {/* The board across the whole width, then the clients in one row, then the code that refused a move, folded. */}
       <div className="flex flex-col gap-2 rounded-[10px] border border-[#2f3a2e] bg-[#131512] p-2.5">
         <div className="flex items-baseline gap-2.5 px-0.5">
           <span className="text-xs font-semibold uppercase tracking-wider text-accent-bright">Trax server</span>
@@ -155,29 +134,6 @@ export default function BoardReplay({ recordings }: { recordings: BoardRecording
         </div>
       </div>
 
-
-      <RulePanel rule={view.rule} />
-
-      <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 font-mono text-xs text-text-muted">
-        {(Object.keys(INTENT_TEXT) as Intent[]).map((intent) => (
-          <span key={intent} className="flex items-center gap-2">
-            <Dot color={TONE[INTENT_TONE[intent]]} />
-            {INTENT_TEXT[intent].key}
-          </span>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap justify-center gap-x-10 gap-y-2 font-mono text-xs text-text-muted">
-        <span className="flex items-center gap-2">
-          <Arrow down color="#7a9ec2" />
-          work package: the ticket, instructions, tools, a lease
-        </span>
-        <span className="flex items-center gap-2">
-          <Arrow color="#6cc596" />
-          submit(evidence): the server re-runs it before anything moves
-        </span>
-      </div>
-
       <div>
         <div className="grid min-w-0 content-start gap-2 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
           {view.pods.map((pod) => (
@@ -185,20 +141,16 @@ export default function BoardReplay({ recordings }: { recordings: BoardRecording
           ))}
         </div>
       </div>
+
+      <CodeFold label="The code that refused each move" pulse={view.rule ? move : null} color={view.rule ? TONE[INTENT_TONE[view.rule.intent]] : undefined}>
+        <RulePanel rule={view.rule} />
+      </CodeFold>
     </div>
   );
 }
 
 function Dot({ color }: { color: string }) {
   return <span className="inline-block size-2 flex-none rounded-full" style={{ background: color }} />;
-}
-
-function Arrow({ down, color }: { down?: boolean; color: string }) {
-  return (
-    <svg width="12" height="14" viewBox="0 0 12 14" aria-hidden="true">
-      <path d={down ? "M6 1v12M1 8l5 5 5-5" : "M6 13V1M1 6l5-5 5 5"} fill="none" stroke={color} strokeWidth="1.5" />
-    </svg>
-  );
 }
 
 function TicketCard({ ticket, holderColor }: { ticket: TicketView; holderColor: string }) {
@@ -253,37 +205,19 @@ function Pod({ pod, color, laneName }: { pod: PodView; color: string; laneName: 
   const ring = pod.mark && pod.mark !== "finding" ? TONE[INTENT_TONE[pod.mark]] : color;
   return (
     <div
-      className="flex h-[208px] flex-col gap-2 overflow-hidden rounded-lg border border-border bg-bg-secondary px-3 py-2.5 transition-colors"
+      className="flex h-[150px] flex-col gap-2 overflow-hidden rounded-lg border border-border bg-bg-secondary px-3 py-2.5 transition-colors"
       style={{ borderColor: pod.current ? ring : undefined, boxShadow: pod.current ? `0 0 0 3px ${ring}26` : undefined }}
     >
       <div className="flex min-w-0 flex-nowrap items-center gap-2">
         <Dot color={color} />
         <span className="flex-none whitespace-nowrap text-[13px] font-semibold text-text-primary">{pod.name}</span>
-        <span className="min-w-0 flex-auto truncate font-mono text-[11px] text-text-muted">{pod.kind === "person" ? "a person" : "agent pod"}</span>
+        <span className="min-w-0 flex-auto truncate font-mono text-[11px] text-text-muted">{pod.kind === "person" ? "a person" : "an agent"}, works {laneName ?? "its lane"}</span>
         <span
           className="ml-auto flex-none whitespace-nowrap rounded-full px-2 py-px text-[11px]"
           style={{ border: `1px solid ${pod.badge ? tone : "#3a3a37"}66`, color: pod.badge ? tone : "#8f8b84" }}
         >
           {pod.badge ?? "idle"}
         </span>
-      </div>
-      <div title={pod.package ?? undefined} className="h-[33px] flex-none line-clamp-2 font-mono text-[11px] leading-normal text-text-secondary [overflow-wrap:anywhere]">
-        {pod.package ?? (pod.badge === "refused" ? "no package" : `idle · works ${laneName ?? "its lane"}`)}
-      </div>
-      <div className="flex gap-1">
-        {ASSIGNMENT_STATES.map((s) => {
-          const on = pod.assignment === s;
-          const c = TONE[STRIP_TONE[s]];
-          return (
-            <span
-              key={s}
-              className="min-w-0 flex-1 truncate rounded py-0.5 text-center font-mono text-[9.5px]"
-              style={{ border: `1px solid ${on ? c : "#2a2a28"}`, color: on ? c : "#5f5c57", background: on ? `${c}1f` : undefined }}
-            >
-              {s}
-            </span>
-          );
-        })}
       </div>
       <div title={pod.say ?? undefined} className="h-[35px] flex-none line-clamp-2 font-mono text-[11.5px] leading-normal text-[#c9c6c0] [overflow-wrap:anywhere]">
         {pod.say}

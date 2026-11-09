@@ -192,7 +192,7 @@ function Badge({ name }: { name: string }) {
 export default function PackageList() {
   return (
     <section className="py-24">
-      <div className="mx-auto max-w-6xl px-6 sm:px-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-8">
         <h2 className="text-2xl font-semibold text-text-primary">Packages</h2>
         <p className="mt-2 text-text-muted">
           {total} packages in one repository, released together at one version,

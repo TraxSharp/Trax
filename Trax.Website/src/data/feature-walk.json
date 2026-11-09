@@ -1,0 +1,659 @@
+{
+  "sample": "CheckIn",
+  "feature": {
+    "file": "features/checking-in.feature",
+    "text": "Feature: Checking in for a flight\n  A passenger checks in once check-in opens, with a passport number and a seat, and gets a boarding pass. A\n  passenger who has not checked in when the gate closes misses the flight.\n\n  Background:\n    Given Ada is a passenger\n    And Ada has a booking\n\n  Scenario: Check-in opens for everyone booked on the flight\n    Given the flight is scheduled\n    When check-in opens for the flight\n    Then the flight is open for check-in\n    And Ada's booking is open for check-in\n    And Ada's departures show status \"Check-in open\"\n\n  Scenario: A passenger checks in and gets a boarding pass\n    Given Ada's booking is open for check-in\n    And Ada's booking has a passport number\n    When Ada checks in for her booking in seat \"14C\"\n    Then Ada's booking is getting a boarding pass\n    When the boarding pass is issued\n    Then Ada's booking is checked in\n    And Ada's bookings show seat \"14C\"\n\n  Scenario: Checking in with no passport number is refused\n    Given Ada's booking is open for check-in\n    And Ada's booking has no passport number\n    When Ada checks in for her booking in seat \"14C\"\n    Then Ada is told \"Add your passport number first.\"\n    And Ada's booking is still open for check-in\n\n  Scenario: An expired passport is turned down\n    Given Ada's booking is open for check-in\n    When Ada gives passport \"X0000000\" for her booking\n    Then Ada's booking is open for check-in\n    When Ada checks in for her booking in seat \"14C\"\n    Then Ada's booking is getting a boarding pass\n    When the passport is turned down\n    Then Ada's booking was turned down\n    And Ada's bookings show status \"Passport not accepted\"\n\n  Scenario: The gate closes on a passenger who has not checked in\n    Given Ada's booking is open for check-in\n    And the flight is open for check-in\n    When the flight closes its gate\n    Then the flight is closed\n    And Ada's booking missed the flight\n    And Ada's bookings show status \"Missed the flight\"\n    And Ada's departures show status \"Gate closed\"\n\n  Scenario: A passenger gives a passport number\n    Given Ada's booking is open for check-in\n    When Ada gives passport \"X1234567\" for her booking\n    Then Ada's booking is open for check-in\n\n  Scenario: Checking in before check-in opens does nothing\n    When Ada checks in for her booking in seat \"14C\"\n    Then Ada's booking is still booked\n\n  Scenario: A checked-in passenger waits for the flight\n    Given Ada's booking is checked in\n    When 10 seconds pass\n    Then Ada's booking is still checked in\n\n  Scenario: A booking opens for check-in\n    When Ada's booking opens for check-in\n    Then Ada's booking is open for check-in\n\n  Scenario: A booking misses the flight\n    Given Ada's booking is open for check-in\n    When Ada's booking misses the flight\n    Then Ada's booking missed the flight\n\n  # The host's boarding pass train never fails or is called off by itself: these two run in memory only.\n  @in-memory\n  Scenario: A boarding pass that cannot be issued leaves the booking without one\n    Given Ada's booking is open for check-in\n    And Ada's booking has a passport number\n    When Ada checks in for her booking in seat \"14C\"\n    Then Ada's booking is getting a boarding pass\n    When the boarding pass cannot be issued\n    Then Ada's booking has no boarding pass\n\n  @in-memory\n  Scenario: A boarding pass called off leaves the booking without one\n    Given Ada's booking is open for check-in\n    And Ada's booking has a passport number\n    When Ada checks in for her booking in seat \"14C\"\n    Then Ada's booking is getting a boarding pass\n    When issuing the boarding pass is called off\n    Then Ada's booking has no boarding pass\n    And Ada's bookings show status \"No boarding pass yet\"\n"
+  },
+  "access": {
+    "file": "machines/access.txt",
+    "text": "@agent: roles agent\n@passenger: roles passenger\nbooking CheckIn: passenger\nbooking GivePassport: passenger\nbooking Miss: the server only\nbooking OpenCheckIn: the server only\nbooking read: passenger\nbooking start: passenger\ndesk CloseGate: agent\ndesk OpenDesk: agent\ndesk read: agent\ndesk start: agent\nflight CloseGate: the server only\nflight OpenCheckIn: the server only\nview bookings: passenger\nview departures: agent, passenger\n"
+  },
+  "machines": {
+    "booking": {
+      "file": "machines/booking.ir.json",
+      "ir": {
+        "committedStates": [],
+        "context": {
+          "Booked": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "passport",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "seat",
+                "nullable": true,
+                "type": "string"
+              }
+            ]
+          },
+          "CheckedIn": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "passport",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "seat",
+                "nullable": true,
+                "type": "string"
+              }
+            ]
+          },
+          "Issuing": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "passport",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "seat",
+                "nullable": true,
+                "type": "string"
+              }
+            ]
+          },
+          "Missed": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "passport",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "seat",
+                "nullable": true,
+                "type": "string"
+              }
+            ]
+          },
+          "NotIssued": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "passport",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "seat",
+                "nullable": true,
+                "type": "string"
+              }
+            ]
+          },
+          "Open": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "passport",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "seat",
+                "nullable": true,
+                "type": "string"
+              }
+            ]
+          },
+          "TurnedDown": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "passport",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "seat",
+                "nullable": true,
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "id": "booking",
+        "initialContext": {
+          "passport": "",
+          "seat": null
+        },
+        "initialState": "Booked",
+        "inputs": {
+          "CheckIn": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "seat",
+                "nullable": false,
+                "type": "string"
+              }
+            ]
+          },
+          "GivePassport": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "passport",
+                "nullable": false,
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "outcomes": {
+          "Issuing.cancelled": {
+            "edges": [
+              {
+                "to": "NotIssued"
+              }
+            ],
+            "outcome": "cancelled",
+            "state": "Issuing"
+          },
+          "Issuing.done": {
+            "edges": [
+              {
+                "guard": {
+                  "field": "accepted",
+                  "rule": "boolEquals",
+                  "source": "input",
+                  "value": true
+                },
+                "to": "CheckedIn"
+              },
+              {
+                "guard": {
+                  "field": "accepted",
+                  "rule": "boolEquals",
+                  "source": "input",
+                  "value": false
+                },
+                "to": "TurnedDown"
+              }
+            ],
+            "outcome": "done",
+            "output": {
+              "fields": [
+                {
+                  "constraints": [],
+                  "name": "accepted",
+                  "nullable": false,
+                  "type": "boolean"
+                }
+              ]
+            },
+            "state": "Issuing"
+          },
+          "Issuing.failed": {
+            "edges": [
+              {
+                "to": "NotIssued"
+              }
+            ],
+            "outcome": "failed",
+            "state": "Issuing"
+          }
+        },
+        "states": [
+          "Booked",
+          "CheckedIn",
+          "Issuing",
+          "Missed",
+          "NotIssued",
+          "Open",
+          "TurnedDown"
+        ],
+        "transitions": [
+          {
+            "from": "Booked",
+            "to": "Open",
+            "trigger": "OpenCheckIn"
+          },
+          {
+            "from": "Open",
+            "guard": {
+              "field": "passport",
+              "rule": "nonEmpty",
+              "source": "context"
+            },
+            "guardMessage": "Add your passport number first.",
+            "reduce": {
+              "reduce": "set",
+              "steps": [
+                {
+                  "field": "seat",
+                  "value": {
+                    "input": "seat"
+                  }
+                }
+              ]
+            },
+            "to": "Issuing",
+            "trigger": "CheckIn"
+          },
+          {
+            "from": "Open",
+            "reduce": {
+              "reduce": "set",
+              "steps": [
+                {
+                  "field": "passport",
+                  "value": {
+                    "input": "passport"
+                  }
+                }
+              ]
+            },
+            "to": "Open",
+            "trigger": "GivePassport"
+          },
+          {
+            "from": "Open",
+            "to": "Missed",
+            "trigger": "Miss"
+          }
+        ],
+        "triggers": [
+          "CheckIn",
+          "GivePassport",
+          "Miss",
+          "OpenCheckIn"
+        ],
+        "version": 1
+      }
+    },
+    "flight": {
+      "file": "machines/flight.ir.json",
+      "ir": {
+        "committedStates": [],
+        "context": {
+          "Closed": {
+            "fields": []
+          },
+          "Departed": {
+            "fields": []
+          },
+          "Open": {
+            "fields": []
+          },
+          "Scheduled": {
+            "fields": []
+          }
+        },
+        "id": "flight",
+        "initialContext": {},
+        "initialState": "Scheduled",
+        "inputs": {},
+        "states": [
+          "Closed",
+          "Departed",
+          "Open",
+          "Scheduled"
+        ],
+        "timers": [
+          {
+            "after": "PT4S",
+            "rules": [
+              "undeclared"
+            ],
+            "state": "Closed",
+            "target": "Departed",
+            "trigger": "Closed.after"
+          },
+          {
+            "after": "PT10S",
+            "rules": [
+              "undeclared"
+            ],
+            "state": "Departed",
+            "target": "Scheduled",
+            "trigger": "Departed.after"
+          }
+        ],
+        "transitions": [
+          {
+            "from": "Closed",
+            "to": "Closed",
+            "trigger": "CloseGate"
+          },
+          {
+            "from": "Open",
+            "to": "Closed",
+            "trigger": "CloseGate"
+          },
+          {
+            "from": "Open",
+            "to": "Open",
+            "trigger": "OpenCheckIn"
+          },
+          {
+            "from": "Scheduled",
+            "to": "Open",
+            "trigger": "OpenCheckIn"
+          }
+        ],
+        "triggers": [
+          "CloseGate",
+          "OpenCheckIn"
+        ],
+        "version": 1
+      }
+    }
+  },
+  "host": {
+    "file": "machines/host.json",
+    "policies": [
+      {
+        "shape": "toSystem",
+        "then": {
+          "key": "flight/tx101",
+          "machine": "flight",
+          "trigger": "CloseGate"
+        },
+        "when": {
+          "enters": "Closing",
+          "machine": "desk"
+        }
+      },
+      {
+        "shape": "toSystem",
+        "then": {
+          "key": "flight/tx101",
+          "machine": "flight",
+          "trigger": "OpenCheckIn"
+        },
+        "when": {
+          "enters": "Open",
+          "machine": "desk"
+        }
+      },
+      {
+        "shape": "broadcast",
+        "then": {
+          "inState": "Open",
+          "machine": "booking",
+          "trigger": "Miss"
+        },
+        "when": {
+          "enters": "Closed",
+          "machine": "flight"
+        }
+      },
+      {
+        "shape": "broadcast",
+        "then": {
+          "inState": "Booked",
+          "machine": "booking",
+          "trigger": "OpenCheckIn"
+        },
+        "when": {
+          "enters": "Open",
+          "machine": "flight"
+        }
+      }
+    ]
+  },
+  "glossary": {
+    "file": "features/glossary.json",
+    "glossary": {
+      "version": 1,
+      "actors": {
+        "passenger": {
+          "noun": "a passenger",
+          "roles": [
+            "passenger"
+          ]
+        },
+        "agent": {
+          "noun": "a gate agent",
+          "roles": [
+            "agent"
+          ]
+        }
+      },
+      "machines": {
+        "booking": {
+          "ownedBy": "passenger",
+          "noun": "booking",
+          "start": "has a booking",
+          "initial": "Booked",
+          "context": [
+            {
+              "name": "passport",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            },
+            {
+              "name": "seat",
+              "type": "string",
+              "nullable": true,
+              "constraints": []
+            }
+          ],
+          "states": {
+            "Booked": "is booked",
+            "Open": "is open for check-in",
+            "Issuing": "is getting a boarding pass",
+            "CheckedIn": "is checked in",
+            "TurnedDown": "was turned down",
+            "NotIssued": "has no boarding pass",
+            "Missed": "missed the flight"
+          },
+          "triggers": {
+            "GivePassport": {
+              "phrase": "gives passport {passport} for {subject}",
+              "input": [
+                {
+                  "name": "passport",
+                  "type": "string",
+                  "nullable": false,
+                  "constraints": []
+                }
+              ],
+              "reduce": {
+                "reduce": "set",
+                "steps": [
+                  {
+                    "field": "passport",
+                    "value": {
+                      "input": "passport"
+                    }
+                  }
+                ]
+              }
+            },
+            "CheckIn": {
+              "phrase": "checks in for {subject} in seat {seat}",
+              "input": [
+                {
+                  "name": "seat",
+                  "type": "string",
+                  "nullable": false,
+                  "constraints": []
+                }
+              ],
+              "reduce": {
+                "reduce": "set",
+                "steps": [
+                  {
+                    "field": "seat",
+                    "value": {
+                      "input": "seat"
+                    }
+                  }
+                ]
+              }
+            },
+            "OpenCheckIn": {
+              "phrase": "{subject} opens for check-in"
+            },
+            "Miss": {
+              "phrase": "{subject} misses the flight"
+            }
+          },
+          "guards": {
+            "hasPassport": {
+              "holds": "has a passport number",
+              "fails": "has no passport number",
+              "rule": {
+                "rule": "nonEmpty",
+                "source": "context",
+                "field": "passport"
+              }
+            }
+          },
+          "invokes": {
+            "Issuing": {
+              "train": "Trax.Samples.CheckIn.Trains.IIssueBoardingPassTrain",
+              "input": {
+                "passport": "passport"
+              },
+              "output": [
+                {
+                  "name": "accepted",
+                  "type": "boolean",
+                  "nullable": false,
+                  "constraints": []
+                }
+              ],
+              "outcomes": {
+                "the boarding pass is issued": {
+                  "outcome": "done",
+                  "when": {
+                    "rule": "boolEquals",
+                    "source": "input",
+                    "field": "accepted",
+                    "value": true
+                  }
+                },
+                "the passport is turned down": {
+                  "outcome": "done",
+                  "when": {
+                    "rule": "boolEquals",
+                    "source": "input",
+                    "field": "accepted",
+                    "value": false
+                  }
+                },
+                "the boarding pass cannot be issued": {
+                  "outcome": "failed"
+                },
+                "issuing the boarding pass is called off": {
+                  "outcome": "cancelled"
+                }
+              },
+              "examples": {
+                "the boarding pass is issued": {
+                  "accepted": true
+                },
+                "the passport is turned down": {
+                  "accepted": false
+                }
+              }
+            }
+          }
+        },
+        "desk": {
+          "ownedBy": "agent",
+          "noun": "desk",
+          "start": "has a desk",
+          "initial": "Waiting",
+          "states": {
+            "Waiting": "is waiting",
+            "Open": "is open",
+            "Closing": "is closing the gate",
+            "Done": "is done"
+          },
+          "triggers": {
+            "OpenDesk": {
+              "phrase": "opens {subject}"
+            },
+            "CloseGate": {
+              "phrase": "closes the gate at {subject}"
+            }
+          }
+        },
+        "flight": {
+          "system": "flight/tx101",
+          "name": "the flight",
+          "initial": "Scheduled",
+          "states": {
+            "Scheduled": "is scheduled",
+            "Open": "is open for check-in",
+            "Closed": "is closed",
+            "Departed": "has departed"
+          },
+          "triggers": {
+            "OpenCheckIn": {
+              "phrase": "check-in opens for the flight"
+            },
+            "CloseGate": {
+              "phrase": "the flight closes its gate"
+            }
+          }
+        }
+      },
+      "views": {
+        "bookings": {
+          "reads": [
+            {
+              "machine": "booking"
+            }
+          ],
+          "fields": {
+            "status": {
+              "from": "booking.state",
+              "labels": {
+                "Booked": "Booked",
+                "Open": "Open for check-in",
+                "Issuing": "Getting a boarding pass",
+                "CheckedIn": "Checked in",
+                "TurnedDown": "Passport not accepted",
+                "NotIssued": "No boarding pass yet",
+                "Missed": "Missed the flight"
+              }
+            },
+            "seat": {
+              "from": "booking.seat"
+            }
+          }
+        },
+        "departures": {
+          "reads": [
+            {
+              "machine": "flight",
+              "key": "flight/tx101"
+            }
+          ],
+          "fields": {
+            "status": {
+              "from": "flight.state",
+              "labels": {
+                "Scheduled": "Scheduled",
+                "Open": "Check-in open",
+                "Closed": "Gate closed",
+                "Departed": "Departed"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -4,9 +4,9 @@ import AgentPrompt from "./AgentPrompt";
 export default function Hero() {
   return (
     <section className="relative overflow-hidden border-b border-border">
-      <div className="mx-auto max-w-6xl px-6 pb-8 pt-10 sm:px-8 lg:pt-12">
+      <div className="mx-auto max-w-7xl px-4 pb-8 pt-10 sm:px-8 lg:pt-12">
         <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-          <div className="max-w-2xl">
+          <div className="max-w-3xl">
             <h1 className="text-4xl font-bold leading-[1.15] tracking-tight text-text-primary sm:text-5xl lg:text-[44px] xl:text-5xl">
               one description of your app, for the whole team
             </h1>

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import CodeFold from "./CodeFold";
+import PhoneFrame from "./PhoneFrame";
 import ReplayToolbar, { PrimaryButton, ToolButton } from "./ReplayToolbar";
 import { useFitCode } from "./useFitCode";
 import data from "@/data/chat-service-recordings.json";
@@ -9,7 +11,6 @@ import {
   advance,
   begin,
   busy,
-  choices,
   choose,
   describe,
   focusOf,
@@ -29,8 +30,27 @@ import { replayNow } from "@/lib/replay-pace";
 const recording = data as ChatRecording;
 const fileName = (path: string) => path.split("/").pop() ?? path;
 
+// The recording branches: two lines for each turn, and Charlie can try or be added at any point. The home page plays
+// one path through it, a move at a time.
+type Move = { label: string; run: (p: ChatPlayback, now: number) => ChatPlayback | null };
+const line = (key: string): Move => {
+  const l = [...recording.lines].find((x) => x.key === key);
+  return { label: `${l?.speaker ?? ""}: “${l?.content ?? ""}”`, run: (p, now) => choose(recording, p, key, now) };
+};
+const SCRIPT: Move[] = [
+  { label: "Alice opens the room and adds Bob", run: (_p, now) => begin(recording, now) },
+  line("a"),
+  line("a1"),
+  { label: "Charlie, not in the room, tries to listen in", run: (p, now) => refuse(recording, p, now) },
+  { label: "Alice adds Charlie", run: (p, now) => addCharlie(recording, p, now) },
+  line("a1y"),
+];
+
 export default function ChatServiceReplay() {
   const [playback, setPlayback] = useState<ChatPlayback | null>(null);
+  // How many moves of the script have been started.
+  const [done, setDone] = useState(0);
+  const [auto, setAuto] = useState(false);
   const playing = playback != null && busy(playback);
 
   useEffect(() => {
@@ -39,10 +59,32 @@ export default function ChatServiceReplay() {
     return () => clearInterval(timer);
   }, [playing]);
 
-  const start = useCallback(() => setPlayback(begin(recording, replayNow())), []);
-  const send = (key: string) => setPlayback((p) => (p ? (choose(recording, p, key, replayNow()) ?? p) : p));
-  const letCharlieTry = () => setPlayback((p) => (p ? (refuse(recording, p, replayNow()) ?? p) : p));
-  const letCharlieIn = () => setPlayback((p) => (p ? (addCharlie(recording, p, replayNow()) ?? p) : p));
+  const next = useCallback(() => {
+    const move = SCRIPT[done];
+    if (!move || (playback && busy(playback))) return;
+    const now = replayNow();
+    const after = done === 0 ? begin(recording, now) : playback ? move.run(playback, now) : null;
+    if (!after) return;
+    setPlayback(after);
+    setDone(done + 1);
+  }, [done, playback]);
+  const start = useCallback(() => {
+    setDone(0);
+    setPlayback(null);
+    setAuto(true);
+  }, []);
+  const reset = () => {
+    setAuto(false);
+    setDone(0);
+    setPlayback(null);
+  };
+
+  // Played by itself, each move starts a moment after the last one has finished showing.
+  useEffect(() => {
+    if (!auto || playing || done >= SCRIPT.length) return;
+    const timer = setTimeout(next, done === 0 ? 0 : 1400);
+    return () => clearTimeout(timer);
+  }, [auto, playing, done, next]);
 
   // Open the room the first time the demo is on screen, unless the reader prefers less motion.
   const root = useRef<HTMLDivElement>(null);
@@ -56,49 +98,35 @@ export default function ChatServiceReplay() {
         if (!entry.isIntersecting || started.current) return;
         started.current = true;
         observer.disconnect();
-        start();
+        setAuto(true);
       },
       { threshold: 0.2 },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [start]);
+  }, []);
 
-  const offered = playback ? choices(recording, playback) : [];
-  const prologueDone = playback != null && !playback.queue.some((q) => q.segment === "prologue");
-  const charlieIn = playback?.charlieJoinedAt != null;
+  const upNext = SCRIPT[done];
 
   return (
     <div ref={root} className="flex flex-col gap-4">
-      {/* The next line goes where the other demos put their caption: here, choosing it is what moves the story. */}
       <ReplayToolbar
-        caption={
-          offered.length > 0 ? (
-            <>
-              <span className="text-xs text-text-muted">{offered[0].speaker} says:</span>
-              {offered.map((line) => (
-                <ToolButton key={line.key} onClick={() => send(line.key)}>
-                  {line.content}
-                </ToolButton>
-              ))}
-            </>
-          ) : !playback ? null : !prologueDone ? (
-            "Alice is creating the room and adding Bob..."
-          ) : playing ? (
-            "Sending..."
-          ) : null
-        }
-        hint="Open the room, then pick what Alice and Bob say."
-        reserve="min-h-[124px] sm:min-h-[58px]"
+        caption={done > 0 ? `${done}. ${SCRIPT[done - 1].label}` : null}
+        hint="Play runs the conversation against the recording, or step through it with Next."
       >
-        {!playback ? <PrimaryButton onClick={start}>Open the room</PrimaryButton> : null}
-        <ToolButton onClick={letCharlieTry} disabled={!prologueDone || playing || playback?.refused || charlieIn}>
-          Charlie tries to listen in
+        <PrimaryButton onClick={done >= SCRIPT.length ? start : () => setAuto(true)} disabled={auto && done < SCRIPT.length}>
+          {done >= SCRIPT.length ? "Play again" : "Play"}
+        </PrimaryButton>
+        <ToolButton
+          onClick={() => {
+            setAuto(false);
+            next();
+          }}
+          disabled={playing || !upNext}
+        >
+          {upNext ? `Next: ${upNext.label}` : "Done"}
         </ToolButton>
-        <ToolButton onClick={letCharlieIn} disabled={!prologueDone || playing || charlieIn}>
-          Alice adds Charlie
-        </ToolButton>
-        <ToolButton onClick={() => setPlayback(null)} disabled={!playback}>
+        <ToolButton onClick={reset} disabled={!playback}>
           Reset
         </ToolButton>
       </ReplayToolbar>
@@ -109,10 +137,14 @@ export default function ChatServiceReplay() {
         <ChatView user="Charlie" playback={playback} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        <UnderTheHood played={playback?.played ?? []} />
-        <CodePanel played={playback?.played ?? []} />
-      </div>
+      <CodeFold label="What each client sent and received, and the code that ran" pulse={playback?.played.length ?? 0}
+        color={latestTone(playback?.played ?? [])}
+      >
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+          <UnderTheHood played={playback?.played ?? []} />
+          <CodePanel played={playback?.played ?? []} />
+        </div>
+      </CodeFold>
 
     </div>
   );
@@ -139,11 +171,10 @@ function ChatView({ user, playback }: { user: string; playback: ChatPlayback | n
   const view = playback ? viewOf(playback, user) : { room: false, subscribed: false, lines: [] as ViewLine[] };
   const box = useStickToEnd(view.lines.length);
   return (
-    // Each person's phone: a rounded frame with a thin bar for the notch, showing the chat app's screen.
+    // Each person's phone, showing the chat app's screen.
     <div className="flex min-w-0 justify-center">
-      <div className="flex h-[400px] w-full max-w-[300px] flex-col overflow-hidden rounded-[2rem] border border-border bg-bg-secondary px-3 pb-3 pt-2.5 lg:h-[480px]">
-        <div className="mx-auto mb-3 h-1.5 w-16 rounded-full bg-border" />
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-border bg-bg-primary">
+      <PhoneFrame height="h-[440px] lg:h-[500px]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-bg-primary">
           <div className="border-b border-border px-4 pb-2.5 pt-3">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-text-primary">{user}</span>
@@ -184,9 +215,16 @@ function ChatView({ user, playback }: { user: string; playback: ChatPlayback | n
             )}
           </div>
         </div>
-      </div>
+      </PhoneFrame>
     </div>
   );
+}
+
+// The colour of the latest thing shown, as the log below draws it, for the fold's bar.
+const TONE_HEX: Record<Described["tone"], string> = { out: "#7a9ec2", in: "#6cc596", event: "#d4a24c", refused: "#c45c5c", info: "#8f8b84" };
+function latestTone(played: Played[]): string | undefined {
+  const last = played.at(-1);
+  return last ? TONE_HEX[describe(last, played).tone] : undefined;
 }
 
 const TONES: Record<Described["tone"], string> = {

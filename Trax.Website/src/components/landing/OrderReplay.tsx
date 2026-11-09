@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import ReplayToolbar, { PrimaryButton, ToolButton, ToolSelect, ToolbarPills } from "./ReplayToolbar";
+import CodeFold from "./CodeFold";
+import PhoneFrame from "./PhoneFrame";
+import ReplayToolbar, { PrimaryButton, ToolButton, ToolbarPills } from "./ReplayToolbar";
 import StepButtons from "./StepButtons";
 import { alignChains, codeLineLayout, useFitCode } from "./useFitCode";
 import { replayNow } from "@/lib/replay-pace";
@@ -13,6 +15,8 @@ import { ORDER, STAGES, durationOf, eventsOf, trackAt, viewAt, type OrderRecordi
 // host, with the time each thing arrived. Re-record when the machine, its train or the page change.
 const recordings = data as unknown as OrderRecordings;
 const scenarios: Scenario[] = Array.isArray(recordings.scenarios) ? recordings.scenarios : [];
+// The recording holds four scenarios; the home page plays the plain order, start to the door.
+const KEY = "order";
 
 // A stage's colour at a given strength: a quiet tint for fills, a stronger one for borders.
 const tint = (stage: Stage, alpha: number) =>
@@ -21,7 +25,7 @@ const tint = (stage: Stage, alpha: number) =>
     .padStart(2, "0")}`;
 
 export default function OrderReplay() {
-  const [key, setKey] = useState(scenarios[0]?.key ?? "order");
+  const key = KEY;
   const [playing, setPlaying] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   // Back or Next stops the clock: from then on the replay moves only when the reader steps.
@@ -75,7 +79,7 @@ export default function OrderReplay() {
         if (!entry.isIntersecting || autoplayed.current) return;
         autoplayed.current = true;
         observer.disconnect();
-        if (scenarios[0]) run(scenarios[0].key);
+        run(KEY);
       },
       { threshold: 0.2 },
     );
@@ -83,32 +87,15 @@ export default function OrderReplay() {
     return () => observer.disconnect();
   }, [run]);
 
-  const leaves = key === "left-in-cart";
-
   return (
     <div ref={root} className="flex flex-col gap-4">
       <ReplayToolbar caption={view?.note} hint="Place the order and watch the machine run its train, or step through it with Back and Next.">
-        <ToolSelect
-          label="Scenario"
-          value={key}
-          disabled={active}
-          onChange={(e) => {
-            setKey(e.target.value as Scenario["key"]);
-            reset();
-          }}
-        >
-          {scenarios.map((s) => (
-            <option key={s.key} value={s.key}>
-              {s.title}
-            </option>
-          ))}
-        </ToolSelect>
         <span className="flex items-baseline gap-3 rounded-md border border-border bg-bg-primary px-3 py-2">
           <span className="text-text-primary">{ORDER.item}</span>
           <span className="text-text-muted">{ORDER.price}</span>
         </span>
         <PrimaryButton onClick={() => run(key)} disabled={active}>
-          {leaves ? "Leave it in the cart" : "Place order"}
+          Place order
         </PrimaryButton>
         <StepButtons
           onBack={() => step(false)}
@@ -145,24 +132,28 @@ export default function OrderReplay() {
         <PhonePanel view={view} />
       </div>
 
-      {/* The run is the demo; the code that drives it sits below, lit in step with it, for whoever wants to look. */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        {recordings.source && (
-          <CodePanel
-            kind="machine"
-            source={recordings.source}
-            lit={view?.lit ?? null}
-            revision={view?.revision ?? null}
-          />
-        )}
-        {recordings.train?.source && (
-          <CodePanel
-            kind="train"
-            source={recordings.train.source}
-            lit={view?.trainLit ? { step: view.trainLit.step, stage: view.trainLit.stage } : null}
-          />
-        )}
-      </div>
+      {/* The run is the demo; the code that drives it is folded below it, lit in step with it. */}
+      <CodeFold label="The machine and the workflow, lit as it runs" pulse={`${JSON.stringify(view?.lit ?? null)}|${view?.trainLit?.step ?? ""}`}
+        color={STAGES[(view?.trainLit ?? view?.lit)?.stage ?? "sent"]?.color}
+      >
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          {recordings.source && (
+            <CodePanel
+              kind="machine"
+              source={recordings.source}
+              lit={view?.lit ?? null}
+              revision={view?.revision ?? null}
+            />
+          )}
+          {recordings.train?.source && (
+            <CodePanel
+              kind="train"
+              source={recordings.train.source}
+              lit={view?.trainLit ? { step: view.trainLit.step, stage: view.trainLit.stage } : null}
+            />
+          )}
+        </div>
+      </CodeFold>
 
     </div>
   );
@@ -283,12 +274,11 @@ function PhonePanel({ view }: { view: ReturnType<typeof viewAt> | null }) {
     if (box.current) box.current.scrollTop = box.current.scrollHeight;
   }, [lines.length]);
 
-  // A plain phone: a rounded frame with a thin bar for the notch, showing a delivery app's screen.
+  // The phone, showing a delivery app's screen.
   return (
     <div className="flex min-w-0 justify-center">
-      <div className="flex h-[420px] w-full max-w-[300px] flex-col overflow-hidden rounded-[2rem] border border-border bg-bg-secondary px-3 pb-3 pt-2.5">
-        <div className="mx-auto mb-3 h-1.5 w-16 rounded-full bg-border" />
-        <div className="flex flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-border bg-bg-primary">
+      <PhoneFrame height="h-[420px]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-bg-primary">
           <div className="border-b border-border px-4 pb-3 pt-4">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Your order</p>
             <p className="text-xs text-text-secondary">{ORDER.restaurant}</p>
@@ -321,7 +311,7 @@ function PhonePanel({ view }: { view: ReturnType<typeof viewAt> | null }) {
             ))}
           </div>
         </div>
-      </div>
+      </PhoneFrame>
     </div>
   );
 }

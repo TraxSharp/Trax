@@ -20,7 +20,7 @@ const fields: { name: string; value: string; tone?: "fail" }[] = [
 export default function RunRecord() {
   return (
     <section className="border-b border-border py-24">
-      <div className="mx-auto grid max-w-6xl gap-10 px-6 sm:px-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-16">
+      <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-16">
         <div>
           <h2 className="text-2xl font-semibold text-text-primary">
             Every run leaves a record

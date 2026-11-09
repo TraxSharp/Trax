@@ -1,7 +1,7 @@
 # Sample recordings
 
 traxsharp.net's landing page lets a reader try samples in the browser without running anything: follow a food
-order, watch agents work a board, crash a refund, chat over WebSockets, and call a persisted-operations API. Each tab plays recordings of the real sample, and these scripts make them. Each one drives
+order, watch agents work a board, crash a refund and chat over WebSockets. Each demo plays recordings of the real sample, and these scripts make them. Each one drives
 its sample's running host over the same requests the sample's own page or client sends, and writes down every
 request, response and pushed event, with the time it arrived. Nothing the website shows is made up; where a sample
 takes free input, the recorder records a few presets instead. A sixth script records the operations dashboard that
@@ -23,7 +23,7 @@ script:
 | StateMachine | `node state-machine.mjs` | `STATE_MACHINE_HOST`, default `localhost:5280` | every button the page offers from every state it can reach, for both machines |
 | ChatService | `node chat-service.mjs` | `CHAT_HOST`, default `localhost:5210` | Alice and Bob in one room, a small tree of lines to pick from, a listener who is refused, and Charlie added at every point of the conversation |
 | SignalRBroadcaster | `node signalr-broadcaster.mjs` | `SIGNALR_HOST`, default `localhost:5270` | the refused connection, sign-in, every kind of ping and the events the hub pushes, sign-out |
-| PersistedOperations | `node persisted-operations.mjs` | `PERSISTED_OPERATIONS_HOST`, default `localhost:5240` | every call and management action in each state the store can be in |
+| PersistedOperations | `node persisted-operations.mjs` | `PERSISTED_OPERATIONS_HOST`, default `localhost:5240` | every call and management action in each state the store can be in; the landing page no longer shows it |
 | The dashboard | `node dashboard.mjs` | starts Scheduling, Recovery and PersistedOperations itself | every page, filter, row and write of the operations dashboard, from all three hosts |
 
 Each script writes its raw recording under `out/` (gitignored). Add `--copy-to ../../../Trax.Website/src/data` to

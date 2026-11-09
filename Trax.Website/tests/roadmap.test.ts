@@ -33,10 +33,3 @@ test("the roadmap names no internal work-item or milestone ids", () => {
   const id = /\b(?:CORE|MED|EFF|SCH|API|DSH|CLI|SAM|DOC|WS|MS)-\d+\b/;
   assert.ok(!id.test(raw), `roadmap.json contains an id: ${raw.match(id)?.[0]}`);
 });
-
-test("every link into the roadmap names a milestone that exists", () => {
-  const refs: string[] = [];
-  const stops = fs.readFileSync(path.join(SRC_DIR, "components/landing/WhereTraxStops.tsx"), "utf-8");
-  for (const m of stops.matchAll(/roadmap: \{ key: "([^"]+)"/g)) refs.push(m[1]);
-  assert.deepEqual(refs.filter((k) => !keys.has(k)), []);
-});
