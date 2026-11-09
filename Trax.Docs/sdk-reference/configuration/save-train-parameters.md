@@ -36,7 +36,7 @@ public static TBuilder SaveTrainParameters<TBuilder>(
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `jsonSerializerOptions` | `JsonSerializerOptions?` | `TraxJsonSerializationOptions.Default` | The options inputs and outputs are serialized with. They become the builder's `TrainParameterJsonSerializerOptions`. |
+| `jsonSerializerOptions` | `JsonSerializerOptions?` | `TraxJsonSerializationOptions.Default` | The options inputs and outputs are serialized with. They become the builder's `TrainParameterJsonSerializerOptions`. The default camel-cases member names and writes dictionary keys as they are. |
 | `configure` | `Action<ParameterEffectConfiguration>?` | `null` | Sets what is serialized, and the ceiling |
 
 ### ParameterEffectConfiguration

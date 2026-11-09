@@ -77,6 +77,20 @@ public class StoredJsonOptionsTests
     }
 
     [TestCaseSource(nameof(StoredOptions))]
+    public void A_dictionary_is_read_back_with_the_keys_it_was_written_with(
+        JsonSerializerOptions options
+    )
+    {
+        var totals = new Dictionary<string, int> { ["Ada"] = 1, ["bo"] = 2 };
+
+        var json = JsonSerializer.Serialize(totals, options);
+        var read = JsonSerializer.Deserialize<Dictionary<string, int>>(json, options)!;
+
+        read.Keys.Should()
+            .BeEquivalentTo(["Ada", "bo"], "a dictionary's keys are data, not member names");
+    }
+
+    [TestCaseSource(nameof(StoredOptions))]
     public void An_input_nested_twenty_deep_is_written_and_read_back(JsonSerializerOptions options)
     {
         var input = Nested(20);
