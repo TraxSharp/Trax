@@ -16,7 +16,8 @@ operations console. Each step shows every file it changes in full, and what you 
 The [Glossary](/docs/reference/glossary) says what each Trax name means in plain terms: a train is a
 workflow, a junction one of its steps.
 
-Every C# block on this page is compiled in CI against the package versions in the project file below.
+Every C# block on this page is compiled in CI against Trax's current source. The project file below
+pins the release this site was published from.
 
 ## Requirements
 
@@ -47,22 +48,22 @@ each one:
 
   <ItemGroup>
     <!-- Steps 2 and 3: trains, the effect system, the train bus. -->
-    <PackageReference Include="Trax.Effect" Version="1.61.0" />
-    <PackageReference Include="Trax.Effect.Data.InMemory" Version="1.61.0" />
-    <PackageReference Include="Trax.Mediator" Version="1.61.0" />
+    <PackageReference Include="Trax.Effect" Version="1.69.0" />
+    <PackageReference Include="Trax.Effect.Data.InMemory" Version="1.69.0" />
+    <PackageReference Include="Trax.Mediator" Version="1.69.0" />
 
     <!-- Step 4: Postgres, saved inputs and outputs, a log line per junction. -->
-    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.61.0" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" Version="1.61.0" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.69.0" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.69.0" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" Version="1.69.0" />
 
     <!-- Step 5: the scheduler. -->
-    <PackageReference Include="Trax.Scheduler" Version="1.61.0" />
+    <PackageReference Include="Trax.Scheduler" Version="1.69.0" />
 
     <!-- Step 6: GraphQL, an API key to call it with, and the operations console. -->
-    <PackageReference Include="Trax.Api.GraphQL" Version="1.61.0" />
-    <PackageReference Include="Trax.Api.Auth.ApiKey" Version="1.61.0" />
-    <PackageReference Include="Trax.Api.Dashboard" Version="1.61.0" />
+    <PackageReference Include="Trax.Api.GraphQL" Version="1.69.0" />
+    <PackageReference Include="Trax.Api.Auth.ApiKey" Version="1.69.0" />
+    <PackageReference Include="Trax.Api.Dashboard" Version="1.69.0" />
   </ItemGroup>
 </Project>
 ```

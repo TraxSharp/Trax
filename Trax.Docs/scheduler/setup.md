@@ -33,10 +33,10 @@ Replace `Reports.csproj` with this:
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" Version="1.61.0" />
-    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.61.0" />
-    <PackageReference Include="Trax.Mediator" Version="1.61.0" />
-    <PackageReference Include="Trax.Scheduler" Version="1.61.0" />
+    <PackageReference Include="Trax.Effect" Version="1.69.0" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.69.0" />
+    <PackageReference Include="Trax.Mediator" Version="1.69.0" />
+    <PackageReference Include="Trax.Scheduler" Version="1.69.0" />
   </ItemGroup>
 </Project>
 ```

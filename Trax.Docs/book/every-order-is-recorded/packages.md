@@ -24,15 +24,15 @@ in-memory storage for the train tests, so they take that package over. Add the n
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Trax.Core" Version="1.61.0" />
-    <PackageVersion Include="Trax.Core.Testing" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
-    <PackageVersion Include="Trax.Mediator" Version="1.61.0" />
-    <PackageVersion Include="Trax.Mediator.Testing" Version="1.61.0" />
+    <PackageVersion Include="Trax.Core" Version="1.69.0" />
+    <PackageVersion Include="Trax.Core.Testing" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.69.0" />
+    <PackageVersion Include="Trax.Mediator" Version="1.69.0" />
+    <PackageVersion Include="Trax.Mediator.Testing" Version="1.69.0" />
   </ItemGroup>
 
   <ItemGroup>

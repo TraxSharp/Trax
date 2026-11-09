@@ -157,6 +157,11 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
           global-json-file: global.json
+      - name: Fetch the release tags the docs pin
+        # DocsPackageVersionsTests checks each package a page pins against the tree of the
+        # release it pins, and of the newest release; the checkout above has no tags.
+        if: matrix.package.folder == 'Trax.Docs'
+        run: .github/scripts/fetch-docs-release-tags.sh
       - name: Restore tools
         working-directory: ${{ matrix.package.folder }}
         run: dotnet tool restore
