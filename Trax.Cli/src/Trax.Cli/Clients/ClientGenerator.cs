@@ -559,12 +559,15 @@ internal sealed partial class ClientGenerator
         {
             if (!IsRoot(parent, writer))
                 continue;
+            // Compared in any case: on a file system that ignores it (macOS, Windows) documents/ is Documents/, and a
+            // refusal on one that does not costs a rename, where letting it through costs the other client's files.
             var first = Path.GetRelativePath(parent, full).Split(Path.DirectorySeparatorChar)[0];
+            bool Is(string name) => string.Equals(first, name, StringComparison.OrdinalIgnoreCase);
             var writes = writer switch
             {
-                Writer.OperationsCSharp => first == "Documents",
-                Writer.OperationsTypeScript => first == "documents",
-                _ => first == "documents" || Served(parent).Contains(first),
+                Writer.OperationsCSharp => Is("Documents"),
+                Writer.OperationsTypeScript => Is("documents"),
+                _ => Is("documents") || Served(parent).Any(Is),
             };
             if (writes)
                 throw new InvalidOperationException(

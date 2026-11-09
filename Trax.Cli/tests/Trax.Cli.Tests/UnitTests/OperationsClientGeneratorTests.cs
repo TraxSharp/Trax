@@ -993,6 +993,96 @@ public class OperationsClientGeneratorTests
         }
     }
 
+    // documents/ and Documents/ are one folder on macOS and Windows, so a client in the other spelling would land in
+    // the folder the outer client writes. It is refused on every file system.
+    [TestCase(false)]
+    [TestCase(true)]
+    public void A_client_in_the_documents_folder_spelled_in_another_case_is_refused(bool csharp)
+    {
+        var dir = Directory.CreateTempSubdirectory("trax-ops-overlap-case-");
+        try
+        {
+            var options = Options(("src/graphql/Runs.graphql", Runs));
+            var nested = Path.Combine(dir.FullName, csharp ? "documents" : "Documents");
+            var ns = ClientGenerator.DefaultOperationsNamespace;
+            void Write(string outDir)
+            {
+                if (csharp)
+                    ClientGenerator.WriteCSharp(options, ns, outDir);
+                else
+                    ClientGenerator.Write(options, outDir);
+            }
+            Write(dir.FullName);
+
+            var second = () => Write(nested);
+
+            second.Should().Throw<InvalidOperationException>().WithMessage("*move one of them*");
+            File.Exists(Path.Combine(nested, csharp ? "Types.g.cs" : "index.g.ts"))
+                .Should()
+                .BeFalse("a refused client writes nothing");
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    // On a file system that keeps case, documents/Runs.g.cs beside the C# client's Documents/Runs.g.cs is another
+    // file, left by an earlier run, and stale.
+    [Test]
+    public void A_generated_file_differing_only_in_case_from_one_the_client_writes_is_stale()
+    {
+        var dir = Directory.CreateTempSubdirectory("trax-ops-cs-case-");
+        try
+        {
+            var options = Options(("src/graphql/Runs.graphql", Runs));
+            var ns = ClientGenerator.DefaultOperationsNamespace;
+            ClientGenerator.WriteCSharp(options, ns, dir.FullName);
+            var written = Path.Combine(dir.FullName, "Documents", "Runs.g.cs");
+            var other = Path.Combine(dir.FullName, "documents", "Runs.g.cs");
+            Directory.CreateDirectory(Path.GetDirectoryName(other)!);
+            if (File.Exists(other))
+                Assert.Ignore("The file system ignores case: documents/ is Documents/ here.");
+            File.Copy(written, other);
+
+            ClientGenerator
+                .CheckCSharp(options, ns, dir.FullName)
+                .Select(d => d.Path)
+                .Should()
+                .Contain("documents/Runs.g.cs");
+            ClientGenerator.WriteCSharp(options, ns, dir.FullName);
+            File.Exists(other).Should().BeFalse("the stale case variant is deleted");
+            File.Exists(written).Should().BeTrue();
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    // On a file system that ignores case, the C# client's Documents/Runs.g.cs is the file a TypeScript-cased listing
+    // spells documents/Runs.g.cs, whichever run made the folder: it is the client's own, not stale.
+    [Test]
+    [Platform("MacOsX,Win")]
+    public void A_documents_folder_made_in_another_case_holds_the_clients_own_files()
+    {
+        var dir = Directory.CreateTempSubdirectory("trax-ops-cs-fold-");
+        try
+        {
+            var options = Options(("src/graphql/Runs.graphql", Runs));
+            var ns = ClientGenerator.DefaultOperationsNamespace;
+            Directory.CreateDirectory(Path.Combine(dir.FullName, "documents"));
+            ClientGenerator.WriteCSharp(options, ns, dir.FullName);
+
+            ClientGenerator.CheckCSharp(options, ns, dir.FullName).Should().BeEmpty();
+            File.Exists(Path.Combine(dir.FullName, "documents", "Runs.g.cs")).Should().BeTrue();
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
     [Test]
     public void A_csharp_folder_that_empties_is_removed_and_one_holding_an_apps_own_file_is_kept()
     {
