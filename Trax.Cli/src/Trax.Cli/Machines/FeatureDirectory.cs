@@ -112,6 +112,22 @@ internal static class FeatureDirectory
         var existing = Owned(outDir);
         Directory.CreateDirectory(outDir);
         var changes = new List<string>();
+        // A file that differs from a derived one only in case goes first. On a file system that ignores case it is the
+        // derived file under another spelling, which writing would keep and the stale pass would then delete; on one
+        // that keeps case it is stale anyway.
+        foreach (
+            var variant in existing
+                .Where(n =>
+                    !files.ContainsKey(n)
+                    && files.Keys.Any(k => string.Equals(k, n, StringComparison.OrdinalIgnoreCase))
+                )
+                .ToList()
+        )
+        {
+            File.Delete(Path.Combine(outDir, variant));
+            existing.Remove(variant);
+            changes.Add($"removed {variant}");
+        }
         foreach (var (name, text) in files)
         {
             var path = Path.Combine(outDir, name);

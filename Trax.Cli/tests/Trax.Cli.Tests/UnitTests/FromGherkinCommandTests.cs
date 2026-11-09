@@ -714,6 +714,57 @@ public class FromGherkinCommandTests
         checkOut.Should().Contain("is up to date");
     }
 
+    [Test]
+    public void Explain_prints_a_warning_to_stderr_and_still_explains()
+    {
+        File.WriteAllText(Path.Combine(Features, "glossary.json"), Quiz);
+        File.Delete(Path.Combine(Features, "ordering.feature"));
+        File.Delete(Path.Combine(Features, "opening.feature"));
+        File.WriteAllText(Path.Combine(Features, "quiz.feature"), Sheets);
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+
+        var exit = MachineCommand.RunExplain(
+            Features,
+            Path.Combine(Features, "glossary.json"),
+            null,
+            stdout,
+            stderr
+        );
+
+        exit.Should().Be(0, stderr.ToString());
+        stderr
+            .ToString()
+            .Should()
+            .StartWith(
+                "warning: quiz.feature:52: When quiz enters Between, the policy quiz.Between>answer-sheet.Clear"
+            );
+        stdout.ToString().Should().NotContain("warning:").And.Contain("quiz.feature:");
+    }
+
+    // On a file system that ignores case, writing checkout.ir.json writes into a Checkout.ir.json already there, and
+    // removing that one as no longer derived would remove what was just written. On one that keeps case, it is
+    // another file and is removed. Either way the directory ends holding the derived names, spelled as derived.
+    [Test]
+    public void An_ir_already_there_in_another_case_ends_spelled_as_derived()
+    {
+        Run().Exit.Should().Be(0);
+        var derived = Path.Combine(Out, "order.ir.json");
+        var text = File.ReadAllText(derived);
+        File.Delete(derived);
+        File.WriteAllText(Path.Combine(Out, "Order.ir.json"), text);
+
+        var (exit, _, err) = Run();
+
+        exit.Should().Be(0, err);
+        Directory
+            .EnumerateFiles(Out)
+            .Select(Path.GetFileName)
+            .Should()
+            .BeEquivalentTo(["order.ir.json", "shop.ir.json", "host.json", "access.txt"]);
+        Run(check: true).Exit.Should().Be(0);
+    }
+
     private (int Exit, string Out, string Err) RunFeatures(MachineCommand.RunArguments? args = null)
     {
         var stdout = new StringWriter();
