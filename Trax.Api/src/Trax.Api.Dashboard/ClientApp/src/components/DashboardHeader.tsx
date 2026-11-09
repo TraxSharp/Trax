@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { usePollSeconds } from "../lib/poll";
 import { useRefreshStatus } from "../lib/refreshStatus";
 import { useNow } from "../lib/useNow";
-import { environmentBadgeColor } from "../lib/environment";
+import { ENVIRONMENT_BADGE, environmentTone } from "../lib/environment";
 import { schedulerPaused } from "../lib/scheduler";
 import { Search } from "./Search";
 import { CirclePause, Clock, RotateCw, TriangleAlert } from "lucide-react";
@@ -34,8 +34,8 @@ export function DashboardHeader() {
       {environment && (
         <span
           data-testid="environment-badge"
-          className="px-2 py-0.5 rounded font-semibold text-white"
-          style={{ backgroundColor: environmentBadgeColor(environment) }}
+          data-tone={environmentTone(environment)}
+          className={`px-2 py-0.5 rounded-md border font-semibold ${ENVIRONMENT_BADGE[environmentTone(environment)]}`}
         >
           Environment: {environment}
         </span>

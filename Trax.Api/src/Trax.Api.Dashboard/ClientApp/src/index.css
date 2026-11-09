@@ -1,6 +1,6 @@
 @import "tailwindcss";
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/atkinson-hyperlegible-next";
+@import "@fontsource-variable/jetbrains-mono";
 
 /* Class-based dark mode: toggling `.dark` on <html> flips the theme (not system-only). */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -8,9 +8,10 @@
 /*
  * The dashboard's colours, in one place. Components use these tokens (bg-surface, text-muted,
  * bg-accent, text-danger-fg, ...) and never a palette colour, so the light and dark themes are
- * both defined here and nowhere else. Dark is traxsharp.net's own palette (forest green on warm
- * charcoal); light is the same hues on a warm off-white. Every *-fg text colour keeps at least
- * 4.5:1 against the surfaces and *-soft fills it sits on.
+ * both defined here and nowhere else. Dark is traxsharp.net's own palette (its mint, the logo's
+ * green on a dark ground, on warm charcoal, with dark ink on a mint button as the site has); light
+ * is the logo's deeper green for a light ground on a warm off-white (.github/brand/README.md).
+ * Every *-fg text colour keeps at least 4.5:1 against the surfaces and *-soft fills it sits on.
  */
 :root {
   /* Surfaces, from the page back to the controls on it. */
@@ -30,19 +31,19 @@
   --muted: #6b6862;
   --faint: #b3afa7; /* decorative only: tree glyphs, empty-cell dashes */
 
-  /* Forest green: primary actions, links, the current page. */
-  --accent: #347c2f;
-  --accent-hover: #2b6827;
+  /* The brand green: primary actions, links, the current page. */
+  --accent: #2a7350;
+  --accent-hover: #1f5f41;
   --on-accent: #ffffff;
-  --accent-fg: #2b6827;
-  --accent-soft: #e8f2e6;
-  --accent-line: #a8cda2;
+  --accent-fg: #1f5f41;
+  --accent-soft: #e6f3ec;
+  --accent-line: #a6d4ba;
 
   /* Status. Success shares the brand green, as it does on the site. */
-  --ok: #3d8b37;
-  --ok-fg: #2b6827;
-  --ok-soft: #e8f2e6;
-  --ok-line: #a8cda2;
+  --ok: #2f8a5c;
+  --ok-fg: #1f5f41;
+  --ok-soft: #e6f3ec;
+  --ok-line: #a6d4ba;
   --info: #5b86b3;
   --info-fg: #35618d;
   --info-soft: #e8eff7;
@@ -60,11 +61,11 @@
   --idle: #a8a49c;
 
   /* Chart series (Overview). */
-  --chart-completed: #3d8b37;
+  --chart-completed: #2f8a5c;
   --chart-failed: #c45c5c;
   --chart-cancelled: #a8a49c;
   --chart-series-1: #5b86b3;
-  --chart-series-2: #3d8b37;
+  --chart-series-2: #2f8a5c;
   --chart-series-3: #d4a24c;
   --chart-series-4: #a8a49c;
   --chart-axis: #6b6862;
@@ -89,17 +90,17 @@
   --muted: #959189;
   --faint: #4a4844;
 
-  --accent: #347c2f;
-  --accent-hover: #2d6b29;
-  --on-accent: #ffffff;
-  --accent-fg: #5cb85c;
-  --accent-soft: #1a2e18;
-  --accent-line: #2f5a2b;
+  --accent: #6cc596;
+  --accent-hover: #52ab7e;
+  --on-accent: #0d2017;
+  --accent-fg: #6cc596;
+  --accent-soft: #1b2d23;
+  --accent-line: #2f5a45;
 
-  --ok: #5cb85c;
-  --ok-fg: #6cc46a;
-  --ok-soft: #1a2e18;
-  --ok-line: #2f5a2b;
+  --ok: #6cc596;
+  --ok-fg: #94d9b4;
+  --ok-soft: #1b2d23;
+  --ok-line: #2f5a45;
   --info: #7a9ec2;
   --info-fg: #9dbbd9;
   --info-soft: #18222d;
@@ -116,11 +117,11 @@
   --danger-line: #5c2a2a;
   --idle: #6e6b65;
 
-  --chart-completed: #5cb85c;
+  --chart-completed: #6cc596;
   --chart-failed: #d46a6a;
   --chart-cancelled: #7d7a73;
   --chart-series-1: #7a9ec2;
-  --chart-series-2: #5cb85c;
+  --chart-series-2: #6cc596;
   --chart-series-3: #d4a24c;
   --chart-series-4: #7d7a73;
   --chart-axis: #959189;
@@ -168,9 +169,9 @@
   --color-danger-line: var(--danger-line);
   --color-idle: var(--idle);
 
-  /* The site's type: Geist and Geist Mono, bundled with the dashboard. */
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* The site's type: Atkinson Hyperlegible Next and JetBrains Mono, bundled with the dashboard. */
+  --font-sans: "Atkinson Hyperlegible Next Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @layer base {
@@ -188,5 +189,10 @@
   ::selection {
     background: var(--accent-soft);
     color: var(--accent-fg);
+  }
+  /* Thin scrollbars in the theme's own colours, as on the site. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
   }
 }

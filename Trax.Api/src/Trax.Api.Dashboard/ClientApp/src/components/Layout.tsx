@@ -39,6 +39,7 @@ import { GlobalProgressBar } from "./GlobalProgressBar";
 import { NotificationBridge } from "./NotificationBridge";
 import { ThemeToggle } from "./ThemeToggle";
 import { ToastHost } from "./ToastHost";
+import TraxLogo from "./TraxLogo";
 import { ConfirmHost } from "./ConfirmHost";
 
 interface NavItem {
@@ -154,7 +155,9 @@ export function Layout() {
         <GlobalProgressBar />
         <aside className="w-60 bg-surface border-r border-line flex flex-col">
           <div className="p-6 border-b border-line">
-            <h1 className="text-xl font-bold text-accent-fg">Trax</h1>
+            <h1 className="text-accent-fg">
+              <TraxLogo maskId="sidebar" className="h-7 w-auto" />
+            </h1>
             <div className="flex items-center gap-2 mt-1">
               <p className="text-sm text-muted">Dashboard</p>
               {mockActive && (

@@ -17,13 +17,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// The environment badge is blue for Development, as in the Blazor header; the UTC clock runs.
+// The environment badge is the info blue for Development; the UTC clock runs.
 export const Development: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const badge = await c.findByTestId("environment-badge");
     expect(badge).toHaveTextContent("Environment: Development");
-    expect(badge).toHaveStyle({ backgroundColor: "#1976D2" });
+    expect(badge).toHaveAttribute("data-tone", "development");
     expect(c.getByTestId("utc-clock")).toHaveTextContent(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC/);
     expect(c.getByText("Auto-refresh off")).toBeInTheDocument();
   },
@@ -33,7 +33,7 @@ export const Production: Story = {
   parameters: { mock: env("Production") },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    expect(await c.findByTestId("environment-badge")).toHaveStyle({ backgroundColor: "#D32F2F" });
+    expect(await c.findByTestId("environment-badge")).toHaveAttribute("data-tone", "production");
   },
 };
 
@@ -41,7 +41,7 @@ export const OtherEnvironment: Story = {
   parameters: { mock: env("Staging") },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    expect(await c.findByTestId("environment-badge")).toHaveStyle({ backgroundColor: "#757575" });
+    expect(await c.findByTestId("environment-badge")).toHaveAttribute("data-tone", "other");
   },
 };
 

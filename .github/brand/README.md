@@ -24,7 +24,8 @@ at least half its height clear around it.
 
 ## Redrawing
 
-`draw.py` writes every SVG here and the site's `Trax.Website/src/components/layout/TraxLogo.tsx`.
+`draw.py` writes every SVG here, the site's `Trax.Website/src/components/layout/TraxLogo.tsx` and
+the operations console's `Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/components/TraxLogo.tsx`.
 Edit the mark there, never the output. From the repository root, with JetBrains Mono Bold
 ([v2.304](https://github.com/JetBrains/JetBrainsMono/releases/tag/v2.304), SIL Open Font
 License) at `JetBrainsMono-Bold.ttf`:

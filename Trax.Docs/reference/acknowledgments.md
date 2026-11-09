@@ -215,7 +215,7 @@ from these npm packages, which ship inside it, bundled:
 | [@xyflow/react](https://github.com/xyflow/xyflow), [@dagrejs/dagre](https://github.com/dagrejs/dagre) | MIT | Drawing and laying out graphs |
 | [recharts](https://github.com/recharts/recharts) | MIT | Charts |
 | [lucide-react](https://github.com/lucide-icons/lucide) | ISC | Icons |
-| [@fontsource-variable/geist](https://github.com/fontsource/font-files), [@fontsource-variable/geist-mono](https://github.com/fontsource/font-files) | OFL-1.1 | The console's fonts |
+| [@fontsource-variable/atkinson-hyperlegible-next](https://github.com/fontsource/font-files), [@fontsource-variable/jetbrains-mono](https://github.com/fontsource/font-files) | OFL-1.1 | The console's fonts, the same as the site's |
 
 ## Trax.Cli
 

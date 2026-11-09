@@ -6,7 +6,7 @@ import {
   setOverviewPanel,
 } from "./overviewPanels";
 import { getRefreshStatus, noteQueryResult, noteRefresh, resetRefreshStatus } from "./refreshStatus";
-import { environmentBadgeColor } from "./environment";
+import { environmentTone } from "./environment";
 import { persistedOperationPath, tenantLabel } from "./persistedOperations";
 import { formatMs } from "./format";
 
@@ -36,10 +36,10 @@ describe("refresh status", () => {
 });
 
 describe("display helpers", () => {
-  test("environment badge colours match the Blazor header", () => {
-    expect(environmentBadgeColor("Development")).toBe("#1976D2");
-    expect(environmentBadgeColor("production")).toBe("#D32F2F");
-    expect(environmentBadgeColor("Staging")).toBe("#757575");
+  test("the environment badge marks Development and Production apart from the rest", () => {
+    expect(environmentTone("Development")).toBe("development");
+    expect(environmentTone("production")).toBe("production");
+    expect(environmentTone("Staging")).toBe("other");
   });
   test("persisted operation routes carry the tenant only when there is one", () => {
     expect(persistedOperationPath("greet.v1", null)).toBe("/api-admin/persisted-operations/greet.v1");

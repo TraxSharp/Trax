@@ -7,7 +7,7 @@ const STORAGE_KEY = "trax-dashboard-theme";
 const listeners = new Set<() => void>();
 
 function systemPref(): Theme {
-  // The demo is framed in traxsharp.net, which is dark, so it starts dark too (the toggle still works).
+  // The demo is framed in traxsharp.net, which is dark unless the reader chose light there, and starts the same.
   if (import.meta.env.VITE_DEMO === "1") return "dark";
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches
     ? "dark"
@@ -50,6 +50,15 @@ export function setTheme(theme: Theme) {
 export function toggleTheme() {
   setTheme(getTheme() === "dark" ? "light" : "dark");
 }
+
+// A change made in another document of this origin: traxsharp.net's own toggle, around the framed demo, keeps its
+// choice under this key, so the demo follows it as it happens.
+if (typeof window !== "undefined")
+  window.addEventListener("storage", (e) => {
+    if (e.key !== STORAGE_KEY) return;
+    apply(getTheme());
+    listeners.forEach((fn) => fn());
+  });
 
 export function subscribeTheme(fn: () => void): () => void {
   listeners.add(fn);
