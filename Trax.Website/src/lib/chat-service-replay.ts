@@ -79,11 +79,37 @@ export function begin(recording: ChatRecording, now: number): ChatPlayback {
   return enqueue({ queue: [], played: [], path: [], refused: false, charlieJoinedAt: null }, recording.prologue, now);
 }
 
+/**
+ * A line's entries in the order the player shows them. The server publishes a message to every subscriber at once,
+ * and which socket the recorder heard first, a millisecond apart at most, is a coin flip; the pace then spreads that
+ * out until it looks as if the listener saw the line before its speaker did. The frames that carry one event are
+ * shown together where the first of them arrived, the speaker's first.
+ */
+export function ordered(segment: Segment): Entry[] {
+  const speaker = segment.speaker;
+  if (!speaker) return segment.entries;
+  const run = (entry: Entry) => eventOf(entry)?.trainExternalId;
+  const out: Entry[] = [];
+  const placed = new Set<string>();
+  for (const entry of segment.entries) {
+    const id = run(entry);
+    if (id == null) {
+      out.push(entry);
+      continue;
+    }
+    if (placed.has(id)) continue;
+    placed.add(id);
+    const group = segment.entries.filter((e) => run(e) === id);
+    out.push(...group.filter((e) => e.user === speaker), ...group.filter((e) => e.user !== speaker));
+  }
+  return out;
+}
+
 function enqueue(p: ChatPlayback, segment: Segment, now: number): ChatPlayback {
   let due = Math.max(now, p.queue.at(-1)?.due ?? now);
   const start = due;
   const queue = [...p.queue];
-  segment.entries.forEach((entry, i) => {
+  ordered(segment).forEach((entry, i) => {
     due = Math.max(start + entry.t, i === 0 ? due : due + PACE_MS);
     queue.push({ entry, segment: segment.key, due });
   });
