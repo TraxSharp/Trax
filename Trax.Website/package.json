@@ -13,7 +13,7 @@
     "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "gray-matter": "^4.0.3",
-    "next": "16.4.2",
+    "next": "16.4.3",
     "next-mdx-remote": "^6.0.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
@@ -24,7 +24,7 @@
     "rehype-slug": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "shiki": "^4.5.0",
-    "unist-util-visit": "^5.1.0"
+    "unist-util-visit": "^5.2.0"
   },
   "devDependencies": {
     "@mdx-js/mdx": "^3.1.1",
@@ -35,7 +35,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.4.2",
+    "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
