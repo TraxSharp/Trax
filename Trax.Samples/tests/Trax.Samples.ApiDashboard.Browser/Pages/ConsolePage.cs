@@ -92,6 +92,15 @@ public class ConsolePage(IPage page, Uri origin)
             new() { Timeout = BrowserTimeouts.Render.Ms() }
         );
 
+    /// <summary>Waits until the host has answered <paramref name="operation"/>, and returns the response.</summary>
+    public Task<IResponse> AnsweredAsync(string operation) =>
+        Page.WaitForResponseAsync(
+            r =>
+                r.Url.EndsWith("/trax/graphql")
+                && r.Request.PostData?.Contains($"\"operationName\":\"{operation}\"") == true,
+            new() { Timeout = BrowserTimeouts.Render.Ms() }
+        );
+
     public async Task<IResponse?> GotoAsync(string route = "") => await Page.GotoAsync(Url(route));
 
     /// <summary>
