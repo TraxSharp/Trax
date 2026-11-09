@@ -590,6 +590,181 @@ public class FromGherkinCommandTests
         stderr.ToString().Should().Contain("has no host.json");
     }
 
+    // A quiz whose Between broadcast clears the sheets its Scoring broadcast closes: derivation warns, and writes.
+    private const string Quiz = """
+        {
+          "version": 1,
+          "actors": { "player": { "noun": "a player", "roles": ["player"] } },
+          "machines": {
+            "quiz": {
+              "system": "quiz/main",
+              "name": "the quiz",
+              "initial": "Waiting",
+              "states": {
+                "Waiting": "is waiting for the first question",
+                "Open": "is taking answers",
+                "Scoring": "is scoring the question",
+                "Between": "is between questions"
+              },
+              "triggers": {
+                "Ask": { "phrase": "the quiz opens a question" },
+                "Stop": { "phrase": "the question closes" }
+              },
+              "invokes": {
+                "Scoring": {
+                  "train": "Quiz.IScoreQuestion",
+                  "outcomes": {
+                    "the answers are scored": { "outcome": "done" },
+                    "the scoring fails": { "outcome": "failed" },
+                    "the scoring is called off": { "outcome": "cancelled" }
+                  }
+                }
+              }
+            },
+            "answer-sheet": {
+              "ownedBy": "player",
+              "noun": "answer sheet",
+              "start": "has an answer sheet",
+              "initial": "Waiting",
+              "states": { "Waiting": "is waiting for a question", "Open": "is open", "Closed": "is closed" },
+              "triggers": {
+                "Open": { "phrase": "{subject} opens" },
+                "Close": { "phrase": "{subject} closes" },
+                "Clear": { "phrase": "{subject} is cleared" }
+              }
+            }
+          }
+        }
+        """;
+
+    private const string Sheets = """
+        Feature: The quiz
+          Background:
+            Given Ada is a player
+            And Ada has an answer sheet
+
+          Scenario: A sheet opens
+            When Ada's answer sheet opens
+            Then Ada's answer sheet is open
+
+          Scenario: A sheet closes
+            Given Ada's answer sheet is open
+            When Ada's answer sheet closes
+            Then Ada's answer sheet is closed
+
+          Scenario: A sheet is cleared
+            Given Ada's answer sheet is closed
+            When Ada's answer sheet is cleared
+            Then Ada's answer sheet is waiting for a question
+
+          Scenario: The quiz opens its first question
+            Given the quiz is waiting for the first question
+            When the quiz opens a question
+            Then the quiz is taking answers
+
+          Scenario: The quiz opens the next question
+            Given the quiz is between questions
+            When the quiz opens a question
+            Then the quiz is taking answers
+
+          Scenario: The question closes, and the open sheets close with it
+            Given Ada's answer sheet is open
+            And the quiz is taking answers
+            When the question closes
+            Then the quiz is scoring the question
+            And Ada's answer sheet is closed
+
+          Scenario: Scoring that fails waits for the next question
+            Given the quiz is scoring the question
+            When the scoring fails
+            Then the quiz is between questions
+
+          Scenario: Scoring that is called off waits for the next question
+            Given the quiz is scoring the question
+            When the scoring is called off
+            Then the quiz is between questions
+
+          Scenario: The answers are scored and the closed sheets are cleared
+            Given Ada's answer sheet is closed
+            And the quiz is scoring the question
+            When the answers are scored
+            Then the quiz is between questions
+            And Ada's answer sheet is waiting for a question
+        """;
+
+    [Test]
+    public void A_warning_is_printed_to_stderr_and_fails_neither_the_write_nor_the_check()
+    {
+        File.WriteAllText(Path.Combine(Features, "glossary.json"), Quiz);
+        File.Delete(Path.Combine(Features, "ordering.feature"));
+        File.Delete(Path.Combine(Features, "opening.feature"));
+        File.WriteAllText(Path.Combine(Features, "quiz.feature"), Sheets);
+
+        var (exit, _, err) = Run();
+        var (checkExit, checkOut, checkErr) = Run(check: true);
+
+        exit.Should().Be(0, err);
+        err.Should()
+            .StartWith(
+                "warning: quiz.feature:52: When quiz enters Between, the policy quiz.Between>answer-sheet.Clear moves answer-sheet instances in Closed;"
+            );
+        File.Exists(Path.Combine(Out, "host.json")).Should().BeTrue();
+        checkExit.Should().Be(0, checkErr);
+        checkErr.Should().Contain("warning: quiz.feature:52:");
+        checkOut.Should().Contain("is up to date");
+    }
+
+    [Test]
+    public void Explain_prints_a_warning_to_stderr_and_still_explains()
+    {
+        File.WriteAllText(Path.Combine(Features, "glossary.json"), Quiz);
+        File.Delete(Path.Combine(Features, "ordering.feature"));
+        File.Delete(Path.Combine(Features, "opening.feature"));
+        File.WriteAllText(Path.Combine(Features, "quiz.feature"), Sheets);
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+
+        var exit = MachineCommand.RunExplain(
+            Features,
+            Path.Combine(Features, "glossary.json"),
+            null,
+            stdout,
+            stderr
+        );
+
+        exit.Should().Be(0, stderr.ToString());
+        stderr
+            .ToString()
+            .Should()
+            .StartWith(
+                "warning: quiz.feature:52: When quiz enters Between, the policy quiz.Between>answer-sheet.Clear"
+            );
+        stdout.ToString().Should().NotContain("warning:").And.Contain("quiz.feature:");
+    }
+
+    // On a file system that ignores case, writing checkout.ir.json writes into a Checkout.ir.json already there, and
+    // removing that one as no longer derived would remove what was just written. On one that keeps case, it is
+    // another file and is removed. Either way the directory ends holding the derived names, spelled as derived.
+    [Test]
+    public void An_ir_already_there_in_another_case_ends_spelled_as_derived()
+    {
+        Run().Exit.Should().Be(0);
+        var derived = Path.Combine(Out, "order.ir.json");
+        var text = File.ReadAllText(derived);
+        File.Delete(derived);
+        File.WriteAllText(Path.Combine(Out, "Order.ir.json"), text);
+
+        var (exit, _, err) = Run();
+
+        exit.Should().Be(0, err);
+        Directory
+            .EnumerateFiles(Out)
+            .Select(Path.GetFileName)
+            .Should()
+            .BeEquivalentTo(["order.ir.json", "shop.ir.json", "host.json", "access.txt"]);
+        Run(check: true).Exit.Should().Be(0);
+    }
+
     private (int Exit, string Out, string Err) RunFeatures(MachineCommand.RunArguments? args = null)
     {
         var stdout = new StringWriter();

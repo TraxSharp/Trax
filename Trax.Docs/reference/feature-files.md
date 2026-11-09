@@ -33,17 +33,17 @@ A machine is a user's or the system's:
 | Key | What it is |
 | --- | --- |
 | `ownedBy` | The actor whose people own its instances, or a list of them (`["triage", "fixer"]`): each person owns their own instances whichever actor they are. With it, `noun` is how a step names one (`booking`, as `Ada's booking` says it) and `start` the phrase a person has one with (`has a booking`). |
-| `system`, `name` | A system machine: its fixed key (`flight/tx101`) and its name in a step (`the flight`). The host starts its one instance; only the server moves it. Or `{ "keyedBy": ["id"] }`, a keyed system machine: one instance per key, which host code starts and moves (see below). |
+| `system`, `name` | A system machine: its fixed key, which starts with the machine's id and a slash (`flight/tx101` for `flight`), and its name in a step (`the flight`). The host starts its one instance; only the server moves it. Or `{ "keyedBy": ["id"] }`, a keyed system machine: one instance per key, which host code starts and moves (see below). |
 | `version` | The machine's definition version, which its snapshots carry. Defaults to `1`. |
 | `initial` | The state an instance starts in. |
 | `initialContext` | The context a new instance starts with. Without it, each field of the initial state's context starts at its zero, and a nullable one at `null`. |
-| `context` | The fields of its context, as the IR declares fields: every state's, unless the state gives its own. |
+| `context` | The fields of its context, as the IR declares fields: every state's, unless the state gives its own. No field, here or in a state's own context, may be named `state`, which a view reads as the machine's state. |
 | `states` | Each state by name, with its phrase (`is booked`), or with `{ "phrase", "committed", "requires", "context" }`: `committed: true` (the IR's `committedStates`), the rule its context must meet (the IR's `invariants`), and a context of its own in place of the machine's. |
 | `differential` | `true` to write the IR's `differential` block from the scenarios (below). |
 | `rules`, `reductions` | Each custom rule and reduction the machine names, by its name in the IR: its C# `type` (an `ICustomRule` or `ICustomReduction` class) and the `example` an in-memory run answers with, whether the rule holds or the fields the reduction sets. |
 | `migrations` | The C# `type` (an `IMachineMigration` class) of each step to the machine's `version`, by the version it steps from: one for every version below it, and none other. |
 | `triggers` | Each trigger by name: its `phrase`, with `{subject}` where the instance is named and `{field}` for each of its `input` fields, and a `reduce` that sets context from the input. A phrase that starts with `{subject}` is something that happens to the instance, fired by no person. A `guard` names the guard that decides it when more than one tells its moves from its refusals, and an `effect` makes it a send (below). |
-| `guards` | Each guard by name: its `holds` and `fails` phrases and its `rule`, which the features set up with Givens. |
+| `guards` | Each guard by name: its `rule`, and the `holds` and `fails` phrases a Given sets it up with. A guard whose rule reads only the trigger's input leaves the phrases out: a When's value shows it, as in `When Ada answers "" on her answer sheet`. |
 | `invokes` | Each state that runs a train: the `train`'s interface full name, its `input` from context fields (or from `$owner`, below), its `output` fields, its `outcomes` by phrase (`done`, `failed` or `cancelled`, a `when` rule on the output, a `reduce`), and `examples`, the output an in-memory run answers with. |
 | `links` | Each link by its phrase: the other user machine (`machine`) whose instance this machine's context `field` holds the id of. A `linked` policy finds its target through it (below). |
 
@@ -52,7 +52,10 @@ one of its own:
 
 - A field in `context`, a trigger's `input` or an invoked train's `output` is
   `{ "name", "type", "nullable", "constraints" }`, with the optional keys the IR's schemas take
-  ([the IR format](/docs/sdk-reference/statemachine-api/ir-format#top-level)).
+  ([the IR format](/docs/sdk-reference/statemachine-api/ir-format#top-level)). An integer in an invoked train's
+  `output`, a dictionary's `values` among them, carries its CLR type's exact range as `minimum` and `maximum`
+  (`-2147483648` and `2147483647` for an `int`), since the host checks the IR against the train when it starts and
+  names any range that differs.
 - A guard's `rule`, a state's `requires`, an outcome's `when` and a field's `constraints` are IR rules, tagged by
   `rule`: `{ "rule": "nonEmpty", "source": "context", "field": "passport" }`. The kinds and their
   keys are in [the IR format's transitions](/docs/sdk-reference/statemachine-api/ir-format#transitions), and the C#
@@ -143,10 +146,24 @@ has to follow; `trax machine explain` prints what derivation read from each one.
 | A trigger a policy fires also has a scenario of its own, showing it as a plain move. | `Given the flight is scheduled` / `When check-in opens for the flight` / `Then the flight is open for check-in` | "flight goes from Scheduled to Open when desk enters Open, and no scenario shows a trigger doing that." |
 | Two timers falling due at the same moment read as one moving the other. Give them different durations, or show them in different scenarios. | `When 2 seconds pass` / `Then Kit's desk is done` / `And the flight is still closed` | "flight goes from Closed to Departed when desk enters Done". |
 | `still` after time passing says the timer has not fallen due; after a trigger it says the trigger was refused. | `When 10 seconds pass` / `Then Ada's booking is still checked in` | Two different facts from one word: read it as the scenario's When decides. |
-| A Then naming the state the trigger left from is a self-transition: it is served, changes nothing and sets no policy off. Use it where a policy may land on a machine already there. | `Given the flight is open for check-in` / `When check-in opens for the flight` / `Then the flight is open for check-in` | Without it the policy's fire is refused and logged each time. |
+| A Then naming the state the trigger left from is a self-transition: it is served, the instance stays in its state and sets no policy off, and the trigger's `reduce` still applies. Use it where a policy may land on a machine already there. | `Given the flight is open for check-in` / `When check-in opens for the flight` / `Then the flight is open for check-in` | Without it the policy's fire is refused and logged each time. |
 | A trigger only some roles may fire does not lead back to the state an instance starts in: whoever may start one could put it there anyway. | Lead it to a state of its own (`Open --CloseGate--> Closing`). | "the rule would gate nothing, since whoever may start one can put it there." |
 | Timers alone do not form a loop. Let an event lead out of one of the states. | `Closed --after 4 s--> Departed`, `Departed --after 10 s--> Scheduled`, `Scheduled --OpenCheckIn--> Open` | "the timers of Closed -> Departed -> Scheduled -> Closed form a cycle no event breaks", at each scenario that showed one of them; the host refuses the same loop. |
 | A person fires triggers on their own instances only, and never on a system machine. | `When check-in opens for the flight` (the server), not `When Kit opens check-in for the flight`. | "only the server moves a system machine", or "acts on Ada's booking". |
+
+The order of the Thens is not an order on the host. In memory, `trax machine run` plays a When's whole cascade at
+once, in the order its Thens list it. The host runs each policy fire and each invoked train on its own, in no fixed
+order: the policy runner works the fires every `PolicyRunnerOptions.Interval` (1 second by default) and a worker runs
+the train on its own poll. So a policy that moves instances out of a state another policy moves them into, when its
+own state is reached from the other's with no person in between (through a train's outcome, another policy, or a timer
+shorter than the runner's default interval of 1 second), may run first and find none there. The same holds when the
+earlier policy's instances reach that state only after a train's outcome or a short timer moves them on. Derivation warns of such a
+pair, naming both policies, and writes the machines all the same (`trax machine from-gherkin` prints the warnings, and
+`FeatureMachines.Derive` returns them as `Warnings`): move the instances from a state the earlier policy leaves alone,
+or move them in one policy. A timer of 1 second or more, or one whose duration a context field holds, spaces the two
+policies, and they are not warned of. Derivation cannot see a host's options, so it measures against the default: a
+host that sets `Interval` above 1 second can let a timer shorter than its interval fire first with no warning. Keep
+timers between such policies longer than the interval you set.
 
 ## The C# a machine names
 

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Trax.Effect.Utils;
 
@@ -10,21 +9,10 @@ public class JunctionLoggerProviderSerializationTests
 {
     private JsonSerializerOptions _options = null!;
 
+    // What the junction logger writes with: the real options, wrapped for logging as the logger wraps them.
     [SetUp]
-    public void SetUp()
-    {
-        _options = new JsonSerializerOptions
-        {
-            WriteIndented = false,
-            IncludeFields = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            ReferenceHandler = ReferenceHandler.IgnoreCycles,
-            MaxDepth = 8,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
-            Converters = { new JsonStringEnumConverter(), new DisposableConverter() },
-        };
-    }
+    public void SetUp() =>
+        _options = TraxLogSerialization.ForLogging(TraxJsonSerializationOptions.JunctionLogging);
 
     #region SimplePoco
 
@@ -93,6 +81,23 @@ public class JunctionLoggerProviderSerializationTests
         var doc = JsonDocument.Parse(json);
         // IgnoreCycles writes null, WhenWritingNull omits it entirely
         doc.RootElement.TryGetProperty("self", out _).Should().BeFalse();
+    }
+
+    #endregion
+
+    #region Dictionaries
+
+    [Test]
+    public void Serialize_Dictionary_KeepsItsKeysAndCamelCasesMembers()
+    {
+        var obj = new ObjectWithDictionary
+        {
+            Totals = new Dictionary<string, int> { ["Ada"] = 1, ["bo"] = 2 },
+        };
+
+        var json = JsonSerializer.Serialize<object>(obj, _options);
+
+        json.Should().Be("{\"totals\":{\"Ada\":1,\"bo\":2}}");
     }
 
     #endregion
@@ -209,6 +214,11 @@ public class JunctionLoggerProviderSerializationTests
     {
         Inactive,
         Active,
+    }
+
+    private class ObjectWithDictionary
+    {
+        public Dictionary<string, int> Totals { get; set; } = new();
     }
 
     private class ObjectWithEnum

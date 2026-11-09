@@ -44,8 +44,10 @@ public static TraxEffectBuilderWithData UseSqlite(
 
 `UseSqlite` runs, in order, before it registers anything: the migration (unless
 [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) was called earlier in the chain), then
-`PRAGMA journal_mode=WAL`. It sets `HasDataProvider` and `HasDatabaseProvider`, so the scheduler runs its full,
-database-backed services on it, as on Postgres.
+`PRAGMA journal_mode=WAL`. A process started with `--trax-export-client <path>` skips both and opens no database,
+and registers a hosted service that refuses to start the host if it serves anyway (see
+[Client manifest](/docs/sdk-reference/statemachine-api/client-manifest#behavior)). It sets `HasDataProvider` and
+`HasDatabaseProvider`, so the scheduler runs its full, database-backed services on it, as on Postgres.
 
 - Enums are stored as their integers, EF Core's default for SQLite, and JSON as `TEXT`. Raw SQL compares an enum
   column to an integer, such as `0` for `TrainState.Pending`. `TrainState`, `WorkQueueStatus` and `FailureClass`,
@@ -76,6 +78,8 @@ behind and runs again cleanly at the next start.
 | [ISqlDialect](/docs/sdk-reference/configuration/i-sql-dialect) | Singleton | The SQLite dialect |
 | [IQueuedWorkListener](/docs/sdk-reference/configuration/i-queued-work-listener) | Singleton | An in-process signal raised when a save through one of these contexts commits queued work |
 | `ICheckpointRows` | Singleton, if none is registered | The rows checkpoints are stored in |
+| `IHostedService` (`HostHeartbeatService`) | Singleton | Writes this host's row in `trax.host_heartbeat` at start and every 15 seconds. See [Host Tracking](/docs/sdk-reference/configuration/host-tracking#heartbeat). |
+| `TimeProvider` | Singleton, if none is registered | `TimeProvider.System`, the heartbeat's clock |
 | `ITraxFeatureDbConfigurator` | Singleton | A `DelegateFeatureDbConfigurator` that points a feature's own `DbContext` at the same file (`UseSqlite`) |
 
 ## Example

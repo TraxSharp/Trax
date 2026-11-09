@@ -3,7 +3,7 @@
   "isRoot": true,
   "tools": {
     "trax.cli": {
-      "version": "1.61.0",
+      "version": "1.69.0",
       "commands": [
         "trax"
       ],

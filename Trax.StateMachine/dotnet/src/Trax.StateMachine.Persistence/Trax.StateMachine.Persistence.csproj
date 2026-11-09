@@ -5,9 +5,6 @@
     <Nullable>enable</Nullable>
     <Description>Persistence for the Trax .NET snapshot state-machine engine: a user-scoped snapshot store with optimistic concurrency, the FE-drives/BE-validates draft service, and a generic exactly-once effect primitive (lease + fence token).</Description>
     <AssemblyName>Trax.StateMachine.Persistence</AssemblyName>
-    <!-- A new package id, so nuget.org has no release to validate against yet. Remove after the first release that
-         ships it (Directory.Build.props). -->
-    <EnablePackageValidation>false</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>

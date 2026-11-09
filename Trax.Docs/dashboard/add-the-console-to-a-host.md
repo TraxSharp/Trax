@@ -23,7 +23,7 @@ dotnet add package Trax.Api.Dashboard
 Or in the `.csproj`:
 
 ```xml
-<PackageReference Include="Trax.Api.Dashboard" Version="1.61.0" />
+<PackageReference Include="Trax.Api.Dashboard" Version="1.69.0" />
 ```
 
 The package carries the built app, so the host needs no Node.

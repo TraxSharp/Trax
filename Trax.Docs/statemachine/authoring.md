@@ -206,6 +206,10 @@ cap, the change feed) are under [AddStateMachines](/docs/sdk-reference/statemach
 The rules for which registered machines are served, and the refusals for a marked subclass or a duplicate id, are
 under [Serving a machine](/docs/sdk-reference/statemachine-api/add-state-machines#serving-a-machine).
 
+Persisted operations are required by default (`RequirePersisted(true)`), so a document sent as text, including one
+typed into the GraphQL IDE at `/trax/graphql`, is refused with `PERSISTED_OPERATION_REQUIRED`; with
+`DisableIntrospection()` the IDE cannot load the schema either.
+
 ## 5. Call it from a client
 
 The machine is now `machines { checkout { ... } }`: `start`, one mutation per client event (`chooseItems`, `next`,

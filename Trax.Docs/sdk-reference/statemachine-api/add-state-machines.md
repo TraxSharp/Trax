@@ -72,7 +72,7 @@ public static class StateMachinesBuilderExtensions
 |--------|-------------|
 | `ExposeGenericStateMachineMutations(Action<GenericStateMachineMutationOptions> configure)` | Serves the six generic mutations (`startSnapshot`, `saveSnapshot`, `advanceSnapshot`, `loadSnapshot`, `sendSnapshot`, `discardSnapshot`) under `dispatch { stateMachine { ... } }`, each behind `GenericStateMachineMutationOptions.Policy`, the authorization policy a caller must satisfy. Without this call none of them is in the schema. The opt-in without a policy is refused where `AddStateMachines` runs. |
 | `ServeFeatures(string directory, params Assembly[] trainAssemblies)` | Serves the machines [`trax machine from-gherkin`](/docs/sdk-reference/statemachine-api/feature-machines) wrote to `directory`: each `<machine>.ir.json` with the access, policies, views and system instances its `host.json` gives. A relative path is read from the application's base directory, where a build copies content. The directory is read and checked where `AddStateMachines` runs: an IR the host file was not derived from, or names the two disagree on, refuse the host with an `InvalidOperationException` naming the file. `trainAssemblies` are where the trains the machines invoke are found, and the effects, custom rules, custom reductions and migrations the host file names for them ([the C# a host binds](/docs/sdk-reference/statemachine-api/feature-machines#the-c-a-host-binds)). A host file with policies on `UseInMemory` is refused: InMemory has no transaction to queue a policy's fire in with the transition that owes it. Called twice, it throws. |
-| `PolicyRunner(Action<PolicyRunnerOptions> configure)` | Configures the runner that fires the served machines' policies: `PolicyRunnerOptions.BatchSize` (100), how many owed firings one pass takes; `FanOutCap` (10,000), the most instances one broadcast fires for one transition, the rest logged as a warning; `Interval` (one second), how long it waits when nothing is owed. `BatchSize` must be at least 1, `FanOutCap` at least 0 and less than `int.MaxValue`, and `Interval` more than zero and at most about 49.7 days (what `Task.Delay` takes); a value outside that throws `ArgumentOutOfRangeException` naming it. Without `ServeFeatures` it is refused. |
+| `PolicyRunner(Action<PolicyRunnerOptions> configure)` | Configures the runner that fires the served machines' policies: `PolicyRunnerOptions.BatchSize` (100), how many owed firings one pass takes; `FanOutCap` (10,000), the most instances one broadcast fires for one transition, the rest logged as a warning; `Interval` (one second), how long it waits when nothing is owed; derivation's [policy race warning](/docs/reference/feature-files#how-a-scenario-is-read) measures timers against the default, so a longer interval lets a timer shorter than it race unwarned. `BatchSize` must be at least 1, `FanOutCap` at least 0 and less than `int.MaxValue`, and `Interval` more than zero and at most about 49.7 days (what `Task.Delay` takes); a value outside that throws `ArgumentOutOfRangeException` naming it. Without `ServeFeatures` it is refused. |
 
 A machine's own typed operations are served by marking it, not by an option: see [Serving a machine](#serving-a-machine).
 
@@ -262,16 +262,22 @@ instance for its owner, and `IOperationsService.WatchMachineInstancesAsync`, the
 
 ### Tables
 
-`snapshot_draft` and `effect_claim` (both in the `trax` schema) ship as migrations in the core data
-providers and apply automatically when you register one. `UsePostgres(...)` runs
-`040_state_machine_snapshots.sql`, `048_snapshot_draft_request_scope.sql`,
-`051_snapshot_draft_machine_key.sql` and `053_effect_claim_content_fingerprint.sql`; `UseSqlite(...)` runs `006`,
-`013`, `015` and `018` of the same names. A host
-that calls `AddStateMachines` gets the tables for free; one that does not just carries two empty tables. You do
-not create or migrate them yourself, and there is no `EnsureCreated` step. Their models are
-`Trax.Effect.Models.SnapshotDraft.SnapshotDraft` and `Trax.Effect.Models.EffectClaim.EffectClaim`, mapped on the
-core data context like every other Trax table, so on SQLite the data context strips the `trax` schema, maps the
-`jsonb` context column to `TEXT`, and stores each timestamp as fixed-width UTC text that sorts in time order.
+The machines are stored in four tables in the `trax` schema:
+
+| Table | Model | Holds |
+|---|---|---|
+| `snapshot_draft` | `Trax.Effect.Models.SnapshotDraft.SnapshotDraft` | One row per instance: its owner, machine, state, context, revision and the timers, runs and effects it is waiting on. |
+| `effect_claim` | `Trax.Effect.Models.EffectClaim.EffectClaim` | The ledger of exactly-once effects: one row per effect key, claimed before the effect runs and completed with its receipt. |
+| `snapshot_transition` | `Trax.Effect.Models.SnapshotTransition.SnapshotTransition` | An instance's history: one row per snapshot the store writes, with the command, actor and states, never the context. |
+| `machine_policy_fire` | `Trax.Effect.Models.MachinePolicyFire.MachinePolicyFire` | The fires machine policies still owe: written with the transition that sets one off, deleted when it fires. |
+
+They ship as migrations in the core data providers, so `UsePostgres(...)` and `UseSqlite(...)` create and update
+them at startup with every other Trax table; [Schema migrations](/docs/reference/schema-migrations) lists the
+scripts that change them. A host that calls `AddStateMachines` gets the tables for free; one that does not carries
+them empty. You do not create or migrate them yourself, and there is no `EnsureCreated` step. Their models are
+mapped on the core data context like every other Trax table, so on SQLite the data context strips the `trax`
+schema, maps the `jsonb` context column to `TEXT`, and stores each timestamp as fixed-width UTC text that sorts in
+time order.
 
 A draft is keyed by its user, its machine and its id, so two machines can each give one user a draft under
 the same well-known id without touching each other's.

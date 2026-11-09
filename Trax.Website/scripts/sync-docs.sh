@@ -52,9 +52,11 @@ if [ -d "$SOURCE_DIR/images" ]; then
 fi
 
 # Every Trax package releases at one version, and a page names it in each
-# <PackageReference Include="Trax.*" Version="..."> or <PackageVersion ...> it shows. A production build stamps
-# the version of the latest release into those, so the site always tells a reader to
-# install what exists; the version written in Trax.Docs is only where it was last edited.
+# <PackageReference Include="Trax.*" Version="..."> or <PackageVersion ...> it shows, and in each
+# `dotnet tool install Trax.* --version ...` or `dotnet add package Trax.* --version ...`. A
+# production build stamps the version of the latest release into those, so the site always tells
+# a reader to install what exists; the version written in Trax.Docs is only where it was last
+# edited.
 # TRAX_DOCS_VERSION overrides it; outside production nothing is stamped.
 #
 # The same version picks the git ref the site links repository files at (Source links,
@@ -74,7 +76,8 @@ if [ -n "${TRAX_DOCS_VERSION:-}" ] || [ "${VERCEL_ENV:-}" = "production" ]; then
     exit 1
   fi
   find "$CACHE_DIR" -name "*.md" -print0 | xargs -0 perl -pi -e \
-    's/(<Package(?:Reference|Version)\s+Include="Trax\.[^"]+"\s+Version=")[^"]+"/${1}'"$version"'"/g'
+    's/(<Package(?:Reference|Version)\s+Include="Trax\.[^"]+"\s+Version=")[^"]+"/${1}'"$version"'"/g;
+     s/(dotnet\s+(?:tool\s+install|add\s+package)\s+(?:--global\s+)?Trax\.\S+\s+--version\s+)\d+\.\d+\.\d+\b/${1}'"$version"'/g'
   echo "Stamped Trax package versions with $version"
   site_ref="v$version"
 fi

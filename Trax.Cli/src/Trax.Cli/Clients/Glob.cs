@@ -31,15 +31,79 @@ internal static class Glob
             .ToList();
     }
 
-    /// <summary><paramref name="pattern"/>, relative to <paramref name="cwd"/>, rewritten relative to <paramref name="dir"/>.</summary>
+    /// <summary>
+    /// <paramref name="pattern"/>, relative to <paramref name="cwd"/>, rewritten relative to <paramref name="dir"/>.
+    /// Both sides are compared with their links resolved: the working directory is always reported that way
+    /// (<c>/private/var/...</c> on macOS, where <c>/var</c> is a link), and a folder named through a link would
+    /// otherwise look like it sits elsewhere, giving a path that climbs to the root and back.
+    /// </summary>
     public static string RelativeTo(string cwd, string dir, string pattern)
     {
         var (baseDir, rest) = Split(Path.GetFullPath(cwd), pattern);
-        var relative = Path.GetRelativePath(Path.GetFullPath(dir), baseDir).Replace('\\', '/');
+        var relative = Path.GetRelativePath(Resolved(dir), Resolved(baseDir)).Replace('\\', '/');
         return rest.Length == 0 ? relative
             : relative == "." ? rest
             : $"{relative}/{rest}";
     }
+
+    /// <summary>
+    /// The full path with every link on the way to it resolved and each part spelled as it is on disk, as far as it
+    /// exists; the rest is appended as written. Two paths name the same place when these are equal, whichever links
+    /// each was given through and, on a file system that ignores case, whichever case each was given in.
+    /// </summary>
+    public static string Resolved(string path)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var resolved = Path.GetPathRoot(full)!;
+        var parts = full[resolved.Length..]
+            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < parts.Length; i++)
+        {
+            var next = Path.Combine(resolved, parts[i]);
+            if (!Directory.Exists(next) && !File.Exists(next))
+                return Path.Combine([next, .. parts[(i + 1)..]]);
+            next = Path.Combine(resolved, SpelledOnDisk(resolved, parts[i]));
+            FileSystemInfo info = Directory.Exists(next)
+                ? new DirectoryInfo(next)
+                : new FileInfo(next);
+            resolved =
+                info.LinkTarget is null ? next
+                : info.ResolveLinkTarget(returnFinalTarget: true) is { } target
+                    ? Resolved(target.FullName)
+                : next;
+        }
+        return resolved;
+    }
+
+    // The entry of `folder` that `name` names, as it is spelled there. On a case-sensitive file system that is `name`;
+    // on one that ignores case it may be spelled otherwise, and only one entry can match.
+    private static string SpelledOnDisk(string folder, string name)
+    {
+        string? folded = null;
+        try
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(folder, "*", AllEntries))
+            {
+                var entryName = Path.GetFileName(entry);
+                if (string.Equals(entryName, name, StringComparison.Ordinal))
+                    return name;
+                if (string.Equals(entryName, name, StringComparison.OrdinalIgnoreCase))
+                    folded ??= entryName;
+            }
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            // A folder that can be passed through but not listed keeps the name as given.
+            return name;
+        }
+        return folded ?? name;
+    }
+
+    private static readonly EnumerationOptions AllEntries = new()
+    {
+        AttributesToSkip = 0,
+        IgnoreInaccessible = true,
+    };
 
     // The folder before the first segment holding a wildcard, and the pattern from there. The folder's part of the
     // pattern is combined with the root as one path, so one that is rooted (/home/..., C:/...) is read from where it

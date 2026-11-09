@@ -264,20 +264,34 @@ builder.Services.AddTraxGraphQL(graphql => graphql
     .UsePersistedOperations(po => po.SingleNode()));
 ```
 
-The `topic-map` machine then has:
+The `topic-map` machine then has one persisted document per operation, which the
+[generated client](/docs/reference/cli#frontend-clients-trax-client) sends by its id with only the variables. Each
+write is its own operation, since an operation that selects two is refused with `TRAX_ONE_MACHINE_EVENT`, and an
+inline document is refused, since `UsePersistedOperations` requires persisted ones. The documents below are
+`TopicMapStart`, `TopicMapChooseFields` (a `ChooseFields` event whose `WithInput<ChooseFieldsInput>()` declares
+the input), `TopicMapDiscard` and `TopicMapGet`, with their selections shortened: the registered ones select every
+field of the answer.
 
 ```graphql
-mutation {
+mutation TopicMapStart($requestId: String!) {
+  machines { topicMap { start(requestId: $requestId) { id revision state context { fields } problem { code message } } } }
+}
+
+mutation TopicMapChooseFields($id: UUID!, $input: ChooseFieldsInput!, $requestId: String!, $clientResult: String) {
   machines {
     topicMap {
-      start(requestId: "r-1") { id revision state context { fields } problem { code message } }
-      chooseFields(id: "...", input: { fields: ["Hydrology"] }, requestId: "r-2") { revision state }
-      discard(id: "...", requestId: "r-3") { id discarded problem { code message } }
+      chooseFields(id: $id, input: $input, requestId: $requestId, clientResult: $clientResult) { revision state problem { code message } }
     }
   }
 }
 
-query { machines { topicMap { get(id: "...") { id revision state context { fields mapId } } } } }
+mutation TopicMapDiscard($id: UUID!, $requestId: String!) {
+  machines { topicMap { discard(id: $id, requestId: $requestId) { id discarded problem { code message } } } }
+}
+
+query TopicMapGet($id: UUID!) {
+  machines { topicMap { get(id: $id) { id revision state context { fields mapId } } } }
+}
 ```
 
 ## See also

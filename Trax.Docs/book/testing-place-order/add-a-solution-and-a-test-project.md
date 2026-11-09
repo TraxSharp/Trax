@@ -30,13 +30,13 @@ Add the test packages to `Directory.Packages.props`, beside the Trax ones:
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Trax.Core" Version="1.61.0" />
-    <PackageVersion Include="Trax.Core.Testing" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
-    <PackageVersion Include="Trax.Mediator" Version="1.61.0" />
-    <PackageVersion Include="Trax.Mediator.Testing" Version="1.61.0" />
+    <PackageVersion Include="Trax.Core" Version="1.69.0" />
+    <PackageVersion Include="Trax.Core.Testing" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.69.0" />
+    <PackageVersion Include="Trax.Mediator" Version="1.69.0" />
+    <PackageVersion Include="Trax.Mediator.Testing" Version="1.69.0" />
   </ItemGroup>
 
   <ItemGroup>

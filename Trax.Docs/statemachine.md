@@ -29,6 +29,8 @@ A machine can also be written as Gherkin features and a glossary instead of a C#
 moves, guards, timers, access, the policies between machines and the views from the scenarios, and runs the same
 scenarios as tests. See [Write machines as features](/docs/statemachine/write-machines-as-features), and
 [How features become machines](/docs/statemachine/how-features-become-machines) for what each part becomes.
+[Serve features from the hub template](/docs/statemachine/serve-features-from-the-hub-template) serves them from a
+`trax-hub` project.
 
 ## The two-document model
 

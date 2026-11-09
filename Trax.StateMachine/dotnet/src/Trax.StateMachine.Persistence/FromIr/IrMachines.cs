@@ -85,6 +85,8 @@ internal static class IrMachines
         foreach (var problem in MachineFiles.HandlerProblems(host, ir))
             throw new InvalidOperationException(Refuse(problem));
         var trains = Trains(ir, host, trainAssemblies, Refuse);
+        foreach (var problem in OutputProblems(ir, trains))
+            throw new InvalidOperationException(Refuse(problem));
         var handlers = Handlers(host, trainAssemblies, Refuse);
 
         IrTypes types;
@@ -258,7 +260,7 @@ internal static class IrMachines
     }
 
     // The train each invoking state runs: named by the host file, found by its full name in the assemblies given, and an
-    // IServiceTrain. The outcome's output schema is checked against the train's output type when the export is compared.
+    // IServiceTrain. The outcome's output schema is checked against the train's output type by OutputProblems.
     private static Dictionary<string, Type> Trains(
         JsonObject ir,
         HostMachine host,
@@ -314,6 +316,117 @@ internal static class IrMachines
             trains[state] = train;
         }
         return trains;
+    }
+
+    // Each invoking state's done output as the file declares it, beside the schema the train's output type exports.
+    // The machine built from the IR exports the train's, so any difference would only surface as a diff of the whole
+    // IR; named here in the glossary's terms (invokes.<State>.output.<field>), with the value to write.
+    private static IEnumerable<string> OutputProblems(
+        JsonObject ir,
+        Dictionary<string, Type> trains
+    )
+    {
+        foreach (
+            var outcome in (ir["outcomes"] as JsonObject ?? []).Select(o => o.Value!.AsObject())
+        )
+        {
+            if (
+                outcome["outcome"]!.GetValue<string>() != "done"
+                || outcome["output"] is not JsonObject declared
+                || !trains.TryGetValue(outcome["state"]!.GetValue<string>(), out var train)
+            )
+                continue;
+            var state = outcome["state"]!.GetValue<string>();
+            var output = TrainTypes(train).Output;
+            JsonObject reflected;
+            try
+            {
+                reflected = IrExporter.WriteSchema(SchemaReflection.ForInput(output));
+            }
+            catch (InvalidOperationException)
+            {
+                // An output with no schema is refused when the machine is built, with its own reason.
+                continue;
+            }
+            var differences = new List<string>();
+            CompareFields(
+                declared["fields"] as JsonArray,
+                reflected["fields"] as JsonArray,
+                $"invokes.{state}.output",
+                differences
+            );
+            if (differences.Count > 0)
+                yield return $"{state} invokes {train.FullName}, and its output {output.Name} does not have the "
+                    + "schema the IR declares for it, which the server and every client check that output against. "
+                    + "In the glossary, "
+                    + string.Join("; ", differences)
+                    + ". Then derive the machine again.";
+        }
+    }
+
+    private static void CompareFields(
+        JsonArray? declared,
+        JsonArray? reflected,
+        string path,
+        List<string> differences
+    )
+    {
+        static Dictionary<string, JsonObject> ByName(JsonArray? fields) =>
+            (fields ?? [])
+                .OfType<JsonObject>()
+                .ToDictionary(f => f["name"]!.GetValue<string>(), StringComparer.Ordinal);
+        var file = ByName(declared);
+        var train = ByName(reflected);
+        foreach (var (name, field) in train.Where(f => !file.ContainsKey(f.Key)))
+            differences.Add(
+                $"{path} has no field {name}, which the train's output has; add {CanonicalJson.Serialize(field)}"
+            );
+        foreach (var name in file.Keys.Where(n => !train.ContainsKey(n)))
+            differences.Add($"{path}.{name} is not a field of the train's output; remove it");
+        foreach (var (name, field) in file.Where(f => train.ContainsKey(f.Key)))
+            CompareShape(field, train[name], $"{path}.{name}", differences);
+    }
+
+    // One field, dictionary value or key: every key of its shape, then its own fields, values and keys.
+    private static void CompareShape(
+        JsonObject declared,
+        JsonObject reflected,
+        string path,
+        List<string> differences
+    )
+    {
+        string[] nested = ["fields", "values", "keys"];
+        foreach (
+            var key in declared
+                .Select(kv => kv.Key)
+                .Union(reflected.Select(kv => kv.Key))
+                .Where(k => k != "name")
+                .Order(StringComparer.Ordinal)
+        )
+        {
+            var file = declared[key];
+            var train = reflected[key];
+            var has = declared.ContainsKey(key);
+            var needs = reflected.ContainsKey(key);
+            if (has && needs && nested.Contains(key))
+            {
+                if (key == "fields")
+                    CompareFields(file as JsonArray, train as JsonArray, path, differences);
+                else
+                    CompareShape(file!.AsObject(), train!.AsObject(), $"{path}.{key}", differences);
+                continue;
+            }
+            var written = has ? CanonicalJson.Serialize(file) : null;
+            var wanted = needs ? CanonicalJson.Serialize(train) : null;
+            if (written == wanted)
+                continue;
+            differences.Add(
+                !has ? $"{path} has no \"{key}\"; write \"{key}\": {wanted}"
+                : !needs
+                    ? $"{path} has \"{key}\": {written}, which the train's output does not; remove it"
+                : $"{path} has \"{key}\": {written}; write \"{key}\": {wanted}"
+            );
+        }
     }
 
     // An IR as the exporter writes it, so its canonical text and hash are the ones the exporter produces. The engine

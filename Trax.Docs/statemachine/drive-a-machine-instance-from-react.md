@@ -12,6 +12,10 @@ nav_order: 21
 machine's typed operations and its [push](/docs/sdk-reference/graphql-api/machines#the-push) stream into the `MachineServer` that
 `useServerMachine` (from `@traxsharp/state-machine/react`) and its framework-free `ServerMachineController` drive an instance
 through. The server applies every transition, stores it and answers what it stored; the twin only predicts.
+[`trax client`](/docs/reference/cli#frontend-clients-trax-client) writes the twin and the machine's documents, as `topicMap` and
+`topicMapDocuments` in `topic-map/topic-map.client.g.ts` under its `--out` (`src/trax` here, beside the page). The
+same module's `useTopicMap()` is `useServerMachine` over a server it builds from the connection given to
+`configureTrax`; build your own, as below, when the page holds its own socket.
 
 ## Bind the server and use the hook
 
@@ -19,12 +23,12 @@ through. The server applies every transition, stores it and answers what it stor
 import { createClient } from 'graphql-ws';
 import { createMachineServer, persistedMessageReplacer, retryClosedSocket } from '@traxsharp/state-machine/client';
 import { useServerMachine } from '@traxsharp/state-machine/react';
-import documents from './topic-map.documents.json';
+import { topicMap, topicMapDocuments } from './trax/topic-map/topic-map.client.g';
 
 const server = createMachineServer('/trax/graphql', {
   headers: () => ({ 'X-Api-Key': key }),
   machine: topicMap,
-  documents,
+  documents: topicMapDocuments,
   socket: createClient({
     url: 'wss://host/trax/graphql',
     connectionParams: { apiKey: key },
@@ -66,6 +70,15 @@ function Wizard({ id }: { id?: string }) {
   `resubscribeDelays` (1, 2, then every 5 seconds, each wait drawn between half the delay and all of it); the new
   stream's first event is the instance as it is then, so nothing is read again.
 - **Adds `discard(id, requestId)`**, for a page that throws an instance away.
+
+## A page on another origin
+
+The socket is checked apart from the HTTP requests. A page served from another origin than the host (a Vite dev
+server on `localhost:5173` in front of a host on `localhost:5280`) opens it only when the host allows the page's
+origin, through its CORS default policy's `WithOrigins(...)` or `AllowSocketOrigins(...)`; otherwise the upgrade is
+answered `403` and the push never arrives, even where CORS lets every request through (`AllowAnyOrigin()` allows
+no socket origin). A Vite proxy with `changeOrigin: true`
+causes the same refusal. See [Allowed origins](/docs/sdk-reference/graphql-api/subscriptions#allowed-origins).
 
 ## What useServerMachine does
 

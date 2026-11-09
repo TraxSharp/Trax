@@ -146,6 +146,15 @@ From `@traxsharp/state-machine/react`:
 `@traxsharp/state-machine/react`, is `ServerMachineController` as a hook. Its options, its answer and an example are under
 [Driving an instance from React](/docs/statemachine/drive-a-machine-instance-from-react).
 
+`useRememberedMachine` reads and writes `globalThis.localStorage`, and keeps nothing when it is missing or throws.
+Node 25 and later define a `localStorage` global of their own, empty without `--localstorage-file`, which shadows the
+one a jsdom test environment provides, so in a test under vitest's `jsdom` environment the hook remembers nothing.
+Put jsdom's back in a setup file (`setupFiles` in the vitest config):
+
+```js
+Object.defineProperty(globalThis, "localStorage", { value: globalThis.jsdom.window.localStorage, configurable: true });
+```
+
 ## See also
 
 - [The machines root](/docs/sdk-reference/graphql-api/machines), the operations each client sends.

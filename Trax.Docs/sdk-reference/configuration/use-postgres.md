@@ -52,7 +52,10 @@ public static TraxEffectBuilderWithData UsePostgres(
 Unless [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) was called earlier in the chain,
 `UsePostgres` runs `DatabaseMigrator.Migrate(connectionString)` synchronously before it registers anything, so the
 database must be reachable when the host is configured. See
-[DatabaseMigrator](/docs/sdk-reference/configuration/database-migrator). It sets `HasDataProvider` and
+[DatabaseMigrator](/docs/sdk-reference/configuration/database-migrator). A process started with
+`--trax-export-client <path>` skips the migration, so configuring the host opens no database, and registers a hosted
+service that refuses to start the host if it serves anyway (see
+[Client manifest](/docs/sdk-reference/statemachine-api/client-manifest#behavior)). It sets `HasDataProvider` and
 `HasDatabaseProvider`.
 
 - The migration's scripts wait at most five seconds for a table lock. When one gives up, the migrator runs the
@@ -95,6 +98,8 @@ needs a data source mapped the same way outside the container.
 | [IQueuedWorkListener](/docs/sdk-reference/configuration/i-queued-work-listener) | Singleton | Hears `trax_queued_work` notifications from every host |
 | `IInvokedRunListener`, `ISnapshotNoticeSource` | Singleton | The notifications the state machine runtime waits on |
 | `ICheckpointRows` | Singleton, if none is registered | The rows checkpoints are stored in |
+| `IHostedService` (`HostHeartbeatService`) | Singleton | Writes this host's row in `trax.host_heartbeat` at start and every 15 seconds. See [Host Tracking](/docs/sdk-reference/configuration/host-tracking#heartbeat). |
+| `TimeProvider` | Singleton, if none is registered | `TimeProvider.System`, the heartbeat's clock |
 | `ITraxFeatureDbConfigurator` | Singleton | A `DelegateFeatureDbConfigurator` that points a feature's own `DbContext` at the same data source (`UseNpgsql`), so it needs no `AddDbContext` of the host's |
 
 ## Examples

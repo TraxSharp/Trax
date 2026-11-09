@@ -1,10 +1,12 @@
 using System.Text;
+using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.Utils;
 using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.TrainExecution;
 
@@ -161,6 +163,51 @@ public partial class RunAndQueueExecutionTests
             .SingleAsync(w => w.Id == queued.WorkQueueId);
 
         stored.Input.Should().Contain("\"a\"").And.Contain("\"c\"");
+    }
+
+    [Test]
+    public async Task A_queued_input_keeps_its_dictionary_keys()
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
+
+        var queued = await execution.QueueAsync(
+            typeof(ITotalsTrain).FullName!,
+            """{"totals":{"Ada":1,"bo":2}}"""
+        );
+
+        var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var stored = await context
+            .WorkQueues.AsNoTracking()
+            .SingleAsync(w => w.Id == queued.WorkQueueId);
+
+        // The dispatcher reads the entry and the job submitter writes it again for the worker,
+        // both with ManifestProperties; the local worker reads that copy with the same options.
+        var options = TraxJsonSerializationOptions.ManifestProperties;
+        var dispatched = JsonSerializer.Deserialize<TotalsInput>(stored.Input!, options)!;
+        var jobInput = JsonSerializer.Serialize(dispatched, options);
+        var seenByTheTrain = JsonSerializer.Deserialize<TotalsInput>(jobInput, options)!;
+
+        seenByTheTrain
+            .Totals.Keys.Should()
+            .BeEquivalentTo(
+                ["Ada", "bo"],
+                "a dictionary's keys are the caller's data, not member names to rename"
+            );
+    }
+
+    public record TotalsInput
+    {
+        public Dictionary<string, int> Totals { get; init; } = [];
+    }
+
+    public interface ITotalsTrain : IServiceTrain<TotalsInput, Unit>;
+
+    public class TotalsTrain : ServiceTrain<TotalsInput, Unit>, ITotalsTrain
+    {
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 
     public record RowsInput

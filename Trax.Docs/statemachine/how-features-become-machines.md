@@ -107,7 +107,7 @@ answered `FORBIDDEN`, and a booking with no passport number is answered with the
 | `states` | `states`, `initialState`, `context`, `committedStates`, `invariants` | | the state enum and context records of the generated client |
 | `context`, `initialContext` | `context` (each state's), `initialContext` | | the context record |
 | a trigger a person fires (`When Ada checks in for her booking in seat "14C"`) | `triggers`, a transition | `triggers.<T>.roles` (or `anyAuthenticated`) | the mutation `<trigger>` |
-| a trigger no person fires (`When check-in opens for the flight`) | a transition, left out of `triggers` | `triggers.<T>.server: true` | nothing: only the server fires it |
+| a trigger no person fires (`When check-in opens for the flight`) | `triggers`, a transition | `triggers.<T>.server: true` | nothing: only the server fires it |
 | a trigger only ever denied, or never fired | nothing | nothing | nothing |
 | `triggers.<T>.input` and `reduce` | `inputs.<T>`, the transition's `reduce` | | the mutation's `input` |
 | a guard, with a scenario where it holds and one where it fails | the transition's `guard` and `guardMessage` | | the refusal's message |

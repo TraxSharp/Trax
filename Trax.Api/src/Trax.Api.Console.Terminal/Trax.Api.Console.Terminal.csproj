@@ -15,9 +15,6 @@
     <PackageTags>trax;dotnet;dotnet-tool;operations;console;terminal;tui;graphql</PackageTags>
     <PackageProjectUrl>https://traxsharp.net/docs/reference/trax-console</PackageProjectUrl>
     <TraxPackageReadme>$(MSBuildThisFileDirectory)README.md</TraxPackageReadme>
-    <!-- A new package id, so nuget.org has no release to validate against yet. Remove after the first release that
-         ships it (Directory.Build.props). -->
-    <EnablePackageValidation>false</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>

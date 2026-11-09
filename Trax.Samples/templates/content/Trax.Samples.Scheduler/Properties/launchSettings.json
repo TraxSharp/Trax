@@ -5,7 +5,7 @@
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
-      "launchUrl": "trax",
+      "launchUrl": "trax/dashboard",
       "applicationUrl": "http://localhost:5401",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"

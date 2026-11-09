@@ -9,10 +9,10 @@ the diff after deriving: if something else moved, a scenario says more than you 
 | --- | --- | --- |
 | Add a state | `states.<Name>: "<phrase>"` in the glossary, and a scenario that reaches it | the IR's `states`, the client's state enum |
 | Let an actor do something new | a trigger with a `phrase`, and a scenario where a person of that actor fires it on their own instance | IR transition and `triggers`, `host.json` `triggers.<T>.roles`, a new `access.txt` line, a new mutation |
-| Make something happen with no person | a phrase starting with `{subject}` (or a system machine's phrase), fired by no one in its scenario | IR transition only; `host.json` `server: true`; `access.txt` `the server only`; no mutation |
+| Make something happen with no person | a phrase starting with `{subject}` (or a system machine's phrase), fired by no one in its scenario | IR transition and `triggers`; `host.json` `triggers.<T>.server: true`; `access.txt` `the server only`; no mutation |
 | Take input with a trigger | `input` fields, `{field}` in the phrase, a `reduce`, and a quoted value in the step | IR `inputs.<T>`, the mutation's `input` |
 | Refuse a move with a message | a guard (`holds`, `fails`, `rule`), a scenario where it holds and one where it fails with `Then Ada is told "..."` | the IR transition's `guard` and `guardMessage` |
-| Forbid an actor | a scenario with `Then Ada is not allowed`, and no scenario where that actor fires it | the trigger left out for that actor; if no actor fires it, left out entirely |
+| Forbid an actor | a scenario with `Then Ada is not allowed`, and no scenario where that actor fires it | the trigger left out for that actor; if no actor fires it, left out entirely and `access.txt` says `nobody` |
 | Wait, then move | `When <n> <unit> pass` then a Then in the new state | IR `timers` (`<State>.after`) |
 | Run work in a state | `invokes.<State>` (train interface, input, output, outcomes, examples) and scenarios for done, failed, cancelled | IR `outcomes`; `host.json` `invokes`; the train is found by its interface's full name in the assemblies given to `ServeFeatures` |
 | Give the train its caller | `"input": { "<field>": "$owner" }` | `host.json` only; the server sets it |
@@ -53,6 +53,7 @@ booking start: passenger            who may start one of their own
 booking read: passenger             who may read their own
 booking CheckIn: passenger          who may fire CheckIn on their own
 booking Miss: the server only       no client may fire it
+booking Board: nobody               every scenario denies it, so it is not served
 view departures: agent, passenger   who may query the view
 ```
 

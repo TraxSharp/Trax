@@ -277,7 +277,15 @@ public class MachineGenerateFromPackedToolTests
         File.WriteAllText(
             Path.Combine(work, "vitest.config.mjs"),
             """
-            export default { test: { include: ["client.g.test.ts"], environment: "jsdom" } };
+            export default { test: { include: ["client.g.test.ts"], environment: "jsdom", setupFiles: ["jsdom-storage.mjs"] } };
+            """
+        );
+        // Node 25 and later define a global localStorage of their own, which holds nothing without
+        // --localstorage-file and shadows jsdom's; the remembered hooks under test need the page's.
+        File.WriteAllText(
+            Path.Combine(work, "jsdom-storage.mjs"),
+            """
+            Object.defineProperty(globalThis, "localStorage", { value: globalThis.jsdom.window.localStorage, configurable: true });
             """
         );
         File.WriteAllText(Path.Combine(work, "client.g.test.ts"), GeneratedHookTests);

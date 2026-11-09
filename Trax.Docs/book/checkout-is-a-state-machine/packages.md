@@ -24,25 +24,25 @@ while a machine waits on it. The tests check the machine against its exported de
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Trax.Api.Auth" Version="1.61.0" />
-    <PackageVersion Include="Trax.Api.Auth.Jwt" Version="1.61.0" />
-    <PackageVersion Include="Trax.Api.Dashboard" Version="1.61.0" />
-    <PackageVersion Include="Trax.Api.GraphQL" Version="1.61.0" />
-    <PackageVersion Include="Trax.Api.GraphQL.PersistedOperations" Version="1.61.0" />
-    <PackageVersion Include="Trax.Core" Version="1.61.0" />
-    <PackageVersion Include="Trax.Core.Testing" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.Data.Testing" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.JunctionProvider.Progress" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
-    <PackageVersion Include="Trax.StateMachine.Persistence" Version="1.61.0" />
-    <PackageVersion Include="Trax.StateMachine.Testing" Version="1.61.0" />
-    <PackageVersion Include="Trax.Mediator" Version="1.61.0" />
-    <PackageVersion Include="Trax.Mediator.Testing" Version="1.61.0" />
-    <PackageVersion Include="Trax.Scheduler" Version="1.61.0" />
+    <PackageVersion Include="Trax.Api.Auth" Version="1.69.0" />
+    <PackageVersion Include="Trax.Api.Auth.Jwt" Version="1.69.0" />
+    <PackageVersion Include="Trax.Api.Dashboard" Version="1.69.0" />
+    <PackageVersion Include="Trax.Api.GraphQL" Version="1.69.0" />
+    <PackageVersion Include="Trax.Api.GraphQL.PersistedOperations" Version="1.69.0" />
+    <PackageVersion Include="Trax.Core" Version="1.69.0" />
+    <PackageVersion Include="Trax.Core.Testing" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Data.Testing" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.JunctionProvider.Progress" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.69.0" />
+    <PackageVersion Include="Trax.StateMachine.Persistence" Version="1.69.0" />
+    <PackageVersion Include="Trax.StateMachine.Testing" Version="1.69.0" />
+    <PackageVersion Include="Trax.Mediator" Version="1.69.0" />
+    <PackageVersion Include="Trax.Mediator.Testing" Version="1.69.0" />
+    <PackageVersion Include="Trax.Scheduler" Version="1.69.0" />
   </ItemGroup>
 
   <ItemGroup>

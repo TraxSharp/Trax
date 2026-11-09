@@ -21,7 +21,7 @@ Install the tool for the solution:
 
 ```bash
 dotnet new tool-manifest
-dotnet tool install Trax.Cli --version 1.61.0
+dotnet tool install Trax.Cli --version 1.69.0
 ```
 
 Build the library, then export:

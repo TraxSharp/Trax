@@ -45,6 +45,9 @@ than a 401 or 403.
 2. Then remove the `IsDevelopment()` check around `AddTraxApiKeyAuth`, with the demo keys gone from
    it. Moving the demo key out of the check does not work: a host refuses to start outside
    Development with a key containing `do-not-use-in-production` registered.
+   That check sees only keys registered with `Add`. A host that resolves keys from its own store
+   (`AddTraxApiKeyAuth<TResolver>()`) and seeds demo users into it in Development keeps them in
+   Production: remove the seeding and the rows it wrote before deploying.
 3. Keep `[TraxAuthorize]` on the trains you add. Mark one `[TraxAllowAnonymous]` only when anyone
    who can reach the host may call it.
 

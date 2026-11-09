@@ -24,8 +24,14 @@ until you choose one. Each also ships a README, a `.gitignore` and an NUnit test
 
 A [state machine that invokes trains](/docs/statemachine/invoking-trains) needs a scheduler, `AddJunctionProgress()`
 and a database. Start it from `trax-hub`, which has the first two, and switch it from `UseInMemory()` to `UseSqlite()`
-or `UsePostgres()` ([Switch a template to Postgres](/docs/reference/switch-a-template-to-postgres)). `trax-api` has
-no scheduler.
+(package `Trax.Effect.Data.Sqlite`) or `UsePostgres()` (package `Trax.Effect.Data.Postgres`;
+[Switch a template to Postgres](/docs/reference/switch-a-template-to-postgres)). `trax-api` has no scheduler.
+
+Machines [written as features](/docs/statemachine/write-machines-as-features) are served from `trax-hub` too, after
+a few additions: a database, `AddStateMachines(o => o.ServeFeatures(...))` between `AddEffects` and `AddMediator`,
+the `machines/` folder copied into the build output, an `ISnapshotPrincipal`, persisted operations and
+`RunTraxAsync`. [Serve features from the hub template](/docs/statemachine/serve-features-from-the-hub-template) has
+each step.
 
 Before writing your own trains, read [Organize trains in a project](/docs/core/organize-trains): one folder per train,
 its own input type, its junctions beside it. The templates' `HelloWorld` and `Lookup` trains follow it, so keep them as
@@ -257,6 +263,7 @@ Each test project references the application and uses NUnit with
 - [Add your own trains to a template](/docs/reference/add-trains-to-a-template): a query train and a scheduled train.
 - [Switch a template to Postgres](/docs/reference/switch-a-template-to-postgres): a database that survives a restart and lets `mode: QUEUE` run.
 - [Prepare a template for deployment](/docs/reference/prepare-a-template-for-deployment): the console and the demo keys exist only in Development.
+- [Serve features from the hub template](/docs/statemachine/serve-features-from-the-hub-template): machines written as Gherkin features, served from `trax-hub`.
 
 ## Uninstalling
 

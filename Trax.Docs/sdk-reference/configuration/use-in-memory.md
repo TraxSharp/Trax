@@ -50,6 +50,8 @@ database, and no `ISqlDialect` or `IQueuedWorkListener` is registered. NUL chara
 | [IDataContext](/docs/sdk-reference/configuration/i-data-context) | Scoped | A context over the shared root |
 | `ICheckpointRows` | Singleton, if none is registered | The rows checkpoints are stored in |
 | `ITraxFeatureDbConfigurator` | Singleton | A `DelegateFeatureDbConfigurator` that points a feature's own `DbContext` at the same in-memory store |
+| `IHostedService` (`HostHeartbeatService`) | Singleton | Writes this host's row in `trax.host_heartbeat` at start and every 15 seconds. See [Host Tracking](/docs/sdk-reference/configuration/host-tracking#heartbeat). |
+| `TimeProvider` | Singleton, if none is registered | `TimeProvider.System`, the heartbeat's clock |
 
 ### InMemoryContextProviderFactory
 

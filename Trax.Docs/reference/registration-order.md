@@ -17,6 +17,8 @@ naming the call to move. Nothing about registration is allowed to fail silently.
 | Requirement | What happens if you get it wrong |
 |---|---|
 | `AddTrax()` before `AddTraxGraphQL()` | Throws immediately, naming the missing call. |
+| `AddEffects(...)` before `AddMediator(...)`, inside `AddTrax` | Does not compile: error CS0619, `Call AddEffects(...) before AddMediator(...). See https://traxsharp.net/docs/cross-cutting/troubleshooting#call-addeffects-before-addmediator` |
+| `AddStateMachines(...)` before `AddMediator(...)`, inside `AddTrax` | Does not compile: error CS0619, `Call AddStateMachines(...) before AddMediator(...).` |
 | An authorization posture in the `UseTraxApiDashboard(...)` options | `UseTraxApiDashboard()` throws, naming `RequirePolicy`, `RequireRoles` and `AllowAnonymousShell`. |
 | Trains registered before `AddTraxGraphQL()` | The host refuses to start, naming each `[TraxQuery]`, `[TraxMutation]` or `[TraxBroadcast]` train registered afterwards. `AddTraxGraphQL()` checks each train's authorization posture and name and builds the schema roots from the trains registered before it. |
 | Machines served from features (`ServeFeatures(...)` in `AddStateMachines`) before `AddTraxGraphQL()`, when they declare views | The host refuses to start: `These views of machines served from features are registered, but AddTraxGraphQL() saw none of them, so the schema has no views root to serve them under:` followed by the views, then `Register the machines directory before AddTraxGraphQL().` |
@@ -27,6 +29,13 @@ builder.Services.AddTrax(trax => trax.AddEffects(...).AddMediator(...));
 builder.Services.AddTraxJwtAuth(...);
 builder.Services.AddTraxGraphQL(graphql => graphql.AddDbContext<AppDbContext>());
 ```
+
+## Calls made more than once
+
+| Call | What happens |
+|---|---|
+| A second `AddMediator(...)` in the same chain | Does not compile: error CS0619, `AddMediator(...) is already called. Call it once and configure everything in that call.` |
+| A second `AddStateMachines(...)` in the same chain | Throws at registration: `AddStateMachines() was called more than once. Call it once, passing every assembly that holds your machines and configuring every option in that call: AddStateMachines(o => ..., typeof(A).Assembly, typeof(B).Assembly).` |
 
 ## Missing registrations and what they raise
 

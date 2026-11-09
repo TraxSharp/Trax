@@ -2,40 +2,41 @@
 
 import { useState } from "react";
 
-const PROMPT = `Use Trax .NET (traxsharp.net) and React to build a live quiz for a room of people.
-The host puts up one question at a time, players answer on their own screens, each
-question closes 60 seconds after it opens, and a scoreboard shows the totals.
+const PROMPT = `Use Trax .NET (traxsharp.net) and React to build Battleship in the browser: one
+player against the computer.
 
-Write the app as features, not code: a glossary and a features/ folder in Gherkin
+Write the game as features, not code: a glossary and a features/ folder in Gherkin
 (traxsharp.net/docs/statemachine/write-machines-as-features). Trax derives the state
-machines, the access rules and the API from them, so write no machine class and no access
-rule by hand. Read the linked docs before you start.
+machine, its access rules and its API from them, so write no machine class and no access
+rule by hand. Read that page and the CheckIn sample it links before you start: the game
+has the same shape.
 
 What the features say:
-- There is one quiz, owned by the system at a fixed key. Each player owns their answer
-  sheet, and the host owns their hosting shift.
-- When the host asks a question, every waiting answer sheet opens. After 60 seconds the
-  question closes by itself, and the sheets close with it.
-- An empty answer is refused with "Write something first.", an answer after the question
-  closes is refused, and a player cannot ask a question.
-- Scoring runs as a workflow when a question closes, and a scoreboard view shows the
-  totals.
+- Each player owns their games. A new game deals both fleets at random: five ships
+  (5, 4, 3, 3, 2) each on a 10x10 board, none overlapping.
+- On your turn you fire at a square and learn whether it was a miss, a hit or a sunk
+  ship. Firing at a square you have already tried costs you nothing. Then the computer
+  fires back, hunting around a hit instead of firing at random.
+- You win when the computer's last ship sinks, and lose when yours does.
+
+The server owns the game. Dealing, your shot and the computer's shot are workflows the
+game's states invoke. Everything in the game's context reaches the page, so the
+computer's fleet stays on the server, out of the context.
 
 How to build it:
 - Backend: \`dotnet new trax-hub\` (traxsharp.net/docs/reference/templates), switched to
-  SQLite, with Development-only demo keys beside the template's: one host and two players.
-- Derive the machines with \`trax machine from-gherkin\`, commit machines/ with its
-  access.txt, and serve them with ServeFeatures.
+  SQLite. Derive the machine with \`trax machine from-gherkin\`, commit machines/ with
+  its access.txt, and serve it with ServeFeatures.
 - Frontend: \`npm create vite@latest -- --template react-ts\`. Generate its client with
   \`trax client\` from the manifest the host exports (traxsharp.net/docs/reference/cli)
-  and use the generated hooks, with no hand-written fetch or GraphQL. One page for the
-  host and one for a player, where a player picks their key from a list instead of
-  signing in.
+  and use the generated hooks, with no hand-written fetch or GraphQL. Show both boards
+  with hits and misses, and whose turn it is. No sign-in: the page uses the template's
+  development demo key, and a reload resumes the game.
 
 You are done when \`trax machine from-gherkin --check\` and \`trax client --check\` pass,
-\`trax machine run\` is green, \`trax machine missing\` lists nothing and \`npm run build\`
-has no errors. Then leave both running and give me the URLs for the host page, each
-player's page and the operations console.`;
+\`trax machine run\` is green, \`trax machine missing\` lists nothing, \`npm run build\`
+has no errors, and you have played a whole game in a browser against the running host,
+to a win or a loss. Then leave both running and give me the URL to play it.`;
 
 export default function AgentPrompt() {
   const [copied, setCopied] = useState(false);

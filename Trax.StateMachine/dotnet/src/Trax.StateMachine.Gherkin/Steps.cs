@@ -128,14 +128,17 @@ internal sealed partial class StepResolver
             }
             foreach (var guard in machine.Guards.Values)
             {
-                Add(
-                    $@"{reference}\s+{Words(guard.Holds)}",
-                    m => new Meaning.Guard(machine.Id, Owner(m), guard.Name, true, KeyOf(m))
-                );
-                Add(
-                    $@"{reference}\s+{Words(guard.Fails)}",
-                    m => new Meaning.Guard(machine.Id, Owner(m), guard.Name, false, KeyOf(m))
-                );
+                // A guard on the input alone has no phrases: a When shows it.
+                if (guard.Holds is { } holds)
+                    Add(
+                        $@"{reference}\s+{Words(holds)}",
+                        m => new Meaning.Guard(machine.Id, Owner(m), guard.Name, true, KeyOf(m))
+                    );
+                if (guard.Fails is { } fails)
+                    Add(
+                        $@"{reference}\s+{Words(fails)}",
+                        m => new Meaning.Guard(machine.Id, Owner(m), guard.Name, false, KeyOf(m))
+                    );
             }
             foreach (var trigger in machine.Triggers.Values)
             {

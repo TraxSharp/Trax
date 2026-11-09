@@ -43,6 +43,8 @@ public static class TraxJsonSerializationOptions
     /// - IncludeFields: true - Includes fields (not just properties) in serialization
     /// - DefaultIgnoreCondition: WhenWritingNull - Omits null values from the output
     /// - MaxDepth: 64 - System.Text.Json's own default, deep enough for nested inputs
+    /// - PropertyNamingPolicy: camelCase for member names. Dictionary keys are written as they
+    ///   are: they are the train's data, and reading never renames a key back
     /// - No reference preservation: a stored input is a plain tree, with no $id or $values.
     ///   Rows written by versions that preserved references still read back (see
     ///   <c>StoredJson</c>)
@@ -60,7 +62,6 @@ public static class TraxJsonSerializationOptions
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
                 MaxDepth = StoredDepth,
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
                 Converters =
                 {
                     new JsonStringEnumConverter(),
@@ -72,7 +73,8 @@ public static class TraxJsonSerializationOptions
 
     /// <summary>
     /// JSON serializer options for manifest properties and for a queued input's stored form: the
-    /// same as <see cref="Default"/> with relaxed escaping. Read-only.
+    /// same as <see cref="Default"/> with relaxed escaping, so dictionary keys are kept as they
+    /// are. Read-only.
     /// </summary>
     public static JsonSerializerOptions ManifestProperties { get; internal set; } =
         Frozen(
@@ -84,7 +86,6 @@ public static class TraxJsonSerializationOptions
                 Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
                 MaxDepth = StoredDepth,
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
                 Converters =
                 {
                     new JsonStringEnumConverter(),
@@ -110,7 +111,8 @@ public static class TraxJsonSerializationOptions
     /// <summary>
     /// The options the junction logger uses to serialize a junction's output into <c>JunctionMetadata.OutputJson</c>
     /// when <c>serializeJunctionData</c> is on, wrapped by <see cref="TraxLogSerialization.ForLogging"/> so
-    /// <c>[TraxSensitive]</c> members are masked. Compact, camelCase, nulls omitted, enums as strings, cycles ignored
+    /// <c>[TraxSensitive]</c> members are masked. Compact, camelCase member names with dictionary keys written as they
+    /// are (they are data, as in the stored input and output), nulls omitted, enums as strings, cycles ignored
     /// rather than preserved, depth capped at 8, and any <see cref="IDisposable"/> written as a placeholder by
     /// <see cref="DisposableConverter"/>. Process-wide and settable; replacing it affects every junction logger.
     /// </summary>
@@ -123,7 +125,6 @@ public static class TraxJsonSerializationOptions
             ReferenceHandler = ReferenceHandler.IgnoreCycles,
             MaxDepth = 8,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
             Converters = { new JsonStringEnumConverter(), new DisposableConverter() },
         };
 }

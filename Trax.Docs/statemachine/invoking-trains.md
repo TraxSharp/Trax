@@ -127,8 +127,10 @@ public sealed class IngestMachine : Machine<Stage, IngestTrigger>
 - `OnFailed`, exactly once. A run the scheduler reaps arrives here too.
 - `OnCancelled`, exactly once, and required.
 
-`Build` refuses an invoking state that leaves one out, and an outcome that goes to the state the machine starts at or
-to its effect's target. The builder's rules are listed under
+`Build` refuses an invoking state that leaves one out, an outcome that goes to its effect's target, and an outcome
+that goes to the state the machine starts at, unless that state invokes a train itself. It also refuses an effect
+bound with `RunsOnce` that runs from or lands in an invoking state (`An effect neither runs from nor lands in a state
+that invokes a train; put a plain state between them.`). The builder's rules are listed under
 [IInvokeBuilder](/docs/sdk-reference/statemachine-api/machine#iinvokebuilder).
 
 Two more rules shape the rest of the machine, and `Build` refuses a machine that breaks either:
@@ -137,10 +139,15 @@ Two more rules shape the rest of the machine, and `Build` refuses a machine that
   target. Give each user action its own event into a working state that invokes the train for it, and let the
   outcome bring the instance back.
 - **An event any caller may send (no rule, `AnyAuthenticated()` or `Anonymous()`) may not copy from its input a field
-  an outcome writes.** A custom reducer (`new Reduction.Custom(name)`) counts as copying every field, so an open event
-  with one is refused whenever the machine invokes a train. Copy each value the next run needs into its own field,
-  with [`SetAll`](/docs/sdk-reference/statemachine-api/rules) when there are several, and leave the fields outcomes
-  write alone.
+  the server writes.** That is an outcome's field here, and on any machine that declares rules it is also the
+  effect's receipt, a spawned child's id and a field an event gated by `Requires` or `RequiresPolicy` writes, whether
+  or not the machine invokes a train. A custom reducer (`new Reduction.Custom(name)`) counts as copying every field, so
+  an open event with one is refused whenever the server writes any field. Copy each value the next run needs into its
+  own field, with [`SetAll`](/docs/sdk-reference/statemachine-api/rules) when there are several, and leave the fields
+  the server writes alone.
+
+Both are checked by `Build`, so a test that builds the machine catches them. The rules under
+[Who a run belongs to](#who-a-run-belongs-to) are checked only when a host that registers the machine starts.
 
 ## 3. Meet the host's requirements
 
@@ -184,7 +191,9 @@ are authorized.
   invokes) must require at least as much, or the host refuses to start. An outcome may not enter another invoking
   state, and neither may a timer, since no
   user is present to authorize that run: chain stages through an event the user sends (a "continue" or "retry" edge
-  into the next stage), as `Retry` does above.
+  into the next stage), as `Retry` does above. `Build` accepts such a machine; the host refuses it at startup
+  (`The machine 'ingest' is user-owned, and the OnDone outcome of Fetching enters Parsing, which invokes a train of its
+  own.`), so a test that only builds the machine passes. Start a host in the test too.
 - **System-owned.** Only [`IMachineInstances.Start`](/docs/sdk-reference/statemachine-api/machine-instances)
   creates an instance, and only its runs' outcomes and `IMachineInstances.Advance` move it. Its train is authorized
   inside Trax's trusted execution scope, as a scheduled manifest run is, so the train may not declare

@@ -27,11 +27,11 @@ Package versions live in one place, `Directory.Packages.props`, beside the proje
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Trax.Core" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
-    <PackageVersion Include="Trax.Mediator" Version="1.61.0" />
+    <PackageVersion Include="Trax.Core" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.69.0" />
+    <PackageVersion Include="Trax.Mediator" Version="1.69.0" />
   </ItemGroup>
 </Project>
 ```

@@ -434,11 +434,9 @@
       "additionalProperties": false
     },
     "guard": {
-      "description": "A condition, with the words for when it holds and when it fails.",
+      "description": "A condition, with the words a Given or a Then says it holds or fails in. A guard whose rule reads only the trigger's input is shown by a When's value and may leave `holds` and `fails` out; the C# reader refuses one that reads the context without both.",
       "type": "object",
       "required": [
-        "holds",
-        "fails",
         "rule"
       ],
       "properties": {

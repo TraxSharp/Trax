@@ -38,6 +38,11 @@ A field `from` a machine's `state` is a `String`: the state's label when the vie
 name otherwise. A field `from` a context field has the GraphQL type the machine's record gives that field, as on the
 machine's own operations ([Machines root](/docs/sdk-reference/graphql-api/machines)).
 
+A dictionary context field (an `object` whose `values` share one schema) arrives as a list of key and value pairs,
+not as a JSON object: a field whose values are integers is `[KeyValuePairOfNullableStringAndInt64!]`, each item
+`{ key value }`. The key is a nullable `String`, so the client `trax client` generates types it `key: string | null`,
+and the list itself is nullable.
+
 ## Example
 
 ```graphql

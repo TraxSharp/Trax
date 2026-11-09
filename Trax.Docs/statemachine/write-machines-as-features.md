@@ -122,7 +122,10 @@ When the boarding pass is issued
 Then Ada's booking is checked in
 ```
 
-Every invoking state needs a scenario for each of `done`, `failed` and `cancelled`. The train is the one piece of
+Every invoking state needs a scenario for each of `done`, `failed` and `cancelled`. An outcome may not go to the
+state the machine starts in (unless that state invokes a train itself): an outcome's state is reserved for what the
+train produced, so no instance could be started there. Send it to a state of its own, with a move back if the flow
+returns. The train is the one piece of
 C# behind the machine, written as in [Invoke a train from a state](/docs/statemachine/invoking-trains).
 
 **A timer** is time passing in a scenario. There is no glossary entry:
@@ -168,7 +171,9 @@ Scenario: A gate agent opens check-in for everyone booked
 ```
 
 That derives a `toSystem` policy: when a desk enters `Open`, the server fires `OpenCheckIn` on `flight/tx101`. The
-flight entering `Open` then moves every booking still `Booked`, which is a `broadcast`. Each machine's
+flight entering `Open` then moves every booking still `Booked`, which is a `broadcast`. A broadcast moves the
+instances in exactly one state: a Then that shows instances moving out of two states from one transition is refused,
+so give them one state to wait in. Each machine's
 `OpenCheckIn` also needs a scenario of its own showing it as a plain move (`When check-in opens for the flight`,
 `When Ada's booking opens for check-in`). Two machines of the same owner need a
 [link](/docs/reference/feature-files#links).
@@ -220,8 +225,11 @@ services.AddTrax(trax => trax
 
 [`ServeFeatures`](/docs/sdk-reference/statemachine-api/add-state-machines) serves the directory as committed: each
 machine with its access, the policies between them, the views and the system instances. A directory whose files
-disagree refuses the host at startup. Copy `machines/` into the build output, and export the client manifest and run
-`trax client` as for any machine.
+disagree refuses the host at startup. Copy `machines/` into the build output, register an
+[`ISnapshotPrincipal`](/docs/sdk-reference/statemachine-api/persistence-ports#isnapshotprincipal), which says whose
+instances a request reaches and which Trax does not register for you, and export the client manifest and run
+`trax client` as for any machine. [Serve features from the hub template](/docs/statemachine/serve-features-from-the-hub-template)
+takes a `trax-hub` project through each step, persisted operations and the timer and policy intervals included.
 
 A state that invokes a train only queues its run. `AddScheduler()`, on this host or another sharing the database, runs
 it, and without one the instance waits in that state. See
@@ -242,6 +250,23 @@ Nothing runs a feature through a page yet. A page's browser tests are written by
 `CheckInPageTests` are: a gate agent and three passengers on pages of their own, telling the same story as the
 features. Nothing checks that
 they still do when a scenario changes.
+
+## What features cannot say yet
+
+Some designs need something the glossary has no word for. Each of these is a limit of what is served today:
+
+- **A policy carries no data.** A policy fires a trigger with no input on the instances it reaches, so a value in
+  the moving instance's context does not travel with it. Put the value where the target can read it, or have a train
+  write it.
+- **A view does not show a timer's `dueAt`.** A view's field is a state or a context field. A user's own instance
+  carries `dueAt` on its machine's `get` and push ([Machines root](/docs/sdk-reference/graphql-api/machines)), but a
+  system machine read through a view does not, so a page cannot count down to its timer on the server's clock.
+- **The server has no supported read of other users' instances.** A view shows the caller's own instances and the
+  system's. `IMachineInstances` starts and moves system instances, and the operations service lists instances by
+  machine and state without their context or owner. A train that needs every user's instances (to score every
+  answer, say) reads the snapshot table through `IDataContext.SnapshotDrafts` itself, and is then tied to how the
+  features name machines, states and fields: renaming one in the glossary breaks the train, and derivation does not
+  notice.
 
 ## SDK Reference
 

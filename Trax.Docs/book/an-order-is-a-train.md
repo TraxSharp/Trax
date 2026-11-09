@@ -14,7 +14,7 @@ a train. By the end, `POST /orders` prices a cart, reserves stock, takes a payme
 order, and the log shows each of those steps as it happens. When a Trax name is new, the
 [Glossary](/docs/reference/glossary) gives its plain equivalent.
 
-Every C# block on this page is compiled in CI against the release this site was published from.
+Every C# block on this page is compiled in CI against Trax's current source.
 
 ## In this chapter
 

@@ -9,6 +9,7 @@ namespace Trax.StateMachine.Gherkin
         public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureProblem> Problems { get; init; }
         public bool Succeeded { get; }
         public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureProblem> UiSteps { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureProblem> Warnings { get; init; }
     }
     public sealed class FeatureBoard : System.IEquatable<Trax.StateMachine.Gherkin.FeatureBoard>
     {
