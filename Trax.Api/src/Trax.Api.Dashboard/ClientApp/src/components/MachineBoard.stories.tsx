@@ -42,7 +42,7 @@ export const WithProvenance: Story = {
     const c = within(canvasElement);
     await userEvent.click(await c.findByRole("button", { name: /^Place(?!d)/ }));
     await expect(await c.findByText("Ada places her order")).toBeInTheDocument();
-    await expect(c.getByText("ordering.feature:6")).toBeInTheDocument();
+    await expect(c.getByLabelText("ordering.feature line 6")).toBeInTheDocument();
   },
 };
 

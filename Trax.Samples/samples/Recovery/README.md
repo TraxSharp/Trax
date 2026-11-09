@@ -117,6 +117,10 @@ query { operations { executions(manifestId: 1, order: OLDEST) { items { id train
 query { operations { junctionRuns(metadataId: 42) { position kind name state answer replayed attempt } } }
 ```
 
+`crashWhile` takes `PAYING`, `EMAILING`, or `PAYING_THEN_EMAILING`, which the page does not offer: the first
+attempt crashes paying, its retry replays both answers, pays and crashes emailing, and the last retry starts from
+the checkpoint the second one stored. It uses all three attempts the manifest allows.
+
 ## The topic map
 
 `BuildTopicMapTrain` maps a slice of 28 made-up papers, shaped like works from a scholarly index (title,

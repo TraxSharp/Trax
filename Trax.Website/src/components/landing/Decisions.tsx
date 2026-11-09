@@ -1,8 +1,9 @@
 import DemoSection from "./DemoSection";
 import RecoveryReplay from "./RecoveryReplay";
 
-// The Recovery sample's refund, replayed from one recorded run: it asks its model two questions, crashes once while
-// paying, and the retry replays both answers instead of asking again.
+// The Recovery sample's refund, replayed from one recorded run: it asks its model two questions and crashes while
+// paying, the retry replays both answers instead of asking again and crashes while emailing, and the last retry
+// starts from the checkpoint.
 export default function Decisions() {
   return (
     <DemoSection
@@ -10,7 +11,8 @@ export default function Decisions() {
       intro={
         <p>
             A workflow lists its paths, and a model or a rule table picks one at run time. Each answer is saved, so a retry
-            after a crash takes the same path without asking again, unless the data changed.
+            after a crash takes the same path without asking again, unless the data changed. A checkpoint saves the
+            result so far, so a retry after it starts there and does not pay twice.
         </p>
       }
       links={[

@@ -161,6 +161,7 @@ hand, so nothing checks that a page tells the same story as its features.
 
 ## Changelog
 
+- **2026-11-09**: The console draws the board on a Board page of its own, under Overview, as paper notes on a wall.
 - **2026-11-08**: The CheckIn sample replaces the Bakery as the worked example, in this record and the pages that
   follow it.
 - **2026-11-08**: The Thens after a When follow the cascade in order, so a scenario can show a policy taking the acting

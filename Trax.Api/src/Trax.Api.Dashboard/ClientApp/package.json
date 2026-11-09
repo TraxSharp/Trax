@@ -24,8 +24,8 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",
-    "@fontsource-variable/geist": "^5.3.0",
-    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@xyflow/react": "^12.12.0",
     "graphql": "^16.13.2",
     "graphql-ws": "^6.4.1",

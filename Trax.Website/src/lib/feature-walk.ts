@@ -6,16 +6,18 @@
 // Each step colours one phrase of its line by what it becomes, and lights the part of a machine it produced in the
 // same colour. What a step means follows Trax.Docs/reference/feature-files.md, "The steps" and "How a scenario is read".
 
+import { HUE } from "./hue.ts";
+
 export type Kind = "who" | "command" | "state" | "guard" | "train" | "view" | "policy";
 
 export const KINDS: Record<Kind, { label: string; color: string }> = {
-  who: { label: "who may do it", color: "#7a9ec2" },
-  command: { label: "a command", color: "#d4a24c" },
-  state: { label: "a state", color: "#6cc596" },
-  guard: { label: "a guard", color: "#a093c6" },
-  train: { label: "the boarding pass train", color: "#c97fae" },
-  view: { label: "a view", color: "#5fb3a6" },
-  policy: { label: "a policy: one machine moving another", color: "#e0805a" },
+  who: { label: "who may do it", color: HUE.blue },
+  command: { label: "a command", color: HUE.amber },
+  state: { label: "a state", color: HUE.green },
+  guard: { label: "a guard", color: HUE.violet },
+  train: { label: "the boarding pass train", color: HUE.pink },
+  view: { label: "a view", color: HUE.teal },
+  policy: { label: "a policy: one machine moving another", color: HUE.coral },
 };
 
 /** A part of the diagram, a line of access.txt, or a screen, that a step can light. */

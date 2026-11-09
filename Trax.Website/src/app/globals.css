@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  /* Trax palette — forest green on warm charcoal */
+  /* Trax palette: the logo's mint on warm charcoal. The light theme is below. */
   --bg-primary: #101010;
   --bg-secondary: #181818;
   --bg-tertiary: #212121;
@@ -40,6 +40,108 @@
   --warning: #d4a24c;
   --error: #c45c5c;
   --info: #7a9ec2;
+
+  /* The demos' own hues: a status, a kind of thing, one client of several. */
+  --hue-green: #6cc596;
+  --hue-green-deep: #52ab7e;
+  --hue-amber: #d4a24c;
+  --hue-blue: #7a9ec2;
+  --hue-red: #c45c5c;
+  --hue-red-soft: #d97a7a;
+  --hue-violet: #a093c6;
+  --hue-pink: #c97fae;
+  --hue-teal: #5fb3a6;
+  --hue-coral: #e0805a;
+  --hue-gold: #c4a468;
+  --hue-copper: #c68f68;
+  --hue-steel: #78a6c4;
+  --hue-slate: #8b95a7;
+  --hue-rose: #c47a85;
+  --hue-grey: #8d8a84;
+  --hue-olive: #6fa86f;
+  --hue-butter: #e8c46a;
+
+  /* The phones the demos draw a person's app in. */
+  --phone-bezel: #2c2d2a;
+  --phone-body: #0b0c0a;
+  --phone-edge: #1f201e;
+  --phone-notch: #000000;
+
+  color-scheme: dark;
+}
+
+/*
+ * The light theme: the same hues on a warm off-white, as the operations console's, each dark enough to read as
+ * text (4.5:1 on the page), and the logo's deeper green for a light ground (.github/brand/README.md). Chosen with
+ * the header's toggle and kept in localStorage under the console's key, so the framed console demo agrees.
+ */
+:root[data-theme="light"] {
+  --bg-primary: #f6f5f2;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #efede8;
+  --bg-card: #ffffff;
+  --bg-hover: #ebe9e4;
+
+  --text-primary: #1b1a18;
+  --text-secondary: #4a4843;
+  --text-muted: #6b6862;
+
+  --accent: #2a7350;
+  --accent-hover: #1f5f41;
+  --accent-bright: #1f5f41;
+  --accent-ink: #ffffff;
+  --brand: #1f5f41;
+
+  --signal: #90671f;
+  --signal-muted: #faf2e1;
+  --derail: #bf4343;
+  --derail-muted: #fbeceb;
+  --afresh: #a85a1f;
+
+  --border: #e3e0da;
+  --border-hover: #cfcbc3;
+
+  --success: #2f7d54;
+  --warning: #90671f;
+  --error: #bf4343;
+  --info: #44709c;
+
+  --hue-green: #2f7d54;
+  --hue-green-deep: #387958;
+  --hue-amber: #90671f;
+  --hue-blue: #44709c;
+  --hue-red: #bf4343;
+  --hue-red-soft: #ca3737;
+  --hue-violet: #7662af;
+  --hue-pink: #b04789;
+  --hue-teal: #377a6f;
+  --hue-coral: #ba4b1f;
+  --hue-gold: #856831;
+  --hue-copper: #9b6137;
+  --hue-steel: #3f7497;
+  --hue-slate: #626e83;
+  --hue-rose: #b44d5c;
+  --hue-grey: #716e68;
+  --hue-olive: #477947;
+  --hue-butter: #896712;
+
+  --phone-bezel: #d9d5cd;
+  --phone-body: #e9e6df;
+  --phone-edge: #cfcac1;
+  --phone-notch: #3a3935;
+
+  color-scheme: light;
+}
+
+/* Code blocks carry both themes' colours, as --shiki-dark and --shiki-light on each token; the page's theme picks
+   one. Dark is the default. */
+[data-rehype-pretty-code-figure] span[style*="--shiki-dark"],
+code[data-theme] span[style*="--shiki-dark"] {
+  color: var(--shiki-dark);
+}
+:root[data-theme="light"] [data-rehype-pretty-code-figure] span[style*="--shiki-light"],
+:root[data-theme="light"] code[data-theme] span[style*="--shiki-light"] {
+  color: var(--shiki-light);
 }
 
 @theme inline {

@@ -17,14 +17,14 @@ script:
 
 | Sample | Script | Host it expects | What it records |
 |---|---|---|---|
-| Recovery | `node recovery.mjs` | `RECOVERY_HOST`, default `localhost:5260`, with `Recovery__RequirePersistedOperations=false` | 15 runs: three refund orders, each clean, crashing while it pays (with each fork that crash can take) and crashing while it emails, each ending with a requeue |
+| Recovery | `node recovery.mjs` | `RECOVERY_HOST`, default `localhost:5260`, with `Recovery__RequirePersistedOperations=false` | 18 runs: three refund orders, each clean, crashing while it pays (with each fork that crash can take), crashing while it emails, and crashing while it pays then while it emails, each ending with a requeue |
 | Recovery's food order | `node order.mjs` | `RECOVERY_HOST`, default `localhost:5260`, with `Recovery__RequirePersistedOperations=false` `Recovery__CartWait=00:00:15` and `Recovery__MachineSweepInterval=00:00:01` | four orders, each from a fresh `start` with Place order pressed twice: delivered, the tablet timing out and tried again, the restaurant closed, and a cart the server's timer clears, with both screens' pushes and the invoked run's junction events |
 | Board | `node board.mjs` | `BOARD_HOST`, default `localhost:5290`, as shipped (persisted documents only), with `npm ci` run in `samples/Board/Trax.Samples.Board.Agents` | four tickets worked through the lanes by the sample's own scripted agents over their generated client: a skipped lane and a self-approval refused, a patch an earlier case refuses, a patch QA sends back, and a ticket closed after two cases that did not reproduce it |
 | StateMachine | `node state-machine.mjs` | `STATE_MACHINE_HOST`, default `localhost:5280` | every button the page offers from every state it can reach, for both machines |
 | ChatService | `node chat-service.mjs` | `CHAT_HOST`, default `localhost:5210` | Alice and Bob in one room, a small tree of lines to pick from, a listener who is refused, and Charlie added at every point of the conversation |
 | SignalRBroadcaster | `node signalr-broadcaster.mjs` | `SIGNALR_HOST`, default `localhost:5270` | the refused connection, sign-in, every kind of ping and the events the hub pushes, sign-out |
 | PersistedOperations | `node persisted-operations.mjs` | `PERSISTED_OPERATIONS_HOST`, default `localhost:5240` | every call and management action in each state the store can be in; the landing page no longer shows it |
-| The dashboard | `node dashboard.mjs` | starts Scheduling, Recovery and PersistedOperations itself | every page, filter, row and write of the operations dashboard, from all three hosts |
+| The dashboard | `node dashboard.mjs` | starts Scheduling, Recovery, PersistedOperations and CheckIn itself | every page, filter, row and write of the operations dashboard, from all four hosts |
 
 Each script writes its raw recording under `out/` (gitignored). Add `--copy-to ../../../Trax.Website/src/data` to
 write the website's copy as well, with a Trax.Website checkout next to this repository: one compact
@@ -38,11 +38,11 @@ plays every recording through the landing page's players.
 ## The dashboard
 
 `node dashboard.mjs` records what the operations dashboard (`Trax.Api/src/Trax.Api.Dashboard/ClientApp`) needs to run with no API
-behind it. It differs from the scripts above in three ways. It starts the hosts itself: Scheduling, Recovery and
-PersistedOperations, each on a private port (5391 to 5393) and a database it creates fresh, so it needs only Docker's
+behind it. It differs from the scripts above in three ways. It starts the hosts itself: Scheduling, Recovery,
+PersistedOperations and CheckIn, each on a private port (5391 to 5394) and a database it creates fresh, so it needs only Docker's
 Postgres (`docker compose up -d database`; set `TRAX_PG_PORT` when it is not on 5432, and `TRAX_PG_CONTAINER` when
 the container is not `trax_database`). It reads the queries, mutations and subscriptions it sends from the
-dashboard's own source (`--dashboard`, default `../Trax.Api/src/Trax.Api.Dashboard/ClientApp` in this checkout), so it records
+dashboard's own `src/graphql` (`--dashboard`, default `../Trax.Api/src/Trax.Api.Dashboard/ClientApp` in this checkout), so it records
 exactly what the dashboard asks. And it records a snapshot rather than a sequence: about three minutes of the hosts
 running and being driven (with every live event timed), then both schedulers paused, then every list the dashboard
 shows walked to its end once per filter, sort and scope, every row's page read, and every write the dashboard offers
@@ -57,7 +57,7 @@ makes it create the databases with a psql of its own on `TRAX_PG_HOST` (default 
 Record there, then write the copy from the checkout with `--copy-only`: the footer's version is the latest release
 tag, which the scrubber reads with git.
 
-The website's copy combines the three hosts as one cluster on one database would show them; the script's header says
+The website's copy combines the four hosts as one cluster on one database would show them; the script's header says
 how, and what it changes (ids renumbered, the machine's name and paths replaced). After re-recording, run the
 dashboard's `npm test` in `Trax.Api/src/Trax.Api.Dashboard/ClientApp`: its strict check opens every page, filter and row
 of the demo and fails on any query the recording does not answer.

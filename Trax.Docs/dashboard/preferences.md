@@ -3,7 +3,7 @@ title: Preferences
 description: "Reference for the operations console's Preferences page: theme, credential, notifications, refresh, scheduler trains and Overview panels."
 type: reference
 area: dashboard
-nav_order: 11
+nav_order: 12
 source:
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/UserSettingsPage.tsx
 redirect_from:

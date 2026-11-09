@@ -1577,7 +1577,7 @@ export const MACHINE_BOARD = {
   ],
 };
 
-/** {@link machineScenario}, with topic-map served from features: its page has a Board tab. */
+/** {@link machineScenario}, with topic-map served from features: the Board page draws it, and its page links there. */
 export const machineScenarioWithBoard: MockSchemaOverrides = {
   resolvers: () => ({
     OperationsQueries: {

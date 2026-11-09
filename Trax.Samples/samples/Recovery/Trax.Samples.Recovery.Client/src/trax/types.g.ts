@@ -63,7 +63,7 @@ export interface RangeChoiceInput {
   toYear: number;
 }
 
-export type RefundCrash = "PAYING" | "EMAILING";
+export type RefundCrash = "PAYING" | "EMAILING" | "PAYING_THEN_EMAILING";
 
 /**
  * Every code a machine operation is refused with, by the engine, the draft service, the effect runner or the API. It

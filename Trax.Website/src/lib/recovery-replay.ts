@@ -8,8 +8,11 @@
 // recordings number their executions the same way, so switching to another at the fork changes nothing on screen.
 
 export type Scenario = "REFUND";
-/** Where the run crashes: nowhere, while it pays (before the checkpoint), or while it emails (after it). */
-export type CrashAt = "none" | "paying" | "emailing";
+/**
+ * Where the run crashes: nowhere, while it pays (before the checkpoint), while it emails (after it), or both in turn:
+ * the first attempt while it pays and its retry while it emails.
+ */
+export type CrashAt = "none" | "paying" | "emailing" | "payingThenEmailing";
 export type Fork = "none" | "askAfresh" | "changeData";
 export type StepKind = "JUNCTION" | "CHOICE" | "SCORE" | "YES_NO" | "ROUTE";
 export type StepState = "IN_PROGRESS" | "COMPLETED" | "FAILED" | "CANCELLED";
@@ -95,7 +98,7 @@ export interface Recording {
   scenario: Scenario;
   orderId?: string;
   crashOnce?: boolean;
-  crashWhile?: "PAYING" | "EMAILING";
+  crashWhile?: "PAYING" | "EMAILING" | "PAYING_THEN_EMAILING";
   fork: Fork;
   events: ReplayEvent[];
 }
@@ -146,7 +149,10 @@ const RANK: Record<StepState, number> = { IN_PROGRESS: 0, COMPLETED: 1, FAILED: 
 /** The recording for an order, where it crashes, and the fork taken in the backoff of a crash while paying. */
 export function keyOf(orderId: string, crash: CrashAt, fork: Fork = "none"): string {
   const base = `refund-${orderId}`;
-  return crash === "none" ? `${base}-clean` : crash === "emailing" ? `${base}-email` : `${base}-pay-${fork}`;
+  if (crash === "none") return `${base}-clean`;
+  if (crash === "emailing") return `${base}-email`;
+  if (crash === "payingThenEmailing") return `${base}-pay-then-email`;
+  return `${base}-pay-${fork}`;
 }
 
 /** Whether the run's crash comes after its checkpoint, so its retry starts there and asks nothing. */
@@ -305,11 +311,13 @@ function apply(p: Playback, event: ReplayEvent): void {
     case "started": {
       p.run = event.run;
       const crash =
-        event.run.armedCrash === "REFUND_EMAIL"
-          ? ", with a crash armed in the email to the customer, after the checkpoint, on the first attempt"
-          : event.run.armedCrash === "REFUND_TRACK"
-            ? ", with a crash armed in the payment step, on the first attempt"
-            : "";
+        p.recording.crashWhile === "PAYING_THEN_EMAILING"
+          ? ", with two crashes armed, each firing once: in the payment step, before the checkpoint, then in the email to the customer, after it"
+          : event.run.armedCrash === "REFUND_EMAIL"
+            ? ", with a crash armed in the email to the customer, after the checkpoint, on the first attempt"
+            : event.run.armedCrash === "REFUND_TRACK"
+              ? ", with a crash armed in the payment step, on the first attempt"
+              : "";
       say("start", event.t, "system", `# Scheduled a one-off manifest (MaxRetries ${event.run.maxRetries})${crash}`);
       return;
     }
@@ -341,7 +349,7 @@ function apply(p: Playback, event: ReplayEvent): void {
           `${a.id}:end`,
           event.t,
           "system",
-          p.run?.armedCrash === "REFUND_EMAIL"
+          crashedAfterCheckpoint(a)
             ? `${labelOf(p, a)} # FAILED. The scheduler retries after its backoff, starting from the RefundOutcome checkpoint: only the email is sent again.`
             : `${labelOf(p, a)} # FAILED. The scheduler retries after its backoff (a few seconds here), naming execution ${a.id} as the run to replay.`,
         );
@@ -382,6 +390,11 @@ function apply(p: Playback, event: ReplayEvent): void {
       return;
     }
   }
+}
+
+/** Whether an attempt failed after storing its checkpoint, so the retry starts from it. */
+function crashedAfterCheckpoint(a: Attempt): boolean {
+  return a.checkpointAt != null || a.failureJunction === CHECKPOINT.before || Object.values(a.steps).some((s) => s.name === CHECKPOINT.before);
 }
 
 function narrate(

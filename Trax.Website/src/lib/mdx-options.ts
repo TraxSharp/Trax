@@ -328,7 +328,8 @@ export const docsMdxOptions: MDXRemoteProps["options"] = {
       [
         rehypePrettyCode,
         {
-          theme: "github-dark-dimmed",
+          // Both, as CSS variables on each token; globals.css picks one by the page's theme.
+          theme: { dark: "github-dark-dimmed", light: "github-light" },
           keepBackground: false,
           defaultLang: { block: "text" },
         },

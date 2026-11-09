@@ -7,6 +7,7 @@ import ReplayToolbar, { PrimaryButton, ToolButton } from "./ReplayToolbar";
 import StepButtons from "./StepButtons";
 import data from "@/data/feature-walk.json";
 import { KINDS, WALK, accessLines, derivedOf, featureBlocks, inFeature, kindOf, type Kind, type Part, type Passenger, type WalkData, type WalkStep } from "@/lib/feature-walk";
+import { HUE, NEUTRAL, alpha } from "@/lib/hue";
 
 // A flight check-in feature acted out a moment at a time: Ada's phone and the departures board, as the scenarios
 // describe them, with the lines each moment acts out lit in the feature and the parts they became lit on
@@ -14,8 +15,8 @@ import { KINDS, WALK, accessLines, derivedOf, featureBlocks, inFeature, kindOf, 
 // ones `trax machine from-gherkin` wrote (see src/lib/feature-walk.ts); the screens are drawn from them, not recorded.
 const walk = data as unknown as WalkData;
 const PACE_MS = 2800;
-const MUTED = "#3a3a37";
-const MUTED_TEXT = "#8f8b84";
+const MUTED = NEUTRAL.lineStrong;
+const MUTED_TEXT = NEUTRAL.muted;
 type Lit = Map<Part, { kind: Kind; now: boolean }>;
 
 export default function FeatureWalk() {
@@ -147,7 +148,7 @@ function FeaturePanel({ at }: { at: number }) {
             <div
               key={block[0].n}
               className="min-w-0 rounded-md border bg-bg-primary py-1.5 transition-colors"
-              style={{ borderColor: on && ring ? `${ring}99` : "var(--border)" }}
+              style={{ borderColor: on && ring ? alpha(ring, 60) : "var(--border)" }}
             >
               {block.map(({ n, text }) => (
                 <FeatureLine key={n} n={n} text={text} on={current.includes(n)} mark={marks.get(n)} />
@@ -172,7 +173,7 @@ function FeatureLine({ n, text, on, mark }: { n: number; text: string; on: boole
         {body.slice(0, i)}
         <span
           className="rounded-sm px-0.5 font-semibold"
-          style={{ color, background: on ? `${color}2e` : undefined, boxShadow: on ? `0 0 0 1px ${color}88` : undefined }}
+          style={{ color, background: on ? alpha(color!, 18) : undefined, boxShadow: on ? `0 0 0 1px ${alpha(color!, 53)}` : undefined }}
         >
           {mark.phrase}
         </span>
@@ -238,29 +239,29 @@ function MachinePanel({ lit, ada, flight, step }: { lit: Lit; ada: string | null
         <Departures flight={flight} step={step} />
       </div>
       <svg viewBox="0 0 1100 216" className="block h-auto w-full" role="img" aria-label="The flight opening check-in, and Ada's booking from Booked to CheckedIn">
-        <text x={24} y={fy + 5} fontSize="15" fill={MUTED_TEXT}>the flight</text>
-        <text x={24} y={by + 5} fontSize="15" fill={MUTED_TEXT}>Ada&apos;s booking</text>
+        <text x={24} y={fy + 5} fontSize="15" style={{ fill: MUTED_TEXT }}>the flight</text>
+        <text x={24} y={by + 5} fontSize="15" style={{ fill: MUTED_TEXT }}>Ada&apos;s booking</text>
 
         <Edge x1={R(0)} y1={fy} x2={L(1)} y2={fy} color={color("edge:f:OpenCheckIn")} strong={strong("edge:f:OpenCheckIn")} />
-        <text {...label} x={mid(0, 1)} y={fy - 10} fill={text("edge:f:OpenCheckIn")}>check-in opens</text>
+        <text {...label} x={mid(0, 1)} y={fy - 10} style={{ fill: text("edge:f:OpenCheckIn") }}>check-in opens</text>
 
         {/* The policy: the flight entering Open opens every booking still Booked. */}
-        <Edge x1={C[1]} y1={68} x2={C[1]} y2={128} color={lit.has("policy:open") ? KINDS.policy.color : "#4a4844"} strong={strong("policy:open")} dashed />
-        <text x={C[1] + 14} y={103} fontSize="14" fill={lit.has("policy:open") ? KINDS.policy.color : MUTED_TEXT}>
+        <Edge x1={C[1]} y1={68} x2={C[1]} y2={128} color={lit.has("policy:open") ? KINDS.policy.color : NEUTRAL.lineStrong} strong={strong("policy:open")} dashed />
+        <text x={C[1] + 14} y={103} fontSize="14" style={{ fill: lit.has("policy:open") ? KINDS.policy.color : MUTED_TEXT }}>
           and opens every Booked booking
         </text>
 
         <Edge x1={R(0)} y1={by} x2={L(1)} y2={by} color={color("edge:b:OpenCheckIn")} strong={strong("edge:b:OpenCheckIn")} />
-        <text {...label} x={mid(0, 1)} y={by - 10} fill={text("edge:b:OpenCheckIn")}>opens</text>
+        <text {...label} x={mid(0, 1)} y={by - 10} style={{ fill: text("edge:b:OpenCheckIn") }}>opens</text>
         {/* GivePassport: from Open back to Open, storing the number. */}
-        <path d={`M${C[1] - 30} 176 C ${C[1] - 30} 206, ${C[1] + 30} 206, ${C[1] + 30} 184`} fill="none" stroke={color("edge:b:GivePassport")} strokeWidth="1.8" />
+        <path d={`M${C[1] - 30} 176 C ${C[1] - 30} 206, ${C[1] + 30} 206, ${C[1] + 30} 184`} fill="none" style={{ stroke: color("edge:b:GivePassport") }} strokeWidth="1.8" />
         <Head x={C[1] + 30} y={176} dx={0} dy={-1} color={color("edge:b:GivePassport")} />
-        <text x={C[1] + 40} y={204} fontSize="13.5" fill={text("edge:b:GivePassport")}>gives passport</text>
+        <text x={C[1] + 40} y={204} fontSize="13.5" style={{ fill: text("edge:b:GivePassport") }}>gives passport</text>
         <Edge x1={R(1)} y1={by} x2={L(2)} y2={by} color={color("edge:b:CheckIn")} strong={strong("edge:b:CheckIn")} />
-        <text {...label} x={mid(1, 2)} y={by - 10} fontWeight={600} fill={text("edge:b:CheckIn")}>checks in</text>
-        <text {...label} x={mid(1, 2)} y={by + 22} fontSize={13.5} fill={text("guard:CheckIn")}>passport in</text>
+        <text {...label} x={mid(1, 2)} y={by - 10} fontWeight={600} style={{ fill: text("edge:b:CheckIn") }}>checks in</text>
+        <text {...label} x={mid(1, 2)} y={by + 22} fontSize={13.5} style={{ fill: text("guard:CheckIn") }}>passport in</text>
         <Edge x1={R(2)} y1={by} x2={L(3)} y2={by} color={color("edge:b:issued")} strong={strong("edge:b:issued")} />
-        <text {...label} x={mid(2, 3)} y={by - 10} fill={text("edge:b:issued")}>accepted</text>
+        <text {...label} x={mid(2, 3)} y={by - 10} style={{ fill: text("edge:b:issued") }}>accepted</text>
 
         {Object.entries(FLIGHT).map(([s, b]) => (
           <State key={`f${s}`} name={s} box={b} part={`flight:${s}` as Part} marker={flight === s ? "TX101" : ""} lit={lit} />
@@ -302,17 +303,17 @@ function State({
   const c = l ? KINDS[l.kind].color : here ? KINDS.state.color : MUTED;
   return (
     <g>
-      <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={7} fill={here ? `${KINDS.state.color}1f` : "#161715"} stroke={c} strokeWidth={l?.now || here ? 2.2 : 1.4} />
-      <text x={b.x + b.w / 2} y={b.y + (here || sub ? 20 : b.h / 2 + 5)} textAnchor="middle" fontSize="15.5" fontWeight="600" fill={l || here ? "#e8e6e1" : MUTED_TEXT}>
+      <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={7} style={{ fill: here ? alpha(KINDS.state.color, 12) : "var(--bg-secondary)", stroke: c }} strokeWidth={l?.now || here ? 2.2 : 1.4} />
+      <text x={b.x + b.w / 2} y={b.y + (here || sub ? 20 : b.h / 2 + 5)} textAnchor="middle" fontSize="15.5" fontWeight="600" style={{ fill: l || here ? NEUTRAL.text : MUTED_TEXT }}>
         {name}
       </text>
       {sub && (
-        <text x={b.x + b.w / 2} y={b.y + 37} textAnchor="middle" fontSize="11.5" fill={sub.color}>
+        <text x={b.x + b.w / 2} y={b.y + 37} textAnchor="middle" fontSize="11.5" style={{ fill: sub.color }}>
           {sub.text}
         </text>
       )}
       {here && (
-        <text x={b.x + b.w / 2} y={b.y + b.h - 7} textAnchor="middle" fontSize="12" fill={KINDS.state.color}>
+        <text x={b.x + b.w / 2} y={b.y + b.h - 7} textAnchor="middle" fontSize="12" style={{ fill: KINDS.state.color }}>
           {marker}
         </text>
       )}
@@ -326,7 +327,7 @@ function Edge({ x1, y1, x2, y2, color, strong, dashed }: { x1: number; y1: numbe
   const dy = (y2 - y1) / len;
   return (
     <>
-      <line x1={x1} y1={y1} x2={x2 - dx * 6} y2={y2 - dy * 6} stroke={color} strokeWidth={strong ? 2.25 : 1.5} strokeDasharray={dashed ? "5 4" : undefined} />
+      <line x1={x1} y1={y1} x2={x2 - dx * 6} y2={y2 - dy * 6} style={{ stroke: color }} strokeWidth={strong ? 2.25 : 1.5} strokeDasharray={dashed ? "5 4" : undefined} />
       <Head x={x2} y={y2} dx={dx} dy={dy} color={color} />
     </>
   );
@@ -335,7 +336,7 @@ function Edge({ x1, y1, x2, y2, color, strong, dashed }: { x1: number; y1: numbe
 function Head({ x, y, dx, dy, color }: { x: number; y: number; dx: number; dy: number; color: string }) {
   const bx = x - dx * 8;
   const by = y - dy * 8;
-  return <polygon points={`${x},${y} ${bx - dy * 4},${by + dx * 4} ${bx + dy * 4},${by - dx * 4}`} fill={color} />;
+  return <polygon points={`${x},${y} ${bx - dy * 4},${by + dx * 4} ${bx + dy * 4},${by - dx * 4}`} style={{ fill: color }} />;
 }
 
 // Every line of access.txt: who may start, send each command and read, each derived from the scenarios.
@@ -348,7 +349,7 @@ function AccessPanel({ lit }: { lit: Lit }) {
           const on = lit.get(`access:${l}` as Part);
           const c = on ? KINDS[on.kind].color : undefined;
           return (
-            <li key={l} className="rounded-sm px-1" style={{ color: c ?? MUTED_TEXT, background: on?.now ? `${c}24` : undefined, fontWeight: on ? 600 : undefined }}>
+            <li key={l} className="rounded-sm px-1" style={{ color: c ?? MUTED_TEXT, background: on?.now ? alpha(c!, 14) : undefined, fontWeight: on ? 600 : undefined }}>
               {l}
             </li>
           );
@@ -386,11 +387,11 @@ function Phone({ passenger, step }: { passenger: Passenger | null; step: WalkSte
                 <span className="font-mono text-sm text-text-primary">TX101</span>
                 <span className="text-[10px] uppercase tracking-wider text-text-muted">booking</span>
               </div>
-              <div className="text-base font-semibold transition-colors" style={{ color: viewLit ? KINDS.view.color : "#e8e6e1" }}>
+              <div className="text-base font-semibold transition-colors" style={{ color: viewLit ? KINDS.view.color : NEUTRAL.text }}>
                 {label}
               </div>
               {seat ? (
-                <div className="rounded-lg border border-dashed px-3 py-3 text-center" style={{ borderColor: `${KINDS.view.color}88` }}>
+                <div className="rounded-lg border border-dashed px-3 py-3 text-center" style={{ borderColor: alpha(KINDS.view.color, 53) }}>
                   <div className="text-[10px] uppercase tracking-wider text-text-muted">Boarding pass</div>
                   <div className="mt-1 font-mono text-2xl font-semibold" style={{ color: KINDS.view.color }}>
                     {seat}
@@ -412,8 +413,8 @@ function Phone({ passenger, step }: { passenger: Passenger | null; step: WalkSte
                     disabled={!canCheckIn}
                     className="rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:opacity-30"
                     style={{
-                      background: canCheckIn ? (pressed ? KINDS.command.color : "#2f3a2e") : "#262624",
-                      color: canCheckIn ? (pressed ? "#1a1406" : "#e8e6e1") : MUTED_TEXT,
+                      background: canCheckIn ? (pressed ? KINDS.command.color : "var(--accent-muted)") : "var(--bg-tertiary)",
+                      color: canCheckIn ? (pressed ? "var(--bg-primary)" : NEUTRAL.text) : MUTED_TEXT,
                     }}
                   >
                     Check in
@@ -421,7 +422,7 @@ function Phone({ passenger, step }: { passenger: Passenger | null; step: WalkSte
                 </div>
               )}
               {passenger?.told ? (
-                <div className="rounded-md border px-3 py-1.5 text-xs" style={{ borderColor: `${KINDS.guard.color}88`, color: KINDS.guard.color }}>
+                <div className="rounded-md border px-3 py-1.5 text-xs" style={{ borderColor: alpha(KINDS.guard.color, 53), color: KINDS.guard.color }}>
                   {passenger.told}
                 </div>
               ) : null}
@@ -440,12 +441,12 @@ function Departures({ flight, step }: { flight: string; step: WalkStep | null })
   const ring = lit || moved ? KINDS[kindOf(step as WalkStep)].color : null;
   return (
     <span
-      className="flex items-center gap-3 rounded-md border bg-[#111210] px-3 py-1 font-mono text-[12px] transition-colors"
-      style={{ borderColor: ring ?? "#2a2a28" }}
+      className="flex items-center gap-3 rounded-md border bg-bg-primary px-3 py-1 font-mono text-[12px] transition-colors"
+      style={{ borderColor: ring ?? NEUTRAL.line }}
     >
       <span className="font-sans text-[12px] font-semibold text-text-primary">Departures</span>
       <span className="text-text-primary">TX101</span>
-      <span className="transition-colors" style={{ color: lit ? KINDS.view.color : "#e8c46a" }}>
+      <span className="transition-colors" style={{ color: lit ? KINDS.view.color : HUE.butter }}>
         {label}
       </span>
     </span>

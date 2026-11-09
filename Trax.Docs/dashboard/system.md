@@ -3,7 +3,7 @@ title: System
 description: "Reference for the operations console's System area: hosts and heartbeats, the scheduler's switches and settings, log levels, effects, logs, live events."
 type: reference
 area: dashboard
-nav_order: 8
+nav_order: 9
 source:
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/ClusterPage.tsx
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/SettingsPage.tsx

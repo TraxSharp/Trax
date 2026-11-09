@@ -3,7 +3,7 @@ title: A run
 description: "Reference for a run's page in the operations console: its header and actions, the run drawn on its chain, the step panel and the tabs."
 type: reference
 area: dashboard
-nav_order: 4
+nav_order: 5
 source:
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/ExecutionDetailPage.tsx
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/components/RunGraphPanel.tsx

@@ -24,6 +24,7 @@ import {
   type ViewLine,
 } from "@/lib/chat-service-replay";
 import { replayNow } from "@/lib/replay-pace";
+import { HUE, NEUTRAL } from "@/lib/hue";
 
 // Recorded from the ChatService sample by Trax.Samples' scripts/recordings/chat-service.mjs, which writes this file
 // with its --copy-to option. Re-record when the sample's trains, hook, subscription or client documents change.
@@ -221,7 +222,7 @@ function ChatView({ user, playback }: { user: string; playback: ChatPlayback | n
 }
 
 // The colour of the latest thing shown, as the log below draws it, for the fold's bar.
-const TONE_HEX: Record<Described["tone"], string> = { out: "#7a9ec2", in: "#6cc596", event: "#d4a24c", refused: "#c45c5c", info: "#8f8b84" };
+const TONE_HEX: Record<Described["tone"], string> = { out: HUE.blue, in: HUE.green, event: HUE.amber, refused: HUE.red, info: NEUTRAL.muted };
 function latestTone(played: Played[]): string | undefined {
   const last = played.at(-1);
   return last ? TONE_HEX[describe(last, played).tone] : undefined;

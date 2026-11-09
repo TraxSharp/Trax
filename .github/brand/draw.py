@@ -112,6 +112,10 @@ export default function TraxLogo({{ className, maskId }}: {{ className?: string;
   );
 }}
 """
-site = os.path.join(OUT, "..", "..", "Trax.Website", "src", "components", "layout", "TraxLogo.tsx")
-with open(site, "w") as f:
-    f.write(TSX)
+# The site's header and footer, and the operations console's sidebar.
+for target in (
+    ("Trax.Website", "src", "components", "layout", "TraxLogo.tsx"),
+    ("Trax.Api", "src", "Trax.Api.Dashboard", "ClientApp", "src", "components", "TraxLogo.tsx"),
+):
+    with open(os.path.join(OUT, "..", "..", *target), "w") as f:
+        f.write(TSX)

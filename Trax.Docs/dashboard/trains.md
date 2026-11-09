@@ -3,7 +3,7 @@ title: Trains
 description: "Reference for the operations console's Trains list and a train's page: its chain, recent runs by step, manifests, the machines that start it, Run and Queue."
 type: reference
 area: dashboard
-nav_order: 5
+nav_order: 6
 source:
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/TrainsPage.tsx
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/TrainDetailPage.tsx

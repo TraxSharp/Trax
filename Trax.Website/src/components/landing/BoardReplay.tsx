@@ -15,11 +15,12 @@ import {
   type TicketView,
   type Tone,
 } from "@/lib/board-replay";
+import { HUE, NEUTRAL, alpha } from "@/lib/hue";
 
 // One of the Board sample's recorded scenarios, replayed a move at a time: the board the server holds, the client each
 // agent works in, and what the server answered. It plays itself once the first time it is on screen; Back and Next
 // take over.
-const TONE: Record<Tone, string> = { ok: "#6cc596", bad: "#d97a7a", warn: "#d4a24c", info: "#7a9ec2", idle: "#8f8b84" };
+const TONE: Record<Tone, string> = { ok: HUE.green, bad: HUE.redSoft, warn: HUE.amber, info: HUE.blue, idle: NEUTRAL.muted };
 const PACE_MS = 2600;
 // How a marked move is named: on the ticket it touched, and in the rule panel.
 const INTENT_TEXT: Record<Intent, { ticket: string; rule: string }> = {
@@ -107,7 +108,7 @@ export default function BoardReplay({ recordings, scenarioKey }: { recordings: B
       </ReplayToolbar>
 
       {/* The board across the whole width, then the clients in one row, then the code that refused a move, folded. */}
-      <div className="flex flex-col gap-2 rounded-[10px] border border-[#2f3a2e] bg-[#131512] p-2.5">
+      <div className="flex flex-col gap-2 rounded-[10px] border border-accent-muted bg-bg-secondary p-2.5">
         <div className="flex items-baseline gap-2.5 px-0.5">
           <span className="text-xs font-semibold uppercase tracking-wider text-accent-bright">Trax server</span>
           <span className="text-xs text-text-muted">the board: TicketMachine, which only the server moves</span>
@@ -154,22 +155,22 @@ function Dot({ color }: { color: string }) {
 }
 
 function TicketCard({ ticket, holderColor }: { ticket: TicketView; holderColor: string }) {
-  const chip = ticket.state === "Done" ? "#52ab7e" : ticket.live ? "#6cc596" : "#8f8b84";
+  const chip = ticket.state === "Done" ? HUE.greenDeep : ticket.live ? HUE.green : NEUTRAL.muted;
   // A move a worker got wrong lights the card in its tone instead of the usual green.
   const wrong = ticket.attempt ? TONE[INTENT_TONE[ticket.attempt.intent]] : null;
   return (
     <div
       style={{
         height: CARD_HEIGHT,
-        ...(wrong ? { borderColor: wrong, boxShadow: `0 0 0 3px ${wrong}33` } : {}),
+        ...(wrong ? { borderColor: wrong, boxShadow: `0 0 0 3px ${alpha(wrong, 20)}` } : {}),
       }}
       className={`flex flex-none flex-col gap-1.5 overflow-hidden rounded-md border bg-bg-primary px-2.5 py-2 transition-colors ${
-        ticket.live ? "border-accent shadow-[0_0_0_3px_rgba(61,139,55,0.15)]" : "border-border"
+        ticket.live ? "border-accent shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_15%,transparent)]" : "border-border"
       }`}
     >
       <div className="flex flex-none flex-nowrap items-center justify-between gap-1 font-mono text-[10.5px] text-text-muted">
         <span className="flex-none">{ticket.id}</span>
-        <span className="min-w-0 truncate rounded px-1" title={ticket.state} style={{ border: `1px solid ${chip}55`, color: chip }}>
+        <span className="min-w-0 truncate rounded px-1" title={ticket.state} style={{ border: `1px solid ${alpha(chip, 33)}`, color: chip }}>
           {ticket.state}
         </span>
       </div>
@@ -191,7 +192,7 @@ function TicketCard({ ticket, holderColor }: { ticket: TicketView; holderColor: 
         </div>
       ) : (
         <div className="mt-auto flex h-[15px] flex-none items-center gap-1.5 text-[10.5px] text-text-muted">
-          <Dot color={ticket.holder ? holderColor : ticket.moved ? "#6cc596" : "#3a3a37"} />
+          <Dot color={ticket.holder ? holderColor : ticket.moved ? HUE.green : NEUTRAL.lineStrong} />
           <span className="truncate">{ticket.holder ? `held by ${ticket.holder}` : ticket.moved ? "moved by the server" : "unclaimed"}</span>
         </div>
       )}
@@ -206,7 +207,7 @@ function Pod({ pod, color, laneName }: { pod: PodView; color: string; laneName: 
   return (
     <div
       className="flex h-[150px] flex-col gap-2 overflow-hidden rounded-lg border border-border bg-bg-secondary px-3 py-2.5 transition-colors"
-      style={{ borderColor: pod.current ? ring : undefined, boxShadow: pod.current ? `0 0 0 3px ${ring}26` : undefined }}
+      style={{ borderColor: pod.current ? ring : undefined, boxShadow: pod.current ? `0 0 0 3px ${alpha(ring, 15)}` : undefined }}
     >
       <div className="flex min-w-0 flex-nowrap items-center gap-2">
         <Dot color={color} />
@@ -214,18 +215,18 @@ function Pod({ pod, color, laneName }: { pod: PodView; color: string; laneName: 
         <span className="min-w-0 flex-auto truncate font-mono text-[11px] text-text-muted">{pod.kind === "person" ? "a person" : "an agent"}, works {laneName ?? "its lane"}</span>
         <span
           className="ml-auto flex-none whitespace-nowrap rounded-full px-2 py-px text-[11px]"
-          style={{ border: `1px solid ${pod.badge ? tone : "#3a3a37"}66`, color: pod.badge ? tone : "#8f8b84" }}
+          style={{ border: `1px solid ${alpha(pod.badge ? tone : NEUTRAL.lineStrong, 40)}`, color: pod.badge ? tone : NEUTRAL.muted }}
         >
           {pod.badge ?? "idle"}
         </span>
       </div>
-      <div title={pod.say ?? undefined} className="h-[35px] flex-none line-clamp-2 font-mono text-[11.5px] leading-normal text-[#c9c6c0] [overflow-wrap:anywhere]">
+      <div title={pod.say ?? undefined} className="h-[35px] flex-none line-clamp-2 font-mono text-[11.5px] leading-normal text-text-secondary [overflow-wrap:anywhere]">
         {pod.say}
       </div>
       <div
         title={pod.verdict ?? undefined}
         className="box-content h-[35px] flex-none line-clamp-2 border-t border-border pt-1.5 font-mono text-[11.5px] leading-normal [overflow-wrap:anywhere]"
-        style={{ color: pod.badge ? tone : "#8f8b84" }}
+        style={{ color: pod.badge ? tone : NEUTRAL.muted }}
       >
         {pod.verdict}
       </div>
@@ -236,10 +237,10 @@ function Pod({ pod, color, laneName }: { pod: PodView; color: string; laneName: 
 // The code that refused, rejected or found the current move, with what the server said. It keeps its height on moves
 // with nothing to show, so the pods below never move.
 function RulePanel({ rule }: { rule: RuleView | null }) {
-  const tone = rule ? TONE[INTENT_TONE[rule.intent]] : "#3a3a37";
+  const tone = rule ? TONE[INTENT_TONE[rule.intent]] : NEUTRAL.lineStrong;
   return (
     <div
-      style={{ height: RULE_HEIGHT, borderColor: rule ? `${tone}88` : undefined }}
+      style={{ height: RULE_HEIGHT, borderColor: rule ? alpha(tone, 53) : undefined }}
       className="flex flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-bg-secondary px-3 py-2.5"
     >
       {rule ? (
@@ -252,7 +253,7 @@ function RulePanel({ rule }: { rule: RuleView | null }) {
               {rule.file}:{rule.from}
             </span>
           </div>
-          <pre className="min-h-0 flex-auto overflow-x-auto font-mono text-[11.5px] leading-[1.55] text-[#c9c6c0]">
+          <pre className="min-h-0 flex-auto overflow-x-auto font-mono text-[11.5px] leading-[1.55] text-text-secondary">
             {dedent(rule.lines).map((line, i) => (
               <div key={i} className="flex gap-3">
                 <span className="w-7 flex-none select-none text-right text-text-muted">{rule.from + i}</span>

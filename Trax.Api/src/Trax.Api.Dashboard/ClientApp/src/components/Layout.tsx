@@ -17,6 +17,7 @@ import {
   Play,
   Radio,
   ScrollText,
+  StickyNote,
   Server,
   Settings,
   Sparkles,
@@ -38,6 +39,7 @@ import { GlobalProgressBar } from "./GlobalProgressBar";
 import { NotificationBridge } from "./NotificationBridge";
 import { ThemeToggle } from "./ThemeToggle";
 import { ToastHost } from "./ToastHost";
+import TraxLogo from "./TraxLogo";
 import { ConfirmHost } from "./ConfirmHost";
 
 interface NavItem {
@@ -55,7 +57,11 @@ interface NavGroup {
 
 // The navigation api/0043 decides: what an operator works with, not the tables behind it. A group
 // with one entry is drawn as a plain row.
-const TOP: NavItem[] = [{ path: "/", label: "Overview", icon: LayoutDashboard }];
+const TOP: NavItem[] = [
+  { path: "/", label: "Overview", icon: LayoutDashboard },
+  // The machines as the team wrote them, for people who read the system rather than run it (api/0043).
+  { path: "/board", label: "Board", icon: StickyNote, feature: "stateMachines" },
+];
 
 const GROUPS: NavGroup[] = [
   {
@@ -149,7 +155,9 @@ export function Layout() {
         <GlobalProgressBar />
         <aside className="w-60 bg-surface border-r border-line flex flex-col">
           <div className="p-6 border-b border-line">
-            <h1 className="text-xl font-bold text-accent-fg">Trax</h1>
+            <h1 className="text-accent-fg">
+              <TraxLogo maskId="sidebar" className="h-7 w-auto" />
+            </h1>
             <div className="flex items-center gap-2 mt-1">
               <p className="text-sm text-muted">Dashboard</p>
               {mockActive && (
@@ -160,8 +168,8 @@ export function Layout() {
             </div>
           </div>
 
-          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-            {TOP.map((item) => (
+          <nav aria-label="Console" className="flex-1 p-4 space-y-1 overflow-y-auto">
+            {TOP.filter(shown).map((item) => (
               <NavLinkRow key={item.path} item={item} active={active(item.path)} />
             ))}
             {groups.map((group) =>

@@ -11,6 +11,7 @@ import { DeadLettersPage } from "./pages/DeadLettersPage";
 import { LogsPage } from "./pages/LogsPage";
 import { StateMachinesPage } from "./pages/StateMachinesPage";
 import { MachinePage } from "./pages/MachinePage";
+import { BoardPage } from "./pages/BoardPage";
 import { StateMachineInstancePage } from "./pages/StateMachineInstancePage";
 import { ManifestsPage } from "./pages/ManifestsPage";
 import { ManifestGroupsPage } from "./pages/ManifestGroupsPage";
@@ -27,7 +28,7 @@ import { ManifestDetailPage } from "./pages/ManifestDetailPage";
 import { MockOverlayPage } from "./pages/dev/MockOverlayPage";
 import { BulkOperationPage, BulkOperationsPage } from "./pages/BulkOperationsPage";
 
-// The console's routes follow its navigation (api/0043): Runs (with its Queued and Dead letter views),
+// The console's routes follow its navigation (api/0043): Overview, Board, Runs (with its Queued and Dead letter views),
 // Trains, Machines, Schedules, System, API admin. The routes before it moved keep working as
 // redirects, so a link already pasted into a log line or a ticket still lands.
 export function AppRoutes() {
@@ -43,6 +44,8 @@ export function AppRoutes() {
         <Route path="/runs/:id" element={<ExecutionDetailPage />} />
         <Route path="/trains" element={<TrainsPage />} />
         <Route path="/trains/:name" element={<TrainDetailPage />} />
+        <Route path="/board" element={<BoardPage />} />
+        <Route path="/board/:machine" element={<BoardPage />} />
         <Route path="/machines" element={<StateMachinesPage />} />
         <Route path="/machines/:name" element={<MachinePage />} />
         <Route path="/machines/:machine/:owner/:id" element={<StateMachineInstancePage />} />

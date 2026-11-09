@@ -13,6 +13,7 @@ import {
   describe,
   focusOf,
   lineOf,
+  ordered,
   refuse,
   viewOf,
   type ChatPlayback,
@@ -160,4 +161,18 @@ test("entries appear in order and no faster than the pace", () => {
   for (let i = 1; i < dues.length; i++) assert.ok(dues[i] - dues[i - 1] >= 280, `entry ${i}`);
   assert.equal(advance(p, 999).played.length, 0);
   assert.equal(advance(p, 1000).played.length, 1);
+});
+
+test("a line reaches its speaker's chat before anyone else's, with or without Charlie in the room", () => {
+  const segments = [...recording.lines, ...recording.charlie.lines];
+  assert.ok(segments.some((s) => s.entries.filter((e) => e.frame === "next")[0]?.user !== s.speaker), "the recording has a tie the player must order");
+  for (const segment of segments) {
+    const events = ordered(segment).filter((e) => e.frame === "next");
+    assert.ok(events.length >= 2, segment.key);
+    assert.equal(events[0].user, segment.speaker, segment.key);
+  }
+  let p = start();
+  p = choose(recording, p, "a", 0)!;
+  const first = p.queue.find((q) => q.entry.frame === "next")!;
+  assert.equal(first.entry.user, recording.lines.find((l) => l.key === "a")!.speaker);
 });

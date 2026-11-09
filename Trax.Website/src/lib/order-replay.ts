@@ -4,6 +4,8 @@
 //
 // The recording is read defensively: fields it does not know are ignored, and a missing one leaves its part blank.
 
+import { HUE } from "./hue.ts";
+
 export type ScenarioKey = "order" | "tablet-times-out" | "restaurant-closed" | "left-in-cart";
 
 export type TimedEvent = { t: number; gap?: number } & (
@@ -50,14 +52,14 @@ export type Stage = "cart" | "sent" | "charged" | "cooking" | "courier" | "deliv
  * and the phone. Low saturation, none louder than the site's green.
  */
 export const STAGES: Record<Stage, { label: string; color: string }> = {
-  cart: { label: "In your cart", color: "#8b95a7" },
-  sent: { label: "Sent to the restaurant", color: "#c4a468" },
-  charged: { label: "Charged", color: "#a093c6" },
-  cooking: { label: "Cooking", color: "#c68f68" },
-  courier: { label: "With the courier", color: "#78a6c4" },
-  delivered: { label: "Delivered", color: "#52ab7e" },
-  cancelled: { label: "Cancelled", color: "#c47a85" },
-  cleared: { label: "Cleared", color: "#8d8a84" },
+  cart: { label: "In your cart", color: HUE.slate },
+  sent: { label: "Sent to the restaurant", color: HUE.gold },
+  charged: { label: "Charged", color: HUE.violet },
+  cooking: { label: "Cooking", color: HUE.copper },
+  courier: { label: "With the courier", color: HUE.steel },
+  delivered: { label: "Delivered", color: HUE.greenDeep },
+  cancelled: { label: "Cancelled", color: HUE.rose },
+  cleared: { label: "Cleared", color: HUE.grey },
 };
 
 const JUNCTION_STAGE: Record<string, Stage> = {

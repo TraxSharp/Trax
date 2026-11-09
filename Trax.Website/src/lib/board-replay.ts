@@ -5,6 +5,8 @@
 //
 // The recording is read defensively: fields it does not know are ignored, and a missing one leaves its part blank.
 
+import { HUE, NEUTRAL } from "./hue.ts";
+
 export interface Problem {
   code: string;
   message: string;
@@ -60,11 +62,11 @@ export type Intent = "not-allowed" | "bad-evidence" | "finding";
 export const INTENT_TONE: Record<Intent, Tone> = { "not-allowed": "bad", "bad-evidence": "warn", finding: "info" };
 
 // One colour per client, in the order the recording lists them: the board, the pods and the panel all use it.
-const CLIENT_COLORS = ["#7a9ec2", "#c4a468", "#a093c6", "#5fb3a6", "#6fa86f", "#c68f68"];
+const CLIENT_COLORS = [HUE.blue, HUE.gold, HUE.violet, HUE.teal, HUE.olive, HUE.copper];
 
 export function clientColor(recordings: BoardRecordings, name: string | null | undefined): string {
   const i = recordings.agents.findIndex((a) => a.name === name);
-  return i < 0 ? "#3a3a37" : CLIENT_COLORS[i % CLIENT_COLORS.length];
+  return i < 0 ? NEUTRAL.lineStrong : CLIENT_COLORS[i % CLIENT_COLORS.length];
 }
 
 /** The states a pod's Assignment strip shows, in order. */

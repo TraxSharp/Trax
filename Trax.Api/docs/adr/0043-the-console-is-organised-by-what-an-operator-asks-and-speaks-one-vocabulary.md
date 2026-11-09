@@ -20,6 +20,7 @@ the thing an operator works with, and every page takes its words from one table.
 | Entry | What it holds |
 |---|---|
 | Overview | What needs attention, each item a link to the filtered list behind it |
+| Board | Each machine served from features as an event-storming board, with the scenarios behind each note |
 | Runs | One list of runs, with views: All, Failed, Queued (the work queue), Dead letters |
 | Trains | Every registered train; a train's page holds its chain, runs, manifests, the machines that invoke it, and Run and Queue |
 | Machines | Every registered machine; a machine's page holds its diagram and its instances |
@@ -63,4 +64,6 @@ implements it, and nothing compares the two.
 
 ## Changelog
 
+- **2026-11-09**: Board added under Overview: the event-storming board was a tab on a machine's page, and is read
+  by people who do not run the system.
 - **2026-10-18**: Recorded.

@@ -66,7 +66,7 @@ export interface GraphLayout {
 
 export type GraphDirection = "LR" | "TB";
 
-const CHAR_WIDTH = 7.2; // 13px Geist, measured on the widest common labels
+const CHAR_WIDTH = 7.2; // 13px Atkinson Hyperlegible Next, on the widest common labels
 const MIN_NODE_WIDTH = 120;
 const MAX_NODE_WIDTH = 260;
 const NODE_HEIGHT = 40;

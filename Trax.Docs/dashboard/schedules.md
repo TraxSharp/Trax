@@ -3,7 +3,7 @@ title: Schedules
 description: "Reference for the operations console's Schedules area: manifests and their next runs, a manifest's page, manifest groups and a group's settings."
 type: reference
 area: dashboard
-nav_order: 7
+nav_order: 8
 source:
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/ManifestsPage.tsx
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/ManifestDetailPage.tsx

@@ -226,30 +226,52 @@ public class MachineBrowserTests : ConsoleTest
 
     [Test]
     [Covers("route:/machines/:name")]
-    public async Task A_machine_served_from_features_shows_its_board_and_the_scenarios_behind_a_command()
+    [Covers("route:/board/:machine")]
+    public async Task A_machine_served_from_features_links_its_board_which_lists_the_scenarios_behind_a_command()
     {
         var page = new MachinePage(Console, FeatureShelf.Id);
         await page.OpenAsync(Caller.Operator);
 
-        await page.Tab("Board").ClickAsync();
+        await page.BoardLink.ClickAsync(new() { Timeout = Render });
         await Assertions
             .Expect(Page)
-            .ToHaveURLAsync(new System.Text.RegularExpressions.Regex("[?&]tab=board"));
+            .ToHaveURLAsync(
+                new System.Text.RegularExpressions.Regex($"/board/{FeatureShelf.Id}$"),
+                new() { Timeout = Render }
+            );
         await page.Sticky("Shelve").ClickAsync(new() { Timeout = Render });
 
         var scenarios = Page.GetByLabel("Scenarios behind it");
         await Assertions
             .Expect(scenarios)
             .ToContainTextAsync(FeatureShelf.Scenario, new() { Timeout = Render });
-        await Assertions.Expect(scenarios).ToContainTextAsync("shelving.feature:2");
+        await Assertions.Expect(scenarios).ToContainTextAsync("shelving.feature");
+        await Assertions.Expect(scenarios.GetByLabel("shelving.feature line 2")).ToBeVisibleAsync();
+    }
+
+    [Test]
+    [Covers("route:/board")]
+    public async Task The_Board_entry_opens_the_first_machine_served_from_features()
+    {
+        await Console.OpenAsync("board", Caller.Operator);
+
+        await Assertions
+            .Expect(Page)
+            .ToHaveURLAsync(
+                new System.Text.RegularExpressions.Regex($"/board/{FeatureShelf.Id}$"),
+                new() { Timeout = Render }
+            );
+        await Assertions
+            .Expect(new MachinePage(Console, FeatureShelf.Id).Board)
+            .ToBeVisibleAsync(new() { Timeout = Render });
     }
 
     [Test]
     [Covers("route:/machines/:name")]
-    public async Task A_machine_not_served_from_features_has_no_board_tab()
+    public async Task A_machine_not_served_from_features_has_no_board_to_link()
     {
         var page = new MachinePage(Console, ReminderMachine.Id);
-        // The tab is drawn once the board's own read answers, which the diagram does not wait for.
+        // The link is drawn once the board's own read answers, which the diagram does not wait for.
         var boardRead = Page.WaitForResponseAsync(
             r =>
                 r.Url.EndsWith("/trax/graphql")
@@ -267,6 +289,6 @@ public class MachineBrowserTests : ConsoleTest
             .ValueKind.Should()
             .Be(System.Text.Json.JsonValueKind.Null);
         await Assertions.Expect(page.Diagram).ToBeVisibleAsync(new() { Timeout = Render });
-        await Assertions.Expect(page.Tab("Board")).ToHaveCountAsync(0);
+        await Assertions.Expect(page.BoardLink).ToHaveCountAsync(0);
     }
 }
