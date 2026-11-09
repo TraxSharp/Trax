@@ -26,8 +26,9 @@ Look for `features/glossary.json`, a `machines/host.json`, and `ServeFeatures("m
 Without them the app's machines are C# classes: use `trax-design-a-machine`.
 
 A new machine can go either way. Write it as features unless it needs something only C# has: a child machine
-(`Spawns`), a delegate guard or reducer, `RequiresPolicy`, `Anonymous`, `InvokedRunLimit`, a timer whose duration a
-context field holds, or one person acting on another person's instance. Say which, and why, before choosing C#.
+(`Spawns`), a delegate guard or reducer, `RequiresPolicy`, `Anonymous`, `InvokedRunLimit`, or a timer whose duration
+a context field holds. Say which, and why, before choosing C#. One person acting on another person's instance is
+neither: it needs instances shared between people, which Trax does not have yet.
 
 ## Never edit machines/ by hand
 
@@ -96,7 +97,8 @@ These keep access closed. Do not work around them:
 - A system machine is read through a view, never fired by a person. If a person needs to change it, their own machine
   changes state and a policy moves the system machine.
 - One person acting on another's instance is refused because Trax has no shared instances yet. Do not route around it
-  with a system machine that a person can effectively drive. Tell the user it needs a C# machine or shared instances.
+  with a system machine that a person can effectively drive, nor with a C# machine, where a client acts on its own
+  instances too. Tell the user it needs shared instances, which Trax does not have yet.
 
 ## Glossary syntax that is not obvious
 

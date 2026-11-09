@@ -33,11 +33,11 @@ A machine is a user's or the system's:
 | Key | What it is |
 | --- | --- |
 | `ownedBy` | The actor whose people own its instances, or a list of them (`["triage", "fixer"]`): each person owns their own instances whichever actor they are. With it, `noun` is how a step names one (`booking`, as `Ada's booking` says it) and `start` the phrase a person has one with (`has a booking`). |
-| `system`, `name` | A system machine: its fixed key (`flight/tx101`) and its name in a step (`the flight`). The host starts its one instance; only the server moves it. Or `{ "keyedBy": ["id"] }`, a keyed system machine: one instance per key, which host code starts and moves (see below). |
+| `system`, `name` | A system machine: its fixed key, which starts with the machine's id and a slash (`flight/tx101` for `flight`), and its name in a step (`the flight`). The host starts its one instance; only the server moves it. Or `{ "keyedBy": ["id"] }`, a keyed system machine: one instance per key, which host code starts and moves (see below). |
 | `version` | The machine's definition version, which its snapshots carry. Defaults to `1`. |
 | `initial` | The state an instance starts in. |
 | `initialContext` | The context a new instance starts with. Without it, each field of the initial state's context starts at its zero, and a nullable one at `null`. |
-| `context` | The fields of its context, as the IR declares fields: every state's, unless the state gives its own. |
+| `context` | The fields of its context, as the IR declares fields: every state's, unless the state gives its own. No field, here or in a state's own context, may be named `state`, which a view reads as the machine's state. |
 | `states` | Each state by name, with its phrase (`is booked`), or with `{ "phrase", "committed", "requires", "context" }`: `committed: true` (the IR's `committedStates`), the rule its context must meet (the IR's `invariants`), and a context of its own in place of the machine's. |
 | `differential` | `true` to write the IR's `differential` block from the scenarios (below). |
 | `rules`, `reductions` | Each custom rule and reduction the machine names, by its name in the IR: its C# `type` (an `ICustomRule` or `ICustomReduction` class) and the `example` an in-memory run answers with, whether the rule holds or the fields the reduction sets. |
