@@ -1,6 +1,6 @@
 ---
 name: trax-design-a-machine
-description: Use before writing or changing a Trax state machine (a Machine subclass, Trax.StateMachine, Trax.StateMachine.Persistence), or when a process spans several requests or users, waits on people, or walks a user through steps such as a checkout, a wizard, an approval or a game turn. Covers train or machine, the builder and host rules that decide the machine's layout, invoking trains from a state, Rule and Reduction (SetAll, new Rule.Custom), spawning child machines, undoing an effect and where machine files go.
+description: Use before writing or changing a Trax state machine (a Machine subclass, Trax.StateMachine, Trax.StateMachine.Persistence), or when a process spans several requests or users, waits on people, or walks a user through steps such as a checkout, a wizard, an approval or a game turn. Covers train or machine, the builder and host rules that decide the machine's layout, invoking trains from a state, Rule and Reduction (SetAll, new Rule.Custom), spawning child machines, undoing an effect and where machine files go. If the app's machines are written as Gherkin features and a glossary, use trax-write-machines-as-features instead.
 metadata:
   internal: true
 ---
@@ -19,6 +19,16 @@ the builder refuses, found after the states were drawn. Read the rules below bef
 - **Both, usually:** the machine decides when the work happens, a train does it. A state invokes the train.
 
 [Train or machine](https://traxsharp.net/docs/statemachine/train-or-machine) has the full comparison.
+
+## First: features or C#
+
+If the app has `features/glossary.json`, a `machines/host.json` and a host calling `ServeFeatures`, its machines are
+written as Gherkin features and a glossary, and derived. Load `trax-write-machines-as-features` and change the
+features, not C#. A new machine in any app can be written that way too, unless it needs something only C# has: a
+child machine (`Spawns`), a delegate guard or reducer, `RequiresPolicy`, `Anonymous`, `InvokedRunLimit`, a timer whose
+duration a context field holds, or one person acting on another's instance. The rest of this skill is the C# route.
+[How features become machines](https://traxsharp.net/docs/statemachine/how-features-become-machines#the-same-machine-in-c)
+maps each glossary entry to the builder call it stands for.
 
 ## Decide before writing states
 

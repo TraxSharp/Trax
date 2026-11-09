@@ -67,6 +67,7 @@ Pick the highest layer you need, then one data provider. Each package brings the
 | A GraphQL API over the trains | add `Trax.Api.GraphQL` and an auth package (`Trax.Api.Auth.ApiKey`, `.Jwt`, `.Oidc`) |
 | The operations console | add `Trax.Api.Dashboard` |
 | State machines | `Trax.StateMachine.Persistence` (server), `@traxsharp/state-machine` (TypeScript client), `Trax.StateMachine.Client` (.NET client) |
+| State machines written as features | add `Trax.StateMachine.Gherkin` (derive and run in memory) and, in a Reqnroll test project, `Trax.StateMachine.Gherkin.Reqnroll` |
 
 ## Before writing code
 
@@ -87,6 +88,7 @@ code depends on.
 | Write or change a train or junction | `trax-write-a-train` |
 | A train has to choose between paths, or a rule changes often | `trax-write-a-decider` |
 | A process spans several requests or users, or waits on people | `trax-design-a-machine` |
+| The app's machines are written as Gherkin features and a glossary (`features/`, `machines/host.json`, `ServeFeatures`), or the user wants behaviour written as scenarios | `trax-write-machines-as-features` |
 | Expose trains or machines over GraphQL, set up auth | `trax-expose-over-api` |
 | Call the API from a frontend, generate a client | `trax-generate-a-client` |
 | Run trains on a schedule, in a queue, or on workers | `trax-schedule-work` |
