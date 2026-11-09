@@ -150,6 +150,75 @@ public class GapStubTests
         problems.Should().NotBeEmpty();
     }
 
+    // A guard on the trigger's input is said in the When, never a Given, so the glossary gives it no phrases, a When
+    // whose value it refuses shows it, and its stub is that When.
+    private const string AnswerGlossary = """
+        {
+          "version": 1,
+          "actors": { "player": { "noun": "a player", "roles": ["player"] } },
+          "machines": {
+            "answer-sheet": {
+              "ownedBy": "player",
+              "noun": "answer sheet",
+              "start": "has an answer sheet",
+              "initial": "Open",
+              "context": [ { "name": "answer", "type": "string", "nullable": true, "constraints": [] } ],
+              "states": { "Open": "is open" },
+              "triggers": {
+                "Answer": {
+                  "phrase": "answers {answer} on {subject}",
+                  "input": [ { "name": "answer", "type": "string", "nullable": false, "constraints": [] } ],
+                  "reduce": { "reduce": "set", "steps": [ { "field": "answer", "value": { "input": "answer" } } ] }
+                }
+              },
+              "guards": {
+                "hasAnswer": { "rule": { "rule": "nonEmpty", "source": "input", "field": "answer" } }
+              }
+            }
+          }
+        }
+        """;
+
+    private const string Answering = """
+        Feature: Answering
+          Scenario: A player answers
+            Given Ada is a player
+            And Ada has an answer sheet
+            When Ada answers "Paris" on her answer sheet
+            Then Ada's answer sheet is open
+        """;
+
+    private const string Refusing = """
+          Scenario: An empty answer is refused
+            Given Ada is a player
+            And Ada has an answer sheet
+            When Ada answers "" on her answer sheet
+            Then Ada is told "Write something first."
+            And Ada's answer sheet is still open
+        """;
+
+    [Test]
+    public void Missing_counts_an_input_guard_shown_by_a_when()
+    {
+        var glossary = Trax.StateMachine.Features.Glossary.Read(AnswerGlossary);
+        IReadOnlyList<Gap> GuardGaps(string feature)
+        {
+            var (gaps, problems) = Missing.Find(glossary, [("answering.feature", feature)]);
+            problems.Should().BeEmpty();
+            return gaps.Where(g => g.Kind is GapKind.Guard or GapKind.Refusal).ToList();
+        }
+
+        var unshown = GuardGaps(Answering).Single(g => g.Kind == GapKind.Guard);
+        unshown.What.Should().Be("hasAnswer");
+        unshown
+            .Stub.Should()
+            .Contain("When Ada answers \"\" on their answer sheet")
+            .And.NotContain("And Ada's answer sheet")
+            .And.Contain("Then Ada's answer sheet is still open");
+
+        GuardGaps(Answering + "\n" + Refusing).Should().BeEmpty();
+    }
+
     // A stub is pasted as a feature of its own, so the Background of another does not repeat its Givens.
     private static IReadOnlyList<(string, string)> Files(string feature, string? stub) =>
         stub is null

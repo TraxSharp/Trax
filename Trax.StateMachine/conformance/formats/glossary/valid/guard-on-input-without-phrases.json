@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "actors": {
+    "player": {
+      "noun": "a player",
+      "roles": [
+        "player"
+      ]
+    }
+  },
+  "machines": {
+    "answer-sheet": {
+      "ownedBy": "player",
+      "noun": "answer sheet",
+      "start": "has an answer sheet",
+      "initial": "Open",
+      "context": [
+        {
+          "name": "answer",
+          "type": "string",
+          "nullable": true,
+          "constraints": []
+        }
+      ],
+      "states": {
+        "Open": "is open"
+      },
+      "triggers": {
+        "Answer": {
+          "phrase": "answers {answer} on {subject}",
+          "input": [
+            {
+              "name": "answer",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "reduce": {
+            "reduce": "set",
+            "steps": [
+              {
+                "field": "answer",
+                "value": {
+                  "input": "answer"
+                }
+              }
+            ]
+          },
+          "guard": "hasAnswer"
+        }
+      },
+      "guards": {
+        "hasAnswer": {
+          "rule": {
+            "rule": "nonEmpty",
+            "source": "input",
+            "field": "answer"
+          }
+        }
+      }
+    }
+  }
+}

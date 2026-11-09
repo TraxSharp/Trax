@@ -52,8 +52,10 @@ internal static class Usage
                 Phrase($"{m} state {state}", phrase);
             foreach (var guard in machine.Guards.Values)
             {
-                Phrase($"{m} guard {guard.Name} holds", guard.Holds);
-                Phrase($"{m} guard {guard.Name} fails", guard.Fails);
+                if (guard.Holds is { } holds)
+                    Phrase($"{m} guard {guard.Name} holds", holds);
+                if (guard.Fails is { } fails)
+                    Phrase($"{m} guard {guard.Name} fails", fails);
             }
             foreach (var trigger in machine.Triggers.Values)
                 Phrase($"{m} trigger {trigger.Name}", trigger.Phrase);

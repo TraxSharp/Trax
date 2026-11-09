@@ -21,7 +21,9 @@ internal static class Satisfy
         why = null;
         var rule = IrMachine.ReadRule(machine.Guards[guardName].Rule);
         var copy = (JsonObject)context.DeepClone();
-        var phrase = holds ? machine.Guards[guardName].Holds : machine.Guards[guardName].Fails;
+        var phrase =
+            (holds ? machine.Guards[guardName].Holds : machine.Guards[guardName].Fails)
+            ?? guardName;
         string? field = rule switch
         {
             Rule.Present r when r.Source == RuleSource.Context => r.Field,

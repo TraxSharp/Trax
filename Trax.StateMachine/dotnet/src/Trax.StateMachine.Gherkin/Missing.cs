@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Trax.StateMachine.Features;
 
@@ -109,10 +110,14 @@ internal static class Missing
                         From: e!["from"]!.GetValue<string>(),
                         Trigger: e["trigger"]!.GetValue<string>(),
                         To: e["to"]!.GetValue<string>(),
-                        Guarded: e["guard"] is not null
+                        Guard: e["guard"]
                     )
                 )
                 .ToList();
+            // A guard decides a move when the derived edge carries its rule: the scenarios showed it holding on the
+            // move and failing on the refusal, whether a Given set it up or the When's value did.
+            bool Decides(GlossaryGuard guard) =>
+                edges.Any(e => e.Guard is not null && JsonNode.DeepEquals(e.Guard, guard.Rule));
             var reached = edges
                 .Select(e => e.To)
                 .Append(machine.Initial)
@@ -189,12 +194,14 @@ internal static class Missing
             foreach (
                 var guard in machine.Guards.Values.OrderBy(g => g.Name, StringComparer.Ordinal)
             )
-                if (!guardsUsed.Contains((m, guard.Name)))
+                if (!guardsUsed.Contains((m, guard.Name)) && !Decides(guard))
                     Add(
                         GapKind.Guard,
                         m,
                         guard.Name,
-                        $"{m} guard {guard.Name}: no scenario sets it up.",
+                        guard.OnInput
+                            ? $"{m} guard {guard.Name}: no scenario shows it refusing a When's value."
+                            : $"{m} guard {guard.Name}: no scenario sets it up.",
                         edges
                             .Select(e =>
                                 Guarded(
@@ -212,7 +219,7 @@ internal static class Missing
             // A move no scenario shows refused: a guarded edge, or one a guard is shown holding for and never failing.
             foreach (var edge in edges.DistinctBy(e => (e.From, e.Trigger)))
             {
-                var guards = edge.Guarded
+                var guards = edge.Guard is not null
                     ? machine.Guards.Values.ToList()
                     : machine
                         .Guards.Values.Where(g =>
@@ -482,6 +489,9 @@ internal static class Missing
         string to
     )
     {
+        // A guard on the input is shown by a When whose value it refuses, beside the move already shown.
+        if (guard.OnInput)
+            return Refused(glossary, machine, guard, from, trigger);
         if (Fire(machine, trigger) is not { } when)
             return null;
         var lines = Arrange(glossary, machine, from);
@@ -503,18 +513,89 @@ internal static class Missing
         GlossaryTrigger trigger
     )
     {
-        if (Fire(machine, trigger) is not { } when)
-            return null;
         var lines = Arrange(glossary, machine, from);
-        lines.Add($"And {Instance(machine)} {guard.Fails}");
-        lines.Add($"When {when}");
+        string name;
+        if (guard.OnInput)
+        {
+            if (Failing(machine, trigger, guard) is not { } values)
+                return null;
+            if (Fire(machine, trigger, values) is not { } refused)
+                return null;
+            lines.Add($"When {refused}");
+            name = $"{trigger.Name} refused by {guard.Name}";
+        }
+        else
+        {
+            if (Fire(machine, trigger) is not { } when)
+                return null;
+            lines.Add($"And {Instance(machine)} {guard.Fails}");
+            lines.Add($"When {when}");
+            name = $"{trigger.Name} when {guard.Fails}";
+        }
         lines.Add($"Then {Instance(machine)} {StillPhrase(machine.States[from])}");
-        return new Claim(
-            Scenario($"{trigger.Name} when {guard.Fails}", lines),
-            machine.Id,
-            $"guard {from} {trigger.Name}"
-        );
+        return new Claim(Scenario(name, lines), machine.Id, $"guard {from} {trigger.Name}");
     }
+
+    // The trigger's input values a guard on the input fails for: the stub's own values with one field changed, the
+    // first change that makes the guard fail. Null when no such change does, or the guard is not the trigger's to fail.
+    private static Dictionary<string, string>? Failing(
+        GlossaryMachine machine,
+        GlossaryTrigger trigger,
+        GlossaryGuard guard
+    )
+    {
+        var rule = IrMachine.ReadRule(guard.Rule);
+        var types = trigger
+            .Input.Select(f =>
+                (Name: f!["name"]!.GetValue<string>(), Type: f["type"]!.GetValue<string>())
+            )
+            .ToList();
+        var values = types.ToDictionary(f => f.Name, f => Sample(f.Type), StringComparer.Ordinal);
+        if (values.Values.Any(v => v is null))
+            return null;
+        foreach (var (name, type) in types)
+        foreach (var candidate in Candidates(type))
+        {
+            var tried = new Dictionary<string, string>(values!, StringComparer.Ordinal)
+            {
+                [name] = candidate,
+            };
+            var input = new JsonObject();
+            foreach (var (field, fieldType) in types)
+                input[field] = Typed(fieldType, tried[field]);
+            if (!RuleEvaluator.Evaluate(rule, new JsonObject(), input, machine.ExampleRules))
+                return tried;
+        }
+        return null;
+    }
+
+    // The value a stub fires a trigger with, as the feature says it.
+    private static string? Sample(string type) =>
+        type switch
+        {
+            "integer" or "number" => "1",
+            "string" => "x",
+            "boolean" => "true",
+            _ => null,
+        };
+
+    private static IEnumerable<string> Candidates(string type) =>
+        type switch
+        {
+            "integer" or "number" => ["0", "-1", "1000000"],
+            "string" => [""],
+            "boolean" => ["false"],
+            _ => [],
+        };
+
+    private static JsonNode? Typed(string type, string value) =>
+        type switch
+        {
+            "integer" => JsonValue.Create(long.Parse(value, CultureInfo.InvariantCulture)),
+            "number" => JsonValue.Create(double.Parse(value, CultureInfo.InvariantCulture)),
+            "boolean" => JsonValue.Create(value == "true"),
+            _ => JsonValue.Create(value),
+        };
 
     private static Claim OutcomeStub(
         Glossary glossary,
@@ -573,19 +654,18 @@ internal static class Missing
     }
 
     // The When of a trigger: the person firing it, or the server when its phrase starts with the instance.
-    private static string? Fire(GlossaryMachine machine, GlossaryTrigger trigger)
+    private static string? Fire(
+        GlossaryMachine machine,
+        GlossaryTrigger trigger,
+        IReadOnlyDictionary<string, string>? values = null
+    )
     {
         var text = trigger.Phrase;
         foreach (var field in trigger.Input)
         {
             var name = field!["name"]!.GetValue<string>();
-            var value = field["type"]!.GetValue<string>() switch
-            {
-                "integer" or "number" => "1",
-                "string" => "x",
-                "boolean" => "true",
-                _ => null,
-            };
+            var value =
+                values?.GetValueOrDefault(name) ?? Sample(field["type"]!.GetValue<string>());
             if (value is null)
                 return null;
             text = text.Replace("{" + name + "}", $"\"{value}\"", StringComparison.Ordinal);

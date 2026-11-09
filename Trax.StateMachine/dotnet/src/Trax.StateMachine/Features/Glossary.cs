@@ -329,12 +329,21 @@ internal sealed partial record Glossary(
     private static GlossaryGuard ReadGuard(At at, string name, JsonObject guard)
     {
         at.Closed(guard, "holds", "fails", "rule");
-        return new GlossaryGuard(
-            name,
-            Names.PhraseAt(at["holds"], at.Required(guard, "holds")),
-            Names.PhraseAt(at["fails"], at.Required(guard, "fails")),
-            IrShapes.Rule(at["rule"], at.Required(guard, "rule"))
-        );
+        var rule = IrShapes.Rule(at["rule"], at.Required(guard, "rule"));
+        // A guard on the trigger's input is shown by the When's value, never by a Given or a Then, so it needs no
+        // phrases; one that reads the context is set up and checked by them.
+        var onInput = GlossaryGuard.ReadsOnlyInput(IrMachine.ReadRule(rule));
+        string? Phrase(string key)
+        {
+            if (guard.ContainsKey(key))
+                return Names.PhraseAt(at[key], guard[key]);
+            if (onInput)
+                return null;
+            throw at.Fail(
+                $"has no '{key}' phrase. A guard that reads the context is set up by a Given and checked by a Then, so it needs both 'holds' and 'fails'; only one that reads nothing but the trigger's input may leave them out."
+            );
+        }
+        return new GlossaryGuard(name, Phrase("holds"), Phrase("fails"), rule);
     }
 
     private static GlossaryInvoke ReadInvoke(At at, string state, JsonObject invoke)
@@ -471,8 +480,10 @@ internal sealed partial record Glossary(
                 Unique(own, m["states"][state], phrase);
             foreach (var guard in machine.Guards.Values)
             {
-                Unique(own, m["guards"][guard.Name]["holds"], guard.Holds);
-                Unique(own, m["guards"][guard.Name]["fails"], guard.Fails);
+                if (guard.Holds is { } holds)
+                    Unique(own, m["guards"][guard.Name]["holds"], holds);
+                if (guard.Fails is { } fails)
+                    Unique(own, m["guards"][guard.Name]["fails"], fails);
             }
 
             foreach (var trigger in machine.Triggers.Values)
@@ -764,8 +775,10 @@ internal sealed partial record Glossary(
             yield return (m["states"][state], phrase);
         foreach (var guard in machine.Guards.Values)
         {
-            yield return (m["guards"][guard.Name]["holds"], guard.Holds);
-            yield return (m["guards"][guard.Name]["fails"], guard.Fails);
+            if (guard.Holds is { } holds)
+                yield return (m["guards"][guard.Name]["holds"], holds);
+            if (guard.Fails is { } fails)
+                yield return (m["guards"][guard.Name]["fails"], fails);
         }
         foreach (var invoke in machine.Invokes.Values)
         foreach (var phrase in invoke.Outcomes.Keys)
@@ -980,7 +993,34 @@ internal sealed record GlossaryEffect(string Type, string? KeyPrefix, string Exa
 /// </summary>
 internal sealed record GlossaryHandler(string Name, string Type, JsonNode Example);
 
-internal sealed record GlossaryGuard(string Name, string Holds, string Fails, JsonObject Rule);
+/// <summary>
+/// A guard: its rule, and the words a Given or a Then says it holds or fails in. A guard whose rule reads only the
+/// trigger's input has no such words (<see cref="Holds"/> and <see cref="Fails"/> may be null): a When shows it.
+/// </summary>
+internal sealed record GlossaryGuard(string Name, string? Holds, string? Fails, JsonObject Rule)
+{
+    /// <summary>Whether the guard reads nothing but the trigger's input, so only a When's value decides it.</summary>
+    internal bool OnInput => ReadsOnlyInput(IrMachine.ReadRule(Rule));
+
+    internal static bool ReadsOnlyInput(StateMachine.Rule rule) =>
+        rule switch
+        {
+            StateMachine.Rule.All all => all.Rules.Count > 0 && all.Rules.All(ReadsOnlyInput),
+            StateMachine.Rule.Any any => any.Rules.Count > 0 && any.Rules.All(ReadsOnlyInput),
+            StateMachine.Rule.Custom => false,
+            StateMachine.Rule.Present r => r.Source == RuleSource.Input,
+            StateMachine.Rule.Absent r => r.Source == RuleSource.Input,
+            StateMachine.Rule.OfType r => r.Source == RuleSource.Input,
+            StateMachine.Rule.NonEmpty r => r.Source == RuleSource.Input,
+            StateMachine.Rule.OneOf r => r.Source == RuleSource.Input,
+            StateMachine.Rule.Compare r => r.Source == RuleSource.Input,
+            StateMachine.Rule.Count r => r.Source == RuleSource.Input,
+            StateMachine.Rule.Length r => r.Source == RuleSource.Input,
+            StateMachine.Rule.BoolEquals r => r.Source == RuleSource.Input,
+            StateMachine.Rule.ArrayOf r => r.Source == RuleSource.Input,
+            _ => false,
+        };
+}
 
 internal sealed record GlossaryInvoke(
     string State,
