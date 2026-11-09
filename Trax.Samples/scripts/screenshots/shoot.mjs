@@ -85,7 +85,7 @@ const scenes = {
       if ((await state()) === "Review") await fire("back to the cart");
       for (const item of ["Field guide", "Compass"]) {
         await page.getByPlaceholder("Add an item").fill(item);
-        await page.getByRole("button", { name: "Save with it" }).click();
+        await page.getByRole("button", { name: "AddItem", exact: true }).click();
         await page.waitForTimeout(500);
       }
       await fire("go to review");
