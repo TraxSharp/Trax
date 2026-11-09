@@ -18,7 +18,11 @@ public sealed class PolicyRunnerOptions
     /// </summary>
     public int FanOutCap { get; set; } = 10_000;
 
-    /// <summary>How long the runner waits between passes when nothing is owed. Defaults to one second.</summary>
+    /// <summary>
+    /// How long the runner waits between passes when nothing is owed. Defaults to one second. Derivation's warning of
+    /// a policy waiting for another's result counts a timer of one second or more as spacing the two, so a longer
+    /// interval lets a timer shorter than it fire first with no warning.
+    /// </summary>
     public TimeSpan Interval { get; set; } = PolicyLoops.RunnerInterval;
 
     // The longest wait Task.Delay takes.
