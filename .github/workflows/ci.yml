@@ -281,6 +281,19 @@ jobs:
               -- "DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Include=$include")
           fi
           dotnet test "$SOLUTION" "${args[@]}"
+      - name: Setup the current Node
+        # The tests a folder's "current-node-tests" filter names drive node, and a consumer may run a newer one
+        # than the build's: they run again on the newest release line, after the run on Node 24 above.
+        if: matrix.package['current-node-tests']
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: '26'
+      - name: Test on the current Node
+        if: matrix.package['current-node-tests']
+        working-directory: ${{ matrix.package.folder }}
+        env:
+          FILTER: ${{ matrix.package['current-node-tests'] }}
+        run: dotnet test "$SOLUTION" --configuration Release --no-build --filter "$FILTER"
       - name: Upload coverage results
         if: matrix.package.coverage
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
@@ -1084,15 +1097,21 @@ jobs:
 
   # The TypeScript engine, @traxsharp/state-machine (packages.json suite state-machine-ts). It
   # runs for a change under Trax.StateMachine/ts or the conformance kit, not for one to the C#
-  # engine; the state-machine-conformance suite is the check that spans both.
+  # engine; the state-machine-conformance suite is the check that spans both. Its tests run on
+  # Node 24, what the release builds on, and on the newest release line, which a consumer may
+  # run; the build, pack and audit run once, on 24.
   state-machine:
     needs: changes
     if: contains(fromJSON(needs.changes.outputs.suite-names), 'state-machine-ts')
-    name: state-machine-ts
+    name: state-machine-ts (node ${{ matrix.node }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['24', '26']
     defaults:
       run:
         working-directory: Trax.StateMachine/ts
@@ -1115,7 +1134,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
-          node-version: '24'
+          node-version: ${{ matrix.node }}
       - name: Install (locked, no install scripts)
         run: npm ci --ignore-scripts
       - name: Typecheck
@@ -1123,15 +1142,19 @@ jobs:
       - name: Test
         run: npm test
       - name: Build
+        if: matrix.node == '24'
         run: npm run build
       - name: Every file package.json names is built and packed
+        if: matrix.node == '24'
         # Neither tsup nor npm pack fails on an exports target the build did not write.
         run: npm run check:exports
       - name: Pack (what a release publishes)
+        if: matrix.node == '24'
         # The release packs this folder the same way and publishes the tarball to npm, so a
         # broken prepack or a file left out of it fails here rather than after a version is cut.
         run: npm pack --dry-run
       - name: Audit runtime dependencies
+        if: matrix.node == '24'
         run: npm audit --omit=dev --audit-level=high
 
   # The Rust engine and its client, Trax.StateMachine/rust (packages.json suite state-machine-rust).
