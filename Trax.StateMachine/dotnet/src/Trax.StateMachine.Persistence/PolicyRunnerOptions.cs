@@ -1,3 +1,5 @@
+using Trax.StateMachine.Features;
+
 namespace Trax.StateMachine.Persistence;
 
 /// <summary>
@@ -17,7 +19,7 @@ public sealed class PolicyRunnerOptions
     public int FanOutCap { get; set; } = 10_000;
 
     /// <summary>How long the runner waits between passes when nothing is owed. Defaults to one second.</summary>
-    public TimeSpan Interval { get; set; } = TimeSpan.FromSeconds(1);
+    public TimeSpan Interval { get; set; } = PolicyLoops.RunnerInterval;
 
     // The longest wait Task.Delay takes.
     private static readonly TimeSpan LongestInterval = TimeSpan.FromMilliseconds(uint.MaxValue - 1);

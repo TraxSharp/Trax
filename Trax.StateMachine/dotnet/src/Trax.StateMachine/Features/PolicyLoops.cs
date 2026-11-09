@@ -67,10 +67,19 @@ internal static class PolicyLoops
     internal sealed record Race(HostPolicy Later, HostPolicy Earlier, string State);
 
     /// <summary>
+    /// The policy runner's default interval, the time it waits between passes when nothing is owed:
+    /// <c>PolicyRunnerOptions.Interval</c> defaults to this. A timer shorter than it can fire before the runner's next
+    /// pass, so <see cref="Races"/> does not count one as spacing.
+    /// </summary>
+    internal static readonly TimeSpan RunnerInterval = TimeSpan.FromSeconds(1);
+
+    /// <summary>
     /// Each policy that waits for another's result (<see cref="Race"/>), sorted by the later policy and then the earlier.
     /// The moves between them are the ones <see cref="Find"/> follows, but not the earlier policy's own: a state reached
-    /// only through its landing comes after it. A timer is no such move: it waits a time a person chose, which the
-    /// policy runner's interval (a second by default) does not come near, as a loop through one is paced by it.
+    /// only through its landing comes after it. A timer of <see cref="RunnerInterval"/> or more, or one whose duration a
+    /// context field holds, is no such move: it waits a time a person chose, which the policy runner's interval does
+    /// not come near, as a loop through one is paced by it. A fixed timer shorter than the interval can fire before the
+    /// runner's next pass, so it is one.
     /// </summary>
     internal static List<Race> Races(
         IReadOnlyList<HostPolicy> policies,
@@ -78,6 +87,7 @@ internal static class PolicyLoops
     )
     {
         var moves = Moves(policies, irs);
+        moves.AddRange(ShortTimers(irs));
         var races = new List<Race>();
         foreach (var later in policies)
         {
@@ -163,6 +173,22 @@ internal static class PolicyLoops
                     moves.Add(new Move($"{id}.{state}", $"{id}.{to}", null));
         }
         return moves;
+    }
+
+    // A timer with a fixed duration shorter than the runner's interval, moving its instance on from the state that
+    // holds it. A loop through one is still paced, so only Races follows these.
+    private static IEnumerable<Move> ShortTimers(IReadOnlyDictionary<string, JsonObject> irs)
+    {
+        foreach (var (id, ir) in irs)
+        foreach (var timer in Array(ir["timers"]))
+            if (
+                Text(timer?["state"]) is { } state
+                && Text(timer?["target"]) is { } target
+                && target != state
+                && IsoDuration.TryParse(Text(timer?["after"]), out var after)
+                && after < RunnerInterval
+            )
+                yield return new Move($"{id}.{state}", $"{id}.{target}", null);
     }
 
     // Every state the moves reach from one, not counting it unless a move comes back to it.

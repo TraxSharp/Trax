@@ -569,6 +569,90 @@ public class PolicyDerivationTests
             .Equal(("quiz.Tallied>sheet.Clear", "quiz.Scoring>sheet.Close", "Closed"));
     }
 
+    [TestCase("PT0.5S", true)]
+    [TestCase("PT2S", false)]
+    [TestCase(null, false)]
+    public void A_timer_between_two_policies_spaces_them_only_when_it_waits_the_runners_interval(
+        string? after,
+        bool warned
+    )
+    {
+        // Scoring closes the open sheets, and a timer moves the quiz on to Tallied, which clears the closed ones. A
+        // timer shorter than the policy runner's interval can fire before the close lands; one at least as long, or
+        // one whose duration a context field holds, is a time a person chose.
+        var timer = after is null ? """{ "name": "grace", "min": "PT0S", "max": "PT1H" }""" : null;
+        var irs = new Dictionary<string, JsonObject>
+        {
+            ["quiz"] = JsonNode
+                .Parse(
+                    $$"""
+                    {
+                      "transitions": [],
+                      "timers": [ { "state": "Scoring", "trigger": "Tally", "target": "Tallied", {{(
+                        after is null ? $"\"field\": {timer}" : $"\"after\": \"{after}\""
+                    )}} } ]
+                    }
+                    """
+                )!
+                .AsObject(),
+            ["sheet"] = JsonNode
+                .Parse(
+                    """
+                    {
+                      "transitions": [
+                        { "from": "Open", "to": "Closed", "trigger": "Close" },
+                        { "from": "Closed", "to": "Waiting", "trigger": "Clear" }
+                      ]
+                    }
+                    """
+                )!
+                .AsObject(),
+        };
+        HostPolicy[] policies =
+        [
+            new("broadcast", "quiz", "Scoring", "sheet", "Close", "Open"),
+            new("broadcast", "quiz", "Tallied", "sheet", "Clear", "Closed"),
+        ];
+
+        var races = PolicyLoops.Races(policies, irs).Select(r => (r.Later.Id, r.Earlier.Id));
+
+        if (warned)
+            races.Should().Equal(("quiz.Tallied>sheet.Clear", "quiz.Scoring>sheet.Close"));
+        else
+            races.Should().BeEmpty();
+    }
+
+    [Test]
+    public void The_public_derivation_returns_the_warnings()
+    {
+        var derived = FeatureMachines.Derive(
+            FeatureGlossary.Read(Quiz),
+            [
+                new FeatureFile(
+                    "bakery.feature",
+                    Sheets
+                        + """
+                          Scenario: The answers are scored and the closed sheets are cleared
+                            Given Ada's answer sheet is closed
+                            And the quiz is scoring the question
+                            When the answers are scored
+                            Then the quiz is between questions
+                            And Ada's answer sheet is waiting for a question
+                        """
+                ),
+            ]
+        );
+
+        derived.Succeeded.Should().BeTrue("a warning stops nothing");
+        var warning = derived.Warnings.Should().ContainSingle().Subject;
+        (warning.File, warning.Line).Should().Be(("bakery.feature", 51L));
+        warning
+            .Message.Should()
+            .StartWith(
+                "When quiz enters Between, the policy quiz.Between>answer-sheet.Clear moves answer-sheet instances in Closed;"
+            );
+    }
+
     [Test]
     public void Policies_whose_order_the_host_keeps_are_not_warned()
     {

@@ -154,10 +154,13 @@ has to follow; `trax machine explain` prints what derivation read from each one.
 The order of the Thens is not an order on the host. In memory, `trax machine run` plays a When's whole cascade at
 once, in the order its Thens list it. The host runs each policy fire and each invoked train on its own, in no fixed
 order: the policy runner works the fires every `PolicyRunnerOptions.Interval` (1 second by default) and a worker runs
-the train on its own poll. So a policy that moves instances out of a state another policy moves them into, when its own
-state is reached from the other's with no person in between (through a train's outcome or another policy), may run
-first and find none there. Derivation warns of it, naming both policies, and writes the machines all the same: move
-the instances from a state the earlier policy leaves alone, or move them in one policy.
+the train on its own poll. So a policy that moves instances out of a state another policy moves them into, when its
+own state is reached from the other's with no person in between (through a train's outcome, another policy, or a timer
+shorter than the runner's default interval of 1 second), may run first and find none there. Derivation warns of such a
+pair, naming both policies, and writes the machines all the same (`trax machine from-gherkin` prints the warnings, and
+`FeatureMachines.Derive` returns them as `Warnings`): move the instances from a state the earlier policy leaves alone,
+or move them in one policy. A timer of 1 second or more, or one whose duration a context field holds, spaces the two
+policies, and they are not warned of.
 
 ## The C# a machine names
 
