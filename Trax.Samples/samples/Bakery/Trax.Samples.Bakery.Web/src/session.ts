@@ -1,7 +1,7 @@
 import { configureTrax, TraxOperationError } from "./trax/index.g";
 
-// The host: localhost:5280 in development, or what the build was given (the browser tests point it at their host).
-export const API_ORIGIN: string = import.meta.env.VITE_BAKERY_API ?? "http://localhost:5280";
+// The host: localhost:5282 in development, or what the build was given (the browser tests point it at their host).
+export const API_ORIGIN: string = import.meta.env.VITE_BAKERY_API ?? "http://localhost:5282";
 
 export type Role = "customer" | "baker";
 

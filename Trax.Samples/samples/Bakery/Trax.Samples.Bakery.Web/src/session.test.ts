@@ -132,7 +132,7 @@ describe("connecting", () => {
   });
 
   it("refuses cleartext to a host that is not loopback", async () => {
-    vi.stubEnv("VITE_BAKERY_API", "http://bakery.example:5280");
+    vi.stubEnv("VITE_BAKERY_API", "http://bakery.example:5282");
     vi.resetModules();
     const session = await import("./session");
     const client = await import("./trax/index.g");
