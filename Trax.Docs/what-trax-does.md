@@ -33,7 +33,7 @@ install ([Packages](/docs/reference/packages) has the full list).
 | Memory | Each step's output is handed to later steps by its type, with no wiring code. | [1.6](/docs/book/an-order-is-a-train/the-train) | [Memory](/docs/core/memory) | `Trax.Core` |
 | The startup chain check | A host whose chain can never run refuses to start, naming the step and the missing type. | [1.9](/docs/book/an-order-is-a-train/when-the-chain-does-not-fit) | [Startup chain check](/docs/core/startup-chain-check) | `Trax.Mediator` |
 | Decisions | A branch in the chain is a typed question a decider answers: a rule, a lookup or a model. Answers can be recorded and replayed. | [Chapter 5](/docs/book/does-this-order-look-like-fraud) | [Decisions](/docs/core/decisions) | `Trax.Core` |
-| Parallel steps and checkpoints | Steps that run side by side, and a saved point a failed run resumes after. | [Chapter 14](/docs/book/checks-in-parallel-and-resuming) | [Checkpoints and branches](/docs/core/checkpoints-and-branches) | `Trax.Core` |
+| Parallel steps and checkpoints | Steps that run side by side, and a saved point a failed run resumes after. | [Chapter 15](/docs/book/checks-in-parallel-and-resuming) | [Checkpoints and branches](/docs/core/checkpoints-and-branches) | `Trax.Core` |
 | Testing | Test a step on its own, a train on in-memory storage, and the whole host as a client calls it. | [Chapter 2](/docs/book/testing-place-order) | [Testing](/docs/cross-cutting/testing) | `Trax.Effect.Data.InMemory` |
 
 ## Record every run
@@ -61,8 +61,8 @@ install ([Packages](/docs/reference/packages) has the full list).
 | Authorization | Nothing is served until a rule says who may call it; an unguarded train stops the host. | [Chapter 6](/docs/book/customers-and-staff) | [Authorization rules](/docs/security/authorization-rules) | `Trax.Effect` (the attributes), `Trax.Api.Auth` (sign-in) |
 | GraphQL | Trains become typed queries and mutations, and query models become filterable queries. | [Chapter 7](/docs/book/serve-it-over-graphql) | [The GraphQL API](/docs/api) | `Trax.Api.GraphQL` |
 | The operations console | Every run, schedule, dead letter and machine in one place, with requeue and cancel. | [Chapter 8](/docs/book/the-operations-console) | [Operations console](/docs/dashboard) | `Trax.Api.Dashboard` |
-| Generated clients | A typed TypeScript client generated from the documents your frontend writes. | [Chapter 15](/docs/book/a-generated-client) | [Trax CLI](/docs/reference/cli) | the `trax` tool |
-| Persisted operations | The server runs only the GraphQL documents you registered and refuses the rest. | [Chapter 17](/docs/book/require-persisted-operations) | [Persisted operations](/docs/api/persisted-operations) | `Trax.Api.GraphQL.PersistedOperations` |
+| Generated clients | A typed TypeScript client generated from the documents your frontend writes. | [Chapter 16](/docs/book/a-generated-client) | [Trax CLI](/docs/reference/cli) | the `trax` tool |
+| Persisted operations | The server runs only the GraphQL documents you registered and refuses the rest. | [Chapter 18](/docs/book/require-persisted-operations) | [Persisted operations](/docs/api/persisted-operations) | `Trax.Api.GraphQL.PersistedOperations` |
 
 ## Walk a user through a process
 
@@ -70,13 +70,13 @@ install ([Packages](/docs/reference/packages) has the full list).
 |---|---|---|---|---|
 | State machines | A long-lived flow (a checkout, a form) as named states the server and the browser agree on. | [Chapter 12](/docs/book/checkout-is-a-state-machine) | [State machines](/docs/statemachine) | `Trax.StateMachine` |
 | A machine runs a train | A state starts a train and moves on with its result. | [Chapter 13](/docs/book/the-machine-places-the-order) | [Train or machine](/docs/statemachine/train-or-machine) | `Trax.StateMachine` |
-| The browser twin | The same machine in TypeScript, so the browser predicts each move before the server confirms it. | [Chapter 16](/docs/book/checkout-in-the-browser) | [State machines](/docs/statemachine) | `@traxsharp/state-machine` |
+| The browser twin | The same machine in TypeScript, so the browser predicts each move before the server confirms it. | [Chapter 17](/docs/book/checkout-in-the-browser) | [State machines](/docs/statemachine) | `@traxsharp/state-machine` |
 
 ## Ship it
 
 | Capability | In plain words | Learn it | Understand it | Package |
 |---|---|---|---|---|
-| Deployment | One host, or a hub and workers against one Postgres and RabbitMQ, with health checks. | [Chapter 18](/docs/book/deploy) | [Deployment topologies](/docs/reference/deployment-topologies) | |
+| Deployment | One host, or a hub and workers against one Postgres and RabbitMQ, with health checks. | [Chapter 19](/docs/book/deploy) | [Deployment topologies](/docs/reference/deployment-topologies) | |
 | Architecture guards | Tests your build runs to keep trains, junctions and registrations in the shape Trax expects. | [Chapter 2](/docs/book/testing-place-order) | [Architecture guards](/docs/reference/architecture-guards) | `Trax.Core.Testing` |
 
 ## SDK Reference

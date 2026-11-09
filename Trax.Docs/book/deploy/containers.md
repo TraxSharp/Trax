@@ -1,16 +1,16 @@
 ---
-title: "18.6 Containers"
-description: "Chapter 18 of the Trax book, section 6: Containers."
+title: "19.6 Containers"
+description: "Chapter 19 of the Trax book, section 6: Containers."
 type: tutorial
 area: general
-parent: "18. Deploy"
+parent: "19. Deploy"
 grand_parent: The Trax book
 nav_order: 6
 snippet_context: none
 follows: book/deploy/the-tests-migrate-too
 ---
 
-# 18.6 Containers
+# 19.6 Containers
 
 One image per process, each built from the solution folder, since the hub and the worker both
 reference the library. The SDK image builds and publishes; the runtime image runs, as a user that
@@ -31,8 +31,8 @@ RUN dotnet restore Shopfront.Hub/Shopfront.Hub.csproj
 
 COPY Shopfront.Core/ Shopfront.Core/
 COPY Shopfront.Hub/ Shopfront.Hub/
-# The machine's corpus, which the library embeds, and the storefront's documents, which the hub
-# registers at start.
+# The checkout's corpus, which the library embeds, the machines derived from features, which the
+# hub serves, and the storefront's documents, which the hub registers at start.
 COPY machines/ machines/
 COPY web/src/trax/trax.documents.json web/src/trax/
 RUN dotnet publish Shopfront.Hub/Shopfront.Hub.csproj -c Release -o /app --no-restore
@@ -88,4 +88,4 @@ after `trax client`, from the same commit as the storefront.
 
 ---
 
-Next: [18.7 Run it as deployed](/docs/book/deploy/run-it-as-deployed)
+Next: [19.7 Run it as deployed](/docs/book/deploy/run-it-as-deployed)

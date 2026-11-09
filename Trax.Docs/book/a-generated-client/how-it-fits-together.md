@@ -1,16 +1,16 @@
 ---
-title: "15.1 How it fits together"
-description: "Chapter 15 of the Trax book, section 1: How it fits together."
+title: "16.1 How it fits together"
+description: "Chapter 16 of the Trax book, section 1: How it fits together."
 type: tutorial
 area: general
-parent: "15. A generated client"
+parent: "16. A generated client"
 grand_parent: The Trax book
 nav_order: 1
 snippet_context: none
 follows: book/checks-in-parallel-and-resuming/test-it
 ---
 
-# 15.1 How it fits together
+# 16.1 How it fits together
 
 ```text
 web/src/graphql/*.graphql ──┐
@@ -26,7 +26,7 @@ hub --trax-export-client ───┘                     └── trax.documen
    themselves in `trax.documents.json`.
 4. **The hub registers `trax.documents.json` when it starts.** Each document gets an id from a hash
    of its text, and the page sends only that id and its variables, never the text. That is what
-   persisted operations are: the server runs the documents it registered, and in chapter 17 it
+   persisted operations are: the server runs the documents it registered, and in chapter 18 it
    runs nothing else.
 
 A document that asks for a field the hub does not serve, or one a train refuses, stops the hub at
@@ -39,4 +39,4 @@ not when a customer clicks.
 
 ---
 
-Next: [15.2 The storefront's place](/docs/book/a-generated-client/the-storefronts-place)
+Next: [16.2 The storefront's place](/docs/book/a-generated-client/the-storefronts-place)

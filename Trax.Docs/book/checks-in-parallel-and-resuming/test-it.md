@@ -1,16 +1,16 @@
 ---
-title: "14.6 Test it"
-description: "Chapter 14 of the Trax book, section 6: Test it."
+title: "15.6 Test it"
+description: "Chapter 15 of the Trax book, section 6: Test it."
 type: tutorial
 area: general
-parent: "14. Checks in parallel, and resuming"
+parent: "15. Checks in parallel, and resuming"
 grand_parent: The Trax book
 nav_order: 6
 snippet_context: none
 follows: book/checks-in-parallel-and-resuming/kill-the-worker-mid-pack-and-resume
 ---
 
-# 14.6 Test it
+# 15.6 Test it
 
 The junction tests move to the new signatures, and the train is tested whole, branches and
 checkpoint included, with fakes that answer at once.
@@ -182,4 +182,4 @@ React, from a client Trax generates.
 
 ---
 
-Next: [15. A generated client](/docs/book/a-generated-client)
+Next: [16. A generated client](/docs/book/a-generated-client)

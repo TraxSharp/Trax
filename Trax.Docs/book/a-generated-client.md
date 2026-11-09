@@ -1,20 +1,20 @@
 ---
-title: "15. A generated client"
-description: "Chapter 15 of the Trax book: write the storefront's GraphQL documents and generate a typed React client for them with trax client."
+title: "16. A generated client"
+description: "Chapter 16 of the Trax book: write the storefront's GraphQL documents and generate a typed React client for them with trax client."
 type: tutorial
 area: general
 parent: The Trax book
-nav_order: 25
+nav_order: 26
 ---
 
-# 15. A generated client
+# 16. A generated client
 
 Customers have been using Shopfront through `curl`. In this chapter they get a storefront: a React
 page that lists the catalogue, places an order, follows its run and lists the customer's orders.
 The page calls none of that by hand. It writes the GraphQL documents it needs, and Trax generates
 a typed function for each, plus the client that sends them.
 
-This chapter starts from the end of [chapter 14](/docs/book/checks-in-parallel-and-resuming). It
+This chapter starts from the end of [chapter 15](/docs/book/checks-in-parallel-and-resuming). It
 needs Node.js 22 or later, as `trax machine generate` already did.
 
 ## In this chapter
@@ -35,4 +35,4 @@ needs Node.js 22 or later, as `trax machine generate` already did.
 
 ---
 
-Next: [15.1 How it fits together](/docs/book/a-generated-client/how-it-fits-together)
+Next: [16.1 How it fits together](/docs/book/a-generated-client/how-it-fits-together)

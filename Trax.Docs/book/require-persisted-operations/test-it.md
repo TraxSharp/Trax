@@ -1,16 +1,16 @@
 ---
-title: "17.5 Test it"
-description: "Chapter 17 of the Trax book, section 5: Test it."
+title: "18.5 Test it"
+description: "Chapter 18 of the Trax book, section 5: Test it."
 type: tutorial
 area: general
-parent: "17. Require persisted operations"
+parent: "18. Require persisted operations"
 grand_parent: The Trax book
 nav_order: 5
 snippet_context: none
 follows: book/require-persisted-operations/what-stops-working
 ---
 
-# 17.5 Test it
+# 18.5 Test it
 
 The host tests write their documents as text. A fixture for the folder sets the Development-only
 switch for the whole run:
@@ -32,6 +32,91 @@ public class DocumentsAsText
 
     [OneTimeTearDown]
     public void Restore() => Environment.SetEnvironmentVariable(Switch, null);
+}
+```
+
+The returns features (chapter 14) send theirs as text too, to a hub of their own. The hook that
+starts it sets the same switch on it:
+
+`tests/Shopfront.Tests/FeatureHooks.cs`:
+
+```csharp compile=tests file=tests/Shopfront.Tests/FeatureHooks.cs
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Reqnroll;
+using Shopfront.Auth;
+using Shopfront.Data;
+using Trax.StateMachine.Gherkin;
+using Trax.StateMachine.Gherkin.Reqnroll;
+
+namespace Shopfront.Tests;
+
+// Starts the hub once for the features and points the Trax bindings at it. Every person of every
+// scenario signs in as a user of their own, so no scenario sees another's returns.
+[Binding]
+public sealed class FeatureHooks
+{
+    // A database of their own, new for each run: the other tests drop theirs before each test,
+    // which would pull it out from under a running hub.
+    private const string Database =
+        "Host=localhost;Database=shopfront_features;Username=postgres;Password=shopfront";
+
+    private static WebApplicationFactory<Program>? hub;
+
+    [BeforeTestRun]
+    public static async Task StartTheHub()
+    {
+        await using (var db = Context())
+        {
+            await db.Database.EnsureDeletedAsync();
+            await db.Database.EnsureCreatedAsync();
+        }
+
+        // The bindings write their documents as text, which the hub refuses unless the
+        // Development-only switch says otherwise, as DocumentsAsText sets it for the host tests.
+        hub = new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
+            host.UseEnvironment("Development")
+                .UseSetting("ConnectionStrings:Shopfront", Database)
+                .UseSetting("PersistedOperations:Require", "false")
+        );
+        var client = hub.CreateClient();
+        var glossary = Path.Combine(AppContext.BaseDirectory, "features", "glossary.json");
+
+        TraxFeatures.Configure(features =>
+        {
+            features.Host = hub.Services;
+            features.Client = client;
+            features.Glossary = FeatureGlossary.Read(File.ReadAllText(glossary));
+            features.Credential = (actor, person, scenario) =>
+                new FeatureCredential(
+                    new Dictionary<string, string>
+                    {
+                        ["Authorization"] =
+                            "Bearer " + DevJwt.Mint($"{person}-{scenario}", actor.Roles[0]),
+                    }
+                );
+        });
+    }
+
+    // The hub hands every job to the worker, and these tests start none: a scenario that waits for
+    // the check's answer runs in memory only (ReturnFeaturesTests).
+    [BeforeScenario("in-memory")]
+    public static void InMemoryOnly() =>
+        Assert.Ignore("Runs in memory only: no worker answers the check here.");
+
+    [AfterTestRun]
+    public static async Task StopTheHub()
+    {
+        if (hub is not null)
+            await hub.DisposeAsync();
+    }
+
+    private static ShopfrontDbContext Context() =>
+        new(
+            new DbContextOptionsBuilder<ShopfrontDbContext>().UseNpgsql(Database).Options,
+            TestCaller.Staff
+        );
 }
 ```
 
@@ -65,15 +150,25 @@ test project copies it beside the tests.
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The returns features, run against the hub by the Trax bindings, and the glossary they
+         read. Reqnroll writes a test class for each feature file. -->
+    <ReqnrollFeatureFiles Include="..\..\features\*.feature" Link="Features\%(Filename)%(Extension)" />
+    <None Include="..\..\features\*" LinkBase="features" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="reqnroll.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit.Analyzers" />
     <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="Reqnroll.NUnit" />
     <PackageReference Include="Trax.Core.Testing" />
     <PackageReference Include="Trax.Effect.Data.InMemory" />
     <PackageReference Include="Trax.Effect.Data.Testing" />
+    <PackageReference Include="Trax.StateMachine.Gherkin.Reqnroll" />
     <PackageReference Include="Trax.StateMachine.Testing" />
     <PackageReference Include="Trax.Mediator.Testing" />
   </ItemGroup>
@@ -192,4 +287,4 @@ The last chapter deploys Shopfront.
 
 ---
 
-Next: [18. Deploy](/docs/book/deploy)
+Next: [19. Deploy](/docs/book/deploy)

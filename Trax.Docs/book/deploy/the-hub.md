@@ -1,16 +1,16 @@
 ---
-title: "18.3 The hub"
-description: "Chapter 18 of the Trax book, section 3: The hub."
+title: "19.3 The hub"
+description: "Chapter 19 of the Trax book, section 3: The hub."
 type: tutorial
 area: general
-parent: "18. Deploy"
+parent: "19. Deploy"
 grand_parent: The Trax book
 nav_order: 3
 snippet_context: none
 follows: book/deploy/migrate-the-shops-schema
 ---
 
-# 18.3 The hub
+# 19.3 The hub
 
 `Shopfront.Hub/Program.cs`:
 
@@ -119,7 +119,13 @@ builder.Services.AddTrax(trax =>
                 .AddJunctionEvents()
                 .AddLifecycleHook<StaffFailureHook>()
         )
-        .AddStateMachines(typeof(ManifestNames).Assembly)
+        // Checkout and the parcel are classes in the library. Returns are derived from
+        // features/ by trax machine from-gherkin, which writes machines/from-features; the
+        // build copies it to machines/ beside the hub.
+        .AddStateMachines(
+            machines => machines.ServeFeatures("machines", typeof(ManifestNames).Assembly),
+            typeof(ManifestNames).Assembly
+        )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>
         {
@@ -262,7 +268,7 @@ What changed:
 - **`AllowInsecureTransport`, from configuration.** `UseRabbitMq` refuses a plain `amqp://` broker
   that is not on this machine, since its credentials and every event would cross the network in
   cleartext. `localhost` passes. Compose sets `Broadcast:AllowInsecureTransport` for the broker on
-  its own network (18.7); a broker anywhere else is reached over `amqps://`.
+  its own network (19.7); a broker anywhere else is reached over `amqps://`.
 - **Two health checks.** `AddTraxSchedulerLiveness` fails when the scheduler has stopped
   dispatching, which is what a restart fixes: that is liveness. `AddTraxHealthCheck` reads the
   database and reports `Degraded` when dead letters wait for someone or runs keep failing: that is
@@ -282,6 +288,16 @@ What changed:
   <ItemGroup>
     <!-- The host tests start the hub. -->
     <InternalsVisibleTo Include="Shopfront.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The machines trax machine from-gherkin derives from ../features, as committed. The hub
+         serves them from machines/ beside it, and refuses to start if they disagree. -->
+    <None
+      Include="..\machines\from-features\*"
+      LinkBase="machines"
+      CopyToOutputDirectory="PreserveNewest"
+    />
   </ItemGroup>
 
   <ItemGroup>
@@ -350,4 +366,4 @@ What changed:
 
 ---
 
-Next: [18.4 The worker](/docs/book/deploy/the-worker)
+Next: [19.4 The worker](/docs/book/deploy/the-worker)

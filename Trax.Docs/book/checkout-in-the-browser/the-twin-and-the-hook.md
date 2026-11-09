@@ -1,16 +1,16 @@
 ---
-title: "16.1 The twin and the hook"
-description: "Chapter 16 of the Trax book, section 1: The twin and the hook."
+title: "17.1 The twin and the hook"
+description: "Chapter 17 of the Trax book, section 1: The twin and the hook."
 type: tutorial
 area: general
-parent: "16. Checkout in the browser"
+parent: "17. Checkout in the browser"
 grand_parent: The Trax book
 nav_order: 1
 snippet_context: none
 follows: book/a-generated-client/test-it
 ---
 
-# 16.1 The twin and the hook
+# 17.1 The twin and the hook
 
 `checkout.machine.g.ts` is the machine's **twin**: the same states, events, guards and reducers,
 in TypeScript, generated from the definition the hub exported. It never decides anything. It
@@ -45,4 +45,4 @@ once.
 
 ---
 
-Next: [16.2 The checkout](/docs/book/checkout-in-the-browser/the-checkout)
+Next: [17.2 The checkout](/docs/book/checkout-in-the-browser/the-checkout)

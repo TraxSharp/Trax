@@ -1,0 +1,6 @@
+@customer: roles Customer
+order-return Describe: customer
+order-return Send: customer
+order-return read: customer
+order-return start: customer
+view returns: customer

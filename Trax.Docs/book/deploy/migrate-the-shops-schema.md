@@ -1,16 +1,16 @@
 ---
-title: "18.2 Migrate the shop's schema"
-description: "Chapter 18 of the Trax book, section 2: Migrate the shop's schema."
+title: "19.2 Migrate the shop's schema"
+description: "Chapter 19 of the Trax book, section 2: Migrate the shop's schema."
 type: tutorial
 area: general
-parent: "18. Deploy"
+parent: "19. Deploy"
 grand_parent: The Trax book
 nav_order: 2
 snippet_context: none
 follows: book/deploy/the-shape
 ---
 
-# 18.2 Migrate the shop's schema
+# 19.2 Migrate the shop's schema
 
 Since chapter 4, `EnsureSchemaCreatedAsync` has created the shop's tables. It creates what is
 missing and changes nothing that exists, which suits a schema that is still being written. A
@@ -49,6 +49,7 @@ dotnet tool install dotnet-ef --version 10.0.12
     <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.61.0" />
     <PackageVersion Include="Trax.Effect.JunctionProvider.Progress" Version="1.61.0" />
     <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
+    <PackageVersion Include="Trax.StateMachine.Gherkin.Reqnroll" Version="1.61.0" />
     <PackageVersion Include="Trax.StateMachine.Persistence" Version="1.61.0" />
     <PackageVersion Include="Trax.StateMachine.Testing" Version="1.61.0" />
     <PackageVersion Include="Trax.Mediator" Version="1.61.0" />
@@ -71,6 +72,7 @@ dotnet tool install dotnet-ef --version 10.0.12
     <PackageVersion Include="NUnit" Version="5.0.0" />
     <PackageVersion Include="NUnit.Analyzers" Version="4.15.0" />
     <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
+    <PackageVersion Include="Reqnroll.NUnit" Version="3.3.4" />
   </ItemGroup>
 </Project>
 ```
@@ -245,4 +247,4 @@ create it again, or [record the first migration as applied](/docs/effect/move-a-
 
 ---
 
-Next: [18.3 The hub](/docs/book/deploy/the-hub)
+Next: [19.3 The hub](/docs/book/deploy/the-hub)

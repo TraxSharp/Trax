@@ -1,20 +1,20 @@
 ---
-title: "17. Require persisted operations"
-description: "Chapter 17 of the Trax book: turn persisted operations from logging to refusing, so the hub runs only documents it registered."
+title: "18. Require persisted operations"
+description: "Chapter 18 of the Trax book: turn persisted operations from logging to refusing, so the hub runs only documents it registered."
 type: tutorial
 area: general
 parent: The Trax book
-nav_order: 27
+nav_order: 28
 ---
 
-# 17. Require persisted operations
+# 18. Require persisted operations
 
 Since chapter 12 the hub has run persisted operations in shadow mode: every document it registered
 runs by id, anything sent as text runs too, and the hub logs what it would refuse. In this chapter
 it refuses. The hub then runs only documents it registered when it started, and nothing a caller
 writes.
 
-This chapter starts from the end of [chapter 16](/docs/book/checkout-in-the-browser).
+This chapter starts from the end of [chapter 17](/docs/book/checkout-in-the-browser).
 
 ## In this chapter
 
@@ -30,4 +30,4 @@ This chapter starts from the end of [chapter 16](/docs/book/checkout-in-the-brow
 
 ---
 
-Next: [17.1 What the hub registers](/docs/book/require-persisted-operations/what-the-hub-registers)
+Next: [18.1 What the hub registers](/docs/book/require-persisted-operations/what-the-hub-registers)

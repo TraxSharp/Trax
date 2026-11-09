@@ -20,6 +20,7 @@
     <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.61.0" />
     <PackageVersion Include="Trax.Effect.JunctionProvider.Progress" Version="1.61.0" />
     <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
+    <PackageVersion Include="Trax.StateMachine.Gherkin.Reqnroll" Version="1.61.0" />
     <PackageVersion Include="Trax.StateMachine.Persistence" Version="1.61.0" />
     <PackageVersion Include="Trax.StateMachine.Testing" Version="1.61.0" />
     <PackageVersion Include="Trax.Mediator" Version="1.61.0" />
@@ -42,5 +43,6 @@
     <PackageVersion Include="NUnit" Version="5.0.0" />
     <PackageVersion Include="NUnit.Analyzers" Version="4.15.0" />
     <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
+    <PackageVersion Include="Reqnroll.NUnit" Version="3.3.4" />
   </ItemGroup>
 </Project>

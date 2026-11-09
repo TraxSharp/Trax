@@ -12,6 +12,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The machines trax machine from-gherkin derives from ../features, as committed. The hub
+         serves them from machines/ beside it, and refuses to start if they disagree. -->
+    <None
+      Include="..\machines\from-features\*"
+      LinkBase="machines"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The storefront's documents, registered at start. trax client writes the file. -->
     <None
       Include="..\web\src\trax\trax.documents.json"

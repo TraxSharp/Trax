@@ -1,13 +1,13 @@
 ---
-title: "18. Deploy"
-description: "Chapter 18 of the Trax book: run the hub and its workers in containers on one Postgres and RabbitMQ, with migrations and health checks."
+title: "19. Deploy"
+description: "Chapter 19 of the Trax book: run the hub and its workers in containers on one Postgres and RabbitMQ, with migrations and health checks."
 type: tutorial
 area: general
 parent: The Trax book
-nav_order: 28
+nav_order: 29
 ---
 
-# 18. Deploy
+# 19. Deploy
 
 Shopfront has run on one machine, in Development, from `dotnet run`. In this chapter it runs as it
 would deployed: a hub and two workers in containers, one Postgres, and RabbitMQ between them. Four
@@ -15,7 +15,7 @@ things change before it can: the shop's schema is migrated rather than created, 
 each other about runs, each says whether it is healthy, and the hub runs in Production, which
 turns off everything that was there for Development.
 
-This chapter starts from the end of [chapter 17](/docs/book/require-persisted-operations).
+This chapter starts from the end of [chapter 18](/docs/book/require-persisted-operations).
 
 ## In this chapter
 
@@ -36,4 +36,4 @@ This chapter starts from the end of [chapter 17](/docs/book/require-persisted-op
 
 ---
 
-Next: [18.1 The shape](/docs/book/deploy/the-shape)
+Next: [19.1 The shape](/docs/book/deploy/the-shape)

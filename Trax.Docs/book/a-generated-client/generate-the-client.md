@@ -1,16 +1,16 @@
 ---
-title: "15.5 Generate the client"
-description: "Chapter 15 of the Trax book, section 5: Generate the client."
+title: "16.5 Generate the client"
+description: "Chapter 16 of the Trax book, section 5: Generate the client."
 type: tutorial
 area: general
-parent: "15. A generated client"
+parent: "16. A generated client"
 grand_parent: The Trax book
 nav_order: 5
 snippet_context: none
 follows: book/a-generated-client/the-hub-serves-the-storefront
 ---
 
-# 15.5 Generate the client
+# 16.5 Generate the client
 
 Build the hub, and export its manifest into the storefront:
 
@@ -81,4 +81,4 @@ dotnet build
 
 ---
 
-Next: [15.6 The page](/docs/book/a-generated-client/the-page)
+Next: [16.6 The page](/docs/book/a-generated-client/the-page)

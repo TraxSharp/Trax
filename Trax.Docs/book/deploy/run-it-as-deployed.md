@@ -1,16 +1,16 @@
 ---
-title: "18.7 Run it as deployed"
-description: "Chapter 18 of the Trax book, section 7: Run it as deployed."
+title: "19.7 Run it as deployed"
+description: "Chapter 19 of the Trax book, section 7: Run it as deployed."
 type: tutorial
 area: general
-parent: "18. Deploy"
+parent: "19. Deploy"
 grand_parent: The Trax book
 nav_order: 7
 snippet_context: none
 follows: book/deploy/containers
 ---
 
-# 18.7 Run it as deployed
+# 19.7 Run it as deployed
 
 `compose.yaml` runs the whole of it: Postgres, RabbitMQ, the hub and two workers.
 
@@ -139,7 +139,7 @@ Each process also warns that it reaches RabbitMQ without TLS, which is what
 EF Core logs one `fail:` before that, the first time: it looks for the history table before it
 creates it. On a fresh database that is expected, and later starts log none.
 
-The storefront's documents run by id, and text is refused, as in chapter 17. The catalogue has more
+The storefront's documents run by id, and text is refused, as in chapter 18. The catalogue has more
 caps and T-shirts than it started with: the restock ran as soon as the hub scheduled it, on a
 worker, which logged `Received 2 deliveries`.
 
@@ -159,4 +159,4 @@ outlives the container.
 
 ---
 
-Next: [18.8 The storefront](/docs/book/deploy/the-storefront)
+Next: [19.8 The storefront](/docs/book/deploy/the-storefront)

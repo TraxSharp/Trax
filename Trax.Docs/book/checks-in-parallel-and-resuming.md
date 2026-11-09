@@ -1,13 +1,13 @@
 ---
-title: "14. Checks in parallel, and resuming"
-description: "Chapter 14 of the Trax book: look up fulfilment's box and courier rates side by side, and checkpoint the label so a resume never buys another."
+title: "15. Checks in parallel, and resuming"
+description: "Chapter 15 of the Trax book: look up fulfilment's box and courier rates side by side, and checkpoint the label so a resume never buys another."
 type: tutorial
 area: general
 parent: The Trax book
-nav_order: 24
+nav_order: 25
 ---
 
-# 14. Checks in parallel, and resuming
+# 15. Checks in parallel, and resuming
 
 Fulfilment packs the order, and that is all it does. A real one does more first: it picks a box
 for the order, asks the courier what it charges, and buys a label. The box and the rates do not
@@ -18,7 +18,7 @@ At the end of [chapter 11](/docs/book/a-separate-worker) a member of staff re-qu
 whose worker died. A re-queue runs the train from its first junction. With a label to buy, that
 would buy it twice. In this chapter staff **resume** it instead.
 
-This chapter starts from the end of [chapter 13](/docs/book/the-machine-places-the-order).
+This chapter starts from the end of [chapter 14](/docs/book/returns-are-written-as-features).
 
 ## In this chapter
 
@@ -35,4 +35,4 @@ This chapter starts from the end of [chapter 13](/docs/book/the-machine-places-t
 
 ---
 
-Next: [14.1 The new chain](/docs/book/checks-in-parallel-and-resuming/the-new-chain)
+Next: [15.1 The new chain](/docs/book/checks-in-parallel-and-resuming/the-new-chain)

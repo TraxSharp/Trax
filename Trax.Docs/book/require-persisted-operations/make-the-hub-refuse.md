@@ -1,16 +1,16 @@
 ---
-title: "17.2 Make the hub refuse"
-description: "Chapter 17 of the Trax book, section 2: Make the hub refuse."
+title: "18.2 Make the hub refuse"
+description: "Chapter 18 of the Trax book, section 2: Make the hub refuse."
 type: tutorial
 area: general
-parent: "17. Require persisted operations"
+parent: "18. Require persisted operations"
 grand_parent: The Trax book
 nav_order: 2
 snippet_context: none
 follows: book/require-persisted-operations/what-the-hub-registers
 ---
 
-# 17.2 Make the hub refuse
+# 18.2 Make the hub refuse
 
 `Shopfront.Hub/Program.cs`:
 
@@ -91,7 +91,13 @@ builder.Services.AddTrax(trax =>
                 .AddJunctionEvents()
                 .AddLifecycleHook<StaffFailureHook>()
         )
-        .AddStateMachines(typeof(ManifestNames).Assembly)
+        // Checkout and the parcel are classes in the library. Returns are derived from
+        // features/ by trax machine from-gherkin, which writes machines/from-features; the
+        // build copies it to machines/ beside the hub.
+        .AddStateMachines(
+            machines => machines.ServeFeatures("machines", typeof(ManifestNames).Assembly),
+            typeof(ManifestNames).Assembly
+        )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>
         {
@@ -217,4 +223,4 @@ What changed:
 
 ---
 
-Next: [17.3 What a caller sees](/docs/book/require-persisted-operations/what-a-caller-sees)
+Next: [18.3 What a caller sees](/docs/book/require-persisted-operations/what-a-caller-sees)
