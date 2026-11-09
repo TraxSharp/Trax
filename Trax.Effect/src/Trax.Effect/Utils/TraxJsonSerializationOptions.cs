@@ -111,7 +111,8 @@ public static class TraxJsonSerializationOptions
     /// <summary>
     /// The options the junction logger uses to serialize a junction's output into <c>JunctionMetadata.OutputJson</c>
     /// when <c>serializeJunctionData</c> is on, wrapped by <see cref="TraxLogSerialization.ForLogging"/> so
-    /// <c>[TraxSensitive]</c> members are masked. Compact, camelCase, nulls omitted, enums as strings, cycles ignored
+    /// <c>[TraxSensitive]</c> members are masked. Compact, camelCase member names with dictionary keys written as they
+    /// are (they are data, as in the stored input and output), nulls omitted, enums as strings, cycles ignored
     /// rather than preserved, depth capped at 8, and any <see cref="IDisposable"/> written as a placeholder by
     /// <see cref="DisposableConverter"/>. Process-wide and settable; replacing it affects every junction logger.
     /// </summary>
@@ -124,7 +125,6 @@ public static class TraxJsonSerializationOptions
             ReferenceHandler = ReferenceHandler.IgnoreCycles,
             MaxDepth = 8,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
             Converters = { new JsonStringEnumConverter(), new DisposableConverter() },
         };
 }

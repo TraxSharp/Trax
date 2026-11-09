@@ -90,6 +90,23 @@ public class StoredJsonOptionsTests
             .BeEquivalentTo(["Ada", "bo"], "a dictionary's keys are data, not member names");
     }
 
+    [Test]
+    public void A_junction_log_keeps_its_dictionary_keys()
+    {
+        var output = new { Totals = new Dictionary<string, int> { ["Ada"] = 1 } };
+
+        var json = JsonSerializer.Serialize(
+            output,
+            TraxLogSerialization.ForLogging(TraxJsonSerializationOptions.JunctionLogging)
+        );
+
+        json.Should()
+            .Be(
+                "{\"totals\":{\"Ada\":1}}",
+                "the log names members in camelCase but writes a dictionary's keys as the run stored them"
+            );
+    }
+
     [TestCaseSource(nameof(StoredOptions))]
     public void An_input_nested_twenty_deep_is_written_and_read_back(JsonSerializerOptions options)
     {
