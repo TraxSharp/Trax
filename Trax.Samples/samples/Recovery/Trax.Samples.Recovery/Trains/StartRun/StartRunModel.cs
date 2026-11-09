@@ -27,7 +27,7 @@ public record StartRunInput
     /// <summary>The last year to map; 2025 when left out. Topic map only.</summary>
     public int? ToYear { get; init; }
 
-    /// <summary>Crash the scenario's crash point once, on the first attempt.</summary>
+    /// <summary>Crash the scenario's crash point once, on the first attempt that reaches it.</summary>
     public bool CrashOnce { get; init; }
 
     /// <summary>Where a refund crashes when <see cref="CrashOnce"/> is set; while paying when left out.</summary>
@@ -42,6 +42,12 @@ public enum RefundCrash
 
     /// <summary>In <c>NotifyCustomer</c>, after the checkpoint.</summary>
     Emailing,
+
+    /// <summary>
+    /// Both, once each: the first attempt crashes paying, its retry replays the answers, pays and crashes emailing,
+    /// and the last retry starts from the checkpoint. Takes all three attempts the manifest allows.
+    /// </summary>
+    PayingThenEmailing,
 }
 
 public record StartRunOutput
@@ -57,6 +63,7 @@ public record StartRunOutput
     /// <summary>The canonical name of the train the manifest runs.</summary>
     public required string TrainName { get; init; }
 
+    /// <summary>The crash the run meets first; a run armed paying then emailing names the payment.</summary>
     public required CrashPoint ArmedCrash { get; init; }
 
     /// <summary>How many times the manifest retries a failed run before dead-lettering it.</summary>

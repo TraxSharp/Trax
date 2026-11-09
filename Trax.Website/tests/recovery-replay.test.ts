@@ -51,6 +51,7 @@ test("there is a recording for every choice the player offers", () => {
     for (const key of [
       keyOf(order, "none"),
       keyOf(order, "emailing"),
+      keyOf(order, "payingThenEmailing"),
       ...(["none", "askAfresh", "changeData"] as const).map((f) => keyOf(order, "paying", f)),
     ])
       recording(key);
@@ -125,6 +126,42 @@ test("the timeline draws the checkpoint, saved on the crashed attempt and restor
   const at = paidLanes[0].slots.findIndex((s) => s.label === "Checkpoint");
   assert.equal(paidLanes[0].slots[at].tone, "idle");
   assert.equal(paidLanes[1].slots[at].tone, "saved");
+});
+
+test("a crash while paying then while emailing replays the answers on the second attempt and starts the third from the checkpoint", () => {
+  for (const order of ["A-1001", "A-1002", "A-1003"]) {
+    const key = keyOf(order, "payingThenEmailing");
+    const r = withCheckpointPauses(recording(key));
+    const done = advance(begin(r), Infinity);
+    assert.equal(done.attempts.length, 3, key);
+    assert.deepEqual(done.attempts.map((a) => a.trainState), ["FAILED", "FAILED", "COMPLETED"], key);
+    assert.deepEqual(badges(done, 0), ["model asked", "model asked"], key);
+    assert.deepEqual(badges(done, 1), ["replayed: model not asked", "replayed: model not asked"], key);
+    assert.deepEqual(Object.values(done.attempts[2].steps).map((s) => s.name), ["NotifyCustomer"], key);
+    assert.deepEqual(modelCallsOf(done).map((c) => c.attempt), ["attempt 1", "attempt 1", "attempt 2", "attempt 2"], key);
+
+    // Each failure says how its retry starts.
+    const failed = done.lines.filter((l) => l.text.includes("FAILED")).map((l) => l.text);
+    assert.equal(failed.length, 2, key);
+    assert.match(failed[0], /naming execution \d+ as the run to replay/, key);
+    assert.match(failed[1], /starting from the RefundOutcome checkpoint/, key);
+
+    // The timeline: the first attempt never reaches the checkpoint, the second saves it, the third restores it.
+    const lanes = trackOf(r, done, Infinity);
+    assert.equal(lanes.length, 3, key);
+    const at = lanes[0].slots.findIndex((s) => s.label === "Checkpoint");
+    assert.deepEqual(lanes.map((l) => l.slots[at].tone), ["idle", "saved", "restored"], key);
+    assert.equal(lanes[1].slots.at(-1)?.tone, "failed", key);
+    assert.ok(lanes[2].slots.slice(0, at).every((s) => s.tone === "restored"), key);
+    assert.equal(lanes[2].slots.at(-1)?.tone, "done", key);
+    assert.deepEqual(lanes.map((l) => l.status?.text), ["Crashed", "Crashed", "Recovered"], key);
+
+    // It waits out a backoff after each crash, and nothing can be forked in either.
+    const backoff = r.events.find((e) => e.type === "fork" && e.at === "backoff")!;
+    const inFirst = advance(begin(r), backoff.t);
+    assert.equal(phaseOf(inFirst), "breaks", key);
+    assert.equal(takeFork(inFirst, recordings, "askAfresh"), null, key);
+  }
 });
 
 test("changing the data during the backoff refuses both replays and asks the model afresh", () => {

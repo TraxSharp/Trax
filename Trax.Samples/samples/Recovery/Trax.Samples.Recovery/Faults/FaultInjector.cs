@@ -13,20 +13,23 @@ namespace Trax.Samples.Recovery.Faults;
 /// </remarks>
 public sealed class FaultInjector
 {
-    private readonly ConcurrentDictionary<string, CrashPoint> _armed = new();
+    // One entry per armed point: a run can have more than one, each firing once.
+    private readonly ConcurrentDictionary<(string RunId, CrashPoint Point), byte> _armed = new();
     private readonly ConcurrentDictionary<string, CrashPoint> _everyAttempt = new();
     private readonly ConcurrentDictionary<string, CrashPoint> _nextOrder = new(
         StringComparer.Ordinal
     );
 
-    /// <summary>Arms <paramref name="point"/> for the run <paramref name="runId"/>.</summary>
-    public void Arm(string runId, CrashPoint point)
+    /// <summary>
+    /// Arms <paramref name="points"/> for the run <paramref name="runId"/>, replacing whatever was armed for it. Each
+    /// fires once, at the first attempt that reaches it, so two points on one train crash two attempts in turn.
+    /// </summary>
+    public void Arm(string runId, params CrashPoint[] points)
     {
-        _everyAttempt.TryRemove(runId, out _);
-        if (point == CrashPoint.None)
-            _armed.TryRemove(runId, out _);
-        else
-            _armed[runId] = point;
+        Disarm(runId);
+        foreach (var point in points)
+            if (point != CrashPoint.None)
+                _armed[(runId, point)] = 0;
     }
 
     /// <summary>
@@ -35,7 +38,9 @@ public sealed class FaultInjector
     /// </summary>
     public void Disarm(string runId)
     {
-        _armed.TryRemove(runId, out _);
+        foreach (var key in _armed.Keys)
+            if (key.RunId == runId)
+                _armed.TryRemove(key, out _);
         _everyAttempt.TryRemove(runId, out _);
     }
 
@@ -45,13 +50,13 @@ public sealed class FaultInjector
     /// </summary>
     public void ArmEveryAttempt(string runId, CrashPoint point)
     {
-        _armed.TryRemove(runId, out _);
+        Disarm(runId);
         _everyAttempt[runId] = point;
     }
 
     /// <summary>Whether a crash is still armed for the run.</summary>
     public bool IsArmed(string runId) =>
-        _armed.ContainsKey(runId) || _everyAttempt.ContainsKey(runId);
+        _armed.Keys.Any(key => key.RunId == runId) || _everyAttempt.ContainsKey(runId);
 
     /// <summary>
     /// Fires the crash armed for <paramref name="runId"/> at <paramref name="point"/>, if any, and
@@ -60,7 +65,7 @@ public sealed class FaultInjector
     /// </summary>
     public bool TryFire(string runId, CrashPoint point) =>
         (_everyAttempt.TryGetValue(runId, out var every) && every == point)
-        || _armed.TryRemove(new KeyValuePair<string, CrashPoint>(runId, point));
+        || _armed.TryRemove((runId, point), out _);
 
     /// <summary>
     /// Arms <paramref name="point"/> for the next food order <paramref name="owner"/> places, whose run id nobody knows

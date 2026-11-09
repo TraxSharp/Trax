@@ -32,10 +32,12 @@ import { REPLAY_PACE } from "@/lib/replay-pace";
 const recordings = (data.recordings as Recording[]).map(withCheckpointPauses);
 const sources = data.sources as Record<Scenario, { file: string; code: string }>;
 
-// The recording holds three orders, three crash points and the forks a reader can take during the backoff. The home
-// page plays one run: the first order, crashing once while it pays, retried with both answers replayed.
+// The recording holds three orders, four crash plans and the forks a reader can take during the backoff. The home
+// page plays one run that shows both ways a retry recovers: the first order crashes while it pays, before the
+// checkpoint, so the retry runs from the top with both answers replayed; that retry pays, stores the checkpoint and
+// crashes while it emails, so the last retry starts from the checkpoint and only sends the email.
 const ORDER = "A-1001";
-const CRASH: CrashAt = "paying";
+const CRASH: CrashAt = "payingThenEmailing";
 const PHASES: { phases: Phase[]; label: string }[] = [
   { phases: ["starting", "runs"], label: "Runs" },
   { phases: ["breaks"], label: "Breaks" },
@@ -120,7 +122,7 @@ export default function RecoveryReplay() {
     <div ref={root} className="flex flex-col gap-4">
       <ReplayToolbar
         caption={retryIn != null && playback?.forkTaken === "none" ? `Retrying in ${retryIn.toFixed(1)} s` : null}
-        hint="Refund A-1001, $89, arrived broken. The payment step is set to crash once. Run it."
+        hint="Refund A-1001, $89, arrived broken. The payment is set to crash once, then the email once. Run it."
       >
         <PrimaryButton onClick={() => run()} disabled={locked}>
           Run

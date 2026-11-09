@@ -11,8 +11,9 @@
 //
 // node recovery.mjs <part-of-a-key> records only the runs whose key contains it.
 //
-// Each order is recorded clean, crashing while it pays (before the checkpoint), and crashing while it emails (after
-// it). A run that forks (the user asks afresh or changes the data during the backoff, or asks afresh once the run is
+// Each order is recorded clean, crashing while it pays (before the checkpoint), crashing while it emails (after
+// it), and crashing both ways in turn: the first attempt while it pays, its retry while it emails, and the last
+// retry from the checkpoint the second stored. A run that forks (the user asks afresh or changes the data during the backoff, or asks afresh once the run is
 // over) is recorded once per fork; a crash while emailing retries from the checkpoint, so it has no backoff fork. Each recording marks where it forked, so the player can switch from one to
 // another at that point.
 
@@ -30,7 +31,7 @@ const ENDED = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
 
 const STEP = `position kind name state startedAt endedAt durationMs failureClass failureException questionKey
   answer confidence replayed answerWithheld nameWithheld trackPosition attempt`;
-const ROW = "id trainState startTime endTime failureJunction failureReason";
+const ROW = "id externalId trainState startTime endTime failureJunction failureReason";
 
 const ops = {
   startRun: `mutation ($input: StartRunInput!) { dispatch { startRun(input: $input) { output {
@@ -40,7 +41,7 @@ const ops = {
     items { ${ROW} } } } }`,
   execution: `query ($id: Long!) { operations { executionDetail(id: $id) { ${ROW} } } }`,
   junctionRuns: `query ($metadataId: Long!) { operations { junctionRuns(metadataId: $metadataId) { ${STEP} } } }`,
-  journal: `query ($metadataId: Long!) { discover { decisionJournal(input: { metadataId: $metadataId }) {
+  journal: `query ($runId: String!) { discover { decisionJournal(input: { runId: $runId }) {
     replayDecisionsOf replayAbandoned decisions { questionKey occurrence replayed replayRefused model decider stateHash
       question answer } } } }`,
   triggerAskAfresh: `mutation ($externalId: String!) { operations { triggerManifest(externalId: $externalId, askAfresh: true) {
@@ -53,7 +54,10 @@ const ops = {
 const ORDERS = ["A-1001", "A-1002", "A-1003"];
 const FORKS = ["none", "askAfresh", "changeData"];
 
-/** Every run the player can show: each order clean, crashing while paying with each fork, and crashing while emailing. */
+/**
+ * Every run the player can show: each order clean, crashing while paying with each fork, crashing while emailing, and
+ * crashing while paying then while emailing.
+ */
 function plans() {
   const all = [];
   for (const orderId of ORDERS) {
@@ -62,6 +66,11 @@ function plans() {
     for (const fork of FORKS)
       all.push({ key: `refund-${orderId}-pay-${fork}`, input: { ...input, crashOnce: true, crashWhile: "PAYING" }, fork });
     all.push({ key: `refund-${orderId}-email`, input: { ...input, crashOnce: true, crashWhile: "EMAILING" }, fork: "none" });
+    all.push({
+      key: `refund-${orderId}-pay-then-email`,
+      input: { ...input, crashOnce: true, crashWhile: "PAYING_THEN_EMAILING" },
+      fork: "none",
+    });
   }
   return all;
 }
@@ -126,7 +135,7 @@ async function record(plan, ws) {
       attempt.journaled = true;
       const stored = await gql(ops.junctionRuns, { metadataId: row.id });
       for (const step of stored.operations.junctionRuns) mergeStep(row.id, step);
-      const { discover } = await gql(ops.journal, { metadataId: row.id });
+      const { discover } = await gql(ops.journal, { runId: row.externalId });
       attempt.journal = discover.decisionJournal;
       log("journal", { attemptId: row.id, journal: discover.decisionJournal });
     }

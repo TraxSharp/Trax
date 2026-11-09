@@ -36,16 +36,23 @@ public class ScheduleDemoRun(
         // armed before the manifest is scheduled, since the dispatcher may start the first run
         // before the start below sees it queued, and disarmed if the start fails, so a refused or
         // timed-out start leaves nothing armed.
-        var crash = !input.CrashOnce
-            ? CrashPoint.None
+        CrashPoint[] crashes = !input.CrashOnce
+            ? []
             : input.Scenario switch
             {
-                Scenario.Refund => input.CrashWhile == RefundCrash.Emailing
-                    ? CrashPoint.RefundEmail
-                    : CrashPoint.RefundTrack,
-                _ => CrashPoint.CoCitation,
+                Scenario.Refund => input.CrashWhile switch
+                {
+                    RefundCrash.Emailing => [CrashPoint.RefundEmail],
+                    RefundCrash.PayingThenEmailing =>
+                    [
+                        CrashPoint.RefundTrack,
+                        CrashPoint.RefundEmail,
+                    ],
+                    _ => [CrashPoint.RefundTrack],
+                },
+                _ => [CrashPoint.CoCitation],
             };
-        faults.Arm(runId, crash);
+        faults.Arm(runId, crashes);
 
         Trax.Effect.Models.Manifest.Manifest manifest;
         string firstRunId;
@@ -77,7 +84,7 @@ public class ScheduleDemoRun(
             ManifestId = manifest.Id,
             ManifestExternalId = manifest.ExternalId,
             TrainName = manifest.Name,
-            ArmedCrash = crash,
+            ArmedCrash = crashes.FirstOrDefault(CrashPoint.None),
             MaxRetries = MaxRetries,
             FirstRunId = firstRunId,
         };
