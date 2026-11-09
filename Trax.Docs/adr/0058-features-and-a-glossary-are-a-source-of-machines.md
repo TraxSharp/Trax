@@ -161,6 +161,7 @@ hand, so nothing checks that a page tells the same story as its features.
 
 ## Changelog
 
+- **2026-11-09**: The console draws the board on a Board page of its own, under Overview, as paper notes on a wall.
 - **2026-11-08**: The CheckIn sample replaces the Bakery as the worked example, in this record and the pages that
   follow it.
 - **2026-11-08**: The Thens after a When follow the cascade in order, so a scenario can show a policy taking the acting
@@ -169,7 +170,6 @@ hand, so nothing checks that a page tells the same story as its features.
 - **2026-11-08**: The Reqnroll bindings take a test project's own steps, fail a spec's unread Then, and send by
   persisted id when given the host's manifest.
 - **2026-11-08**: An invoked train may take the instance owner's principal id as `$owner`, set by the server.
-- **2026-11-09**: The console draws the board on a Board page of its own, under Overview, as paper notes on a wall.
 - **2026-11-08**: A system machine may be `keyedBy` its key, one instance per key, started and moved by host code.
 - **2026-11-08**: `ownedBy` may list several actors, each trigger granted to the owners shown firing it.
 - **2026-11-08**: The glossary says a machine's version and each state's shape, and names its effect, custom handlers
