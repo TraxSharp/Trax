@@ -1,4 +1,5 @@
-import glossaryJson from "../../features/glossary.json";
+// The glossary trax machine from-gherkin elaborates from features/checkin.lexicon.
+import glossaryJson from "../../machines/glossary.json";
 
 interface Glossary {
   machines: Record<string, { noun?: string; name?: string; states: Record<string, string | { phrase: string }> }>;

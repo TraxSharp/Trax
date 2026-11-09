@@ -1,9 +1,12 @@
+using Shopfront.Trains.ReturnOrder;
 using Trax.StateMachine.Gherkin;
 
 namespace Shopfront.Tests.UnitTests;
 
 // The returns features, run in memory on the machines committed in machines/from-features, as
-// trax machine run runs them, and those machines are what the features derive today.
+// trax machine run runs them, and those machines and the glossary are what the features and the
+// lexicon derive today. The lexicon is read with the train's records, so its Returns: line is
+// checked against the train's output here (ADR Trax.Docs/adr/0059).
 [TestFixture]
 public class ReturnFeaturesTests
 {
@@ -11,8 +14,14 @@ public class ReturnFeaturesTests
 
     private static string Machines => Path.Combine(AppContext.BaseDirectory, "machines");
 
+    private static LexiconReading Lexicon =>
+        Trax.StateMachine.Gherkin.Lexicon.ReadDirectory(
+            Features,
+            [typeof(IReturnOrderTrain).Assembly]
+        )!;
+
     private static FeatureGlossary Glossary =>
-        FeatureGlossary.Read(File.ReadAllText(Path.Combine(Features, "glossary.json")));
+        Lexicon.Glossary ?? throw new InvalidOperationException(string.Join("\n", Lexicon.Problems));
 
     private static FeatureFile[] Files =>
         [
@@ -53,6 +62,9 @@ public class ReturnFeaturesTests
         foreach (var (id, ir) in derived.Irs)
             Read($"{id}.ir.json").Should().Be(ir, "run trax machine from-gherkin again");
         Read("host.json").Should().Be(derived.Host, "run trax machine from-gherkin again");
+        Read("glossary.json")
+            .Should()
+            .Be(Lexicon.Json!.TrimEnd('\n'), "run trax machine from-gherkin again");
     }
 
     private static string Read(string file) =>

@@ -27,11 +27,12 @@ public sealed class Hooks
         {
             o.Host = s_factory.Services;
             o.Client = client;
-            o.Glossary = FeatureGlossary.Read(
-                File.ReadAllText(
-                    Path.Combine(AppContext.BaseDirectory, "features", "glossary.json")
-                )
-            );
+            o.Glossary = Lexicon
+                .ReadDirectory(
+                    Path.Combine(AppContext.BaseDirectory, "features"),
+                    [typeof(Trax.Samples.CheckIn.Trains.IIssueBoardingPassTrain).Assembly]
+                )!
+                .Glossary!;
             o.Manifest = ClientManifest.Read(
                 File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client", "manifest.json"))
             );

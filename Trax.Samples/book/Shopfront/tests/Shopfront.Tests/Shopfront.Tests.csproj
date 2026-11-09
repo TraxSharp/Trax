@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The returns features, run against the hub by the Trax bindings, and the glossary they
+    <!-- The returns features, run against the hub by the Trax bindings, and the lexicon they
          read. Reqnroll writes a test class for each feature file. -->
     <ReqnrollFeatureFiles Include="..\..\features\*.feature" Link="Features\%(Filename)%(Extension)" />
     <None Include="..\..\features\*" LinkBase="features" CopyToOutputDirectory="PreserveNewest" />
