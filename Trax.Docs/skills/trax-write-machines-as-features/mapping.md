@@ -48,12 +48,12 @@ the diff after deriving: if something else moved, a scenario says more than you 
 ## How to read access.txt
 
 ```
-@customer: roles customer        an actor and the roles that make a caller one
-order start: customer            who may start one of their own
-order read: customer             who may read their own
-order Place: customer            who may fire Place on their own
-order Bake: the server only      no client may fire it
-view shop sign: baker, customer  who may query the view
+@passenger: roles passenger         an actor and the roles that make a caller one
+booking start: passenger            who may start one of their own
+booking read: passenger             who may read their own
+booking CheckIn: passenger          who may fire CheckIn on their own
+booking Miss: the server only       no client may fire it
+view departures: agent, passenger   who may query the view
 ```
 
 An actor marked `(no scenario)` is admitted by a rule's roles without any scenario showing it. That is a role design

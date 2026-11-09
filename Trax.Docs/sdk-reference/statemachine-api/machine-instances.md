@@ -145,8 +145,8 @@ them. An id no registered machine has, and a user-owned machine's id, throw `Inv
 A keyed system machine served from features (`"system": { "keyedBy": [...] }` in its glossary) is never started by
 the host: its instances exist only once host code starts them here, one per key, with the key's parts in the order
 `keyedBy` names them. A key with another number of parts throws `InvalidOperationException`, from `Start` and
-`Advance` alike, and so does any key but its own for a system machine at a fixed key (`shop/main` is
-`MachineKey.Of("main")`): neither would reach an instance a view, a policy or a correctly keyed call reads.
+`Advance` alike, and so does any key but its own for a system machine at a fixed key (`flight/tx101` is
+`MachineKey.Of("tx101")`): neither would reach an instance a view, a policy or a correctly keyed call reads.
 
 A trigger only the server fires, such as a policy's, can be fired here: these are the server's calls, never a
 client's, and the history records the host as the actor.

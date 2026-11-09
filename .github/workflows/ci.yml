@@ -212,10 +212,10 @@ jobs:
         if: matrix.package.playwright
         working-directory: Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client
         run: npm ci --ignore-scripts
-      - name: Install the Bakery page (locked, no install scripts)
+      - name: Install the CheckIn page (locked, no install scripts)
         # Its browser tests build it with vite too, pointed at the host they start.
         if: matrix.package.playwright
-        working-directory: Trax.Samples/samples/Bakery/Trax.Samples.Bakery.Web
+        working-directory: Trax.Samples/samples/CheckIn/Trax.Samples.CheckIn.Web
         run: npm ci --ignore-scripts
       - name: Raise the Postgres connection limit
         # dotnet test runs a solution's test projects in parallel, all against this one service,
@@ -899,11 +899,11 @@ jobs:
             --tools-dir "$RUNNER_TEMP/engine" --documents 'src/graphql/*.graphql' --check) \
             || { echo "::error::The StateMachine sample's generated client is out of date. Regenerate it with the commands at the top of $api/Program.cs and commit the result."; exit 1; }
 
-  # The Bakery sample's page (Trax.Samples/samples/Bakery/Trax.Samples.Bakery.Web), its own npm project
+  # The CheckIn sample's page (Trax.Samples/samples/CheckIn/Trax.Samples.CheckIn.Web), its own npm project
   # on the client `trax client` generated from the host, whose machines are written only as features.
   # Besides its lint, tests and build, it exports the host's client manifest and runs `trax client --check`
   # over the committed client, and fails when they differ.
-  bakery-web:
+  checkin-web:
     needs: changes
     if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Samples')
     runs-on: ubuntu-latest
@@ -911,7 +911,7 @@ jobs:
     permissions:
       contents: read
     env:
-      WEB: Trax.Samples/samples/Bakery/Trax.Samples.Bakery.Web
+      WEB: Trax.Samples/samples/CheckIn/Trax.Samples.CheckIn.Web
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
@@ -969,13 +969,13 @@ jobs:
         working-directory: ${{ env.WEB }}
         run: npm audit --omit=dev --audit-level=high
       - name: Install the API dashboard (locked, no install scripts)
-        # The Bakery host serves the console, and a build without the app refuses to start, so
+        # The CheckIn host serves the console, and a build without the app refuses to start, so
         # exporting its client manifest below needs the app embedded.
         working-directory: Trax.Api/src/Trax.Api.Dashboard/ClientApp
         run: npm ci --ignore-scripts
       - name: The committed client matches the host
         run: |
-          api=Trax.Samples/samples/Bakery/Trax.Samples.Bakery.Api
+          api=Trax.Samples/samples/CheckIn/Trax.Samples.CheckIn.Api
           dotnet restore "$api" --locked-mode
           dotnet restore Trax.Cli/src/Trax.Cli --locked-mode
           node Trax.StateMachine/ts/tools/bundle-cli.mjs --out "$RUNNER_TEMP/engine"
@@ -984,7 +984,7 @@ jobs:
           (cd "$WEB" && dotnet run --project "$cli" --no-restore -- client \
             --manifest "$RUNNER_TEMP/manifest.json" --out src/trax \
             --tools-dir "$RUNNER_TEMP/engine" --check) \
-            || { echo "::error::The Bakery page's generated client is out of date. Regenerate it with the commands in Trax.Samples/samples/Bakery/README.md and commit the result."; exit 1; }
+            || { echo "::error::The CheckIn page's generated client is out of date. Regenerate it with the commands in Trax.Samples/samples/CheckIn/README.md and commit the result."; exit 1; }
 
   # The Board sample's agents (Trax.Samples/samples/Board/Trax.Samples.Board.Agents) and page
   # (Trax.Samples.Board.Client), two npm projects, each on the client `trax client` generated from the
@@ -1255,7 +1255,7 @@ jobs:
   # The coverage upload is not among them: it is information, and it never fails a run.
   result:
     name: CI result
-    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, bakery-web, board-client, state-machine, state-machine-rust, release-tooling]
+    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, checkin-web, board-client, state-machine, state-machine-rust, release-tooling]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

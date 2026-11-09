@@ -906,22 +906,6 @@
           "Trax.Scheduler": "[1.99.99, )"
         }
       },
-      "trax.samples.bakery.api": {
-        "type": "Project",
-        "dependencies": {
-          "Trax.Api": "[1.99.99, )",
-          "Trax.Api.Auth": "[1.99.99, )",
-          "Trax.Api.Auth.Jwt": "[1.99.99, )",
-          "Trax.Api.Dashboard": "[1.99.99, )",
-          "Trax.Api.GraphQL": "[1.99.99, )",
-          "Trax.Api.GraphQL.PersistedOperations": "[1.99.99, )",
-          "Trax.Effect.Data.Postgres": "[1.99.99, )",
-          "Trax.Effect.JunctionProvider.Progress": "[1.99.99, )",
-          "Trax.Effect.Provider.Json": "[1.99.99, )",
-          "Trax.Samples.Shared": "[1.99.99, )",
-          "Trax.Scheduler": "[1.99.99, )"
-        }
-      },
       "trax.samples.board": {
         "type": "Project",
         "dependencies": {
@@ -982,6 +966,22 @@
           "Microsoft.EntityFrameworkCore.Sqlite": "[10.0.12, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )",
           "Trax.Effect.Data": "[1.99.99, )"
+        }
+      },
+      "trax.samples.checkin.api": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api": "[1.99.99, )",
+          "Trax.Api.Auth": "[1.99.99, )",
+          "Trax.Api.Auth.Jwt": "[1.99.99, )",
+          "Trax.Api.Dashboard": "[1.99.99, )",
+          "Trax.Api.GraphQL": "[1.99.99, )",
+          "Trax.Api.GraphQL.PersistedOperations": "[1.99.99, )",
+          "Trax.Effect.Data.Postgres": "[1.99.99, )",
+          "Trax.Effect.JunctionProvider.Progress": "[1.99.99, )",
+          "Trax.Effect.Provider.Json": "[1.99.99, )",
+          "Trax.Samples.Shared": "[1.99.99, )",
+          "Trax.Scheduler": "[1.99.99, )"
         }
       },
       "trax.samples.contentshield": {

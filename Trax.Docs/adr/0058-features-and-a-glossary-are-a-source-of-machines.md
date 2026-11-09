@@ -31,10 +31,10 @@ failure rather than a bug.
   make, so two machines may share an action word their nouns tell apart. A step two machines could own is
   ambiguous, never resolved to the first.
 - **Features name their people, and an actor's own act grants access.** A scenario names each person from an actor's
-  noun (`Given Ada is a customer`) and refers to a user's instance by its owner (`Ada's order`, or `her order` for the
-  step's own person, and no one else). `When Ada places her order` grants customers that trigger. An actor no scenario
-  shows doing it is denied. The glossary writes a trigger's phrase without the person, with `{subject}` where the
-  machine goes (`places {subject}`), and no glossary phrase speaks as "I". Derivation also writes `access.txt`, one
+  noun (`Given Ada is a passenger`) and refers to a user's instance by its owner (`Ada's booking`, or `her booking`
+  for the step's own person, and no one else). `When Ada gives passport "X1234567" for her booking` grants passengers
+  that trigger. An actor no scenario shows doing it is denied. The glossary writes a trigger's phrase without the
+  person, with `{subject}` where the machine goes (`gives passport {passport} for {subject}`), and no glossary phrase speaks as "I". Derivation also writes `access.txt`, one
   sorted line per trigger, start and view with the actors it admits, and it is committed, so a new grant shows in a
   pull request's diff. Its check fails when the file is stale.
 - **Ownership is one of two kinds, and strict.** A machine is `ownedBy` one actor or a list of them, or `system`. A
@@ -67,7 +67,7 @@ failure rather than a bug.
   does, so a view never shows an instance its machine would refuse to; a machine that refuses the caller reads as no
   instances, and the rest of the view still reads. A view no scenario reads is not served.
 - **Features are read by Cucumber's own parser,** in a derivation package of its own, so the engine takes no new
-  dependency. A value in a step is quoted and read as its field's type (`When Ada orders "3" loaves`). The fixed steps
+  dependency. A value in a step is quoted and read as its field's type (`When Ada checks in for her booking in seat "14C"`). The fixed steps
   (`Ada is told "..."`, `Ada is not allowed`, `5 minutes pass`, `still`) are English only in this version.
 - **Discard follows read.** A derived machine's owner discards their own instances, narrowed by the read rule's roles;
   committed, invoking and effect-target states are not discarded whatever the rule.
@@ -161,6 +161,8 @@ hand, so nothing checks that a page tells the same story as its features.
 
 ## Changelog
 
+- **2026-11-08**: The CheckIn sample replaces the Bakery as the worked example, in this record and the pages that
+  follow it.
 - **2026-11-08**: The Thens after a When follow the cascade in order, so a scenario can show a policy taking the acting
   instance on.
 - **2026-11-08**: Derivation refuses timers that loop with no event leading out, as the host's builder does.
