@@ -12,6 +12,11 @@ export function machinePath(machine: string): string {
   return `${MACHINE_INSTANCES_PATH}/${encodeURIComponent(machine)}`;
 }
 
+/** A machine's event-storming board, on the Board page. */
+export function boardPath(machine: string): string {
+  return `/board/${encodeURIComponent(machine)}`;
+}
+
 /** The path segment for an owner kind. */
 export function ownerSegment(ownerKind: SnapshotOwnerKind): "system" | "user" {
   return ownerKind === "SYSTEM" ? "system" : "user";

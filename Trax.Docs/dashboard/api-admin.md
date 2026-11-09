@@ -3,7 +3,7 @@ title: API admin
 description: "Reference for the operations console's API admin area: the persisted operations pages, shown to a caller the host lets manage persisted GraphQL documents."
 type: reference
 area: dashboard
-nav_order: 10
+nav_order: 11
 source:
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/PersistedOperationsPage.tsx
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/PersistedOperationDetailPage.tsx

@@ -3,7 +3,7 @@ title: Search
 description: "Reference for the operations console's search: finding a run, manifest, queue entry, dead letter, machine instance or train by an exact id, key or name."
 type: reference
 area: dashboard
-nav_order: 12
+nav_order: 13
 source:
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/components/Search.tsx
 ---

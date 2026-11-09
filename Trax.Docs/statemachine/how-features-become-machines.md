@@ -121,7 +121,7 @@ answered `FORBIDDEN`, and a booking with no passport number is answered with the
 | `rules`, `reductions` | `custom` rules and reductions by name | `handlers` | |
 | `version`, `migrations` | `version` | `migrations` | |
 | `differential: true` | `differential`, from what the scenarios sent | | |
-| every scenario | | `provenance`, by file, line and name | the console's Board tab |
+| every scenario | | `provenance`, by file, line and name | the console's [Board](/docs/dashboard/board) page |
 
 Three rules hold across the table:
 

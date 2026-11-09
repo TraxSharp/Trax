@@ -3,7 +3,7 @@ using Trax.StateMachine.Gherkin;
 namespace Trax.Samples.ApiDashboard.Browser.Host;
 
 /// <summary>
-/// A machine served from features, for the machine page's Board tab: a glossary and one feature, derived when the host
+/// A machine served from features, for the console's Board page: a glossary and one feature, derived when the host
 /// starts and written to a directory the host serves with <c>ServeFeatures</c>, so its host file carries provenance.
 /// </summary>
 public static class FeatureShelf

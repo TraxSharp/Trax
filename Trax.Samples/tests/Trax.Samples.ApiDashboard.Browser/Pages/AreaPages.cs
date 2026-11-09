@@ -305,14 +305,15 @@ public sealed class MachinePage : AreaPage
 
     public ILocator Instances => Page.GetByRole(AriaRole.Region, new() { Name = "Instances" });
 
-    /// <summary>A tab of the page: <c>State diagram</c> or <c>Board</c>.</summary>
-    public ILocator Tab(string name) =>
-        Page.GetByRole(AriaRole.Tab, new() { Name = name, Exact = true });
+    /// <summary>The link from the machine's states to its board, on the Board page.</summary>
+    public ILocator BoardLink =>
+        Page.GetByRole(AriaRole.Link, new() { Name = "Its board", Exact = true });
 
+    /// <summary>The machine's board, on the Board page.</summary>
     public ILocator Board =>
         Page.GetByRole(AriaRole.Group, new() { Name = $"Board of {machine}", Exact = true });
 
-    /// <summary>A sticky on the board: a button named by its label.</summary>
+    /// <summary>A note on the board: a button named by its label, then its role.</summary>
     public ILocator Sticky(string label) =>
         Board.GetByRole(
             AriaRole.Button,

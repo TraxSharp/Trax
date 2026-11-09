@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { BackLink, Loading } from "../components/detail";
-import { MachineBoard } from "../components/MachineBoard";
 import { MachineDiagram } from "../components/MachineDiagram";
 import { WaitingOn } from "../components/WaitingOn";
 import { TermHelp } from "../components/TermHelp";
 import { formatTime } from "../lib/format";
 import { countsByState } from "../lib/machineGraph";
-import { MACHINE_INSTANCES_PATH, machineInstancePath, ownerLabel } from "../lib/machineInstances";
+import { MACHINE_INSTANCES_PATH, boardPath, machineInstancePath, ownerLabel } from "../lib/machineInstances";
 import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { useUrlStateOrNull } from "../lib/urlState";
@@ -39,14 +38,14 @@ export function MachinePage() {
   const [state, setState] = useUrlStateOrNull("state");
   const [ownerKind, setOwnerKind] = useUrlStateOrNull<SnapshotOwnerKind>("owner");
   const [stuckParam, setStuck] = useUrlStateOrNull("stuck");
-  const [tabParam, setTab] = useUrlStateOrNull("tab");
-  const tab = tabParam === "board" ? "board" : "states";
+  // The board was a tab here before it had a page of its own: a link to the tab still lands on it.
+  const [tabParam] = useUrlStateOrNull("tab");
   const stuck = stuckParam === "true" ? true : null;
   const [skip, setSkip] = useState(0);
 
   const [machines] = useTraxQuery(machinesDocument);
   const [boardResult] = useTraxQuery(machineBoardDocument, { variables: { machine: name } });
-  const board = boardResult.data?.operations?.machineBoard ?? null;
+  const hasBoard = boardResult.data?.operations?.machineBoard != null;
   const [counts, reexecuteCounts] = useTraxQuery(machineInstanceStuckCountsDocument, { variables: { machine: name } });
   const [result, reexecute] = useTraxQuery(machineInstancesAttentionDocument, { variables: { machine: name, state, ownerKind, stuck, skip, take: PAGE_SIZE } });
   const refetch = () => {
@@ -86,6 +85,7 @@ export function MachinePage() {
 
   const back = <BackLink to={MACHINE_INSTANCES_PATH} label="All machines" />;
 
+  if (tabParam === "board") return <Navigate to={boardPath(name)} replace />;
   if (machines.error)
     return (
       <>
@@ -125,53 +125,15 @@ export function MachinePage() {
         )}
       </p>
 
-      {board && (
-        <div role="tablist" aria-label="Machine views" className="flex flex-wrap gap-1 border-b border-line mb-4">
-          {(
-            [
-              ["states", "State diagram"],
-              ["board", "Board"],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              role="tab"
-              id={`machine-tab-${key}`}
-              aria-selected={tab === key}
-              aria-controls={`machine-panel-${key}`}
-              onClick={() => setTab(key === "states" ? null : key)}
-              className={`px-3 py-1.5 text-sm -mb-px border-b-2 ${
-                tab === key ? "border-accent text-fg font-medium" : "border-transparent text-muted hover:text-fg"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+      <section aria-label="States" className="bg-surface rounded-lg border border-line p-5 mb-6">
+        <div className="flex items-baseline justify-between gap-4 mb-3">
+          <h2 className="text-sm font-semibold text-fg">States</h2>
+          {hasBoard && (
+            <Link to={boardPath(machine.name)} className="text-sm text-accent-fg hover:underline">
+              Its board
+            </Link>
+          )}
         </div>
-      )}
-
-      {board && tab === "board" && (
-        <section
-          id="machine-panel-board"
-          role="tabpanel"
-          aria-labelledby="machine-tab-board"
-          aria-label="Board"
-          className="bg-surface rounded-lg border border-line p-5 mb-6"
-        >
-          <h2 className="text-sm font-semibold text-fg mb-3">Board</h2>
-          <MachineBoard board={board} />
-        </section>
-      )}
-
-      <section
-        id="machine-panel-states"
-        role={board ? "tabpanel" : undefined}
-        aria-labelledby={board ? "machine-tab-states" : undefined}
-        aria-label="States"
-        hidden={board != null && tab === "board"}
-        className="bg-surface rounded-lg border border-line p-5 mb-6"
-      >
-        <h2 className="text-sm font-semibold text-fg mb-3">States</h2>
         <MachineDiagram
           machine={machine}
           counts={byState}

@@ -3,7 +3,7 @@ title: Bulk operations
 description: "Reference for bulk operations in the operations console: one action over every row a list filter matches, the typed-count check, and its page."
 type: reference
 area: dashboard
-nav_order: 9
+nav_order: 10
 source:
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/components/ApplyToAllMatching.tsx
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/BulkOperationsPage.tsx

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, test } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { ConsoleClientProvider } from "../lib/consoleClient";
@@ -9,7 +9,7 @@ import type { Board } from "../lib/machineBoard";
 
 afterEach(cleanup);
 
-function open(board: Board | null) {
+function openAt(path: string, board: Board | null) {
   const client = createMockClient({
     fixtures: false,
     overrides: {
@@ -18,38 +18,34 @@ function open(board: Board | null) {
   });
   render(
     <ConsoleClientProvider client={client}>
-      <MemoryRouter initialEntries={["/machines/topic-map"]}>
+      <MemoryRouter initialEntries={[path]}>
         <AppRoutes />
       </MemoryRouter>
     </ConsoleClientProvider>,
   );
 }
 
-// Each tab names the panel it shows, and that panel is a tabpanel labelled by the tab: a screen reader moves from
-// one to the other.
-function expectWired(tab: HTMLElement) {
-  const panel = document.getElementById(tab.getAttribute("aria-controls") ?? "");
-  expect(panel).not.toBeNull();
-  expect(panel).toHaveAttribute("role", "tabpanel");
-  expect(panel).toHaveAttribute("aria-labelledby", tab.id);
-}
+const open = (board: Board | null) => openAt("/machines/topic-map", board);
 
-test("each tab of a machine with a board controls a panel labelled by it", async () => {
+test("a machine with a board links it from its states, and its states are a plain region", async () => {
   open(MACHINE_BOARD);
 
-  const states = await screen.findByRole("tab", { name: "State diagram" });
-  expectWired(states);
-
-  const board = screen.getByRole("tab", { name: "Board" });
-  fireEvent.click(board);
-  await screen.findByRole("tabpanel", { name: "Board" });
-  expectWired(board);
-});
-
-test("a machine with no board has no tabs, and its states are a plain region", async () => {
-  open(null);
-
   const states = await screen.findByRole("region", { name: "States" });
+  expect(await screen.findByRole("link", { name: "Its board" })).toHaveAttribute("href", "/board/topic-map");
   expect(screen.queryByRole("tablist")).toBeNull();
   expect(states).not.toHaveAttribute("role");
+});
+
+test("a machine with no board has no link to one", async () => {
+  open(null);
+
+  await screen.findByRole("region", { name: "States" });
+  expect(screen.queryByRole("link", { name: "Its board" })).toBeNull();
+});
+
+test("the address of the board tab it used to have opens the Board page", async () => {
+  openAt("/machines/topic-map?tab=board", MACHINE_BOARD);
+
+  expect(await screen.findByRole("heading", { name: "Board", level: 1 })).toBeInTheDocument();
+  expect(await screen.findByRole("region", { name: "Board of topic-map" })).toBeInTheDocument();
 });

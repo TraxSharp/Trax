@@ -62,7 +62,7 @@ the fields below.
 
 The event-storming board of a machine the host serves from features: who acts, what they ask, what happens, the
 rules between, the views, and the scenarios behind each, one lane per machine it joins. It reads through
-`IOperationsService.GetMachineBoardAsync`, which the console's Board tab draws.
+`IOperationsService.GetMachineBoardAsync`, which the console's [Board](/docs/dashboard/board) page draws.
 
 ```graphql
 query {

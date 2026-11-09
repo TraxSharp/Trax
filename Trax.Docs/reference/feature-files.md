@@ -243,7 +243,7 @@ Written by `from-gherkin`, never by hand. Everything only the server reads:
 | `machines` | Each machine's `schemaHash` (the IR it was derived with), `owner` (`user`, `{ "system": "<key>" }`, or `{ "system": { "keyedBy": [...] } }` for a keyed system machine), who may `start` and `read` it, each trigger's rule (`roles`, `anyAuthenticated`, or `server`), the train each invoking state runs, with its input from context fields or `$owner`, the `effects` each effect-bound trigger runs, the `handlers` of its custom `rules` and `reductions`, and its `migrations` by the version each steps from, each a type's full name. A trigger with no entry is not served. |
 | `policies` | The server acting when a machine enters a state: `linked` (the same owner's instance through a link), `broadcast` (from a system machine, every instance waiting in a state) or `toSystem` (a user's machine moving the system's at its key). |
 | `views` | Each view a scenario reads, its fields and its readers. A view no scenario reads is not served. |
-| `provenance` | For each part of each machine, the scenarios that produced it, by file, line and name, never by step text. The console's Board tab shows them. |
+| `provenance` | For each part of each machine, the scenarios that produced it, by file, line and name, never by step text. The console's [Board](/docs/dashboard/board) page shows them. |
 
 A host refuses a directory whose IR the host file was not derived from, or whose names disagree with it: among them an
 effect, custom rule, custom reduction or version step of the IR with no type, or a type for one the IR does not have. It also

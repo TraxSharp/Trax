@@ -49,24 +49,21 @@ export const Diagram: Story = {
   },
 };
 
-// A machine its host serves no board for: the diagram alone, with no tabs.
+// A machine its host serves no board for: the diagram alone, with no link to a board.
 export const NoBoard: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(await c.findByRole("region", { name: "States" })).toBeInTheDocument();
-    expect(c.queryByRole("tablist")).toBeNull();
+    expect(c.queryByRole("link", { name: "Its board" })).toBeNull();
   },
 };
 
-// A machine its host serves from features: a tab for its diagram and one for its board, the stickies in its lane.
+// A machine its host serves from features: its states, and a link to its board on the Board page.
 export const Board: Story = {
   parameters: { mock: machineScenarioWithBoard },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    await userEvent.click(await c.findByRole("tab", { name: "Board" }));
-    const board = await c.findByRole("tabpanel", { name: "Board" });
-    await userEvent.click(within(board).getByRole("button", { name: /^Rebuild/ }));
-    expect(await within(board).findByText("Ada builds it again")).toBeInTheDocument();
+    expect(await c.findByRole("link", { name: "Its board" })).toHaveAttribute("href", "/board/topic-map");
   },
 };
 

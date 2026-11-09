@@ -848,7 +848,7 @@ each machine a policy or a view joins it to, by name), its `Stickies` and its `L
 has an `Id`, a `Kind` (`actor`, `command`, `event`, `policy`, `aggregate` or `view`), the `Machine` whose lane it is
 in, a `Label`, and the `Scenarios` that produced it, each a `MachineScenarioDescription` (`File`, `Line`,
 `Scenario`), none when the host file has no provenance. A `MachineBoardLinkDescription` goes `From` one sticky's id
-`To` another's. A machine not served from features answers null. It reads no table. The console's Board tab and
+`To` another's. A machine not served from features answers null. It reads no table. The console's [Board](/docs/dashboard/board) page and
 [`operations.machineBoard`](/docs/sdk-reference/graphql-api/queries/machine-instances#machineboard) read through it.
 
 ## Behavior
