@@ -13,7 +13,8 @@ guards, the timers, the policies between machines, the views, and who may do wha
 trains the machines invoke. Why this is a source of machines, and what it refuses, is
 [ADR 0058](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0058-features-and-a-glossary-are-a-source-of-machines.md).
 The [Bakery sample](https://github.com/TraxSharp/Trax/blob/main/Trax.Samples/samples/Bakery/README.md) is this page,
-built.
+built, and [How features become machines](/docs/statemachine/how-features-become-machines) follows each glossary
+entry and step to the IR, `host.json`, GraphQL and the C# builder.
 
 ## Write the glossary
 
@@ -56,6 +57,120 @@ Feature: Ordering bread
 An actor's own act grants that actor the trigger. A trigger no scenario shows anyone firing is not served at all. The
 steps derivation reads are in the [reference](/docs/reference/feature-files#the-steps); a Then it does not read is
 about the UI, and is left alone.
+
+## Add guards, trains, timers, policies and views
+
+Each of these is a glossary entry plus the scenarios that show it. The examples are the Bakery's.
+
+**A guard** is a pair of phrases and the rule they stand for. A scenario where it holds and one where it fails, with
+the message, make a guarded move:
+
+```json
+"guards": {
+  "hasLoaves": {
+    "holds": "has something in it",
+    "fails": "has nothing in it",
+    "rule": { "rule": "compare", "source": "context", "field": "loaves", "op": "gt", "value": 0 }
+  }
+}
+```
+
+```gherkin
+Scenario: An empty order is refused
+  Given Ada's order has nothing in it
+  When Ada places her order
+  Then Ada is told "Add something first."
+  And Ada's order is still a draft
+```
+
+**A train** runs when an instance enters a state. The glossary names its interface, its input from context fields,
+its output, and a phrase for each outcome, with the output an in-memory run answers with:
+
+```json
+"invokes": {
+  "Paying": {
+    "train": "Trax.Samples.Bakery.Trains.ITakePaymentTrain",
+    "input": { "loaves": "loaves" },
+    "output": [ { "name": "approved", "type": "boolean", "nullable": false, "constraints": [] } ],
+    "outcomes": {
+      "the payment goes through": { "outcome": "done", "when": { "rule": "boolEquals", "source": "input", "field": "approved", "value": true } },
+      "the payment is declined": { "outcome": "done", "when": { "rule": "boolEquals", "source": "input", "field": "approved", "value": false } },
+      "the payment cannot be taken": { "outcome": "failed" },
+      "the payment is called off": { "outcome": "cancelled" }
+    },
+    "examples": {
+      "the payment goes through": { "approved": true },
+      "the payment is declined": { "approved": false }
+    }
+  }
+}
+```
+
+```gherkin
+When Ada places her order
+Then Ada's order is being paid for
+When the payment goes through
+Then Ada's order is placed
+```
+
+Every invoking state needs a scenario for each of `done`, `failed` and `cancelled`. The train is the one piece of
+C# behind the machine, written as in [Invoke a train from a state](/docs/statemachine/invoking-trains).
+
+**A timer** is time passing in a scenario. There is no glossary entry:
+
+```gherkin
+Scenario: An order comes out of the oven
+  Given Ada's order is baking
+  When 10 seconds pass
+  Then Ada's order is ready to collect
+```
+
+**A policy** is a Then about another instance moving after a When. A system machine has a fixed key and a name, and
+only the server moves it:
+
+```json
+"shop": {
+  "system": "shop/main",
+  "name": "the shop",
+  "initial": "Closed",
+  "states": { "Closed": "is closed", "Open": "is open" },
+  "triggers": { "Open": { "phrase": "the shop opens" } }
+}
+```
+
+```gherkin
+Scenario: A baker clocking in opens the shop
+  Given Kit is a baker
+  And Kit has a shift
+  And the shop is closed
+  When Kit clocks in for his shift
+  Then Kit's shift is on
+  And the shop is open
+```
+
+That derives a `toSystem` policy: when a shift enters `On`, the server fires `Open` on `shop/main`. `Open` also needs
+a scenario of its own (`Given the shop is closed` / `When the shop opens` / `Then the shop is open`). Two machines of
+the same owner need a [link](/docs/reference/feature-files#links), and a system machine moving every waiting user
+instance is a `broadcast`.
+
+**A view** is what a reader sees across machines, with labels for states. A scenario that reads it makes its actor a
+reader, and a view no scenario reads is not served:
+
+```json
+"views": {
+  "orders": {
+    "reads": [ { "machine": "order" } ],
+    "fields": {
+      "status": { "from": "order.state", "labels": { "Placed": "Waiting for the oven", "Baking": "In the oven" } },
+      "loaves": { "from": "order.loaves" }
+    }
+  }
+}
+```
+
+```gherkin
+Then Ada's orders show status "In the oven"
+```
 
 ## Derive the machines
 

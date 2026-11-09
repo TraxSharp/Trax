@@ -79,7 +79,8 @@ The same features run two ways:
   their own: [`Hooks`](../../tests/Trax.Samples.Bakery.E2E/Hooks.cs) and the feature files themselves. The host
   requires persisted operations as it ships, and the bindings send each step by the id the page's manifest holds. The two
   scenarios whose outcome the real payment train never produces by itself (a payment that fails, one that is called
-  off) are tagged `@in-memory` and run in memory only.
+  off) are tagged `@in-memory` and run in memory only. The tag is this sample's: a `BeforeScenario` hook in `Hooks`
+  skips it on the host. Trax gives meaning to no tag but `@host`.
 
 The page has browser tests of its own, written by hand rather than run from the features:
 [`BakeryPageTests`](../../tests/Trax.Samples.Bakery.Browser/BakeryPageTests.cs), a customer and a baker on pages of
