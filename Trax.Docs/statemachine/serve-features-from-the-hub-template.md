@@ -100,7 +100,8 @@ builder.Services.AddTraxPrincipalAccessor();
 builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 ```
 
-With the template's API keys, the key's `id` is the user key: `keys.Add(key, id: "ada", "passenger")` is Ada.
+With the template's API keys, the user key is the key's `id` qualified by its scheme: `keys.Add(key, id: "ada",
+"passenger")` stores Ada's instances under `TraxApiKey:ada`.
 The template registers its keys in Development only, and `AddTraxApiKeyAuth` is what registers `TraxCaller`, so
 [`AddTraxPrincipalAccessor()`](/docs/sdk-reference/api-auth/add-trax-principal-accessor) keeps it resolvable in every
 environment. See [ISnapshotPrincipal](/docs/sdk-reference/statemachine-api/persistence-ports#isnapshotprincipal).
