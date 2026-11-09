@@ -107,7 +107,11 @@ A React app in [web/](web/) drives both machines through the client `trax client
 manifest: `useRememberedTurnstile` and `useRememberedCheckout` keep each user's instance, the trains are called through the
 page's own documents (`web/src/graphql/`), and every request is sent by the persisted id the host registered. Start this host, then `cd web && npm install && npm run dev` and open
 http://localhost:5173. The host allows that origin only, so Vite refuses to start rather than move to
-another port while a different sample's client holds 5173.
+another port while a different sample's client holds 5173. The page's socket reaches the host only because of that
+same `AddCors` policy: a socket upgrade from another origin is accepted only when the host allows it, and the
+allowed origins default to the CORS default policy's `WithOrigins(...)`
+([Allowed origins](https://traxsharp.net/docs/sdk-reference/graphql-api/subscriptions#allowed-origins)). A page
+served from anywhere else needs its origin in `StateMachine:PageOrigin`, or the push never arrives.
 
 The page teaches the machine before the example. Each machine has a tab: the turnstile first, as the simplest
 machine, then the checkout, a machine with an effect. The page starts each machine once per user and keeps the id

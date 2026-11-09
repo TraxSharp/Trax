@@ -45,6 +45,11 @@ Logic that does not fit, a formula reducer or a multi-field invariant, has two h
 The State Machine sample's checkout prices its cart this way: the vocabulary has no arithmetic, so the total is a
 named reduction and a named rule, each with one C# handler.
 
+Every comparison is against a constant. A guard that compares an input with a context field (a slot number below the
+count of items the context holds) is not in the vocabulary. When the event's target invokes a train that reads the
+same data, check it there: the train's output says whether it held, and a guarded `OnDone` routes the answer. A
+custom rule is the other home, when the guard has to refuse the event before anything runs.
+
 ## See also
 
 - [Machine](/docs/sdk-reference/statemachine-api/machine), the builder overloads of both styles.

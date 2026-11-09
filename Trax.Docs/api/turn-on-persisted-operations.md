@@ -64,7 +64,71 @@ builder.Services.AddTraxGraphQL(graphql =>
 - `RequirePersisted(false)` without `LogNonPersistedRequests(true)` does nothing, and the host
   refuses to start.
 
-## 3. Upload the documents your clients send
+## 3. Register or upload the documents your clients send
+
+### A frontend generated with `trax client`
+
+A frontend whose client [`trax client`](/docs/reference/cli#frontend-clients-trax-client) generates
+uploads nothing: the host registers its documents when it starts.
+
+1. The frontend writes one `.graphql` document per operation it sends to a train, and
+   `trax client --documents 'src/graphql/*.graphql'` writes them, with every fragment they spread,
+   to `trax.documents.json` under its `--out`. Commit the file with the rest of the client.
+2. Copy the file beside the host's build. A `None` item in the host's project does it on every
+   build:
+
+```xml
+<ItemGroup>
+  <None
+    Include="..\web\src\trax\trax.documents.json"
+    Link="trax.documents.json"
+    CopyToOutputDirectory="PreserveNewest"
+    Condition="Exists('..\web\src\trax\trax.documents.json')"
+  />
+</ItemGroup>
+```
+
+3. Name it in `ClientDocuments(path)`. A relative path resolves against the content root, so
+   pass the build output's:
+
+```csharp compile
+using Trax.Api.GraphQL.Extensions;
+using Trax.Api.GraphQL.PersistedOperations.Extensions;
+
+builder.Services.AddTraxGraphQL(graphql =>
+    graphql.UsePersistedOperations(opts =>
+        opts.RequirePersisted(true)
+            .SingleNode()
+            .ClientDocuments(Path.Combine(AppContext.BaseDirectory, "trax.documents.json"))
+    )
+);
+```
+
+The host checks every document when it starts, as `trax client` did, and refuses to start, naming
+it, when the file is missing or malformed or a document no longer fits the schema. An export with
+`--trax-export-client` does not read the file, so the first build may run without one. Each
+document is stored under `trax_client_<name>_<hash of its text>`; a version a frontend no longer
+holds keeps running until no node has registered it for the grace period. Deploy the host before
+the frontend: a page sends ids the host registers only once it is built with the new file.
+[Fetch only what a component needs](/docs/api/fetch-only-what-a-component-needs) covers writing the
+documents.
+
+The host registers its own documents the same way, so these ids are reserved and no upload may use
+them (`RESERVED_ID`):
+
+| Prefix | Registered for |
+|---|---|
+| `trax_client_` | a frontend's documents, from `ClientDocuments(path)` |
+| `trax_machine_` | every exposed machine operation |
+| `trax_progress_` | `runProgress`, when a train carries `[TraxRunProgress]` |
+| `trax_view_` | each view a host serves from features |
+| `trax_console_` | the operations console's own documents, when the host serves the console |
+| `trax_train_` | nothing now: the train documents an earlier version generated |
+
+What each holds is under
+[Generated documents](/docs/sdk-reference/persisted-operations/use-persisted-operations#generated-documents).
+
+### Any other client
 
 Each client's build produces a manifest of ids and documents. Upload it before the clients that
 use it ship, from CI or a deploy step. Over GraphQL, as a caller the management gate admits:

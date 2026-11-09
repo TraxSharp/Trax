@@ -73,7 +73,7 @@ implements it.
 | `SystemOwned()` | The machine's instances belong to the system: only [`IMachineInstances.Start`](/docs/sdk-reference/statemachine-api/machine-instances) creates one, and no user's draft operation reaches the machine (they answer `UNKNOWN_MACHINE`). A train it invokes is authorized in the trusted execution scope, so the host refuses one that declares `[TraxAuthorize]`. Without it a machine is user-owned and `Start` refuses it. See [Invoking a train](/docs/statemachine/invoking-trains#who-a-run-belongs-to). |
 | `InvokedRunLimit(int limit)` | The most live invoked runs one user may already hold, counted across every machine, for entering one of this machine's invoking states to be allowed; past it the entry is refused with `INVOKE_LIMIT_REACHED`. Defaults to 10; at least 1. System owners are not capped. See [Invoking a train](/docs/statemachine/invoking-trains#who-a-run-belongs-to). |
 | `CustomGuard(string name, Func<JsonObject, JsonNode?, bool> guard)` | Binds the C# handler for `new Rule.Custom(name)`, wherever the machine uses it (a `When` or a `Requires`, nested or not). The TypeScript twin's `customGuards` is the other half. |
-| `CustomReducer(string name, Func<JsonObject, JsonNode?, JsonObject> reducer)` | Binds the C# handler for `Reduction.Custom(name)`: it gets the context and the trigger input and returns the destination context. The twin's `customReducers` is the other half. |
+| `CustomReducer(string name, Func<JsonObject, JsonNode?, JsonObject> reducer)` | Binds the C# handler for `new Reduction.Custom(name)`: it gets the context and the trigger input and returns the destination context. The twin's `customReducers` is the other half. |
 
 `Build()` throws `InvalidOperationException` for a custom rule or reduction whose name has no handler bound,
 so an unbound name fails when the machine is built rather than refusing its edge forever. It also throws for a
@@ -119,9 +119,16 @@ or `OnCancelled`, declares either of the last two twice, invokes or spawns a sec
 rather than its interface, or names a tuple as the output (its elements are fields, which no guard or reduction can
 read), or writes a spawned child's id into a field its declared context does not hold as a `Guid?`. It also throws
 when a state is declared with both `Ends()` and `Fails()`, or ends and also invokes or spawns, when an outcome goes to the target of the `RunsOnce` effect, or to the state the machine
-`StartsAt` (which would be reserved, so no draft could ever be created), or when an ordinary transition enters a
-state an outcome goes to (a self-loop is allowed). An invoked train does not count
-against the one `RunsOnce` effect.
+`StartsAt` (which would be reserved, so no draft could ever be created) unless that state invokes a train itself, when
+an ordinary transition enters a state an outcome goes to (a self-loop is allowed, and so is an edge into an outcome
+target that itself invokes a train), or when the `RunsOnce` effect runs from or lands in an invoking state (`An effect
+neither runs from nor lands in a state that invokes a train; put a plain state between them.`). An invoked train does
+not count against the one `RunsOnce` effect.
+
+`Build()` does not see the host, so it accepts a user-owned machine whose `OnDone`, `OnFailed` or `OnCancelled` (or
+timer) enters another invoking state. The host refuses it at startup, naming the machine, the outcome and both
+states (`The machine '…' is user-owned, and the OnDone outcome of A enters B, which invokes a train of its own.`); see
+[Who a run belongs to](/docs/statemachine/invoking-trains#who-a-run-belongs-to).
 
 ## ITransitionBuilder
 
@@ -185,6 +192,12 @@ are the server's own and offer no rule. At startup the host compares every event
 the start into an invoking initial state, with the invoked train's `[TraxAuthorize]`, and refuses one whose rule
 does not prove the train's: an event's role set must sit inside each of the train's role sets, and it must name
 each of the train's policies, since a policy cannot be proven to grant a role.
+
+On a machine that declares rules, `Build` refuses an event any caller may send (no rule, `AnyAuthenticated()` or
+`Anonymous()`) that copies from its input a field the server writes: an invoked train's outcome, the effect's
+receipt, a spawned child's id, or an event gated by `Requires` or `RequiresPolicy`. It applies whether or not the
+machine invokes a train, and a custom reducer counts as copying every field. The message names the event, the field
+and its writer, and ends `Leave the field out of <event>'s reduction, or give <event> a rule that gates it.`
 
 A state has at most one timer. `Build` refuses two timers on one state, a timer back into its own state, timers that
 form a cycle no event breaks, a timer into an effect's target or an invoked train's outcome target, a fixed duration
