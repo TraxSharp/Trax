@@ -65,6 +65,6 @@ test("the sidebar hides Persisted operations on a host that does not serve their
   );
   expect(await findByRole("link", { name: /Queued/ })).toBeInTheDocument();
   await waitFor(() => expect(queryByRole("link", { name: /Persisted operations/ })).not.toBeInTheDocument());
-  // The failed probe is an answer, not a failed refresh.
+  // The answer is not a failed refresh.
   expect(queryByRole("status")).not.toBeInTheDocument();
 });

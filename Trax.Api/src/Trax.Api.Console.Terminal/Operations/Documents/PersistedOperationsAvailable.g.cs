@@ -7,27 +7,34 @@ namespace Trax.Api.Console.Terminal.Operations;
 /// <summary>What PersistedOperationsAvailable answers: the fields it selects.</summary>
 internal sealed record PersistedOperationsAvailableResult
 {
-    /// <summary>Persisted-operation management: the stored documents and their history. Behind the management gate the host declared.</summary>
-    [global::System.Text.Json.Serialization.JsonPropertyName("persistedOperations")]
-    public PersistedOperationsAvailableResultPersistedOperations? PersistedOperations { get; init; }
+    [global::System.Text.Json.Serialization.JsonPropertyName("operations")]
+    public PersistedOperationsAvailableResultOperations? Operations { get; init; }
 }
 
-/// <summary>RootQuery.persistedOperations as the console document PersistedOperationsAvailable (src/graphql/PersistedOperationsAvailable.graphql) selects it.</summary>
-internal sealed record PersistedOperationsAvailableResultPersistedOperations
+/// <summary>RootQuery.operations as the console document PersistedOperationsAvailable (src/graphql/PersistedOperationsAvailable.graphql) selects it.</summary>
+internal sealed record PersistedOperationsAvailableResultOperations
 {
-    /// <summary>The value's type, PersistedOperationQueries.</summary>
-    [global::System.Text.Json.Serialization.JsonPropertyName("__typename")]
-    public required string Typename { get; init; }
+    /// <summary>Nested namespace exposing live scheduler runtime config (what the dashboard's ServerSettingsPage reads).</summary>
+    [global::System.Text.Json.Serialization.JsonPropertyName("config")]
+    public required PersistedOperationsAvailableResultOperationsConfig Config { get; init; }
+}
+
+/// <summary>OperationsQueries.config as the console document PersistedOperationsAvailable (src/graphql/PersistedOperationsAvailable.graphql) selects it.</summary>
+internal sealed record PersistedOperationsAvailableResultOperationsConfig
+{
+    /// <summary>Whether the caller may manage persisted operations on this host: the host serves the persistedOperations root (it calls UsePersistedOperations with GateManagement) and the caller meets that gate. False on a host without persisted operations, on one that declares no management gate, and for a caller the gate refuses. The operations console reads it to decide whether to show its persisted-operation pages, so every host answers the question without an error.</summary>
+    [global::System.Text.Json.Serialization.JsonPropertyName("canManagePersistedOperations")]
+    public required bool CanManagePersistedOperations { get; init; }
 }
 
 internal static partial class TraxOperations
 {
-    /// <summary>The query PersistedOperationsAvailable (src/graphql/PersistedOperationsAvailable.graphql). A host runs it as text, behind its own gate, and never registers it.</summary>
+    /// <summary>The query PersistedOperationsAvailable (src/graphql/PersistedOperationsAvailable.graphql), and the id a host that serves the console registers it under.</summary>
     public static readonly global::Trax.Client.TraxDocument<global::Trax.Client.TraxNoVariables, PersistedOperationsAvailableResult> PersistedOperationsAvailable = new(
         "PersistedOperationsAvailable",
         global::Trax.Client.TraxOperationKind.Query,
-        null,
-        "query PersistedOperationsAvailable {\n  persistedOperations {\n    __typename\n  }\n}\n"
+        "trax_console_PersistedOperationsAvailable_ee9243f3583e36b802595971cee75dab52c3143c058be307823b95f9b08ad1e9455e22c06d5f8483",
+        "query PersistedOperationsAvailable {\n  operations {\n    config {\n      canManagePersistedOperations\n    }\n  }\n}\n"
     );
 }
 

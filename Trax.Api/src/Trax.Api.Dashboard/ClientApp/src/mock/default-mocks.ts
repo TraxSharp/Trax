@@ -16,4 +16,7 @@ export const defaultMocks: IMocks = {
   Duration: () => "PT5S",
   UUID: () => "00000000-0000-4000-8000-000000000000",
   Any: () => null,
+  // The mock is a host that serves persisted-operation management to its caller; a scenario that
+  // is not overrides it (scenarios.ts, persistedOperationsUnavailable).
+  ConfigQueries: () => ({ canManagePersistedOperations: true }),
 };

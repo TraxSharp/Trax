@@ -816,6 +816,16 @@ type ConfigQueries {
   version: String!
 
   """
+  Whether the caller may manage persisted operations on this host: the host serves the
+  persistedOperations root (it calls UsePersistedOperations with
+  GateManagement) and the caller meets that gate. False on a host without persisted
+  operations, on one that declares no management gate, and for a caller the gate refuses. The
+  operations console reads it to decide whether to show its persisted-operation pages, so every
+  host answers the question without an error.
+  """
+  canManagePersistedOperations: Boolean!
+
+  """
   The level each category configured under the API host's Logging:LogLevel section
   filters at now, Default first and the rest by name, including any change made with
   setLogLevels. Read through ILogLevelService, the call the dashboard's

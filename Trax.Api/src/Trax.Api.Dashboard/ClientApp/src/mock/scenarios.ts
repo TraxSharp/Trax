@@ -1231,11 +1231,12 @@ export const persistedOperationsScenario: MockSchemaOverrides = {
   }),
 };
 
-/** A host that does not serve persisted-operation management, or a caller outside its gate: the probe fails. */
-export const persistedOperationsUnavailable: MockSchemaOverrides = errorOverride(
-  "RootQuery",
-  "persistedOperations",
-);
+/** A host that does not serve persisted-operation management, or a caller outside its gate: the host says so. */
+export const persistedOperationsUnavailable: MockSchemaOverrides = {
+  resolvers: () => ({
+    ConfigQueries: { canManagePersistedOperations: () => false },
+  }),
+};
 
 // ── State machines ───────────────────────────────────────────────────────
 // Two machines, as the Recovery sample has them. source-partition is system-owned: ...0001 waits on

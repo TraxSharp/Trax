@@ -52,6 +52,7 @@ public class PersistedOperationsManagementGateTests
     private const string OperatorKey = "management-gate-operator-0123456789abcde";
     private const string DeployerKey = "management-gate-deployer-0123456789abcde";
     private const string ReaderKey = "management-gate-reader-0123456789abcdefg";
+    private const string BothKey = "management-gate-both-0123456789abcdefghi";
 
     private const string Upload = """
         mutation Upload($input: UploadPersistedOperationInput!) {
@@ -64,6 +65,8 @@ public class PersistedOperationsManagementGateTests
     private const string List = "{ persistedOperations { persistedOperations { totalCount } } }";
 
     private const string Cancel = "mutation { operations { cancelExecution(id: 1) { success } } }";
+
+    private const string CanManage = "{ operations { config { canManagePersistedOperations } } }";
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -177,6 +180,33 @@ public class PersistedOperationsManagementGateTests
         HasErrorCode(await PostAsync(app, ReaderKey, List), "TRAX_AUTHORIZATION")
             .Should()
             .BeTrue("a signed-in caller without the role is refused too");
+    }
+
+    [Test]
+    public async Task Operations_config_says_whether_the_caller_may_manage_without_an_error()
+    {
+        await using (
+            var gated = await StartAsync(
+                g => g.ExposeOperationQueries().GateOperations(roles: "Operator"),
+                po => po.SingleNode().GateManagement(roles: "Deployer")
+            )
+        )
+        {
+            CanManageOf(await PostAsync(gated, BothKey, CanManage))
+                .Should()
+                .BeTrue("an operator who holds the management role may manage documents");
+            CanManageOf(await PostAsync(gated, OperatorKey, CanManage))
+                .Should()
+                .BeFalse("the operator's role is not the management gate");
+        }
+
+        await using var ungated = await StartAsync(
+            g => g.ExposeOperationQueries().GateOperations(roles: "Operator"),
+            po => po.SingleNode()
+        );
+        CanManageOf(await PostAsync(ungated, BothKey, CanManage))
+            .Should()
+            .BeFalse("with no management gate declared the management fields are not served");
     }
 
     [Test]
@@ -320,7 +350,7 @@ public class PersistedOperationsManagementGateTests
         foreach (var (gateName, declare, admitted) in table)
         {
             await using var app = await StartAsync(
-                g => g,
+                g => g.ExposeOperationQueries().AllowAnonymousOperations(),
                 po => declare(po.SingleNode()),
                 services =>
                     services.AddAuthorization(o =>
@@ -341,9 +371,13 @@ public class PersistedOperationsManagementGateTests
                     .ServiceProvider.GetRequiredService<IPersistedOperationsManagementGate>()
                     .AllowsAsync(principal);
 
-                if (graphql != expected || gate != expected)
+                // What the console asks to decide whether to show the management pages.
+                var console = CanManageOf(await PostAsPrincipalAsync(app, name, CanManage));
+
+                if (graphql != expected || gate != expected || console != expected)
                     mismatches.Add(
-                        $"{gateName}, {name}: expected {expected}, GraphQL {graphql}, gate {gate}"
+                        $"{gateName}, {name}: expected {expected}, GraphQL {graphql}, gate {gate}, "
+                            + $"canManagePersistedOperations {console}"
                     );
             }
         }
@@ -351,8 +385,8 @@ public class PersistedOperationsManagementGateTests
         mismatches
             .Should()
             .BeEmpty(
-                "the dashboard's gate and the GraphQL persistedOperations fields refuse the same "
-                    + "people"
+                "the dashboard's gate, the GraphQL persistedOperations fields and "
+                    + "operations.config.canManagePersistedOperations refuse the same people"
             );
     }
 
@@ -520,6 +554,7 @@ public class PersistedOperationsManagementGateTests
             keys.Add(OperatorKey, id: "operator", "Operator")
                 .Add(DeployerKey, id: "deployer", "Deployer")
                 .Add(ReaderKey, id: "reader", "Reader")
+                .Add(BothKey, id: "both", "Operator", "Deployer")
         );
         services.AddSingleton<TraxMarker>();
         services.AddSingleton(Substitute.For<ITrainDiscoveryService>());
@@ -605,6 +640,20 @@ public class PersistedOperationsManagementGateTests
 
         var response = await app.GetTestClient().SendAsync(request);
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+    }
+
+    // operations.config.canManagePersistedOperations, from an answer that carries no error.
+    private static bool CanManageOf(JsonDocument doc)
+    {
+        doc.RootElement.TryGetProperty("errors", out _)
+            .Should()
+            .BeFalse("every caller past the operations gate is answered: " + doc.RootElement);
+        return doc
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("config")
+            .GetProperty("canManagePersistedOperations")
+            .GetBoolean();
     }
 
     private static bool HasErrorCode(JsonDocument doc, string code) =>

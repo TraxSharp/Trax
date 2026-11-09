@@ -13,8 +13,11 @@ source:
 
 Shown only when the host serves [persisted operations](/docs/api/persisted-operations) management to
 this caller: it turns on persisted operations, declares the management gate (`GateManagement`), and
-the caller meets it. Every read and write goes through the `persistedOperations` fields, behind that
-gate, so the console refuses what the API refuses, with the same message. Turning it on is in
+the caller meets it. The console learns that from
+[`operations.config.canManagePersistedOperations`](/docs/sdk-reference/graphql-api/queries/config#canmanagepersistedoperations),
+which every host answers, so a host without persisted operations is never sent a field it does not
+have. Every read and write goes through the `persistedOperations` fields, behind that gate, so the
+console refuses what the API refuses, with the same message. Turning it on is in
 [Turn on persisted operations](/docs/api/turn-on-persisted-operations).
 
 ## Persisted operations

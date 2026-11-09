@@ -1,14 +1,15 @@
 import { useTraxQuery } from "./consoleClient";
 import { persistedOperationsAvailableDocument } from "../trax/index.g";
 
-// Whether the host serves persistedOperations to this caller (it calls UsePersistedOperations and
-// GateManagement, and the caller meets the gate). The probe selects only the namespace's
-// __typename, which reads nothing; a host without the namespace fails it at validation, and a
-// caller outside the gate is refused. Its failure is the answer, not a broken refresh, so it opts out of the
-// header's "last refresh failed" mark. The console client sends it once for the sidebar and the pages.
+// Whether this caller may manage persisted operations on the host: it serves the persistedOperations
+// root (UsePersistedOperations with GateManagement) and the caller meets that gate. It reads
+// operations.config.canManagePersistedOperations, which every host serves and answers false where
+// management is not served, so no host is sent a field it does not have. A caller the operations
+// gate refuses sees no pages anyway; its refusal is not a broken refresh, so the query opts out of
+// the header's "last refresh failed" mark. The console client sends it once for the sidebar and the pages.
 export function usePersistedOperationsAvailable(): { available: boolean; checking: boolean } {
   const [{ data, fetching, error }] = useTraxQuery(persistedOperationsAvailableDocument, { ignoreRefreshStatus: true });
-  const available = !error && Boolean(data?.persistedOperations);
+  const available = !error && data?.operations?.config.canManagePersistedOperations === true;
   return { available, checking: fetching && !data && !error };
 }
 

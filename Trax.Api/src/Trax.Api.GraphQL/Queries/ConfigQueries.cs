@@ -1,5 +1,8 @@
 using System.Reflection;
+using System.Security.Claims;
+using HotChocolate.Resolvers;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.DTOs;
 using Trax.Scheduler.Services.LogLevels;
@@ -36,6 +39,28 @@ public class ConfigQueries
     /// version.
     /// </summary>
     public string GetVersion() => TraxVersion;
+
+    /// <summary>
+    /// Whether the caller may manage persisted operations on this host: the host serves the
+    /// <c>persistedOperations</c> root (it calls <c>UsePersistedOperations</c> with
+    /// <c>GateManagement</c>) and the caller meets that gate. False on a host without persisted
+    /// operations, on one that declares no management gate, and for a caller the gate refuses. The
+    /// operations console reads it to decide whether to show its persisted-operation pages, so every
+    /// host answers the question without an error.
+    /// </summary>
+    /// <param name="user">The caller, from the request; not a GraphQL argument.</param>
+    /// <param name="context">The resolver context the gate is evaluated in; not a GraphQL argument.</param>
+    public async Task<bool> GetCanManagePersistedOperations(
+        [GlobalState(nameof(ClaimsPrincipal))] ClaimsPrincipal? user,
+        IResolverContext context
+    )
+    {
+        if (user is null)
+            return false;
+        var access = context.Services.GetService<IPersistedOperationsManagementAccess>();
+        return access is not null
+            && await access.AllowsAsync(user, context.RequestAborted).ConfigureAwait(false);
+    }
 
     private static readonly string TraxVersion =
         typeof(ConfigQueries)

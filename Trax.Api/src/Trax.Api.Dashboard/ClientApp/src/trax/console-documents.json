@@ -222,6 +222,10 @@
       "text": "query Overview($range: MetricsRange!, $hideAdmin: Boolean!) {\n  operations {\n    health {\n      status\n      description\n      queueDepth\n      inProgress\n      failedLastHour\n      deadLetters\n    }\n    metrics {\n      server {\n        uptimeSeconds\n        workingSetBytes\n        gcHeapBytes\n      }\n      serverCpuPercent\n      dashboard(range: $range, hideAdminTrains: $hideAdmin) {\n        kpis {\n          executionsToday\n          successRate\n          currentlyRunning\n          unresolvedDeadLetters\n        }\n        executionsOverTime {\n          timestamp\n          completed\n          failed\n          cancelled\n        }\n        topFailures {\n          trainName\n          count\n        }\n        topAverageDurations {\n          trainName\n          averageMilliseconds\n        }\n        throughputSeries {\n          trainName\n          buckets {\n            timestamp\n            count\n          }\n        }\n      }\n    }\n  }\n}\n"
     },
     {
+      "name": "PersistedOperationsAvailable",
+      "text": "query PersistedOperationsAvailable {\n  operations {\n    config {\n      canManagePersistedOperations\n    }\n  }\n}\n"
+    },
+    {
       "name": "QueueTrain",
       "text": "mutation QueueTrain($input: QueueTrainInput!) {\n  operations {\n    workQueue {\n      queueTrain(input: $input) {\n        success\n        message\n        id\n      }\n    }\n  }\n}\n"
     },
