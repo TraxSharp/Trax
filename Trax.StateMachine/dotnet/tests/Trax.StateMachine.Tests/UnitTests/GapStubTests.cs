@@ -197,10 +197,25 @@ public class GapStubTests
             And Ada's answer sheet is still open
         """;
 
-    [Test]
-    public void Missing_counts_an_input_guard_shown_by_a_when()
+    // The trigger names its guard, so the derived edge carries it whether or not a scenario shows it refusing.
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Missing_counts_an_input_guard_shown_by_a_when(bool named)
     {
-        var glossary = Trax.StateMachine.Features.Glossary.Read(AnswerGlossary);
+        var glossary = Trax.StateMachine.Features.Glossary.Read(
+            named
+                ? AnswerGlossary.Replace(
+                    "\"value\": { \"input\": \"answer\" } } ] }",
+                    "\"value\": { \"input\": \"answer\" } } ] },\n          \"guard\": \"hasAnswer\"",
+                    StringComparison.Ordinal
+                )
+                : AnswerGlossary
+        );
+        glossary
+            .Machines["answer-sheet"]
+            .Triggers["Answer"]
+            .Guard.Should()
+            .Be(named ? "hasAnswer" : null);
         IReadOnlyList<Gap> GuardGaps(string feature)
         {
             var (gaps, problems) = Missing.Find(glossary, [("answering.feature", feature)]);

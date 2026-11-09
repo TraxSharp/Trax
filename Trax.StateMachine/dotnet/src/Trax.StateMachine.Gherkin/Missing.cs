@@ -114,10 +114,15 @@ internal static class Missing
                     )
                 )
                 .ToList();
-            // A guard decides a move when the derived edge carries its rule: the scenarios showed it holding on the
-            // move and failing on the refusal, whether a Given set it up or the When's value did.
+            // A guard decides a move when the derived edge carries its rule and a scenario shows it refusing there:
+            // the scenarios showed it holding on the move and failing on the refusal, whether a Given set it up or
+            // the When's value did. A guard the trigger names is on its edge with no refusal shown, which shows nothing.
             bool Decides(GlossaryGuard guard) =>
-                edges.Any(e => e.Guard is not null && JsonNode.DeepEquals(e.Guard, guard.Rule));
+                edges.Any(e =>
+                    e.Guard is not null
+                    && JsonNode.DeepEquals(e.Guard, guard.Rule)
+                    && Shown(m, $"guard {e.From} {e.Trigger}")
+                );
             var reached = edges
                 .Select(e => e.To)
                 .Append(machine.Initial)
