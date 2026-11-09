@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { HUE, NEUTRAL, alpha } from "@/lib/hue";
 
 // The code under a demo, lit as the run goes, folded until the reader opens it. It folds the same way as the
 // sample's "real code" box under it. A code panel inside re-fits its font when it opens (useFitCode observes its size).
@@ -11,7 +12,7 @@ import { useEffect, useState } from "react";
 export default function CodeFold({
   label,
   pulse,
-  color = "#6cc596",
+  color = HUE.green,
   children,
 }: {
   label: string;
@@ -37,7 +38,7 @@ export default function CodeFold({
     <details
       onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
       className="group rounded-lg border border-border bg-bg-secondary text-sm transition-colors duration-500"
-      style={{ borderColor: showing ? `${color}59` : undefined }}
+      style={{ borderColor: showing ? alpha(color, 35) : undefined }}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-text-secondary hover:text-text-primary">
         <span className="flex items-center gap-2.5">
@@ -45,7 +46,7 @@ export default function CodeFold({
             <span
               aria-hidden="true"
               className="inline-block size-2 rounded-full transition-colors duration-500"
-              style={{ background: showing ? color : "#3a3a37" }}
+              style={{ background: showing ? color : NEUTRAL.lineStrong }}
             />
           )}
           {label}

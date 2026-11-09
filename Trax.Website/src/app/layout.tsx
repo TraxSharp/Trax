@@ -1,3 +1,4 @@
+import { THEME_SCRIPT } from "@/lib/theme";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import Header from "@/components/layout/Header";
@@ -45,7 +46,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    // The theme script sets data-theme before React runs, so the attribute differs from the server's HTML on purpose.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body
         className={`${atkinson.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >

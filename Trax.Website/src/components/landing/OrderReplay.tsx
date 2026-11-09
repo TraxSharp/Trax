@@ -10,6 +10,7 @@ import { replayNow } from "@/lib/replay-pace";
 import { nextStop, previousStop, stepIndex, stopsOf } from "@/lib/replay-steps";
 import data from "@/data/order-recordings.json";
 import { ORDER, STAGES, durationOf, eventsOf, trackAt, viewAt, type OrderRecordings, type Scenario, type Slot, type Stage, type Tone, type Track } from "@/lib/order-replay";
+import { alpha } from "@/lib/hue";
 
 // A food order taken by the Recovery sample's OrderMachine: what its laptop page and the phone received from the
 // host, with the time each thing arrived. Re-record when the machine, its train or the page change.
@@ -19,10 +20,7 @@ const scenarios: Scenario[] = Array.isArray(recordings.scenarios) ? recordings.s
 const KEY = "order";
 
 // A stage's colour at a given strength: a quiet tint for fills, a stronger one for borders.
-const tint = (stage: Stage, alpha: number) =>
-  `${STAGES[stage].color}${Math.round(alpha * 255)
-    .toString(16)
-    .padStart(2, "0")}`;
+const tint = (stage: Stage, strength: number) => alpha(STAGES[stage].color, Math.round(strength * 100));
 
 export default function OrderReplay() {
   const key = KEY;

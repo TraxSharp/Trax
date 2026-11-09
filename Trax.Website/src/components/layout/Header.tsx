@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import MobileNav from "./MobileNav";
 import TraxLogo from "./TraxLogo";
+import ThemeToggle from "./ThemeToggle";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -61,6 +62,8 @@ export default function Header() {
           </a>
         </nav>
 
+        <div className="flex items-center gap-1 md:ml-2">
+        <ThemeToggle />
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
           className="rounded-lg p-2 text-text-secondary hover:bg-bg-hover md:hidden"
@@ -81,6 +84,7 @@ export default function Header() {
             )}
           </svg>
         </button>
+        </div>
       </div>
 
       {mobileOpen && (

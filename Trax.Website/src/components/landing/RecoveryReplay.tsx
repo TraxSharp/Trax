@@ -26,6 +26,7 @@ import {
   type TrackLane,
 } from "@/lib/recovery-replay";
 import { REPLAY_PACE } from "@/lib/replay-pace";
+import { HUE } from "@/lib/hue";
 
 // Recorded from the Recovery sample by Trax.Samples' scripts/recordings, which writes this file with its
 // --copy-to option. Re-record when the sample's trains or its page change.
@@ -158,7 +159,7 @@ export default function RecoveryReplay() {
 
       {/* The run is the demo; the train behind it is folded below it, lit in step with it. */}
       <CodeFold label="The refund workflow, lit as it runs" pulse={step ? `${playback?.attempts.length}:${step.position}:${step.state}` : null}
-        color={!step ? undefined : step.replayed ? "#d4a24c" : step.state === "FAILED" ? "#c45c5c" : step.state === "COMPLETED" ? "#6cc596" : "#7a9ec2"}
+        color={!step ? undefined : step.replayed ? HUE.amber : step.state === "FAILED" ? HUE.red : step.state === "COMPLETED" ? HUE.green : HUE.blue}
       >
         <CodePanel source={sources.REFUND} step={step} />
       </CodeFold>
