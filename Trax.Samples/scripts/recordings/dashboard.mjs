@@ -1,13 +1,13 @@
 // Records the operations dashboard for traxsharp.net, which serves it as a demo that answers from these recordings.
-// Unlike the other scripts, this one starts the hosts itself, because it needs three of them on databases of their
+// Unlike the other scripts, this one starts the hosts itself, because it needs four of them on databases of their
 // own: build nothing first, have Docker's Postgres up (the compose file's `database`), then run
 //
 //   node dashboard.mjs [--copy-to <dir>] [--dashboard <dir>]
 //
-// It reads every query, mutation and subscription document from the dashboard's source (--dashboard, default
+// It reads every query, mutation and subscription document from the dashboard's src/graphql (--dashboard, default
 // ../../../Trax.Api/src/Trax.Api.Dashboard/ClientApp), so what it records is exactly what the dashboard sends.
 //
-// Three samples feed it, each on a private port and a fresh database it creates in the Postgres container
+// Four samples feed it, each on a private port and a fresh database it creates in the Postgres container
 // (TRAX_PG_CONTAINER, default trax_database, published on TRAX_PG_PORT, default 5432). Beside the database in
 // one pod or network, TRAX_PSQL=psql creates them with a psql of its own instead, on TRAX_PG_HOST:TRAX_PG_PORT.
 //
@@ -24,6 +24,10 @@
 //                        topic map drafts (built, and one left choosing its years), each with its history.
 //   PersistedOperations  the store the dashboard manages: uploads, a hot-fix with history, a refused shape change,
 //                        a deactivated operation and a tenant's own copy.
+//   CheckIn              three machines served from features, so the Board page has boards to draw: a booking, a
+//                        gate agent's desk and the flight, with the flight's system instance. It takes persisted
+//                        documents only and signs in with a token, so the recorder sends the console's own document
+//                        ids, read from the page the host serves, under an operator's token from its /dev/token.
 //
 // The run has four phases. Drive: the hosts run and are driven for about three minutes while every
 // onTrainStateChanged, onDataChanged and onJunctionEvent frame is written down with the time it arrived. Freeze:
@@ -55,7 +59,7 @@
 import { createClient } from "graphql-ws";
 import { execFileSync, spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -110,13 +114,23 @@ const HOSTS = {
     port: 5393,
     database: "trax_dashboard_recording_persisted_operations",
     key: "operator-key-do-not-use-in-production",
+    // It takes persisted documents only: the console's are sent by the ids it registered them under.
     env: {},
+  },
+  checkin: {
+    alias: "checkin",
+    project: "samples/CheckIn/Trax.Samples.CheckIn.Api",
+    port: 5394,
+    database: "trax_dashboard_recording_checkin",
+    // No API key: an operator's token from the host's /dev/token, and the console's persisted document ids.
+    signIn: { name: "Recorder", role: "operator" },
+    env: { CheckIn__MachineSweepInterval: "00:00:01" },
   },
 };
 const PRIMARY = "scheduling";
 const SCHEDULER_HOSTS = ["scheduling", "recovery"];
 // The hosts that register state machines.
-const MACHINE_HOSTS = ["recovery"];
+const MACHINE_HOSTS = ["recovery", "checkin"];
 
 // Page sizes and ranges the console asks for, where the recorder reads a page part by part (see TAKES for lists).
 const MACHINE_PAGE = 20; // pages/MachinePage.tsx
@@ -132,21 +146,15 @@ const TRAIN_RANGE_MS = { LAST24_HOURS: 24 * 3600_000, LAST7_DAYS: 7 * 24 * 3600_
 // ── The dashboard's documents ────────────────────────────────────────────────
 
 /** Every operation document in the dashboard's src/graphql, by operation name, with `${CONST}` fragments filled in. */
+/** The console's documents, by operation name: one per file in its src/graphql. */
 function readDocuments() {
+  const dir = join(dashboardDir, "src/graphql");
   const docs = {};
-  const consts = {};
-  for (const file of ["queries.ts", "mutations.ts", "subscriptions.ts"]) {
-    const src = readFileSync(join(dashboardDir, "src/graphql", file), "utf8");
-    for (const m of src.matchAll(/const (\w+) = `([\s\S]*?)`;/g)) consts[m[1]] = m[2];
-    for (const m of src.matchAll(/export const \w+ = gql`([\s\S]*?)`;/g)) {
-      const text = m[1].replace(/\$\{(\w+)\}/g, (_, name) => {
-        if (!(name in consts)) throw new Error(`${file}: unknown fragment constant ${name}`);
-        return consts[name];
-      });
-      const name = /(?:query|mutation|subscription)\s+(\w+)/.exec(text)?.[1];
-      if (!name) throw new Error(`${file}: a document without an operation name`);
-      docs[name] = text.trim();
-    }
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".graphql"))) {
+    const text = readFileSync(join(dir, file), "utf8").replace(/^\s*#.*$/gm, "").trim();
+    const name = /^(?:query|mutation|subscription)\s+(\w+)/m.exec(text)?.[1];
+    if (!name) throw new Error(`${file}: a document without an operation name`);
+    docs[name] = text;
   }
   return docs;
 }
@@ -240,12 +248,68 @@ let DOCS = {};
 
 async function post(name, query, variables, operationName) {
   const host = HOSTS[name];
+  const auth = host.signIn ? { Authorization: `Bearer ${host.token}` } : { "X-Api-Key": host.key };
+  // A host that takes persisted documents only is sent the id it registered the console's document under.
+  // Persisted-operation management is accepted inline everywhere, and is not among the console's registered ids.
+  const id = host.documentIds?.[operationName];
   const response = await fetch(`http://localhost:${host.port}/trax/graphql`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Api-Key": host.key },
-    body: JSON.stringify({ query, variables, operationName }),
+    headers: { "Content-Type": "application/json", ...auth },
+    body: JSON.stringify(id ? { id, variables, operationName } : { query, variables, operationName }),
   });
   return response.json();
+}
+
+/**
+ * Signs in to a host that takes tokens, then reads the ids it registered the console's documents under.
+ */
+async function signIn(name) {
+  const host = HOSTS[name];
+  const base = `http://localhost:${host.port}`;
+  for (let i = 0; i < 240 && !host.token; i++) {
+    try {
+      const response = await fetch(`${base}/dev/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(host.signIn),
+      });
+      if (response.ok) host.token = (await response.json()).token;
+    } catch {
+      /* not up yet */
+    }
+    if (!host.token) await sleep(500);
+  }
+  if (!host.token) throw new Error(`${name} gave no token; see out/dashboard/${name}.log`);
+  await readConsoleIds(name);
+}
+
+/**
+ * Reads the ids a host that takes persisted documents only registered the console's documents under, from the
+ * console page it serves, which carries them in its trax-dashboard-config meta tag.
+ */
+async function readConsoleIds(name) {
+  const host = HOSTS[name];
+  let page = null;
+  for (let i = 0; i < 240 && page == null; i++) {
+    try {
+      const response = await fetch(`http://localhost:${host.port}/trax/dashboard`);
+      if (response.ok) page = await response.text();
+    } catch {
+      /* not up yet */
+    }
+    if (page == null) await sleep(500);
+  }
+  if (page == null) throw new Error(`${name} serves no console; see out/dashboard/${name}.log`);
+  const content = page.match(/<meta name="trax-dashboard-config" content="([^"]*)"/)?.[1];
+  if (!content) throw new Error(`${name} serves no console config`);
+  const decoded = content
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+  host.documentIds = JSON.parse(decoded).documents;
 }
 
 /** Sends one of the dashboard's documents and returns its data; an error is thrown. */
@@ -329,6 +393,53 @@ async function walk(name, op, vars = {}, { scope = "merge" } = {}) {
   }
   raw.walks.push({ host: name, op, vars, scope, items, envelope });
   return items;
+}
+
+/** A train's page: its stats, its runs over each range, the failed runs it places on the chain's steps, its manifests. */
+async function recordTrainPage(name, trainName) {
+  await record(name, "TrainStats", { trainName });
+  for (const range of SERIES_RANGES) {
+    await record(name, "MetricSeries", { scope: "TRAIN", range, name: trainName });
+    const startedAfter = new Date(Date.parse(raw.recordedAt) - TRAIN_RANGE_MS[range]).toISOString();
+    await walk(name, "Executions", { trainName, trainState: "FAILED", startedAfter, order: "NEWEST" });
+  }
+  await walk(name, "Manifests", { nameContains: trainName, hideAdminTrains: false });
+  // The Overview's failing-train link: the Runs page filtered to the train's failed runs.
+  for (const hideAdminTrains of [true, false])
+    await walk(name, "Executions", { order: "NEWEST", hideAdminTrains, trainState: "FAILED", trainName });
+}
+
+// The runs whose pages have been read, by host.
+const runPagesRead = new Map();
+
+/** A run's page, timeline, decisions and log (the run's own, oldest first, and the Logs page's run filter), once. */
+async function recordRunPages(name, id) {
+  if (!runPagesRead.has(name)) runPagesRead.set(name, new Set());
+  if (runPagesRead.get(name).has(id)) return;
+  runPagesRead.get(name).add(id);
+  const detail = await record(name, "ExecutionDetail", { id });
+  await record(name, "RunGraph", { metadataId: id });
+  await record(name, "RunLinks", { id });
+  await walk(name, "Logs", { metadataId: id, order: "OLDEST" }, { scope: "owner" });
+  await walk(name, "Logs", { metadataId: id, order: "NEWEST" }, { scope: "owner" });
+  await record(name, "JunctionRuns", { metadataId: id, take: 500 });
+  let afterId = null;
+  for (let i = 0; i < 20; i++) {
+    const page = (await record(name, "Decisions", { metadataId: id, afterId, take: 26 })).operations.decisions;
+    if (page.items.length < 26 || page.nextCursor == null) break;
+    afterId = page.items[24].id;
+  }
+  if (detail.operations.executionDetail?.childCount > 0)
+    await walk(name, "ExecutionChildren", { parentId: id }, { scope: "owner" });
+}
+
+/**
+ * The pages of every run a list showed that were not read with the rest: freezing the schedulers stops their
+ * manifests, not the metadata cleanup sweep, which starts a run of its own every minute while the snapshot reads.
+ */
+async function recordLateRuns() {
+  for (const w of raw.walks)
+    if (w.op === "Executions" || w.op === "ExecutionChildren") for (const e of w.items) await recordRunPages(w.host, e.id);
 }
 
 // ── Drive ────────────────────────────────────────────────────────────────────
@@ -786,22 +897,7 @@ async function snapshot() {
     for (const messageContains of PRESETS.logMessage) await walk(name, "Logs", { order: "NEWEST", messageContains });
 
     // Every run: its page, timeline, decisions, log (the run's own, oldest first, and the Logs page's run filter).
-    for (const e of a.executions) {
-      const detail = await record(name, "ExecutionDetail", { id: e.id });
-      await record(name, "RunGraph", { metadataId: e.id });
-      await record(name, "RunLinks", { id: e.id });
-      await walk(name, "Logs", { metadataId: e.id, order: "OLDEST" }, { scope: "owner" });
-      await walk(name, "Logs", { metadataId: e.id, order: "NEWEST" }, { scope: "owner" });
-      await record(name, "JunctionRuns", { metadataId: e.id, take: 500 });
-      let afterId = null;
-      for (let i = 0; i < 20; i++) {
-        const page = (await record(name, "Decisions", { metadataId: e.id, afterId, take: 26 })).operations.decisions;
-        if (page.items.length < 26 || page.nextCursor == null) break;
-        afterId = page.items[24].id;
-      }
-      if (detail.operations.executionDetail?.childCount > 0)
-        await walk(name, "ExecutionChildren", { parentId: e.id }, { scope: "owner" });
-    }
+    for (const e of a.executions) await recordRunPages(name, e.id);
     for (const w of a.workQueue) await record(name, "WorkQueueDetail", { id: w.id });
     for (const d of a.deadLetters) await record(name, "DeadLetterDetail", { id: d.id });
     for (const m of a.manifests) {
@@ -822,20 +918,20 @@ async function snapshot() {
     const graph = (await call(name, "GroupDependencyGraph")).operations.manifestGroups.dependencyGraph;
     if (graph.nodes.length)
       await record(name, "GroupGraphStatus", { groupIds: graph.nodes.slice(0, GROUP_STATUS_IDS).map((n) => n.id) });
-    for (const trainName of new Set([...trainNames, ...registered])) {
-      await record(name, "TrainStats", { trainName });
-      // A train's page: its runs over each range, the failed runs it places on the chain's steps, and its manifests.
-      for (const range of SERIES_RANGES) {
-        await record(name, "MetricSeries", { scope: "TRAIN", range, name: trainName });
-        const startedAfter = new Date(Date.parse(raw.recordedAt) - TRAIN_RANGE_MS[range]).toISOString();
-        await walk(name, "Executions", { trainName, trainState: "FAILED", startedAfter, order: "NEWEST" });
-      }
-      await walk(name, "Manifests", { nameContains: trainName, hideAdminTrains: false });
-      // The Overview's failing-train link: the Runs page filtered to the train's failed runs.
-      for (const hideAdminTrains of [true, false])
-        await walk(name, "Executions", { order: "NEWEST", hideAdminTrains, trainState: "FAILED", trainName });
-    }
+    for (const trainName of new Set([...trainNames, ...registered])) await recordTrainPage(name, trainName);
     log(`${name}: snapshot read`);
+  }
+
+  // A machine host that is not one of the scheduler hosts (CheckIn) runs the trains its machines invoke. They are
+  // part of the cluster, so they join the Trains list, and a machine's link to one opens its page.
+  for (const name of MACHINE_HOSTS.filter((n) => !SCHEDULER_HOSTS.includes(n))) {
+    for (const hideAdmin of [true, false]) await record(name, "Trains", { hideAdmin });
+    await record(name, "TrainChains", { hideAdmin: false });
+    const trains = (await call(name, "Trains", { hideAdmin: true })).operations.trains.map((t) => t.fullName);
+    for (const trainName of trains) {
+      await walk(name, "Executions", { trainName, order: "NEWEST" });
+      await recordTrainPage(name, trainName);
+    }
   }
 
   // The state machines: every machine, its counts, its instances under every filter its page offers, and every
@@ -846,7 +942,7 @@ async function snapshot() {
     const instances = new Map();
     for (const m of machines) {
       const counts = (await record(name, "MachineInstanceStuckCounts", { machine: m.name })).operations.machineInstanceCounts;
-      // Its Board tab's read: null for a machine not served from features, as every recorded host's are.
+      // The Board page's read: null for a machine not served from features, as Recovery's are; CheckIn's are drawn.
       await record(name, "MachineBoard", { machine: m.name });
       const states = [null, ...new Set([...m.states.map((s) => s.name), ...counts.map((c) => c.state)])];
       for (const state of states)
@@ -1560,8 +1656,13 @@ function compile(recording) {
     TrainChains: (parts) => ({
       operations: { trains: unionBy((t) => t.fullName)(parts.map((p) => p.data.operations.trains)) },
     }),
+    // Ordered by name, as one host lists them.
     Machines: (parts) => ({
-      operations: { machines: unionBy((m) => m.name)(parts.map((p) => p.data.operations.machines)) },
+      operations: {
+        machines: unionBy((m) => m.name)(parts.map((p) => p.data.operations.machines)).sort((a, b) =>
+          a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+        ),
+      },
     }),
     MachineInstanceStuckCounts: (parts) => ({
       operations: { machineInstanceCounts: parts.flatMap((p) => p.data.operations.machineInstanceCounts) },
@@ -1669,7 +1770,7 @@ function compile(recording) {
   };
   const copy = {
     recordedAt: recording.recordedAt,
-    note: "Recorded by Trax.Samples scripts/recordings/dashboard.mjs from the Scheduling, Recovery and PersistedOperations samples. Do not edit by hand.",
+    note: "Recorded by Trax.Samples scripts/recordings/dashboard.mjs from the Scheduling, Recovery, PersistedOperations and CheckIn samples. Do not edit by hand.",
     objects: null,
     queries: intern(queries),
     mutations,
@@ -1704,7 +1805,7 @@ async function main() {
     return writeWebsiteCopy(copyTo, JSON.parse(readFileSync(file, "utf8")));
   }
 
-  log("building the three hosts");
+  log("building the four hosts");
   for (const name of Object.keys(HOSTS))
     execFileSync("dotnet", ["build", "--nologo", "-v", "q", join(repo, HOSTS[name].project)], { stdio: "inherit" });
   for (const name of Object.keys(HOSTS)) await ensurePortFree(HOSTS[name].port);
@@ -1712,7 +1813,8 @@ async function main() {
   await Promise.all([
     waitReady("scheduling", "Manifests", { take: 1 }),
     waitReady("recovery", "Manifests", { take: 1 }),
-    waitReady("persisted", "PersistedOperations", { skip: 0, take: 1 }),
+    readConsoleIds("persisted").then(() => waitReady("persisted", "PersistedOperations", { skip: 0, take: 1 })),
+    signIn("checkin").then(() => waitReady("checkin", "Machines")),
   ]);
   log("hosts up; driving them");
 
@@ -1727,6 +1829,7 @@ async function main() {
   raw.recordedAt = new Date(anchor).toISOString();
   log("reading the snapshot");
   await snapshot();
+  await recordLateRuns();
   log("recording every write");
   await recordMutations();
 
