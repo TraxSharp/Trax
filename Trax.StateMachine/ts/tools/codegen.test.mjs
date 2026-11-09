@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -184,13 +184,16 @@ describe("generate-twin entrypoint", () => {
   // turnstile writes Turnstile.g.cs and turn-stile TurnStile.g.cs: one file on a disk that ignores case.
   it("refuses a C# view whose file another machine's view holds, ignoring case", async () => {
     await generateTwin({ irPath: turnstileIr, engineSrc, outDir: out, lang: "csharp" });
+    const view = read(join(out, "Turnstile.g.cs"));
     const other = join(out, "turn-stile.ir.json");
     writeFileSync(other, JSON.stringify({ ...JSON.parse(read(turnstileIr)), id: "turn-stile" }));
 
     await expect(generateTwin({ irPath: other, engineSrc, outDir: out, lang: "csharp" })).rejects.toThrow(
       "Turnstile.g.cs in " + out + " is the view of the machine 'turnstile', and the machine 'turn-stile' would write TurnStile.g.cs",
     );
-    expect(existsSync(join(out, "TurnStile.g.cs"))).toBe(false);
+    // Listed and read rather than checked with existsSync, which finds TurnStile.g.cs on a disk that ignores case.
+    expect(readdirSync(out).filter((name) => name.endsWith(".g.cs"))).toEqual(["Turnstile.g.cs"]);
+    expect(read(join(out, "Turnstile.g.cs"))).toBe(view);
     // The machine's own view is replaced, as it always was.
     await expect(generateTwin({ irPath: turnstileIr, engineSrc, outDir: out, lang: "csharp" })).resolves.toBeDefined();
   });
