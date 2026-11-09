@@ -1038,6 +1038,52 @@ public class ClientDocumentsGeneratorTests
         }
     }
 
+    // The schema written for the editor sits under --out, where the glob matches it too. Named through a link, --out
+    // must still be the folder the glob finds it in, or the second run reads the schema as a document.
+    [Test]
+    public void The_command_never_reads_its_editor_schema_when_out_is_named_through_a_link()
+    {
+        var real = Directory.CreateTempSubdirectory("trax-docs-real-").FullName;
+        var link = Path.Combine(Path.GetTempPath(), $"trax-docs-link-{Guid.NewGuid():N}");
+        var src = Path.Combine(real, "src", "trax");
+        Directory.CreateDirectory(Path.Combine(src, "cards"));
+        Directory.CreateSymbolicLink(link, real);
+        var manifest = Path.Combine(real, "manifest.json");
+        File.WriteAllText(manifest, ClientManifest.Write(Manifest));
+        File.WriteAllText(Path.Combine(src, "cards", "orderCard.graphql"), OrderCard);
+        var outDir = Path.Combine(link, "src", "trax");
+        var previous = Directory.GetCurrentDirectory();
+        int Run(bool check) =>
+            ClientCommand.Run(
+                "react",
+                manifest,
+                outDir,
+                check,
+                null,
+                null,
+                new FakeNodeRunner(),
+                ["src/**/*.graphql"]
+            );
+        try
+        {
+            Directory.SetCurrentDirectory(real);
+            Run(check: false).Should().Be(0);
+            File.Exists(Path.Combine(src, ClientGenerator.EditorSchemaFileName)).Should().BeTrue();
+
+            Run(check: false).Should().Be(0, "the editor schema is not a document");
+            Run(check: true).Should().Be(0);
+            File.ReadAllText(Path.Combine(src, "trax.documents.json"))
+                .Should()
+                .NotContain(ClientGenerator.EditorSchemaFileName);
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previous);
+            Directory.Delete(link);
+            Directory.Delete(real, recursive: true);
+        }
+    }
+
     [TestCase(
         "src/**/*.graphql",
         new[] { "src/a.graphql", "src/x/b.graphql", "src/x/y/c.graphql" }
@@ -1123,6 +1169,27 @@ public class ClientDocumentsGeneratorTests
         finally
         {
             Directory.Delete(link);
+            Directory.Delete(real, recursive: true);
+        }
+    }
+
+    // A case-insensitive file system answers to any spelling of a path, and the working directory and the globs'
+    // matches carry the one on disk, so a path given in another case must resolve to that one.
+    [Test]
+    [Platform("MacOsX,Win")]
+    public void A_path_spelled_in_another_case_resolves_to_its_spelling_on_disk()
+    {
+        var real = Directory.CreateTempSubdirectory("trax-glob-case-").FullName;
+        Directory.CreateDirectory(Path.Combine(real, "src", "trax"));
+        File.WriteAllText(Path.Combine(real, "src", "trax", "schema.graphql"), "");
+        try
+        {
+            Glob.Resolved(Path.Combine(real, "Src", "Trax", "Schema.graphql"))
+                .Should()
+                .Be(Glob.Resolved(Path.Combine(real, "src", "trax", "schema.graphql")));
+        }
+        finally
+        {
             Directory.Delete(real, recursive: true);
         }
     }

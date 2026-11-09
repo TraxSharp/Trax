@@ -282,8 +282,9 @@ internal static class ClientCommand
     }
 
     // The .graphql files the globs match under the current directory, by their path relative to it, never `exclude`
-    // (a schema written as a .graphql file a glob would match too). The two are compared with their links resolved,
-    // since the matches are under the working directory, which is reported that way, and `exclude` may not be.
+    // (a schema written as a .graphql file a glob would match too). The two are compared with their links resolved
+    // and spelled as on disk, since the matches are under the working directory, which is reported that way, and
+    // `exclude` may not be.
     private static List<ClientDocumentFile> ReadDocuments(
         IReadOnlyList<string> globs,
         string exclude

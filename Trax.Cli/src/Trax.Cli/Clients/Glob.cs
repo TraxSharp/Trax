@@ -47,8 +47,9 @@ internal static class Glob
     }
 
     /// <summary>
-    /// The full path with every link on the way to it resolved, as far as it exists; the rest is appended as written.
-    /// Two paths name the same place when these are equal, whichever links each was given through.
+    /// The full path with every link on the way to it resolved and each part spelled as it is on disk, as far as it
+    /// exists; the rest is appended as written. Two paths name the same place when these are equal, whichever links
+    /// each was given through and, on a file system that ignores case, whichever case each was given in.
     /// </summary>
     public static string Resolved(string path)
     {
@@ -59,9 +60,12 @@ internal static class Glob
         for (var i = 0; i < parts.Length; i++)
         {
             var next = Path.Combine(resolved, parts[i]);
-            var info = new DirectoryInfo(next);
-            if (!info.Exists)
+            if (!Directory.Exists(next) && !File.Exists(next))
                 return Path.Combine([next, .. parts[(i + 1)..]]);
+            next = Path.Combine(resolved, SpelledOnDisk(resolved, parts[i]));
+            FileSystemInfo info = Directory.Exists(next)
+                ? new DirectoryInfo(next)
+                : new FileInfo(next);
             resolved =
                 info.LinkTarget is null ? next
                 : info.ResolveLinkTarget(returnFinalTarget: true) is { } target
@@ -70,6 +74,36 @@ internal static class Glob
         }
         return resolved;
     }
+
+    // The entry of `folder` that `name` names, as it is spelled there. On a case-sensitive file system that is `name`;
+    // on one that ignores case it may be spelled otherwise, and only one entry can match.
+    private static string SpelledOnDisk(string folder, string name)
+    {
+        string? folded = null;
+        try
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(folder, "*", AllEntries))
+            {
+                var entryName = Path.GetFileName(entry);
+                if (string.Equals(entryName, name, StringComparison.Ordinal))
+                    return name;
+                if (string.Equals(entryName, name, StringComparison.OrdinalIgnoreCase))
+                    folded ??= entryName;
+            }
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            // A folder that can be passed through but not listed keeps the name as given.
+            return name;
+        }
+        return folded ?? name;
+    }
+
+    private static readonly EnumerationOptions AllEntries = new()
+    {
+        AttributesToSkip = 0,
+        IgnoreInaccessible = true,
+    };
 
     // The folder before the first segment holding a wildcard, and the pattern from there. The folder's part of the
     // pattern is combined with the root as one path, so one that is rooted (/home/..., C:/...) is read from where it
