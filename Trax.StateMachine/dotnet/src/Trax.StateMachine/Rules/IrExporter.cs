@@ -381,7 +381,7 @@ public static class IrExporter
         return array;
     }
 
-    private static JsonObject WriteSchema(ContextSchema schema) =>
+    internal static JsonObject WriteSchema(ContextSchema schema) =>
         new() { ["fields"] = WriteFields(schema.Fields) };
 
     // A nested record's fields, or a list of records' element fields, are written under the field as "fields".

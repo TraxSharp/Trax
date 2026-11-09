@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Sqlite.Extensions;
 using Trax.Effect.Extensions;
+using Trax.Effect.Services.ServiceTrain;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 
@@ -84,6 +85,55 @@ public class ServeFeaturesTests
             Then Ada's order has expired
             And Ada's receipt is void
         """;
+
+    // A tally whose Scoring state invokes a train returning Dictionary<string, int>; {range} is the values' range.
+    private const string Scoring = """
+        {
+          "version": 1,
+          "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
+          "machines": {
+            "tally": {
+              "ownedBy": "customer",
+              "noun": "tally",
+              "start": "has a tally",
+              "initial": "Draft",
+              "states": { "Draft": "is a draft", "Scoring": "is being scored", "Scored": "is scored", "Unscored": "is unscored" },
+              "triggers": { "Score": { "phrase": "scores {subject}" } },
+              "invokes": {
+                "Scoring": {
+                  "train": "Trax.StateMachine.Persistence.Integration.IScoreTallyTrain",
+                  "output": [
+                    { "name": "totals", "type": "object", "nullable": false, "constraints": [],
+                      "values": { "type": "integer", "nullable": false{range} } }
+                  ],
+                  "outcomes": {
+                    "the answers are scored": { "outcome": "done" },
+                    "the scoring fails": { "outcome": "failed" },
+                    "the scoring is called off": { "outcome": "cancelled" }
+                  },
+                  "examples": { "the answers are scored": { "totals": { "ada": 1 } } }
+                }
+              }
+            }
+          }
+        }
+        """;
+
+    private static string Scored(string outcome, string then) =>
+        $"""
+
+              Scenario: {outcome}
+                When Ada scores her tally
+                Then Ada's tally is being scored
+                When {outcome}
+                Then Ada's tally {then}
+            """;
+
+    private static readonly string Tallying =
+        "Feature: Tallying\n  Background:\n    Given Ada is a customer\n    And Ada has a tally\n"
+        + Scored("the answers are scored", "is scored")
+        + Scored("the scoring fails", "is unscored")
+        + Scored("the scoring is called off", "is unscored");
 
     private string _dir = null!;
 
@@ -233,6 +283,70 @@ public class ServeFeaturesTests
     }
 
     [Test]
+    public void ServeFeatures_names_the_output_range_a_train_needs()
+    {
+        var dir = Write(Scoring.Replace("{range}", ""), Tallying);
+        try
+        {
+            var services = new ServiceCollection();
+
+            var act = () =>
+                services.AddTrax(trax =>
+                    trax.AddEffects(e => e.UseInMemory())
+                        .AddStateMachines(o =>
+                            o.ServeFeatures(dir, typeof(IScoreTallyTrain).Assembly)
+                        )
+                );
+
+            var refusal = act.Should().Throw<InvalidOperationException>().Which.Message;
+            refusal.Should().Contain("The machine 'tally'");
+            refusal.Should().Contain(typeof(IScoreTallyTrain).FullName);
+            refusal
+                .Should()
+                .Contain(
+                    "invokes.Scoring.output.totals.values has no \"maximum\"; write \"maximum\": 2147483647"
+                );
+            refusal
+                .Should()
+                .Contain(
+                    "invokes.Scoring.output.totals.values has no \"minimum\"; write \"minimum\": -2147483648"
+                );
+            refusal.Should().NotContain("First difference");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Test]
+    public void ServeFeatures_serves_a_train_output_whose_range_the_glossary_gives()
+    {
+        var dir = Write(
+            Scoring.Replace("{range}", ", \"minimum\": -2147483648, \"maximum\": 2147483647"),
+            Tallying
+        );
+        try
+        {
+            var services = new ServiceCollection();
+
+            services.AddTrax(trax =>
+                trax.AddEffects(e => e.UseInMemory())
+                    .AddStateMachines(o => o.ServeFeatures(dir, typeof(IScoreTallyTrain).Assembly))
+            );
+
+            services
+                .Select(d => (d.ImplementationInstance as IMachine)?.Name)
+                .Should()
+                .Contain("tally");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Test]
     public void Serving_two_directories_is_refused()
     {
         var options = new StateMachineOptions().ServeFeatures(_dir);
@@ -240,3 +354,12 @@ public class ServeFeaturesTests
         options.Invoking(o => o.ServeFeatures(_dir)).Should().Throw<InvalidOperationException>();
     }
 }
+
+/// <summary>The input of the train the tally's Scoring state invokes.</summary>
+public sealed record ScoreTallyInput;
+
+/// <summary>Its output: an integer per name, so the glossary's values need an int's range.</summary>
+public sealed record ScoreTallyOutput(Dictionary<string, int> Totals);
+
+/// <summary>The train, named by its interface; registering the machine never runs it.</summary>
+public interface IScoreTallyTrain : IServiceTrain<ScoreTallyInput, ScoreTallyOutput>;

@@ -52,7 +52,10 @@ one of its own:
 
 - A field in `context`, a trigger's `input` or an invoked train's `output` is
   `{ "name", "type", "nullable", "constraints" }`, with the optional keys the IR's schemas take
-  ([the IR format](/docs/sdk-reference/statemachine-api/ir-format#top-level)).
+  ([the IR format](/docs/sdk-reference/statemachine-api/ir-format#top-level)). An integer in an invoked train's
+  `output`, a dictionary's `values` among them, carries its CLR type's exact range as `minimum` and `maximum`
+  (`-2147483648` and `2147483647` for an `int`), since the host checks the IR against the train when it starts and
+  names any range that differs.
 - A guard's `rule`, a state's `requires`, an outcome's `when` and a field's `constraints` are IR rules, tagged by
   `rule`: `{ "rule": "nonEmpty", "source": "context", "field": "passport" }`. The kinds and their
   keys are in [the IR format's transitions](/docs/sdk-reference/statemachine-api/ir-format#transitions), and the C#
