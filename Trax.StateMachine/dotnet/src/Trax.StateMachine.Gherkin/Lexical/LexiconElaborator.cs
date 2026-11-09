@@ -88,6 +88,8 @@ internal sealed class LexiconElaborator
 
         foreach (var constant in _doc.Constants)
             Once(_constants, constant.Name, constant, constant.Line, c => c.Line, "the constant");
+        foreach (var constant in _constants.Values)
+            Resolve(constant);
         foreach (var type in _doc.Types)
         {
             if (!Once(_types, type.Name, type, type.Line, t => t.Line, "the type"))
@@ -161,6 +163,51 @@ internal sealed class LexiconElaborator
         }
         return root;
     }
+
+    // Each constant's value with every name in it followed to a value, once. A name that is no constant, or one that
+    // comes back round to itself, is a problem at the constant's line, and the constant has no value.
+    private readonly Dictionary<string, LxValue?> _resolved = new(StringComparer.Ordinal);
+
+    private LxValue? Resolve(LxConstant constant)
+    {
+        if (_resolved.TryGetValue(constant.Name, out var done))
+            return done;
+        var seen = new List<string> { constant.Name };
+        var value = constant.Value;
+        while (value is LxRef r)
+        {
+            if (!_constants.TryGetValue(r.Name, out var next))
+            {
+                Problem(constant.Line, $"'{r.Name}' is not a constant; a text value is quoted.");
+                value = null;
+                break;
+            }
+            if (seen.Contains(next.Name))
+            {
+                Problem(
+                    constant.Line,
+                    $"'{constant.Name}' refers to itself through {string.Join(", ", seen.Skip(1).Append(next.Name).Select(n => $"'{n}'"))}."
+                );
+                value = null;
+                break;
+            }
+            seen.Add(next.Name);
+            value = next.Value;
+        }
+        if (value is not null && Contains(value))
+        {
+            Problem(
+                constant.Line,
+                $"'{constant.Name}' holds a name in a list; a constant's list holds values."
+            );
+            value = null;
+        }
+        _resolved[constant.Name] = value;
+        return value;
+    }
+
+    private static bool Contains(LxValue value) =>
+        value is LxList list && list.Items.Any(i => i is LxRef || Contains(i));
 
     private static JsonArray Strings(IEnumerable<string> items) =>
         new(items.Select(i => (JsonNode?)JsonValue.Create(i)).ToArray());
@@ -545,6 +592,28 @@ internal sealed class LexiconElaborator
     private static JsonObject? OutputField(JsonArray output, string name) =>
         output.OfType<JsonObject>().FirstOrDefault(f => f["name"]?.GetValue<string>() == name);
 
+    // A Returns: field agrees with the record's when it has the same type, format, nullability and values. The record's
+    // numeric bounds are its CLR type's, which no lexicon restates, so they are not compared.
+    private static bool SameField(JsonObject written, JsonObject reflected) =>
+        SameType(written, reflected)
+        && (written["nullable"]?.GetValue<bool>() ?? false)
+            == (reflected["nullable"]?.GetValue<bool>() ?? false)
+        && Values(written).SetEquals(Values(reflected));
+
+    private static HashSet<string> Values(JsonObject shape) =>
+        (shape["enum"] as JsonArray ?? [])
+            .Select(v => v!.GetValue<string>())
+            .ToHashSet(StringComparer.Ordinal);
+
+    private static string Said(JsonObject shape) =>
+        Describe(shape)
+        + (shape["nullable"]?.GetValue<bool>() == true ? ", may be empty" : "")
+        + (
+            shape["enum"] is JsonArray values
+                ? ", one of " + string.Join(", ", values.Select(v => $"\"{v}\""))
+                : ""
+        );
+
     private static bool SameType(JsonObject a, JsonObject b) =>
         a["type"]?.GetValue<string>() == b["type"]?.GetValue<string>()
         && a["format"]?.GetValue<string>() == b["format"]?.GetValue<string>();
@@ -585,7 +654,7 @@ internal sealed class LexiconElaborator
                     ["values"] = new JsonObject { ["type"] = "string", ["nullable"] = false },
                 };
             case LxRef r when _constants.TryGetValue(r.Name, out var constant):
-                return LiteralShape(constant.Value);
+                return Resolve(constant) is { } resolved ? LiteralShape(resolved) : null;
             default:
                 return null;
         }
@@ -815,10 +884,10 @@ internal sealed class LexiconElaborator
                         runs.ReturnsLine,
                         $"the train {name} returns no '{n}'; its output has {Names(record.Keys)}."
                     );
-                else if (!SameType(field, reflected))
+                else if (!SameField(field, reflected))
                     Problem(
                         runs.ReturnsLine,
-                        $"the train {name} returns '{n}' as {Describe(reflected)}, not {Describe(field)}."
+                        $"the train {name} returns '{n}' as {Said(reflected)}, not {Said(field)}."
                     );
             }
             foreach (
@@ -830,6 +899,9 @@ internal sealed class LexiconElaborator
                     runs.ReturnsLine,
                     $"the train {name} also returns '{n}', which 'Returns:' leaves out."
                 );
+            // A Returns: line that agrees with the record is what is written, so the glossary is the same with the
+            // assemblies and without them.
+            return (written, shape.Input);
         }
         return ((JsonArray)output.DeepClone(), shape.Input);
     }
@@ -1158,16 +1230,17 @@ internal sealed class LexiconElaborator
             }
             case LxTypeRef.Map:
             {
-                var keys = Shape(type.Key!, line);
-                keys["nullable"] = false;
                 var values = Shape(type.Element!, line);
                 values["nullable"] = false;
-                return new JsonObject
+                var map = new JsonObject { ["type"] = "object", ["values"] = values };
+                // A key that is any string has no shape to check, as the host writes a Dictionary<string, T>.
+                var keys = Shape(type.Key!, line);
+                if (keys.Count > 1 || keys["type"]?.GetValue<string>() != "string")
                 {
-                    ["type"] = "object",
-                    ["values"] = values,
-                    ["keys"] = keys,
-                };
+                    keys["nullable"] = false;
+                    map["keys"] = keys;
+                }
+                return map;
             }
             case LxTypeRef.Simple:
                 return type.Name switch
@@ -1188,11 +1261,23 @@ internal sealed class LexiconElaborator
         }
         if (named.Values is { } enumValues)
             return new JsonObject { ["type"] = "string", ["enum"] = Strings(enumValues) };
+        // A record that holds itself, directly or through another, has no end to write.
+        if (!_expanding.Add(named.Name))
+        {
+            Problem(
+                line,
+                $"'{named.Name}' contains itself, so it has no end: hold an id in its place."
+            );
+            return new JsonObject { ["type"] = "object" };
+        }
         var fields = new JsonArray();
         foreach (var field in named.Has)
             fields.Add(Field(field, "input"));
+        _expanding.Remove(named.Name);
         return new JsonObject { ["type"] = "object", ["fields"] = fields };
     }
+
+    private readonly HashSet<string> _expanding = new(StringComparer.Ordinal);
 
     private LxType? Named(string name)
     {
@@ -1345,7 +1430,7 @@ internal sealed class LexiconElaborator
         if (value is LxRef r)
         {
             if (_constants.TryGetValue(r.Name, out var constant))
-                return Typed(constant.Value with { }, shape, field);
+                return Resolve(constant) is { } resolved ? Typed(resolved, shape, field) : null;
             Problem(r.Line, $"'{r.Name}' is not a constant; a text value is quoted.");
             return null;
         }
@@ -1362,7 +1447,19 @@ internal sealed class LexiconElaborator
                     );
                 return null;
             case LxText t when type == "string":
-                if (
+                var declared = (shape["enum"] as JsonArray)
+                    ?.Select(a => a!.GetValue<string>())
+                    .FirstOrDefault(a =>
+                        string.Equals(a, t.Text, StringComparison.OrdinalIgnoreCase)
+                    );
+                // Rules compare a value as written, so a value in another case than its declared one would never
+                // match one.
+                if (declared is not null && declared != t.Text)
+                    Problem(
+                        value.Line,
+                        $"\"{t.Text}\" is \"{declared}\" in the values of '{field}'; write it as declared."
+                    );
+                else if (
                     shape["enum"] is JsonArray allowed
                     && !allowed.Any(a =>
                         string.Equals(

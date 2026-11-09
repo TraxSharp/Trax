@@ -10,6 +10,7 @@ internal sealed class LexiconParser
     private readonly List<LexProblem> _problems = [];
     private readonly LxDoc _doc = new();
     private readonly List<(Block Block, object? Node)> _open = [(Block.Root, null)];
+    private bool _started;
 
     internal static (LxDoc Doc, List<LexProblem> Problems) Parse(IReadOnlyList<LexLine> lines)
     {
@@ -22,6 +23,9 @@ internal sealed class LexiconParser
     private void Line(LexLine line)
     {
         var keyword = line.Keyword;
+        var first = !_started;
+        _started = true;
+
         var at = _open.FindLastIndex(o => keyword.Under.Contains(o.Block));
         if (at < 0)
         {
@@ -38,6 +42,13 @@ internal sealed class LexiconParser
             return;
         }
         _open.RemoveRange(at + 1, _open.Count - at - 1);
+        if (keyword.Text == "Version:" && _open[at].Block == Block.Root && !first)
+        {
+            _problems.Add(
+                new LexProblem(line.Number, "'Version: 1' is the first line of a lexicon.")
+            );
+            return;
+        }
         if (line.Broken)
         {
             _open.Add((keyword.Opens!.Value, null));
@@ -553,26 +564,39 @@ internal sealed class LexiconParser
             c.Expect("followed");
             c.Expect("by");
             var tails = Range(c);
+            if ((long)values.Count * tails.Count > MaxValues)
+                throw c.Form($"the two ranges make more than {MaxValues} values");
             values = values.SelectMany(v => tails.Select(t => v + t)).ToList();
         }
         return values;
     }
+
+    /// <summary>The most values a <c>Values:</c> line gives, ranges multiplied.</summary>
+    internal const int MaxValues = 1000;
 
     private static List<string> Range(Cursor c)
     {
         var from = c.Word("the first of a range");
         c.Expect("to");
         var to = c.Word("the last of a range");
-        if (int.TryParse(from, out var a) && int.TryParse(to, out var b) && a <= b && b - a < 1000)
-            return Enumerable
-                .Range(a, b - a + 1)
-                .Select(i => i.ToString(System.Globalization.CultureInfo.InvariantCulture))
-                .ToList();
+        if (
+            long.TryParse(from, System.Globalization.CultureInfo.InvariantCulture, out var a)
+            && long.TryParse(to, System.Globalization.CultureInfo.InvariantCulture, out var b)
+            && a <= b
+        )
+        {
+            if (b - a >= MaxValues)
+                throw c.Form($"'{from} to {to}' is more than {MaxValues} values");
+            var numbers = new List<string>();
+            for (var i = a; i <= b; i++)
+                numbers.Add(i.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            return numbers;
+        }
         if (
             from.Length == 1
             && to.Length == 1
-            && char.IsLetter(from[0])
-            && char.IsLetter(to[0])
+            && Letter(from[0])
+            && Letter(to[0])
             && from[0] <= to[0]
             && char.IsUpper(from[0]) == char.IsUpper(to[0])
         )
@@ -581,9 +605,12 @@ internal sealed class LexiconParser
                 .Select(i => ((char)i).ToString())
                 .ToList();
         throw c.Form(
-            $"'{from} to {to}' is not a range: two letters or two whole numbers, the first not after the last"
+            $"'{from} to {to}' is not a range: two letters from A to Z (or a to z), or two whole numbers, the first "
+                + "not after the last"
         );
     }
+
+    private static bool Letter(char c) => c is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z');
 
     private static FormError Again(string keyword, int line) =>
         new($"'{keyword}' is already given at line {line}, and is given once.");

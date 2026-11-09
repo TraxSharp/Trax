@@ -11,11 +11,11 @@ Machine: order
   Context: loaves is an integer
   Context: approved is a boolean, may be empty
 
-  State: Draft     "is a draft"
-  State: Paying    "is being paid for"
-  State: Placed    "is placed"
-  State: Declined  "was declined"
-  State: Baking    "is baking"
+  State: Draft    "is a draft"
+  State: Paying   "is being paid for"
+  State: Placed   "is placed"
+  State: Declined "was declined"
+  State: Baking   "is baking"
 
   Trigger: Order "orders {loaves} loaves for {subject}"
     Input: loaves is an integer
@@ -30,9 +30,9 @@ Machine: order
   Runs: Bakery.Trains.ITakePayment in Paying
     Input: amount from loaves
     Returns: approved is a boolean
-    Outcome: "the payment goes through"     when approved is true
-    Outcome: "the payment is declined"      when approved is false
-    Outcome: "the payment cannot be taken"  when it fails
+    Outcome: "the payment goes through"    when approved is true
+    Outcome: "the payment is declined"     when approved is false
+    Outcome: "the payment cannot be taken" when it fails
 
 Machine: receipt
   Owned by: customer

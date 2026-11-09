@@ -23,25 +23,28 @@ namespace Trax.StateMachine.Tests.UnitTests
         private static Gherkin.LexiconReading Read(string train, params string[] runs) =>
             Gherkin.Lexicon.Read(
                 "game.lexicon",
-                string.Join(
-                    "\n",
-                    [
-                        "Version: 1",
-                        $"Trains in: {Trains}",
-                        "Actor: player \"a player\"",
-                        "  Roles: User",
-                        "Machine: game",
-                        "  Owned by: player",
-                        "  Context: shots is a string",
-                        "  Context: target is a string",
-                        "  State: Firing \"is firing\"",
-                        $"  Runs: {train} in Firing",
-                        .. runs,
-                        "    Outcome: \"the shot misses\" when result is \"miss\"",
-                        "    Outcome: \"the shot cannot be fired\" when it fails",
-                    ]
-                ),
+                Text(train, runs),
                 [typeof(IFireShotTrain).Assembly]
+            );
+
+        private static string Text(string train, params string[] runs) =>
+            string.Join(
+                "\n",
+                [
+                    "Version: 1",
+                    $"Trains in: {Trains}",
+                    "Actor: player \"a player\"",
+                    "  Roles: User",
+                    "Machine: game",
+                    "  Owned by: player",
+                    "  Context: shots is a string",
+                    "  Context: target is a string",
+                    "  State: Firing \"is firing\"",
+                    $"  Runs: {train} in Firing",
+                    .. runs,
+                    "    Outcome: \"the shot misses\" when result is \"miss\"",
+                    "    Outcome: \"the shot cannot be fired\" when it fails",
+                ]
             );
 
         [Test]
@@ -110,6 +113,73 @@ namespace Trax.StateMachine.Tests.UnitTests
         }
 
         [Test]
+        public void A_Returns_line_that_disagrees_on_nullability_is_a_problem_at_its_line()
+        {
+            var reading = Read(
+                "NotedShot",
+                ["    Returns: result is a string, shots is a string, note is a string", .. Wiring]
+            );
+
+            reading.Succeeded.Should().BeFalse();
+            reading.Problems[0].Line.Should().Be(11);
+            reading.Problems[0].Message.Should().Contain("'note'").And.Contain("may be empty");
+        }
+
+        [Test]
+        public void A_Returns_line_that_agrees_with_the_record_gives_the_glossary_it_gives_without_it()
+        {
+            string[] runs =
+            [
+                "    Returns: result is a string, shots is a string",
+                "    Takes: shots, owner",
+                .. Wiring,
+            ];
+            var without = Gherkin.Lexicon.Read("game.lexicon", Text("FireShot", runs));
+
+            Read("FireShot", runs).Json.Should().Be(without.Json).And.NotBeNull();
+        }
+
+        [Test]
+        public void An_input_line_the_record_does_not_have_is_a_problem_at_its_line()
+        {
+            var reading = Read("FireShot", [.. Wiring, "    Input: aim from target"]);
+
+            reading.Succeeded.Should().BeFalse();
+            reading.Problems[0].Line.Should().Be(14);
+            reading.Problems[0].Message.Should().Contain("takes no 'aim'");
+        }
+
+        [Test]
+        public void A_train_whose_types_do_not_load_is_a_problem_at_its_Runs_line()
+        {
+            var reading = Gherkin.Lexicon.Read(
+                "game.lexicon",
+                Text("FireShot", Wiring),
+                [new UnloadableAssembly()]
+            );
+
+            reading.Succeeded.Should().BeFalse();
+            reading.Problems[0].Line.Should().Be(10);
+            reading
+                .Problems[0]
+                .Message.Should()
+                .Contain("could not be loaded")
+                .And.Contain("Missing.Dependency");
+        }
+
+        // An assembly whose types reach a dependency that is not there, as a hub's bin missing a package is.
+        private sealed class UnloadableAssembly : System.Reflection.Assembly
+        {
+            public override Type? GetType(string name, bool throwOnError) =>
+                throw new FileNotFoundException(
+                    "Could not load file or assembly 'Missing.Dependency'.",
+                    "Missing.Dependency"
+                );
+
+            public override System.Reflection.AssemblyName GetName() => new("Unloadable");
+        }
+
+        [Test]
         public void A_train_the_assemblies_do_not_have_is_a_problem_at_its_Runs_line()
         {
             var reading = Read("NoSuch", Wiring);
@@ -134,4 +204,8 @@ namespace Trax.StateMachine.Tests.UnitTests.LexiconTrains
     public sealed record RenamedOutput(string Outcome, string Shots);
 
     public interface IRenamedShotTrain : IServiceTrain<FireShotInput, RenamedOutput>;
+
+    public sealed record NotedOutput(string Result, string Shots, string? Note);
+
+    public interface INotedShotTrain : IServiceTrain<FireShotInput, NotedOutput>;
 }

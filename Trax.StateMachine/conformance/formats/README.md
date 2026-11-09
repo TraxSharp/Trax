@@ -21,8 +21,12 @@ only test that reads it.
 
 | Directory | What it holds |
 | --- | --- |
-| `lexicon/valid/` | a lexicon that elaborates, byte for byte, to the glossary of its name: `<name>.json` beside it, else `glossary/valid/<name>.json`. Every glossary in `glossary/valid/` has one. |
+| `lexicon/valid/` | a lexicon that elaborates, byte for byte, to the glossary of its name: `<name>.json` beside it, else `glossary/valid/<name>.json`. Every glossary in `glossary/valid/` has one. Each lexicon is in the layout `trax lexicon format` writes. |
 | `lexicon/invalid/` | a lexicon refused for one thing, its first line `# expect <line>: <words of the problem>`; a directory is read as a features directory (two lexicons in one). |
+
+So every file in `glossary/valid/` is in the canonical form the elaborator writes (`../lexicon.md`, "The canonical
+glossary"): each object's keys in the schema's order, two spaces of indent, a trailing newline. `LexiconTests` fails on
+one that is not, even a case added for the TypeScript reader.
 
 The invalid lexicons are their own list, not a copy of `glossary/invalid/`: most of those are JSON shapes a lexicon
 cannot write. What the glossary reader still refuses on the elaborated form (an owner that is not an actor, two

@@ -1,0 +1,10 @@
+# expect 6: more than 1000 values
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Type: Seat
+  Values: -2147483648 to 2147483647
+Machine: note
+  Owned by: member
+  Context: seat is a Seat
+  State: Open "is open"

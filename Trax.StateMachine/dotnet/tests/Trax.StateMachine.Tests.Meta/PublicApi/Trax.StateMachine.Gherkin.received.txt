@@ -133,5 +133,6 @@ namespace Trax.StateMachine.Gherkin
         public string? Json { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureProblem> Problems { get; init; }
         public bool Succeeded { get; }
+        public Trax.StateMachine.Gherkin.FeatureGlossary GlossaryOrThrow() { }
     }
 }

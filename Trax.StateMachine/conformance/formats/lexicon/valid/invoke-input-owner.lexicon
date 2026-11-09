@@ -5,8 +5,8 @@ Actor: member "a member"
 
 Machine: loan
   Owned by: member
-  State: Open       "is open"
-  State: Borrowing  "is being borrowed"
+  State: Open      "is open"
+  State: Borrowing "is being borrowed"
 
   Runs: Library.Trains.IBorrow in Borrowing
     Input: memberId from the owner

@@ -1,0 +1,10 @@
+# expect 6: two letters from A to Z
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Type: Mark
+  Values: 一 to 龥
+Machine: note
+  Owned by: member
+  Context: mark is a Mark
+  State: Open "is open"

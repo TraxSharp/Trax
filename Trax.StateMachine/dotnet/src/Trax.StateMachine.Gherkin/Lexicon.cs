@@ -18,6 +18,16 @@ public sealed record LexiconReading(
 {
     /// <summary>Whether the lexicon elaborated to a glossary.</summary>
     public bool Succeeded => Glossary is not null;
+
+    /// <summary>The glossary, for a caller that cannot go on without one (a test run's hook).</summary>
+    /// <exception cref="FormatException">The lexicon has problems; the message lists each at its file and line.</exception>
+    public FeatureGlossary GlossaryOrThrow() =>
+        Glossary
+        ?? throw new FormatException(
+            "The lexicon has problems:"
+                + Environment.NewLine
+                + string.Join(Environment.NewLine, Problems.Select(p => "  " + p))
+        );
 }
 
 /// <summary>
@@ -30,6 +40,8 @@ public static partial class Lexicon
 {
     /// <summary>A lexicon's file extension.</summary>
     public const string Extension = ".lexicon";
+
+    private const string GlossaryFileName = "glossary.json";
 
     /// <summary>
     /// Reads a lexicon. A train's output fields come from its <c>Returns:</c> line, and its input fields from its
@@ -52,7 +64,8 @@ public static partial class Lexicon
 
     /// <summary>
     /// The one lexicon in <paramref name="directory"/>, read; null when it has none. Two lexicons in one directory are
-    /// a problem: a features directory has one, holding any number of machines.
+    /// a problem: a features directory has one, holding any number of machines. So is a <c>glossary.json</c> beside
+    /// the lexicon, which is derived from it and written beside the machines, so a copy here could only disagree.
     /// </summary>
     public static LexiconReading? ReadDirectory(
         string directory,
@@ -75,6 +88,20 @@ public static partial class Lexicon
                         0,
                         $"{Path.GetFileName(found[0])} is this directory's lexicon already; a features directory "
                             + "has one, holding any number of machines."
+                    ),
+                ]
+            );
+        var beside = Path.Combine(directory, GlossaryFileName);
+        if (File.Exists(beside))
+            return new LexiconReading(
+                null,
+                null,
+                [
+                    new FeatureProblem(
+                        beside,
+                        0,
+                        $"{GlossaryFileName} is beside the lexicon {Path.GetFileName(found[0])}. The glossary is "
+                            + "derived from the lexicon and written beside the machines, so delete this copy."
                     ),
                 ]
             );
@@ -216,6 +243,32 @@ internal static class TrainShapes
     private const string ServiceTrain = "Trax.Effect.Services.ServiceTrain.IServiceTrain`2";
 
     internal static TrainShape Find(IReadOnlyCollection<Assembly> assemblies, string name)
+    {
+        try
+        {
+            return Reflect(assemblies, name);
+        }
+        catch (Exception ex)
+            when (ex
+                    is TypeLoadException
+                        or FileNotFoundException
+                        or FileLoadException
+                        or BadImageFormatException
+                        or ReflectionTypeLoadException
+            )
+        {
+            // A hub built against a dependency its bin does not have, or on a framework this process does not carry
+            // (ASP.NET Core), has types that do not load here.
+            return new TrainShape(
+                null,
+                null,
+                $"{name} could not be loaded from the assemblies given: {ex.Message} Build the hub, and give its "
+                    + "output's assemblies, or write the train's fields on 'Returns:' and 'Takes:' lines instead."
+            );
+        }
+    }
+
+    private static TrainShape Reflect(IReadOnlyCollection<Assembly> assemblies, string name)
     {
         var found = assemblies
             .Select(a => a.GetType(name, throwOnError: false))

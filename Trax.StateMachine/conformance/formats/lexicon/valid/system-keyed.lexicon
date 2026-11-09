@@ -5,6 +5,6 @@ Actor: fixer "a fixer"
 
 Machine: ticket
   System keyed by: id
-  State: New      "is new"
-  State: Triaged  "is in triage"
+  State: New     "is new"
+  State: Triaged "is in triage"
   Trigger: Triage "{subject} is triaged"

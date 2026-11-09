@@ -110,7 +110,9 @@ public partial class LexiconTests
         var problem = reading.Problems[0];
         problem.Message.Should().Contain(words, $"the problem was {problem}");
         problem.Line.Should().Be(line, $"the problem was {problem}");
-        problem.Message.Should().NotContain("glossary.json");
+        // Only the case about a glossary.json beside the lexicon names one.
+        if (!words.Contains("glossary.json", StringComparison.Ordinal))
+            problem.Message.Should().NotContain("glossary.json");
         problem.Message.Should().NotContain("/machines/");
     }
 
@@ -164,6 +166,64 @@ public partial class LexiconTests
     // A run of spaces outside quotes; the fixtures hold no quote with two spaces in it.
     [GeneratedRegex(@"  +(?=(?:[^""]*""[^""]*"")*[^""]*\z)")]
     private static partial Regex Columns();
+
+    [Test]
+    public void A_lone_surrogate_in_quotes_is_a_problem_at_its_line()
+    {
+        var reading = Lexicon.Read(
+            "bad.lexicon",
+            "Version: 1\nActor: member \"a \ud800 member\"\n"
+        );
+
+        reading.Succeeded.Should().BeFalse();
+        reading.Problems[0].Line.Should().Be(2);
+        reading.Problems[0].Message.Should().Contain("not text");
+    }
+
+    [Test]
+    public void A_keyword_written_against_its_value_reads_as_with_a_space()
+    {
+        var path = Path.Combine(Valid, "minimal.lexicon");
+        var text = File.ReadAllText(path);
+
+        Lexicon
+            .Read(
+                path,
+                text.Replace("Version: 1", "Version:1").Replace("State: Open", "State:Open")
+            )
+            .Json.Should()
+            .Be(Lexicon.Read(path, text).Json)
+            .And.NotBeNull();
+    }
+
+    [TestCaseSource(nameof(ValidLexicons))]
+    public void A_valid_lexicon_is_in_the_layout_trax_lexicon_format_writes(string name)
+    {
+        var text = File.ReadAllText(Path.Combine(Valid, name));
+
+        LexiconFormatter.Format(text).Text.Should().Be(text);
+    }
+
+    [Test]
+    [Category(Categories.CrossEngine)]
+    public void Every_elaborated_glossary_is_one_the_schema_accepts()
+    {
+        var names = ValidLexicons().ToList();
+        var texts = names
+            .Select(n => File.ReadAllText(GlossaryOf(Path.Combine(Valid, n))))
+            .ToList();
+
+        var verdicts = TwinEngine.ValidateFormat("glossary", texts);
+
+        names
+            .Zip(verdicts)
+            .Where(p => p.Second.Count > 0)
+            .Select(p => $"{p.First}: {string.Join("; ", p.Second.Take(2))}")
+            .Should()
+            .BeEmpty(
+                "conformance/glossary.schema.json accepts every glossary a lexicon elaborates to"
+            );
+    }
 
     [GeneratedRegex(@"\A#\s*expect\s+(\d+):(.*)\z")]
     private static partial Regex Expect();

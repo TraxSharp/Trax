@@ -52,10 +52,6 @@
           "values": {
             "type": "integer",
             "nullable": false
-          },
-          "keys": {
-            "type": "string",
-            "nullable": false
           }
         },
         {

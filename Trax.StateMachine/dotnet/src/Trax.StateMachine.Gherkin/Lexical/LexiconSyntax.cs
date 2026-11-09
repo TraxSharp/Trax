@@ -176,6 +176,11 @@ internal static class LexiconSyntax
         {
             number++;
             var line = raw.TrimEnd('\r');
+            if (LoneSurrogate(line))
+            {
+                problems.Add(new LexProblem(number, "holds a lone surrogate, which is not text."));
+                continue;
+            }
             if (!Tokenize(line, out var tokens, out var problem))
             {
                 problems.Add(new LexProblem(number, problem!));
@@ -191,7 +196,7 @@ internal static class LexiconSyntax
             }
             if (tokens.Count == 0)
                 continue;
-            var keyword = Match(tokens, out var rest);
+            var keyword = Match(tokens, out var rest) ?? Match(Unglued(tokens), out rest);
             if (keyword is null)
             {
                 problems.Add(new LexProblem(number, Unknown(tokens)));
@@ -236,6 +241,45 @@ internal static class LexiconSyntax
         }
         rest = [];
         return null;
+    }
+
+    // "Version:1" is "Version: 1": a keyword's colon written against the word after it. Only the keyword's own words
+    // are split, so a name with a colon later on the line (checkout:priced) is left alone.
+    private static List<Token> Unglued(List<Token> tokens)
+    {
+        for (var i = 0; i < Math.Min(3, tokens.Count); i++)
+        {
+            var token = tokens[i];
+            if (token.Kind != TokenKind.Word)
+                break;
+            var colon = token.Value.IndexOf(':', StringComparison.Ordinal);
+            if (colon <= 0 || colon == token.Value.Length - 1)
+                continue;
+            return
+            [
+                .. tokens.Take(i),
+                new Token(TokenKind.Word, token.Value[..(colon + 1)]),
+                new Token(TokenKind.Word, token.Value[(colon + 1)..]),
+                .. tokens.Skip(i + 1),
+            ];
+        }
+        return tokens;
+    }
+
+    private static bool LoneSurrogate(string line)
+    {
+        for (var i = 0; i < line.Length; i++)
+        {
+            if (
+                char.IsHighSurrogate(line[i])
+                && i + 1 < line.Length
+                && char.IsLowSurrogate(line[i + 1])
+            )
+                i++;
+            else if (char.IsSurrogate(line[i]))
+                return true;
+        }
+        return false;
     }
 
     private static string Unknown(List<Token> tokens)

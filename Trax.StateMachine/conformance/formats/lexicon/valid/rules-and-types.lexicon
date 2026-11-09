@@ -21,7 +21,7 @@ Machine: parcel
   Context: sentAt is a date-time, may be empty
   Starts with: weight is 1, size is "M", tags is ["new"], code is "P-1"
 
-  State: Open "is open"
+  State: Open   "is open"
   State: Sealed "is sealed"
     Requires: weight is at most 30 and tags has at least 1 items and code is not empty
   State: Gone "is gone"

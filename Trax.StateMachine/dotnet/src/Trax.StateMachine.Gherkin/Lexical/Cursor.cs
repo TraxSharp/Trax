@@ -101,7 +101,12 @@ internal sealed class Cursor(LexLine line)
     /// A value: a quoted text, a number, <c>true</c>, <c>false</c>, <c>nothing</c> (null), a list in brackets, or a
     /// bare name (a constant, or a field of what the line reads from).
     /// </summary>
-    internal LxValue Value()
+    /// <summary>The deepest a list in a value nests.</summary>
+    internal const int MaxDepth = 32;
+
+    internal LxValue Value() => Value(0);
+
+    private LxValue Value(int depth)
     {
         var token = Next("a value");
         switch (token.Kind)
@@ -109,13 +114,15 @@ internal sealed class Cursor(LexLine line)
             case TokenKind.Text:
                 return new LxText(token.Value, Line);
             case TokenKind.Open:
+                if (depth >= MaxDepth)
+                    throw new FormError($"a list nests deeper than {MaxDepth}.");
                 var items = new List<LxValue>();
                 if (Peek.Kind == TokenKind.Close && !AtEnd)
                 {
                     _at++;
                     return new LxList(items, Line);
                 }
-                do items.Add(Value());
+                do items.Add(Value(depth + 1));
                 while (TryComma());
                 var close = Next("']'");
                 if (close.Kind != TokenKind.Close)

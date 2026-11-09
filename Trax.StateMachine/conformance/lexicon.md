@@ -11,12 +11,15 @@ and only the .NET tooling writes it.
 ## Lines
 
 - A lexicon is one file per features directory, named `<anything>.lexicon`. It may hold any number of machines; a
-  second lexicon in the directory is a problem.
+  second lexicon in the directory is a problem, and so is a `glossary.json` beside it, since the glossary is derived
+  and written beside the machines.
+- `Version: 1` is its first line: notes and blank lines may come before it, nothing else.
 - Every line starts with a keyword from the closed set below. A line that does not is a problem, with the nearest
   keyword suggested (`Outcom:` → `Outcome:`). There is no free text: a note goes after `#`.
-- Whitespace outside quotes never matters. Indentation, tabs and lined-up columns are for reading only.
+- Whitespace outside quotes never matters. Indentation, tabs and lined-up columns are for reading only, and a
+  keyword's colon may be written against the word after it (`Version:1`).
 - Phrases, labels, names of views and text values are quoted. Inside quotes, `\"` is a quote, `\\` a backslash and
-  `#` is text; any other backslash is a problem.
+  `#` is text; any other backslash is a problem, and so is a lone surrogate anywhere on a line.
 - A keyword belongs under one kind of block, and attaches to the nearest one still open, closing every block opened
   after it. So a machine's `Context:` lines come before its first `State:`: after one, `Context:` belongs to that
   state.
@@ -56,7 +59,9 @@ An actor has one of the two, and is refused with both.
 | `Values:` | `Values: "S", "M", "L"`, or a range: `Values: A to J, each followed by 1 to 10` | a string field with that `enum` (`A1` … `J10`) |
 | `Has:` | `Has: postcode is a string, may be empty`, one per field | an object field with those `fields` |
 
-A type is one or the other. A range is two letters or two whole numbers.
+A type is one or the other. A range is two letters from `A` to `Z` (or `a` to `z`) or two whole numbers, the first not
+after the last, and a `Values:` line gives at most 1000 values, its two ranges multiplied. A record that contains
+itself, directly or through another type, is a problem at the `Has:` line: it has no end, so hold an id instead.
 
 ### Under `Machine:`
 
@@ -148,7 +153,8 @@ A guard that reads only the trigger's input may leave both out.
 Types: `a string`, `a number`, `an integer`, `a boolean`, `an object`, `a list`; the string formats `a uuid`,
 `a date`, `a time`, `a date-time`, `a date-time-offset`, `a duration`, `a uri`, `a char`; a named `Type:`
 (`a Square`, `an Address`); `a list of <type>` (`a list of strings`, `a list of Squares`); and
-`a map of <type> to <type>` (`a map of string to integer`). Nothing nests inside a line: a record in a list is a named
+`a map of <type> to <type>` (`a map of string to integer`). A map whose keys are any string writes no `keys` shape, as
+the host writes a `Dictionary<string, T>`. Nothing nests inside a line: a record in a list is a named
 type.
 
 `Returns:` holds several fields on one line, separated by commas; a comma followed by a clause goes on with the field
@@ -183,7 +189,10 @@ input reads `input item is not empty`).
 Typed by the field they are for. A string is quoted, a number and an integer bare (an integer whole), a boolean `true`
 or `false`, a list in brackets (`["bread", "rye"]`), and `nothing` is null, allowed only where the field may be empty.
 A bare name is a constant, or, in `Sets:` and `Stores:`, a field of what the line reads from. A value of the wrong
-type is a problem at its line. An object field takes no value in a lexicon; set it with a custom reduction.
+type is a problem at its line. A value of a field with a list of values is written as declared: `"m"` for a field of
+`"S", "M", "L"` is a problem, since rules compare values as written. A list nests at most 32 deep. A constant's value
+may be another constant's name, and one that comes back round to itself is a problem at its line. An object field
+takes no value in a lexicon; set it with a custom reduction.
 
 ## What is inferred
 
@@ -198,8 +207,11 @@ type is a problem at its line. An object field takes no value in a lexicon; set 
 - **A train's input.** Each `Takes:` field from the context field of its name, `owner` from the instance owner, and
   each `Input:` line as written, in the order written. Given the train assemblies, every input the record has and no
   line writes is wired by the same rule, and `Takes:` is optional.
-- **A train's output.** From `Returns:`, sorted by name; given the train assemblies, from the output record, as the
-  host reads it, and `Returns:` is optional. A `Returns:` that disagrees with the record is a problem at its line.
+- **A train's output.** From `Returns:`, sorted by name. Given the train assemblies, `Returns:` is optional: without
+  it the output is the record's, as the host reads it; with it, each field must have the record's type, format,
+  nullability and values (a problem at the `Returns:` line otherwise), and the `Returns:` line is what is written, so
+  the glossary is the same with the assemblies and without. A train whose types do not load is a problem at its
+  `Runs:` line. An `Input:` line naming a field the input record does not have is a problem at its line.
 - **Each done outcome** stores what `Stores:` and `Sets:` say, and its example is the value its `when` pins for each
   output field, then the `Example:` line's. An output field with neither is a problem at the outcome.
 - **A view's reads** of a system machine at a fixed key carry the key.

@@ -20,7 +20,7 @@ instance per user, runs a machine's one irreversible effect once per intent, and
 dotnet add package Trax.StateMachine.Persistence
 dotnet add package Trax.StateMachine.Testing   # in a test project
 dotnet add package Trax.StateMachine.Client    # in a .NET frontend that drives a served machine
-dotnet add package Trax.StateMachine.Gherkin   # to derive machines from features and a glossary
+dotnet add package Trax.StateMachine.Gherkin   # to derive machines from features and a lexicon
 dotnet add package Trax.StateMachine.Gherkin.Reqnroll   # in a Reqnroll test project that runs them on a host
 ```
 

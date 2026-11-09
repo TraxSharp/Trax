@@ -124,7 +124,9 @@ internal static class LexiconFormatter
         if (width > 0)
         {
             var first = Render([row.Tokens[0]]);
-            text.Append(first).Append(' ', width - first.Length + 1).Append(Render(row.Tokens.Skip(1).ToList()));
+            text.Append(first)
+                .Append(' ', width - first.Length + 1)
+                .Append(Render(row.Tokens.Skip(1).ToList()));
         }
         else
             text.Append(Render(row.Tokens));
