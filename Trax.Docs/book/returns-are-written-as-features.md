@@ -1,6 +1,6 @@
 ---
 title: "14. Returns are written as features"
-description: "Chapter 14 of the Trax book: write returns as a Gherkin feature and a glossary, derive the machine from them, and run the feature as its tests."
+description: "Chapter 14 of the Trax book: write returns as a Gherkin feature and a lexicon, derive the machine from them, and run the feature as its tests."
 type: tutorial
 area: general
 parent: The Trax book
@@ -12,7 +12,7 @@ nav_order: 24
 Checkout and the parcel are classes: their states, events, guards and rules are C# in the
 library. Returns are written another way. A customer sends an order back and says why, and the
 shop checks the order is theirs before it takes the return. That is written as a Gherkin
-**feature**, in plain words, with a **glossary** that says what the words mean. Trax derives the
+**feature**, in plain words, with a **lexicon** that says what the words mean. Trax derives the
 machine from the two: its states and moves, the guard and its message, who may do what, the train
 it runs and a view of a customer's returns. The same feature then runs as the machine's tests.
 
@@ -24,7 +24,7 @@ This chapter starts from the end of [chapter 13](/docs/book/the-machine-places-t
 ## In this chapter
 
 1. [The flow](/docs/book/returns-are-written-as-features/the-flow)
-2. [The glossary](/docs/book/returns-are-written-as-features/the-glossary)
+2. [The lexicon](/docs/book/returns-are-written-as-features/the-lexicon)
 3. [The features](/docs/book/returns-are-written-as-features/the-features)
 4. [Derive the machine](/docs/book/returns-are-written-as-features/derive-the-machine)
 5. [The check](/docs/book/returns-are-written-as-features/the-check)

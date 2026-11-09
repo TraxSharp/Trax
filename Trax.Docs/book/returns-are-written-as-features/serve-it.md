@@ -224,7 +224,7 @@ The build copies the derived files beside the hub, as `machines/`.
   and the view its `host.json` gives. The assembly after the path is where the train is found.
 - **The hub checks the pair when it starts.** `host.json` was derived from one IR and records its
   hash. An IR edited by hand, or a host file left behind by a changed feature, refuses the start
-  and names the file. So does a train the glossary names that the library does not hold, or a
+  and names the file. So does a train the lexicon names that the library does not hold, or a
   type there that is not a train.
 - **It is served as checkout is.** `machines { orderReturn { start describe send get } }`, with the
   rule `host.json` gives on each, and `views { returns }` as a query of its own.

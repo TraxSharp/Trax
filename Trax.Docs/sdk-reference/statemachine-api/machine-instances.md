@@ -142,7 +142,7 @@ name: its type is emitted when the host starts. `Start(machineId, ...)` and `Adv
 machine's id, as its IR and `host.json` give it, and behave as the typed overloads do; the typed overloads call
 them. An id no registered machine has, and a user-owned machine's id, throw `InvalidOperationException`.
 
-A keyed system machine served from features (`"system": { "keyedBy": [...] }` in its glossary) is never started by
+A keyed system machine served from features (`System keyed by:` in its lexicon) is never started by
 the host: its instances exist only once host code starts them here, one per key, with the key's parts in the order
 `keyedBy` names them. A key with another number of parts throws `InvalidOperationException`, from `Start` and
 `Advance` alike, and so does any key but its own for a system machine at a fixed key (`flight/tx101` is

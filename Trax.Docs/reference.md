@@ -49,6 +49,11 @@ Pages to look things up in. Per-type and per-method pages are in the
 
 - [Train Discovery](/docs/mediator/train-discovery): how trains are found and routed by input type.
 
+## State machines
+
+- [Lexicon](/docs/reference/lexicon): the file that says what a features directory's words mean, keyword by keyword.
+- [Feature files](/docs/reference/feature-files): what `trax machine from-gherkin` reads and writes: the steps, the glossary, `host.json` and `access.txt`.
+
 ## Scheduling
 
 - [Scheduling Options](/docs/scheduler/scheduling-options): manifests, groups and schedule types.

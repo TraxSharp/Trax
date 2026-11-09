@@ -1,19 +1,23 @@
 ---
 name: trax-write-machines-as-features
-description: Use when a Trax app's state machines are written as Gherkin features and a glossary (a features/ folder with glossary.json, a machines/ folder with *.ir.json, host.json and access.txt, a host calling ServeFeatures), or when the user wants behaviour written as scenarios rather than a Machine class. Covers writing and changing the glossary and the .feature files, the step dialect derivation reads (named people, owner's instances, server steps, outcomes, time passing, view reads), trax machine from-gherkin, run, missing, usage, explain and diagram, reviewing access.txt, fixing derivation problems, the Reqnroll host bindings, and how each glossary entry maps to the IR, host.json, GraphQL and the C# builder.
+description: Use when a Trax app's state machines are written as Gherkin features and a lexicon (a features/ folder with a *.lexicon file, or an older hand-written glossary.json, a machines/ folder with *.ir.json, host.json, access.txt and glossary.json, a host calling ServeFeatures), or when the user wants behaviour written as scenarios rather than a Machine class. Covers writing and changing the lexicon and the .feature files, moving a hand-written glossary.json to a lexicon, the step dialect derivation reads (named people, owner's instances, server steps, outcomes, time passing, view reads), trax machine from-gherkin, run, missing, usage, explain and diagram, trax lexicon format, reviewing access.txt, fixing derivation and lexicon problems, the Reqnroll host bindings, and how each lexicon line maps to the IR, host.json, GraphQL and the C# builder.
 metadata:
   internal: true
 ---
 
 # Write Trax machines as features
 
-In an app that does this, the behaviour of its machines lives in `features/*.feature` and `features/glossary.json`
-and nowhere else. `trax machine from-gherkin` derives `machines/`: one `<machine>.ir.json` per machine,
-`host.json` (access, trains, policies, views, provenance) and `access.txt` (one line per grant). The host serves
+In an app that does this, the behaviour of its machines lives in `features/*.feature` and one lexicon,
+`features/<name>.lexicon`, and nowhere else. The lexicon says what the features' words mean, one keyword per line.
+`trax machine from-gherkin` derives `machines/`: one `<machine>.ir.json` per machine, `host.json` (access, trains,
+policies, views, provenance), `access.txt` (one line per grant) and `glossary.json` (the lexicon elaborated to the
+JSON the engines read). The host serves
 `machines/` with `ServeFeatures`. There is no machine class and no hand-written rule.
 
 [Write machines as features](https://traxsharp.net/docs/statemachine/write-machines-as-features) is the how-to,
-[Feature files](https://traxsharp.net/docs/reference/feature-files) has every key and step, and
+[Lexicon](https://traxsharp.net/docs/reference/lexicon) has every keyword, its block and its one form,
+[Feature files](https://traxsharp.net/docs/reference/feature-files) has every step and every key of the derived files,
+and
 [How features become machines](https://traxsharp.net/docs/statemachine/how-features-become-machines) traces each
 part to the IR, `host.json`, GraphQL and the C# builder. [mapping.md](mapping.md) is that trace as a lookup: what to
 edit for a given change. [Serve features from the hub template](https://traxsharp.net/docs/statemachine/serve-features-from-the-hub-template)
@@ -21,9 +25,15 @@ lists what a `dotnet new trax-hub` host needs to serve them.
 
 ## First: is this app written this way
 
-Look for `features/glossary.json`, a `machines/host.json`, and `ServeFeatures("machines", ...)` in the host's
-`AddStateMachines`. With all three, every change to a machine's behaviour is a change to the features or the glossary.
-Without them the app's machines are C# classes: use `trax-design-a-machine`.
+Look for a `features/*.lexicon` (or, in an app not yet moved, a hand-written `features/glossary.json`), a
+`machines/host.json`, and `ServeFeatures("machines", ...)` in the host's `AddStateMachines`. With all three, every
+change to a machine's behaviour is a change to the features or the lexicon. Without them the app's machines are C#
+classes: use `trax-design-a-machine`.
+
+An app with `features/glossary.json` and no lexicon predates the lexicon. `from-gherkin` refuses that directory
+unless given `--glossary features/glossary.json`, which reads the JSON as it is. To move it, write the lexicon that
+says the same thing, delete `features/glossary.json`, run `from-gherkin`, and compare the `machines/glossary.json` it
+writes with the old file: the IRs, `host.json` and `access.txt` should not change. Ask the user before moving one.
 
 A new machine can go either way. Write it as features unless it needs something only C# has: a child machine
 (`Spawns`), a delegate guard or reducer, `RequiresPolicy`, `Anonymous`, `InvokedRunLimit`, or a timer whose duration
@@ -33,17 +43,20 @@ neither: it needs instances shared between people, which Trax does not have yet.
 ## Never edit machines/ by hand
 
 `machines/` is output. `host.json` carries each IR's hash and the host refuses a pair that does not match, and
-`from-gherkin --check` in CI fails on any file that differs from what the features derive. Change the features or the
-glossary, then run `from-gherkin`. The same goes for the client: `trax client` regenerates it from the host's
+`from-gherkin --check` in CI fails on any file that differs from what the features derive, `glossary.json` included.
+Change the features or the lexicon, then run `from-gherkin`. Never write a `glossary.json` by hand, and never put one
+beside the lexicon: the CLI refuses the directory. The same goes for the client: `trax client` regenerates it from the host's
 exported manifest (`trax-generate-a-client`).
 
 ## The loop
 
-1. Change the glossary first when a new word is needed: a state, a trigger, a guard, an outcome, a view, an actor.
+1. Change the lexicon first when a new word is needed: a state, a trigger, a guard, an outcome, a view, an actor.
+   `trax lexicon format` lines its columns up.
 2. Write or change the scenarios.
 3. Derive, which also replays every scenario on what it derived and writes nothing if one fails:
    `trax machine from-gherkin --features features --out machines`
-4. Read the problems, if any. Each names a file and line.
+4. Read the problems, if any. Each names a file and line; a lexicon problem names its lexicon line and, for a
+   misspelt keyword, the nearest one.
    [Problems derivation reports](https://traxsharp.net/docs/reference/feature-files#problems-derivation-reports) says
    what to change for the common ones. `trax machine explain --features features --scenario "<name>"` prints what
    derivation read from one scenario: its edges, guards, timers and policies, and which Then caused which.
@@ -51,7 +64,7 @@ exported manifest (`trax-generate-a-client`).
    summary, in words (`passengers may now check in on their own bookings`). A grant you did not mean is a scenario that
    shows the wrong person acting.
 6. Run the features on the committed files: `trax machine run --features features --machines machines`.
-7. `trax machine missing --features features` lists what the glossary names and no scenario shows, each with a
+7. `trax machine missing --features features` lists what the lexicon names and no scenario shows, each with a
    stub that is checked to derive clean. Use it before calling the work finished.
 8. Run the host tests (below), regenerate the client if the IR changed, and commit `features/` and `machines/`
    together.
@@ -100,28 +113,37 @@ These keep access closed. Do not work around them:
   with a system machine that a person can effectively drive, nor with a C# machine, where a client acts on its own
   instances too. Tell the user it needs shared instances, which Trax does not have yet.
 
-## Glossary syntax that is not obvious
+## Lexicon syntax that is not obvious
 
-- A field is `{ "name", "type", "nullable", "constraints" }`, as the IR writes one.
-- A guard's `rule`, a state's `requires` and an outcome's `when` are IR rules:
-  `{ "rule": "nonEmpty", "source": "context", "field": "passport" }`. A trigger's `reduce` is an IR reduction:
-  `{ "reduce": "set", "steps": [ { "field": "passport", "value": { "input": "passport" } } ] }`.
-  [The IR format](https://traxsharp.net/docs/sdk-reference/statemachine-api/ir-format#transitions) lists every kind.
+- Every line starts with a keyword and has one form. There is no free text; a note goes after `#`. A keyword attaches
+  to the nearest open block, so a machine's `Context:` lines go before its first `State:`.
+- Phrases, labels and text values are quoted. Indentation is for reading only.
+- A field is `<name> is a <type>` with clauses after commas: `Input: seat is a string`,
+  `Context: approved is a boolean, may be empty`. A field a line writes (`Sets:`, `Returns:`, `Stores:`) needs no
+  `Context:` line; its type comes from what writes it, and it is never null unless `Context: <field> may be empty`.
+- A rule is a sentence: `Guard: hasPassport when passport is not empty`, `Requires: total is more than 0`,
+  `Outcome: "the shot misses" when result is "miss"`. `and` or `or`, never both in one line: a rule that needs both is
+  a custom `Rule:`. [Rules](https://traxsharp.net/docs/reference/lexicon#rules) lists every comparison.
 - A trigger phrase has `{subject}` where the instance goes and `{field}` for each input: `gives passport {passport} for
   {subject}`. A phrase that starts with `{subject}` happens to the instance, with no person.
-- A train's input from `$owner` (`"input": { "memberId": "$owner" }`) gives it the instance owner, set by the server.
-  Use it whenever the train checks who it acts for.
-- Two user machines of one owner that a policy joins need a
-  [link](https://traxsharp.net/docs/reference/feature-files#links): a context field on the target holding the source's
-  id.
+- `Runs: <Train> in <State>` names the train's interface; a plain name needs `Trains in: <namespace>` at the top.
+  `Input: memberId from the owner` (or `owner` in `Takes:`) gives the train the instance owner, set by the server. Use
+  it whenever the train checks who it acts for.
+- Pass the train assemblies (`from-gherkin --trains bin/<Trains>.dll`, the same on `run`, `missing`, `usage` and
+  `explain`) and `Takes:` and `Returns:` can be left out: they are read from the train's records, and a `Returns:`
+  that disagrees is a problem.
+- Two user machines of one owner that a policy joins need a `Link:`
+  ([links](https://traxsharp.net/docs/reference/feature-files#links)): a context field on the target holding the
+  source's id.
 
 ## Testing
 
 - **In memory:** `trax machine run`, or `FeatureMachines.Run` from a test. It answers as the host does, access
   included, and is fast. Tags, names and `file:line` select scenarios.
 - **Against the host:** reference `Trax.StateMachine.Gherkin.Reqnroll` in a Reqnroll test project, include the feature
-  files, and call `TraxFeatures.Configure` from a `[BeforeTestRun]` hook with the host in the test process and a
-  credential per person per scenario. Set `Manifest` to the host's exported client manifest when the host requires
+  files, and call `TraxFeatures.Configure` from a `[BeforeTestRun]` hook with the host in the test process, the
+  `Glossary` of `Lexicon.ReadDirectory("features", [typeof(<a train>).Assembly])`, and a credential per person per
+  scenario. Copy `features/*` to the test output so the lexicon is there. Set `Manifest` to the host's exported client manifest when the host requires
   persisted operations, so every step goes by its persisted id. A machine feature needs no step code.
   [Feature bindings](https://traxsharp.net/docs/sdk-reference/statemachine-api/feature-bindings) has the options.
 - **Other specs** (scheduling, auth, anything that is not a machine) go in `specs/`, which derivation does not read.
@@ -133,8 +155,9 @@ These keep access closed. Do not work around them:
 
 ## Known mistakes
 
-- Editing `machines/*.json` or `access.txt` by hand. The host or CI refuses it.
-- Writing a Then the glossary cannot read and assuming it was checked.
+- Editing `machines/*.json`, `machines/glossary.json` or `access.txt` by hand. The host or CI refuses it.
+- Writing a hand-made `features/glossary.json` beside the lexicon. The CLI refuses the directory; delete it.
+- Writing a Then no lexicon phrase reads and assuming it was checked.
 - Copying `machines/` into the build output was forgotten: `ServeFeatures("machines")` reads from the application's
   base directory.
 - A state that invokes a train with no scheduler on this host or another sharing the database: the run stays queued
@@ -143,8 +166,9 @@ These keep access closed. Do not work around them:
 - Policies on `UseInMemory()`: refused, since InMemory has no transaction to queue a policy's fire in.
 - A design that needs one policy to land before another: the host runs each policy and each invoked train on its own,
   in no fixed order, while `trax machine run` plays them in the Thens' order. `from-gherkin` warns about it.
-- An invoked train's integer output with no range in the glossary: the host checks the IR against the train and
-  refuses to start until `minimum`/`maximum` match the CLR type.
+- An invoked train's integer output in `Returns:` with no range: the host checks the IR against the train and
+  refuses to start until `minimum`/`maximum` match the CLR type. Pass `--trains` and leave `Returns:` out, so the
+  output is read from the record.
 - A long timer tested against the host: on the host time passes on the wall clock, so keep host scenarios to seconds
   and leave long timers to the in-memory run.
 

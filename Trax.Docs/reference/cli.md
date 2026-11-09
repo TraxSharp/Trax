@@ -1,6 +1,6 @@
 ---
 title: Trax CLI
-description: "The trax CLI: generate scaffolds a hub and a trains library from GraphQL SDL or OpenAPI, and machine scaffolds and exports state machines."
+description: "The trax CLI: generate scaffolds a hub and trains from GraphQL SDL or OpenAPI, machine scaffolds and exports state machines, lexicon formats lexicons."
 type: reference
 area: tooling
 nav_order: 1
@@ -9,6 +9,7 @@ source:
   - Trax.Cli/src/Trax.Cli/Generator
   - Trax.Cli/src/Trax.Cli/Schema
   - Trax.Cli/src/Trax.Cli/Commands/MachineCommand.cs
+  - Trax.Cli/src/Trax.Cli/Commands/LexiconCommand.cs
   - Trax.Cli/src/Trax.Cli/Machines
 ---
 
@@ -482,20 +483,27 @@ that never happened.
 ### Machines from features
 
 `trax machine from-gherkin`, `run`, `missing`, `usage`, `explain` and `diagram` work on
-[machines written as features](/docs/statemachine/write-machines-as-features), from a features directory with its
-`glossary.json` ([feature files](/docs/reference/feature-files)). Each exits 1 with a message for a bad path or a bad
-glossary.
+[machines written as features](/docs/statemachine/write-machines-as-features), from a features directory and its
+[lexicon](/docs/reference/lexicon), the one `*.lexicon` file in it. The five that read features (`from-gherkin`,
+`run`, `missing`, `usage` and `explain`) elaborate the lexicon to the glossary on every run, and refuse a directory
+with no lexicon, two lexicons, or a lexicon beside a `glossary.json`. `--glossary <file>` reads a glossary's JSON
+instead, for features not yet written with a lexicon; then `from-gherkin` writes no `glossary.json`, and removes one
+already in `--out`. `--trains <dll>`, repeatable, gives the train assemblies the lexicon reads each train's input and
+output records from, as the host does, so its `Takes:` and `Returns:` lines are optional and a `Returns:` that
+disagrees with the record is a problem. Each command exits 1 with a message for a bad path, a bad lexicon (each problem at its line) or a bad glossary.
 
 ```bash
-# Derive one IR per machine, host.json and access.txt into a directory the command owns.
+# Derive one IR per machine, host.json, access.txt and glossary.json into a directory the command owns.
 trax machine from-gherkin --features ./features --out ./machines
+# The same, reading Takes: and Returns: from the trains' records.
+trax machine from-gherkin --features ./features --out ./machines --trains ./bin/MyApp.Trains.dll
 # The CI gate: write nothing, fail when any committed file differs.
 trax machine from-gherkin --features ./features --out ./machines --check
 # Run the features in memory on the committed machines, as the host answers.
 trax machine run --features ./features --machines ./machines --tags "@smoke and not @slow" --format junit --report results.xml
-# What the glossary names and no scenario shows, each with a scenario to paste.
+# What the lexicon names and no scenario shows, each with a scenario to paste.
 trax machine missing --features ./features --out missing.feature
-# Each glossary phrase and the steps that say it.
+# Each lexicon phrase and the steps that say it.
 trax machine usage --features ./features --unused
 # What derivation read from each scenario: edges, guards, outcomes, timers, policies, starts, grants and views.
 trax machine explain --features ./features --scenario "fires the oven"
@@ -505,12 +513,33 @@ trax machine diagram --machines ./machines --format html --out board.html
 
 | Command | Options |
 | --- | --- |
-| `from-gherkin` | `--features` (required), `--glossary` (default `glossary.json` in the features directory), `--out` (required: a directory holding only what the command writes; a machine that no longer derives has its IR removed), `--check`. |
-| `run` | `--features`, `--glossary`, `--machines` (required), locations as `file:line`, `--tags` (a tag expression), `--name` (a regular expression, repeatable), `--format` (`pretty`, `json` or `junit`), `--report` (a file), `--strict` (fail on steps about the UI too), `--dry-run`, `--fail-fast`. An undefined step always fails, and so does a selection that runs no scenario: one that matches none, or one whose every scenario is tagged `@host`, which only the host bindings run. A `@host` scenario selected beside others is skipped and does not fail the run. |
-| `missing` | `--features`, `--glossary`, `--kind` (`machine`, `trigger`, `state`, `guard`, `refusal`, `outcome`, `view` or `grant`, repeatable), `--out` (the stubs, as one feature). It refuses features that do not derive. |
-| `usage` | `--features`, `--glossary`, `--unused`. |
-| `explain` | `--features`, `--glossary`, `--scenario` (a name to contain, any case, or a `file:line`). It derives in memory and writes nothing; features that do not derive are their problems and exit 1. |
+| `from-gherkin` | `--features` (required), `--glossary` (a glossary's JSON file, read in place of the lexicon), `--trains` (a train assembly, repeatable), `--out` (required: a directory holding only what the command writes, one `<machine>.ir.json` per machine, `host.json`, `access.txt` and `glossary.json`; a machine that no longer derives has its IR removed), `--check` (write nothing; exit 1 when any file in `--out`, `glossary.json` and `access.txt` included, differs). |
+| `run` | `--features`, `--glossary`, `--trains`, `--machines` (required), locations as `file:line`, `--tags` (a tag expression), `--name` (a regular expression, repeatable), `--format` (`pretty`, `json` or `junit`), `--report` (a file), `--strict` (fail on steps about the UI too), `--dry-run`, `--fail-fast`. An undefined step always fails, and so does a selection that runs no scenario: one that matches none, or one whose every scenario is tagged `@host`, which only the host bindings run. A `@host` scenario selected beside others is skipped and does not fail the run. |
+| `missing` | `--features`, `--glossary`, `--trains`, `--kind` (`machine`, `trigger`, `state`, `guard`, `refusal`, `outcome`, `view` or `grant`, repeatable), `--out` (the stubs, as one feature). It refuses features that do not derive. |
+| `usage` | `--features`, `--glossary`, `--trains`, `--unused`. |
+| `explain` | `--features`, `--glossary`, `--trains`, `--scenario` (a name to contain, any case, or a `file:line`). It derives in memory and writes nothing; features that do not derive are their problems and exit 1. |
 | `diagram` | `--machines` (required), `--format` (`html`, `mermaid` or `json`), `--out`. |
+
+### `trax lexicon format`
+
+Lays a lexicon out one way: two spaces of indent per block and its columns lined up. The reader ignores layout, so
+what the lexicon elaborates to is unchanged.
+
+```bash
+# Format every *.lexicon under the current directory, or under the paths given.
+trax lexicon format
+trax lexicon format features/returns.lexicon
+# The CI gate: write nothing, exit 1 when a lexicon is not in its layout.
+trax lexicon format features --check
+```
+
+| Argument or option | What it does |
+| --- | --- |
+| `paths` | Lexicon files, or directories searched recursively for `*.lexicon`. Default: the current directory. |
+| `--check` | Write nothing; exit 1 if a lexicon is not in its layout. |
+
+A path that does not exist, no lexicon found, or a lexicon whose lines cannot be read (each problem at its line)
+exits 1.
 
 ## Frontend clients (`trax client`)
 

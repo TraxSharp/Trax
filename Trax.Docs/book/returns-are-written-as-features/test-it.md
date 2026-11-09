@@ -33,18 +33,23 @@ returns.feature:55 A check called off leaves the return unchecked  passed
 ```
 
 It runs on the committed files, so it tests what the hub serves, and answers as the hub does,
-access included. The train is not run: each outcome plays the glossary's example. The test project
-runs the same, and checks the committed machine is what the feature derives today:
+access included. The train is not run: each outcome answers with the output its `when` pins,
+`accepted` true or false. The test project runs the same, and checks that the committed machine and
+`glossary.json` are what the feature and the lexicon derive today. It reads the lexicon with the
+train's assembly, so the `Returns:` line is also checked against `ReturnOrderOutput`:
 
 `tests/Shopfront.Tests/UnitTests/ReturnFeaturesTests.cs`:
 
 ```csharp compile=tests file=tests/Shopfront.Tests/UnitTests/ReturnFeaturesTests.cs
+using Shopfront.Trains.ReturnOrder;
 using Trax.StateMachine.Gherkin;
 
 namespace Shopfront.Tests.UnitTests;
 
 // The returns features, run in memory on the machines committed in machines/from-features, as
-// trax machine run runs them, and those machines are what the features derive today.
+// trax machine run runs them, and those machines and the glossary are what the features and the
+// lexicon derive today. The lexicon is read with the train's records, so its Returns: line is
+// checked against the train's output here (ADR Trax.Docs/adr/0059).
 [TestFixture]
 public class ReturnFeaturesTests
 {
@@ -52,8 +57,14 @@ public class ReturnFeaturesTests
 
     private static string Machines => Path.Combine(AppContext.BaseDirectory, "machines");
 
+    private static LexiconReading Lexicon =>
+        Trax.StateMachine.Gherkin.Lexicon.ReadDirectory(
+            Features,
+            [typeof(IReturnOrderTrain).Assembly]
+        )!;
+
     private static FeatureGlossary Glossary =>
-        FeatureGlossary.Read(File.ReadAllText(Path.Combine(Features, "glossary.json")));
+        Lexicon.Glossary ?? throw new InvalidOperationException(string.Join("\n", Lexicon.Problems));
 
     private static FeatureFile[] Files =>
         [
@@ -94,6 +105,9 @@ public class ReturnFeaturesTests
         foreach (var (id, ir) in derived.Irs)
             Read($"{id}.ir.json").Should().Be(ir, "run trax machine from-gherkin again");
         Read("host.json").Should().Be(derived.Host, "run trax machine from-gherkin again");
+        Read("glossary.json")
+            .Should()
+            .Be(Lexicon.Json!.TrimEnd('\n'), "run trax machine from-gherkin again");
     }
 
     private static string Read(string file) =>
@@ -104,7 +118,7 @@ public class ReturnFeaturesTests
 ## Against the hub
 
 The test project takes the Trax bindings for Reqnroll, which hold one binding for every step the
-glossary reads. There is no step code.
+lexicon's phrases read. There is no step code.
 
 `Directory.Packages.props`:
 
@@ -174,7 +188,7 @@ glossary reads. There is no step code.
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The returns features, run against the hub by the Trax bindings, and the glossary they
+    <!-- The returns features, run against the hub by the Trax bindings, and the lexicon they
          read. Reqnroll writes a test class for each feature file. -->
     <ReqnrollFeatureFiles Include="..\..\features\*.feature" Link="Features\%(Filename)%(Extension)" />
     <None Include="..\..\features\*" LinkBase="features" CopyToOutputDirectory="PreserveNewest" />
@@ -208,7 +222,7 @@ glossary reads. There is no step code.
 }
 ```
 
-One hook starts the hub and tells the bindings how a person signs in.
+One hook starts the hub, reads the lexicon for the bindings, and tells them how a person signs in.
 
 `tests/Shopfront.Tests/FeatureHooks.cs`:
 
@@ -249,14 +263,20 @@ public sealed class FeatureHooks
             host.UseEnvironment("Development").UseSetting("ConnectionStrings:Shopfront", Database)
         );
         var client = hub.CreateClient();
-        var glossary = Path.Combine(AppContext.BaseDirectory, "features", "glossary.json");
+        var features = Path.Combine(AppContext.BaseDirectory, "features");
 
-        TraxFeatures.Configure(features =>
+        // The lexicon is read with the trains' records, as the hub reads them.
+        var lexicon = Lexicon.ReadDirectory(
+            features,
+            [typeof(Shopfront.Trains.ReturnOrder.IReturnOrderTrain).Assembly]
+        )!;
+
+        TraxFeatures.Configure(trax =>
         {
-            features.Host = hub.Services;
-            features.Client = client;
-            features.Glossary = FeatureGlossary.Read(File.ReadAllText(glossary));
-            features.Credential = (actor, person, scenario) =>
+            trax.Host = hub.Services;
+            trax.Client = client;
+            trax.Glossary = lexicon.Glossary!;
+            trax.Credential = (actor, person, scenario) =>
                 new FeatureCredential(
                     new Dictionary<string, string>
                     {

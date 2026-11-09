@@ -161,6 +161,8 @@ hand, so nothing checks that a page tells the same story as its features.
 
 ## Changelog
 
+- **2026-11-09**: Amended by [0059](./0059-the-lexicon-is-the-source-and-the-glossary-is-derived.md): a team writes the lexicon, and the
+  glossary is derived from it and committed in `machines/`.
 - **2026-11-09**: The console draws the board on a Board page of its own, under Overview, as paper notes on a wall.
 - **2026-11-08**: The CheckIn sample replaces the Bakery as the worked example, in this record and the pages that
   follow it.

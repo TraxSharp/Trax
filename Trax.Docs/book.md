@@ -176,11 +176,11 @@ charges, and spawning a child machine.
 
 ### [14. Returns are written as features](/docs/book/returns-are-written-as-features)
 
-Write returns as a Gherkin feature and a glossary instead of a class. `trax machine from-gherkin`
+Write returns as a Gherkin feature and a lexicon instead of a class. `trax machine from-gherkin`
 derives the machine: its states, its guard and message, who may do what, the train it runs and a
 view of a customer's returns. The hub serves it beside checkout, and the feature runs as its tests.
 
-You learn: features and a glossary as a source of machines, reviewing access as a file, the
+You learn: features and a lexicon as a source of machines, reviewing access as a file, the
 console's event-storming board, and running features in memory and against the hub.
 
 ## Part 5: Composition

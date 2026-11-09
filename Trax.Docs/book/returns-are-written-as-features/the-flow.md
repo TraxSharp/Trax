@@ -36,8 +36,9 @@ feature that tries.
 | You write | Trax writes from it |
 |---|---|
 | `features/returns.feature`, the scenarios | `machines/from-features/order-return.ir.json`: the states, the moves, the guard and its message, the train's outcomes |
-| `features/glossary.json`, what the words mean | `machines/from-features/host.json`: who may start, send and read a return, which train `Checking` runs, the view, and which scenario each part came from |
+| `features/returns.lexicon`, what the words mean | `machines/from-features/host.json`: who may start, send and read a return, which train `Checking` runs, the view, and which scenario each part came from |
 | `Shopfront.Core/Trains/ReturnOrder/`, the train | `machines/from-features/access.txt`: every grant, one line each, to review |
+| | `machines/from-features/glossary.json`: the lexicon with everything it leaves to a rule filled in |
 
 The IR is the same portable definition `trax machine generate` wrote for checkout in chapter 12.
 The host file is what only the server reads, so access never ships to a client.
@@ -48,4 +49,4 @@ The host file is what only the server reads, so access never ships to a client.
 
 ---
 
-Next: [14.2 The glossary](/docs/book/returns-are-written-as-features/the-glossary)
+Next: [14.2 The lexicon](/docs/book/returns-are-written-as-features/the-lexicon)

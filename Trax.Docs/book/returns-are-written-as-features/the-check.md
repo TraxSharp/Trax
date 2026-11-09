@@ -95,10 +95,10 @@ internal class CheckTheOrderJunction(IShopfrontDbContext db)
 }
 ```
 
-- **The names are the glossary's.** The run's input is sent as JSON, so `orderId` and
-  `customerId` in the glossary's `input` are `OrderId` and `CustomerId` here, and `accepted` in
-  its `output` is `Accepted`.
-- **`CustomerId` is the owner.** It is `$owner` in the glossary, set by the server from the
+- **The names are the lexicon's.** The run's input is sent as JSON, so `orderId` and
+  `customerId` from the lexicon's `Takes:` and `Input:` lines are `OrderId` and `CustomerId` here,
+  and `accepted` in its `Returns:` line is `Accepted`.
+- **`CustomerId` is the owner.** It is `from the owner` in the lexicon, set by the server from the
   return's owner, the same qualified id, `TraxJwt:ada`, an order's `CustomerId` holds. The shop's
   query filter narrows `Orders` to the caller too, and on the worker the caller is the return's
   owner, as it is for a checkout's `PlaceOrder` (chapter 13).

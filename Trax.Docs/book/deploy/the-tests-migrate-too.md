@@ -97,18 +97,24 @@ public sealed class FeatureHooks
             host.UseEnvironment("Development").UseSetting("ConnectionStrings:Shopfront", Database)
         );
         var client = hub.CreateClient();
-        var glossary = Path.Combine(AppContext.BaseDirectory, "features", "glossary.json");
+        var features = Path.Combine(AppContext.BaseDirectory, "features");
         // The hub runs only the documents it registered, so the bindings send each step by the
         // persisted id the storefront's client manifest holds for it.
         var manifest = Path.Combine(AppContext.BaseDirectory, "manifest.json");
 
-        TraxFeatures.Configure(features =>
+        // The lexicon is read with the trains' records, as the hub reads them.
+        var lexicon = Lexicon.ReadDirectory(
+            features,
+            [typeof(Shopfront.Trains.ReturnOrder.IReturnOrderTrain).Assembly]
+        )!;
+
+        TraxFeatures.Configure(trax =>
         {
-            features.Host = hub.Services;
-            features.Client = client;
-            features.Glossary = FeatureGlossary.Read(File.ReadAllText(glossary));
-            features.Manifest = ClientManifest.Read(File.ReadAllText(manifest));
-            features.Credential = (actor, person, scenario) =>
+            trax.Host = hub.Services;
+            trax.Client = client;
+            trax.Glossary = lexicon.Glossary!;
+            trax.Manifest = ClientManifest.Read(File.ReadAllText(manifest));
+            trax.Credential = (actor, person, scenario) =>
                 new FeatureCredential(
                     new Dictionary<string, string>
                     {
