@@ -80,7 +80,7 @@ internal sealed class InvokesStartupValidator(
                     $"The machine '{name}' is user-owned, and the {chained.Outcome} outcome of {chained.State} "
                         + $"enters {chained.Target}, which invokes a train of its own. Its run would be queued "
                         + "with no user present to authorize it. Chain through an event the user sends (a "
-                        + $"continue or retry edge into {chained.Target}), or declare the machine SystemOwned()."
+                        + $"continue or retry edge into {chained.Target}), or declare the machine SystemOwned() (in a glossary, a \"system\" machine)."
                 );
 
         // A timer is the server acting with nobody present, so on a user-owned machine it may not enter an invoking
@@ -100,7 +100,7 @@ internal sealed class InvokesStartupValidator(
                         $"The machine '{name}' is user-owned, and the timer of {timed} enters {target}, which "
                             + "invokes a train. Its run would be queued by the server with no user present to "
                             + "authorize it. Let an event the user sends enter it, or declare the machine "
-                            + "SystemOwned()."
+                            + "SystemOwned() (in a glossary, a \"system\" machine)."
                     );
 
             // A server-only trigger is a policy's, fired with nobody present, so it may not enter one either.
@@ -109,7 +109,7 @@ internal sealed class InvokesStartupValidator(
                     $"The machine '{name}' is user-owned, and the server-only trigger {edge.Trigger} enters "
                         + $"{edge.To} from {edge.From}, which invokes a train. Its run would be queued by the "
                         + "server with no user present to authorize it. Let an event the user sends enter it, or "
-                        + "declare the machine SystemOwned()."
+                        + "declare the machine SystemOwned() (in a glossary, a \"system\" machine)."
                 );
         }
 

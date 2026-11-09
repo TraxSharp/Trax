@@ -145,8 +145,13 @@ function fieldType(field: FieldSchema, source: RuleSource): TypeRef {
     if (rule.rule === "oneOf" && field.type === "string" && rule.source === source && rule.field === field.name)
       return { kind: "literals", values: rule.values };
   }
-  return baseType(field.type);
+  return enumOrBase(field);
 }
+
+// A string a C# enum or a glossary's `enum` types: one of its names, as written. The server also reads a name in
+// another case unless it is one of `enumExact`, but a client sends the names as declared.
+const enumOrBase = (schema: ValueSchema): TypeRef =>
+  schema.type === "string" && schema.enum ? { kind: "literals", values: schema.enum } : baseType(schema.type);
 
 // A map's or a list's type from the schema of its values.
 function valuesType(values: ValueSchema, type: JsonFieldType, source: RuleSource): TypeRef {
@@ -160,7 +165,7 @@ function valueRef(schema: ValueSchema, source: RuleSource): ValueRef {
     : schema.fields && schema.type === "array"
       ? { kind: "list", of: { type: { kind: "record", fields: fieldsOf(schema.fields, source) }, nullable: false }, from: "record" }
     : schema.values ? valuesType(schema.values, schema.type, source)
-    : baseType(schema.type);
+    : enumOrBase(schema);
   return { type, nullable: schema.nullable };
 }
 
