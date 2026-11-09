@@ -282,18 +282,20 @@ internal static class ClientCommand
     }
 
     // The .graphql files the globs match under the current directory, by their path relative to it, never `exclude`
-    // (a schema written as a .graphql file a glob would match too).
+    // (a schema written as a .graphql file a glob would match too). The two are compared with their links resolved,
+    // since the matches are under the working directory, which is reported that way, and `exclude` may not be.
     private static List<ClientDocumentFile> ReadDocuments(
         IReadOnlyList<string> globs,
         string exclude
     )
     {
         var cwd = Directory.GetCurrentDirectory();
+        exclude = Glob.Resolved(exclude);
         var found = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var glob in globs)
         {
             var matches = Glob.Files(cwd, glob)
-                .Where(f => !string.Equals(f, exclude, StringComparison.Ordinal))
+                .Where(f => !string.Equals(Glob.Resolved(f), exclude, StringComparison.Ordinal))
                 .ToList();
             if (matches.Count == 0)
                 throw new InvalidOperationException(

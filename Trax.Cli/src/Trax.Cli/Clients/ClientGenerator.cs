@@ -426,7 +426,7 @@ internal sealed partial class ClientGenerator
             foreach (var file in Directory.EnumerateFiles(folder, pattern, Entries))
             {
                 var path = Path.GetRelativePath(outDir, file).Replace('\\', '/');
-                if (!expected.Contains(path) && Generated(path, file, header, served))
+                if (!Writes(expected, outDir, path) && Generated(path, file, header, served))
                     stale.Add(path);
             }
             foreach (var sub in Directory.EnumerateDirectories(folder, "*", Entries))
@@ -438,6 +438,42 @@ internal sealed partial class ClientGenerator
                 if (!expected.Contains(name) && DocumentFile(Path.Combine(outDir, name), name))
                     stale.Add(name);
         return stale.Order(StringComparer.Ordinal).ToList();
+    }
+
+    // Whether the file listed at `path` under outDir is one the client writes. On a case-insensitive file system (the
+    // default on macOS and Windows) a path the client writes also names the file listed in another case: the C#
+    // client's Documents/ and the TypeScript one's documents/ are one folder there, spelled as whichever run made it
+    // first. Such a path names the listed file when it exists but is not spelled that way on disk; on a case-sensitive
+    // file system it exists only when it is, and is then another file.
+    private static bool Writes(HashSet<string> expected, string outDir, string path)
+    {
+        if (expected.Contains(path))
+            return true;
+        foreach (var other in expected)
+            if (
+                string.Equals(other, path, StringComparison.OrdinalIgnoreCase)
+                && File.Exists(Path.Combine(outDir, other))
+                && !SpelledOnDisk(outDir, other)
+            )
+                return true;
+        return false;
+    }
+
+    // Whether every segment of `path` under outDir is an entry spelled exactly that way.
+    private static bool SpelledOnDisk(string outDir, string path)
+    {
+        var folder = outDir;
+        foreach (var part in path.Split('/'))
+        {
+            if (
+                !Directory
+                    .EnumerateFileSystemEntries(folder, "*", Entries)
+                    .Any(e => string.Equals(Path.GetFileName(e), part, StringComparison.Ordinal))
+            )
+                return false;
+            folder = Path.Combine(folder, part);
+        }
+        return true;
     }
 
     // What the manifest client writes at its root beside the modules when it is given documents. A run without them

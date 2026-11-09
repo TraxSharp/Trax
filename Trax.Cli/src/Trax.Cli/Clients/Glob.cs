@@ -31,14 +31,44 @@ internal static class Glob
             .ToList();
     }
 
-    /// <summary><paramref name="pattern"/>, relative to <paramref name="cwd"/>, rewritten relative to <paramref name="dir"/>.</summary>
+    /// <summary>
+    /// <paramref name="pattern"/>, relative to <paramref name="cwd"/>, rewritten relative to <paramref name="dir"/>.
+    /// Both sides are compared with their links resolved: the working directory is always reported that way
+    /// (<c>/private/var/...</c> on macOS, where <c>/var</c> is a link), and a folder named through a link would
+    /// otherwise look like it sits elsewhere, giving a path that climbs to the root and back.
+    /// </summary>
     public static string RelativeTo(string cwd, string dir, string pattern)
     {
         var (baseDir, rest) = Split(Path.GetFullPath(cwd), pattern);
-        var relative = Path.GetRelativePath(Path.GetFullPath(dir), baseDir).Replace('\\', '/');
+        var relative = Path.GetRelativePath(Resolved(dir), Resolved(baseDir)).Replace('\\', '/');
         return rest.Length == 0 ? relative
             : relative == "." ? rest
             : $"{relative}/{rest}";
+    }
+
+    /// <summary>
+    /// The full path with every link on the way to it resolved, as far as it exists; the rest is appended as written.
+    /// Two paths name the same place when these are equal, whichever links each was given through.
+    /// </summary>
+    public static string Resolved(string path)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var resolved = Path.GetPathRoot(full)!;
+        var parts = full[resolved.Length..]
+            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < parts.Length; i++)
+        {
+            var next = Path.Combine(resolved, parts[i]);
+            var info = new DirectoryInfo(next);
+            if (!info.Exists)
+                return Path.Combine([next, .. parts[(i + 1)..]]);
+            resolved =
+                info.LinkTarget is null ? next
+                : info.ResolveLinkTarget(returnFinalTarget: true) is { } target
+                    ? Resolved(target.FullName)
+                : next;
+        }
+        return resolved;
     }
 
     // The folder before the first segment holding a wildcard, and the pattern from there. The folder's part of the

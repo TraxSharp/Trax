@@ -1102,6 +1102,31 @@ public class ClientDocumentsGeneratorTests
         }
     }
 
+    // The working directory is always reported with its links resolved (macOS's temp folder is /var/..., a link to
+    // /private/var/...), so --out named through a link must not read as a folder somewhere else.
+    [Test]
+    public void An_out_folder_named_through_a_link_gets_the_glob_relative_to_where_it_is()
+    {
+        var real = Directory.CreateTempSubdirectory("trax-glob-real-").FullName;
+        var link = Path.Combine(Path.GetTempPath(), $"trax-glob-link-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(real, "src", "trax"));
+        Directory.CreateSymbolicLink(link, real);
+        try
+        {
+            Glob.RelativeTo(real, Path.Combine(link, "src", "trax"), "src/**/*.graphql")
+                .Should()
+                .Be("../**/*.graphql");
+            Glob.Resolved(Path.Combine(link, "src", "trax", "schema.graphql"))
+                .Should()
+                .Be(Glob.Resolved(Path.Combine(real, "src", "trax", "schema.graphql")));
+        }
+        finally
+        {
+            Directory.Delete(link);
+            Directory.Delete(real, recursive: true);
+        }
+    }
+
     // A drive-relative path (C:x) is read against the drive's current folder, not the root of C:.
     [Test]
     [Platform("Win")]
