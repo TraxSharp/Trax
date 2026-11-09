@@ -6,9 +6,6 @@
     <Description>Drive a Trax state machine a host serves from .NET: Blazor, MAUI, Avalonia, WPF or another service. Sends each operation by the persisted id the host's client manifest lists, follows the instance over a graphql-transport-ws socket, predicts each event with the Trax.StateMachine engine and replaces the prediction with what the server stored. Every operation answers a refusal or a transport failure as a value.</Description>
     <AssemblyName>Trax.StateMachine.Client</AssemblyName>
     <PackageTags>trax;dotnet;state-machine;graphql;blazor;maui</PackageTags>
-    <!-- A new package id, so nuget.org has no release to validate against yet. Remove after the first release that
-         ships it (Directory.Build.props). -->
-    <EnablePackageValidation>false</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>

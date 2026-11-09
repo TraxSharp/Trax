@@ -5,9 +5,6 @@
     <Nullable>enable</Nullable>
     <Description>Portable, resumable snapshot state-machine engine. Pure: no database or I/O. Represents a multi-step flow's state as language-neutral JSON so a C# backend and a TypeScript client agree on it, with illegal (state, context) pairs unrepresentable and every operation total.</Description>
     <AssemblyName>Trax.StateMachine</AssemblyName>
-    <!-- A new package id, so nuget.org has no release to validate against yet. Remove after the first release that
-         ships it (Directory.Build.props). -->
-    <EnablePackageValidation>false</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>

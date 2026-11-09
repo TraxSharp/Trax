@@ -9,8 +9,6 @@
     <PackageDescription>The Trax .NET operations dashboard as a single-page app your Trax.Api host serves: runs, the work queue, dead letters, manifests, logs, trains, effects and state machines, read and changed through the host's Trax GraphQL operations surface. The built app ships inside the package, so the host needs no Node. Map it with app.UseTraxApiDashboard().</PackageDescription>
     <PackageTags>trax;dotnet;graphql;dashboard;react;operations</PackageTags>
     <TraxPackageReadme>$(MSBuildThisFileDirectory)README.md</TraxPackageReadme>
-    <!-- Not yet released, so there is no baseline to validate against. Remove after its first release. -->
-    <EnablePackageValidation>false</EnablePackageValidation>
     <!-- The React app's source is its own npm project; nothing in it is an item of this project. -->
     <DefaultItemExcludes>$(DefaultItemExcludes);ClientApp/**</DefaultItemExcludes>
   </PropertyGroup>

@@ -4,9 +4,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Trax.StateMachine.Gherkin.Reqnroll</AssemblyName>
-    <!-- A new package id, so nuget.org has no release to validate against yet. Remove after the first release that
-         ships it (Directory.Build.props). -->
-    <EnablePackageValidation>false</EnablePackageValidation>
     <Description>Reqnroll bindings that run Trax .NET features against a host in the test process: one binding for every step the glossary reads, each person a user of their own, Givens arranged through the host's store and everything else sent over GraphQL as a client sends it.</Description>
     <PackageTags>trax;statemachine;gherkin;reqnroll;bdd;testing</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
