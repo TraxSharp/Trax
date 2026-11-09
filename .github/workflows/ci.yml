@@ -293,7 +293,18 @@ jobs:
         working-directory: ${{ matrix.package.folder }}
         env:
           FILTER: ${{ matrix.package['current-node-tests'] }}
-        run: dotnet test "$SOLUTION" --configuration Release --no-build --filter "$FILTER"
+        run: |
+          # dotnet test passes a filter that matches nothing, so count what ran: a renamed class must fail the step,
+          # not skip it.
+          results="$RUNNER_TEMP/current-node-tests"
+          dotnet test "$SOLUTION" --configuration Release --no-build --filter "$FILTER" \
+            --logger trx --results-directory "$results"
+          ran=$(find "$results" -name '*.trx' -exec cat {} + | { grep -o '<UnitTestResult ' || true; } | wc -l)
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::The current-node-tests filter '$FILTER' matched no test."
+            exit 1
+          fi
+          echo "$ran test(s) ran on the current Node."
       - name: Upload coverage results
         if: matrix.package.coverage
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
