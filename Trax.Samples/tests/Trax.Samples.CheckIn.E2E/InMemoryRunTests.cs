@@ -76,7 +76,7 @@ public class InMemoryRunTests
     }
 
     [Test]
-    public void Nothing_the_glossary_names_is_left_out_of_the_features() =>
+    public void Nothing_the_lexicon_names_is_left_out_of_the_features() =>
         FeatureMachines.Missing(Glossary, Files).Should().BeEmpty();
 
     // A checkout with CRLF line endings holds the same files, as trax machine from-gherkin --check reads them.

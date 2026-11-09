@@ -195,7 +195,7 @@ export function Passenger() {
             </p>
           )}
           <p className="view-note">
-            The <code>bookings</code> view: your bookings only, with the labels the glossary gives each state.
+            The <code>bookings</code> view: your bookings only, with the labels the lexicon gives each state.
           </p>
         </section>
       </div>
