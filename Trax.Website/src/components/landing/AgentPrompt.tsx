@@ -19,9 +19,9 @@ What the features say:
   fires back, hunting around a hit instead of firing at random.
 - You win when the computer's last ship sinks, and lose when yours does.
 
-The server owns the game. Dealing, your shot and the computer's shot are workflows the
-game's states invoke. Everything in the game's context reaches the page, so the
-computer's fleet stays on the server, out of the context.
+The server owns the game. Dealing and each turn (your shot, then the computer's reply)
+are workflows the game's states invoke. Everything in the game's context reaches the
+page, so the computer's fleet stays on the server, out of the context.
 
 How to build it:
 - Backend: \`dotnet new trax-hub\` (traxsharp.net/docs/reference/templates), switched to
