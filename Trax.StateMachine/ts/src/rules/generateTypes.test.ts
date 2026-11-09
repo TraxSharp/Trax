@@ -128,6 +128,32 @@ describe("generateContextTypes", () => {
       expect(out).toContain('size: "s" | "m";');
     });
 
+    // A glossary's `enum` (or a C# enum) on a string is the same narrowing a oneOf is, and the engine refuses any
+    // other value, so the type says so too.
+    it("gives an enum string its names as a literal union, in a field and in a dictionary's values", () => {
+      const out = generateContextTypes(
+        schemaFor({
+          name: "square",
+          type: "string",
+          nullable: false,
+          constraints: [],
+          enum: ["A1", "A2"],
+        }),
+      );
+      expect(out).toContain('square: "A1" | "A2";');
+
+      const map = generateContextTypes(
+        schemaFor({
+          name: "marks",
+          type: "object",
+          nullable: false,
+          constraints: [],
+          values: { type: "string", nullable: false, enum: ["hit", "miss"] },
+        }),
+      );
+      expect(map).toContain('marks: Record<string, "hit" | "miss">;');
+    });
+
     it("leaves a field alone when the constraint targets another field or the trigger input", () => {
       const out = generateContextTypes(
         schemaFor({
