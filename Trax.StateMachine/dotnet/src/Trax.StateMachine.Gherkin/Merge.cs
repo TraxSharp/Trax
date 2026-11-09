@@ -544,6 +544,24 @@ internal static class Merge
                 }
                 if (targets.Count == 0)
                     continue;
+                // The host's rule (InvokesStartupValidator), said first here: on a user's machine an outcome that enters
+                // another state that runs a train would queue that run with no user there to run it as.
+                if (!machine.IsSystem && machine.Invokes.ContainsKey(targets[0]))
+                {
+                    var chained = observed.First(o =>
+                        o.State == invoke.State && o.Phrase == outcome.Phrase && o.To == targets[0]
+                    );
+                    problems.Add(
+                        new Problem(
+                            chained.Scenario.File,
+                            chained.Line,
+                            $"'{outcome.Phrase}' takes {machine.Id} from {invoke.State} into {targets[0]}, which runs a "
+                                + "train, and a user's machine never starts a train on another train's outcome: the host "
+                                + "refuses it, since no user is there to run it as. Send the outcome to a state of its "
+                                + $"own and let a person's trigger enter {targets[0]}, or have one train do both."
+                        )
+                    );
+                }
                 var edge = new JsonObject { ["to"] = targets[0] };
                 if (outcome.When is { } when)
                     edge["guard"] = when.DeepClone();
@@ -569,7 +587,7 @@ internal static class Merge
                 ["edges"] = edges,
             };
             if (kind == "done")
-                entry["output"] = new JsonObject { ["fields"] = invoke.Output.DeepClone() };
+                entry["output"] = new JsonObject { ["fields"] = ByName(invoke.Output) };
             outcomes[$"{invoke.State}.{kind}"] = entry;
         }
         return outcomes;
@@ -678,6 +696,28 @@ internal static class Merge
     }
 
     private static string Said(TimeSpan time) => IsoDuration.Format(time);
+
+    // A train's output fields in the order the host reflects them from its output type (SchemaReflection: by name,
+    // ordinal, at every depth), so the IR the host exports from the train is the IR written here, whatever order the
+    // glossary lists them in.
+    private static JsonArray ByName(JsonArray fields) =>
+        new(
+            fields
+                .Select(f => (JsonObject)f!.DeepClone())
+                .OrderBy(f => f["name"]!.GetValue<string>(), StringComparer.Ordinal)
+                .Select(f => (JsonNode?)Nested(f))
+                .ToArray()
+        );
+
+    // A record field's own fields, and a list's or a dictionary's value shape, sorted the same way.
+    private static JsonObject Nested(JsonObject shape)
+    {
+        if (shape["fields"] is JsonArray fields)
+            shape["fields"] = ByName(fields);
+        if (shape["values"] is JsonObject values)
+            Nested(values);
+        return shape;
+    }
 
     private static JsonArray Sorted(IEnumerable<string> names) =>
         new(names.Order(StringComparer.Ordinal).Select(n => (JsonNode?)n).ToArray());

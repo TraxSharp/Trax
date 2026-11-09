@@ -125,8 +125,24 @@ Then Ada's booking is checked in
 Every invoking state needs a scenario for each of `done`, `failed` and `cancelled`. An outcome may not go to the
 state the machine starts in (unless that state invokes a train itself): an outcome's state is reserved for what the
 train produced, so no instance could be started there. Send it to a state of its own, with a move back if the flow
-returns. The train is the one piece of
-C# behind the machine, written as in [Invoke a train from a state](/docs/statemachine/invoking-trains).
+returns. The initial state may invoke a train: starting an instance queues its run. The train is the one piece of
+C# behind the machine, written as in [Invoke a train from a state](/docs/statemachine/invoking-trains). Its input and
+output records' properties are the glossary's field names in camelCase (`Accepted` is `accepted`).
+
+An outcome keeps what the train produced with a `reduce`, where `{ "input": "<field>" }` reads a field of the train's
+output (the output is the outcome's input):
+
+```json
+"the shot lands": {
+  "outcome": "done",
+  "reduce": { "reduce": "set", "steps": [ { "field": "lastShot", "value": { "input": "result" } } ] }
+}
+```
+
+On a machine a person owns, an outcome may not go to another state that invokes a train. The server would queue that
+run with nobody there to run it as, so derivation refuses it, as it refuses a timer or a policy that enters one. Stop
+in a state of the outcome's own and let a trigger the person fires go on from there, or have one train do both steps.
+Only a `system` machine chains runs through outcomes.
 
 **A timer** is time passing in a scenario. There is no glossary entry:
 

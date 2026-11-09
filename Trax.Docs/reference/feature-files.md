@@ -62,7 +62,9 @@ one of its own:
   each one exports from is in [Rules](/docs/sdk-reference/statemachine-api/rules).
 - A trigger's or an outcome's `reduce` is an IR reduction, tagged by `reduce`:
   `{ "reduce": "set", "steps": [ { "field": "passport", "value": { "input": "passport" } } ] }`, or `keep`, `clear`,
-  `reset` and `custom`.
+  `reset` and `custom`. In a trigger's, `input` reads the trigger's input; in an outcome's, the train's output.
+- An invoke's `output` fields may be listed in any order: derivation writes them by name, the order the host reads
+  them from the train's output type.
 
 ### Links
 
