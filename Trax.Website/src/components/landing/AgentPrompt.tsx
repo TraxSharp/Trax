@@ -2,38 +2,40 @@
 
 import { useState } from "react";
 
-const PROMPT = `Build me a trivia night in the browser with Trax .NET (traxsharp.net) and React: a
-host runs rounds of questions, and players answer before each round closes.
+const PROMPT = `Use Trax .NET (traxsharp.net) and React to build a live quiz for a room of people.
+The host puts up one question at a time, players answer on their own screens, each
+question closes 60 seconds after it opens, and a scoreboard shows the totals.
 
-Describe what the app does as features, not code: a glossary and a features/ folder in
-Gherkin (traxsharp.net/docs/statemachine/write-machines-as-features). Trax derives the state
-machines, who may do what, and the API from them. Write no machine class and no access rule
-by hand. Read the linked docs before writing code.
+Write the app as features, not code: a glossary and a features/ folder in Gherkin
+(traxsharp.net/docs/statemachine/write-machines-as-features). Trax derives the state
+machines, the access rules and the API from them, so write no machine class and no access
+rule by hand. Read the linked docs before you start.
 
-- Host: start from \`dotnet new trax-hub\` (traxsharp.net/docs/reference/templates) and
-  switch it to SQLite. Add Development-only demo keys beside the template's, one per person:
-  a host and two players.
-- The night is system-owned, at a fixed key. Each player owns their answer sheet, and the
-  host owns their hosting shift.
-- A round opens when the host asks the next question, and closes by itself after 60
-  seconds. When a round opens, every waiting answer sheet can be answered; when it closes,
-  none can.
-- The scenarios say what is allowed and what is refused: an empty answer is refused with
-  "Write something first.", an answer after the round closes is refused, and a player is
-  not allowed to ask a question.
-- Scoring is real work, so it goes in a train the closing round runs. Show a scoreboard
-  view.
+What the features say:
+- There is one quiz, owned by the system at a fixed key. Each player owns their answer
+  sheet, and the host owns their hosting shift.
+- When the host asks a question, every waiting answer sheet opens. After 60 seconds the
+  question closes by itself, and the sheets close with it.
+- An empty answer is refused with "Write something first.", an answer after the question
+  closes is refused, and a player cannot ask a question.
+- Scoring runs as a workflow when a question closes, and a scoreboard view shows the
+  totals.
+
+How to build it:
+- Backend: \`dotnet new trax-hub\` (traxsharp.net/docs/reference/templates), switched to
+  SQLite, with Development-only demo keys beside the template's: one host and two players.
 - Derive the machines with \`trax machine from-gherkin\`, commit machines/ with its
   access.txt, and serve them with ServeFeatures.
-- Frontend: \`npm create vite@latest -- --template react-ts\`, then generate its client with
-  \`trax client\` from the manifest the host exports (traxsharp.net/docs/reference/cli).
-  Use the generated hooks; write no fetch or GraphQL calls by hand. One page for the host,
-  one for a player; a player picks their key from a list, with no sign-in screen.
+- Frontend: \`npm create vite@latest -- --template react-ts\`. Generate its client with
+  \`trax client\` from the manifest the host exports (traxsharp.net/docs/reference/cli)
+  and use the generated hooks, with no hand-written fetch or GraphQL. One page for the
+  host and one for a player, where a player picks their key from a list instead of
+  signing in.
 
-Done when \`trax machine from-gherkin --check\` passes, \`trax machine run\` is green,
-\`trax machine missing\` lists nothing, \`trax client --check\` passes and \`npm run build\`
-shows no errors. Then start both, leave them running, and give me the URLs for the host
-and for each player.`;
+You are done when \`trax machine from-gherkin --check\` and \`trax client --check\` pass,
+\`trax machine run\` is green, \`trax machine missing\` lists nothing and \`npm run build\`
+has no errors. Then leave both running and give me the URLs for the host page, each
+player's page and the operations console.`;
 
 export default function AgentPrompt() {
   const [copied, setCopied] = useState(false);
