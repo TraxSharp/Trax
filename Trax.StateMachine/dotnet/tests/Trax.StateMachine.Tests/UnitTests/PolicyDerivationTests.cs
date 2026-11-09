@@ -569,7 +569,53 @@ public class PolicyDerivationTests
             .Equal(("quiz.Tallied>sheet.Clear", "quiz.Scoring>sheet.Close", "Closed"));
     }
 
+    [Test]
+    public void A_policy_waiting_where_the_earlier_ones_train_moves_its_instance_is_warned()
+    {
+        // Scoring sends the open sheets to marking, whose train closes them, and a scoring train tallies the quiz,
+        // which clears the closed sheets. The clear waits for the marking train, not for the policy itself.
+        var irs = new Dictionary<string, JsonObject>
+        {
+            ["quiz"] = JsonNode
+                .Parse(
+                    """
+                    {
+                      "transitions": [],
+                      "outcomes": { "done": { "state": "Scoring", "edges": [ { "to": "Tallied" } ] } }
+                    }
+                    """
+                )!
+                .AsObject(),
+            ["sheet"] = JsonNode
+                .Parse(
+                    """
+                    {
+                      "transitions": [
+                        { "from": "Open", "to": "Marking", "trigger": "Mark" },
+                        { "from": "Closed", "to": "Waiting", "trigger": "Clear" }
+                      ],
+                      "outcomes": { "marked": { "state": "Marking", "edges": [ { "to": "Closed" } ] } }
+                    }
+                    """
+                )!
+                .AsObject(),
+        };
+        HostPolicy[] policies =
+        [
+            new("broadcast", "quiz", "Scoring", "sheet", "Mark", "Open"),
+            new("broadcast", "quiz", "Tallied", "sheet", "Clear", "Closed"),
+        ];
+
+        PolicyLoops
+            .Races(policies, irs)
+            .Select(r => (r.Later.Id, r.Earlier.Id, r.State))
+            .Should()
+            .Equal(("quiz.Tallied>sheet.Clear", "quiz.Scoring>sheet.Mark", "Closed"));
+    }
+
     [TestCase("PT0.5S", true)]
+    [TestCase("PT0.999S", true)]
+    [TestCase("PT1S", false)]
     [TestCase("PT2S", false)]
     [TestCase(null, false)]
     public void A_timer_between_two_policies_spaces_them_only_when_it_waits_the_runners_interval(

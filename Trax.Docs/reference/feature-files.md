@@ -156,11 +156,14 @@ once, in the order its Thens list it. The host runs each policy fire and each in
 order: the policy runner works the fires every `PolicyRunnerOptions.Interval` (1 second by default) and a worker runs
 the train on its own poll. So a policy that moves instances out of a state another policy moves them into, when its
 own state is reached from the other's with no person in between (through a train's outcome, another policy, or a timer
-shorter than the runner's default interval of 1 second), may run first and find none there. Derivation warns of such a
+shorter than the runner's default interval of 1 second), may run first and find none there. The same holds when the
+earlier policy's instances reach that state only after a train's outcome or a short timer moves them on. Derivation warns of such a
 pair, naming both policies, and writes the machines all the same (`trax machine from-gherkin` prints the warnings, and
 `FeatureMachines.Derive` returns them as `Warnings`): move the instances from a state the earlier policy leaves alone,
 or move them in one policy. A timer of 1 second or more, or one whose duration a context field holds, spaces the two
-policies, and they are not warned of.
+policies, and they are not warned of. Derivation cannot see a host's options, so it measures against the default: a
+host that sets `Interval` above 1 second can let a timer shorter than its interval fire first with no warning. Keep
+timers between such policies longer than the interval you set.
 
 ## The C# a machine names
 

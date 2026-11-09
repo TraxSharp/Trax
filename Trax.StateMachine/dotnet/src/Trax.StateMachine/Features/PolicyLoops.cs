@@ -76,7 +76,8 @@ internal static class PolicyLoops
     /// <summary>
     /// Each policy that waits for another's result (<see cref="Race"/>), sorted by the later policy and then the earlier.
     /// The moves between them are the ones <see cref="Find"/> follows, but not the earlier policy's own: a state reached
-    /// only through its landing comes after it. A timer of <see cref="RunnerInterval"/> or more, or one whose duration a
+    /// only through its landing comes after it. The earlier policy's result is where its landing moves an instance, and
+    /// any state a train's outcome or a short timer moves it on to from there. A timer of <see cref="RunnerInterval"/> or more, or one whose duration a
     /// context field holds, is no such move: it waits a time a person chose, which the policy runner's interval does
     /// not come near, as a loop through one is paced by it. A fixed timer shorter than the interval can fire before the
     /// runner's next pass, so it is one.
@@ -88,6 +89,7 @@ internal static class PolicyLoops
     {
         var moves = Moves(policies, irs);
         moves.AddRange(ShortTimers(irs));
+        var unpaced = moves.Where(m => m.Policy is null).ToList();
         var races = new List<Race>();
         foreach (var later in policies)
         {
@@ -107,9 +109,11 @@ internal static class PolicyLoops
             {
                 if (earlier.Id == later.Id || earlier.Target != later.Target)
                     continue;
-                var into = moves
-                    .Where(m => m.Policy == earlier.Id)
-                    .Select(m => m.To)
+                // The states the earlier policy's landing moves an instance into, and those a train or a short timer
+                // moves it on to from there: those land later still.
+                var landings = moves.Where(m => m.Policy == earlier.Id).Select(m => m.To).ToList();
+                var into = landings
+                    .Concat(landings.SelectMany(l => Reached(l, unpaced)))
                     .ToHashSet(StringComparer.Ordinal);
                 if (
                     waits.FirstOrDefault(w => into.Contains($"{later.Target}.{w}")) is not { } state
