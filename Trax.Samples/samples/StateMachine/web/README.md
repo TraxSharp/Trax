@@ -8,6 +8,7 @@ only by its events.
 | File | Role |
 |---|---|
 | `src/trax/` | The generated client: each machine's twin, its documents by id and its hooks, the train functions (`paymentsListCharges`), their types, and the manifest it was generated from. Do not edit; regenerate it (below). |
+| `src/host.ts` | Where the host is: `http://localhost:5280` unless the build names another in `VITE_STATEMACHINE_API`. |
 | `src/connection.ts` | Points the generated client at the host as the signed-in user, and logs every request for the Inspector, with the document its id names read from the manifest. |
 | `src/useMachineStage.ts` | The instance this browser keeps for a user and machine, through the generated `useRemembered<Machine>` hook, and the last request for the walkthrough. |
 | `src/machines.ts` | How the page describes the two machines: states, the rule each must hold, moves, guards and the effect. Display only; the server decides. |
@@ -19,7 +20,7 @@ only by its events.
 
 ## Run it
 
-Start the backend first (it must be on `http://localhost:5280`, which this app expects):
+Start the backend first. The app expects it on `http://localhost:5280` unless it is built for another (below):
 
 ```bash
 cd Trax.Samples && docker compose up -d
@@ -34,7 +35,8 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173.
+Open http://localhost:5173. To serve the page from another origin, build it with `VITE_STATEMACHINE_API` set to the
+host's origin and start the host with `StateMachine__PageOrigin` set to the page's.
 
 ## Regenerate the client
 

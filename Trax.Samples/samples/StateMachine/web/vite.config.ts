@@ -17,7 +17,7 @@ export default defineConfig({
     ],
     dedupe: ["react", "react-dom"],
   },
-  // The host's CORS policy allows http://localhost:5173 only. strictPort makes a second Vite client
-  // fail to start instead of moving to 5174, where every request would be refused.
+  // The host's CORS policy allows http://localhost:5173 only, unless its PageOrigin names another. strictPort makes a
+  // second Vite client fail to start instead of moving to 5174, where every request would be refused.
   server: { port: 5173, strictPort: true, fs: { allow: [".", engine] } },
 });
