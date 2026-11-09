@@ -16,6 +16,9 @@ dotnet run --project samples/Board/Trax.Samples.Board.Api       # http://localho
 (cd samples/Board/Trax.Samples.Board.Client && npm ci && npm run dev)   # the board, http://localhost:5173
 ```
 
+To serve the page from another origin, build it with `VITE_BOARD_API` set to the host's origin and start the host
+with `Board__PageOrigin` set to the page's.
+
 ## Example
 
 The `cannot-reproduce` scenario (`npm run scenario -- cannot-reproduce`). repro-bot sends cases on its assignment;
