@@ -12,8 +12,10 @@ import { print } from "graphql";
 import { createClient } from "graphql-ws";
 import { maskKey, record } from "./inspector";
 
-const API_URL = "http://localhost:5210/trax/graphql";
-const WS_URL = "ws://localhost:5210/trax/graphql";
+// The host: localhost:5210 in development, or what the build was given. The socket is the same origin over ws or wss.
+const API_ORIGIN: string = import.meta.env.VITE_CHATSERVICE_API ?? "http://localhost:5210";
+const API_URL = `${API_ORIGIN}/trax/graphql`;
+const WS_URL = `${API_ORIGIN.replace(/^http/, "ws")}/trax/graphql`;
 
 const pascal = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 

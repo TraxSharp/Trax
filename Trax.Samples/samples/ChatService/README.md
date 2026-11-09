@@ -38,6 +38,9 @@ npm ci
 npm run dev
 ```
 
+To serve the client from another origin, build it with `VITE_CHATSERVICE_API` set to the API's origin and start the
+API with `ChatService__PageOrigin` set to the client's.
+
 Open two browser tabs on the client and pick Alice in one and Bob in the other. As Alice, create a
 room and press **+ Invite** to add Bob: the room appears in Bob's list within a few seconds, marked
 new, and the two of you can chat.
