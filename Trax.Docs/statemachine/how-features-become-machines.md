@@ -174,7 +174,8 @@ Some of each side has no counterpart on the other:
   machines, views, the started system instance at its fixed key, and provenance.
 - **Only in C#:** spawning a child machine (`Spawns`, `Ends`, `Fails`), delegate guards and reducers, `RequiresPolicy`,
   `Anonymous`, `InvokedRunLimit`, and a timer whose duration a context field holds. A machine that needs one of
-  these is written in C#.
+  these is written in C#. One host serves both kinds: `ServeFeatures` and the assemblies of `[TraxMachine]` classes go
+  in the same `AddStateMachines` call.
 
 ## Checking that the forms agree
 
