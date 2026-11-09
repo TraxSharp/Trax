@@ -94,7 +94,7 @@ public sealed class FeatureHooks
         {
             trax.Host = hub.Services;
             trax.Client = client;
-            trax.Glossary = lexicon.Glossary!;
+            trax.Glossary = lexicon.GlossaryOrThrow();
             trax.Manifest = ClientManifest.Read(File.ReadAllText(manifest));
             trax.Credential = (actor, person, scenario) =>
                 new FeatureCredential(

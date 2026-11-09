@@ -78,6 +78,8 @@ View: "orders"
 - A lexicon with any problem gives no glossary. Every problem names its lexicon line, including the ones the glossary
   reader and derivation find later.
 - A second lexicon in the same directory is a problem, and so is a `glossary.json` beside a lexicon.
+- `Version: 1` is the first line; only notes and blank lines come before it. A keyword's colon may be written against
+  the word after it (`Version:1`), and a lone surrogate anywhere on a line is a problem.
 
 ## Top level
 
@@ -107,7 +109,9 @@ An actor has one of the two, and is refused with both.
 | `Values:` | `Values: "S", "M", "L"`, or a range: `Values: A to J, each followed by 1 to 10` | a string field with that `enum` (`A1` to `J10`) |
 | `Has:` | `Has: postcode is a string, may be empty`, one per field | an object field with those `fields` |
 
-A type is one or the other. A range is two letters or two whole numbers.
+A type is one or the other. A range is two letters from `A` to `Z` (or `a` to `z`) or two whole numbers, and a
+`Values:` line gives at most 1000 values. A record that contains itself, directly or through another type, is a
+problem at its `Has:` line.
 
 ## Under `Machine:`
 
@@ -178,8 +182,9 @@ A guard that reads only the trigger's input may leave both out.
 | `Outcome:` | `Outcome: "the shot misses" when result is "miss"`, or `when it is done`, `when it fails`, `when it is called off` | `outcomes`: `done` with its `when`, `done`, `failed`, `cancelled` |
 
 Given the train assemblies (`trax machine from-gherkin --trains`, or `Lexicon.Read` with assemblies), `Takes:` and
-`Returns:` are optional, read from the train's records, and a `Returns:` that disagrees with the record is a problem
-at its line.
+`Returns:` are optional and read from the train's records. A `Returns:` field that differs from the record's in type,
+format, nullability or values is a problem at its line; one that agrees is what the glossary holds, so it is the same
+with the assemblies and without. A train whose types do not load is a problem at its `Runs:` line.
 
 ## Under `View:` and `Field:`
 
@@ -206,7 +211,7 @@ A field is `<name> is a <type>`, then clauses after commas:
 | String formats | `a uuid`, `a date`, `a time`, `a date-time`, `a date-time-offset`, `a duration`, `a uri`, `a char` |
 | Named | a `Type:` by name: `a Square`, `an Address` |
 | List | `a list of <type>`: `a list of strings`, `a list of Squares` |
-| Map | `a map of <type> to <type>`: `a map of string to integer` |
+| Map | `a map of <type> to <type>`: `a map of string to integer`. Keys that are any string write no `keys` shape, as the host writes a `Dictionary<string, T>`. |
 
 Nothing nests inside a line: a record in a list is a named type. `Returns:` holds several fields on one line,
 separated by commas; a comma followed by a clause goes on with the field before it.
@@ -240,7 +245,9 @@ input reads `input item is not empty`. The IR rules are in
 A value is typed by the field it is for. A string is quoted, a number and an integer bare (an integer whole), a
 boolean `true` or `false`, a list in brackets (`["bread", "rye"]`), and `nothing` is null, allowed only where the
 field may be empty. A bare name is a constant, or, in `Sets:` and `Stores:`, a field of what the line reads from. A
-value of the wrong type is a problem at its line. An object field takes no value in a lexicon; set it with a custom
+value of the wrong type is a problem at its line, and so is a value in another case than the field's declared one
+(`"m"` for `"S", "M", "L"`), since rules compare values as written. A list nests at most 32 deep, and a constant that
+comes back round to itself is a problem at its line. An object field takes no value in a lexicon; set it with a custom
 reduction.
 
 ## What is inferred

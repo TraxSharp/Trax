@@ -86,7 +86,7 @@ public sealed class Hooks
         {
             o.Host = app.Services;
             o.Client = app.CreateClient();
-            o.Glossary = Lexicon.ReadDirectory("features", [typeof(IIssueBoardingPassTrain).Assembly])!.Glossary!;
+            o.Glossary = Lexicon.ReadDirectory("features", [typeof(IIssueBoardingPassTrain).Assembly])!.GlossaryOrThrow();
             o.Manifest = ClientManifest.Read(File.ReadAllText("client/manifest.json"));
             o.Credential = (actor, person, scenario) =>
                 new(new Dictionary<string, string> { ["Authorization"] = "Bearer " + Tokens.Mint($"{scenario}-{person}", actor.Roles) });

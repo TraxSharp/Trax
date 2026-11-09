@@ -20,8 +20,7 @@ public class ReturnFeaturesTests
             [typeof(IReturnOrderTrain).Assembly]
         )!;
 
-    private static FeatureGlossary Glossary =>
-        Lexicon.Glossary ?? throw new InvalidOperationException(string.Join("\n", Lexicon.Problems));
+    private static FeatureGlossary Glossary => Lexicon.GlossaryOrThrow();
 
     private static FeatureFile[] Files =>
         [

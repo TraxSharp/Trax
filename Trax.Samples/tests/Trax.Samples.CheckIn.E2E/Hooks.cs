@@ -32,7 +32,7 @@ public sealed class Hooks
                     Path.Combine(AppContext.BaseDirectory, "features"),
                     [typeof(Trax.Samples.CheckIn.Trains.IIssueBoardingPassTrain).Assembly]
                 )!
-                .Glossary!;
+                .GlossaryOrThrow();
             o.Manifest = ClientManifest.Read(
                 File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client", "manifest.json"))
             );

@@ -63,8 +63,7 @@ public class ReturnFeaturesTests
             [typeof(IReturnOrderTrain).Assembly]
         )!;
 
-    private static FeatureGlossary Glossary =>
-        Lexicon.Glossary ?? throw new InvalidOperationException(string.Join("\n", Lexicon.Problems));
+    private static FeatureGlossary Glossary => Lexicon.GlossaryOrThrow();
 
     private static FeatureFile[] Files =>
         [
@@ -275,7 +274,7 @@ public sealed class FeatureHooks
         {
             trax.Host = hub.Services;
             trax.Client = client;
-            trax.Glossary = lexicon.Glossary!;
+            trax.Glossary = lexicon.GlossaryOrThrow();
             trax.Credential = (actor, person, scenario) =>
                 new FeatureCredential(
                     new Dictionary<string, string>

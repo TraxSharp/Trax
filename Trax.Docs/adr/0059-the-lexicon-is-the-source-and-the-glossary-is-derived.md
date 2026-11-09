@@ -51,17 +51,18 @@ the IRs and `host.json`. This amends 0058: where it says a team writes the gloss
 
 ## Exemplars
 
-- `LexiconTests` in `Trax.StateMachine.Tests` holds the corpus under `conformance/formats/lexicon/`: each valid
-  lexicon elaborates to its glossary byte for byte, every valid glossary has a lexicon and is in the canonical form,
-  each invalid one is refused at its line, layout never changes the result, and a problem derivation finds with the
-  glossary is reported at its lexicon line.
-- `LexiconTrainRecordTests` there holds the train assemblies: output and input read from the records, a renamed
-  output field refused at the `Stores:` line that names it, a `Returns:` that disagrees refused at its line.
-- `FromGherkinCommandTests` in `Trax.Cli.Tests` holds the commands: `glossary.json` written to `--out` and checked,
-  refused beside a lexicon and for two lexicons, every command reading the lexicon. `LexiconFormatCommandTests` holds
-  `trax lexicon format`: a second run changes nothing, and the glossary is the same before and after.
-- `InMemoryRunTests` (CheckIn) and `ReturnFeaturesTests` (Shopfront) gate each sample's committed glossary, with the
-  train's records checked against the lexicon's `Returns:` line.
+**Enforced elsewhere:** in `Trax.StateMachine.Tests`, `LexiconTests` holds the corpus under
+`conformance/formats/lexicon/` (each valid lexicon elaborates to its glossary byte for byte and in the layout
+`trax lexicon format` writes, every valid glossary has a lexicon, is in the canonical form and is one the schema
+accepts, each invalid one is refused at its line, layout never changes the result, and a problem derivation finds with
+the glossary is reported at its lexicon line), and `LexiconTrainRecordTests` holds the train assemblies (output and
+input read from the records, a renamed output field refused at the `Stores:` line that names it, a `Returns:` or
+`Input:` line that disagrees refused at its line, a train that does not load reported at its `Runs:` line). In
+`Trax.Cli.Tests`, `FromGherkinCommandTests` holds the commands (`glossary.json` written to `--out` and checked, refused
+beside a lexicon and for two lexicons, a `--glossary` inside `--out` refused, `--trains` read) and
+`LexiconFormatCommandTests` holds `trax lexicon format` (a second run changes nothing, the glossary is the same before
+and after, build output left alone). `InMemoryRunTests` (CheckIn) and `ReturnFeaturesTests` (Shopfront) gate each
+sample's committed glossary, with the train's records checked against the lexicon's `Returns:` line.
 
 Not covered: the website (its feature walk and the home prompt) still teaches the JSON until a release carries the
 CLI that reads lexicons.

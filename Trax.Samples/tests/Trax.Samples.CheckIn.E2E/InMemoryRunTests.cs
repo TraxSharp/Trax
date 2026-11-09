@@ -22,9 +22,7 @@ public class InMemoryRunTests
             [typeof(IIssueBoardingPassTrain).Assembly]
         )!;
 
-    private static FeatureGlossary Glossary =>
-        Lexicon.Glossary
-        ?? throw new InvalidOperationException(string.Join("\n", Lexicon.Problems));
+    private static FeatureGlossary Glossary => Lexicon.GlossaryOrThrow();
 
     private static FeatureFile[] Files =>
         Directory

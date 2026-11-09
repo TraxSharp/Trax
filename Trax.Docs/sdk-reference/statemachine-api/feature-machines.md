@@ -30,7 +30,7 @@ these calls (`trax machine usage` and `explain` are the CLI's own, with no call 
 | --- | --- |
 | `Lexicon.ReadDirectory(directory, trains)` | Reads the one lexicon in a features directory and returns its `LexiconReading`, or null when the directory has none. Two lexicons in one directory are a problem in the reading. See [Lexicon](#lexicon). |
 | `Lexicon.Read(path, text)`, `Lexicon.Read(path, text, trains)` | Reads a lexicon's text; `path` is what every problem names. Returns `LexiconReading`. |
-| `LexiconReading` | `Glossary`, the `FeatureGlossary` the lexicon elaborates to; `Json`, that glossary's canonical JSON, the `glossary.json` `trax machine from-gherkin` writes; `Problems`, each a `FeatureProblem` at its lexicon line. `Succeeded` is true when there is a glossary, and only then are `Glossary` and `Json` set. |
+| `LexiconReading` | `Glossary`, the `FeatureGlossary` the lexicon elaborates to; `Json`, that glossary's canonical JSON, the `glossary.json` `trax machine from-gherkin` writes; `Problems`, each a `FeatureProblem` at its lexicon line. `Succeeded` is true when there is a glossary, and only then are `Glossary` and `Json` set. `GlossaryOrThrow()` returns the glossary, or throws a `FormatException` listing each problem at its line. |
 | `FeatureGlossary.Read(string json)` | Reads a glossary's JSON, for features not yet written with a lexicon. A text that is not one throws a `FormatException` naming the key. |
 | `FeatureFile` | One feature file: its `Path`, as provenance and every problem names it, and its `Text`. |
 | `FeatureMachines.Derive(glossary, features)` | Derives every machine the features use, then replays every scenario on what it derived, access included. Returns `DerivedMachines`. |
@@ -81,8 +81,7 @@ as `RunsOnce<TEffect>` binds one.
 
 ```csharp fragment
 var lexicon = Lexicon.ReadDirectory("features", [typeof(ITakePaymentTrain).Assembly])!;
-var glossary = lexicon.Glossary
-    ?? throw new InvalidOperationException(string.Join("\n", lexicon.Problems));
+var glossary = lexicon.GlossaryOrThrow();
 FeatureFile[] features = [new("ordering.feature", File.ReadAllText("features/ordering.feature"))];
 
 var derived = FeatureMachines.Derive(glossary, features);
