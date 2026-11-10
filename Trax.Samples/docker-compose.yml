@@ -24,7 +24,7 @@ services:
 
   rabbitmq:
     container_name: trax_rabbitmq
-    image: rabbitmq:4-management@sha256:8dd6e3570ddaa2ef82a6c3a8950e79c1f73893adfbdddbc374fc1f1ac8a0f5dd
+    image: rabbitmq:4-management@sha256:af6f50d38098d8bd52fef7f3fa85015dd8b2bf6def58e995bf584ae9ba0f6407
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: trax
