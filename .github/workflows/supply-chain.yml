@@ -84,7 +84,7 @@ jobs:
       # Since v0.7 the action installs zizmor's wheel from PyPI, checked against the hashes
       # the action pins, instead of pulling its container image.
       - name: Audit workflows
-        uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e  # v0.7.1
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd  # v0.8.1
         with:
           # Report in the log and fail the job, rather than upload to code scanning,
           # which would need security-events: write.
