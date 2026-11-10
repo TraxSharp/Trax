@@ -1,0 +1,9 @@
+# expect 8: is already given at line 7
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: note
+  Owned by: member
+  Context: text is a string
+  Context: text may be empty
+  State: Open "is open"

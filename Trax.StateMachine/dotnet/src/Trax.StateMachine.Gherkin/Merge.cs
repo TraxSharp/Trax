@@ -330,11 +330,14 @@ internal static class Merge
             {
                 problems.Add(
                     new Problem(
-                        "glossary",
+                        Problem.Glossary,
                         0,
                         $"{machine.Id} asks for a differential block, and no scenario sends it an input, gives an "
                             + "outcome's output or sets an instance up in a state, so there is nothing to write."
                     )
+                    {
+                        Pointer = $"/machines/{machine.Id}/differential",
+                    }
                 );
                 return null;
             }
@@ -460,12 +463,15 @@ internal static class Merge
             if (target == machine.Initial)
                 problems.Add(
                     new Problem(
-                        at?.Scenario.File ?? "glossary",
+                        at?.Scenario.File ?? Problem.Glossary,
                         at?.Line ?? 0,
                         $"{machine.Id} starts at {target}, and an outcome of the train {state} invokes goes there. An "
                             + "outcome's state is reserved for what the train produced, so no instance could be started. "
                             + "Send the outcome to a state of its own, with a move from there back if the flow returns."
                     )
+                    {
+                        Pointer = $"/machines/{machine.Id}/invokes/{state}",
+                    }
                 );
             foreach (var into in edges.Where(e => e.To == target && e.From != target))
             {
@@ -479,12 +485,15 @@ internal static class Merge
                     );
                 problems.Add(
                     new Problem(
-                        by?.Scenario.File ?? "glossary",
+                        by?.Scenario.File ?? Problem.Glossary,
                         by?.Line ?? 0,
                         $"{into.Trigger} moves {machine.Id} from {into.From} to {target}, where an outcome of the "
                             + $"train {state} invokes goes. An outcome's state is reserved for what the train "
                             + "produced: give the move a state of its own."
                     )
+                    {
+                        Pointer = $"/machines/{machine.Id}/invokes/{state}",
+                    }
                 );
             }
             foreach (var timer in timers.Where(t => t!["target"]!.GetValue<string>() == target))
@@ -497,12 +506,15 @@ internal static class Merge
                     );
                 problems.Add(
                     new Problem(
-                        by?.Scenario.File ?? "glossary",
+                        by?.Scenario.File ?? Problem.Glossary,
                         by?.Line ?? 0,
                         $"Time takes {machine.Id} from {from} to {target}, where an outcome of the train {state} "
                             + "invokes goes. An outcome's state is reserved for what the train produced: send the "
                             + "timer to a state of its own."
                     )
+                    {
+                        Pointer = $"/machines/{machine.Id}/invokes/{state}",
+                    }
                 );
             }
         }
@@ -573,10 +585,13 @@ internal static class Merge
             {
                 problems.Add(
                     new Problem(
-                        "glossary",
+                        Problem.Glossary,
                         0,
                         $"{machine.Id}: {invoke.State} invokes {invoke.Train}, and no scenario says where a {kind} run takes it. Every invoking state routes done, failed and cancelled."
                     )
+                    {
+                        Pointer = $"/machines/{machine.Id}/invokes/{invoke.State}",
+                    }
                 );
                 continue;
             }

@@ -3,7 +3,7 @@ using Trax.StateMachine.Gherkin;
 namespace Trax.Samples.ApiDashboard.Browser.Host;
 
 /// <summary>
-/// A machine served from features, for the console's Board page: a glossary and one feature, derived when the host
+/// A machine served from features, for the console's Board page: a lexicon and one feature, derived when the host
 /// starts and written to a directory the host serves with <c>ServeFeatures</c>, so its host file carries provenance.
 /// </summary>
 public static class FeatureShelf
@@ -12,21 +12,18 @@ public static class FeatureShelf
 
     public const string Scenario = "Ada shelves her order";
 
-    private const string Glossary = """
-        {
-          "version": 1,
-          "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
-          "machines": {
-            "shelf-order": {
-              "ownedBy": "customer",
-              "noun": "order",
-              "start": "has an order",
-              "initial": "Open",
-              "states": { "Open": "is open", "Shelved": "is shelved" },
-              "triggers": { "Shelve": { "phrase": "shelves {subject}" } }
-            }
-          }
-        }
+    private const string Lexicon = """
+        Version: 1
+
+        Actor: customer "a customer"
+          Roles: customer
+
+        Machine: shelf-order "order"
+          Owned by: customer
+          Started by: "has an order"
+          State: Open    "is open"
+          State: Shelved "is shelved"
+          Trigger: Shelve "shelves {subject}"
         """;
 
     private const string Feature = $"""
@@ -41,8 +38,11 @@ public static class FeatureShelf
     /// <summary>Derives the machine and writes its directory; returns the directory.</summary>
     public static string Write()
     {
+        var glossary = Trax
+            .StateMachine.Gherkin.Lexicon.Read("shelving.lexicon", Lexicon)
+            .GlossaryOrThrow();
         var derived = FeatureMachines.Derive(
-            FeatureGlossary.Read(Glossary),
+            glossary,
             [new FeatureFile("shelving.feature", Feature)]
         );
         if (!derived.Succeeded)

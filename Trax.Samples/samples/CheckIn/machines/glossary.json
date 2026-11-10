@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "actors": {
+    "passenger": {
+      "noun": "a passenger",
+      "roles": [
+        "passenger"
+      ]
+    },
+    "agent": {
+      "noun": "a gate agent",
+      "roles": [
+        "agent"
+      ]
+    }
+  },
+  "machines": {
+    "booking": {
+      "ownedBy": "passenger",
+      "noun": "booking",
+      "start": "has a booking",
+      "initial": "Booked",
+      "context": [
+        {
+          "name": "passport",
+          "type": "string",
+          "nullable": false,
+          "constraints": []
+        },
+        {
+          "name": "seat",
+          "type": "string",
+          "nullable": true,
+          "constraints": []
+        }
+      ],
+      "states": {
+        "Booked": "is booked",
+        "Open": "is open for check-in",
+        "Issuing": "is getting a boarding pass",
+        "CheckedIn": "is checked in",
+        "TurnedDown": "was turned down",
+        "NotIssued": "has no boarding pass",
+        "Missed": "missed the flight"
+      },
+      "triggers": {
+        "GivePassport": {
+          "phrase": "gives passport {passport} for {subject}",
+          "input": [
+            {
+              "name": "passport",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "reduce": {
+            "reduce": "set",
+            "steps": [
+              {
+                "field": "passport",
+                "value": {
+                  "input": "passport"
+                }
+              }
+            ]
+          }
+        },
+        "CheckIn": {
+          "phrase": "checks in for {subject} in seat {seat}",
+          "input": [
+            {
+              "name": "seat",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "reduce": {
+            "reduce": "set",
+            "steps": [
+              {
+                "field": "seat",
+                "value": {
+                  "input": "seat"
+                }
+              }
+            ]
+          }
+        },
+        "OpenCheckIn": {
+          "phrase": "{subject} opens for check-in"
+        },
+        "Miss": {
+          "phrase": "{subject} misses the flight"
+        }
+      },
+      "guards": {
+        "hasPassport": {
+          "holds": "has a passport number",
+          "fails": "has no passport number",
+          "rule": {
+            "rule": "nonEmpty",
+            "source": "context",
+            "field": "passport"
+          }
+        }
+      },
+      "invokes": {
+        "Issuing": {
+          "train": "Trax.Samples.CheckIn.Trains.IIssueBoardingPassTrain",
+          "input": {
+            "passport": "passport"
+          },
+          "output": [
+            {
+              "name": "accepted",
+              "type": "boolean",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "outcomes": {
+            "the boarding pass is issued": {
+              "outcome": "done",
+              "when": {
+                "rule": "boolEquals",
+                "source": "input",
+                "field": "accepted",
+                "value": true
+              }
+            },
+            "the passport is turned down": {
+              "outcome": "done",
+              "when": {
+                "rule": "boolEquals",
+                "source": "input",
+                "field": "accepted",
+                "value": false
+              }
+            },
+            "the boarding pass cannot be issued": {
+              "outcome": "failed"
+            },
+            "issuing the boarding pass is called off": {
+              "outcome": "cancelled"
+            }
+          },
+          "examples": {
+            "the boarding pass is issued": {
+              "accepted": true
+            },
+            "the passport is turned down": {
+              "accepted": false
+            }
+          }
+        }
+      }
+    },
+    "desk": {
+      "ownedBy": "agent",
+      "noun": "desk",
+      "start": "has a desk",
+      "initial": "Waiting",
+      "states": {
+        "Waiting": "is waiting",
+        "Open": "is open",
+        "Closing": "is closing the gate",
+        "Done": "is done"
+      },
+      "triggers": {
+        "OpenDesk": {
+          "phrase": "opens {subject}"
+        },
+        "CloseGate": {
+          "phrase": "closes the gate at {subject}"
+        }
+      }
+    },
+    "flight": {
+      "system": "flight/tx101",
+      "name": "the flight",
+      "initial": "Scheduled",
+      "states": {
+        "Scheduled": "is scheduled",
+        "Open": "is open for check-in",
+        "Closed": "is closed",
+        "Departed": "has departed"
+      },
+      "triggers": {
+        "OpenCheckIn": {
+          "phrase": "check-in opens for the flight"
+        },
+        "CloseGate": {
+          "phrase": "the flight closes its gate"
+        }
+      }
+    }
+  },
+  "views": {
+    "bookings": {
+      "reads": [
+        {
+          "machine": "booking"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "booking.state",
+          "labels": {
+            "Booked": "Booked",
+            "Open": "Open for check-in",
+            "Issuing": "Getting a boarding pass",
+            "CheckedIn": "Checked in",
+            "TurnedDown": "Passport not accepted",
+            "NotIssued": "No boarding pass yet",
+            "Missed": "Missed the flight"
+          }
+        },
+        "seat": {
+          "from": "booking.seat"
+        }
+      }
+    },
+    "departures": {
+      "reads": [
+        {
+          "machine": "flight",
+          "key": "flight/tx101"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "flight.state",
+          "labels": {
+            "Scheduled": "Scheduled",
+            "Open": "Check-in open",
+            "Closed": "Gate closed",
+            "Departed": "Departed"
+          }
+        }
+      }
+    }
+  }
+}

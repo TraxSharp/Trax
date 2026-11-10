@@ -18,6 +18,7 @@ internal static class TraxCommandLine
             GenerateCommand.Create(),
             MachineCommand.Create(),
             ClientCommand.Create(),
+            LexiconCommand.Create(),
         };
 
     private static readonly ParserConfiguration Configuration = new()

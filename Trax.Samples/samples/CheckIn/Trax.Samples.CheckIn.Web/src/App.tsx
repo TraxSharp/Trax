@@ -15,7 +15,7 @@ function Intro() {
       </div>
       <h1>Machines written as features</h1>
       <p className="subtitle">
-        This check-in has no machine class. Its behaviour is two Gherkin files and a glossary, and{" "}
+        This check-in has no machine class. Its behaviour is two Gherkin files and a lexicon, and{" "}
         <code>trax machine from-gherkin</code> derives the machines, who may do what, and how they react to each other.
         The page only asks the server to move them.
       </p>

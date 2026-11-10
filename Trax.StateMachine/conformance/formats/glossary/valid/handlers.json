@@ -10,8 +10,8 @@
     "checkout": {
       "ownedBy": "shopper",
       "noun": "checkout",
-      "start": "has a checkout",
       "version": 2,
+      "start": "has a checkout",
       "initial": "Cart",
       "context": [
         {

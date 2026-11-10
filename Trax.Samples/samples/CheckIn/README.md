@@ -1,17 +1,18 @@
 # CheckIn
 
 Online check-in for a flight, with machines written only as features. A team writes what happens in Gherkin and a
-glossary of its words; `trax machine from-gherkin` derives the machines from them, with who may do what; the host
-serves them as committed. There is no C# machine class and no hand-written rule. The one piece of C# behind the
-machines is the boarding pass train a booking invokes.
+lexicon of its words; `trax machine from-gherkin` derives the machines from them, with who may do what, and the
+glossary the lexicon elaborates to; the host serves them as committed. There is no C# machine class and no
+hand-written rule. The one piece of C# behind the machines is the boarding pass train a booking invokes.
 
 ![The CheckIn page: Ada is checked in to seat 14C after a gate agent opened check-in, and the scenario that says so is lit in checking-in.feature](screenshot.png)
 
 | You write | Trax derives |
 | --- | --- |
 | [`features/checking-in.feature`](features/checking-in.feature), [`features/gate.feature`](features/gate.feature) | One IR per machine in [`machines/`](machines/) |
-| [`features/glossary.json`](features/glossary.json): actors, machines, states, phrases, views | [`machines/host.json`](machines/host.json): owners, access, policies, views, and the scenarios behind each part |
+| [`features/checkin.lexicon`](features/checkin.lexicon): actors, machines, states, phrases, views | [`machines/host.json`](machines/host.json): owners, access, policies, views, and the scenarios behind each part |
 | | [`machines/access.txt`](machines/access.txt): every grant, one line each, reviewed in a pull request |
+| | [`machines/glossary.json`](machines/glossary.json): the lexicon with everything it implies filled in, which the page reads |
 
 ## What it shows
 
@@ -50,7 +51,7 @@ start with anywhere else. Outside Development the host has no sign-in, so it ser
 
 ## Change a feature
 
-Edit `features/`, then derive the machines again and run the features on them, from the repository root:
+Edit `features/` (the features, or the lexicon), then derive the machines again and run the features on them, from the repository root:
 
 ```bash
 dotnet run --project Trax.Cli/src/Trax.Cli -- machine from-gherkin \
@@ -61,7 +62,7 @@ dotnet run --project Trax.Cli/src/Trax.Cli -- machine missing --features Trax.Sa
 ```
 
 `from-gherkin` refuses features that contradict each other, or that would derive a machine the host refuses, and says
-where. `access.txt` changes whenever who may do what does. Then write the page's client again from the host:
+where; a problem with the lexicon is reported at its line. `access.txt` changes whenever who may do what does. Then write the page's client again from the host:
 
 ```bash
 (cd Trax.Samples/samples/CheckIn/Trax.Samples.CheckIn.Api && dotnet run -- --trax-export-client ../Trax.Samples.CheckIn.Web/src/trax/manifest.json)
@@ -79,7 +80,8 @@ The same features run two ways:
 
 - **In memory**, on the committed machines, as `trax machine run` runs them:
   [`InMemoryRunTests`](../../tests/Trax.Samples.CheckIn.E2E/InMemoryRunTests.cs). It also checks the committed machines
-  are what the features derive, and that the glossary names nothing the features leave out.
+  and glossary are what the features and the lexicon derive, the lexicon's `Returns:` against the train's record, and
+  that the lexicon names nothing the features leave out.
 - **Against the host**, through the Reqnroll bindings of `Trax.StateMachine.Gherkin.Reqnroll`, every person a user of
   their own: [`Hooks`](../../tests/Trax.Samples.CheckIn.E2E/Hooks.cs) and the feature files themselves. The host
   requires persisted operations as it ships, and the bindings send each step by the id the page's manifest holds. The two

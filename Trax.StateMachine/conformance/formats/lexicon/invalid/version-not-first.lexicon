@@ -1,0 +1,7 @@
+# expect 4: 'Version: 1' is the first line
+Actor: member "a member"
+  Any signed-in
+Version: 1
+Machine: note
+  Owned by: member
+  State: Open "is open"

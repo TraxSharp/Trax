@@ -28,7 +28,7 @@
     <PackageReference Include="Reqnroll.NUnit" />
   </ItemGroup>
 
-  <!-- The sample's own features and glossary, run as they are: in memory (InMemoryRunTests) and against the host
+  <!-- The sample's own features and lexicon, run as they are: in memory (InMemoryRunTests) and against the host
        (Reqnroll, through the Trax bindings). Nothing here restates a step. -->
   <ItemGroup>
     <ReqnrollFeatureFiles

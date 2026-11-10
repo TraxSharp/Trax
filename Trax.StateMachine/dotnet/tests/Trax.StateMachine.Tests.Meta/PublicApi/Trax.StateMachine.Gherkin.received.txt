@@ -119,4 +119,20 @@ namespace Trax.StateMachine.Gherkin
         public string Machine { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureScenarioRef> Scenarios { get; init; }
     }
+    public static class Lexicon
+    {
+        public const string Extension = ".lexicon";
+        public static Trax.StateMachine.Gherkin.LexiconReading Read(string path, string text) { }
+        public static Trax.StateMachine.Gherkin.LexiconReading Read(string path, string text, System.Collections.Generic.IEnumerable<System.Reflection.Assembly> trains) { }
+        public static Trax.StateMachine.Gherkin.LexiconReading? ReadDirectory(string directory, System.Collections.Generic.IEnumerable<System.Reflection.Assembly>? trains = null) { }
+    }
+    public sealed class LexiconReading : System.IEquatable<Trax.StateMachine.Gherkin.LexiconReading>
+    {
+        public LexiconReading(Trax.StateMachine.Gherkin.FeatureGlossary? Glossary, string? Json, System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureProblem> Problems) { }
+        public Trax.StateMachine.Gherkin.FeatureGlossary? Glossary { get; init; }
+        public string? Json { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Gherkin.FeatureProblem> Problems { get; init; }
+        public bool Succeeded { get; }
+        public Trax.StateMachine.Gherkin.FeatureGlossary GlossaryOrThrow() { }
+    }
 }

@@ -1,0 +1,10 @@
+# expect 10: and this writes a boolean
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: note
+  Owned by: member
+  Context: text is a string
+  State: Open "is open"
+  Trigger: Write "writes {subject}"
+    Sets: text to true

@@ -2,8 +2,8 @@
 // Trax CheckIn: machines written only as features
 //
 // The three machines (a passenger's booking, a gate agent's desk, the flight) have no C# class and no hand-written
-// rule. A team writes features/*.feature and features/glossary.json; `trax machine from-gherkin` derives machines/
-// from them (one IR per machine, host.json with who may do what, access.txt to review); this host serves that
+// rule. A team writes features/*.feature and features/checkin.lexicon; `trax machine from-gherkin` derives machines/
+// from them (one IR per machine, host.json with who may do what, access.txt to review, glossary.json); this host serves that
 // directory as committed with ServeFeatures. The one piece of C# behind the machines is the boarding pass train the
 // booking's Issuing state invokes.
 //

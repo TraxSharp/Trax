@@ -1,0 +1,9 @@
+# expect 8: nests deeper than
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: note
+  Owned by: member
+  Context: tags is a list
+  Starts with: tags is [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+  State: Open "is open"

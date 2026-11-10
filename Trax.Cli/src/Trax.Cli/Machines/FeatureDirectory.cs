@@ -5,15 +5,18 @@ using Trax.StateMachine.Gherkin;
 namespace Trax.Cli.Machines;
 
 /// <summary>
-/// Derives machines from a directory of features and a glossary, and writes them to a directory it owns (ADR
-/// <c>Trax.Docs/adr/0058</c>): one <c>&lt;machine&gt;.ir.json</c> per machine, one <c>host.json</c> and
-/// <c>access.txt</c>. A machine that no longer derives has its file removed, and a directory holding anything else is
-/// refused rather than cleaned. <see cref="Check"/> writes nothing and names every file that differs.
+/// Derives machines from a directory of features and its lexicon, and writes them to a directory it owns (ADR
+/// <c>Trax.Docs/adr/0058</c>, <c>Trax.Docs/adr/0059</c>): one <c>&lt;machine&gt;.ir.json</c> per machine, one
+/// <c>host.json</c>, <c>access.txt</c> and the <c>glossary.json</c> the lexicon elaborates to. A machine that no longer
+/// derives has its file removed, and a directory holding anything else is refused rather than cleaned.
+/// <see cref="Check"/> writes nothing and names every file that differs. A glossary's JSON given by path is still read,
+/// for features not yet written with a lexicon, and is not written.
 /// </summary>
 internal static class FeatureDirectory
 {
     internal const string HostFileName = "host.json";
     internal const string AccessFileName = "access.txt";
+    internal const string GlossaryFileName = "glossary.json";
     internal const string IrSuffix = ".ir.json";
 
     /// <summary>
@@ -27,20 +30,40 @@ internal static class FeatureDirectory
         IReadOnlyList<string> Warnings
     );
 
-    /// <summary>Reads the glossary and every <c>*.feature</c> under the features directory, and derives.</summary>
-    /// <exception cref="FeatureMachinesException">A path is wrong, or the glossary is not one.</exception>
-    internal static Result Derive(string featuresDir, string glossaryPath)
+    /// <summary>
+    /// What the features are read with: the glossary, and its canonical JSON when it was elaborated from the
+    /// directory's lexicon, which <c>from-gherkin</c> writes.
+    /// </summary>
+    internal sealed record Read(
+        FeatureGlossary Glossary,
+        string? Json,
+        List<(string Path, string Text)> Features
+    );
+
+    /// <summary>Reads the lexicon and every <c>*.feature</c> under the features directory, and derives.</summary>
+    /// <exception cref="FeatureMachinesException">A path is wrong, or the lexicon or glossary is not one.</exception>
+    internal static Result Derive(
+        string featuresDir,
+        string? glossaryPath,
+        IReadOnlyList<string>? trains = null
+    )
     {
-        var (glossary, features) = Read(featuresDir, glossaryPath);
-        var derived = FeatureDerivation.Derive(glossary, features);
-        return Derived(derived);
+        var read = ReadFeatures(featuresDir, glossaryPath, trains);
+        var derived = FeatureDerivation.Derive(read.Glossary.Inner, read.Features);
+        return Derived(derived, read);
     }
 
-    /// <summary>The glossary and every <c>*.feature</c> under the features directory, by relative path.</summary>
-    /// <exception cref="FeatureMachinesException">A path is wrong, or the glossary is not one.</exception>
-    internal static (Glossary Glossary, List<(string Path, string Text)> Features) Read(
+    /// <summary>
+    /// The glossary and every <c>*.feature</c> under the features directory, by relative path. The glossary is the
+    /// directory's lexicon, elaborated on every run, or the JSON file at <paramref name="glossaryPath"/> when one is
+    /// given. Two lexicons, or a lexicon beside a <c>glossary.json</c>, are refused: the glossary is derived from the
+    /// lexicon, so a hand-kept copy beside it could only disagree.
+    /// </summary>
+    /// <exception cref="FeatureMachinesException">A path is wrong, or the lexicon or glossary is not one.</exception>
+    internal static Read ReadFeatures(
         string featuresDir,
-        string glossaryPath
+        string? glossaryPath,
+        IReadOnlyList<string>? trains = null
     )
     {
         if (!Directory.Exists(featuresDir))
@@ -49,22 +72,14 @@ internal static class FeatureDirectory
                     ? $"--features is a file, {featuresDir}: give the directory that holds the .feature files."
                     : $"--features does not exist: {featuresDir}."
             );
-        if (!File.Exists(glossaryPath))
+        if (glossaryPath is not null && trains is { Count: > 0 })
             throw new FeatureMachinesException(
-                Directory.Exists(glossaryPath)
-                    ? $"--glossary is a directory, {glossaryPath}: give the glossary's JSON file."
-                    : $"There is no glossary at {glossaryPath}."
+                "--trains is read with a lexicon, and --glossary reads a JSON glossary, which already writes out its "
+                    + "trains' fields. Give one or the other."
             );
-
-        Glossary glossary;
-        try
-        {
-            glossary = Glossary.Read(File.ReadAllText(glossaryPath));
-        }
-        catch (FormatException ex)
-        {
-            throw new FeatureMachinesException($"{glossaryPath}: {ex.Message}");
-        }
+        var (glossary, json) = glossaryPath is null
+            ? FromLexicon(featuresDir, trains ?? [])
+            : (FromJson(glossaryPath), null);
 
         // Relative, '/'-separated and sorted, so the output and its provenance read the same on every machine.
         var features = Directory
@@ -79,17 +94,76 @@ internal static class FeatureDirectory
             .ToList();
         if (features.Count == 0)
             throw new FeatureMachinesException($"{featuresDir} holds no .feature files.");
-        return (glossary, features);
+        return new Read(glossary, json, features);
     }
 
-    private static Result Derived(Derived derived)
+    private static FeatureGlossary FromJson(string glossaryPath)
+    {
+        if (!File.Exists(glossaryPath))
+            throw new FeatureMachinesException(
+                Directory.Exists(glossaryPath)
+                    ? $"--glossary is a directory, {glossaryPath}: give the glossary's JSON file."
+                    : $"There is no glossary at {glossaryPath}."
+            );
+        try
+        {
+            return FeatureGlossary.Read(File.ReadAllText(glossaryPath));
+        }
+        catch (FormatException ex)
+        {
+            throw new FeatureMachinesException($"{glossaryPath}: {ex.Message}");
+        }
+    }
+
+    private static (FeatureGlossary Glossary, string Json) FromLexicon(
+        string featuresDir,
+        IReadOnlyList<string> trains
+    )
+    {
+        var beside = Path.Combine(featuresDir, GlossaryFileName);
+        var lexicons = Directory.GetFiles(featuresDir, "*" + Lexicon.Extension);
+        if (lexicons.Length == 0)
+            throw new FeatureMachinesException(
+                File.Exists(beside)
+                    ? $"{featuresDir} holds {GlossaryFileName} and no lexicon. Write the lexicon (*{Lexicon.Extension}) "
+                        + $"it elaborates to, or read the JSON as it is with --glossary {beside}."
+                    : $"{featuresDir} holds no lexicon (*{Lexicon.Extension}) to say what its features' words mean."
+            );
+        if (File.Exists(beside))
+            throw new FeatureMachinesException(
+                $"{featuresDir} holds a lexicon and {GlossaryFileName}. The glossary is derived from the lexicon and "
+                    + $"written to --out by from-gherkin, so delete {beside}."
+            );
+        List<System.Reflection.Assembly> assemblies;
+        try
+        {
+            assemblies = trains.Select(MachineLoader.LoadAssembly).ToList();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new FeatureMachinesException($"--trains: {ex.Message}");
+        }
+        var reading =
+            trains.Count == 0
+                ? Lexicon.ReadDirectory(featuresDir)!
+                : Lexicon.ReadDirectory(featuresDir, assemblies)!;
+        if (!reading.Succeeded)
+            throw new FeatureMachinesException(
+                string.Join(Environment.NewLine, reading.Problems.Select(p => p.ToString()))
+                    + Environment.NewLine
+                    + $"{reading.Problems.Count} problem(s) in the lexicon."
+            );
+        return (reading.Glossary!, reading.Json!);
+    }
+
+    private static Result Derived(Derived derived, Read read)
     {
         var uiSteps = derived.UiSteps.Select(p => p.ToString()).ToList();
-        var warnings = derived.Warnings.Select(p => p.ToString()).ToList();
+        var warnings = derived.Warnings.Select(p => read.Glossary.Locate(p).ToString()).ToList();
         if (derived.Problems.Count > 0)
             return new Result(
                 new Dictionary<string, string>(),
-                derived.Problems.Select(p => p.ToString()).ToList(),
+                derived.Problems.Select(p => read.Glossary.Locate(p).ToString()).ToList(),
                 uiSteps,
                 warnings
             );
@@ -99,6 +173,8 @@ internal static class FeatureDirectory
             files[id + IrSuffix] = ir + "\n";
         files[HostFileName] = derived.Host! + "\n";
         files[AccessFileName] = derived.Access!;
+        if (read.Json is { } json)
+            files[GlossaryFileName] = json;
         return new Result(files, [], uiSteps, warnings);
     }
 
@@ -183,7 +259,7 @@ internal static class FeatureDirectory
         if (File.Exists(outDir))
             throw new FeatureMachinesException(
                 $"--out is a file, {outDir}: give a directory, which will hold one .ir.json per machine, "
-                    + $"{HostFileName} and {AccessFileName}."
+                    + $"{HostFileName}, {AccessFileName} and {GlossaryFileName}."
             );
         if (!Directory.Exists(outDir))
             return [];
@@ -206,7 +282,7 @@ internal static class FeatureDirectory
     }
 
     private static bool IsOwned(string name) =>
-        name is HostFileName or AccessFileName
+        name is HostFileName or AccessFileName or GlossaryFileName
         || (name.EndsWith(IrSuffix, StringComparison.Ordinal) && name.Length > IrSuffix.Length);
 }
 

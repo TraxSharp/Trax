@@ -307,12 +307,13 @@ internal static class MachineCommand
         var glossaryOption = new Option<FileInfo?>("--glossary")
         {
             Description =
-                "The glossary's JSON file (default: glossary.json in the features directory).",
+                "A glossary's JSON file, for features not yet written with a lexicon. Without it, the features directory's lexicon is read.",
         };
+        var trainsOption = TrainsOption();
         var outOption = new Option<DirectoryInfo>("--out")
         {
             Description =
-                "Directory the command owns: one <machine>.ir.json per machine, host.json and access.txt. A machine that no longer derives has its file removed.",
+                "Directory the command owns: one <machine>.ir.json per machine, host.json, access.txt and the glossary.json the lexicon elaborates to. A machine that no longer derives has its file removed.",
             Required = true,
         };
         var checkOption = new Option<bool>("--check")
@@ -322,11 +323,12 @@ internal static class MachineCommand
         };
         var command = new Command(
             "from-gherkin",
-            "Derive machines from features and a glossary: their IRs, the host file and the access report."
+            "Derive machines from features and their lexicon: their IRs, the host file, the access report and the glossary."
         )
         {
             featuresOption,
             glossaryOption,
+            trainsOption,
             outOption,
             checkOption,
         };
@@ -335,12 +337,12 @@ internal static class MachineCommand
             var features = parseResult.GetRequiredValue(featuresOption).FullName;
             return RunFromGherkin(
                 features,
-                parseResult.GetValue(glossaryOption)?.FullName
-                    ?? Path.Combine(features, "glossary.json"),
+                parseResult.GetValue(glossaryOption)?.FullName,
                 parseResult.GetRequiredValue(outOption).FullName,
                 parseResult.GetValue(checkOption),
                 Console.Out,
-                Console.Error
+                Console.Error,
+                Trains(parseResult, trainsOption)
             );
         });
         return command;
@@ -348,17 +350,35 @@ internal static class MachineCommand
 
     internal static int RunFromGherkin(
         string featuresDir,
-        string glossaryPath,
+        string? glossaryPath,
         string outDir,
         bool check,
         TextWriter stdout,
-        TextWriter stderr
+        TextWriter stderr,
+        IReadOnlyList<string>? trains = null
     )
     {
         try
         {
             FeatureDirectory.RefuseForeign(outDir);
-            var result = FeatureDirectory.Derive(featuresDir, glossaryPath);
+            // --out is the command's: what it does not derive there it removes, a glossary it was told to read included.
+            if (
+                glossaryPath is not null
+                && Path.GetFullPath(glossaryPath)
+                    .StartsWith(
+                        Path.TrimEndingDirectorySeparator(Path.GetFullPath(outDir))
+                            + Path.DirectorySeparatorChar,
+                        StringComparison.Ordinal
+                    )
+            )
+            {
+                stderr.WriteLine(
+                    $"--glossary {glossaryPath} is inside --out {outDir}, which from-gherkin owns and would remove "
+                        + "it from. Keep a hand-written glossary outside --out, or write the lexicon it elaborates from."
+                );
+                return 1;
+            }
+            var result = FeatureDirectory.Derive(featuresDir, glossaryPath, trains);
             foreach (var step in result.UiSteps)
                 stdout.WriteLine($"not derived (about the UI): {step}");
             // A warning is printed and stops nothing, --check included.
@@ -422,8 +442,9 @@ internal static class MachineCommand
         var glossaryOption = new Option<FileInfo?>("--glossary")
         {
             Description =
-                "The glossary's JSON file (default: glossary.json in the features directory).",
+                "A glossary's JSON file, for features not yet written with a lexicon. Without it, the features directory's lexicon is read.",
         };
+        var runTrainsOption = TrainsOption();
         var machinesOption = new Option<DirectoryInfo>("--machines")
         {
             Description =
@@ -477,6 +498,7 @@ internal static class MachineCommand
         {
             featuresOption,
             glossaryOption,
+            runTrainsOption,
             machinesOption,
             locationsArgument,
             tagsOption,
@@ -493,8 +515,7 @@ internal static class MachineCommand
             return RunRun(
                 new RunArguments(
                     features,
-                    parseResult.GetValue(glossaryOption)?.FullName
-                        ?? Path.Combine(features, "glossary.json"),
+                    parseResult.GetValue(glossaryOption)?.FullName,
                     parseResult.GetRequiredValue(machinesOption).FullName,
                     parseResult.GetValue(locationsArgument) ?? [],
                     parseResult.GetValue(tagsOption),
@@ -504,7 +525,10 @@ internal static class MachineCommand
                     parseResult.GetValue(strictOption),
                     parseResult.GetValue(dryRunOption),
                     parseResult.GetValue(failFastOption)
-                ),
+                )
+                {
+                    Trains = Trains(parseResult, runTrainsOption),
+                },
                 Console.Out,
                 Console.Error
             );
@@ -514,7 +538,7 @@ internal static class MachineCommand
 
     internal sealed record RunArguments(
         string FeaturesDir,
-        string GlossaryPath,
+        string? GlossaryPath,
         string MachinesDir,
         IReadOnlyList<string> Locations,
         string? Tags = null,
@@ -524,13 +548,22 @@ internal static class MachineCommand
         bool Strict = false,
         bool DryRun = false,
         bool FailFast = false
-    );
+    )
+    {
+        /// <summary>Train assemblies the lexicon reads each train's records from.</summary>
+        public IReadOnlyList<string> Trains { get; init; } = [];
+    }
 
     internal static int RunRun(RunArguments args, TextWriter stdout, TextWriter stderr)
     {
         try
         {
-            var (glossary, features) = FeatureDirectory.Read(args.FeaturesDir, args.GlossaryPath);
+            var read = FeatureDirectory.ReadFeatures(
+                args.FeaturesDir,
+                args.GlossaryPath,
+                args.Trains
+            );
+            var (glossary, features) = (read.Glossary.Inner, read.Features);
             var (host, irs) = Trax.StateMachine.Persistence.FromIr.IrDirectory.Read(
                 args.MachinesDir
             );
@@ -636,7 +669,11 @@ internal static class MachineCommand
         }
     }
 
-    private static (Option<DirectoryInfo> Features, Option<FileInfo?> Glossary) FeatureOptions() =>
+    private static (
+        Option<DirectoryInfo> Features,
+        Option<FileInfo?> Glossary,
+        Option<FileInfo[]> Trains
+    ) FeatureOptions() =>
         (
             new Option<DirectoryInfo>("--features")
             {
@@ -646,22 +683,37 @@ internal static class MachineCommand
             new Option<FileInfo?>("--glossary")
             {
                 Description =
-                    "The glossary's JSON file (default: glossary.json in the features directory).",
-            }
+                    "A glossary's JSON file, for features not yet written with a lexicon. Without it, the features directory's lexicon is read.",
+            },
+            TrainsOption()
         );
 
-    private static (string Features, string Glossary) FeaturePaths(
+    private static Option<FileInfo[]> TrainsOption() =>
+        new("--trains")
+        {
+            Description =
+                "A train assembly (.dll) the lexicon reads each train's input and output records from, as the host does, so its Returns: and Takes: lines are optional. Repeat for several.",
+            AllowMultipleArgumentsPerToken = false,
+        };
+
+    private static IReadOnlyList<string> Trains(
         ParseResult parseResult,
-        (Option<DirectoryInfo> Features, Option<FileInfo?> Glossary) options
-    )
-    {
-        var features = parseResult.GetRequiredValue(options.Features).FullName;
-        return (
-            features,
-            parseResult.GetValue(options.Glossary)?.FullName
-                ?? Path.Combine(features, "glossary.json")
+        Option<FileInfo[]> option
+    ) => (parseResult.GetValue(option) ?? []).Select(f => f.FullName).ToList();
+
+    private static (string Features, string? Glossary, IReadOnlyList<string> Trains) FeaturePaths(
+        ParseResult parseResult,
+        (
+            Option<DirectoryInfo> Features,
+            Option<FileInfo?> Glossary,
+            Option<FileInfo[]> Trains
+        ) options
+    ) =>
+        (
+            parseResult.GetRequiredValue(options.Features).FullName,
+            parseResult.GetValue(options.Glossary)?.FullName,
+            Trains(parseResult, options.Trains)
         );
-    }
 
     private static Command CreateMissing()
     {
@@ -685,19 +737,21 @@ internal static class MachineCommand
         {
             paths.Features,
             paths.Glossary,
+            paths.Trains,
             kindOption,
             outOption,
         };
         command.SetAction(parseResult =>
         {
-            var (features, glossary) = FeaturePaths(parseResult, paths);
+            var (features, glossary, trains) = FeaturePaths(parseResult, paths);
             return RunMissing(
                 features,
                 glossary,
                 parseResult.GetValue(kindOption) ?? [],
                 parseResult.GetValue(outOption)?.FullName,
                 Console.Out,
-                Console.Error
+                Console.Error,
+                trains
             );
         });
         return command;
@@ -705,17 +759,18 @@ internal static class MachineCommand
 
     internal static int RunMissing(
         string featuresDir,
-        string glossaryPath,
+        string? glossaryPath,
         IReadOnlyList<string> kinds,
         string? outPath,
         TextWriter stdout,
-        TextWriter stderr
+        TextWriter stderr,
+        IReadOnlyList<string>? trains = null
     )
     {
         try
         {
-            var (glossary, features) = FeatureDirectory.Read(featuresDir, glossaryPath);
-            var (gaps, problems) = Missing.Find(glossary, features);
+            var read = FeatureDirectory.ReadFeatures(featuresDir, glossaryPath, trains);
+            var (gaps, problems) = Missing.Find(read.Glossary.Inner, read.Features);
             if (problems.Count > 0)
             {
                 foreach (var problem in problems)
@@ -772,17 +827,19 @@ internal static class MachineCommand
         {
             paths.Features,
             paths.Glossary,
+            paths.Trains,
             unusedOption,
         };
         command.SetAction(parseResult =>
         {
-            var (features, glossary) = FeaturePaths(parseResult, paths);
+            var (features, glossary, trains) = FeaturePaths(parseResult, paths);
             return RunUsage(
                 features,
                 glossary,
                 parseResult.GetValue(unusedOption),
                 Console.Out,
-                Console.Error
+                Console.Error,
+                trains
             );
         });
         return command;
@@ -790,16 +847,17 @@ internal static class MachineCommand
 
     internal static int RunUsage(
         string featuresDir,
-        string glossaryPath,
+        string? glossaryPath,
         bool unusedOnly,
         TextWriter stdout,
-        TextWriter stderr
+        TextWriter stderr,
+        IReadOnlyList<string>? trains = null
     )
     {
         try
         {
-            var (glossary, features) = FeatureDirectory.Read(featuresDir, glossaryPath);
-            var (phrases, problems) = Usage.Find(glossary, features);
+            var read = FeatureDirectory.ReadFeatures(featuresDir, glossaryPath, trains);
+            var (phrases, problems) = Usage.Find(read.Glossary.Inner, read.Features);
             foreach (var problem in problems)
                 stderr.WriteLine(problem);
             foreach (var use in phrases.Where(p => !unusedOnly || p.Steps.Count == 0))
@@ -842,17 +900,19 @@ internal static class MachineCommand
         {
             paths.Features,
             paths.Glossary,
+            paths.Trains,
             scenarioOption,
         };
         command.SetAction(parseResult =>
         {
-            var (features, glossary) = FeaturePaths(parseResult, paths);
+            var (features, glossary, trains) = FeaturePaths(parseResult, paths);
             return RunExplain(
                 features,
                 glossary,
                 parseResult.GetValue(scenarioOption),
                 Console.Out,
-                Console.Error
+                Console.Error,
+                trains
             );
         });
         return command;
@@ -860,15 +920,16 @@ internal static class MachineCommand
 
     internal static int RunExplain(
         string featuresDir,
-        string glossaryPath,
+        string? glossaryPath,
         string? scenario,
         TextWriter stdout,
-        TextWriter stderr
+        TextWriter stderr,
+        IReadOnlyList<string>? trains = null
     )
     {
         try
         {
-            var result = FeatureDirectory.Derive(featuresDir, glossaryPath);
+            var result = FeatureDirectory.Derive(featuresDir, glossaryPath, trains);
             if (result.Problems.Count > 0)
             {
                 foreach (var problem in result.Problems)

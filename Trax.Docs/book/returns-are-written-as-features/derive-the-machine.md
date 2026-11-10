@@ -12,7 +12,7 @@ follows: book/returns-are-written-as-features/the-features
 
 # 14.4 Derive the machine
 
-`trax machine from-gherkin` reads the feature and the glossary and writes the machine. It came with
+`trax machine from-gherkin` reads the feature and the lexicon and writes the machine. It came with
 the tool installed in chapter 12. From the solution folder:
 
 ```bash
@@ -21,6 +21,7 @@ dotnet trax machine from-gherkin --features features --out machines/from-feature
 
 ```text
 wrote access.txt
+wrote glossary.json
 wrote host.json
 wrote order-return.ir.json
 ```
@@ -30,6 +31,180 @@ of its own beside checkout's `machines/checkout`. Before it writes anything it r
 scenario on what it derived and fails on one that does not pass. Two scenarios that disagree, a
 Given or When it cannot read, or a feature that would derive a machine the hub refuses, are
 reported with the file and the line, and nothing is written.
+
+`glossary.json` is the lexicon elaborated: every word it gave, and what it left to a rule written
+out, such as the context fields `Sets:` implied and each outcome's example. It is derived like the
+rest of the folder, never edited.
+
+`machines/from-features/glossary.json`:
+
+```json file=machines/from-features/glossary.json
+{
+  "version": 1,
+  "actors": {
+    "customer": {
+      "noun": "a customer",
+      "roles": [
+        "Customer"
+      ]
+    }
+  },
+  "machines": {
+    "order-return": {
+      "ownedBy": "customer",
+      "noun": "return",
+      "start": "has a return",
+      "initial": "Draft",
+      "context": [
+        {
+          "name": "orderId",
+          "type": "string",
+          "nullable": false,
+          "constraints": []
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "nullable": false,
+          "constraints": []
+        }
+      ],
+      "states": {
+        "Draft": "is a draft",
+        "Checking": "is being checked",
+        "Accepted": "is accepted",
+        "Refused": "was refused",
+        "Unchecked": "could not be checked"
+      },
+      "triggers": {
+        "Describe": {
+          "phrase": "fills in {subject} for order {orderId} because {reason}",
+          "input": [
+            {
+              "name": "orderId",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            },
+            {
+              "name": "reason",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "reduce": {
+            "reduce": "set",
+            "steps": [
+              {
+                "field": "orderId",
+                "value": {
+                  "input": "orderId"
+                }
+              },
+              {
+                "field": "reason",
+                "value": {
+                  "input": "reason"
+                }
+              }
+            ]
+          }
+        },
+        "Send": {
+          "phrase": "sends {subject}"
+        }
+      },
+      "guards": {
+        "hasReason": {
+          "holds": "has a reason",
+          "fails": "has no reason",
+          "rule": {
+            "rule": "nonEmpty",
+            "source": "context",
+            "field": "reason"
+          }
+        }
+      },
+      "invokes": {
+        "Checking": {
+          "train": "Shopfront.Trains.ReturnOrder.IReturnOrderTrain",
+          "input": {
+            "orderId": "orderId",
+            "customerId": "$owner"
+          },
+          "output": [
+            {
+              "name": "accepted",
+              "type": "boolean",
+              "nullable": false,
+              "constraints": []
+            }
+          ],
+          "outcomes": {
+            "the return is accepted": {
+              "outcome": "done",
+              "when": {
+                "rule": "boolEquals",
+                "source": "input",
+                "field": "accepted",
+                "value": true
+              }
+            },
+            "the return is refused": {
+              "outcome": "done",
+              "when": {
+                "rule": "boolEquals",
+                "source": "input",
+                "field": "accepted",
+                "value": false
+              }
+            },
+            "the return cannot be checked": {
+              "outcome": "failed"
+            },
+            "the return is called off": {
+              "outcome": "cancelled"
+            }
+          },
+          "examples": {
+            "the return is accepted": {
+              "accepted": true
+            },
+            "the return is refused": {
+              "accepted": false
+            }
+          }
+        }
+      }
+    }
+  },
+  "views": {
+    "returns": {
+      "reads": [
+        {
+          "machine": "order-return"
+        }
+      ],
+      "fields": {
+        "status": {
+          "from": "order-return.state",
+          "labels": {
+            "Draft": "Not sent",
+            "Checking": "Being checked",
+            "Accepted": "Accepted",
+            "Refused": "Refused",
+            "Unchecked": "Not checked yet"
+          }
+        },
+        "reason": {
+          "from": "order-return.reason"
+        }
+      }
+    }
+  }
+}
+```
 
 Commit the folder. `access.txt` is the part to read in review:
 
@@ -48,7 +223,7 @@ view returns: customer
 - **`view returns`** is there because `Ada's returns show ...`.
 
 Each line is a grant a scenario showed. A grant added to a feature is a new line in this file in
-the same pull request. `dotnet trax machine from-gherkin --features features --out
+the same pull request, and a word changed in the lexicon is a change to `glossary.json`. `dotnet trax machine from-gherkin --features features --out
 machines/from-features --check` writes nothing and fails when a committed file is stale, and is the
 step to run in CI.
 

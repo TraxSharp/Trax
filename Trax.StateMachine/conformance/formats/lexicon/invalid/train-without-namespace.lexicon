@@ -1,0 +1,9 @@
+# expect 7: names a train without its namespace
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: game
+  Owned by: member
+  Runs: FireShots in Firing
+    Outcome: "the shot lands" when it is done
+  State: Firing "is firing"

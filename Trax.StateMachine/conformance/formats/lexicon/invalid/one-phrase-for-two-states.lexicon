@@ -1,0 +1,8 @@
+# expect 8: is also at line 7
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: note
+  Owned by: member
+  State: Open "is open"
+  State: Shut "Is  open"

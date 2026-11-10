@@ -1,0 +1,47 @@
+# Every rule form, every field clause, named record and list types, a map, keep, clear and reset.
+Version: 1
+
+Actor: clerk "a clerk"
+  Roles: Clerk, Manager
+
+Type: Size
+  Values: "S", "M", "L"
+Type: Address
+  Has: street is a string
+  Has: postcode is a string, may be empty
+
+Machine: parcel
+  Owned by: clerk
+  Context: weight is a number, at least 0.5, at most 30
+  Context: size is a Size
+  Context: tags is a list of strings
+  Context: stock is a map of string to integer
+  Context: delivery is an Address, may be empty
+  Context: code is a string, where code is at least 3 characters long
+  Context: sentAt is a date-time, may be empty
+  Starts with: weight is 1, size is "M", tags is ["new"], code is "P-1"
+
+  State: Open   "is open"
+  State: Sealed "is sealed"
+    Requires: weight is at most 30 and tags has at least 1 items and code is not empty
+  State: Gone "is gone"
+
+  Trigger: Weigh "weighs {subject} at {weight}"
+    Input: weight is a number, at least 0
+    Sets: weight
+    Guarded by: light
+  Trigger: Tag "tags {subject} with {tag}"
+    Input: tag is a string, one of "fragile", "urgent"
+    Keeps
+  Trigger: Seal "seals {subject}"
+    Clears
+  Trigger: Reopen "reopens {subject}"
+    Resets
+
+  Guard: light when input weight is less than 30 or input weight is 30
+  Guard: labelled when size is one of "S", "M" and context code is present
+    Holds: "is labelled"
+    Fails: "is not labelled"
+  Guard: sent when sentAt is a string and delivery is present and tags is a list of strings
+    Holds: "is on its way"
+    Fails: "is not on its way"

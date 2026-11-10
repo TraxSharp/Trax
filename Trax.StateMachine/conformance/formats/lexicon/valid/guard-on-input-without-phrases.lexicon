@@ -1,0 +1,19 @@
+Version: 1
+
+Actor: player "a player"
+  Roles: player
+
+Machine: answer-sheet
+  Owned by: player
+  Started by: "has an answer sheet"
+  Context: answer may be empty
+
+  State: Open "is open"
+
+  Trigger: Answer "answers {answer} on {subject}"
+    Input: answer is a string
+    Sets: answer
+    Guarded by: hasAnswer
+
+  # Reads only the trigger's input, so a When's value shows it and it needs no phrases.
+  Guard: hasAnswer when input answer is not empty

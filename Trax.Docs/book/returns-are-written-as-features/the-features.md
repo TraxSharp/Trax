@@ -7,7 +7,7 @@ parent: "14. Returns are written as features"
 grand_parent: The Trax book
 nav_order: 3
 snippet_context: none
-follows: book/returns-are-written-as-features/the-glossary
+follows: book/returns-are-written-as-features/the-lexicon
 ---
 
 # 14.3 The features

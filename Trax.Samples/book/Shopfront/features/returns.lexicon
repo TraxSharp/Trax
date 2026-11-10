@@ -1,0 +1,45 @@
+# What the returns features' words mean. `dotnet trax machine from-gherkin` elaborates it to
+# machines/from-features/glossary.json, with the machine it derives.
+Version: 1
+
+Actor: customer "a customer"
+  Roles: Customer
+
+Machine: order-return "return"
+  Owned by: customer
+  Started by: "has a return"
+
+  State: Draft     "is a draft"
+  State: Checking  "is being checked"
+  State: Accepted  "is accepted"
+  State: Refused   "was refused"
+  State: Unchecked "could not be checked"
+
+  Trigger: Describe "fills in {subject} for order {orderId} because {reason}"
+    Input: orderId is a string
+    Input: reason is a string
+    Sets: orderId, reason
+  Trigger: Send "sends {subject}"
+
+  Guard: hasReason when reason is not empty
+    Holds: "has a reason"
+    Fails: "has no reason"
+
+  Runs: Shopfront.Trains.ReturnOrder.IReturnOrderTrain in Checking
+    Takes: orderId
+    Input: customerId from the owner
+    Returns: accepted is a boolean
+    Outcome: "the return is accepted"       when accepted is true
+    Outcome: "the return is refused"        when accepted is false
+    Outcome: "the return cannot be checked" when it fails
+    Outcome: "the return is called off"     when it is called off
+
+View: "returns"
+  Reads: order-return
+  Field: status from order-return's state
+    Label: Draft     "Not sent"
+    Label: Checking  "Being checked"
+    Label: Accepted  "Accepted"
+    Label: Refused   "Refused"
+    Label: Unchecked "Not checked yet"
+  Field: reason from order-return's reason

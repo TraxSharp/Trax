@@ -1,6 +1,6 @@
 ---
 title: Feature machines
-description: "Reference for Trax.StateMachine.Gherkin: derive machines from features and a glossary, run the features in memory, list gaps, draw the board."
+description: "Reference for Trax.StateMachine.Gherkin: read a lexicon, derive machines from features, run the features in memory, list gaps, draw the board."
 type: reference
 area: machines
 parent: State Machine API
@@ -10,12 +10,14 @@ package: Trax.StateMachine.Gherkin
 namespace: Trax.StateMachine.Gherkin
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureMachines.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/Lexicon.cs
 ---
 
 # Feature machines
 
-`Trax.StateMachine.Gherkin` derives state machines from Gherkin features and a glossary: each machine's IR, the host
-file that says who may use it, and the access report. `trax machine from-gherkin`, `run`, `missing` and `diagram` are
+`Trax.StateMachine.Gherkin` reads a features directory's [lexicon](/docs/reference/lexicon) into its glossary, and
+derives state machines from Gherkin features and that glossary: each machine's IR, the host file that says who may use
+it, and the access report. `trax machine from-gherkin`, `run`, `missing` and `diagram` are
 these calls (`trax machine usage` and `explain` are the CLI's own, with no call here), and a host serves what they write with
 [`ServeFeatures`](/docs/sdk-reference/statemachine-api/add-state-machines). The files are in the
 [feature files reference](/docs/reference/feature-files), the how-to is
@@ -26,7 +28,10 @@ these calls (`trax machine usage` and `explain` are the CLI's own, with no call 
 
 | Member | Description |
 | --- | --- |
-| `FeatureGlossary.Read(string json)` | Reads a glossary. A text that is not one throws a `FormatException` naming the key. |
+| `Lexicon.ReadDirectory(directory, trains)` | Reads the one lexicon in a features directory and returns its `LexiconReading`, or null when the directory has none. Two lexicons in one directory are a problem in the reading. See [Lexicon](#lexicon). |
+| `Lexicon.Read(path, text)`, `Lexicon.Read(path, text, trains)` | Reads a lexicon's text; `path` is what every problem names. Returns `LexiconReading`. |
+| `LexiconReading` | `Glossary`, the `FeatureGlossary` the lexicon elaborates to; `Json`, that glossary's canonical JSON, the `glossary.json` `trax machine from-gherkin` writes; `Problems`, each a `FeatureProblem` at its lexicon line. `Succeeded` is true when there is a glossary, and only then are `Glossary` and `Json` set. `GlossaryOrThrow()` returns the glossary, or throws a `FormatException` listing each problem at its line. |
+| `FeatureGlossary.Read(string json)` | Reads a glossary's JSON, for features not yet written with a lexicon. A text that is not one throws a `FormatException` naming the key. |
 | `FeatureFile` | One feature file: its `Path`, as provenance and every problem names it, and its `Text`. |
 | `FeatureMachines.Derive(glossary, features)` | Derives every machine the features use, then replays every scenario on what it derived, access included. Returns `DerivedMachines`. |
 | `DerivedMachines` | `Irs`, one IR per machine by id; `Host`, the host file; `Access`, the access report; `Problems`, what stopped it, each a `FeatureProblem`; `UiSteps`, the Thens about the UI that derivation does not read; `Warnings`, designs that derive and may still not hold on the host, such as a policy that waits for another policy's result, each a `FeatureProblem`. A warning stops nothing. `Succeeded` is true when there is no problem, and only then are the files set. |
@@ -39,9 +44,24 @@ these calls (`trax machine usage` and `explain` are the CLI's own, with no call 
 | `FeatureMachines.Missing(glossary, features)` | What the glossary names and no scenario shows, each a `FeatureGap`: its `Kind` (`machine`, `trigger`, `state`, `guard`, `refusal`, `outcome`, `view` or `grant`), the `Machine`, `What` it is, a `Message`, and a `Stub`, a scenario to paste, or null when none can be written. A stub is offered only if the features with it pasted derive with no problem and change only what it claims. |
 | `FeatureMachines.Board(irs, host)` | The event-storming board, from the IRs and the host file alone: a `FeatureBoard` of `Stickies` and `Links`. A `FeatureSticky` has an `Id`, a `Kind` (`actor`, `command`, `event`, `policy`, `aggregate` or `view`), its `Machine`, a `Label`, and the `Scenarios` behind it, each a `FeatureScenarioRef` (`File`, `Line`, `Scenario`) when the host file has provenance. A `FeatureLink` goes `From` one sticky's id `To` another's. The files are checked as `Run` checks them, and refused with the same `FormatException`. |
 
+## Lexicon
+
+`Lexicon` reads the file people write to say what their features' words mean
+([the lexicon reference](/docs/reference/lexicon)) and elaborates it to the glossary the calls below take.
+
+| Member | Description |
+| --- | --- |
+| `Extension` | `".lexicon"`. |
+| `Read(string path, string text)` | Reads a lexicon. Each train's output fields come from its `Returns:` line, and its input fields from its `Takes:` and `Input:` lines. |
+| `Read(string path, string text, IEnumerable<Assembly> trains)` | Reads a lexicon, finding each train it runs in `trains` by its full name and reading its input and output records as the host does. `Returns:` and `Takes:` lines are then optional, and one that disagrees with the record is a problem at its line. |
+| `ReadDirectory(string directory, IEnumerable<Assembly>? trains = null)` | The one `*.lexicon` in `directory`, read, with the trains when they are given; null when there is none. A second lexicon is a problem. |
+
+Nothing is read in part: a lexicon with any problem gives no glossary, and every problem, including those the glossary
+reader finds in what the lexicon elaborated to, names the lexicon line that wrote the key.
+
 ## The C# a host binds
 
-A glossary names the C# behind a machine by its full name, and derivation writes those names to the host file, never
+A lexicon names the C# behind a machine by its full name, and derivation writes those names to the host file, never
 to the IR (see [the feature files reference](/docs/reference/feature-files#the-c-a-machine-names)). A host serving the
 directory finds each type in the assemblies given to `ServeFeatures`, as it finds the trains, and refuses the host
 when one is missing, of the wrong kind, or does not pair one for one with what the IR names. The three handler kinds
@@ -60,7 +80,8 @@ as `RunsOnce<TEffect>` binds one.
 ## Example
 
 ```csharp fragment
-var glossary = FeatureGlossary.Read(File.ReadAllText("features/glossary.json"));
+var lexicon = Lexicon.ReadDirectory("features", [typeof(ITakePaymentTrain).Assembly])!;
+var glossary = lexicon.GlossaryOrThrow();
 FeatureFile[] features = [new("ordering.feature", File.ReadAllText("features/ordering.feature"))];
 
 var derived = FeatureMachines.Derive(glossary, features);

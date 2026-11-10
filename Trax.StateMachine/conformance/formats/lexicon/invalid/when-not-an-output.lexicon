@@ -1,0 +1,10 @@
+# expect 10: 'outcome' is not one of what the train returns
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: loan
+  Owned by: member
+  State: Borrowing "is being borrowed"
+  Runs: Library.Trains.IBorrow in Borrowing
+    Returns: result is a string
+    Outcome: "the loan goes through" when outcome is "hit"

@@ -1,6 +1,6 @@
 ---
 title: Feature files
-description: "Reference for machines written as features: the glossary, the Gherkin steps derivation reads, what it refuses, host.json and access.txt."
+description: "Reference for machines written as features: the generated glossary, the Gherkin steps derivation reads, what it refuses, host.json and access.txt."
 type: reference
 area: machines
 nav_order: 9
@@ -12,14 +12,18 @@ What `trax machine from-gherkin` reads and writes. Why features are a source of 
 [ADR 0058](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0058-features-and-a-glossary-are-a-source-of-machines.md);
 the how-to is [Write machines as features](/docs/statemachine/write-machines-as-features), and where each entry ends
 up (the IR, `host.json`, GraphQL, the C# builder) is
-[How features become machines](/docs/statemachine/how-features-become-machines). Both files are JSON with
-schemas beside the IR's, in
+[How features become machines](/docs/statemachine/how-features-become-machines). What you write beside the features
+is the [lexicon](/docs/reference/lexicon); everything on this page is what Trax derives from the two. The glossary and
+the host file are JSON with schemas beside the IR's, in
 [`Trax.StateMachine/conformance/`](https://github.com/TraxSharp/Trax/tree/main/Trax.StateMachine/conformance):
 `glossary.schema.json` and `host.schema.json`. Every object is closed: a key the schema does not name is refused.
 
 ## The glossary
 
-`glossary.json`, written by the team, beside the features.
+`glossary.json`, the lexicon elaborated, written by `from-gherkin` to `--out` beside the IRs and checked by `--check`.
+Never edit it: change the lexicon. The [lexicon reference](/docs/reference/lexicon) gives the line each key comes
+from. An app whose features still have a hand-written glossary passes its JSON with `--glossary`; that file is read, not
+written.
 
 | Key | What it is |
 | --- | --- |
@@ -48,7 +52,8 @@ A machine is a user's or the system's:
 | `links` | Each link by its phrase: the other user machine (`machine`) whose instance this machine's context `field` holds the id of. A `linked` policy finds its target through it (below). |
 
 Fields, rules and reductions are written as the IR writes them, so a glossary uses the IR's vocabulary rather than
-one of its own:
+one of its own. The lexicon's [fields](/docs/reference/lexicon#fields) and [rules](/docs/reference/lexicon#rules) say
+which line becomes which:
 
 - A field in `context`, a trigger's `input` or an invoked train's `output` is
   `{ "name", "type", "nullable", "constraints" }`, with the optional keys the IR's schemas take
@@ -71,18 +76,18 @@ one of its own:
 A policy between two machines of one owner needs to know which instance it moves, since a customer can hold several
 of each. A link says so: the target machine holds the source instance's id in a context field.
 
-```json
-"receipt": {
-  "ownedBy": "customer",
-  "noun": "receipt",
-  "start": "has a receipt",
-  "initial": "Issued",
-  "context": [ { "name": "orderId", "type": "string", "nullable": true, "format": "uuid", "constraints": [] } ],
-  "states": { "Issued": "is issued", "Void": "is void" },
-  "triggers": { "Cancel": { "phrase": "{subject} is voided" } },
-  "links": { "the receipt for {subject}": { "machine": "order", "field": "orderId" } }
-}
+```text
+Machine: receipt
+  Owned by: customer
+  Started by: "has a receipt"
+  Context: orderId is a uuid, may be empty
+  State: Issued "is issued"
+  State: Void   "is void"
+  Trigger: Cancel "{subject} is voided"
+  Link: "the receipt for {subject}" to order by orderId
 ```
+
+In the glossary that is `"links": { "the receipt for {subject}": { "machine": "order", "field": "orderId" } }`.
 
 ```gherkin
 Scenario: An expired order voids its receipt
@@ -98,14 +103,15 @@ does not say which receipt. A receipt with no `orderId`, or another order's, is 
 server-only, and the scenario `Given Ada's receipt is issued` / `When Ada's receipt is voided` shows it as a plain
 move. The field is set like any other context field, by a trigger's `reduce` from its input.
 
-A keyed system machine (`"system": { "keyedBy": ["id"] }`) has one instance per key, such as one per ticket. The
+A keyed system machine (`System keyed by: id`, `"system": { "keyedBy": ["id"] }` in the glossary) has one instance per key, such as one per ticket. The
 host starts none of them: host code starts and moves each one through
 [`IMachineInstances`](/docs/sdk-reference/statemachine-api/machine-instances) by the machine's id and the key
 (`Start("ticket", "T-12")`). Its trigger phrases say where the instance goes as `{subject}` (`{subject} gets triaged`,
 said `ticket "T-12" gets triaged`), and every trigger is the server's. No view reads one, no policy moves one or is set
 off by one, and no person fires one: each is refused.
 
-A train that reads who it is acting for takes them as input: `"input": { "memberId": "$owner" }` gives the train's
+A train that reads who it is acting for takes them as input: `Input: memberId from the owner` under `Runs:`
+(`"input": { "memberId": "$owner" }` in the glossary) gives the train's
 `memberId` the instance owner's qualified principal id (`{scheme}:{id}`, the owner's user key). The server sets it when
 the state is entered; it is in no context, so no client writes it, and a save that puts it in the context is refused as
 any unknown field is. A system machine has no owner, so `$owner` there is refused, and so is a context field named
@@ -169,14 +175,15 @@ timers between such policies longer than the interval you set.
 
 ## The C# a machine names
 
-The glossary names the C# behind a machine, and derivation writes what a client sees into the IR (the custom names,
+The lexicon names the C# behind a machine, and derivation writes what a client sees into the IR (the custom names,
 an effect's `keyPrefix`) and the types into `host.json`, which a host pairs one for one with the IR.
 
-- An `effect` on a trigger: its `type` (an interface extending `ISnapshotEffect`), its `keyPrefix` (`<machine>:<Trigger>`
+- An `Effect:` on a trigger (`effect` in the glossary): its `type` (an interface extending `ISnapshotEffect`), its `keyPrefix` (`<machine>:<Trigger>`
   when not given) and the receipt `example` an in-memory run answers with. A machine runs one. The trigger is a send:
   its owner sends it with no input of theirs, so its phrase holds no `{field}`, and the server runs the effect and fires
   the trigger with the receipt, its only input (`receipt`, a string). `When Ada pays for her checkout` is a send.
-- Every custom rule and reduction the machine names has its `rules` or `reductions` entry, and every entry is named.
+- Every custom rule and reduction the machine names has its `Rule:` or `Reduction:` line (`rules` or `reductions`),
+  and every one is named.
 
 Derivation and `trax machine run` load no assembly, so they play each handler's `example`. A scenario that needs the
 real handler (two items cost twice one) is tagged `@host`: derivation reads its steps and nothing more, an in-memory
@@ -184,7 +191,7 @@ run lists it as skipped, and the host bindings run it.
 
 ## The differential block
 
-With `differential: true`, derivation writes the IR's `differential` block from what the scenarios did, so the
+With `Differential` in the lexicon (`differential: true`), derivation writes the IR's `differential` block from what the scenarios did, so the
 engines can be held to each other on the machine (the corpus `trax machine generate --corpus-out` writes from it):
 
 | Key | From |
@@ -211,14 +218,14 @@ Each problem names the file and line of the step or scenario it is about. The co
 
 | The problem says | Change |
 | --- | --- |
-| No phrase in the glossary says '...' | A Given or When the glossary does not read. Add the phrase to the glossary, or reword the step to one it has. |
+| No phrase in the glossary says '...' | A Given or When no phrase reads. Add the phrase to the lexicon, or reword the step to one it has. |
 | '...' could mean ... | Two phrases match the step. Reword one of them. |
 | '...' speaks as 'I'. Name the person | Write `Ada ...` after `Given Ada is a passenger`. |
 | '...' names Ada, and the scenario never says who Ada is | Add `Given Ada is a passenger` before the step. |
 | Nothing after this When says what it did | Add `Then Ada's booking is ...` straight after the When. |
 | Say where '...' takes Ada's booking | An outcome's When needs a Then naming the state it reached. |
 | ... goes to Issuing here and to CheckedIn in '...' | Two scenarios disagree on one trigger from one state. Fix the wrong one, or add a guard that tells them apart. |
-| ... is refused here and works in '...', and no guard in the glossary tells the two apart | Give the two scenarios Givens of a guard's `holds` and `fails` phrases. |
+| ... is refused here and works in '...', and no guard in the glossary tells the two apart | Give the two scenarios Givens of a guard's `Holds:` and `Fails:` phrases. |
 | ... is the message of a refusal, and no scenario shows ... working | Add a scenario where the trigger is allowed, so there is a guard to carry the message. |
 | ... acts on Bo's booking | A person acts only on their own instance. Have the other person act, or make it the server's step. |
 | ... only the server moves a system machine | Write it without a person: `When check-in opens for the flight`. |
@@ -233,7 +240,7 @@ Each problem names the file and line of the step or scenario it is about. The co
 | ... an outcome's state is reserved for what the train produced | Send the outcome to a state of its own. |
 | The derived machine answers this differently | The scenario fails on what was derived from all the scenarios together. Run `trax machine explain` on it. |
 
-A Then the glossary does not read is not a problem: it is about the UI, listed with the run, and fails only under
+A Then no phrase reads is not a problem: it is about the UI, listed with the run, and fails only under
 `trax machine run --strict`.
 
 ## host.json
@@ -268,4 +275,4 @@ is a line in the pull request.
 
 ## SDK Reference
 
-> [ServeFeatures](/docs/sdk-reference/statemachine-api/add-state-machines) | [FeatureMachines](/docs/sdk-reference/statemachine-api/feature-machines) | [Feature bindings](/docs/sdk-reference/statemachine-api/feature-bindings) | [IR format](/docs/sdk-reference/statemachine-api/ir-format) | [Rules](/docs/sdk-reference/statemachine-api/rules)
+> [Lexicon](/docs/reference/lexicon) | [ServeFeatures](/docs/sdk-reference/statemachine-api/add-state-machines) | [FeatureMachines](/docs/sdk-reference/statemachine-api/feature-machines) | [Feature bindings](/docs/sdk-reference/statemachine-api/feature-bindings) | [IR format](/docs/sdk-reference/statemachine-api/ir-format) | [Rules](/docs/sdk-reference/statemachine-api/rules)

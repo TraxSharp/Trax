@@ -1,0 +1,10 @@
+# expect 6: 'Category' contains itself
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Type: Category
+  Has: parent is a Category, may be empty
+Machine: note
+  Owned by: member
+  Context: category is a Category
+  State: Open "is open"

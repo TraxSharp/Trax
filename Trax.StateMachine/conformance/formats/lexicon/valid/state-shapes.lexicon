@@ -1,0 +1,21 @@
+Version: 1
+
+Actor: customer "a customer"
+  Any signed-in
+
+Machine: checkout
+  Owned by: customer
+  Started by: "has a checkout"
+  Version: 2
+  Migrates from: 1 with Shop.Migrations.CheckoutFromVersion1
+  Differential
+  Context: items is a list of strings
+  Context: receipt is a string, may be empty
+  Starts with: items is [], receipt is nothing
+
+  State: Cart "is in the cart"
+  # Paid has a context of its own, in which the receipt is always there.
+  State: Paid "is paid" committed
+    Requires: receipt is not empty
+    Context: items is a list of strings
+    Context: receipt is a string

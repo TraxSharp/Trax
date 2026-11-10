@@ -1,7 +1,7 @@
 namespace Trax.Samples.CheckIn.Api.Auth;
 
 /// <summary>
-/// The roles the glossary's actors carry, a passenger owning bookings and a gate agent desks, and the operator's, who
+/// The roles the lexicon's actors carry, a passenger owning bookings and a gate agent desks, and the operator's, who
 /// reads the operations console.
 /// </summary>
 public static class CheckInRoles

@@ -1,0 +1,11 @@
+# expect 10: "m" is "M" in the values of 'size'
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Type: Size
+  Values: "S", "M", "L"
+Machine: note
+  Owned by: member
+  Context: size is a Size
+  Starts with: size is "m"
+  State: Open "is open"

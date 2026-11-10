@@ -79,8 +79,7 @@ internal readonly record struct At(string Document, string Pointer)
 
     internal At this[int index] => new(Document, $"{Pointer}/{index}");
 
-    internal FormatException Fail(string problem) =>
-        new($"{Document} {(Pointer.Length == 0 ? "/" : Pointer)}: {problem}");
+    internal FormatException Fail(string problem) => new PointedFormatException(this, problem);
 
     internal JsonObject Object(JsonNode? node) =>
         node as JsonObject ?? throw Fail("must be an object.");
@@ -189,6 +188,18 @@ internal readonly record struct At(string Document, string Pointer)
             count++;
         return count;
     }
+}
+
+/// <summary>
+/// A refusal of a strict document, with where it is (<see cref="At"/>'s pointer) and what is wrong, apart, so a reader
+/// of a source the document was elaborated from (a lexicon) can name its own line instead of the key.
+/// </summary>
+internal sealed class PointedFormatException(At at, string problem)
+    : FormatException($"{at.Document} {(at.Pointer.Length == 0 ? "/" : at.Pointer)}: {problem}")
+{
+    internal string Pointer { get; } = at.Pointer;
+
+    internal string Problem { get; } = problem;
 }
 
 /// <summary>The names the formats share, as the schemas spell them, anchored at both ends of the text.</summary>

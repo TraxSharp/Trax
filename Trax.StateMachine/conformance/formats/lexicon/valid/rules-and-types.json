@@ -1,0 +1,268 @@
+{
+  "version": 1,
+  "actors": {
+    "clerk": {
+      "noun": "a clerk",
+      "roles": [
+        "Clerk",
+        "Manager"
+      ]
+    }
+  },
+  "machines": {
+    "parcel": {
+      "ownedBy": "clerk",
+      "noun": "parcel",
+      "initial": "Open",
+      "context": [
+        {
+          "name": "weight",
+          "type": "number",
+          "nullable": false,
+          "constraints": [],
+          "minimum": 0.5,
+          "maximum": 30
+        },
+        {
+          "name": "size",
+          "type": "string",
+          "nullable": false,
+          "constraints": [],
+          "enum": [
+            "S",
+            "M",
+            "L"
+          ]
+        },
+        {
+          "name": "tags",
+          "type": "array",
+          "nullable": false,
+          "constraints": [],
+          "values": {
+            "type": "string",
+            "nullable": false
+          }
+        },
+        {
+          "name": "stock",
+          "type": "object",
+          "nullable": false,
+          "constraints": [],
+          "values": {
+            "type": "integer",
+            "nullable": false
+          }
+        },
+        {
+          "name": "delivery",
+          "type": "object",
+          "nullable": true,
+          "constraints": [],
+          "fields": [
+            {
+              "name": "street",
+              "type": "string",
+              "nullable": false,
+              "constraints": []
+            },
+            {
+              "name": "postcode",
+              "type": "string",
+              "nullable": true,
+              "constraints": []
+            }
+          ]
+        },
+        {
+          "name": "code",
+          "type": "string",
+          "nullable": false,
+          "constraints": [
+            {
+              "rule": "length",
+              "source": "context",
+              "field": "code",
+              "op": "gte",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "name": "sentAt",
+          "type": "string",
+          "nullable": true,
+          "constraints": [],
+          "format": "date-time"
+        }
+      ],
+      "initialContext": {
+        "weight": 1,
+        "size": "M",
+        "tags": [
+          "new"
+        ],
+        "code": "P-1"
+      },
+      "states": {
+        "Open": "is open",
+        "Sealed": {
+          "phrase": "is sealed",
+          "requires": {
+            "rule": "all",
+            "rules": [
+              {
+                "rule": "compare",
+                "source": "context",
+                "field": "weight",
+                "op": "lte",
+                "value": 30
+              },
+              {
+                "rule": "count",
+                "source": "context",
+                "field": "tags",
+                "op": "gte",
+                "value": 1
+              },
+              {
+                "rule": "nonEmpty",
+                "source": "context",
+                "field": "code"
+              }
+            ]
+          }
+        },
+        "Gone": "is gone"
+      },
+      "triggers": {
+        "Weigh": {
+          "phrase": "weighs {subject} at {weight}",
+          "input": [
+            {
+              "name": "weight",
+              "type": "number",
+              "nullable": false,
+              "constraints": [],
+              "minimum": 0
+            }
+          ],
+          "reduce": {
+            "reduce": "set",
+            "steps": [
+              {
+                "field": "weight",
+                "value": {
+                  "input": "weight"
+                }
+              }
+            ]
+          },
+          "guard": "light"
+        },
+        "Tag": {
+          "phrase": "tags {subject} with {tag}",
+          "input": [
+            {
+              "name": "tag",
+              "type": "string",
+              "nullable": false,
+              "constraints": [],
+              "enum": [
+                "fragile",
+                "urgent"
+              ]
+            }
+          ],
+          "reduce": {
+            "reduce": "keep"
+          }
+        },
+        "Seal": {
+          "phrase": "seals {subject}",
+          "reduce": {
+            "reduce": "clear"
+          }
+        },
+        "Reopen": {
+          "phrase": "reopens {subject}",
+          "reduce": {
+            "reduce": "reset"
+          }
+        }
+      },
+      "guards": {
+        "light": {
+          "rule": {
+            "rule": "any",
+            "rules": [
+              {
+                "rule": "compare",
+                "source": "input",
+                "field": "weight",
+                "op": "lt",
+                "value": 30
+              },
+              {
+                "rule": "compare",
+                "source": "input",
+                "field": "weight",
+                "op": "eq",
+                "value": 30
+              }
+            ]
+          }
+        },
+        "labelled": {
+          "holds": "is labelled",
+          "fails": "is not labelled",
+          "rule": {
+            "rule": "all",
+            "rules": [
+              {
+                "rule": "oneOf",
+                "source": "context",
+                "field": "size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "rule": "present",
+                "source": "context",
+                "field": "code"
+              }
+            ]
+          }
+        },
+        "sent": {
+          "holds": "is on its way",
+          "fails": "is not on its way",
+          "rule": {
+            "rule": "all",
+            "rules": [
+              {
+                "rule": "ofType",
+                "source": "context",
+                "field": "sentAt",
+                "type": "string"
+              },
+              {
+                "rule": "present",
+                "source": "context",
+                "field": "delivery"
+              },
+              {
+                "rule": "arrayOf",
+                "source": "context",
+                "field": "tags",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

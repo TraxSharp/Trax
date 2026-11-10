@@ -1,0 +1,10 @@
+Version: 1
+
+Actor: fixer "a fixer"
+  Roles: fixer
+
+Machine: ticket
+  System keyed by: id
+  State: New     "is new"
+  State: Triaged "is in triage"
+  Trigger: Triage "{subject} is triaged"

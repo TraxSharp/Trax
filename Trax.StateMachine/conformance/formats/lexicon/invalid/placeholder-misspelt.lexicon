@@ -1,0 +1,9 @@
+# expect 7: '{sqaure}' is not one of the trigger's input fields
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: game
+  Owned by: member
+  Trigger: Fire "fires at {sqaure} in {subject}"
+    Input: square is a string
+  State: Open "is open"

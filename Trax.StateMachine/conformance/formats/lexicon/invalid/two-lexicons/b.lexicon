@@ -1,0 +1,7 @@
+# expect 0: is this directory's lexicon already
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: note
+  Owned by: member
+  State: Open "is open"

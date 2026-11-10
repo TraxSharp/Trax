@@ -409,7 +409,7 @@
     ]
   },
   "glossary": {
-    "file": "features/glossary.json",
+    "file": "machines/glossary.json",
     "glossary": {
       "version": 1,
       "actors": {

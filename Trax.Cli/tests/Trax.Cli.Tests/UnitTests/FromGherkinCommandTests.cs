@@ -4,7 +4,8 @@ using Trax.Cli.Commands;
 namespace Trax.Cli.Tests.UnitTests;
 
 /// <summary>
-/// <c>trax machine from-gherkin</c> owns the directory it writes (ADR <c>Trax.Docs/adr/0058</c>): the IR of a machine
+/// <c>trax machine from-gherkin</c> owns the directory it writes (ADR <c>Trax.Docs/adr/0058</c>, and for the glossary it
+/// elaborates from the lexicon <c>Trax.Docs/adr/0059</c>): the IR of a machine
 /// that stops deriving is removed, <c>--check</c> fails on it and on a stale <c>access.txt</c> first, a directory holding
 /// anything else is refused untouched, and every bad path is a message and exit 1, never an exception.
 /// </summary>
@@ -35,6 +36,29 @@ public class FromGherkinCommandTests
             }
           }
         }
+        """;
+
+    // The glossary above, as a lexicon.
+    private const string Lexicon = """
+        Version: 1
+
+        Actor: customer "a customer"
+          Roles: customer
+        Actor: baker "a baker"
+          Roles: baker
+
+        Machine: order
+          Owned by: customer
+          Started by: "has an order"
+          State: Draft  "is a draft"
+          State: Placed "is placed"
+          Trigger: Place "places {subject}"
+
+        Machine: shop "the shop"
+          System
+          State: Closed "is closed"
+          State: Open   "is open"
+          Trigger: Open "the shop opens"
         """;
 
     private const string Ordering = """
@@ -71,6 +95,205 @@ public class FromGherkinCommandTests
 
     [TearDown]
     public void TearDown() => Directory.Delete(_dir, recursive: true);
+
+    [Test]
+    public void A_glossary_json_with_no_lexicon_is_refused_naming_the_way_to_read_it()
+    {
+        var (exit, _, err) = FromLexicon();
+
+        exit.Should().Be(1);
+        err.Should().Contain("holds glossary.json and no lexicon").And.Contain("--glossary");
+        Directory.Exists(Out).Should().BeFalse();
+    }
+
+    [Test]
+    public void A_glossary_inside_out_is_refused_and_left_where_it_is()
+    {
+        Directory.CreateDirectory(Out);
+        var inside = Path.Combine(Out, "glossary.json");
+        File.Move(Path.Combine(Features, "glossary.json"), inside);
+
+        var (exit, _, err) = Run(glossary: inside);
+
+        exit.Should().Be(1);
+        err.Should().Contain("is inside --out");
+        File.ReadAllText(inside).Should().Be(Glossary);
+    }
+
+    [Test]
+    public void Trains_with_a_json_glossary_is_refused()
+    {
+        var (exit, _, err) = Run(
+            trains: [typeof(LexiconTrains.ICheckRefundTrain).Assembly.Location]
+        );
+
+        exit.Should().Be(1);
+        err.Should().Contain("--trains is read with a lexicon");
+    }
+
+    [Test]
+    public void Trains_that_are_not_there_is_a_message()
+    {
+        UseLexicon();
+
+        var stderr = new StringWriter();
+        var exit = MachineCommand.RunFromGherkin(
+            Features,
+            null,
+            Out,
+            false,
+            new StringWriter(),
+            stderr,
+            [Path.Combine(_dir, "Missing.dll")]
+        );
+
+        exit.Should().Be(1);
+        stderr.ToString().Should().Contain("--trains: Assembly not found");
+    }
+
+    [Test]
+    public void Trains_give_a_lexicon_the_fields_its_Runs_lines_leave_out()
+    {
+        UseLexicon(
+            Lexicon
+                + $"""
+
+                Machine: refund
+                  Owned by: customer
+                  Context: reason is a string
+                  State: Asked "is asked for"
+                  State: Checking "is being checked"
+                  Runs: {typeof(LexiconTrains.ICheckRefundTrain).FullName} in Checking
+                    Stores: approved
+                    Outcome: "the refund is approved" when approved is true
+                    Outcome: "the refund cannot be checked" when it fails
+                """
+        );
+        var without = new StringWriter();
+        var withTrains = new StringWriter();
+
+        var refused = MachineCommand.RunUsage(Features, null, false, new StringWriter(), without);
+        var read = MachineCommand.RunUsage(
+            Features,
+            null,
+            false,
+            new StringWriter(),
+            withTrains,
+            [typeof(LexiconTrains.ICheckRefundTrain).Assembly.Location]
+        );
+
+        refused.Should().Be(1);
+        without.ToString().Should().Contain("returns no 'approved'");
+        read.Should().Be(0, withTrains.ToString());
+    }
+
+    [Test]
+    public void A_lexicon_is_elaborated_and_its_glossary_written_with_the_machines()
+    {
+        UseLexicon();
+
+        var (exit, _, err) = FromLexicon();
+
+        exit.Should().Be(0, err);
+        Directory
+            .EnumerateFiles(Out)
+            .Select(Path.GetFileName)
+            .Should()
+            .BeEquivalentTo([
+                "order.ir.json",
+                "shop.ir.json",
+                "host.json",
+                "access.txt",
+                "glossary.json",
+            ]);
+        File.ReadAllText(Path.Combine(Out, "glossary.json"))
+            .Should()
+            .Be(
+                Trax.StateMachine.Gherkin.Lexicon.Read("shop.lexicon", Lexicon).Json,
+                "the glossary written is the lexicon's, in its canonical form"
+            );
+        FromLexicon(check: true).Exit.Should().Be(0, "nothing changed since it was written");
+        FromLexicon()
+            .Out.Should()
+            .Contain("is up to date", "a glossary it wrote is not a foreign file");
+    }
+
+    [Test]
+    public void A_changed_lexicon_makes_the_glossary_stale()
+    {
+        UseLexicon();
+        FromLexicon();
+        UseLexicon(Lexicon.Replace("\"is a draft\"", "\"is still a draft\""));
+
+        var check = FromLexicon(check: true);
+
+        check.Exit.Should().Be(1);
+        check.Err.Should().Contain("glossary.json is stale");
+    }
+
+    [Test]
+    public void A_lexicon_beside_a_glossary_json_is_refused()
+    {
+        File.WriteAllText(Path.Combine(Features, "shop.lexicon"), Lexicon);
+
+        var (exit, _, err) = FromLexicon();
+
+        exit.Should().Be(1);
+        err.Should().Contain("holds a lexicon and glossary.json");
+        Directory.Exists(Out).Should().BeFalse();
+    }
+
+    [Test]
+    public void Two_lexicons_in_one_directory_are_refused()
+    {
+        UseLexicon();
+        File.WriteAllText(Path.Combine(Features, "more.lexicon"), Lexicon);
+
+        var (exit, _, err) = FromLexicon();
+
+        exit.Should().Be(1);
+        err.Should().Contain("this directory's lexicon already");
+    }
+
+    [Test]
+    public void A_lexicon_problem_names_its_line_and_writes_nothing()
+    {
+        UseLexicon(Lexicon.Replace("Trigger: Place", "Trigger: Place\n    Stores: x"));
+
+        var (exit, _, err) = FromLexicon();
+
+        exit.Should().Be(1);
+        err.Should().Contain("shop.lexicon:14: 'Stores:' belongs under a 'Runs:' block");
+        err.Should().NotContain("glossary.json");
+        Directory.Exists(Out).Should().BeFalse();
+    }
+
+    [Test]
+    public void A_directory_with_neither_a_lexicon_nor_a_glossary_is_a_message()
+    {
+        File.Delete(Path.Combine(Features, "glossary.json"));
+
+        var (exit, _, err) = FromLexicon();
+
+        exit.Should().Be(1);
+        err.Should().Contain("holds no lexicon");
+    }
+
+    [Test]
+    public void Run_missing_and_usage_read_the_lexicon_each_time()
+    {
+        UseLexicon();
+        FromLexicon();
+        var usage = new StringWriter();
+
+        RunFeatures(new MachineCommand.RunArguments(Features, null, Out, [])).Exit.Should().Be(0);
+        MachineCommand.RunUsage(Features, null, false, usage, new StringWriter()).Should().Be(0);
+        usage.ToString().Should().Contain("order trigger Place \"places {subject}\": 1");
+        MachineCommand
+            .RunMissing(Features, null, [], null, new StringWriter(), new StringWriter())
+            .Should()
+            .Be(0);
+    }
 
     [Test]
     public void It_writes_one_ir_per_machine_the_host_file_and_the_access_report()
@@ -783,17 +1006,38 @@ public class FromGherkinCommandTests
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
-    private (int Exit, string Out, string Err) Run(bool check = false, string? outDir = null)
+    // The features directory written with a lexicon in place of glossary.json.
+    private void UseLexicon(string text = Lexicon)
+    {
+        File.Delete(Path.Combine(Features, "glossary.json"));
+        File.WriteAllText(Path.Combine(Features, "shop.lexicon"), text);
+    }
+
+    private (int Exit, string Out, string Err) FromLexicon(bool check = false)
+    {
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var exit = MachineCommand.RunFromGherkin(Features, null, Out, check, stdout, stderr);
+        return (exit, stdout.ToString(), stderr.ToString());
+    }
+
+    private (int Exit, string Out, string Err) Run(
+        bool check = false,
+        string? outDir = null,
+        string? glossary = null,
+        IReadOnlyList<string>? trains = null
+    )
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = MachineCommand.RunFromGherkin(
             Features,
-            Path.Combine(Features, "glossary.json"),
+            glossary ?? Path.Combine(Features, "glossary.json"),
             outDir ?? Out,
             check,
             stdout,
-            stderr
+            stderr,
+            trains
         );
         return (exit, stdout.ToString(), stderr.ToString());
     }

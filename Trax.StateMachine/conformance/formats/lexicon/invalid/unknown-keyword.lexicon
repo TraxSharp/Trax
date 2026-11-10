@@ -1,0 +1,9 @@
+# expect 9: did you mean 'Outcome:'?
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: loan
+  Owned by: member
+  State: Borrowing "is being borrowed"
+  Runs: Library.Trains.IBorrow in Borrowing
+    Outcom: "the loan goes through" when it is done

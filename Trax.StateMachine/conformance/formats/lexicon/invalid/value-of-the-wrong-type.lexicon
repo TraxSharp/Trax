@@ -1,0 +1,9 @@
+# expect 8: 'approved' is a boolean, so its value is true or false
+Version: 1
+Actor: member "a member"
+  Any signed-in
+Machine: note
+  Owned by: member
+  Context: approved is a boolean
+  Starts with: approved is "yes"
+  State: Open "is open"

@@ -1,11 +1,14 @@
 using AwesomeAssertions;
+using Trax.Samples.CheckIn.Trains;
 using Trax.StateMachine.Gherkin;
 
 namespace Trax.Samples.CheckIn.E2E;
 
 /// <summary>
 /// The check-in features, run on its committed machines in memory, as <c>trax machine run</c> runs them, and the
-/// committed machines are what the features derive today, as <c>trax machine from-gherkin --check</c> checks.
+/// committed machines and glossary are what the features and the lexicon derive today, as
+/// <c>trax machine from-gherkin --check</c> checks. The lexicon is read with the train's records, so its
+/// <c>Returns:</c> line is checked against <c>BoardingPassOutput</c> here, before the host's startup check would (ADR <c>Trax.Docs/adr/0059</c>).
 /// </summary>
 public class InMemoryRunTests
 {
@@ -13,8 +16,13 @@ public class InMemoryRunTests
 
     private static string Machines => Path.Combine(AppContext.BaseDirectory, "machines");
 
-    private static FeatureGlossary Glossary =>
-        FeatureGlossary.Read(File.ReadAllText(Path.Combine(Features, "glossary.json")));
+    private static LexiconReading Lexicon =>
+        Trax.StateMachine.Gherkin.Lexicon.ReadDirectory(
+            Features,
+            [typeof(IIssueBoardingPassTrain).Assembly]
+        )!;
+
+    private static FeatureGlossary Glossary => Lexicon.GlossaryOrThrow();
 
     private static FeatureFile[] Files =>
         Directory
@@ -60,10 +68,13 @@ public class InMemoryRunTests
                 .Be(ir + "\n", $"{id}.ir.json is stale: run trax machine from-gherkin");
         Lf(File.ReadAllText(Path.Combine(Machines, "host.json"))).Should().Be(derived.Host + "\n");
         Lf(File.ReadAllText(Path.Combine(Machines, "access.txt"))).Should().Be(derived.Access);
+        Lf(File.ReadAllText(Path.Combine(Machines, "glossary.json")))
+            .Should()
+            .Be(Lexicon.Json, "glossary.json is stale: run trax machine from-gherkin");
     }
 
     [Test]
-    public void Nothing_the_glossary_names_is_left_out_of_the_features() =>
+    public void Nothing_the_lexicon_names_is_left_out_of_the_features() =>
         FeatureMachines.Missing(Glossary, Files).Should().BeEmpty();
 
     // A checkout with CRLF line endings holds the same files, as trax machine from-gherkin --check reads them.

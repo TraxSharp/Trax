@@ -14,7 +14,7 @@ namespace Trax.Cli.Machines;
 /// </summary>
 internal static class MachineLoader
 {
-    private static bool _resolverHooked;
+    private static readonly HashSet<string> Hooked = new(StringComparer.Ordinal);
 
     /// <summary>Every non-abstract <see cref="IMachine"/> with a public parameterless constructor.</summary>
     public static IReadOnlyList<Type> DiscoverMachines(Assembly assembly) =>
@@ -61,23 +61,7 @@ internal static class MachineLoader
     public static IMachine Load(string assemblyPath, string? machineFullName)
     {
         var fullPath = Path.GetFullPath(assemblyPath);
-        if (!File.Exists(fullPath))
-            throw new InvalidOperationException($"Assembly not found: {fullPath}");
-
-        HookDependencyResolver(fullPath);
-
-        Assembly assembly;
-        try
-        {
-            assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(fullPath);
-        }
-        catch (Exception ex) when (ex is BadImageFormatException or FileLoadException)
-        {
-            throw new InvalidOperationException(
-                $"Could not load '{fullPath}' as a .NET assembly: {ex.Message}",
-                ex
-            );
-        }
+        var assembly = LoadAssembly(fullPath);
 
         var machines = DiscoverMachines(assembly, out var loaderExceptions);
         if (machines.Count == 0)
@@ -91,6 +75,31 @@ internal static class MachineLoader
 
         var type = SelectMachine(machines, machineFullName, Path.GetFileName(fullPath));
         return (IMachine)Activator.CreateInstance(type)!;
+    }
+
+    /// <summary>
+    /// Loads an assembly into the default context, its own dependencies resolved from its directory, as
+    /// <see cref="Load"/> does. Throws <see cref="InvalidOperationException"/> saying why when it is missing or is not
+    /// a .NET assembly.
+    /// </summary>
+    internal static Assembly LoadAssembly(string assemblyPath)
+    {
+        var fullPath = Path.GetFullPath(assemblyPath);
+        if (!File.Exists(fullPath))
+            throw new InvalidOperationException($"Assembly not found: {fullPath}");
+
+        HookDependencyResolver(fullPath);
+        try
+        {
+            return AssemblyLoadContext.Default.LoadFromAssemblyPath(fullPath);
+        }
+        catch (Exception ex) when (ex is BadImageFormatException or FileLoadException)
+        {
+            throw new InvalidOperationException(
+                $"Could not load '{fullPath}' as a .NET assembly: {ex.Message}",
+                ex
+            );
+        }
     }
 
     // The first few distinct reasons some types did not load, so the user sees which dependency is missing.
@@ -125,13 +134,13 @@ internal static class MachineLoader
         );
     }
 
-    // Resolve the consumer's own dependencies from its output directory. Trax.Effect.* are already loaded (the
+    // Resolve the consumer's own dependencies from its output directory, for each assembly loaded. Trax.Effect.* are already loaded (the
     // CLI references them), so the loader never asks for them here and their type identity is preserved.
     private static void HookDependencyResolver(string assemblyPath)
     {
-        if (_resolverHooked)
-            return;
-        _resolverHooked = true;
+        lock (Hooked)
+            if (!Hooked.Add(assemblyPath))
+                return;
 
         var resolver = new AssemblyDependencyResolver(assemblyPath);
         AssemblyLoadContext.Default.Resolving += (context, name) =>

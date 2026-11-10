@@ -1,0 +1,81 @@
+# What the check-in features' words mean. `trax machine from-gherkin` elaborates it to machines/glossary.json,
+# with the machines it derives.
+Version: 1
+
+Actor: passenger "a passenger"
+  Roles: passenger
+Actor: agent "a gate agent"
+  Roles: agent
+
+Machine: booking
+  Owned by: passenger
+  Started by: "has a booking"
+  Context: seat may be empty
+
+  State: Booked     "is booked"
+  State: Open       "is open for check-in"
+  State: Issuing    "is getting a boarding pass"
+  State: CheckedIn  "is checked in"
+  State: TurnedDown "was turned down"
+  State: NotIssued  "has no boarding pass"
+  State: Missed     "missed the flight"
+
+  Trigger: GivePassport "gives passport {passport} for {subject}"
+    Input: passport is a string
+    Sets: passport
+  Trigger: CheckIn "checks in for {subject} in seat {seat}"
+    Input: seat is a string
+    Sets: seat
+  Trigger: OpenCheckIn "{subject} opens for check-in"
+  Trigger: Miss        "{subject} misses the flight"
+
+  Guard: hasPassport when passport is not empty
+    Holds: "has a passport number"
+    Fails: "has no passport number"
+
+  Runs: Trax.Samples.CheckIn.Trains.IIssueBoardingPassTrain in Issuing
+    Takes: passport
+    Returns: accepted is a boolean
+    Outcome: "the boarding pass is issued"             when accepted is true
+    Outcome: "the passport is turned down"             when accepted is false
+    Outcome: "the boarding pass cannot be issued"      when it fails
+    Outcome: "issuing the boarding pass is called off" when it is called off
+
+Machine: desk
+  Owned by: agent
+  Started by: "has a desk"
+  State: Waiting "is waiting"
+  State: Open    "is open"
+  State: Closing "is closing the gate"
+  State: Done    "is done"
+  Trigger: OpenDesk  "opens {subject}"
+  Trigger: CloseGate "closes the gate at {subject}"
+
+Machine: flight "the flight"
+  System at: flight/tx101
+  State: Scheduled "is scheduled"
+  State: Open      "is open for check-in"
+  State: Closed    "is closed"
+  State: Departed  "has departed"
+  Trigger: OpenCheckIn "check-in opens for the flight"
+  Trigger: CloseGate   "the flight closes its gate"
+
+View: "bookings"
+  Reads: booking
+  Field: status from booking's state
+    Label: Booked     "Booked"
+    Label: Open       "Open for check-in"
+    Label: Issuing    "Getting a boarding pass"
+    Label: CheckedIn  "Checked in"
+    Label: TurnedDown "Passport not accepted"
+    Label: NotIssued  "No boarding pass yet"
+    Label: Missed     "Missed the flight"
+  Field: seat from booking's seat
+
+View: "departures"
+  Reads: flight
+  Field: status from flight's state
+    Label: Scheduled "Scheduled"
+    Label: Open      "Check-in open"
+    Label: Closed    "Gate closed"
+    Label: Departed  "Departed"
