@@ -1,6 +1,6 @@
 ---
 title: Trax CLI
-description: "The trax CLI: generate scaffolds a hub and trains from GraphQL SDL or OpenAPI, machine scaffolds and exports state machines, lexicon formats lexicons, deploy writes a deployment."
+description: "The trax CLI: generate scaffolds a hub and trains from GraphQL or OpenAPI, machine scaffolds and exports machines, lexicon formats, deploy writes a deployment."
 type: reference
 area: tooling
 nav_order: 1
