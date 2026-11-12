@@ -1,6 +1,6 @@
 ---
 title: Switch a template to Postgres
-description: "Move a project made from a Trax template off the in-memory provider onto Postgres, so runs survive a restart and queued work runs."
+description: "Point a project made from a Trax template at Postgres with ConnectionStrings:Trax, so runs survive a restart and queued work runs."
 type: how-to
 area: tooling
 nav_order: 4
@@ -10,41 +10,42 @@ source:
 
 # Switch a template to Postgres
 
-The [project templates](/docs/reference/templates) record runs with the in-memory provider, which
-loses them on restart, shares nothing between processes, and leaves `mode: QUEUE` refused with
-`TRAX_QUEUE_UNAVAILABLE`. These steps move Trax's own tables to Postgres.
+The [project templates](/docs/reference/templates) record runs in Postgres when
+`ConnectionStrings:Trax` is set, and in memory when it is not. In memory loses runs on restart,
+shares nothing between processes and leaves `mode: QUEUE` refused with `TRAX_QUEUE_UNAVAILABLE`, so
+the templates allow it only in Development: started anywhere else without the connection string,
+they refuse to start and name it, unless `Trax:AllowInMemory` is `true`, which their own tests set.
 
-1. Start a Postgres and add the provider package, at the version the project's other `Trax.*`
-   packages already have in `Directory.Packages.props`:
+1. Start a Postgres:
 
    ```bash
    docker run -d --name trax-db -p 127.0.0.1:5432:5432 \
      -e POSTGRES_USER=trax -e POSTGRES_PASSWORD=trax123 -e POSTGRES_DB=trax postgres:17
-   dotnet add package Trax.Effect.Data.Postgres --version <the Trax.Effect version>
    ```
 
-2. Put the connection string in `appsettings.Development.json`:
+2. Put the connection string in `appsettings.Development.json`, or in the environment as
+   `ConnectionStrings__Trax`:
 
    ```json
    {
      "ConnectionStrings": {
-       "TraxDatabase": "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123"
+       "Trax": "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123"
      }
    }
    ```
 
-3. In `Program.cs`, add `using Trax.Effect.Data.Postgres.Extensions;` and replace `UseInMemory()`
-   in `AddEffects` with:
+3. Run the host. Trax creates and migrates its `trax` schema at startup, and the dashboard's runs
+   now survive a restart. `Program.cs` already chooses the provider from the setting:
 
    ```csharp fragment
-   effects.UsePostgres(
-       builder.Configuration.GetConnectionString("TraxDatabase")
-           ?? throw new InvalidOperationException("Set ConnectionStrings:TraxDatabase.")
-   )
+   var traxDatabase = builder.Configuration.GetConnectionString("Trax");
+   // ... refuses to start outside Development when it is null ...
+   effects => (traxDatabase is null ? effects.UseInMemory() : effects.UsePostgres(traxDatabase))
    ```
 
-4. Run the host. Trax creates and migrates its `trax` schema at startup, and the dashboard's runs
-   now survive a restart.
+A project made from a template before this choice was added has `UseInMemory()` alone: add the
+`Trax.Effect.Data.Postgres` package at the version of its other `Trax.*` packages and make the same
+change.
 
 With a database, the scheduler queues work in it and runs it on local workers, so a
 `[TraxMutation]` called with `mode: QUEUE` runs, and several processes on one database share the

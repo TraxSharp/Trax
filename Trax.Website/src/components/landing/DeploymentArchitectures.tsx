@@ -72,9 +72,14 @@ export default function DeploymentArchitectures() {
         <p className="mt-3 max-w-2xl text-text-secondary">
           Start in one process and split it out as load grows, without rewriting your workflows.
         </p>
-        <Link href="/docs/scheduler/remote-execution" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
-          Running work on other machines &rarr;
-        </Link>
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+          <Link href="/docs/scheduler/remote-execution" className="text-sm font-medium text-accent hover:text-accent-hover">
+            Running work on other machines &rarr;
+          </Link>
+          <Link href="/docs/reference/deploy-a-trax-app" className="text-sm font-medium text-accent hover:text-accent-hover">
+            Deploying it with trax deploy &rarr;
+          </Link>
+        </div>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {architectures.map((arch, i) => (

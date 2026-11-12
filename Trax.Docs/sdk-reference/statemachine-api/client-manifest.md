@@ -30,7 +30,7 @@ Three namespaces: `ClientManifest` and its records are in `Trax.StateMachine`; `
 
 | Member | Description |
 | --- | --- |
-| `app.RunTraxAsync(string[]? args = null)` | Runs the host as `app.RunAsync()` does, unless the process was started with `--trax-export-client <path>`: then it runs the host's startup checks, writes the manifest to the path and returns without serving. `args` defaults to the process's command line. In `Trax.Api.GraphQL.PersistedOperations.Extensions`. |
+| `app.RunTraxAsync(string[]? args = null)` | Runs the host as `app.RunAsync()` does, unless the process was started with `--trax-migrate` (it migrates and exits, see [TraxMigrate](/docs/sdk-reference/configuration/trax-migrate)) or `--trax-export-client <path>`: then it runs the host's startup checks, writes the manifest to the path and returns without serving. `args` defaults to the process's command line. In `Trax.Api.GraphQL.PersistedOperations.Extensions`. |
 | `TraxClientExport.Argument` | `--trax-export-client`. It takes the path next (`--trax-export-client out/client.json`) or after `=`. |
 | `TraxClientExport.Requested`, `TraxClientExport.Path` | Whether, and where to, the process was started to export, read from its command line when first used. `UsePostgres` and `UseSqlite` skip their migration when it is set; a host skips its own seeding the same way. The argument without a path throws an `ArgumentException` that says so where it is read. |
 | `TraxClientExport.PathIn(IReadOnlyList<string> args)` | The path `args` name after the argument, or null. The argument without a path throws. |

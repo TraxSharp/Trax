@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Effect.Configuration.ClientExport;
+using Trax.Effect.Data.Extensions;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Extensions;
 
@@ -16,6 +17,7 @@ public static class TraxClientManifestExtensions
 {
     /// <summary>
     /// Runs the host, as <c>app.RunAsync()</c> does, unless the process was started with
+    /// <c>--trax-migrate</c>, which migrates and exits (<see cref="TraxDeployExtensions.RunTraxAsync"/>), or with
     /// <c>--trax-export-client &lt;path&gt;</c>. Then it runs the host's startup checks, writes the client manifest
     /// that <c>trax client</c> reads to the path, and returns without serving: no hosted service starts, nothing
     /// listens, and no database is opened (<see cref="TraxClientExport"/>). A check that refuses the host refuses the
@@ -30,7 +32,8 @@ public static class TraxClientManifestExtensions
         var path = args is null ? TraxClientExport.Path : TraxClientExport.PathIn(args);
         if (path is null)
         {
-            await app.RunAsync().ConfigureAwait(false);
+            // Serves, or migrates and exits when started with --trax-migrate (TraxDeployExtensions).
+            await TraxDeployExtensions.RunTraxAsync(app, args).ConfigureAwait(false);
             return;
         }
 

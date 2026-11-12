@@ -68,6 +68,11 @@ public static class RabbitMqBroadcasterExtensions
             throw new ArgumentException($"UseRabbitMq(): {problem}", nameof(configure));
 
         builder.ServiceCollection.AddSingleton(options);
+        Trax.Effect.Configuration.Deploy.DeployFact.Add(
+            builder.ServiceCollection,
+            Trax.Effect.Configuration.Deploy.DeployFact.Transport,
+            "rabbitmq"
+        );
         builder
             .ServiceCollection.AddSingleton<RabbitMqTrainEventBroadcaster>()
             .AddSingleton<ITrainEventBroadcaster>(sp =>

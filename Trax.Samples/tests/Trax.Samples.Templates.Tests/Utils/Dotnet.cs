@@ -26,13 +26,24 @@ internal static class Dotnet
         params string[] args
     ) => Run(workingDirectory, allowFailure: false, args);
 
+    public static Task<(int ExitCode, string Output)> Run(
+        string workingDirectory,
+        bool allowFailure,
+        params string[] args
+    ) => Run(workingDirectory, new Dictionary<string, string>(), allowFailure, args);
+
+    /// <summary>Runs dotnet to completion with <paramref name="environment"/> added to its own.</summary>
     public static async Task<(int ExitCode, string Output)> Run(
         string workingDirectory,
+        IReadOnlyDictionary<string, string> environment,
         bool allowFailure,
         params string[] args
     )
     {
-        using var process = Process.Start(StartInfo(workingDirectory, args))!;
+        var psi = StartInfo(workingDirectory, args);
+        foreach (var (name, value) in environment)
+            psi.Environment[name] = value;
+        using var process = Process.Start(psi)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
 

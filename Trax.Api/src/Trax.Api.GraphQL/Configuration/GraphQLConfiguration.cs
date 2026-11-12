@@ -48,6 +48,12 @@ public class GraphQLConfiguration
     internal string? MappedRoutePrefix { get; set; }
 
     /// <summary>
+    /// The path <c>UseTraxApiDashboard</c> mapped the operations console at, or null when it is not served. Read by the
+    /// deploy export.
+    /// </summary>
+    internal string? MappedConsolePath { get; set; }
+
+    /// <summary>
     /// The documents the operations console sends, as Trax.Api.Dashboard reads them from the app
     /// it serves; empty until <c>UseTraxApiDashboard</c> maps it. A host that runs persisted
     /// operations registers them when it starts, so the console keeps working where document

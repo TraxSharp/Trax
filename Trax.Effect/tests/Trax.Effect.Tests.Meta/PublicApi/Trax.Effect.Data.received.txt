@@ -48,6 +48,12 @@ namespace Trax.Effect.Data.Extensions
         public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDecisionRecording(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder, System.Action<Trax.Effect.Data.Decisions.DecisionRecordingOptions> configure) { }
         public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddJunctionEvents(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder) { }
     }
+    public static class TraxDeployExtensions
+    {
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData MigrateOnDeploy<TContext>(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData builder)
+            where TContext : Microsoft.EntityFrameworkCore.DbContext { }
+        public static System.Threading.Tasks.Task RunTraxAsync(this Microsoft.Extensions.Hosting.IHost host, string[]? args = null, System.Threading.CancellationToken cancellationToken = default) { }
+    }
 }
 namespace Trax.Effect.Data.JunctionEvents
 {
