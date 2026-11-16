@@ -328,6 +328,22 @@ public class AwsDeployerTests
         fake.Value.Should().Be("sk_test");
     }
 
+    [Test]
+    public void Following_a_log_keeps_only_the_ids_at_its_newest_time()
+    {
+        var seen = new SeenLogEvents();
+
+        for (var i = 0; i < 10_000; i++)
+            seen.Add($"e{i}", 1_000 + i).Should().BeTrue();
+
+        seen.Count.Should().Be(1, "only an event at the newest time can be read again");
+        seen.Add("e9999", 10_999).Should().BeFalse("it was printed already");
+        seen.Add("other", 10_999).Should().BeTrue();
+        seen.Add("late", 10_000)
+            .Should()
+            .BeTrue("the next read starts after it, so it cannot repeat");
+    }
+
     [TestCase(typeof(UnauthorizedAccessException))]
     [TestCase(typeof(System.Text.Json.JsonException))]
     [TestCase(typeof(System.ComponentModel.Win32Exception))]

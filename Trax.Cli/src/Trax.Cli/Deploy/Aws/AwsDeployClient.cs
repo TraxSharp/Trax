@@ -536,7 +536,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
     {
         using var logs = new AmazonCloudWatchLogsClient(_region);
         var start = new DateTimeOffset(since, TimeSpan.Zero).ToUnixTimeMilliseconds();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new SeenLogEvents();
         while (true)
         {
             string? next = null;
@@ -552,7 +552,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
                     ct
                 );
                 foreach (var e in page.Events ?? [])
-                    if (seen.Add(e.EventId))
+                    if (seen.Add(e.EventId, e.Timestamp ?? start))
                     {
                         start = Math.Max(start, e.Timestamp ?? start);
                         yield return e.Message.TrimEnd();
