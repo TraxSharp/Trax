@@ -43,6 +43,11 @@ API service answers on port 8080.
 
 ## 3. Deploy to AWS
 
+An AWS stack keeps runs in Postgres and does not provide RabbitMQ yet, so a deploy refuses a host that keeps its
+runs anywhere else or broadcasts through RabbitMQ (`UseRabbitMq`). It also refuses more than
+one API service, an API with no health check, and more than one copy of the API or the scheduler. Deploy those with
+`--target compose`.
+
 Sign in to the account the usual way (`aws sso login`, a profile, or a role in CI), then:
 
 ```bash
