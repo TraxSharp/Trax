@@ -168,12 +168,12 @@ public class ScaffoldedTemplateTests
     }
 
     [TestCase("trax-hub", "api,scheduler", "/trax/health")]
-    [TestCase("trax-scheduler", "api,scheduler", null)]
+    [TestCase("trax-scheduler", "api,scheduler", "/trax/health")]
     [TestCase("trax-api", "api", "/trax/health")]
     public async Task Scaffold_ReportsWhatItNeedsFromItsDeployment(
         string shortName,
         string roles,
-        string? health
+        string health
     )
     {
         var dir = await Scaffold(shortName);
@@ -206,12 +206,19 @@ public class ScaffoldedTemplateTests
         manifest.Database!.Provider.Should().Be("postgres");
         manifest.Endpoints.GraphQL.Should().Be("/trax/graphql");
         manifest.Endpoints.Health.Should().Be(health);
+        if (manifest.Roles.Contains("api"))
+            manifest
+                .Endpoints.Health.Should()
+                .NotBeNull(
+                    "an api host is deployed behind a load balancer, which probes its health"
+                );
         manifest.Endpoints.Console.Should().BeNull("the console is served only in Development");
     }
 
     [TestCase("trax-hub", "/trax/dashboard/", HttpStatusCode.NotFound)]
     [TestCase("trax-hub", "/trax/health", HttpStatusCode.OK)]
     [TestCase("trax-scheduler", "/trax/dashboard/", HttpStatusCode.NotFound)]
+    [TestCase("trax-scheduler", "/trax/health", HttpStatusCode.OK)]
     [TestCase("trax-api", "/trax/health", HttpStatusCode.OK)]
     public async Task Scaffold_StartsInProduction_WithoutTheDevelopmentOnlyParts(
         string shortName,
