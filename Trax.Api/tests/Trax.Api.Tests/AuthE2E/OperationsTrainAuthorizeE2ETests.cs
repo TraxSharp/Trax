@@ -197,42 +197,72 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     private static string RunTrain(string sku) =>
         $$"""mutation { operations { workQueue { runTrain(input: { trainName: "{{TrainName}}", inputJson: "{\"sku\":\"{{sku}}\"}" }) { success message } } } }""";
 
-    private static void Succeeded(JsonDocument response, string group, string field)
+    /// <summary>The mutation at <paramref name="path"/> under <c>operations</c> succeeded.</summary>
+    private static void Succeeded(JsonDocument response, params string[] path)
     {
         var raw = response.RootElement.GetRawText();
         ErrorCodes(response).Should().BeEmpty(raw);
-        response
-            .RootElement.GetProperty("data")
-            .GetProperty("operations")
-            .GetProperty(group)
-            .GetProperty(field)
-            .GetProperty("success")
-            .GetBoolean()
-            .Should()
-            .BeTrue(raw);
+        var field = response.RootElement.GetProperty("data").GetProperty("operations");
+        foreach (var name in path)
+            field = field.GetProperty(name);
+        field.GetProperty("success").GetBoolean().Should().BeTrue(raw);
     }
 
     [Test]
     public async Task ResumeExecution_ByStaffOutsideTheTrainsRole_IsRefused()
     {
-        var (run, _) = await CustomerFailedOrderAsync();
+        // A run that checkpointed before it failed, so the resume gets as far as the enqueue,
+        // where the train's [TraxAuthorize] applies.
+        var run = await CheckpointedFailedOrderAsync();
 
-        using var doc = await PostAsync(
-            $$"""mutation { operations { resumeExecution(id: {{run}}) { success message } } }""",
-            _staff
-        );
+        using var doc = await PostAsync(ResumeExecution(run), _staff);
 
-        // A run with no checkpoint is refused for that reason too; what must not happen is a
-        // queued resume.
-        var raw = doc.RootElement.GetRawText();
-        if (!ErrorCodes(doc).Contains("TRAX_AUTHORIZATION"))
-            doc.RootElement.GetProperty("data")
-                .GetProperty("operations")
-                .GetProperty("resumeExecution")
-                .GetProperty("success")
-                .GetBoolean()
-                .Should()
-                .BeFalse(raw);
+        ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
+        (await ResumesOfAsync(run)).Should().Be(0, "a refused resume queues nothing");
+
+        // A caller in both the gate's role and the train's may.
+        using var allowed = await PostAsync(ResumeExecution(run), _staffCustomer);
+        Succeeded(allowed, "resumeExecution");
+        (await ResumesOfAsync(run)).Should().Be(1, "the allowed resume queues one entry");
+    }
+
+    private static string ResumeExecution(long run) =>
+        $$"""mutation { operations { resumeExecution(id: {{run}}) { success message } } }""";
+
+    /// <summary>
+    /// A run of <see cref="ICheckpointedOrderTrain"/> that wrote its checkpoint and then failed.
+    /// Run in process, as a worker runs it: the resume is what is under test.
+    /// </summary>
+    private async Task<long> CheckpointedFailedOrderAsync()
+    {
+        long run;
+        using (var scope = _host.Services.CreateScope())
+        {
+            var train = scope.ServiceProvider.GetRequiredService<ICheckpointedOrderTrain>();
+            var act = async () =>
+                await train.Run(new PlaceOrderInput { Sku = Guid.NewGuid().ToString("N") });
+            await act.Should().ThrowAsync<InvalidOperationException>();
+            run = ((ServiceTrain<PlaceOrderInput, PlaceOrderOutput>)train).Metadata!.Id;
+        }
+
+        await using var db = await _host
+            .Services.GetRequiredService<IDataContextProviderFactory>()
+            .CreateDbContextAsync(CancellationToken.None);
+        (await db.Metadatas.AsNoTracking().SingleAsync(m => m.Id == run))
+            .TrainState.Should()
+            .Be(TrainState.Failed);
+        (await db.Checkpoints.AsNoTracking().CountAsync(c => c.MetadataId == run))
+            .Should()
+            .Be(1, "the run checkpointed before it failed");
+        return run;
+    }
+
+    private async Task<int> ResumesOfAsync(long run)
+    {
+        await using var db = await _host
+            .Services.GetRequiredService<IDataContextProviderFactory>()
+            .CreateDbContextAsync(CancellationToken.None);
+        return await db.WorkQueues.CountAsync(q => q.ResumeFrom == run);
     }
 
     /// <summary>
@@ -365,4 +395,39 @@ internal sealed class RejectOrderJunction : Junction<PlaceOrderInput, PlaceOrder
 {
     public override Task<PlaceOrderOutput> Run(PlaceOrderInput input) =>
         throw new InvalidOperationException("Out of stock.");
+}
+
+public sealed record StockHold
+{
+    public required string Sku { get; init; }
+}
+
+public interface ICheckpointedOrderTrain : IServiceTrain<PlaceOrderInput, PlaceOrderOutput>;
+
+/// <summary>
+/// Placed only by a customer: it holds the stock, checkpoints the hold, then fails, so there is a
+/// run to resume.
+/// </summary>
+[TraxAuthorize(Roles = "Customer")]
+public class CheckpointedOrderTrain
+    : ServiceTrain<PlaceOrderInput, PlaceOrderOutput>,
+        ICheckpointedOrderTrain
+{
+    protected override Task<Either<Exception, PlaceOrderOutput>> Junctions() =>
+        Chain<HoldStockJunction>()
+            .Checkpoint<StockHold>()
+            .Chain<ChargeHeldOrderJunction>()
+            .Resolve();
+}
+
+internal sealed class HoldStockJunction : Junction<PlaceOrderInput, StockHold>
+{
+    public override Task<StockHold> Run(PlaceOrderInput input) =>
+        Task.FromResult(new StockHold { Sku = input.Sku });
+}
+
+internal sealed class ChargeHeldOrderJunction : Junction<StockHold, PlaceOrderOutput>
+{
+    public override Task<PlaceOrderOutput> Run(StockHold input) =>
+        throw new InvalidOperationException("Card declined.");
 }
