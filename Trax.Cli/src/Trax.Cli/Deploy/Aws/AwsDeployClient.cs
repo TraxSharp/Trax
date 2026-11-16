@@ -409,12 +409,32 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
     )
     {
         using var secrets = new AmazonSecretsManagerClient(_region);
+        await PutSecretAsync(secrets, name, value, tags, ct);
+    }
+
+    /// <summary>
+    /// Stores <paramref name="value"/> as the secret's current value, creating the secret when it does not exist and
+    /// restoring it first when it is pending deletion (as <c>destroy --delete-data</c> leaves it for seven days),
+    /// since a secret pending deletion takes no value and holds its name.
+    /// </summary>
+    internal static async Task PutSecretAsync(
+        IAmazonSecretsManager secrets,
+        string name,
+        string value,
+        IReadOnlyDictionary<string, string> tags,
+        CancellationToken ct
+    )
+    {
+        var put = new PutSecretValueRequest { SecretId = name, SecretString = value };
         try
         {
-            await secrets.PutSecretValueAsync(
-                new PutSecretValueRequest { SecretId = name, SecretString = value },
-                ct
-            );
+            await secrets.PutSecretValueAsync(put, ct);
+        }
+        catch (InvalidRequestException ex)
+            when (ex.Message.Contains("marked for deletion", StringComparison.Ordinal))
+        {
+            await secrets.RestoreSecretAsync(new RestoreSecretRequest { SecretId = name }, ct);
+            await secrets.PutSecretValueAsync(put, ct);
         }
         catch (Amazon.SecretsManager.Model.ResourceNotFoundException)
         {

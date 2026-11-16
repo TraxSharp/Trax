@@ -1,4 +1,7 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
+using Amazon.SecretsManager;
+using Amazon.SecretsManager.Model;
 using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Deploy;
@@ -285,6 +288,89 @@ public class AwsDeployerTests
     }
 
     private static ConsoleKeyInfo Key(char c, ConsoleKey key) => new(c, key, false, false, false);
+
+    [Test]
+    public async Task Setting_a_secret_that_destroy_deleted_restores_it_first()
+    {
+        var secrets = DispatchProxy.Create<IAmazonSecretsManager, FakeSecretsManager>();
+        var fake = (FakeSecretsManager)(object)secrets;
+        fake.PendingDeletion = true;
+
+        await AwsDeployClient.PutSecretAsync(
+            secrets,
+            "orders-staging/app/Stripe__ApiKey",
+            "sk_test",
+            new Dictionary<string, string>(),
+            CancellationToken.None
+        );
+
+        fake.Calls.Should().Equal("PutSecretValue", "RestoreSecret", "PutSecretValue");
+        fake.Value.Should().Be("sk_test");
+    }
+
+    [Test]
+    public async Task Setting_a_secret_that_does_not_exist_creates_it()
+    {
+        var secrets = DispatchProxy.Create<IAmazonSecretsManager, FakeSecretsManager>();
+        var fake = (FakeSecretsManager)(object)secrets;
+        fake.Missing = true;
+
+        await AwsDeployClient.PutSecretAsync(
+            secrets,
+            "orders-staging/app/Stripe__ApiKey",
+            "sk_test",
+            new Dictionary<string, string>(),
+            CancellationToken.None
+        );
+
+        fake.Calls.Should().Equal("PutSecretValue", "CreateSecret");
+        fake.Value.Should().Be("sk_test");
+    }
+
+    /// <summary>
+    /// Secrets Manager, holding one secret that is missing or pending deletion, as the service answers for each.
+    /// </summary>
+    public class FakeSecretsManager : DispatchProxy
+    {
+        public List<string> Calls { get; } = [];
+        public bool PendingDeletion { get; set; }
+        public bool Missing { get; set; }
+        public string? Value { get; private set; }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            var name = targetMethod!.Name;
+            if (name == "Dispose")
+                return null;
+            Calls.Add(name.Replace("Async", "", StringComparison.Ordinal));
+            switch (name)
+            {
+                case "PutSecretValueAsync":
+                    if (PendingDeletion)
+                        return System.Threading.Tasks.Task.FromException<PutSecretValueResponse>(
+                            new InvalidRequestException(
+                                "You can't perform this operation on the secret because it was marked for deletion."
+                            )
+                        );
+                    if (Missing)
+                        return System.Threading.Tasks.Task.FromException<PutSecretValueResponse>(
+                            new ResourceNotFoundException(
+                                "Secrets Manager can't find the specified secret."
+                            )
+                        );
+                    Value = ((PutSecretValueRequest)args![0]!).SecretString;
+                    return System.Threading.Tasks.Task.FromResult(new PutSecretValueResponse());
+                case "RestoreSecretAsync":
+                    PendingDeletion = false;
+                    return System.Threading.Tasks.Task.FromResult(new RestoreSecretResponse());
+                case "CreateSecretAsync":
+                    Value = ((CreateSecretRequest)args![0]!).SecretString;
+                    return System.Threading.Tasks.Task.FromResult(new CreateSecretResponse());
+                default:
+                    throw new NotSupportedException(name);
+            }
+        }
+    }
 
     internal sealed class FakeImages : IImagePublisher
     {

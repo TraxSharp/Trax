@@ -790,7 +790,8 @@ trax deploy destroy --env production     # asks for the stack's name; --delete-d
 ```
 
 `destroy` turns a production database's deletion protection off, then deletes the stack; the database leaves a
-final snapshot, which RDS keeps until you delete it.
+final snapshot, which RDS keeps until you delete it. A secret `--delete-data` deleted can be recovered for seven days, and
+`secret set` restores it with the new value, so the environment can be deployed again the same day.
 
 ## SDK Reference
 
