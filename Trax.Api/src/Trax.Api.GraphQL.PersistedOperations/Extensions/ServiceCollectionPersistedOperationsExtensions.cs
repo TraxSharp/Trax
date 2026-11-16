@@ -5,6 +5,7 @@ using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
+using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Extensions;
 
@@ -114,10 +115,14 @@ public static class ServiceCollectionPersistedOperationsExtensions
 
         services.TryAddSingleton<IPersistedOperationCache, NoOpPersistedOperationCache>();
         if (rabbitMqInvalidationConnectionString is not null)
+        {
+            // The deploy export reports the broker, so the host is deployed beside one.
+            DeployFact.Add(services, DeployFact.Transport, "rabbitmq");
             services.TryAddSingleton<
                 IPersistedOperationBroadcaster,
                 RabbitMqPersistedOperationBroadcaster
             >();
+        }
         else
             services.TryAddSingleton<
                 IPersistedOperationBroadcaster,

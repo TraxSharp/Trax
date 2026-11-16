@@ -20,6 +20,7 @@ using Trax.Api.GraphQL.PersistedOperations.Middleware;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
 using Trax.Api.GraphQL.Validation;
+using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Extensions;
 
@@ -103,6 +104,8 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         // Broadcaster: RabbitMQ if configured, else no-op.
         if (!string.IsNullOrEmpty(options.RabbitMqConnectionString))
         {
+            // The deploy export reports the broker, so the host is deployed beside one.
+            DeployFact.Add(services, DeployFact.Transport, "rabbitmq");
             services.AddSingleton<
                 IPersistedOperationBroadcaster,
                 RabbitMqPersistedOperationBroadcaster

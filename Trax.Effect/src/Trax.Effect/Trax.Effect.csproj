@@ -59,9 +59,11 @@
     <InternalsVisibleTo Include="Trax.Effect.Data" />
   </ItemGroup>
 
-  <!-- A broadcaster records the transport it connects to for the deploy export (DeployFact). -->
+  <!-- A broadcaster, or persisted operations' cache invalidation, records the transport it connects to for the
+       deploy export (DeployFact). -->
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Effect.Broadcaster.RabbitMQ" />
+    <InternalsVisibleTo Include="Trax.Api.GraphQL.PersistedOperations" />
   </ItemGroup>
 
   <!-- Whether a run can resume (IRunResumes and its verdicts) and how large a checkpoint may be (CheckpointOptions)
