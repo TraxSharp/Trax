@@ -49,7 +49,7 @@ public sealed class DeployManifest
 | Property | What it holds |
 |---|---|
 | `Version` | The format version, `1`. `Read` refuses a newer one. |
-| `Roles` | Sorted: `api` when the host maps the Trax GraphQL endpoint with `UseTraxGraphQL`, `scheduler` for `AddScheduler`, `worker` for `AddTraxWorker`. |
+| `Roles` | Sorted: `api` when the host maps the Trax GraphQL endpoint with `UseTraxGraphQL`, `job-runner` when it maps a runner endpoint with `UseTraxJobRunner` or `UseTraxRunEndpoint`, `scheduler` for `AddScheduler`, `worker` for `AddTraxWorker`. |
 | `Database` | `DeployDatabase`: `Provider` is `postgres`, `sqlite` or `in-memory`; `MigratesOnStart` is false when the code calls `SkipMigrations()`. Null with no data provider. |
 | `Transports` | Sorted: `rabbitmq` when the host broadcasts through RabbitMQ. |
 | `Endpoints` | `DeployEndpoints`: the paths of `GraphQL` (`UseTraxGraphQL`), `Health` (`MapHealthChecks`) and `Console` (`UseTraxApiDashboard`), each null when not mapped. |
