@@ -266,6 +266,26 @@ public class AwsDeployerTests
             .Should()
             .BeTrue("the SDK loads it by reflection for a profile signed in with aws sso login");
 
+    [Test]
+    public void A_hidden_secret_keeps_only_the_characters_typed()
+    {
+        var keys = new Queue<ConsoleKeyInfo>([
+            Key('a', ConsoleKey.A),
+            Key('\0', ConsoleKey.LeftArrow),
+            Key('b', ConsoleKey.B),
+            Key('\t', ConsoleKey.Tab),
+            Key('\0', ConsoleKey.Delete),
+            Key('c', ConsoleKey.C),
+            Key('\b', ConsoleKey.Backspace),
+            Key('d', ConsoleKey.D),
+            Key('\r', ConsoleKey.Enter),
+        ]);
+
+        DeployAwsCommands.ReadHidden(keys.Dequeue).Should().Be("abd");
+    }
+
+    private static ConsoleKeyInfo Key(char c, ConsoleKey key) => new(c, key, false, false, false);
+
     internal sealed class FakeImages : IImagePublisher
     {
         public List<string> Published { get; } = [];
