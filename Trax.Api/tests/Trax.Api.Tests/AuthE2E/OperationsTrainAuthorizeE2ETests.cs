@@ -156,23 +156,60 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     [Test]
     public async Task QueueTrain_ByStaffOutsideTheTrainsRole_IsRefused()
     {
-        using var doc = await PostAsync(
-            $$"""mutation { operations { workQueue { queueTrain(input: { trainName: "{{TrainName}}", inputJson: "{\"sku\":\"x\"}" }) { success message } } } }""",
-            _staff
-        );
+        var sku = Guid.NewGuid().ToString("N");
+        var before = await LastRunIdAsync();
+
+        using var doc = await PostAsync(QueueTrain(sku), _staff);
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
+        (await QueuedWithAsync(sku)).Should().Be(0, "a refused queueTrain queues nothing");
+        (await DirectRunsAfterAsync(before)).Should().Be(0, "a refused queueTrain starts no run");
+
+        // A caller in both the gate's role and the train's may.
+        using var allowed = await PostAsync(QueueTrain(sku), _staffCustomer);
+        Succeeded(allowed, "workQueue", "queueTrain");
+        (await QueuedWithAsync(sku))
+            .Should()
+            .BeGreaterThan(0, "the allowed queueTrain queues the input");
     }
 
     [Test]
     public async Task RunTrain_ByStaffOutsideTheTrainsRole_IsRefused()
     {
-        using var doc = await PostAsync(
-            $$"""mutation { operations { workQueue { runTrain(input: { trainName: "{{TrainName}}", inputJson: "{\"sku\":\"x\"}" }) { success message } } } }""",
-            _staff
-        );
+        var sku = Guid.NewGuid().ToString("N");
+        var before = await LastRunIdAsync();
+
+        using var doc = await PostAsync(RunTrain(sku), _staff);
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
+        (await DirectRunsAfterAsync(before)).Should().Be(0, "a refused runTrain writes no run");
+        (await QueuedWithAsync(sku)).Should().Be(0, "a refused runTrain queues nothing");
+
+        // A caller in both the gate's role and the train's may.
+        using var allowed = await PostAsync(RunTrain(sku), _staffCustomer);
+        Succeeded(allowed, "workQueue", "runTrain");
+        (await DirectRunsAfterAsync(before)).Should().Be(1, "the allowed runTrain writes its run");
+    }
+
+    private static string QueueTrain(string sku) =>
+        $$"""mutation { operations { workQueue { queueTrain(input: { trainName: "{{TrainName}}", inputJson: "{\"sku\":\"{{sku}}\"}" }) { success message } } } }""";
+
+    private static string RunTrain(string sku) =>
+        $$"""mutation { operations { workQueue { runTrain(input: { trainName: "{{TrainName}}", inputJson: "{\"sku\":\"{{sku}}\"}" }) { success message } } } }""";
+
+    private static void Succeeded(JsonDocument response, string group, string field)
+    {
+        var raw = response.RootElement.GetRawText();
+        ErrorCodes(response).Should().BeEmpty(raw);
+        response
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty(group)
+            .GetProperty(field)
+            .GetProperty("success")
+            .GetBoolean()
+            .Should()
+            .BeTrue(raw);
     }
 
     [Test]
@@ -251,6 +288,38 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
         return await ((DbContext)db)
             .Database.SqlQuery<int>(
                 $"SELECT count(*)::int AS \"Value\" FROM trax.work_queue WHERE input::text LIKE {"%" + sku + "%"}"
+            )
+            .SingleAsync();
+    }
+
+    /// <summary>The newest run's id, so a check can look only at runs written after it.</summary>
+    private async Task<long> LastRunIdAsync()
+    {
+        await using var db = await _host
+            .Services.GetRequiredService<IDataContextProviderFactory>()
+            .CreateDbContextAsync(CancellationToken.None);
+        return await ((DbContext)db)
+            .Database.SqlQuery<long>($"SELECT coalesce(max(id), 0) AS \"Value\" FROM trax.metadata")
+            .SingleAsync();
+    }
+
+    /// <summary>
+    /// The runs of the train written after <paramref name="after"/> by a direct run rather than
+    /// the dispatcher: a dispatched run carries its work queue row's external id, and the
+    /// scheduler may dispatch another test's queued row at any time.
+    /// </summary>
+    private async Task<int> DirectRunsAfterAsync(long after)
+    {
+        await using var db = await _host
+            .Services.GetRequiredService<IDataContextProviderFactory>()
+            .CreateDbContextAsync(CancellationToken.None);
+        return await ((DbContext)db)
+            .Database.SqlQuery<int>(
+                $"""
+                SELECT count(*)::int AS "Value" FROM trax.metadata m
+                WHERE m.name = {TrainName} AND m.id > {after}
+                  AND NOT EXISTS (SELECT 1 FROM trax.work_queue q WHERE q.external_id = m.external_id)
+                """
             )
             .SingleAsync();
     }
