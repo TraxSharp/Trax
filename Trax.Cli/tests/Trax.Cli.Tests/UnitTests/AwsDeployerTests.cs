@@ -117,6 +117,41 @@ public class AwsDeployerTests
     }
 
     [Test]
+    public async Task A_stack_an_abandoned_first_deploy_left_in_review_is_created_again()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = new AwsStackState(
+            "REVIEW_IN_PROGRESS",
+            new Dictionary<string, string>(),
+            new Dictionary<string, string>()
+        );
+
+        await Deploy(deployer);
+
+        aws.Calls.Should().Equal("deploy", "run-task", "deploy");
+        aws.Deploys[0][AwsStack.ScaleParameter].Should().Be("0");
+        aws.Deploys[0]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
+    }
+
+    [TestCase(null, "CREATE")]
+    [TestCase("REVIEW_IN_PROGRESS", "CREATE")]
+    [TestCase("UPDATE_COMPLETE", "UPDATE")]
+    public void A_change_set_creates_a_stack_that_holds_nothing_yet(string? status, string type) =>
+        AwsDeployClient
+            .ChangeSetTypeFor(
+                status is null
+                    ? null
+                    : new AwsStackState(
+                        status,
+                        new Dictionary<string, string>(),
+                        new Dictionary<string, string>()
+                    )
+            )
+            .Value.Should()
+            .Be(type);
+
+    [Test]
     public async Task Destroy_unprotects_a_production_database_then_deletes_the_stack()
     {
         var (deployer, aws, _) = Deployer();
@@ -297,13 +332,12 @@ public class AwsDeployerTests
 
         public Task<AwsStackState?> DescribeStackAsync(string stack, CancellationToken ct) =>
             System.Threading.Tasks.Task.FromResult(
-                Calls.Contains("deploy")
-                    ? Existing
-                        ?? new AwsStackState(
-                            "CREATE_COMPLETE",
-                            Outputs(),
-                            new Dictionary<string, string>()
-                        )
+                Calls.Contains("deploy") && Existing is null or { Created: false }
+                    ? new AwsStackState(
+                        "CREATE_COMPLETE",
+                        Outputs(),
+                        new Dictionary<string, string>()
+                    )
                     : Existing
             );
 

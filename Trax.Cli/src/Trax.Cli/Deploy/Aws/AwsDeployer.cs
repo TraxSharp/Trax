@@ -60,6 +60,9 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
             );
 
         var existing = await aws.DescribeStackAsync(stack, ct);
+        // A first deploy that stopped before its change set ran left an empty stack in review: create it again.
+        if (existing is { Created: false })
+            existing = null;
         if (existing is { Dead: true })
             throw new InvalidOperationException(
                 $"{stack} is {existing.Status}: its creation failed and it can only be deleted. Run "
