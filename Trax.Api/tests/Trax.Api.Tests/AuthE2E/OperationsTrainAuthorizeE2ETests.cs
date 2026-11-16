@@ -126,7 +126,7 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     [Test]
     public async Task RequeueExecution_ByStaffOutsideTheTrainsRole_IsRefused()
     {
-        var run = await CustomerFailedOrderAsync();
+        var (run, sku) = await CustomerFailedOrderAsync();
 
         using var doc = await PostAsync(
             $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }""",
@@ -134,7 +134,7 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
         );
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
-        (await QueuedEntriesAsync()).Should().Be(0, "a refused requeue queues nothing");
+        (await QueuedWithAsync(sku)).Should().Be(0, "a refused requeue queues nothing");
 
         // A caller in both the gate's role and the train's may.
         using var allowed = await PostAsync(
@@ -150,6 +150,7 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
             .GetBoolean()
             .Should()
             .BeTrue(allowed.RootElement.GetRawText());
+        (await QueuedWithAsync(sku)).Should().Be(1, "the allowed requeue queues the run's input");
     }
 
     [Test]
@@ -177,7 +178,7 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     [Test]
     public async Task ResumeExecution_ByStaffOutsideTheTrainsRole_IsRefused()
     {
-        var run = await CustomerFailedOrderAsync();
+        var (run, _) = await CustomerFailedOrderAsync();
 
         using var doc = await PostAsync(
             $$"""mutation { operations { resumeExecution(id: {{run}}) { success message } } }""",
@@ -197,8 +198,11 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
                 .BeFalse(raw);
     }
 
-    /// <summary>A customer places an order through the train's own mutation, and it fails.</summary>
-    private async Task<long> CustomerFailedOrderAsync()
+    /// <summary>
+    /// A customer places an order through the train's own mutation, and it fails. Returns the run
+    /// and the order's sku, which no other run's input carries.
+    /// </summary>
+    private async Task<(long Run, string Sku)> CustomerFailedOrderAsync()
     {
         var sku = Guid.NewGuid().ToString("N");
         using var doc = await PostAsync(
@@ -231,15 +235,24 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
             )
             .SingleAsync();
         starter.Should().NotBeNull("a GraphQL run records its caller as the starter");
-        return run.Id;
+        return (run.Id, sku);
     }
 
-    private async Task<int> QueuedEntriesAsync()
+    /// <summary>
+    /// The work queue rows whose input carries <paramref name="sku"/>. Counted by the test's own
+    /// sku rather than the train, because the fixture's database outlives a run of the suite.
+    /// </summary>
+    private async Task<int> QueuedWithAsync(string sku)
     {
         await using var db = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None);
-        return await db.WorkQueues.CountAsync(q => q.TrainName == TrainName);
+        // The column is jsonb, so it is matched as text.
+        return await ((DbContext)db)
+            .Database.SqlQuery<int>(
+                $"SELECT count(*)::int AS \"Value\" FROM trax.work_queue WHERE input::text LIKE {"%" + sku + "%"}"
+            )
+            .SingleAsync();
     }
 
     private Task<JsonDocument> PostAsync(string query, string token) =>
