@@ -97,6 +97,6 @@ broadcast or the maximum age; and a crash between the commit and the publish is 
 
 ## Changelog
 
-- **2026-10-01**: Recorded.
 - **2026-11-16**: HotChocolate 16.7 added a normalized-document cache keyed on the operation id;
   the operation id now carries the document's hash.
+- **2026-10-01**: Recorded.
