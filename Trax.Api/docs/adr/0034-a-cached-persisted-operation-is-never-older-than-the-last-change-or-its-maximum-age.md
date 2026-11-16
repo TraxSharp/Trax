@@ -32,6 +32,10 @@ broadcast, not a replacement for it.
   from the lookup cache and the document cache into the prepared-operation cache, so no layer
   restarts the clock. Past the maximum age the entry is not returned and the store is read again.
   The lookup cache's TTL defaults to the maximum age and may not exceed it.
+- HotChocolate keys caches Trax cannot replace on the operation id, which it derives from the
+  persisted-operation id (since 16.7 the normalized-document cache in its operation compiler).
+  A Trax middleware ahead of document validation adds the document's hash to the operation id
+  whenever the id is not that hash, so a changed document is a new key to all of them.
 - A request that sends its own document is not looked up in the store; the document runs as
   sent. An id the store does not hold is remembered, in a bounded cache, until the next change or
   the maximum age.
@@ -94,3 +98,5 @@ broadcast or the maximum age; and a crash between the commit and the publish is 
 ## Changelog
 
 - **2026-10-01**: Recorded.
+- **2026-11-16**: HotChocolate 16.7 added a normalized-document cache keyed on the operation id;
+  the operation id now carries the document's hash.

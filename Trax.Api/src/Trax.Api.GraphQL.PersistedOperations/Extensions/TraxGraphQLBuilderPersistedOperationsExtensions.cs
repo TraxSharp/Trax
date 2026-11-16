@@ -304,6 +304,15 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
                 key: MachineDocumentMiddleware.Key,
                 before: WellKnownRequestMiddleware.DocumentCacheMiddleware
             );
+            // HotChocolate keys caches Trax cannot empty on the operation id, which it derives from
+            // the persisted-operation id; this adds the document's hash to it, so a re-upload under
+            // the same id is a new key to them. It runs before validation because anything after
+            // it (cost analysis, authorization) may normalize the document and fill one of them.
+            schema.UseRequest(
+                PersistedOperationIdHashMiddleware.Create,
+                key: PersistedOperationIdHashMiddleware.Key,
+                before: WellKnownRequestMiddleware.DocumentValidationMiddleware
+            );
             // Enforcement runs here, after the document is parsed and before it is validated, so
             // every transport that reaches the executor gets the same decision. See
             // docs/adr/0013-persisted-operation-enforcement-runs-in-the-execution-pipeline.md.
