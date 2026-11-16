@@ -47,6 +47,8 @@ each member ships in.
 - [UsePostgres](/docs/sdk-reference/configuration/use-postgres) (`Trax.Effect.Data.Postgres`): the PostgreSQL provider
 - [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) (`Trax.Effect.Data.Postgres`): turns off the startup migration
 - [DatabaseMigrator](/docs/sdk-reference/configuration/database-migrator) (`Trax.Effect.Data.Postgres`): applies the Postgres schema
+- [TraxMigrate](/docs/sdk-reference/configuration/trax-migrate) (`Trax.Effect.Data`): `--trax-migrate`, `TRAX_MIGRATIONS` and `MigrateOnDeploy`, the migrate step of a deployment
+- [DeployManifest](/docs/sdk-reference/configuration/deploy-manifest) (`Trax.Effect`): `--trax-export-deploy` and the manifest `trax deploy` reads
 - [UseSqlite](/docs/sdk-reference/configuration/use-sqlite) (`Trax.Effect.Data.Sqlite`): the SQLite provider
 - [UseInMemory](/docs/sdk-reference/configuration/use-in-memory) (`Trax.Effect.Data.InMemory`): the in-memory provider
 
