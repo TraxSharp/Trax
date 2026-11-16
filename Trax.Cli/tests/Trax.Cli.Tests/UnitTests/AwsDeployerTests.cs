@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Deploy;
 using Trax.Cli.Deploy.Aws;
+using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -325,6 +326,45 @@ public class AwsDeployerTests
 
         fake.Calls.Should().Equal("PutSecretValue", "CreateSecret");
         fake.Value.Should().Be("sk_test");
+    }
+
+    [TestCase(typeof(UnauthorizedAccessException))]
+    [TestCase(typeof(System.Text.Json.JsonException))]
+    [TestCase(typeof(System.ComponentModel.Win32Exception))]
+    public async Task A_deploy_that_fails_reports_it_in_a_line(Type failure)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"trax-deploy-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(dir, "Orders"));
+        Directory.CreateDirectory(Path.Combine(dir, "Orders.Worker"));
+        File.WriteAllText(Path.Combine(dir, "Orders/Orders.csproj"), "<Project />");
+        File.WriteAllText(Path.Combine(dir, "Orders.Worker/Orders.Worker.csproj"), "<Project />");
+        var path = Path.Combine(dir, DeployFile.FileName);
+        File.WriteAllText(path, AwsStackTemplateTests.File_().Write());
+        try
+        {
+            (
+                await DeployAwsCommands.DeployAsync(
+                    path,
+                    "production",
+                    new ThrowingExporter((Exception)Activator.CreateInstance(failure)!),
+                    CancellationToken.None
+                )
+            )
+                .Should()
+                .Be(1);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    internal sealed class ThrowingExporter(Exception failure) : IHostExporter
+    {
+        public DeployManifest Export(
+            string projectPath,
+            IReadOnlyDictionary<string, string> environment
+        ) => throw failure;
     }
 
     /// <summary>

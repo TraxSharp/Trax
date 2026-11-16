@@ -298,6 +298,24 @@ public class DeployComposeTests
         act.Should().Throw<InvalidOperationException>().WithMessage("*'worker'*port 9000*");
     }
 
+    [TestCase(typeof(UnauthorizedAccessException))]
+    [TestCase(typeof(System.Text.Json.JsonException))]
+    [TestCase(typeof(System.ComponentModel.Win32Exception))]
+    public void Deploy_reports_a_failure_in_a_line(Type failure) =>
+        DeployCommand
+            .Run(
+                "compose",
+                Write(File_()),
+                null,
+                build: false,
+                new AwsDeployerTests.ThrowingExporter(
+                    (Exception)Activator.CreateInstance(failure)!
+                ),
+                (_, _) => { }
+            )
+            .Should()
+            .Be(1);
+
     [Test]
     public void A_child_that_does_not_exit_in_time_is_stopped_and_its_output_kept()
     {

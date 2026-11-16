@@ -433,10 +433,9 @@ internal static class DeployAwsCommands
             return 0;
         }
         catch (Exception ex)
-            when (ex
-                    is InvalidOperationException
-                        or IOException
-                        or Amazon.Runtime.AmazonServiceException
+            when (DeployCommand.Reported(ex)
+                || ex
+                    is Amazon.Runtime.AmazonServiceException
                         or Amazon.Runtime.AmazonClientException
             )
         {
