@@ -48,8 +48,10 @@ template: every resource, every security group rule and every IAM statement is T
 
 ## Consequences
 
-- A deployed stack is managed: each `trax deploy` reconciles it with the manifest and the host's report, and a change
-  made by hand in the console is reverted.
+- A deployed stack is managed: each `trax deploy` updates it from the manifest and the host's report. A stack update
+  changes only the resources whose template changed, so a change made by hand in the console stays until a deploy
+  changes that same resource, and then it is overwritten. `trax deploy` does not detect drift; CloudFormation's drift
+  detection (`aws cloudformation detect-stack-drift`) shows what was changed by hand.
 - One hub, any number of workers, until a hub's restart stops failing runs that are live on other hosts.
 - A host that is deployed migrates in one process started with `--trax-migrate`, and every serving process runs with
   `TRAX_MIGRATIONS=skip`.
@@ -66,4 +68,6 @@ does.
 
 ## Changelog
 
+- **2026-11-16**: Corrected the consequence that a deploy reverts changes made by hand. A stack update touches only
+  the resources whose template changed.
 - **2026-10-20**: Recorded.
