@@ -250,6 +250,8 @@
           "AWSSDK.EC2": "[4.0.126.2, )",
           "AWSSDK.ECR": "[4.0.101.7, )",
           "AWSSDK.ECS": "[4.0.106, )",
+          "AWSSDK.SSO": "[4.0.100.17, )",
+          "AWSSDK.SSOOIDC": "[4.0.100.16, )",
           "AWSSDK.SecretsManager": "[4.0.100.15, )",
           "AWSSDK.SecurityToken": "[4.0.101.1, )",
           "GraphQL-Parser": "[9.5.1, )",
@@ -371,6 +373,24 @@
         "requested": "[4.0.101.1, )",
         "resolved": "4.0.101.1",
         "contentHash": "rZnMaqiYwDzbvTqeO7dWhqxEn96RleyR9KN6GYeWispPt9NQPRDUcfYZarvG7Eba5NvDNomhpcQJSNO+VoteGQ==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.SSO": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.100.17, )",
+        "resolved": "4.0.100.17",
+        "contentHash": "r44rkllp5cGOcB0+f/OMAXZXqnL3vt+BgvybBct2iKKFklV/pYk99AprOJqoVsxT9eCvgUC3Kj73KI1PC/bm8g==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.SSOOIDC": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.100.16, )",
+        "resolved": "4.0.100.16",
+        "contentHash": "6IB/jXbKklu7MO85jCdi+9pI5eAKjAm6FQvKlvgMQLVPq7ZC01kGXPl/PqxSRfOvRyKgWtJS9aOxGzt/RvF5xw==",
         "dependencies": {
           "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
         }

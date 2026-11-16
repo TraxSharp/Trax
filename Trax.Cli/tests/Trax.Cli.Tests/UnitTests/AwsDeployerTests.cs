@@ -219,6 +219,18 @@ public class AwsDeployerTests
             .Should()
             .StartWith("20261020-120000");
 
+    [TestCase("AWSSDK.SSO.dll")]
+    [TestCase("AWSSDK.SSOOIDC.dll")]
+    public void The_tool_ships_what_the_AWS_SDK_signs_in_to_an_SSO_profile_with(string assembly) =>
+        File.Exists(
+                Path.Combine(
+                    Path.GetDirectoryName(typeof(AwsDeployClient).Assembly.Location)!,
+                    assembly
+                )
+            )
+            .Should()
+            .BeTrue("the SDK loads it by reflection for a profile signed in with aws sso login");
+
     internal sealed class FakeImages : IImagePublisher
     {
         public List<string> Published { get; } = [];

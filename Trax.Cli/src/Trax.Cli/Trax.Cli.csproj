@@ -31,6 +31,10 @@
     <PackageReference Include="AWSSDK.ECS" />
     <PackageReference Include="AWSSDK.SecretsManager" />
     <PackageReference Include="AWSSDK.SecurityToken" />
+    <!-- Never called directly: the SDK loads these by reflection to resolve an SSO profile's credentials
+         (aws sso login), and fails without them. -->
+    <PackageReference Include="AWSSDK.SSO" />
+    <PackageReference Include="AWSSDK.SSOOIDC" />
     <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Trax.StateMachine.Persistence.csproj" />
     <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/Trax.StateMachine.Gherkin.csproj" />
   </ItemGroup>
