@@ -1,0 +1,3 @@
+Held until trax deploy's AWS target has deployed to a real AWS account and passed its smoke run.
+The AWS target is on main but has only been tested against a fake client and cfn-lint.
+The pull request that adds the smoke run deletes this file once the first run is green.

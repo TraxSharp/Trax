@@ -42,12 +42,45 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # A release can be held by committing .github/release-hold, whose text says why and what
+  # lifts it. While the file is on main every dispatch stops here, before CI, a tag or an
+  # approval. The pull request that lifts the hold deletes the file.
+  # ---------------------------------------------------------------------------
+  hold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+      - name: Refuse while a release hold is on main
+        run: |
+          if [ -f .github/release-hold ]; then
+            echo "::error title=Release held::$(head -n 1 .github/release-hold)"
+            cat .github/release-hold
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
   # Untrusted-code zone. The pull-request CI over every folder, at the commit this
   # run releases: restore, build, typecheck, test and a trial pack of every library
   # package and of the TypeScript engine (the bulk of third-party code execution) with NO
   # release or publish credentials. Nothing below runs unless all of it passed.
   # ---------------------------------------------------------------------------
   build-test:
+    needs: hold
     permissions:
       contents: read
     uses: ./.github/workflows/ci.yml  # zizmor: ignore[self-repository]

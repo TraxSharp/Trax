@@ -46,6 +46,34 @@ const sandbox = () => {
   return root;
 };
 
+describe('hold job', () => {
+  const hold = workflow.jobs.hold;
+  const script = step(hold, 'Refuse while a release hold is on main').run;
+  const repo = () => {
+    const root = mkdtempSync(join(tmpdir(), 'trax-hold-'));
+    mkdirSync(join(root, '.github'));
+    return root;
+  };
+
+  it('runs before CI, so a held release starts nothing else', () => {
+    assert.equal(workflow.jobs['build-test'].needs, 'hold');
+    assert.deepEqual(hold.permissions, { contents: 'read' });
+    assert.equal(hold.environment, undefined);
+  });
+
+  it('fails while .github/release-hold exists, and prints why', () => {
+    const root = repo();
+    writeFileSync(join(root, '.github', 'release-hold'), 'Held until the smoke run passes.\nmore\n');
+    const result = runStep(script, root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /::error title=Release held::Held until the smoke run passes\./);
+  });
+
+  it('passes when there is no hold', () => {
+    assert.equal(runStep(script, repo()).status, 0);
+  });
+});
+
 describe('release job', () => {
   it('holds the write token and runs only the release tooling: it builds and packs nothing', () => {
     assert.equal(release.permissions.contents, 'write');
