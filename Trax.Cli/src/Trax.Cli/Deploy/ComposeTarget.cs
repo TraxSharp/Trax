@@ -100,7 +100,16 @@ internal static class ComposeTarget
         y.AppendLine("        condition: service_healthy");
         y.AppendLine("    restart: \"no\"");
 
-        var port = 8080;
+        // A port asked for in the file is the service's; the rest take 8080 and on, skipping those.
+        var taken = file.Services.Values.Select(s => s.Port).OfType<int>().ToHashSet();
+        var nextPort = 8080;
+        int FreePort()
+        {
+            while (!taken.Add(nextPort))
+                nextPort++;
+            return nextPort;
+        }
+
         foreach (var (name, service) in file.Services)
         {
             var export = exports[name];
@@ -110,13 +119,12 @@ internal static class ComposeTarget
             y.AppendLine("    environment:");
             y.AppendLine("      <<: *trax");
             y.AppendLine($"      {TraxMigrate.Variable}: {TraxMigrate.SkipValue}");
-            if (export.Endpoints.GraphQL is not null || export.Endpoints.Health is not null)
+            if (Hub(export))
             {
                 // Loopback only: whatever puts the app in front of people (a reverse proxy, tailscale serve)
                 // decides who reaches it, not the machine's network.
                 y.AppendLine("    ports:");
-                y.AppendLine($"      - \"127.0.0.1:{service.Port ?? port}:8080\"");
-                port = (service.Port ?? port) + 1;
+                y.AppendLine($"      - \"127.0.0.1:{service.Port ?? FreePort()}:8080\"");
             }
             Hardened(y);
             if (service.Count > 1)
@@ -168,11 +176,28 @@ internal static class ComposeTarget
 
     private static string Required(string name) => $"${{{name}:?set {name}}}";
 
+    /// <summary>The roles a service runs as one copy of, until hosts hold leases on their runs.</summary>
+    private static readonly string[] SingleRoles = ["api", "scheduler"];
+
+    /// <summary>
+    /// Whether compose publishes a port for the service: a hub, which serves HTTP and runs the api or scheduler role,
+    /// so runs as one copy. A port on a service with several copies would be bound once per copy.
+    /// </summary>
+    private static bool Hub(DeployManifest export) =>
+        (export.Endpoints.GraphQL is not null || export.Endpoints.Health is not null)
+        && export.Roles.Intersect(SingleRoles).Any();
+
     /// <summary>Refuses a deployment compose cannot give what the hosts said they need.</summary>
-    internal static void Check(
-        DeployFile file,
-        IReadOnlyDictionary<string, DeployManifest> exports
-    ) => CheckHosts(file, exports, name => file.Services[name].Count);
+    internal static void Check(DeployFile file, IReadOnlyDictionary<string, DeployManifest> exports)
+    {
+        CheckHosts(file, exports, name => file.Services[name].Count);
+        foreach (var (name, service) in file.Services)
+            if (service.Port is { } port && !Hub(exports[name]))
+                throw new InvalidOperationException(
+                    $"Service '{name}' has port {port}, but compose publishes a port only for a service that serves "
+                        + "HTTP and runs the api or scheduler role. Remove the port."
+                );
+    }
 
     /// <summary>
     /// Refuses what no deployment can give the hosts: runs kept anywhere but Postgres, or more than one copy of a
@@ -204,7 +229,7 @@ internal static class ComposeTarget
                             + "with that connection string when it is set."
                     );
             }
-            var single = export.Roles.Intersect(["api", "scheduler"]).ToList();
+            var single = export.Roles.Intersect(SingleRoles).ToList();
             if (copies > 1 && single.Count > 0)
                 throw new InvalidOperationException(
                     $"Service '{name}' runs the {string.Join(" and ", single)} role and has count "

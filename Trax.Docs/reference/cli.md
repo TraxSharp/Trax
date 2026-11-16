@@ -697,7 +697,7 @@ trax deploy --target compose --build
 | Key | Meaning |
 |---|---|
 | `app` | Lower case, a letter first, then letters, digits or dashes. Names the database, its user and the images. |
-| `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes its HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `init` names a lone project `hub` and several by the last part of their names. |
+| `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes a hub's HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `init` names a lone project `hub` and several by the last part of their names. |
 | `connectionStrings` | The names under `ConnectionStrings:` the hosts read Postgres and RabbitMQ from. Default `Trax` and `RabbitMq`. |
 | `settings`, `secrets` | Configuration the deployment must supply, as environment names (`__` for `:`). Every one is required. |
 
@@ -712,8 +712,10 @@ compose:
 - `database`, Postgres 17, with the app's name as database and user;
 - `rabbitmq`, only when a host connects to RabbitMQ;
 - `migrate`, the image of the service that serves the API, started once with `--trax-migrate` before any service;
-- each service, with `TRAX_MIGRATIONS=skip`, waiting for `migrate` to finish; a service that serves HTTP is
-  published on `127.0.0.1` only, on its `port` or 8080 (then 8081 and on), and `count` becomes `deploy.replicas`.
+- each service, with `TRAX_MIGRATIONS=skip`, waiting for `migrate` to finish, and `count` becomes
+  `deploy.replicas`. A hub (a service that serves HTTP and runs the `api` or `scheduler` role, so runs as one) is
+  published on `127.0.0.1` only, on its `port` or the first port from 8080 no other service names. No other service
+  publishes a port, so a `port` on one is refused, and so are two services with the same `port`.
 
 The Trax services drop every Linux capability and run with `no-new-privileges`; Postgres and RabbitMQ get
 `no-new-privileges`. Nothing is reachable from other machines until something in front of the stack (a reverse

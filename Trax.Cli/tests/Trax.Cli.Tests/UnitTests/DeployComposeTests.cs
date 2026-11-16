@@ -8,9 +8,9 @@ namespace Trax.Cli.Tests.UnitTests;
 /// <summary>
 /// <c>trax deploy --target compose</c> turns trax.deploy.json and what each host reports into a compose stack:
 /// Postgres, RabbitMQ only when a host connects to it, one migrate run before any service starts, each service with
-/// migrations off, every password, setting and secret required from the environment, and a port only for a service
-/// that serves HTTP. It refuses what compose cannot give the hosts, and never overwrites a compose file it did not
-/// write.
+/// migrations off, every password, setting and secret required from the environment, and a port only for a hub (a
+/// service that serves HTTP and runs the api or scheduler role, so runs as one). It refuses what compose cannot give
+/// the hosts, and never overwrites a compose file it did not write.
 /// </summary>
 public class DeployComposeTests
 {
@@ -247,6 +247,58 @@ public class DeployComposeTests
     }
 
     [Test]
+    public void A_replicated_service_that_reports_health_publishes_no_port()
+    {
+        var worker = Worker();
+        worker.Endpoints = new DeployEndpoints { Health = "/trax/health" };
+
+        var compose = ComposeTarget
+            .Render(
+                File_(),
+                new Dictionary<string, DeployManifest> { ["hub"] = Hub(), ["worker"] = worker }
+            )[0]
+            .Content;
+
+        compose.Split("127.0.0.1:").Length.Should().Be(2, "only the hub publishes a port");
+        compose.Should().Contain("\"127.0.0.1:8080:8080\"");
+    }
+
+    [Test]
+    public void A_hub_takes_the_next_port_no_other_service_has_asked_for()
+    {
+        var file = File_();
+        file.Services["ops"] = new DeployService { Project = "Orders/Orders.csproj", Port = 8080 };
+        var ops = Hub();
+        ops.Roles = ["scheduler"];
+
+        var compose = ComposeTarget
+            .Render(
+                file,
+                new Dictionary<string, DeployManifest>
+                {
+                    ["hub"] = Hub(),
+                    ["worker"] = Worker(),
+                    ["ops"] = ops,
+                }
+            )[0]
+            .Content;
+
+        compose.Should().Contain("\"127.0.0.1:8081:8080\"").And.Contain("\"127.0.0.1:8080:8080\"");
+        compose.Split("127.0.0.1:8080:").Length.Should().Be(2);
+    }
+
+    [Test]
+    public void A_port_on_a_service_compose_publishes_no_port_for_is_refused()
+    {
+        var file = File_();
+        file.Services["worker"].Port = 9000;
+
+        var act = () => ComposeTarget.Render(file, Exports());
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*'worker'*port 9000*");
+    }
+
+    [Test]
     public void Deploy_writes_the_stack_beside_the_file_from_what_the_hosts_report()
     {
         var path = Write(File_());
@@ -348,6 +400,10 @@ public class DeployComposeTests
     [TestCase(
         """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj" } }, "secrets": ["Auth:Authority"] }""",
         "*'Auth:Authority' is not an environment name*"
+    )]
+    [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "port": 8080 }, "worker": { "project": "Orders.Worker/Orders.Worker.csproj", "port": 8080 } } }""",
+        "*'worker'*port 8080*'hub'*"
     )]
     [TestCase("""{ "version": 2, "app": "orders", "services": {} }""", "*version 2*")]
     public void A_file_that_cannot_be_deployed_is_refused_naming_the_problem(
