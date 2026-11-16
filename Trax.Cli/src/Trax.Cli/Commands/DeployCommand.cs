@@ -63,7 +63,7 @@ internal static class DeployCommand
                             path,
                             parseResult.GetValue(output)?.FullName,
                             parseResult.GetValue(build),
-                            new DotnetHostExporter(),
+                            new DotnetHostExporter(ct),
                             BuildImage
                         )
                     );
@@ -77,7 +77,7 @@ internal static class DeployCommand
                 return DeployAwsCommands.DeployAsync(
                     path,
                     environment,
-                    new DotnetHostExporter(),
+                    new DotnetHostExporter(ct),
                     ct
                 );
             }

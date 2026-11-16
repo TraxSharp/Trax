@@ -61,7 +61,7 @@ internal static class DeployAwsCommands
         };
         command.SetAction(
             (r, ct) =>
-                PlanAsync(PathOf(r, file), r.GetRequiredValue(env), new DotnetHostExporter(), ct)
+                PlanAsync(PathOf(r, file), r.GetRequiredValue(env), new DotnetHostExporter(ct), ct)
         );
         return command;
     }

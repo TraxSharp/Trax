@@ -27,4 +27,53 @@ internal static class ChildProcess
         process.WaitForExit();
         return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
     }
+
+    /// <summary>
+    /// <see cref="Run(ProcessStartInfo)"/>, stopping the process and everything it started when it runs longer than
+    /// <paramref name="timeout"/> (a <see cref="TimeoutException"/> holding what it wrote) or when
+    /// <paramref name="ct"/> is cancelled (an <see cref="OperationCanceledException"/>).
+    /// </summary>
+    public static (int ExitCode, string StdOut, string StdErr) Run(
+        ProcessStartInfo psi,
+        TimeSpan timeout,
+        CancellationToken ct
+    )
+    {
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.UseShellExecute = false;
+        psi.CreateNoWindow = true;
+
+        using var process =
+            Process.Start(psi)
+            ?? throw new InvalidOperationException($"Failed to start '{psi.FileName}'.");
+
+        var stdout = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+        var stderr = process.StandardError.ReadToEndAsync(CancellationToken.None);
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(timeout);
+        try
+        {
+            process.WaitForExitAsync(limit.Token).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+                // It exited on its own in the meantime.
+            }
+            process.WaitForExit();
+            ct.ThrowIfCancellationRequested();
+            throw new TimeoutException(
+                $"'{psi.FileName}' did not finish within {timeout.TotalMinutes:0.#} minutes and was stopped. "
+                    + $"Its output:\n{stdout.GetAwaiter().GetResult()}{stderr.GetAwaiter().GetResult()}"
+            );
+        }
+        process.WaitForExit();
+        return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
+    }
 }

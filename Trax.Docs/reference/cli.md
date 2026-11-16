@@ -668,7 +668,9 @@ C# client does not type one yet; the console selects none.
 database, its roles, its endpoints) is not written in the file: trax runs each project once with
 `--trax-export-deploy`, in Production, and reads what the host reports
 ([DeployManifest](/docs/sdk-reference/configuration/deploy-manifest)). A host that would refuse to start in
-Production refuses the deploy the same way, before anything is written.
+Production refuses the deploy the same way, before anything is written. A run still going after ten minutes, its
+build included, is stopped and the deploy fails with what it printed: a host that calls `app.Run()` serves instead
+of reporting.
 
 ```bash
 # Write a first trax.deploy.json from the Trax host projects under this directory.

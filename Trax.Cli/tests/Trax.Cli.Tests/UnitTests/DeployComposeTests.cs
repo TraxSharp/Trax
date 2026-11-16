@@ -299,6 +299,39 @@ public class DeployComposeTests
     }
 
     [Test]
+    public void A_child_that_does_not_exit_in_time_is_stopped_and_its_output_kept()
+    {
+        if (OperatingSystem.IsWindows())
+            Assert.Ignore("Uses sh; the timeout's code path is the same on every OS.");
+        var psi = new System.Diagnostics.ProcessStartInfo("sh");
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("echo serving; sleep 20");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        var act = () => ChildProcess.Run(psi, TimeSpan.FromSeconds(1), CancellationToken.None);
+
+        act.Should().Throw<TimeoutException>().WithMessage("*serving*");
+        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(15));
+    }
+
+    [Test]
+    public void A_child_is_stopped_when_the_command_is_cancelled()
+    {
+        if (OperatingSystem.IsWindows())
+            Assert.Ignore("Uses sh; the cancellation's code path is the same on every OS.");
+        var psi = new System.Diagnostics.ProcessStartInfo("sh");
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("sleep 20");
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        var act = () => ChildProcess.Run(psi, TimeSpan.FromMinutes(5), cancel.Token);
+
+        act.Should().Throw<OperationCanceledException>();
+        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(15));
+    }
+
+    [Test]
     public void Deploy_writes_the_stack_beside_the_file_from_what_the_hosts_report()
     {
         var path = Write(File_());
