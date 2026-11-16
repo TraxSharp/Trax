@@ -44,6 +44,11 @@ public static class SchedulerExtensions
         var schedulerBuilder = new SchedulerConfigurationBuilder(builder);
         configure(schedulerBuilder);
         schedulerBuilder.Build();
+        Trax.Effect.Configuration.Deploy.DeployFact.Add(
+            builder.ServiceCollection,
+            Trax.Effect.Configuration.Deploy.DeployFact.Role,
+            "scheduler"
+        );
         return builder;
     }
 

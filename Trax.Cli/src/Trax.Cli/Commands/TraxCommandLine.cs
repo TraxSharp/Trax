@@ -13,12 +13,13 @@ namespace Trax.Cli.Commands;
 internal static class TraxCommandLine
 {
     public static RootCommand Create() =>
-        new("Trax CLI — generate Trax API projects from schemas")
+        new("Trax CLI — generate Trax API projects from schemas, and deploy them")
         {
             GenerateCommand.Create(),
             MachineCommand.Create(),
             ClientCommand.Create(),
             LexiconCommand.Create(),
+            DeployCommand.Create(),
         };
 
     private static readonly ParserConfiguration Configuration = new()

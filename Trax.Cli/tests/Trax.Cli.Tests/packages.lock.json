@@ -90,6 +90,11 @@
           "Microsoft.Testing.Platform.MSBuild": "2.3.3"
         }
       },
+      "AWSSDK.Core": {
+        "type": "Transitive",
+        "resolved": "4.0.102.8",
+        "contentHash": "90B9Skhl+ORbtWNXrrmGdGhGvAfZiPmZafRYrB/xHelZjePIwPvXioqz9UiiF1vo21eDLzTnXh5EC4RjbNWsFQ=="
+      },
       "Cucumber.Messages": {
         "type": "Transitive",
         "resolved": "29.0.1",
@@ -240,6 +245,13 @@
       "trax.cli": {
         "type": "Project",
         "dependencies": {
+          "AWSSDK.CloudFormation": "[4.0.102.8, )",
+          "AWSSDK.CloudWatchLogs": "[4.0.105, )",
+          "AWSSDK.EC2": "[4.0.126.2, )",
+          "AWSSDK.ECR": "[4.0.101.7, )",
+          "AWSSDK.ECS": "[4.0.106, )",
+          "AWSSDK.SecretsManager": "[4.0.100.15, )",
+          "AWSSDK.SecurityToken": "[4.0.101.1, )",
           "GraphQL-Parser": "[9.5.1, )",
           "Microsoft.OpenApi.Readers": "[1.6.31, )",
           "Scriban": "[7.5.0, )",
@@ -298,6 +310,69 @@
           "Trax.Effect": "[1.99.99, )",
           "Trax.Effect.Data": "[1.99.99, )",
           "Trax.StateMachine": "[1.99.99, )"
+        }
+      },
+      "AWSSDK.CloudFormation": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.102.8, )",
+        "resolved": "4.0.102.8",
+        "contentHash": "aPZn8YtLBx+SJSFuR2LzhqnNBblTrANcMxXI0iVBy28kmBFI8mAJ7IrDmZ71jfTrOMZnYJ4jHJO4is9GKodSJA==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.CloudWatchLogs": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.105, )",
+        "resolved": "4.0.105",
+        "contentHash": "9Mdho7fiovOVOwOo/qJZzNKOEJvmnOJyW1nYbLrJXtOL5mAzZtCNb0fyu4dIb/+cxEbu/NZUFqnoXopmDTpFrQ==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.EC2": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.126.2, )",
+        "resolved": "4.0.126.2",
+        "contentHash": "Afl8Vr7+AY/aIP3j0/0eEtq213HAsJwPG8/RShb5YvRfQ9P0ImBnpkDKxawQw+j4gMJV6yEwbaQHBHFMWd0PwA==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.ECR": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.101.7, )",
+        "resolved": "4.0.101.7",
+        "contentHash": "L0fQUZUVKF3w9rRtDqd4qNKAXk9jYX+MQukxwXEcAO6OjOmWrE5H6/hpGL+6kNw/3IojmFMjocAvhu9saNPN0Q==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.ECS": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.106, )",
+        "resolved": "4.0.106",
+        "contentHash": "pZve5VF3tmEGrJObv/ecpuJ9XGvS7VxPaj2alnD0qpw2bd2JBfAe9s/Jubv7kRnQhS7K+2CP0LFKsSAFKvpPSg==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.SecretsManager": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.100.15, )",
+        "resolved": "4.0.100.15",
+        "contentHash": "rT7ynrNzVwjrKVOPncko6lCkd2oZCZV7Fq9BW1bnEP9IZurexHz+Gqg+TNN1CCCh4J9HNnd8vIuSg29IX9FxMA==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.SecurityToken": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.101.1, )",
+        "resolved": "4.0.101.1",
+        "contentHash": "rZnMaqiYwDzbvTqeO7dWhqxEn96RleyR9KN6GYeWispPt9NQPRDUcfYZarvG7Eba5NvDNomhpcQJSNO+VoteGQ==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
         }
       },
       "Gherkin": {

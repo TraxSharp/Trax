@@ -68,6 +68,42 @@ public class ScaffoldedTemplateTests
     [TestCase("trax-hub")]
     [TestCase("trax-scheduler")]
     [TestCase("trax-api")]
+    public async Task Scaffold_PublishesAContainerImageNamedAfterItselfOn8080(string shortName)
+    {
+        var dir = await Scaffold(shortName);
+
+        var config = await Run(
+            dir,
+            allowFailure: true,
+            "msbuild",
+            "App.csproj",
+            "-t:ComputeContainerConfig",
+            "-getProperty:ContainerRepository",
+            "-getItem:ContainerPort"
+        );
+
+        config
+            .ExitCode.Should()
+            .Be(0, $"the container config of {shortName} computes:\n{config.Output}");
+        using var json = System.Text.Json.JsonDocument.Parse(
+            config.Output[config.Output.IndexOf('{')..(config.Output.LastIndexOf('}') + 1)]
+        );
+        json.RootElement.GetProperty("Properties")
+            .GetProperty("ContainerRepository")
+            .GetString()
+            .Should()
+            .Be("app", "the image is named after the project, lower-cased");
+        json.RootElement.GetProperty("Items")
+            .GetProperty("ContainerPort")
+            .EnumerateArray()
+            .Select(p => p.GetProperty("Identity").GetString())
+            .Should()
+            .Equal("8080");
+    }
+
+    [TestCase("trax-hub")]
+    [TestCase("trax-scheduler")]
+    [TestCase("trax-api")]
     public async Task Scaffold_TestProject_Passes(string shortName)
     {
         var dir = await Scaffold(shortName);
@@ -131,6 +167,48 @@ public class ScaffoldedTemplateTests
             );
     }
 
+    [TestCase("trax-hub", "api,scheduler", "/trax/health")]
+    [TestCase("trax-scheduler", "api,scheduler", null)]
+    [TestCase("trax-api", "api", "/trax/health")]
+    public async Task Scaffold_ReportsWhatItNeedsFromItsDeployment(
+        string shortName,
+        string roles,
+        string? health
+    )
+    {
+        var dir = await Scaffold(shortName);
+        var path = Path.Combine(dir, "deploy.json");
+
+        // In Production, as trax deploy runs it, with a connection string that names no reachable server: the
+        // export opens no database.
+        var export = await Run(
+            dir,
+            new Dictionary<string, string>
+            {
+                ["ASPNETCORE_ENVIRONMENT"] = "Production",
+                ["ConnectionStrings__Trax"] =
+                    "Host=trax-deploy-export.invalid;Database=x;Username=x;Password=x",
+            },
+            allowFailure: true,
+            "run",
+            "--no-build",
+            "--no-launch-profile",
+            "--",
+            "--trax-export-deploy",
+            path
+        );
+
+        export.ExitCode.Should().Be(0, $"the {shortName} export runs:\n{export.Output}");
+        var manifest = Trax.Effect.Configuration.Deploy.DeployManifest.Read(
+            await File.ReadAllTextAsync(path)
+        );
+        manifest.Roles.Should().Equal(roles.Split(','));
+        manifest.Database!.Provider.Should().Be("postgres");
+        manifest.Endpoints.GraphQL.Should().Be("/trax/graphql");
+        manifest.Endpoints.Health.Should().Be(health);
+        manifest.Endpoints.Console.Should().BeNull("the console is served only in Development");
+    }
+
     [TestCase("trax-hub", "/trax/dashboard/", HttpStatusCode.NotFound)]
     [TestCase("trax-hub", "/trax/health", HttpStatusCode.OK)]
     [TestCase("trax-scheduler", "/trax/dashboard/", HttpStatusCode.NotFound)]
@@ -150,6 +228,7 @@ public class ScaffoldedTemplateTests
             {
                 ["ASPNETCORE_ENVIRONMENT"] = "Production",
                 ["ASPNETCORE_URLS"] = url,
+                ["Trax__AllowInMemory"] = "true",
             },
             "Application started",
             "run",

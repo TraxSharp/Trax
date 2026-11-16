@@ -51,4 +51,38 @@ than a 401 or 403.
 3. Keep `[TraxAuthorize]` on the trains you add. Mark one `[TraxAllowAnonymous]` only when anyone
    who can reach the host may call it.
 
+## Behind a load balancer
+
+A load balancer that ends TLS calls the host over plain HTTP and says who the caller was in
+`X-Forwarded-For` and `X-Forwarded-Proto`. The templates believe those headers only from the
+networks in `Trax:Proxy:KnownNetworks`, comma-separated CIDR ranges:
+
+```bash
+Trax__Proxy__KnownNetworks=10.0.0.0/16
+```
+
+Set it to the network the load balancer sends from, such as the VPC's range. With it unset the host
+reads neither header, so behind a load balancer it sees every request as `http` from the load
+balancer's address: a sign-in redirect is built with `http`, and anything keyed on the caller's
+address sees one caller. The templates do not fall back to believing any sender, which is what
+ASP.NET Core's forwarded headers middleware does when it is given no networks: then any client
+could claim to have arrived over HTTPS, or from any address.
+
+## Build a container image
+
+Each template publishes as a container image with no Dockerfile:
+
+```bash
+dotnet publish -t:PublishContainer
+dotnet publish -t:PublishContainer -p:ContainerRegistry=123456789012.dkr.ecr.us-west-2.amazonaws.com
+```
+
+The image is the ASP.NET runtime image with the published app, named after the project in lower case, running as
+the runtime image's non-root user and listening on 8080, which the project declares with a `ContainerPort` item. The
+first form loads it into the local Docker or Podman; the second pushes it to the registry instead.
+
 [Secure a GraphQL host](/docs/security/secure-a-graphql-host) covers the rest of a production posture.
+
+## SDK Reference
+
+> [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard) | [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth)

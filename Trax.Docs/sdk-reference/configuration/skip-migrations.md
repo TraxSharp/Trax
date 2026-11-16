@@ -35,6 +35,10 @@ Sets `TraxEffectBuilder.MigrationsDisabled`. `UsePostgres` and `UseSqlite` read 
 `SkipMigrations` comes before them in the chain; called after, it has no effect on that provider. Everything else the
 provider registers is unchanged. The flag is carried over when the builder becomes `TraxEffectBuilderWithData`.
 
+To skip without changing code, set `TRAX_MIGRATIONS=skip` in the environment instead, which a process started
+with `--trax-migrate` overrides; a host whose code calls `SkipMigrations` refuses `--trax-migrate` (see
+[TraxMigrate](/docs/sdk-reference/configuration/trax-migrate)).
+
 With migrations skipped, the schema must already be current before the host serves work:
 `DatabaseMigrator.Migrate(connectionString)` applies it from anywhere. See
 [DatabaseMigrator](/docs/sdk-reference/configuration/database-migrator).
@@ -54,4 +58,4 @@ services.AddTrax(trax => trax
 ## See also
 
 - [Run migrations outside startup](/docs/effect/run-migrations-outside-startup)
-- [UsePostgres](/docs/sdk-reference/configuration/use-postgres), [DatabaseMigrator](/docs/sdk-reference/configuration/database-migrator)
+- [TraxMigrate](/docs/sdk-reference/configuration/trax-migrate), [UsePostgres](/docs/sdk-reference/configuration/use-postgres), [DatabaseMigrator](/docs/sdk-reference/configuration/database-migrator)

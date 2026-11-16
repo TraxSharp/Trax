@@ -25,8 +25,9 @@ other run. [Scheduling](https://traxsharp.net/docs/scheduler) explains the parts
 
    More than one Trax process against the same data (a hub and workers, two replicas) needs
    Postgres. [SQLite and Postgres](https://traxsharp.net/docs/effect/sqlite-and-postgres) has the
-   comparison. The `trax-scheduler` and `trax-hub` templates start on `UseInMemory()`;
-   [Switch a template to Postgres](https://traxsharp.net/docs/reference/switch-a-template-to-postgres)
+   comparison. The `trax-scheduler` and `trax-hub` templates use Postgres when
+   `ConnectionStrings:Trax` is set and `UseInMemory()` otherwise, which they allow only in Development;
+   set it ([Switch a template to Postgres](https://traxsharp.net/docs/reference/switch-a-template-to-postgres))
    before relying on queues, retries or dead letters.
 
 2. **Where trains run.** Pick the topology before writing `Program.cs`;

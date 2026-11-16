@@ -63,6 +63,11 @@ public static class ServiceExtensions
     {
         var root = new InMemoryDatabaseRoot();
         var factory = new InMemoryContextProviderFactory(root);
+        Trax.Effect.Configuration.Deploy.DeployFact.Add(
+            configurationBuilder.ServiceCollection,
+            Trax.Effect.Configuration.Deploy.DeployFact.Database,
+            "in-memory"
+        );
 
         configurationBuilder.AddEffect<IDataContextProviderFactory, InMemoryContextProviderFactory>(
             factory,

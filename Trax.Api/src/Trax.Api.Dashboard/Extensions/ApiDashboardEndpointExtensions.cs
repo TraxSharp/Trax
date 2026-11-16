@@ -210,6 +210,7 @@ public static class ApiDashboardEndpointExtensions
             .Map($"{routePrefix}/{{**{DashboardEndpoint.PathRouteValue}}}", endpoint.HandleAsync)
             .WithDisplayName($"Trax API dashboard ({routePrefix})")
             .WithMetadata(marker);
+        graphQL.MappedConsolePath = routePrefix;
         RefuseAllowAnonymousOverAPosture(endpoints, builder, marker, routePrefix);
 
         if (options.AnonymousShellAllowed)

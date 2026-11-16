@@ -48,7 +48,7 @@ A [state machine that invokes trains](https://traxsharp.net/docs/statemachine/in
    for file. They are the style reference; the host tests exercise them. Delete them, and the `hello-world` schedule
    in `Program.cs`, after that. Adding a train is adding its folder:
    [Add your own trains to a template](https://traxsharp.net/docs/reference/add-trains-to-a-template).
-5. **Choose a database before the first feature that needs one.** The templates use `UseInMemory()`: runs vanish on
+5. **Choose a database before the first feature that needs one.** Without `ConnectionStrings:Trax` the templates use `UseInMemory()`, and only in Development: runs vanish on
    restart, two processes never share them, `mode: QUEUE` is refused with `TRAX_QUEUE_UNAVAILABLE`, and invoked runs
    never run. See [Move off the in-memory provider](#move-off-the-in-memory-provider).
 6. **Before deploying**, read
@@ -86,7 +86,8 @@ need `AddMediator(typeof(SomeTypeInTheLibrary).Assembly)` instead, or they do no
 
 ## Move off the in-memory provider
 
-Replace `UseInMemory()` in `AddEffects` and add the provider package at the version every other `Trax.*` package has.
+Set `ConnectionStrings:Trax` to a Postgres connection string and the templates use it. For another provider, replace the
+`UseInMemory()`/`UsePostgres` choice in `AddEffects` and add the provider package at the version every other `Trax.*` package has.
 Trax creates and migrates its own `trax` tables at startup. SQLite, for one host:
 
 ```csharp compile

@@ -1,6 +1,6 @@
 ---
 title: Trax CLI
-description: "The trax CLI: generate scaffolds a hub and trains from GraphQL SDL or OpenAPI, machine scaffolds and exports state machines, lexicon formats lexicons."
+description: "The trax CLI: generate scaffolds a hub and trains from GraphQL or OpenAPI, machine scaffolds and exports machines, lexicon formats, deploy writes a deployment."
 type: reference
 area: tooling
 nav_order: 1
@@ -11,6 +11,8 @@ source:
   - Trax.Cli/src/Trax.Cli/Commands/MachineCommand.cs
   - Trax.Cli/src/Trax.Cli/Commands/LexiconCommand.cs
   - Trax.Cli/src/Trax.Cli/Machines
+  - Trax.Cli/src/Trax.Cli/Commands/DeployCommand.cs
+  - Trax.Cli/src/Trax.Cli/Deploy
 ---
 
 # Trax CLI
@@ -660,7 +662,134 @@ schema type named like a document's `<Operation>Variables` or `<Operation>Result
 record has (`Equals`, `ToString`), which its record would declare beside its own name. It writes no `console-documents.json`;
 the host registers the documents from the TypeScript client's. A union or interface selection is refused, since the
 C# client does not type one yet; the console selects none.
+## Deployments (`trax deploy`)
+
+`trax deploy` turns the projects named in `trax.deploy.json` into a deployment. What each host needs (its
+database, its roles, its endpoints) is not written in the file: trax runs each project once with
+`--trax-export-deploy`, in Production, and reads what the host reports
+([DeployManifest](/docs/sdk-reference/configuration/deploy-manifest)). A host that would refuse to start in
+Production refuses the deploy the same way, before anything is written.
+
+```bash
+# Write a first trax.deploy.json from the Trax host projects under this directory.
+trax deploy init --app orders
+
+# Write compose.yaml and .env.example beside it, and build each service's image.
+trax deploy --target compose --build
+```
+
+### `trax.deploy.json`
+
+```json
+{
+  "version": 1,
+  "app": "orders",
+  "services": {
+    "hub": { "project": "Orders/Orders.csproj" },
+    "worker": { "project": "Orders.Worker/Orders.Worker.csproj", "count": 2 }
+  },
+  "connectionStrings": { "trax": "Trax", "rabbitMq": "RabbitMq" },
+  "settings": ["Auth__Authority", "Auth__Audience"],
+  "secrets": ["Stripe__ApiKey"]
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `app` | Lower case, a letter first, then letters, digits or dashes. Names the database, its user and the images. |
+| `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes its HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `init` names a lone project `hub` and several by the last part of their names. |
+| `connectionStrings` | The names under `ConnectionStrings:` the hosts read Postgres and RabbitMQ from. Default `Trax` and `RabbitMq`. |
+| `settings`, `secrets` | Configuration the deployment must supply, as environment names (`__` for `:`). Every one is required. |
+
+`init` makes a service of every web or console project under the directory that references a `Trax.*` package,
+leaving out test projects, and refuses to replace an existing file without `--force`.
+
+### `--target compose`
+
+Writes `compose.yaml` and `.env.example` beside `trax.deploy.json` (or into `--out`), for docker or podman
+compose:
+
+- `database`, Postgres 17, with the app's name as database and user;
+- `rabbitmq`, only when a host connects to RabbitMQ;
+- `migrate`, the image of the service that serves the API, started once with `--trax-migrate` before any service;
+- each service, with `TRAX_MIGRATIONS=skip`, waiting for `migrate` to finish; a service that serves HTTP is
+  published on `127.0.0.1` only, on its `port` or 8080 (then 8081 and on), and `count` becomes `deploy.replicas`.
+
+The Trax services drop every Linux capability and run with `no-new-privileges`; Postgres and RabbitMQ get
+`no-new-privileges`. Nothing is reachable from other machines until something in front of the stack (a reverse
+proxy, `tailscale serve`) decides who may reach it.
+
+Every password, setting and secret is `${NAME:?set NAME}`, so compose stops when one is missing; `.env.example`
+lists them. Images are `<app>-<service>:${TRAX_IMAGE_TAG:-latest}`; `--build` builds each with
+`dotnet publish -t:PublishContainer` under that name. A host that keeps its runs anywhere but Postgres is refused,
+and so is a `compose.yaml` trax did not write.
+
+### `--target aws`
+
+`trax deploy --env <name>` deploys one environment of `trax.deploy.json` to AWS, as the CloudFormation stack
+`<app>-<name>`. Credentials come from the standard AWS chain (a profile, SSO, the environment, a role); trax stores
+none. Nothing beyond the .NET SDK is needed: the stack is CloudFormation that trax generates, and the images are
+built and pushed with `dotnet publish -t:PublishContainer`.
+
+```json
+"environments": {
+  "production": {
+    "profile": "production",
+    "region": "us-west-2",
+    "domain": "orders.example.com",
+    "hostedZoneId": "Z0123456789ABC",
+    "auth": { "kind": "cognito" },
+    "settings": { "Storefront__Origin": "https://shop.example.com" },
+    "counts": { "worker": 3 }
+  },
+  "staging": { "profile": "try", "region": "us-west-2" }
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `profile` | `production`: a VPC with private subnets behind one NAT gateway, HTTPS on `domain` with an ACM certificate (HTTP redirects), Postgres 17 `db.t4g.small` Multi-AZ with deletion protection and a final snapshot. `try`: public subnets locked by security groups, no NAT, a `db.t4g.micro` deleted with the stack, served on a CloudFront address with no domain. |
+| `domain`, `hostedZoneId` | Production's host name. With the Route 53 zone, the certificate is validated and the name pointed at the load balancer by the stack; without it, CloudFormation waits for the validation record you add. |
+| `network` | `vpcId`, `cidr`, two or more `publicSubnets` and `privateSubnets`: deploy into an existing VPC instead of creating one. |
+| `databaseSecretArn` | A Secrets Manager secret holding a whole Postgres connection string: use an existing database instead of creating one. |
+| `auth` | `{ "kind": "cognito" }` creates a user pool, an app client and an `Operator` group, and sets `Auth__Authority` and `Auth__Audience` (`authorityKey`, `audienceKey` rename them). Leave it out to give an existing issuer in `settings`. |
+| `settings` | A value for each name the file lists under `settings`. |
+| `counts` | Copies per service here, over the file's `count`. |
+
+A deploy:
+
+1. refuses before anything is created when a listed secret has no value, or a host reports something the stack
+   cannot give it (runs kept anywhere but Postgres, RabbitMQ, more than one API service, an API with no health
+   check, more than one copy of the API or the scheduler);
+2. pushes each service's image to the ECR repository `trax/<stack>/<service>`, tagged with the time and the commit;
+3. creates or updates the stack with the migrate task on the new image, while the services stay where they are
+   (a new stack's at zero);
+4. runs the migrate task (`--trax-migrate`) and stops if it does not exit 0;
+5. rolls every service onto the new image with the ECS circuit breaker on, which rolls a version back if it never
+   gets healthy, and prints the address.
+
+Every security group replaces the default allow-all egress: the services reach HTTPS and the database, the
+database reaches nothing, and only the load balancer takes traffic from outside, on 443 and 80 in production and
+from CloudFront alone in `try`. Secrets reach a task by reference: the database password from the secret the stack
+generates (never rotated, so a running task does not lose it), each app secret from `<stack>/app/<NAME>`.
+
+In `try`, CloudFront talks to the load balancer over plain HTTP, since the load balancer has no certificate
+without a domain. That hop is inside AWS's network but not encrypted, and the app sees `http` as the scheme. Use it
+to evaluate, not for data you would not send unencrypted.
+
+```bash
+trax deploy plan --env production        # write .trax/deploy/aws/<stack>.template.json, count what it creates and its idle cost
+trax deploy secret set Stripe__ApiKey --env production   # from standard input, or asked for without echo
+trax deploy secret list --env production
+trax deploy --env production
+trax deploy status --env production
+trax deploy logs hub --env production --follow          # or migrate
+trax deploy destroy --env production     # asks for the stack's name; --delete-data also deletes images and secrets
+```
+
+`destroy` turns a production database's deletion protection off, then deletes the stack; the database leaves a
+final snapshot, which RDS keeps until you delete it.
 
 ## SDK Reference
 
-> [ExportIr](/docs/sdk-reference/statemachine-api/machine#exporting-the-ir) | [IR format](/docs/sdk-reference/statemachine-api/ir-format)
+> [ExportIr](/docs/sdk-reference/statemachine-api/machine#exporting-the-ir) | [IR format](/docs/sdk-reference/statemachine-api/ir-format) | [DeployManifest](/docs/sdk-reference/configuration/deploy-manifest) | [TraxMigrate](/docs/sdk-reference/configuration/trax-migrate)

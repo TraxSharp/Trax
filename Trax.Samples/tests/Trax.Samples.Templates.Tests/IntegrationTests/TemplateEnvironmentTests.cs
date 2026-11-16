@@ -27,9 +27,90 @@ public class TemplateEnvironmentTests
         "see docs/adr/0003-templates-serve-the-dashboard-only-in-development.md";
 
     // Any public type in the template's assembly locates its entry point.
-    private static WebApplicationFactory<T> Start<T>(string environment)
+    // Outside Development a template refuses the in-memory store unless told it is meant, as these starts are.
+    private static WebApplicationFactory<T> Start<T>(string environment, bool allowInMemory = true)
         where T : class =>
-        new WebApplicationFactory<T>().WithWebHostBuilder(b => b.UseEnvironment(environment));
+        new WebApplicationFactory<T>().WithWebHostBuilder(b =>
+        {
+            b.UseEnvironment(environment);
+            if (allowInMemory)
+                b.UseSetting("Trax:AllowInMemory", "true");
+        });
+
+    [Test]
+    public Task The_hub_template_believes_forwarded_headers_only_from_its_proxy_networks() =>
+        BelievesForwardedHeadersOnlyFromItsProxyNetworks<Hub.Data.AppDbContext>();
+
+    [Test]
+    public Task The_scheduler_template_believes_forwarded_headers_only_from_its_proxy_networks() =>
+        BelievesForwardedHeadersOnlyFromItsProxyNetworks<Scheduler.Trains.HelloWorld.HelloWorldInput>();
+
+    [Test]
+    public Task The_api_template_believes_forwarded_headers_only_from_its_proxy_networks() =>
+        BelievesForwardedHeadersOnlyFromItsProxyNetworks<Api.Data.AppDbContext>();
+
+    private static async Task BelievesForwardedHeadersOnlyFromItsProxyNetworks<T>()
+        where T : class
+    {
+        await using var behindProxy = new WebApplicationFactory<T>().WithWebHostBuilder(b =>
+            b.UseEnvironment("Development").UseSetting("Trax:Proxy:KnownNetworks", "10.0.0.0/16")
+        );
+        await using var noProxy = Start<T>("Development");
+
+        (await ForwardedScheme(behindProxy, "10.0.4.5"))
+            .Should()
+            .Be("https", "a request from the load balancer's network carries the caller's scheme");
+        (await ForwardedScheme(behindProxy, "192.0.2.7"))
+            .Should()
+            .Be("http", "anyone outside the proxy networks could otherwise claim https");
+        (await ForwardedScheme(noProxy, "10.0.4.5"))
+            .Should()
+            .Be("http", "with no proxy networks set the host reads no forwarded header");
+    }
+
+    private static async Task<string> ForwardedScheme<T>(
+        WebApplicationFactory<T> factory,
+        string from
+    )
+        where T : class
+    {
+        var context = await factory.Server.SendAsync(c =>
+        {
+            c.Connection.RemoteIpAddress = System.Net.IPAddress.Parse(from);
+            c.Request.Method = "GET";
+            c.Request.Path = "/trax/health";
+            c.Request.Headers["X-Forwarded-Proto"] = "https";
+            c.Request.Headers["X-Forwarded-For"] = "203.0.113.9";
+        });
+        return context.Request.Scheme;
+    }
+
+    [Test]
+    public void The_hub_template_refuses_to_start_outside_Development_without_a_database() =>
+        RefusesWithoutADatabase<Hub.Data.AppDbContext>();
+
+    [Test]
+    public void The_scheduler_template_refuses_to_start_outside_Development_without_a_database() =>
+        RefusesWithoutADatabase<Scheduler.Trains.HelloWorld.HelloWorldInput>();
+
+    [Test]
+    public void The_api_template_refuses_to_start_outside_Development_without_a_database() =>
+        RefusesWithoutADatabase<Api.Data.AppDbContext>();
+
+    private static void RefusesWithoutADatabase<T>()
+        where T : class
+    {
+        using var factory = Start<T>("Production", allowInMemory: false);
+
+        var act = () => factory.CreateClient();
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage(
+                "*ConnectionStrings:Trax*",
+                "a template outside Development refuses the in-memory provider, which loses every run on restart"
+            );
+    }
 
     [Test]
     public async Task The_hub_template_serves_no_dashboard_outside_Development()

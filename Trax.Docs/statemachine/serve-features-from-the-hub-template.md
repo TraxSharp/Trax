@@ -22,7 +22,7 @@ dotnet add package Trax.Api.GraphQL.PersistedOperations --version <the version T
 
 | Package | Why |
 |---|---|
-| `Trax.Effect.Data.Sqlite`, or `Trax.Effect.Data.Postgres` | The template runs on `UseInMemory()`, and a host whose features have policies refuses to start on it: InMemory has no transaction to queue a policy's fire in. `UseSqlite` is in `Trax.Effect.Data.Sqlite`, `UsePostgres` in `Trax.Effect.Data.Postgres`. |
+| `Trax.Effect.Data.Sqlite`, or `Trax.Effect.Data.Postgres` | Without `ConnectionStrings:Trax` the template runs on `UseInMemory()`, and a host whose features have policies refuses to start on it: InMemory has no transaction to queue a policy's fire in. `UseSqlite` is in `Trax.Effect.Data.Sqlite`, `UsePostgres` in `Trax.Effect.Data.Postgres`. |
 | `Trax.Api.GraphQL.PersistedOperations` | A host that serves machines refuses to start without persisted operations, and `RunTraxAsync`, which exports the client manifest, is in it too. |
 
 `AddStateMachines`, `ServeFeatures` and `ISnapshotPrincipal` are in `Trax.StateMachine.Persistence`, which
@@ -31,7 +31,7 @@ dotnet add package Trax.Api.GraphQL.PersistedOperations --version <the version T
 
 ## 2. Serve the machines
 
-Swap `UseInMemory()` for a database, and call `AddStateMachines` after `AddEffects` and before `AddMediator`:
+Replace the template's choice between `UseInMemory()` and `UsePostgres` with one database, and call `AddStateMachines` after `AddEffects` and before `AddMediator`:
 
 ```csharp compile
 using Trax.Effect.Data.Sqlite.Extensions;
