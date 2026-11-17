@@ -62,6 +62,38 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         return lists.PrefixLists?.FirstOrDefault()?.PrefixListId;
     }
 
+    public async Task<IReadOnlyList<AwsNetworkInterface>> NetworkInterfacesAsync(
+        string vpcId,
+        CancellationToken ct
+    )
+    {
+        using var ec2 = new AmazonEC2Client(_region);
+        var found = new List<AwsNetworkInterface>();
+        string? next = null;
+        do
+        {
+            var page = await ec2.DescribeNetworkInterfacesAsync(
+                new DescribeNetworkInterfacesRequest
+                {
+                    Filters = [new Amazon.EC2.Model.Filter("vpc-id", [vpcId])],
+                    NextToken = next,
+                },
+                ct
+            );
+            foreach (var eni in page.NetworkInterfaces ?? [])
+                found.Add(
+                    new AwsNetworkInterface(
+                        eni.NetworkInterfaceId,
+                        eni.InterfaceType?.Value ?? "",
+                        eni.Description ?? "",
+                        [.. (eni.Groups ?? []).Select(g => g.GroupId)]
+                    )
+                );
+            next = page.NextToken;
+        } while (!string.IsNullOrEmpty(next));
+        return found;
+    }
+
     public async Task<string> EnsureRepositoryAsync(
         string name,
         IReadOnlyDictionary<string, string> tags,
@@ -347,7 +379,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
                     AwsvpcConfiguration = new AwsVpcConfiguration
                     {
                         Subnets = [.. request.Subnets],
-                        SecurityGroups = [request.SecurityGroup],
+                        SecurityGroups = [.. request.SecurityGroups],
                         AssignPublicIp = request.AssignPublicIp
                             ? AssignPublicIp.ENABLED
                             : AssignPublicIp.DISABLED,

@@ -231,7 +231,7 @@ internal static class DeployAwsCommands
             var file = DeployFile.Read(filePath);
             var env = file.Environment(environment);
             var exports = DeployCommand.Export(file, filePath, exporter);
-            var template = await new AwsDeployer(
+            var templates = await new AwsDeployer(
                 Client(env.Region),
                 Images,
                 Console.WriteLine
@@ -243,10 +243,19 @@ internal static class DeployAwsCommands
                 "aws"
             );
             Directory.CreateDirectory(dir);
-            var path = Path.Combine(dir, $"{file.StackName(environment)}.template.json");
-            File.WriteAllText(path, AwsStack.Indented(template));
-            Console.WriteLine($"Wrote {path}");
-            foreach (var line in AwsPlanSummary.Lines(file, environment, template))
+            foreach (
+                var (stack, template) in new[]
+                {
+                    (file.FoundationStackName(environment), templates.Foundation),
+                    (file.StackName(environment), templates.Runtime),
+                }
+            )
+            {
+                var path = Path.Combine(dir, $"{stack}.template.json");
+                File.WriteAllText(path, AwsStack.Indented(template));
+                Console.WriteLine($"Wrote {path}");
+            }
+            foreach (var line in AwsPlanSummary.Lines(file, environment, templates))
                 Console.WriteLine(line);
         });
 
@@ -261,6 +270,12 @@ internal static class DeployAwsCommands
             var env = file.Environment(environment);
             var aws = Client(env.Region);
             var stack = file.StackName(environment);
+            var foundation = await aws.DescribeStackAsync(
+                file.FoundationStackName(environment),
+                ct
+            );
+            if (foundation is not null)
+                Console.WriteLine($"{file.FoundationStackName(environment)}: {foundation.Status}");
             var state = await aws.DescribeStackAsync(stack, ct);
             if (state is null)
             {
@@ -317,7 +332,7 @@ internal static class DeployAwsCommands
         var stack = file.StackName(environment);
         var cognito = env.Auth is { Kind: DeployAuth.Cognito };
         var production = env.Profile == DeployEnvironment.Production;
-        var gone = new List<string> { stack };
+        var gone = new List<string> { $"{stack} and {file.FoundationStackName(environment)}" };
         if (cognito && (deleteData || !production))
             gone.Add("its user pool with every user in it");
         if (deleteData)

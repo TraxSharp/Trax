@@ -66,10 +66,30 @@ public class AwsStackTemplateTests
             },
         };
 
-    private static JsonObject Build(
+    internal static AwsTemplates Templates(
         DeployFile? file = null,
         Dictionary<string, DeployManifest>? exports = null
     ) => AwsStack.Build(file ?? File_(), "production", exports ?? Exports(), PrefixList);
+
+    /// <summary>Both stacks' resources and outputs in one object, for the rules that hold across the two.</summary>
+    private static JsonObject Build(
+        DeployFile? file = null,
+        Dictionary<string, DeployManifest>? exports = null
+    )
+    {
+        var templates = Templates(file, exports);
+        var merged = new JsonObject
+        {
+            ["Parameters"] = new JsonObject(),
+            ["Resources"] = new JsonObject(),
+            ["Outputs"] = new JsonObject(),
+        };
+        foreach (var template in new[] { templates.Foundation, templates.Runtime })
+        foreach (var section in new[] { "Parameters", "Resources", "Outputs" })
+        foreach (var (key, value) in (JsonObject?)template[section] ?? new JsonObject())
+            merged[section]![key] = value!.DeepClone();
+        return merged;
+    }
 
     private static IEnumerable<(string Id, JsonObject Resource)> Resources(
         JsonObject template,
@@ -287,7 +307,10 @@ public class AwsStackTemplateTests
             .GetValue<string>()
             .Should()
             .Be("--trax-migrate");
-        Env("HubTaskDefinition").Should().Contain("Trax__Proxy__KnownNetworks=10.0.0.0/16");
+        Env("HubTaskDefinition")
+            .Should()
+            .Contain("""Trax__Proxy__KnownNetworks={"Ref":"VpcCidr"}""");
+        template["Outputs"]!["VpcCidr"]!["Value"]!.GetValue<string>().Should().Be("10.0.0.0/16");
     }
 
     [Test]
@@ -302,11 +325,11 @@ public class AwsStackTemplateTests
         env.Single(e => (string)e!["Name"]! == "Auth__Authority")!["Value"]!
             .ToJsonString()
             .Should()
-            .Contain("cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}");
+            .Contain("cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}");
         env.Single(e => (string)e!["Name"]! == "Auth__Audience")!["Value"]!
             .ToJsonString()
             .Should()
-            .Be("""{"Ref":"UserPoolClient"}""");
+            .Be("""{"Ref":"UserPoolClientId"}""");
     }
 
     [Test]
@@ -374,8 +397,19 @@ public class AwsStackTemplateTests
     }
 
     [Test]
-    public void It_fits_CloudFormations_inline_limit() =>
-        AwsStack.Compact(Build()).Length.Should().BeLessThan(AwsDeployer.InlineTemplateLimit);
+    public void Each_template_fits_CloudFormations_inline_limit()
+    {
+        var templates = Templates();
+
+        AwsStack
+            .Compact(templates.Foundation)
+            .Length.Should()
+            .BeLessThan(AwsDeployer.InlineTemplateLimit);
+        AwsStack
+            .Compact(templates.Runtime)
+            .Length.Should()
+            .BeLessThan(AwsDeployer.InlineTemplateLimit);
+    }
 
     [TestCase("eu-prod")]
     [TestCase("Prod")]
@@ -452,10 +486,147 @@ public class AwsStackTemplateTests
     [Test]
     public void The_plan_summary_counts_resources_and_estimates_the_idle_cost()
     {
-        var lines = AwsPlanSummary.Lines(File_(), "production", Build()).ToList();
+        var lines = AwsPlanSummary.Lines(File_(), "production", Templates()).ToList();
 
-        lines[0].Should().StartWith("orders-production (production, us-west-2) has ");
+        lines[0].Should().StartWith("orders-production-base (production, us-west-2) has ");
+        lines.Should().Contain(l => l.StartsWith("orders-production (production, us-west-2) has "));
         lines.Should().Contain(l => l.Contains("NAT gateway"));
         lines.Last().Should().EndWith("a month");
+    }
+
+    [Test]
+    public void The_foundation_holds_the_network_database_secrets_and_sign_in()
+    {
+        var templates = Templates();
+        var foundation = (JsonObject)templates.Foundation["Resources"]!;
+        var runtime = (JsonObject)templates.Runtime["Resources"]!;
+
+        foreach (
+            var id in new[]
+            {
+                "Vpc",
+                "NatGateway",
+                "Database",
+                "DatabaseSecret",
+                "DatabaseSecurityGroup",
+                "DatabaseClientSecurityGroup",
+                "UserPool",
+                "UserPoolClient",
+            }
+        )
+        {
+            foundation.Should().ContainKey(id);
+            runtime.Should().NotContainKey(id);
+        }
+        foreach (
+            var id in new[] { "Cluster", "LoadBalancer", "HubService", "MigrateTaskDefinition" }
+        )
+        {
+            runtime.Should().ContainKey(id);
+            foundation.Should().NotContainKey(id);
+        }
+    }
+
+    [Test]
+    public void Only_the_database_client_group_reaches_the_database()
+    {
+        var templates = Templates();
+        var foundation = templates.Foundation;
+        var runtime = templates.Runtime;
+
+        var ingress = Resources(foundation, "AWS::EC2::SecurityGroupIngress")
+            .Where(r =>
+                r.Resource["Properties"]!["GroupId"]!.ToJsonString()
+                == """{"Ref":"DatabaseSecurityGroup"}"""
+            )
+            .ToList();
+        ingress.Should().ContainSingle();
+        ingress[0].Resource["Properties"]!["SourceSecurityGroupId"]!
+            .ToJsonString()
+            .Should()
+            .Be("""{"Ref":"DatabaseClientSecurityGroup"}""");
+        foreach (var (id, service) in Resources(runtime, "AWS::ECS::Service"))
+            service["Properties"]!["NetworkConfiguration"]!["AwsvpcConfiguration"]![
+                "SecurityGroups"
+            ]!
+                .ToJsonString()
+                .Should()
+                .Be(
+                    """[{"Ref":"TaskSecurityGroup"},{"Ref":"DatabaseClientSecurityGroup"}]""",
+                    $"{id} reaches the database through the foundation's client group"
+                );
+        Properties(runtime, "TaskSecurityGroup")["SecurityGroupEgress"]!
+            .AsArray()
+            .Should()
+            .NotContain(r => (int?)r!["FromPort"] == 5432);
+    }
+
+    [Test]
+    public void The_runtime_reads_the_foundation_by_parameter_never_by_import()
+    {
+        var templates = Templates();
+        var foundationOutputs = (JsonObject)templates.Foundation["Outputs"]!;
+        var runtimeParameters = (JsonObject)templates.Runtime["Parameters"]!;
+
+        AwsStack.Compact(templates.Foundation).Should().NotContain("Fn::ImportValue");
+        AwsStack.Compact(templates.Runtime).Should().NotContain("Fn::ImportValue");
+        var read = runtimeParameters
+            .Select(p => p.Key)
+            .Where(AwsStack.FoundationValues.Contains)
+            .ToList();
+        read.Should()
+            .Contain([
+                "VpcId",
+                "VpcCidr",
+                "PublicSubnets",
+                "ServiceSubnets",
+                "DatabaseClientSecurityGroup",
+                "DatabaseAddress",
+                "DatabasePort",
+                "DatabaseSecretArn",
+                "UserPoolId",
+                "UserPoolClientId",
+            ]);
+        foreach (var name in read)
+            foundationOutputs.Should().ContainKey(name);
+    }
+
+    [Test]
+    public void The_foundation_names_nothing_the_runtime_creates()
+    {
+        var templates = Templates();
+        var foundation = AwsStack.Compact(templates.Foundation);
+
+        foreach (var (id, _) in (JsonObject)templates.Runtime["Resources"]!)
+            foundation.Should().NotContain($"\"{id}\"", "the foundation is created first");
+    }
+
+    [Test]
+    public void The_app_secrets_and_the_database_secret_keep_the_environments_name()
+    {
+        var templates = Templates();
+
+        Properties(templates.Foundation, "DatabaseSecret")["Name"]!
+            .GetValue<string>()
+            .Should()
+            .Be("orders-production/database");
+        AwsStack.Compact(templates.Runtime).Should().Contain("secret:orders-production/app/*");
+    }
+
+    [Test]
+    public void An_existing_database_is_reached_through_the_client_group()
+    {
+        var file = File_();
+        file.Environments["production"].DatabaseSecretArn =
+            "arn:aws:secretsmanager:us-west-2:123:secret:orders-db";
+
+        var templates = Templates(file);
+
+        Resources(templates.Foundation, "AWS::RDS::DBInstance").Should().BeEmpty();
+        Properties(templates.Foundation, "DatabaseClientSecurityGroup")["SecurityGroupEgress"]!
+            .AsArray()
+            .Should()
+            .Contain(r => (int?)r!["FromPort"] == 5432 && (string?)r["CidrIp"] == "0.0.0.0/0");
+        ((JsonObject)templates.Runtime["Parameters"]!).Should().NotContainKey("DatabaseAddress");
     }
 }

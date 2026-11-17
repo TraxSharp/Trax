@@ -55,14 +55,16 @@ one API service, an API with no health check, and more than one copy of the API 
 Sign in to the account the usual way (`aws sso login`, a profile, or a role in CI), then:
 
 ```bash
-trax deploy plan --env production        # read .trax/deploy/aws/orders-production.template.json and the cost estimate
+trax deploy plan --env production        # read .trax/deploy/aws/orders-production{-base,}.template.json and the cost estimate
 trax deploy secret set Stripe__ApiKey --env production
 trax deploy --env production
 trax deploy status --env production
 ```
 
-The first deploy takes 15 to 25 minutes, most of it the database and, in production, the certificate. Later
-deploys push new images, migrate, and roll the services. With `"auth": { "kind": "cognito" }`, the user pool trax
+An environment is two CloudFormation stacks: `orders-production-base` holds the network, the database, its secret
+and the sign-in, and `orders-production` runs the services on ECS over it. The first deploy takes 15 to 25
+minutes, most of it the database and, in production, the certificate. Later deploys push new images, migrate, and
+roll the services. With `"auth": { "kind": "cognito" }`, the user pool trax
 creates admits only users you invite; add the first in the Cognito console, and put operators in its `Operator`
 group.
 
@@ -82,6 +84,12 @@ runs.
 docker compose down                       # compose; add -v to drop the database too
 trax deploy destroy --env production      # AWS; production's database leaves a final snapshot
 ```
+
+`destroy` deletes the services' stack, then the foundation. It refuses, before deleting anything, when the
+foundation's network holds something trax did not create there, such as an EKS cluster.
+
+An environment deployed by a trax from before the split is one stack. A deploy refuses it; destroy it and deploy
+again (production keeps the final snapshot and the user pool).
 
 In production, `destroy` keeps the Cognito user pool and its users, and the next deploy of the environment signs in
 against it again. `destroy --delete-data` deletes the pool and every user in it.
