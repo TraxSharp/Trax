@@ -47,17 +47,20 @@ internal sealed class PostgresInvokedRunListener(
 
     public async Task<IInvokedRunSubscription> SubscribeAsync(CancellationToken cancellationToken)
     {
-        var connection = await _dataSource.Value.OpenConnectionAsync(cancellationToken);
+        var connection = await _dataSource
+            .Value.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
         try
         {
             var subscription = new Subscription(connection);
-            await using var listen = new NpgsqlCommand($"LISTEN {Channel}", connection);
-            await listen.ExecuteNonQueryAsync(cancellationToken);
+            var listen = new NpgsqlCommand($"LISTEN {Channel}", connection);
+            await using var listenDisposal = listen.ConfigureAwait(false);
+            await listen.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             return subscription;
         }
         catch
         {
-            await connection.DisposeAsync();
+            await connection.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -65,7 +68,7 @@ internal sealed class PostgresInvokedRunListener(
     public async ValueTask DisposeAsync()
     {
         if (_dataSource.IsValueCreated)
-            await _dataSource.Value.DisposeAsync();
+            await _dataSource.Value.DisposeAsync().ConfigureAwait(false);
     }
 
     private sealed class Subscription : IInvokedRunSubscription
@@ -78,7 +81,7 @@ internal sealed class PostgresInvokedRunListener(
             _connection = connection;
             _connection.Notification += (_, args) =>
             {
-                if (args.Channel == Channel)
+                if (string.Equals(args.Channel, Channel, StringComparison.Ordinal))
                     _pending.Enqueue(args.Payload);
             };
         }
@@ -89,7 +92,7 @@ internal sealed class PostgresInvokedRunListener(
             // notifications in one read; each is handed out once.
             string? next;
             while (!_pending.TryDequeue(out next))
-                await _connection.WaitAsync(cancellationToken);
+                await _connection.WaitAsync(cancellationToken).ConfigureAwait(false);
 
             return next;
         }

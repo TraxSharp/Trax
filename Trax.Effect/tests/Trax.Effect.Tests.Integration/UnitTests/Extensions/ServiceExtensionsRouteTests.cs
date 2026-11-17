@@ -130,9 +130,9 @@ public class ServiceExtensionsRouteTests
         public string? CanonicalName { get; set; }
     }
 
-    public interface IDependency { }
+    public interface IDependency;
 
-    public class ConcreteDependency : IDependency { }
+    public class ConcreteDependency : IDependency;
 
     public class HasInject
     {

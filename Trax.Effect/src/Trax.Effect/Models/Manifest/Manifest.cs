@@ -509,7 +509,7 @@ public class Manifest : IModel
     /// </exception>
     public object GetProperties(Type propertyType)
     {
-        if (propertyType.FullName != PropertyTypeName)
+        if (!string.Equals(propertyType.FullName, PropertyTypeName, StringComparison.Ordinal))
             throw new Exception(
                 $"Passed type ({propertyType}) is not saved type ({PropertyTypeName})"
             );
@@ -586,7 +586,8 @@ public class Manifest : IModel
 
         var matches = registeredInputTypes
             .Where(t =>
-                t.FullName == PropertyTypeName && typeof(IManifestProperties).IsAssignableFrom(t)
+                string.Equals(t.FullName, PropertyTypeName, StringComparison.Ordinal)
+                && typeof(IManifestProperties).IsAssignableFrom(t)
             )
             .Distinct()
             .Take(2)

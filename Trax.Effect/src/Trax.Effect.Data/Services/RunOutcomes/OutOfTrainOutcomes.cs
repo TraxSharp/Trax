@@ -135,7 +135,8 @@ internal static class OutOfTrainOutcomes
                 // hook that ignores its token holds the caller up for longer.
                 using var bounded = new CancellationTokenSource(bound);
                 await PublishOneAsync(services, runId, state, publish, bounded.Token)
-                    .WaitAsync(bound, CancellationToken.None);
+                    .WaitAsync(bound, CancellationToken.None)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -152,16 +153,18 @@ internal static class OutOfTrainOutcomes
         if (parallelism <= 1)
         {
             foreach (var runId in runIds)
-                await PublishBoundedAsync(runId);
+                await PublishBoundedAsync(runId).ConfigureAwait(false);
             return;
         }
 
         // Each run in a scope of its own, as in order; a slow hook holds up only its own run.
-        await Parallel.ForEachAsync(
-            runIds,
-            new ParallelOptions { MaxDegreeOfParallelism = parallelism },
-            async (runId, _) => await PublishBoundedAsync(runId)
-        );
+        await Parallel
+            .ForEachAsync(
+                runIds,
+                new ParallelOptions { MaxDegreeOfParallelism = parallelism },
+                async (runId, _) => await PublishBoundedAsync(runId).ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
     }
 
     private static async Task PublishOneAsync(
@@ -181,14 +184,15 @@ internal static class OutOfTrainOutcomes
             return;
 
         Metadata? run;
-        using (var context = await factory.CreateDbContextAsync(ct))
+        using (var context = await factory.CreateDbContextAsync(ct).ConfigureAwait(false))
             run = await context
                 .Metadatas.AsNoTracking()
-                .FirstOrDefaultAsync(m => m.Id == runId, ct);
+                .FirstOrDefaultAsync(m => m.Id == runId, ct)
+                .ConfigureAwait(false);
 
         if (run is null || run.TrainState != state)
             return;
 
-        await publish(hooks, run, ct);
+        await publish(hooks, run, ct).ConfigureAwait(false);
     }
 }

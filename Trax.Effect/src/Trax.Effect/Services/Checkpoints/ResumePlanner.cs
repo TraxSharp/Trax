@@ -82,7 +82,15 @@ internal interface IRunResumes
         CancellationToken cancellationToken
     )
     {
-        var latest = await Check(train, chain, input, output, runId, null, cancellationToken)
+        var latest = await Check(
+                train,
+                chain,
+                input,
+                output,
+                runId,
+                resumeAt: null,
+                cancellationToken
+            )
             .ConfigureAwait(false);
         var at = new Dictionary<string, ResumeVerdict>(StringComparer.Ordinal);
 
@@ -205,7 +213,7 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
         );
 
         return new ResumeChecks(
-            At(null),
+            At(point: null),
             points
                 .Distinct(StringComparer.Ordinal)
                 .ToDictionary(p => p, p => At(p), StringComparer.Ordinal),
@@ -230,11 +238,11 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
         await store.Source(runId, cancellationToken).ConfigureAwait(false)
             is { ResumedToCompletion: true }
             ? new ResumeVerdict(
-                false,
+                CanResume: false,
                 ResumeSources.AlreadyResumed,
                 "A" + ResumeSources.AlreadyResumedReason(runId)[1..],
-                null,
-                null
+                Target: null,
+                Checkpoint: null
             )
             : null;
 }
@@ -250,11 +258,11 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
 internal static class ResumePlanner
 {
     internal static readonly ResumeVerdict NoRows = new(
-        false,
+        CanResume: false,
         ResumeRefusals.NoCheckpoint,
         "This host stores no checkpoints, so a run can only run again from the top.",
-        null,
-        null
+        Target: null,
+        Checkpoint: null
     );
 
     /// <summary>
@@ -315,7 +323,13 @@ internal static class ResumePlanner
         }
 
         return (
-            new ResumeVerdict(true, null, null, outcome.Target, outcome.MainCheckpoint),
+            new ResumeVerdict(
+                CanResume: true,
+                Code: null,
+                Reason: null,
+                outcome.Target,
+                outcome.MainCheckpoint
+            ),
             outcome
         );
     }
@@ -541,7 +555,9 @@ internal static class ResumePlanner
         foreach (var node in JsonNode.Parse(json)?.AsArray() ?? [])
         {
             var key = node?["key"]?.GetValue<string>();
-            var type = declared.FirstOrDefault(t => t.GetGenericArguments()[0].FullName == key);
+            var type = declared.FirstOrDefault(t =>
+                string.Equals(t.GetGenericArguments()[0].FullName, key, StringComparison.Ordinal)
+            );
 
             if (type is null)
                 continue;
@@ -559,5 +575,5 @@ internal static class ResumePlanner
     }
 
     private static ResumeVerdict Refused(string code, string reason) =>
-        new(false, code, reason, null, null);
+        new(CanResume: false, code, reason, Target: null, Checkpoint: null);
 }

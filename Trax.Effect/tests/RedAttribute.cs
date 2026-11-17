@@ -61,7 +61,14 @@ internal sealed class RedAttribute(string because) : Attribute, IWrapTestMethod,
             var result = context.CurrentResult;
             var state = result.ResultState;
 
-            if (state.Status == TestStatus.Failed && state.Label != ResultState.Cancelled.Label)
+            if (
+                state.Status == TestStatus.Failed
+                && !string.Equals(
+                    state.Label,
+                    ResultState.Cancelled.Label,
+                    StringComparison.Ordinal
+                )
+            )
                 result.SetResult(
                     ResultState.Success,
                     $"Red as expected ({because}): {FirstLine(result.Message)}"

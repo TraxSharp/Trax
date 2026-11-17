@@ -107,7 +107,7 @@ public class PostgresParallelRunTests
                 .And.OnlyContain(r => r.State == JunctionRunState.Completed);
             steps.Select(r => r.Position).Should().OnlyHaveUniqueItems();
             steps
-                .Where(r => r.BranchPath == "Parallel#0/a")
+                .Where(r => string.Equals(r.BranchPath, "Parallel#0/a", StringComparison.Ordinal))
                 .Select(r => r.NodeId)
                 .Should()
                 .BeEquivalentTo(
@@ -117,7 +117,7 @@ public class PostgresParallelRunTests
                     "Parallel#0/a/PgParBumpA#2"
                 );
             steps
-                .Where(r => r.BranchPath == "Parallel#0/b")
+                .Where(r => string.Equals(r.BranchPath, "Parallel#0/b", StringComparison.Ordinal))
                 .Select(r => r.NodeId)
                 .Should()
                 .BeEquivalentTo(
@@ -216,7 +216,9 @@ public class PostgresParallelRunTests
         using (var context = await factory.CreateDbContextAsync(CancellationToken.None))
             await context
                 .Metadatas.Where(m => m.Id == train.Metadata!.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(m => m.CancellationRequested, true));
+                .ExecuteUpdateAsync(s =>
+                    s.SetProperty(m => m.CancellationRequested, valueExpression: true)
+                );
         PgParSignals.Release();
 
         await FluentActions
@@ -275,43 +277,62 @@ public class PostgresParallelRunTests
             }
         );
 
-        var output = await train.Run(input, metadata);
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
+        var output = await train.Run(input, metadata).ConfigureAwait(false);
+        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
         return (train, output);
     }
 
     private async Task<Metadata> RunRow(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == metadataId);
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == metadataId)
+            .ConfigureAwait(false);
     }
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync();
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return await context
+            .JunctionRuns.AsNoTracking()
+            .ForRun(metadataId)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return await context
             .RecordedDecisions.AsNoTracking()
             .Where(d => d.MetadataId == metadataId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task Delete(params long[] metadataIds)
     {
         // A step still queued for the writer would insert under the delete's cascade.
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
+        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
 
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        await context.Metadatas.Where(m => metadataIds.Contains(m.Id)).ExecuteDeleteAsync();
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await context
+            .Metadatas.Where(m => metadataIds.Contains(m.Id))
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
     }
 }
 
@@ -359,7 +380,7 @@ internal static class PgParSignals
     {
         var (a, b) = Meetings.GetOrAdd(run, _ => (New(), New()));
         (isA ? a : b).TrySetResult();
-        await (isA ? b : a).Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await (isA ? b : a).Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
         Met = true;
     }
 
@@ -377,8 +398,8 @@ internal static class PgParSignals
     public static async Task UntilCancelled(CancellationToken token)
     {
         var cancelled = New();
-        await using (token.Register(() => cancelled.TrySetCanceled(token)))
-            await cancelled.Task;
+        await using ((token.Register(() => cancelled.TrySetCanceled(token))).ConfigureAwait(false))
+            await cancelled.Task.ConfigureAwait(false);
     }
 
     private static TaskCompletionSource New() =>
@@ -451,7 +472,7 @@ public class PgParScoreA : EffectJunction<PgParOrder, PgParA>
 {
     public override async Task<PgParA> Run(PgParOrder input)
     {
-        await PgParSignals.Arrive(Metadata!.TrainMetadataId, isA: true);
+        await PgParSignals.Arrive(Metadata!.TrainMetadataId, isA: true).ConfigureAwait(false);
         return new PgParA(1);
     }
 }
@@ -460,7 +481,7 @@ public class PgParScoreB : EffectJunction<PgParOrder, PgParB>
 {
     public override async Task<PgParB> Run(PgParOrder input)
     {
-        await PgParSignals.Arrive(Metadata!.TrainMetadataId, isA: false);
+        await PgParSignals.Arrive(Metadata!.TrainMetadataId, isA: false).ConfigureAwait(false);
         return new PgParB(10);
     }
 }
@@ -518,7 +539,7 @@ public class PgParWaitA : EffectJunction<PgParOrder, PgParA>
     public override async Task<PgParA> Run(PgParOrder input)
     {
         PgParSignals.Waiting();
-        await PgParSignals.UntilCancelled(CancellationToken);
+        await PgParSignals.UntilCancelled(CancellationToken).ConfigureAwait(false);
         return new PgParA(0);
     }
 }
@@ -528,7 +549,7 @@ public class PgParWaitB : EffectJunction<PgParOrder, PgParB>
     public override async Task<PgParB> Run(PgParOrder input)
     {
         PgParSignals.Waiting();
-        await PgParSignals.UntilCancelled(CancellationToken);
+        await PgParSignals.UntilCancelled(CancellationToken).ConfigureAwait(false);
         return new PgParB(0);
     }
 }
@@ -539,7 +560,7 @@ public class PgParHoldA : EffectJunction<PgParOrder, PgParA>
     public override async Task<PgParA> Run(PgParOrder input)
     {
         PgParSignals.Waiting();
-        await PgParSignals.Released.WaitAsync(TimeSpan.FromSeconds(30));
+        await PgParSignals.Released.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
         return new PgParA(0);
     }
 }

@@ -67,7 +67,7 @@ public class StateOnlyOutcomeFallbackTests
         var train = (UnwritableFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableFailureTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             $"*{Unwritable}*",
             "the train's own failure still reaches its caller"
@@ -107,7 +107,7 @@ public class StateOnlyOutcomeFallbackTests
         var train = (UnwritableOutputTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableOutputTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should()
             .ThrowAsync<TimeoutException>(
                 "a provider that failed for any reason but the store's content refusal propagates"
@@ -132,7 +132,7 @@ public class StateOnlyOutcomeFallbackTests
         var train = (UnwritableFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableFailureTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         var row = await PersistedRow(scope, train.Metadata!.Id);
@@ -174,7 +174,7 @@ public class StateOnlyOutcomeFallbackTests
         var train = (UnwritableFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableFailureTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         store.Saved[train.Metadata!].FailureReason.Should().NotContain(Unwritable);
@@ -204,7 +204,10 @@ public class StateOnlyOutcomeFallbackTests
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         using var context = (IDataContext)factory.Create();
 
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == id)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -290,7 +293,7 @@ public class StateOnlyOutcomeFallbackTests
         private readonly List<Metadata> _tracked = [];
 
         public Task SaveChanges(CancellationToken cancellationToken) =>
-            _tracked.Any(m => m.TrainState is TrainState.Completed or TrainState.Failed)
+            _tracked.Exists(m => m.TrainState is TrainState.Completed or TrainState.Failed)
                 ? throw new TimeoutException("the effect's endpoint timed out")
                 : Task.CompletedTask;
 

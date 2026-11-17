@@ -156,26 +156,28 @@ public class SqliteTraxInvariantsTests
 
     private async Task<long> SeedRunAsync(int state, long? resumeFrom = null) =>
         await ScalarAsync(
-            """
-            INSERT INTO metadata (external_id, name, train_state, start_time, resume_from)
-            VALUES ($external, 'Invariants.Train', $state, datetime('now'), $resume)
-            RETURNING id
-            """,
-            ("$external", Guid.NewGuid().ToString("N")),
-            ("$state", state),
-            ("$resume", resumeFrom)
-        );
+                """
+                INSERT INTO metadata (external_id, name, train_state, start_time, resume_from)
+                VALUES ($external, 'Invariants.Train', $state, datetime('now'), $resume)
+                RETURNING id
+                """,
+                ("$external", Guid.NewGuid().ToString("N")),
+                ("$state", state),
+                ("$resume", resumeFrom)
+            )
+            .ConfigureAwait(false);
 
     private async Task<long> SeedCheckpointAsync(long runId) =>
         await ScalarAsync(
-            """
-            INSERT INTO checkpoint
-                (metadata_id, node_id, state_type, state, chain_hash, state_fingerprint)
-            VALUES ($run, 'Checkpoint<Findings>#0', 'Findings', '{}', 'hash', 'fp')
-            RETURNING id
-            """,
-            ("$run", runId)
-        );
+                """
+                INSERT INTO checkpoint
+                    (metadata_id, node_id, state_type, state, chain_hash, state_fingerprint)
+                VALUES ($run, 'Checkpoint<Findings>#0', 'Findings', '{}', 'hash', 'fp')
+                RETURNING id
+                """,
+                ("$run", runId)
+            )
+            .ConfigureAwait(false);
 
     private async Task<long> SeedQueueEntryAsync(
         int status,
@@ -183,16 +185,17 @@ public class SqliteTraxInvariantsTests
         long? resumeFrom = null
     ) =>
         await ScalarAsync(
-            """
-            INSERT INTO work_queue (external_id, train_name, status, metadata_id, resume_from)
-            VALUES ($external, 'Invariants.Train', $status, $run, $resume)
-            RETURNING id
-            """,
-            ("$external", Guid.NewGuid().ToString("N")),
-            ("$status", status),
-            ("$run", runId),
-            ("$resume", resumeFrom)
-        );
+                """
+                INSERT INTO work_queue (external_id, train_name, status, metadata_id, resume_from)
+                VALUES ($external, 'Invariants.Train', $status, $run, $resume)
+                RETURNING id
+                """,
+                ("$external", Guid.NewGuid().ToString("N")),
+                ("$status", status),
+                ("$run", runId),
+                ("$resume", resumeFrom)
+            )
+            .ConfigureAwait(false);
 
     [Test]
     public async Task TheLifetimeCheck_CountsAsTheSweepDoes()
@@ -224,7 +227,13 @@ public class SqliteTraxInvariantsTests
                 keptStates: [new KeptState(Machine, "Built")]
             )
         )
-            .Where(v => v.Invariant == TraxInvariants.DraftOlderThanMaxLifetime)
+            .Where(v =>
+                string.Equals(
+                    v.Invariant,
+                    TraxInvariants.DraftOlderThanMaxLifetime,
+                    StringComparison.Ordinal
+                )
+            )
             .Select(v => v.Id);
 
         violations
@@ -240,37 +249,39 @@ public class SqliteTraxInvariantsTests
         string? token = null
     ) =>
         await ScalarAsync(
-            $"""
-            INSERT INTO snapshot_draft
-                (id, user_key, owner_kind, machine, version, state, concurrency_token, created_at, updated_at,
-                 invoke_token)
-            VALUES ($id, 'u1', 0, $machine, 1, $state, $concurrency, {createdAt}, {updatedAt}, $token)
-            RETURNING row_id
-            """,
-            ("$id", Guid.NewGuid().ToString()),
-            ("$machine", Machine),
-            ("$state", state),
-            ("$concurrency", Guid.NewGuid().ToString()),
-            ("$token", token)
-        );
+                $"""
+                INSERT INTO snapshot_draft
+                    (id, user_key, owner_kind, machine, version, state, concurrency_token, created_at, updated_at,
+                     invoke_token)
+                VALUES ($id, 'u1', 0, $machine, 1, $state, $concurrency, {createdAt}, {updatedAt}, $token)
+                RETURNING row_id
+                """,
+                ("$id", Guid.NewGuid().ToString()),
+                ("$machine", Machine),
+                ("$state", state),
+                ("$concurrency", Guid.NewGuid().ToString()),
+                ("$token", token)
+            )
+            .ConfigureAwait(false);
 
     private async Task<string> SeedInvokedEntryAsync(Guid instance, long? runId)
     {
         var external = Guid.NewGuid().ToString("N");
         await ScalarAsync(
-            """
-            INSERT INTO work_queue
-                (external_id, train_name, status, metadata_id,
-                 invoking_machine, invoking_instance_id, invoking_owner_kind)
-            VALUES ($external, 'Invariants.Train', $status, $run, $machine, $instance, 1)
-            RETURNING id
-            """,
-            ("$external", external),
-            ("$status", runId is null ? StatusNumber.Queued : StatusNumber.Dispatched),
-            ("$run", runId),
-            ("$machine", Machine),
-            ("$instance", instance.ToString())
-        );
+                """
+                INSERT INTO work_queue
+                    (external_id, train_name, status, metadata_id,
+                     invoking_machine, invoking_instance_id, invoking_owner_kind)
+                VALUES ($external, 'Invariants.Train', $status, $run, $machine, $instance, 1)
+                RETURNING id
+                """,
+                ("$external", external),
+                ("$status", runId is null ? StatusNumber.Queued : StatusNumber.Dispatched),
+                ("$run", runId),
+                ("$machine", Machine),
+                ("$instance", instance.ToString())
+            )
+            .ConfigureAwait(false);
         return external;
     }
 
@@ -282,46 +293,50 @@ public class SqliteTraxInvariantsTests
         string? stranded = null
     ) =>
         await ScalarAsync(
-            """
-            INSERT INTO snapshot_draft
-                (id, user_key, owner_kind, machine, version, state, concurrency_token, updated_at,
-                 invoke_token, invoke_stranded_state)
-            VALUES ($id, NULL, 1, $machine, 1, $state, $concurrency, datetime('now'), $token, $stranded)
-            RETURNING row_id
-            """,
-            ("$id", id.ToString()),
-            ("$machine", machine),
-            ("$state", state),
-            ("$concurrency", Guid.NewGuid().ToString()),
-            ("$token", token),
-            ("$stranded", stranded)
-        );
+                """
+                INSERT INTO snapshot_draft
+                    (id, user_key, owner_kind, machine, version, state, concurrency_token, updated_at,
+                     invoke_token, invoke_stranded_state)
+                VALUES ($id, NULL, 1, $machine, 1, $state, $concurrency, datetime('now'), $token, $stranded)
+                RETURNING row_id
+                """,
+                ("$id", id.ToString()),
+                ("$machine", machine),
+                ("$state", state),
+                ("$concurrency", Guid.NewGuid().ToString()),
+                ("$token", token),
+                ("$stranded", stranded)
+            )
+            .ConfigureAwait(false);
 
     private async Task SeedClaimAsync(string key, string? receipt) =>
         await ScalarAsync(
-            """
-            INSERT INTO effect_claim (effect_key, receipt, owner_token, lease_expires_at, created_at)
-            VALUES ($key, $receipt, $owner, datetime('now'), datetime('now'))
-            RETURNING 0
-            """,
-            ("$key", key),
-            ("$receipt", receipt),
-            ("$owner", Guid.NewGuid().ToString())
-        );
+                """
+                INSERT INTO effect_claim (effect_key, receipt, owner_token, lease_expires_at, created_at)
+                VALUES ($key, $receipt, $owner, datetime('now'), datetime('now'))
+                RETURNING 0
+                """,
+                ("$key", key),
+                ("$receipt", receipt),
+                ("$owner", Guid.NewGuid().ToString())
+            )
+            .ConfigureAwait(false);
 
     private async Task ExecAsync(string sql)
     {
-        await using var command = _connection.CreateCommand();
+        var command = _connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     private async Task<long> ScalarAsync(string sql, params (string Name, object? Value)[] values)
     {
-        await using var command = _connection.CreateCommand();
+        var command = _connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
         foreach (var (name, value) in values)
             command.Parameters.AddWithValue(name, value ?? DBNull.Value);
-        return (long)(await command.ExecuteScalarAsync())!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
     }
 }

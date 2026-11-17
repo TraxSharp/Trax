@@ -23,7 +23,7 @@ public class SystemOneDeciderTests
             new ChoiceQuestion(
                 "TicketTrack",
                 "Which team should handle this ticket?",
-                [new("Refund", "Money back for an order."), new("Escalate", null)]
+                [new("Refund", "Money back for an order."), new("Escalate", Description: null)]
             ),
             new ScoreQuestion(
                 "Urgency",
@@ -34,7 +34,7 @@ public class SystemOneDeciderTests
                 "ContainsThreat",
                 "Does it threaten anyone?",
                 "It threatens harm.",
-                null
+                No: null
             ),
         ]
     );
@@ -285,7 +285,11 @@ public class SystemOneDeciderTests
                 new ChoiceQuestion(
                     "Lane",
                     "Which lane?",
-                    [new("A", null), new("B", null), new("C", null)]
+                    [
+                        new("A", Description: null),
+                        new("B", Description: null),
+                        new("C", Description: null),
+                    ]
                 ),
             ],
         };
@@ -307,7 +311,7 @@ public class SystemOneDeciderTests
         using var decider = new SystemOneDecider(Options(), new HttpClient(model));
         var single = Ticket with
         {
-            Questions = [new ChoiceQuestion("Lane", "Which lane?", [new("A", null)])],
+            Questions = [new ChoiceQuestion("Lane", "Which lane?", [new("A", Description: null)])],
         };
 
         var decide = () => decider.Decide(single, CancellationToken.None);
@@ -326,7 +330,10 @@ public class SystemOneDeciderTests
     {
         var model = new FakeModel(_ => Ok(Answered));
         using var decider = new SystemOneDecider(Options(), new HttpClient(model));
-        var blank = Ticket with { Questions = [new YesNoQuestion("Q", instructions, null, null)] };
+        var blank = Ticket with
+        {
+            Questions = [new YesNoQuestion("Q", instructions, Yes: null, No: null)],
+        };
 
         var decide = () => decider.Decide(blank, CancellationToken.None);
 
@@ -894,8 +901,8 @@ public class SystemOneDeciderTests
         {
             Questions =
             [
-                new YesNoQuestion("Q", "One?", null, null),
-                new YesNoQuestion("Q", "Two?", null, null),
+                new YesNoQuestion("Q", "One?", Yes: null, No: null),
+                new YesNoQuestion("Q", "Two?", Yes: null, No: null),
             ],
         };
 
@@ -1132,14 +1139,20 @@ public class SystemOneDeciderTests
 
                 try
                 {
-                    context = await _listener.GetContextAsync();
+                    context = await _listener.GetContextAsync().ConfigureAwait(false);
                 }
                 catch (Exception e) when (e is HttpListenerException or ObjectDisposedException)
                 {
                     return;
                 }
 
-                if (context.Request.Url!.AbsolutePath == "/v1/systemone")
+                if (
+                    string.Equals(
+                        context.Request.Url!.AbsolutePath,
+                        "/v1/systemone",
+                        StringComparison.Ordinal
+                    )
+                )
                 {
                     context.Response.StatusCode = 307;
                     context.Response.RedirectLocation = "/elsewhere";
@@ -1149,7 +1162,7 @@ public class SystemOneDeciderTests
                     Interlocked.Increment(ref _followed);
                     var bytes = Encoding.UTF8.GetBytes(answer);
                     context.Response.ContentType = "application/json";
-                    await context.Response.OutputStream.WriteAsync(bytes);
+                    await context.Response.OutputStream.WriteAsync(bytes).ConfigureAwait(false);
                 }
 
                 context.Response.Close();
@@ -1200,7 +1213,11 @@ public class SystemOneDeciderTests
         {
             var sent = new SentRequest(
                 request.Headers.Authorization?.ToString(),
-                JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken))!
+                JsonNode.Parse(
+                    await request
+                        .Content!.ReadAsStringAsync(cancellationToken)
+                        .ConfigureAwait(false)
+                )!
             );
 
             int attempt;
@@ -1221,7 +1238,7 @@ public class SystemOneDeciderTests
                         watcher.Reached.TrySetResult();
                 }
 
-                await waitFor();
+                await waitFor().ConfigureAwait(false);
 
                 lock (_lock)
                     _inFlight--;
@@ -1231,10 +1248,9 @@ public class SystemOneDeciderTests
             {
                 // Never answers; only cancellation (the train's, or the attempt timeout) ends it.
                 var never = new TaskCompletionSource();
-                await using var _ = cancellationToken.Register(() =>
-                    never.TrySetCanceled(cancellationToken)
-                );
-                await never.Task;
+                var _ = cancellationToken.Register(() => never.TrySetCanceled(cancellationToken));
+                await using var _Disposal = _.ConfigureAwait(false);
+                await never.Task.ConfigureAwait(false);
             }
 
             return answer(attempt);

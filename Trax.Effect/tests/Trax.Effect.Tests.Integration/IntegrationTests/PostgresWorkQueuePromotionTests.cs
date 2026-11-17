@@ -80,7 +80,9 @@ public class PostgresWorkQueuePromotionTests : TestSetup
         bool confirmed = false
     )
     {
-        using var context = await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await DataContextFactory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
         for (var i = 0; i < count; i++)
         {
@@ -96,21 +98,24 @@ public class PostgresWorkQueuePromotionTests : TestSetup
             entry.Status = status;
             if (confirmed)
                 entry.ConfirmedAt = entry.CreatedAt;
-            await context.Track(entry);
+            await context.Track(entry).ConfigureAwait(false);
         }
 
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task<Dictionary<WorkQueueStatus, int>> CountByStatus(string trainName)
     {
-        using var context = await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await DataContextFactory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
         var statuses = await context
             .WorkQueues.AsNoTracking()
             .Where(w => w.TrainName == trainName)
             .Select(w => w.Status)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
         return statuses.GroupBy(s => s).ToDictionary(g => g.Key, g => g.Count());
     }

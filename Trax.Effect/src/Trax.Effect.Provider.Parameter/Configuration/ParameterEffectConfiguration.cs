@@ -62,7 +62,7 @@ public class ParameterEffectConfiguration
 
     /// <summary>
     /// Optional predicate deciding whether a given train's INPUT should be serialized.
-    /// Receives the canonical train name (<c>Metadata.Name</c>) and returns <c>false</c> to skip.
+    /// Receives the canonical train name (<c>Metadata.Name</c>) and returns <see langword="false"/> to skip.
     /// <c>null</c> means no predicate. Evaluated in addition to <see cref="ExcludeInput(string)"/>.
     /// </summary>
     /// <remarks>
@@ -130,7 +130,7 @@ public class ParameterEffectConfiguration
 
     /// <summary>
     /// Optional predicate deciding whether a given train's OUTPUT should be serialized.
-    /// Receives the canonical train name (<c>Metadata.Name</c>) and returns <c>false</c> to skip.
+    /// Receives the canonical train name (<c>Metadata.Name</c>) and returns <see langword="false"/> to skip.
     /// <c>null</c> means no predicate. Evaluated in addition to <see cref="ExcludeOutput(string)"/>.
     /// </summary>
     /// <remarks>

@@ -8,7 +8,7 @@ namespace Trax.Effect.Data.Models.HostHeartbeat;
 /// the <c>trax.host_heartbeat</c> table. Keyed by a string, so it is mapped by name in
 /// <c>DataContext.OnModelCreating</c>, as the runner nonce is.
 /// </summary>
-internal class PersistentHostHeartbeat : BaseModel
+internal sealed class PersistentHostHeartbeat : BaseModel
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)
     {

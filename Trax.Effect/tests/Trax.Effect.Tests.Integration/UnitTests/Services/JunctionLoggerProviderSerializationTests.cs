@@ -169,7 +169,7 @@ public class JunctionLoggerProviderSerializationTests
     [Test]
     public void Serialize_NullObject_ReturnsNullLiteral()
     {
-        var json = JsonSerializer.Serialize<object?>(null, _options);
+        var json = JsonSerializer.Serialize<object?>(value: null, _options);
 
         json.Should().Be("null");
     }
@@ -178,7 +178,7 @@ public class JunctionLoggerProviderSerializationTests
 
     #region TestModels
 
-    private class SimplePoco
+    private sealed class SimplePoco
     {
         public string Name { get; init; } = "";
         public int Count { get; init; }
@@ -186,25 +186,25 @@ public class JunctionLoggerProviderSerializationTests
         public string? NullableField { get; init; }
     }
 
-    private class CircularParent
+    private sealed class CircularParent
     {
         public string Name { get; init; } = "";
         public CircularChild? Child { get; set; }
     }
 
-    private class CircularChild
+    private sealed class CircularChild
     {
         public string Name { get; init; } = "";
         public CircularParent? Parent { get; set; }
     }
 
-    private class SelfReferencing
+    private sealed class SelfReferencing
     {
         public string Name { get; init; } = "";
         public SelfReferencing? Self { get; set; }
     }
 
-    private class ObjectWithDisposable
+    private sealed class ObjectWithDisposable
     {
         public string Name { get; init; } = "";
         public MemoryStream? Resource { get; init; }
@@ -216,23 +216,23 @@ public class JunctionLoggerProviderSerializationTests
         Active,
     }
 
-    private class ObjectWithDictionary
+    private sealed class ObjectWithDictionary
     {
         public Dictionary<string, int> Totals { get; set; } = new();
     }
 
-    private class ObjectWithEnum
+    private sealed class ObjectWithEnum
     {
         public TestStatus Status { get; init; }
     }
 
-    private class OuterObject
+    private sealed class OuterObject
     {
         public string Id { get; init; } = "";
         public InnerObject? Inner { get; init; }
     }
 
-    private class InnerObject
+    private sealed class InnerObject
     {
         public int Value { get; init; }
     }

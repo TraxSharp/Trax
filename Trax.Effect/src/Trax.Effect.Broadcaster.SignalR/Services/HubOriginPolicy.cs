@@ -55,11 +55,14 @@ internal static class HubOriginPolicy
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
             return false;
 
-        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+        if (
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal)
+            && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+        )
             return false;
 
         if (
-            uri.AbsolutePath != "/"
+            !string.Equals(uri.AbsolutePath, "/", StringComparison.Ordinal)
             || uri.Query.Length > 0
             || uri.Fragment.Length > 0
             || uri.UserInfo.Length > 0

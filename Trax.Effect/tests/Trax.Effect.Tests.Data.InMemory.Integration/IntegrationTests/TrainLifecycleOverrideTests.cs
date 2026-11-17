@@ -50,7 +50,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingRecordingTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.StartedCalled.Should().BeTrue();
@@ -89,7 +89,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingRecordingTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.CompletedCalled.Should().BeFalse();
@@ -101,7 +101,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (ThrowingHookTrain)
             Scope.ServiceProvider.GetRequiredService<IThrowingHookTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -116,7 +116,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingRecordingTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.FailedCalled.Should().BeTrue();
@@ -141,7 +141,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (ThrowingOnFailedHookTrain)
             Scope.ServiceProvider.GetRequiredService<IThrowingOnFailedHookTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*Intentional train failure*");
     }
@@ -161,7 +161,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var act = async () => await train.Run(Unit.Default, cts.Token);
+        var act = async () => await train.Run(Unit.Default, cts.Token).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         train.CancelledCalled.Should().BeTrue();
@@ -174,7 +174,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingRecordingTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.CancelledCalled.Should().BeFalse();
@@ -191,7 +191,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var act = async () => await train.Run(Unit.Default, cts.Token);
+        var act = async () => await train.Run(Unit.Default, cts.Token).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -216,7 +216,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingRecordingTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.CallOrder.Should().ContainInOrder("OnStarted", "OnFailed");
@@ -227,7 +227,7 @@ public class TrainLifecycleOverrideTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<INoOverrideTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -339,7 +339,8 @@ public class TrainLifecycleOverrideTests : TestSetup
 
         await cts.CancelAsync();
 
-        var act = async () => await train.Run(Unit.Default, metadata, cts.Token);
+        var act = async () =>
+            await train.Run(Unit.Default, metadata, cts.Token).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         train.CancelledCalled.Should().BeTrue();
@@ -436,7 +437,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingTypedAccessTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingTypedAccessTrain>();
 
-        var act = async () => await train.Run("hello");
+        var act = async () => await train.Run("hello").ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.CapturedInput.Should().Be("hello");
@@ -448,7 +449,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingTypedAccessTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingTypedAccessTrain>();
 
-        var act = async () => await train.Run("hello");
+        var act = async () => await train.Run("hello").ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.CapturedOutput.Should().BeNull();
@@ -547,7 +548,8 @@ public class TrainLifecycleOverrideTests : TestSetup
             }
         );
 
-        var act = async () => await train.InvokeOnQueueAsync(metadata, CancellationToken.None);
+        var act = async () =>
+            await train.InvokeOnQueueAsync(metadata, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*OnQueue*");
     }
@@ -556,9 +558,9 @@ public class TrainLifecycleOverrideTests : TestSetup
 
     #region Test Trains
 
-    private interface IRecordingTrain : IServiceTrain<Unit, Unit> { }
+    private interface IRecordingTrain : IServiceTrain<Unit, Unit>;
 
-    private class RecordingTrain : ServiceTrain<Unit, Unit>, IRecordingTrain
+    private sealed class RecordingTrain : ServiceTrain<Unit, Unit>, IRecordingTrain
     {
         public bool StartedCalled { get; private set; }
         public bool CompletedCalled { get; private set; }
@@ -615,9 +617,9 @@ public class TrainLifecycleOverrideTests : TestSetup
         }
     }
 
-    private interface IFailingRecordingTrain : IServiceTrain<Unit, Unit> { }
+    private interface IFailingRecordingTrain : IServiceTrain<Unit, Unit>;
 
-    private class FailingRecordingTrain : ServiceTrain<Unit, Unit>, IFailingRecordingTrain
+    private sealed class FailingRecordingTrain : ServiceTrain<Unit, Unit>, IFailingRecordingTrain
     {
         public bool StartedCalled { get; private set; }
         public bool CompletedCalled { get; private set; }
@@ -665,9 +667,11 @@ public class TrainLifecycleOverrideTests : TestSetup
         }
     }
 
-    private interface ICancellingRecordingTrain : IServiceTrain<Unit, Unit> { }
+    private interface ICancellingRecordingTrain : IServiceTrain<Unit, Unit>;
 
-    private class CancellingRecordingTrain : ServiceTrain<Unit, Unit>, ICancellingRecordingTrain
+    private sealed class CancellingRecordingTrain
+        : ServiceTrain<Unit, Unit>,
+            ICancellingRecordingTrain
     {
         public bool CancelledCalled { get; private set; }
         public Metadata? CancelledMetadata { get; private set; }
@@ -683,9 +687,9 @@ public class TrainLifecycleOverrideTests : TestSetup
         }
     }
 
-    private interface IThrowingHookTrain : IServiceTrain<Unit, Unit> { }
+    private interface IThrowingHookTrain : IServiceTrain<Unit, Unit>;
 
-    private class ThrowingHookTrain : ServiceTrain<Unit, Unit>, IThrowingHookTrain
+    private sealed class ThrowingHookTrain : ServiceTrain<Unit, Unit>, IThrowingHookTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 
@@ -696,9 +700,11 @@ public class TrainLifecycleOverrideTests : TestSetup
             throw new InvalidOperationException("OnCompleted hook failed");
     }
 
-    private interface IThrowingOnFailedHookTrain : IServiceTrain<Unit, Unit> { }
+    private interface IThrowingOnFailedHookTrain : IServiceTrain<Unit, Unit>;
 
-    private class ThrowingOnFailedHookTrain : ServiceTrain<Unit, Unit>, IThrowingOnFailedHookTrain
+    private sealed class ThrowingOnFailedHookTrain
+        : ServiceTrain<Unit, Unit>,
+            IThrowingOnFailedHookTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions() =>
             new TrainException("Intentional train failure");
@@ -710,9 +716,9 @@ public class TrainLifecycleOverrideTests : TestSetup
         ) => throw new InvalidOperationException("OnFailed hook failed");
     }
 
-    private interface IThrowingOnCancelledHookTrain : IServiceTrain<Unit, Unit> { }
+    private interface IThrowingOnCancelledHookTrain : IServiceTrain<Unit, Unit>;
 
-    private class ThrowingOnCancelledHookTrain
+    private sealed class ThrowingOnCancelledHookTrain
         : ServiceTrain<Unit, Unit>,
             IThrowingOnCancelledHookTrain
     {
@@ -723,9 +729,9 @@ public class TrainLifecycleOverrideTests : TestSetup
             throw new InvalidOperationException("OnCancelled hook failed");
     }
 
-    private interface IPartialOverrideTrain : IServiceTrain<Unit, Unit> { }
+    private interface IPartialOverrideTrain : IServiceTrain<Unit, Unit>;
 
-    private class PartialOverrideTrain : ServiceTrain<Unit, Unit>, IPartialOverrideTrain
+    private sealed class PartialOverrideTrain : ServiceTrain<Unit, Unit>, IPartialOverrideTrain
     {
         public bool CompletedCalled { get; private set; }
         public List<string> CallOrder { get; } = [];
@@ -740,9 +746,9 @@ public class TrainLifecycleOverrideTests : TestSetup
         }
     }
 
-    private interface INoOverrideTrain : IServiceTrain<Unit, Unit> { }
+    private interface INoOverrideTrain : IServiceTrain<Unit, Unit>;
 
-    private class NoOverrideTrain : ServiceTrain<Unit, Unit>, INoOverrideTrain
+    private sealed class NoOverrideTrain : ServiceTrain<Unit, Unit>, INoOverrideTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
     }
@@ -760,14 +766,16 @@ public class TrainLifecycleOverrideTests : TestSetup
         public override Task<string> Run(string input) => Task.FromResult(input);
     }
 
-    private record TestOutputDto(
+    private sealed record TestOutputDto(
         [property: System.Text.Json.Serialization.JsonPropertyName("value")] string Value,
         [property: System.Text.Json.Serialization.JsonPropertyName("count")] int Count
     );
 
-    private interface IOutputRecordingTrain : IServiceTrain<string, TestOutputDto> { }
+    private interface IOutputRecordingTrain : IServiceTrain<string, TestOutputDto>;
 
-    private class OutputRecordingTrain : ServiceTrain<string, TestOutputDto>, IOutputRecordingTrain
+    private sealed class OutputRecordingTrain
+        : ServiceTrain<string, TestOutputDto>,
+            IOutputRecordingTrain
     {
         public bool CompletedCalled { get; private set; }
         public string? CapturedOutput { get; private set; }
@@ -785,9 +793,9 @@ public class TrainLifecycleOverrideTests : TestSetup
         }
     }
 
-    private interface ITypedAccessTrain : IServiceTrain<string, TestOutputDto> { }
+    private interface ITypedAccessTrain : IServiceTrain<string, TestOutputDto>;
 
-    private class TypedAccessTrain : ServiceTrain<string, TestOutputDto>, ITypedAccessTrain
+    private sealed class TypedAccessTrain : ServiceTrain<string, TestOutputDto>, ITypedAccessTrain
     {
         public string? CapturedInput { get; private set; }
         public TestOutputDto? CapturedOutput { get; private set; }
@@ -818,9 +826,9 @@ public class TrainLifecycleOverrideTests : TestSetup
         }
     }
 
-    private interface IFailingTypedAccessTrain : IServiceTrain<string, TestOutputDto> { }
+    private interface IFailingTypedAccessTrain : IServiceTrain<string, TestOutputDto>;
 
-    private class FailingTypedAccessTrain
+    private sealed class FailingTypedAccessTrain
         : ServiceTrain<string, TestOutputDto>,
             IFailingTypedAccessTrain
     {
@@ -842,9 +850,9 @@ public class TrainLifecycleOverrideTests : TestSetup
         }
     }
 
-    private interface IQueueRecordingTrain : IServiceTrain<string, string> { }
+    private interface IQueueRecordingTrain : IServiceTrain<string, string>;
 
-    private class QueueRecordingTrain : ServiceTrain<string, string>, IQueueRecordingTrain
+    private sealed class QueueRecordingTrain : ServiceTrain<string, string>, IQueueRecordingTrain
     {
         public bool QueueCalled { get; private set; }
         public string? QueuedExternalId { get; private set; }
@@ -861,13 +869,13 @@ public class TrainLifecycleOverrideTests : TestSetup
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
             // Exercise the base no-op, then record.
-            await base.OnQueue(metadata, ct);
+            await base.OnQueue(metadata, ct).ConfigureAwait(false);
 
             QueueCalled = true;
             QueuedExternalId = metadata.ExternalId;
             QueuedInput = metadata.GetInput<string>();
 
-            if (QueuedInput == "throw")
+            if (string.Equals(QueuedInput, "throw", StringComparison.Ordinal))
                 throw new InvalidOperationException("OnQueue rejected the enqueue");
         }
     }

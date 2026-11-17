@@ -251,7 +251,8 @@ public class RabbitMqBroadcasterIntegrationTests
         await broadcaster.PublishAsync(SampleMessage("idempotent"), CancellationToken.None);
 
         await broadcaster.DisposeAsync();
-        Func<Task> secondDispose = async () => await broadcaster.DisposeAsync();
+        Func<Task> secondDispose = async () =>
+            await broadcaster.DisposeAsync().ConfigureAwait(false);
         await secondDispose.Should().NotThrowAsync();
     }
 
@@ -277,7 +278,7 @@ public class RabbitMqBroadcasterIntegrationTests
             async (_, _) =>
             {
                 entered.TrySetResult();
-                await release.Task;
+                await release.Task.ConfigureAwait(false);
                 if (Interlocked.Increment(ref handled) == 10)
                     allHandled.TrySetResult();
             },

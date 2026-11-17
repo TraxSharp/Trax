@@ -90,13 +90,15 @@ public static class DomainDataContextServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        await using var scope = services.CreateAsyncScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<TContext>>();
-        await using var db = await factory.CreateDbContextAsync(cancellationToken);
+        var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         if (!db.Database.IsRelational())
         {
-            await db.Database.EnsureCreatedAsync(cancellationToken);
+            await db.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -111,11 +113,11 @@ public static class DomainDataContextServiceCollectionExtensions
         // provider writes for this model, less those for objects that are already there.
         var model = db.GetService<IDesignTimeModel>().Model;
         var operations = db.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(null, model.GetRelationalModel());
+            .GetDifferences(source: null, model.GetRelationalModel());
 
         var serialized = IsPostgres(db);
 
-        await db.Database.OpenConnectionAsync(cancellationToken);
+        await db.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             // Hosts that start together would otherwise all see the same objects missing and race
@@ -123,15 +125,16 @@ public static class DomainDataContextServiceCollectionExtensions
             // The lock is held from before the schema is created until the creates commit, so the
             // probes below see what an earlier host created.
             if (serialized)
-                await AcquireBootstrapLock(db, cancellationToken);
+                await AcquireBootstrapLock(db, cancellationToken).ConfigureAwait(false);
 
-            await CreateTheObjects(db, schema, model, operations, cancellationToken);
+            await CreateTheObjects(db, schema, model, operations, cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {
             if (serialized)
-                await ReleaseBootstrapLock(db);
-            await db.Database.CloseConnectionAsync();
+                await ReleaseBootstrapLock(db).ConfigureAwait(false);
+            await db.Database.CloseConnectionAsync().ConfigureAwait(false);
         }
     }
 
@@ -149,14 +152,17 @@ public static class DomainDataContextServiceCollectionExtensions
             // is the context's own compile-time schema constant, never user input, and is
             // identifier-validated above, so the EF1002 interpolation warning does not apply.
 #pragma warning disable EF1002
-            await db.Database.ExecuteSqlRawAsync(
-                $"CREATE SCHEMA IF NOT EXISTS \"{schema}\";",
-                cancellationToken
-            );
+            await db
+                .Database.ExecuteSqlRawAsync(
+                    $"CREATE SCHEMA IF NOT EXISTS \"{schema}\";",
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
 #pragma warning restore EF1002
         }
 
-        var existing = await ExistingObjects(db, operations, cancellationToken);
+        var existing = await ExistingObjects(db, operations, cancellationToken)
+            .ConfigureAwait(false);
 
         // Whether this is the context's first creation is decided by its own tables, the ones in
         // its default schema. A table it maps from another context's schema (a cross-schema read)
@@ -164,7 +170,8 @@ public static class DomainDataContextServiceCollectionExtensions
         var anyOwnTableExisted = operations
             .OfType<CreateTableOperation>()
             .Any(create =>
-                create.Schema == schema && existing.Contains((create.Name, create.Schema))
+                string.Equals(create.Schema, schema, StringComparison.Ordinal)
+                && existing.Contains((create.Name, create.Schema))
             );
 
         var missing = operations
@@ -182,15 +189,20 @@ public static class DomainDataContextServiceCollectionExtensions
             )
             .ToList();
 
-        if (missing.All(operation => operation is EnsureSchemaOperation))
+        if (missing.TrueForAll(operation => operation is EnsureSchemaOperation))
             return;
 
         var commands = db.GetService<IMigrationsSqlGenerator>().Generate(missing, model);
 
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var transaction = await db
+            .Database.BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
         foreach (var command in commands)
-            await db.Database.ExecuteSqlRawAsync(command.CommandText, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            await db
+                .Database.ExecuteSqlRawAsync(command.CommandText, cancellationToken)
+                .ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>The table an operation creates or writes to, or null for one tied to no table.</summary>
@@ -231,12 +243,13 @@ public static class DomainDataContextServiceCollectionExtensions
 
         foreach (var (name, objectSchema) in created)
         {
-            await using var probe = connection.CreateCommand();
+            var probe = connection.CreateCommand();
+            await using var probeDisposal = probe.ConfigureAwait(false);
             probe.CommandText =
                 $"SELECT 1 FROM {sql.DelimitIdentifier(name, objectSchema)} WHERE 1 = 0";
             try
             {
-                await probe.ExecuteNonQueryAsync(cancellationToken);
+                await probe.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 existing.Add((name, objectSchema));
             }
             catch (DbException)
@@ -278,12 +291,13 @@ public static class DomainDataContextServiceCollectionExtensions
         var connection = db.Database.GetDbConnection();
         while (true)
         {
-            await using var command = connection.CreateCommand();
+            var command = connection.CreateCommand();
+            await using var commandDisposal = command.ConfigureAwait(false);
             command.CommandText = $"SELECT pg_try_advisory_lock({BootstrapLockKey});";
-            if (await command.ExecuteScalarAsync(cancellationToken) is true)
+            if (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is true)
                 return;
 
-            await Task.Delay(BootstrapLockPollInterval, cancellationToken);
+            await Task.Delay(BootstrapLockPollInterval, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -296,9 +310,10 @@ public static class DomainDataContextServiceCollectionExtensions
     {
         try
         {
-            await using var command = db.Database.GetDbConnection().CreateCommand();
+            var command = db.Database.GetDbConnection().CreateCommand();
+            await using var commandDisposal = command.ConfigureAwait(false);
             command.CommandText = $"SELECT pg_advisory_unlock({BootstrapLockKey});";
-            await command.ExecuteScalarAsync(CancellationToken.None);
+            await command.ExecuteScalarAsync(CancellationToken.None).ConfigureAwait(false);
         }
         catch (DbException)
         {

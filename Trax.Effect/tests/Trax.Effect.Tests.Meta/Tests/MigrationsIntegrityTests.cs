@@ -36,7 +36,7 @@ public class MigrationsIntegrityTests
         var sqlFiles = Directory
             .EnumerateFiles(migrationsDir, "*.sql")
             .Select(Path.GetFileName)
-            .OrderBy(name => name, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         sqlFiles
@@ -69,7 +69,7 @@ public class MigrationsIntegrityTests
 
         // sequential from 1 with no gaps and no duplicates
         seenNumbers.Should().OnlyHaveUniqueItems($"{provider} migration numbers must be unique.");
-        var ordered = seenNumbers.OrderBy(n => n).ToList();
+        var ordered = seenNumbers.Order().ToList();
         ordered[0].Should().Be(1, $"{provider} migrations must start at 001.");
         for (var i = 0; i < ordered.Count; i++)
         {
@@ -103,7 +103,7 @@ public class MigrationsIntegrityTests
             .Select(v => v!.Replace('\\', '/'))
             .ToList();
 
-        var hasWildcard = embeddedResources.Any(v =>
+        var hasWildcard = embeddedResources.Exists(v =>
             v.Equals("Migrations/*.sql", StringComparison.Ordinal)
             || v.Equals("Migrations/**/*.sql", StringComparison.Ordinal)
         );
@@ -119,7 +119,7 @@ public class MigrationsIntegrityTests
 
         var missing = sqlFiles
             .Where(name =>
-                !embeddedResources.Any(er =>
+                !embeddedResources.Exists(er =>
                     er.EndsWith($"Migrations/{name}", StringComparison.Ordinal)
                 )
             )

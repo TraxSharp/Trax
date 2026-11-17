@@ -151,41 +151,57 @@ public sealed class CheckpointHost : IAsyncDisposable
         Exception? failure = null;
         try
         {
-            await train.Run(input, metadata);
+            await train.Run(input, metadata).ConfigureAwait(false);
         }
         catch (Exception e)
         {
             failure = e;
         }
 
-        return (await Row(train.Metadata!.Id), failure);
+        return (await Row(train.Metadata!.Id).ConfigureAwait(false), failure);
     }
 
     public async Task<Metadata> Row(long id)
     {
-        await using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id);
+        var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == id)
+            .ConfigureAwait(false);
     }
 
     public async Task<List<Models.Checkpoint.Checkpoint>> Checkpoints(long runId)
     {
-        await using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .Checkpoints.AsNoTracking()
             .Where(c => c.MetadataId == runId)
             .OrderBy(c => c.NodeId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>Changes stored checkpoint rows, as a deploy that changed the code would see them.</summary>
     public async Task Tamper(long runId, Action<Models.Checkpoint.Checkpoint> change)
     {
-        await using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         foreach (
-            var row in await context.Checkpoints.Where(c => c.MetadataId == runId).ToListAsync()
+            var row in await context
+                .Checkpoints.Where(c => c.MetadataId == runId)
+                .ToListAsync()
+                .ConfigureAwait(false)
         )
             change(row);
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -194,17 +210,20 @@ public sealed class CheckpointHost : IAsyncDisposable
     /// </summary>
     public async Task<long> Manifest()
     {
-        await using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var group = new ManifestGroup { Name = $"{ManifestPrefix}{Guid.NewGuid():N}" };
-        await context.Track(group);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(group).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var manifest = Models.Manifest.Manifest.Create(
             new CreateManifest { Name = typeof(CheckpointHost) }
         );
         manifest.ManifestGroupId = group.Id;
-        await context.Track(manifest);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(manifest).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _manifests.Add(manifest.Id);
         return manifest.Id;
     }
@@ -216,26 +235,39 @@ public sealed class CheckpointHost : IAsyncDisposable
     /// <summary>Deletes the runs a test made, their checkpoints going with them, and its manifests.</summary>
     public async Task Delete(params long[] ids)
     {
-        await using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
-        var rows = await context.Metadatas.Where(m => ids.Contains(m.Id)).ToListAsync();
+        var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        var rows = await context
+            .Metadatas.Where(m => ids.Contains(m.Id))
+            .ToListAsync()
+            .ConfigureAwait(false);
         var checkpoints = await context
             .Checkpoints.Where(c => ids.Contains(c.MetadataId))
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
         context.Checkpoints.RemoveRange(checkpoints);
         context.Metadatas.RemoveRange(rows);
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         if (_manifests.Count == 0)
             return;
 
-        var manifests = await context.Manifests.Where(m => _manifests.Contains(m.Id)).ToListAsync();
+        var manifests = await context
+            .Manifests.Where(m => _manifests.Contains(m.Id))
+            .ToListAsync()
+            .ConfigureAwait(false);
         var groups = manifests.Select(m => m.ManifestGroupId).ToList();
         context.Manifests.RemoveRange(manifests);
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         context.ManifestGroups.RemoveRange(
-            await context.ManifestGroups.Where(g => groups.Contains(g.Id)).ToListAsync()
+            await context
+                .ManifestGroups.Where(g => groups.Contains(g.Id))
+                .ToListAsync()
+                .ConfigureAwait(false)
         );
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _manifests.Clear();
     }
 
@@ -244,7 +276,7 @@ public sealed class CheckpointHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await Services.DisposeAsync();
+        await Services.DisposeAsync().ConfigureAwait(false);
 
         if (_sqliteFile is null)
             return;

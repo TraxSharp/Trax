@@ -29,7 +29,7 @@ namespace Trax.Effect.JunctionProvider.Progress.Services.JunctionProgressProvide
 /// the one after it, never for a queue of writes. The run settles the writer before its terminal
 /// write, which clears both columns, so no write outlives the run.</para>
 /// </remarks>
-internal class JunctionProgressProvider(IDataContextProviderFactory dataContextFactory)
+internal sealed class JunctionProgressProvider(IDataContextProviderFactory dataContextFactory)
     : IJunctionProgressProvider,
         ISettlesBeforeTheRunEnds
 {
@@ -89,7 +89,7 @@ internal class JunctionProgressProvider(IDataContextProviderFactory dataContextF
 
         try
         {
-            await written.WaitAsync(cancellationToken);
+            await written.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -173,7 +173,7 @@ internal class JunctionProgressProvider(IDataContextProviderFactory dataContextF
                 writer = _writer;
             }
 
-            await writer;
+            await writer.ConfigureAwait(false);
         }
     }
 
@@ -235,7 +235,8 @@ internal class JunctionProgressProvider(IDataContextProviderFactory dataContextF
             {
                 // Not a caller's token: the write carries every caller's change, and the run
                 // settles it before it ends.
-                await Write(metadataId, junction, startedAt, CancellationToken.None);
+                await Write(metadataId, junction, startedAt, CancellationToken.None)
+                    .ConfigureAwait(false);
                 carried.SetResult();
             }
             catch (Exception ex)
@@ -266,7 +267,10 @@ internal class JunctionProgressProvider(IDataContextProviderFactory dataContextF
         if (metadataId <= 0)
             return;
 
-        await using var context = await dataContextFactory.CreateDbContextAsync(cancellationToken);
+        var context = await dataContextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         if (context is DbContext db && db.Database.IsRelational())
         {
@@ -277,22 +281,22 @@ internal class JunctionProgressProvider(IDataContextProviderFactory dataContextF
                         s.SetProperty(m => m.CurrentlyRunningJunction, junction)
                             .SetProperty(m => m.JunctionStartedAt, startedAt),
                     cancellationToken
-                );
+                )
+                .ConfigureAwait(false);
             return;
         }
 
         // The in-memory provider has no bulk update, so the row is read into this context and saved.
-        var row = await context.Metadatas.FirstOrDefaultAsync(
-            m => m.Id == metadataId,
-            cancellationToken
-        );
+        var row = await context
+            .Metadatas.FirstOrDefaultAsync(m => m.Id == metadataId, cancellationToken)
+            .ConfigureAwait(false);
 
         if (row is null)
             return;
 
         row.CurrentlyRunningJunction = junction;
         row.JunctionStartedAt = startedAt;
-        await context.SaveChanges(cancellationToken);
+        await context.SaveChanges(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

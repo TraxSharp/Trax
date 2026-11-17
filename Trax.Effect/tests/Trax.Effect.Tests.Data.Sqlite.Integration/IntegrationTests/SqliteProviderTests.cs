@@ -212,7 +212,8 @@ public class SqliteProviderTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var context = (IDataContext)factory.Create();
 
-        var act = async () => await context.SaveChanges(CancellationToken.None);
+        var act = async () =>
+            await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -256,7 +257,7 @@ public class SqliteProviderTests : TestSetup
 
         var act = async () =>
         {
-            var transaction = await context.BeginTransaction();
+            var transaction = await context.BeginTransaction().ConfigureAwait(false);
             transaction.Dispose();
         };
 
@@ -325,8 +326,8 @@ public class SqliteProviderTests : TestSetup
 
         var act = async () =>
         {
-            var transaction = await context.BeginTransaction();
-            await context.CommitTransaction();
+            var transaction = await context.BeginTransaction().ConfigureAwait(false);
+            await context.CommitTransaction().ConfigureAwait(false);
             transaction.Dispose();
         };
 
@@ -334,8 +335,8 @@ public class SqliteProviderTests : TestSetup
 
         var act2 = async () =>
         {
-            var transaction = await context.BeginTransaction();
-            await context.RollbackTransaction();
+            var transaction = await context.BeginTransaction().ConfigureAwait(false);
+            await context.RollbackTransaction().ConfigureAwait(false);
             transaction.Dispose();
         };
 
@@ -350,7 +351,9 @@ public class SqliteProviderTests : TestSetup
 
         var act = async () =>
         {
-            var transaction = await context.BeginTransaction(CancellationToken.None);
+            var transaction = await context
+                .BeginTransaction(CancellationToken.None)
+                .ConfigureAwait(false);
             transaction.Dispose();
         };
 
@@ -1881,7 +1884,7 @@ public class SqliteProviderTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IFailingTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.Metadata.Should().NotBeNull();
@@ -1898,7 +1901,7 @@ public class SqliteProviderTests : TestSetup
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var act = async () => await train.Run(Unit.Default, cts.Token);
+        var act = async () => await train.Run(Unit.Default, cts.Token).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         train.Metadata.Should().NotBeNull();
@@ -1936,17 +1939,17 @@ public class SqliteProviderTests : TestSetup
 
     #region Test Trains
 
-    private interface ITestTrain : IServiceTrain<Unit, Unit> { }
+    private interface ITestTrain : IServiceTrain<Unit, Unit>;
 
-    private class TestTrain : ServiceTrain<Unit, Unit>, ITestTrain
+    private sealed class TestTrain : ServiceTrain<Unit, Unit>, ITestTrain
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Chain<ObserveCancellation>().Resolve();
     }
 
-    private interface IFailingTrain : IServiceTrain<Unit, Unit> { }
+    private interface IFailingTrain : IServiceTrain<Unit, Unit>;
 
-    private class FailingTrain : ServiceTrain<Unit, Unit>, IFailingTrain
+    private sealed class FailingTrain : ServiceTrain<Unit, Unit>, IFailingTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions() =>
             new TrainException("Test failure");

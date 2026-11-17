@@ -101,7 +101,7 @@ public class RabbitMqBroadcasterSenderTests
                 published.Attempt(message);
                 if (refusal is not null)
                 {
-                    channel.IsOpen.Returns(false);
+                    channel.IsOpen.Returns(returnThis: false);
                     return ValueTask.FromException(refusal);
                 }
 
@@ -114,14 +114,14 @@ public class RabbitMqBroadcasterSenderTests
     private static IConnection OpenConnection()
     {
         var connection = Substitute.For<IConnection>();
-        connection.IsOpen.Returns(true);
+        connection.IsOpen.Returns(returnThis: true);
         return connection;
     }
 
     private static IChannel OpenChannel()
     {
         var channel = Substitute.For<IChannel>();
-        channel.IsOpen.Returns(true);
+        channel.IsOpen.Returns(returnThis: true);
         return channel;
     }
 
@@ -299,7 +299,7 @@ public class RabbitMqBroadcasterSenderTests
         var broadcaster = Broadcaster(connection, new CapturingLogger());
         Set(broadcaster, "_channel", channel);
 
-        var dispose = async () => await broadcaster.DisposeAsync();
+        var dispose = async () => await broadcaster.DisposeAsync().ConfigureAwait(false);
 
         await dispose.Should().NotThrowAsync();
         channel.Received(1).Dispose();
@@ -512,7 +512,7 @@ public class RabbitMqBroadcasterSenderTests
                     channel,
                     into: published,
                     refuse: m =>
-                        m.ExternalId == "refused"
+                        string.Equals(m.ExternalId, "refused", StringComparison.Ordinal)
                             ? new OperationInterruptedException(
                                 new ShutdownEventArgs(
                                     ShutdownInitiator.Peer,
@@ -723,7 +723,7 @@ public class RabbitMqBroadcasterSenderTests
         public async Task<IChannel> Pass(IChannel channel)
         {
             _entered.TrySetResult();
-            await _released.Task;
+            await _released.Task.ConfigureAwait(false);
             return channel;
         }
 
@@ -731,7 +731,8 @@ public class RabbitMqBroadcasterSenderTests
         {
             _entered.TrySetResult();
             // negative-wait: never completes on its own; only the dispose's cancellation ends it.
-            await Task.Delay(System.Threading.Timeout.Infinite, cancellationToken);
+            await Task.Delay(System.Threading.Timeout.Infinite, cancellationToken)
+                .ConfigureAwait(false);
             throw new UnreachableException();
         }
     }

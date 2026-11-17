@@ -77,17 +77,22 @@ public class PostgresLogBatchTests : TestSetup
         // refuses never lands, so the count stays at zero until the deadline.
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
         var stored = 0;
-        while (DateTime.UtcNow < deadline && (stored = await CountStored()) < 10)
+        while (
+            DateTime.UtcNow < deadline && (stored = await CountStored().ConfigureAwait(false)) < 10
+        )
             await Task.Yield();
 
         provider.Dispose();
-        return await CountStored();
+        return await CountStored().ConfigureAwait(false);
     }
 
     private async Task<int> CountStored()
     {
         using var context = (IDataContext)DataContextFactory.Create();
-        return await context.Logs.AsNoTracking().CountAsync(l => l.Category == Category);
+        return await context
+            .Logs.AsNoTracking()
+            .CountAsync(l => l.Category == Category)
+            .ConfigureAwait(false);
     }
 
     private sealed class Config : IDataContextLoggingProviderConfiguration
@@ -103,8 +108,8 @@ public class PostgresLogBatchTests : TestSetup
 
         public async Task<IDataContext> CreateDbContextAsync(CancellationToken cancellationToken)
         {
-            await gate.WaitAsync(cancellationToken);
-            return await inner.CreateDbContextAsync(cancellationToken);
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return await inner.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

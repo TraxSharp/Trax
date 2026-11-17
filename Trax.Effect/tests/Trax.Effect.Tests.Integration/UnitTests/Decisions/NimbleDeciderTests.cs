@@ -208,7 +208,11 @@ public class NimbleDeciderTests
 
         var decide = () =>
             decider.Decide(
-                new DecisionRequest("T", "state", [new YesNoQuestion("Q", "?", null, null)]),
+                new DecisionRequest(
+                    "T",
+                    "state",
+                    [new YesNoQuestion("Q", "?", Yes: null, No: null)]
+                ),
                 CancellationToken.None
             );
         await decide.Should().ThrowAsync<ObjectDisposedException>();

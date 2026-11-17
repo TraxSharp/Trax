@@ -124,7 +124,7 @@ internal sealed class DecisionRun
 
         foreach (var ((asked, asking), id) in _latest)
             if (
-                asking == key
+                string.Equals(asking, key, StringComparison.Ordinal)
                 && BranchPaths.Encloses(asked, path)
                 && (nearest is null || asked.Length > nearest.Length)
             )

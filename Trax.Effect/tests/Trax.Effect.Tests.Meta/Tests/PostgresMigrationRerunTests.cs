@@ -45,7 +45,7 @@ public class PostgresMigrationRerunTests
             )
             .Select(path => Path.GetFileName(path)!)
             .Where(name => int.Parse(name[..3]) >= FirstRerunnable)
-            .OrderBy(name => name, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .Select(name => new TestCaseData(name).SetName($"{{m}}({name})"));
 
     [TestCaseSource(nameof(Scripts))]

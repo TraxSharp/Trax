@@ -253,7 +253,7 @@ public class ManifestSchedulingTests
 
         // Assert - $type should be the first key in the JSON
         var jsonObj = JsonNode.Parse(manifest.Properties!)!.AsObject();
-        jsonObj.First().Key.Should().Be("$type");
+        jsonObj.GetAt(0).Key.Should().Be("$type");
     }
 
     [Test]
@@ -352,7 +352,7 @@ public class ManifestSchedulingTests
 
     #endregion
 
-    private class TestManifestProperties : IManifestProperties
+    private sealed class TestManifestProperties : IManifestProperties
     {
         public string Name { get; set; } = string.Empty;
         public int Value { get; set; }
@@ -366,7 +366,7 @@ public class ManifestSchedulingTests
         Gamma,
     }
 
-    private class TestManifestPropertiesWithEnum : IManifestProperties
+    private sealed class TestManifestPropertiesWithEnum : IManifestProperties
     {
         public string Name { get; set; } = string.Empty;
         public TestCategory Category { get; set; }
@@ -390,7 +390,7 @@ public class ManifestSchedulingTests
     /// Record type similar to the user's ExtractRequest pattern.
     /// Uses primary constructor with properties and a field with default value.
     /// </summary>
-    private record ExtractRequest(NetSuiteTable Table, int Batch, List<int>? Ids = null)
+    private sealed record ExtractRequest(NetSuiteTable Table, int Batch, List<int>? Ids = null)
         : IManifestProperties
     {
         public NetSuiteTable Table { get; } = Table;
@@ -483,7 +483,7 @@ public class ManifestSchedulingTests
     public void SetProperties_RecordWithNullableList_ShouldHandleNullAsEmptyList()
     {
         // Arrange - create with null Ids (should default to empty list)
-        var request = ExtractRequest.Create(NetSuiteTable.Orders, 50, null);
+        var request = ExtractRequest.Create(NetSuiteTable.Orders, 50, ids: null);
 
         var manifest = Manifest.Create(
             new CreateManifest { Name = typeof(Unit), Properties = request }
@@ -532,7 +532,7 @@ public class ManifestSchedulingTests
         var json = JsonNode.Parse(manifest.Properties!)!.AsObject();
 
         // Should have $type as first property
-        json.First().Key.Should().Be("$type");
+        json.GetAt(0).Key.Should().Be("$type");
 
         // Should contain expected property names (camelCase in JSON)
         json.ContainsKey("table").Should().BeTrue();

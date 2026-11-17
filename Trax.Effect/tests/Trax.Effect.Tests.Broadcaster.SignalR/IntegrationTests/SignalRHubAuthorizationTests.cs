@@ -41,7 +41,7 @@ public class SignalRHubAuthorizationTests
     [Test]
     public async Task MappingTheHubWithoutAPosture_FailsAtStartup()
     {
-        var start = async () => await StartHostAsync(_ => { });
+        var start = async () => await StartHostAsync(_ => { }).ConfigureAwait(false);
 
         (
             await start
@@ -58,7 +58,8 @@ public class SignalRHubAuthorizationTests
     public async Task AllowAnonymousTogetherWithARequirement_FailsAtStartup()
     {
         var start = async () =>
-            await StartHostAsync(hub => hub.AllowAnonymous().RequireAuthorization());
+            await StartHostAsync(hub => hub.AllowAnonymous().RequireAuthorization())
+                .ConfigureAwait(false);
 
         await start.Should().ThrowAsync<InvalidOperationException>(Adr);
     }
@@ -69,7 +70,8 @@ public class SignalRHubAuthorizationTests
         using var host = await StartHostAsync(hub => hub.RequireAuthorization());
         await using var connection = Client(host, user: null);
 
-        var connect = async () => await connection.StartAsync().WaitAsync(Timeout);
+        var connect = async () =>
+            await connection.StartAsync().WaitAsync(Timeout).ConfigureAwait(false);
 
         (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
             .Which.StatusCode.Should()
@@ -82,7 +84,8 @@ public class SignalRHubAuthorizationTests
         using var host = await StartHostAsync(hub => hub.RequireAuthorization("TraxEvents"));
         await using var connection = Client(host, user: "mallory");
 
-        var connect = async () => await connection.StartAsync().WaitAsync(Timeout);
+        var connect = async () =>
+            await connection.StartAsync().WaitAsync(Timeout).ConfigureAwait(false);
 
         (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
             .Which.StatusCode.Should()
@@ -96,7 +99,8 @@ public class SignalRHubAuthorizationTests
 
         await using (var outsider = Client(host, user: "bob"))
         {
-            var connect = async () => await outsider.StartAsync().WaitAsync(Timeout);
+            var connect = async () =>
+                await outsider.StartAsync().WaitAsync(Timeout).ConfigureAwait(false);
             (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
                 .Which.StatusCode.Should()
                 .Be(HttpStatusCode.Forbidden);
@@ -168,7 +172,8 @@ public class SignalRHubAuthorizationTests
 
         await using (var anonymous = Client(host, user: null))
         {
-            var connect = async () => await anonymous.StartAsync().WaitAsync(Timeout);
+            var connect = async () =>
+                await anonymous.StartAsync().WaitAsync(Timeout).ConfigureAwait(false);
             (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
                 .Which.StatusCode.Should()
                 .Be(HttpStatusCode.Unauthorized);
@@ -185,7 +190,8 @@ public class SignalRHubAuthorizationTests
     public async Task RequireAuthorization_WithABlankPolicyName_FailsAtStartup(string? policy)
     {
         var start = async () =>
-            await StartHostAsync(hub => hub.RequireAuthorization("TraxEvents", policy!));
+            await StartHostAsync(hub => hub.RequireAuthorization("TraxEvents", policy!))
+                .ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<ArgumentException>())
             .Which.ParamName.Should()
@@ -195,7 +201,8 @@ public class SignalRHubAuthorizationTests
     [Test]
     public async Task RequireRoles_WithNoRoles_FailsAtStartup()
     {
-        var start = async () => await StartHostAsync(hub => hub.RequireRoles());
+        var start = async () =>
+            await StartHostAsync(hub => hub.RequireRoles()).ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<ArgumentException>())
             .Which.Message.Should()
@@ -205,7 +212,8 @@ public class SignalRHubAuthorizationTests
     [Test]
     public async Task RequireRoles_WithANullRoleList_FailsAtStartup()
     {
-        var start = async () => await StartHostAsync(hub => hub.RequireRoles(null!));
+        var start = async () =>
+            await StartHostAsync(hub => hub.RequireRoles(null!)).ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<ArgumentException>()).Which.ParamName.Should().Be("roles");
     }
@@ -215,7 +223,8 @@ public class SignalRHubAuthorizationTests
     [TestCase(null)]
     public async Task RequireRoles_WithABlankRoleName_FailsAtStartup(string? role)
     {
-        var start = async () => await StartHostAsync(hub => hub.RequireRoles("Operator", role!));
+        var start = async () =>
+            await StartHostAsync(hub => hub.RequireRoles("Operator", role!)).ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<ArgumentException>())
             .Which.Message.Should()
@@ -232,7 +241,8 @@ public class SignalRHubAuthorizationTests
 
         await using (var outsider = Client(host, user: "bob"))
         {
-            var connect = async () => await outsider.StartAsync().WaitAsync(Timeout);
+            var connect = async () =>
+                await outsider.StartAsync().WaitAsync(Timeout).ConfigureAwait(false);
             (
                 await connect
                     .Should()
@@ -259,7 +269,8 @@ public class SignalRHubAuthorizationTests
 
         await using (var outsider = WebSocketClient(host, user: "bob"))
         {
-            var connect = async () => await outsider.StartAsync().WaitAsync(Timeout);
+            var connect = async () =>
+                await outsider.StartAsync().WaitAsync(Timeout).ConfigureAwait(false);
             await connect
                 .Should()
                 .ThrowAsync<Exception>(
@@ -281,7 +292,8 @@ public class SignalRHubAuthorizationTests
         using var host = await StartHostAsync(hub => hub.RequireAuthorization());
         await using var connection = Client(host, user: "alice", origin: ForeignOrigin);
 
-        var connect = async () => await connection.StartAsync().WaitAsync(Timeout);
+        var connect = async () =>
+            await connection.StartAsync().WaitAsync(Timeout).ConfigureAwait(false);
 
         (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
             .Which.StatusCode.Should()
@@ -295,7 +307,8 @@ public class SignalRHubAuthorizationTests
 
         await using (var foreign = WebSocketClient(host, user: "alice", origin: ForeignOrigin))
         {
-            var connect = async () => await foreign.StartAsync().WaitAsync(Timeout);
+            var connect = async () =>
+                await foreign.StartAsync().WaitAsync(Timeout).ConfigureAwait(false);
             await connect.Should().ThrowAsync<Exception>(Adr);
             foreign.State.Should().Be(HubConnectionState.Disconnected);
         }
@@ -348,7 +361,7 @@ public class SignalRHubAuthorizationTests
         }
 
         await using var other = Client(host, user: "alice", origin: ForeignOrigin);
-        var connect = async () => await other.StartAsync().WaitAsync(Timeout);
+        var connect = async () => await other.StartAsync().WaitAsync(Timeout).ConfigureAwait(false);
         (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
             .Which.StatusCode.Should()
             .Be(HttpStatusCode.Forbidden);
@@ -370,7 +383,7 @@ public class SignalRHubAuthorizationTests
         }
 
         await using var other = Client(host, user: "alice", origin: ForeignOrigin);
-        var connect = async () => await other.StartAsync().WaitAsync(Timeout);
+        var connect = async () => await other.StartAsync().WaitAsync(Timeout).ConfigureAwait(false);
         (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
             .Which.StatusCode.Should()
             .Be(HttpStatusCode.Forbidden);
@@ -385,7 +398,8 @@ public class SignalRHubAuthorizationTests
         );
         await using var connection = Client(host, user: "alice", origin: ForeignOrigin);
 
-        var connect = async () => await connection.StartAsync().WaitAsync(Timeout);
+        var connect = async () =>
+            await connection.StartAsync().WaitAsync(Timeout).ConfigureAwait(false);
 
         (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
             .Which.StatusCode.Should()
@@ -398,7 +412,8 @@ public class SignalRHubAuthorizationTests
         using var host = await StartHostAsync(hub => hub.AllowAnonymous());
         await using var connection = Client(host, user: null, origin: ForeignOrigin);
 
-        var connect = async () => await connection.StartAsync().WaitAsync(Timeout);
+        var connect = async () =>
+            await connection.StartAsync().WaitAsync(Timeout).ConfigureAwait(false);
 
         (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
             .Which.StatusCode.Should()
@@ -412,7 +427,8 @@ public class SignalRHubAuthorizationTests
     public async Task AllowOrigins_WithSomethingThatIsNotAnOrigin_FailsAtStartup(string origin)
     {
         var start = async () =>
-            await StartHostAsync(hub => hub.RequireAuthorization().AllowOrigins(origin));
+            await StartHostAsync(hub => hub.RequireAuthorization().AllowOrigins(origin))
+                .ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<ArgumentException>())
             .Which.ParamName.Should()
@@ -441,7 +457,7 @@ public class SignalRHubAuthorizationTests
 
         await connection.StartAsync().WaitAsync(Timeout);
 
-        var wait = async () => await closed.Task.WaitAsync(Timeout);
+        var wait = async () => await closed.Task.WaitAsync(Timeout).ConfigureAwait(false);
         await wait.Should()
             .NotThrowAsync(
                 "a connection stops receiving once the authentication it was admitted on expires "
@@ -452,7 +468,9 @@ public class SignalRHubAuthorizationTests
     [Test]
     public async Task RequireAuthorization_WithAnUnknownPolicy_FailsAtMapping()
     {
-        var start = async () => await StartHostAsync(hub => hub.RequireAuthorization("TraxEvnets"));
+        var start = async () =>
+            await StartHostAsync(hub => hub.RequireAuthorization("TraxEvnets"))
+                .ConfigureAwait(false);
 
         (
             await start
@@ -468,7 +486,8 @@ public class SignalRHubAuthorizationTests
     [Test]
     public async Task RequireRoles_WithACommaInARoleName_FailsAtStartup()
     {
-        var start = async () => await StartHostAsync(hub => hub.RequireRoles("Operator,User"));
+        var start = async () =>
+            await StartHostAsync(hub => hub.RequireRoles("Operator,User")).ConfigureAwait(false);
 
         (
             await start
@@ -534,7 +553,7 @@ public class SignalRHubAuthorizationTests
                 })
         );
 
-        return await builder.StartAsync();
+        return await builder.StartAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -567,7 +586,9 @@ public class SignalRHubAuthorizationTests
                             if (origin is not null)
                                 request.Headers["Origin"] = origin;
                         };
-                        return await client.ConnectAsync(context.Uri, cancellationToken);
+                        return await client
+                            .ConnectAsync(context.Uri, cancellationToken)
+                            .ConfigureAwait(false);
                     };
                 }
             )

@@ -40,7 +40,9 @@ public class SignalRConsecutiveRunTests
         var runner = scope.ServiceProvider.GetRequiredService<ILifecycleHookRunner>();
         try
         {
-            await runner.OnCompleted(NewRun(externalId), CancellationToken.None);
+            await runner
+                .OnCompleted(NewRun(externalId), CancellationToken.None)
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -64,7 +66,10 @@ public class SignalRConsecutiveRunTests
             evt =>
             {
                 received.Enqueue(evt);
-                if (evt.ExternalId == "run-2" && evt.EventType == "Completed")
+                if (
+                    string.Equals(evt.ExternalId, "run-2", StringComparison.Ordinal)
+                    && string.Equals(evt.EventType, "Completed", StringComparison.Ordinal)
+                )
                     secondRunArrived.TrySetResult();
             }
         );

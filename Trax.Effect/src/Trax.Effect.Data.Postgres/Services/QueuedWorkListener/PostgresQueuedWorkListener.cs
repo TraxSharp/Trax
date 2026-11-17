@@ -50,17 +50,20 @@ internal sealed class PostgresQueuedWorkListener(
 
     public async Task<IQueuedWorkSubscription> SubscribeAsync(CancellationToken cancellationToken)
     {
-        var connection = await _dataSource.Value.OpenConnectionAsync(cancellationToken);
+        var connection = await _dataSource
+            .Value.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
         try
         {
             var subscription = new Subscription(connection);
-            await using var listen = new NpgsqlCommand($"LISTEN {Channel}", connection);
-            await listen.ExecuteNonQueryAsync(cancellationToken);
+            var listen = new NpgsqlCommand($"LISTEN {Channel}", connection);
+            await using var listenDisposal = listen.ConfigureAwait(false);
+            await listen.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             return subscription;
         }
         catch
         {
-            await connection.DisposeAsync();
+            await connection.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -68,7 +71,7 @@ internal sealed class PostgresQueuedWorkListener(
     public async ValueTask DisposeAsync()
     {
         if (_dataSource.IsValueCreated)
-            await _dataSource.Value.DisposeAsync();
+            await _dataSource.Value.DisposeAsync().ConfigureAwait(false);
     }
 
     private sealed class Subscription : IQueuedWorkSubscription
@@ -81,7 +84,7 @@ internal sealed class PostgresQueuedWorkListener(
             _connection = connection;
             _connection.Notification += (_, args) =>
             {
-                if (args.Channel == Channel)
+                if (string.Equals(args.Channel, Channel, StringComparison.Ordinal))
                     Interlocked.Increment(ref _pending);
             };
         }
@@ -92,7 +95,7 @@ internal sealed class PostgresQueuedWorkListener(
             // parameter change included, and may deliver several notifications in one read. Only
             // the notifications count, one per call.
             while (Volatile.Read(ref _pending) == 0)
-                await _connection.WaitAsync(cancellationToken);
+                await _connection.WaitAsync(cancellationToken).ConfigureAwait(false);
 
             Interlocked.Decrement(ref _pending);
         }

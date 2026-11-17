@@ -283,36 +283,36 @@ public class TraxAuthorizationTests
     /// Stands in for HotChocolate's attribute. Naming it exactly is what the ban matches on, and
     /// Trax.Effect does not reference HotChocolate, so the real one cannot be used here.
     /// </summary>
-    private sealed class Subject
+    private static class Subject
     {
-        public string Undeclared() => "x";
+        public static string Undeclared() => "x";
 
         [TraxAuthorize(Roles = "subscriber")]
-        public string Gated() => "x";
+        public static string Gated() => "x";
 
         [TraxAllowAnonymous]
-        public string Public() => "x";
+        public static string Public() => "x";
 
         [TraxAuthorize]
         [TraxAllowAnonymous]
-        public string Conflicted() => "x";
+        public static string Conflicted() => "x";
 
         [TraxAuthorize(Policy = "AdminOnly")]
         [TraxAuthorize(Roles = "ops")]
-        public string DoublyGated() => "x";
+        public static string DoublyGated() => "x";
 
         [HotChocolate.Authorization.Authorize]
-        public string ForeignGated() => "x";
+        public static string ForeignGated() => "x";
 
         [HotChocolate.Authorization.AllowAnonymous]
-        public string ForeignPublic() => "x";
+        public static string ForeignPublic() => "x";
 
         [TraxAuthorize(Roles = "subscriber")]
         [HotChocolate.Authorization.Authorize]
-        public string MixedVocabulary() => "x";
+        public static string MixedVocabulary() => "x";
 
         [Lookalike.Authorize]
-        public string LookalikeAttribute() => "x";
+        public static string LookalikeAttribute() => "x";
     }
 
     private class BaseSubject
@@ -336,5 +336,5 @@ public class TraxAuthorizationTests
     private sealed class DoubleInterfaced : IGated, IAlsoGated;
 
     [TraxAllowAnonymous]
-    private sealed class PublicType;
+    private static class PublicType;
 }

@@ -106,7 +106,8 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
     private async Task<IDataContext> NewContext() =>
         await Scope
             .ServiceProvider.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
     private static async Task<WorkQueue> QueueFor(
         IDataContext context,
@@ -122,16 +123,16 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
-        await context.Track(group);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(group).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest { Name = typeof(SqliteDisabledManifestDispatchTests) }
         );
         manifest.ManifestGroupId = group.Id;
         manifest.IsEnabled = manifestEnabled;
-        await context.Track(manifest);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(manifest).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -141,8 +142,8 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
                 ExplicitTrigger = explicitTrigger,
             }
         );
-        await context.Track(entry);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(entry).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         return entry;
     }
@@ -152,7 +153,8 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
             .WorkQueues.FromSqlRaw(dialect.LoadGroupFairQueuedJobs(), 1000)
             .AsNoTracking()
             .Select(w => w.Id)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
     private static async Task<WorkQueue?> Claim(
         IDataContext context,
@@ -162,5 +164,6 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
         await context
             .WorkQueues.FromSqlRaw(dialect.ClaimWorkQueueEntry(), id)
             .AsNoTracking()
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync()
+            .ConfigureAwait(false);
 }

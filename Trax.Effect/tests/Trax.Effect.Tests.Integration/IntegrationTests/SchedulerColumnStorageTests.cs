@@ -156,13 +156,13 @@ public class SchedulerColumnStorageTests : TestSetup
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
-        await context.Track(group);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(group).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var manifest = Manifest.Create(create);
         manifest.ManifestGroupId = group.Id;
-        await context.Track(manifest);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(manifest).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return manifest;
     }
 }

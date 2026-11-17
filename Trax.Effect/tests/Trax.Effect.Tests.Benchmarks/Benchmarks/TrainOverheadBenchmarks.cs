@@ -53,17 +53,17 @@ public class TrainOverheadBenchmarks
     // ===== Arithmetic: Add 1 (single junction) =====
 
     [Benchmark(Baseline = true, Description = "Serial_Add1")]
-    public Task<int> Serial_AddOne() => SerialOperations.AddOneSerial(0);
+    public static Task<int> Serial_AddOne() => SerialOperations.AddOneSerial(0);
 
     [Benchmark(Description = "BaseTrain_Add1")]
-    public Task<int> BaseTrain_AddOne() => new AddOneTrain().Run(0);
+    public static Task<int> BaseTrain_AddOne() => new AddOneTrain().Run(0);
 
     [Benchmark(Description = "EffectTrain_NoEffects_Add1")]
     public async Task<int> EffectTrain_NoEffects_AddOne()
     {
         using var scope = _noEffectsProvider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<IEffectAddOneTrain>();
-        return await train.Run(0);
+        return await train.Run(0).ConfigureAwait(false);
     }
 
     [Benchmark(Description = "EffectTrain_InMemory_Add1")]
@@ -71,23 +71,23 @@ public class TrainOverheadBenchmarks
     {
         using var scope = _inMemoryProvider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<IEffectAddOneTrain>();
-        return await train.Run(0);
+        return await train.Run(0).ConfigureAwait(false);
     }
 
     // ===== Arithmetic: Add 3 (three steps) =====
 
     [Benchmark(Description = "Serial_Add3")]
-    public Task<int> Serial_AddThree() => SerialOperations.AddThreeSerial(0);
+    public static Task<int> Serial_AddThree() => SerialOperations.AddThreeSerial(0);
 
     [Benchmark(Description = "BaseTrain_Add3")]
-    public Task<int> BaseTrain_AddThree() => new AddThreeTrain().Run(0);
+    public static Task<int> BaseTrain_AddThree() => new AddThreeTrain().Run(0);
 
     [Benchmark(Description = "EffectTrain_NoEffects_Add3")]
     public async Task<int> EffectTrain_NoEffects_AddThree()
     {
         using var scope = _noEffectsProvider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<IEffectAddThreeTrain>();
-        return await train.Run(0);
+        return await train.Run(0).ConfigureAwait(false);
     }
 
     [Benchmark(Description = "EffectTrain_InMemory_Add3")]
@@ -95,7 +95,7 @@ public class TrainOverheadBenchmarks
     {
         using var scope = _inMemoryProvider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<IEffectAddThreeTrain>();
-        return await train.Run(0);
+        return await train.Run(0).ConfigureAwait(false);
     }
 
     // ===== Object Transformation =====
@@ -111,7 +111,7 @@ public class TrainOverheadBenchmarks
     {
         using var scope = _noEffectsProvider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<IEffectTransformTrain>();
-        return await train.Run(_samplePerson);
+        return await train.Run(_samplePerson).ConfigureAwait(false);
     }
 
     [Benchmark(Description = "EffectTrain_InMemory_Transform")]
@@ -119,23 +119,23 @@ public class TrainOverheadBenchmarks
     {
         using var scope = _inMemoryProvider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<IEffectTransformTrain>();
-        return await train.Run(_samplePerson);
+        return await train.Run(_samplePerson).ConfigureAwait(false);
     }
 
     // ===== Simulated I/O (3 Task.Yield steps) =====
 
     [Benchmark(Description = "Serial_SimulatedIO")]
-    public Task<int> Serial_SimulatedIo() => SerialOperations.SimulatedIoSerial(0, 3);
+    public static Task<int> Serial_SimulatedIo() => SerialOperations.SimulatedIoSerial(0, 3);
 
     [Benchmark(Description = "BaseTrain_SimulatedIO")]
-    public Task<int> BaseTrain_SimulatedIo() => new SimulatedIoTrain().Run(0);
+    public static Task<int> BaseTrain_SimulatedIo() => new SimulatedIoTrain().Run(0);
 
     [Benchmark(Description = "EffectTrain_NoEffects_SimulatedIO")]
     public async Task<int> EffectTrain_NoEffects_SimulatedIo()
     {
         using var scope = _noEffectsProvider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<IEffectSimulatedIoTrain>();
-        return await train.Run(0);
+        return await train.Run(0).ConfigureAwait(false);
     }
 
     [Benchmark(Description = "EffectTrain_InMemory_SimulatedIO")]
@@ -143,6 +143,6 @@ public class TrainOverheadBenchmarks
     {
         using var scope = _inMemoryProvider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<IEffectSimulatedIoTrain>();
-        return await train.Run(0);
+        return await train.Run(0).ConfigureAwait(false);
     }
 }

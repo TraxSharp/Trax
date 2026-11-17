@@ -11,4 +11,4 @@ public class TestEffectTrain : ServiceTrain<TestEffectTrainInput, TestEffectTrai
 
 public record TestEffectTrainInput();
 
-public interface ITestEffectTrain : IServiceTrain<TestEffectTrainInput, TestEffectTrain> { }
+public interface ITestEffectTrain : IServiceTrain<TestEffectTrainInput, TestEffectTrain>;

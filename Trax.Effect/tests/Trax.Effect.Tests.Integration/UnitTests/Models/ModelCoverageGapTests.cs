@@ -27,7 +27,7 @@ public class ModelCoverageGapTests
         act.Should().Throw<Exception>().WithMessage("*full name*");
     }
 
-    private class GenericMarker<T> { }
+    private static class GenericMarker<T>;
 
     [Test]
     public void Manifest_NameType_ResolvesTypeFromOtherAssembly()

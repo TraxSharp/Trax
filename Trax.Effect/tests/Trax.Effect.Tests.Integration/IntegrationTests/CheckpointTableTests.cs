@@ -49,11 +49,11 @@ public class CheckpointTableTests : TestSetup
     {
         using var context = (IDataContext)DataContextFactory.Create();
         var run = await NewRun(context);
-        context.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", null));
+        context.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", branchPath: null));
         await context.SaveChanges(CancellationToken.None);
 
         using var other = (IDataContext)DataContextFactory.Create();
-        other.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", null));
+        other.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", branchPath: null));
         var second = () => other.SaveChanges(CancellationToken.None);
 
         await second.Should().ThrowAsync<DbUpdateException>();
@@ -67,8 +67,8 @@ public class CheckpointTableTests : TestSetup
         using var context = (IDataContext)DataContextFactory.Create();
         var run = await NewRun(context);
         var kept = await NewRun(context);
-        context.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", null));
-        context.Checkpoints.Add(Row(kept, "Checkpoint<Scores>#0", null));
+        context.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", branchPath: null));
+        context.Checkpoints.Add(Row(kept, "Checkpoint<Scores>#0", branchPath: null));
         await context.SaveChanges(CancellationToken.None);
 
         await DeleteRun(context, run);
@@ -147,7 +147,7 @@ public class CheckpointTableTests : TestSetup
             }
         );
         context.Metadatas.Add(metadata);
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return metadata.Id;
     }
 

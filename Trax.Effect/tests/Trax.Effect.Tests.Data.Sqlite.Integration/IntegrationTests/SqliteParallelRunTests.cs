@@ -106,11 +106,13 @@ public class SqliteParallelRunTests
         var run = await Run();
 
         var rows = await Rows(run);
-        rows.Where(r => r.Name == nameof(LiteParTookGround))
+        rows.Where(r => string.Equals(r.Name, nameof(LiteParTookGround), StringComparison.Ordinal))
             .Select(r => r.BranchPath)
             .Should()
             .BeEquivalentTo([null, "Parallel#0/a", "Parallel#0/b", null]);
-        rows.Single(r => r.Name == nameof(LiteParFinish)).BranchPath.Should().BeNull();
+        rows.Single(r => string.Equals(r.Name, nameof(LiteParFinish), StringComparison.Ordinal))
+            .BranchPath.Should()
+            .BeNull();
     }
 
     private async Task<long> Run(long? replayDecisionsOf = null)
@@ -130,26 +132,35 @@ public class SqliteParallelRunTests
             }
         );
 
-        await train.Run(input, metadata);
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
+        await train.Run(input, metadata).ConfigureAwait(false);
+        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
         return train.Metadata!.Id;
     }
 
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return await context
             .RecordedDecisions.AsNoTracking()
             .Where(d => d.MetadataId == metadataId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync();
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return await context
+            .JunctionRuns.AsNoTracking()
+            .ForRun(metadataId)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 }
 

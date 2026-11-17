@@ -67,7 +67,10 @@ public class LifecycleHookScopeTests
         using var scope = provider.CreateScope();
 
         var run = async () =>
-            await scope.ServiceProvider.GetRequiredService<IAuditedTrain>().Run(Unit.Default);
+            await scope
+                .ServiceProvider.GetRequiredService<IAuditedTrain>()
+                .Run(Unit.Default)
+                .ConfigureAwait(false);
 
         await run.Should()
             .NotThrowAsync(
@@ -85,11 +88,11 @@ public class LifecycleHookScopeTests
         }
     }
 
-    private class AuditedTrain : ServiceTrain<Unit, Unit>, IAuditedTrain
+    private sealed class AuditedTrain : ServiceTrain<Unit, Unit>, IAuditedTrain
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 
-    public interface IAuditedTrain : IServiceTrain<Unit, Unit> { }
+    public interface IAuditedTrain : IServiceTrain<Unit, Unit>;
 }

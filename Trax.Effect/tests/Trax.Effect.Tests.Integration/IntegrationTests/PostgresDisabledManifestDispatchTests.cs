@@ -130,7 +130,7 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
     }
 
     private async Task<IDataContext> NewContext() =>
-        await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
+        await DataContextFactory.CreateDbContextAsync(CancellationToken.None).ConfigureAwait(false);
 
     private static async Task<WorkQueue> QueueFor(
         IDataContext context,
@@ -146,16 +146,16 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
-        await context.Track(group);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(group).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest { Name = typeof(PostgresDisabledManifestDispatchTests) }
         );
         manifest.ManifestGroupId = group.Id;
         manifest.IsEnabled = manifestEnabled;
-        await context.Track(manifest);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(manifest).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -165,8 +165,8 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
                 ExplicitTrigger = explicitTrigger,
             }
         );
-        await context.Track(entry);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(entry).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         return entry;
     }
@@ -176,7 +176,8 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
             .WorkQueues.FromSqlRaw(dialect.LoadGroupFairQueuedJobs(), 1000)
             .AsNoTracking()
             .Select(w => w.Id)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
     private static async Task<WorkQueue?> Claim(
         IDataContext context,
@@ -186,5 +187,6 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
         await context
             .WorkQueues.FromSqlRaw(dialect.ClaimWorkQueueEntry(), id)
             .AsNoTracking()
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync()
+            .ConfigureAwait(false);
 }

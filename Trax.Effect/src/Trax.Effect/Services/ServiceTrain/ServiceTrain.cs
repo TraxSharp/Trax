@@ -351,7 +351,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             if (Metadata is not null)
                 ForgetPreviousRun();
 
-            await this.InitializeServiceTrain();
+            await this.InitializeServiceTrain().ConfigureAwait(false);
         }
 
         Metadata.AssertLoaded();
@@ -392,7 +392,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // check does), so a run graph drawn later on a changed chain can say so. Never read here:
         // a train that declares no checkpoint never has its chain read by a run.
         Metadata.ChainHash ??= DeclaredChains.Known(GetType())?.Hash;
-        await EffectRunner.Update(Metadata);
+        await EffectRunner.Update(Metadata).ConfigureAwait(false);
 
         // Not the caller's token, for the same reason SaveOutcome does not take it. An
         // already-cancelled caller, which is what a host shutting down or a timed-out request
@@ -401,7 +401,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // manifest counts toward retries and dead letters. Persisting it regardless costs one
         // write and lets the cancellation surface inside the try, where it is recorded as what it
         // is.
-        await SaveStart();
+        await SaveStart().ConfigureAwait(false);
 
         // Everything up to the result is captured rather than allowed to propagate, so a failure
         // takes exactly one path: the terminal write and the failure hooks run once. Rethrowing
@@ -411,11 +411,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         try
         {
-            await LifecycleHookRunner.OnStarted(Metadata, CancellationToken);
+            await LifecycleHookRunner.OnStarted(Metadata, CancellationToken).ConfigureAwait(false);
 
             try
             {
-                await OnStarted(Metadata, CancellationToken);
+                await OnStarted(Metadata, CancellationToken).ConfigureAwait(false);
             }
             catch (Exception hookEx)
             {
@@ -429,30 +429,26 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             // Set in this frame, not in a helper, so the run's own async flow carries it and no
             // other run's does. A run that names one to replay and cannot replay it fails here,
             // before it asks anything.
-            DecisionRun.Current = await BeginDecisions();
+            DecisionRun.Current = await BeginDecisions().ConfigureAwait(false);
 
             // A run that resumes an earlier one skips to its checkpoint; one that cannot runs from
             // the top. Its checkpoints are stored against this run. See Trax.Docs/adr/0047.
             checkpoints =
                 Metadata.Id > 0 ? new CheckpointRun(Metadata.Id, () => Declared()?.Hash) : null;
             CheckpointRun.Current = checkpoints;
-            Resume = await BeginResume(input);
+            Resume = await BeginResume(input).ConfigureAwait(false);
 
             // The same for the run's junction events, when the host publishes them
             // (AddJunctionEvents): its junctions and decisions report against this run only.
             JunctionEventRun.Current = ServiceProvider.GetService(typeof(JunctionEventPublisher))
                 is JunctionEventPublisher junctionEvents
-                ? await junctionEvents.BeginAsync(
-                    Metadata,
-                    GetType(),
-                    ServiceProvider,
-                    CancellationToken,
-                    this
-                )
+                ? await junctionEvents
+                    .BeginAsync(Metadata, GetType(), ServiceProvider, CancellationToken, this)
+                    .ConfigureAwait(false)
                 : null;
 
             Logger?.LogTrace("Running Train: ({TrainName})", TrainName);
-            result = await RunEither(input);
+            result = await RunEither(input).ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -483,8 +479,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             UnrecordedContent? unrecorded = null;
             try
             {
-                await this.FinishServiceTrain(result);
-                unrecorded = await SaveOutcome();
+                await this.FinishServiceTrain(result).ConfigureAwait(false);
+                unrecorded = await SaveOutcome().ConfigureAwait(false);
             }
             catch (Exception recordEx)
             {
@@ -509,14 +505,16 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                 // very cancellation it is reporting, and LifecycleHookRunner swallows hook failures
                 // by design, so the event is dropped with nothing to show for it. A run that
                 // completes despite cancellation loses its Completed event the same way.
-                await LifecycleHookRunner.OnCancelled(Metadata, CancellationToken.None);
+                await LifecycleHookRunner
+                    .OnCancelled(Metadata, CancellationToken.None)
+                    .ConfigureAwait(false);
 
                 try
                 {
                     // The train's own override keeps the caller's token: it is consumer code that
                     // may legitimately want to honour the cancellation, and
                     // TrainLifecycleOverrideTests pins the passthrough deliberately.
-                    await OnCancelled(Metadata, CancellationToken);
+                    await OnCancelled(Metadata, CancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception hookEx)
                 {
@@ -530,12 +528,14 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             else
             {
                 // Not the caller's token; see the OnCancelled branch above.
-                await LifecycleHookRunner.OnFailed(Metadata, exception, CancellationToken.None);
+                await LifecycleHookRunner
+                    .OnFailed(Metadata, exception, CancellationToken.None)
+                    .ConfigureAwait(false);
 
                 try
                 {
                     // The train's own override keeps the caller's token; see OnCancelled above.
-                    await OnFailed(Metadata, exception, CancellationToken);
+                    await OnFailed(Metadata, exception, CancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception hookEx)
                 {
@@ -569,12 +569,12 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         // A failure to record a completed run propagates as it is. It is not turned into a
         // Failed outcome: the work happened, and recording that it failed would be false.
-        await EffectRunner.Update(Metadata);
-        await this.FinishServiceTrain(result);
-        var unrecordedOutcome = await SaveOutcome();
+        await EffectRunner.Update(Metadata).ConfigureAwait(false);
+        await this.FinishServiceTrain(result).ConfigureAwait(false);
+        var unrecordedOutcome = await SaveOutcome().ConfigureAwait(false);
 
         if (checkpoints is { Wrote: true })
-            await ForgetCheckpoints();
+            await ForgetCheckpoints().ConfigureAwait(false);
 
         // The hooks report what happened, not what the store could hold: the output the store
         // refused is what they publish, in place of the placeholder that was stored.
@@ -592,7 +592,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         if (OutputWithheldFromHooks)
         {
             Metadata.Output = null;
-            Metadata.SetOutputObject(null);
+            Metadata.SetOutputObject(value: null);
         }
         else if (Metadata.Output is null)
         {
@@ -634,12 +634,14 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         {
             // Not the caller's token. A caller that cancelled while the work finished anyway still
             // gets Completed recorded (effect/0005), so the matching event has to survive too.
-            await LifecycleHookRunner.OnCompleted(Metadata, CancellationToken.None);
+            await LifecycleHookRunner
+                .OnCompleted(Metadata, CancellationToken.None)
+                .ConfigureAwait(false);
 
             try
             {
                 // The train's own override keeps the caller's token; see the OnCancelled branch.
-                await OnCompleted(Metadata, CancellationToken);
+                await OnCompleted(Metadata, CancellationToken).ConfigureAwait(false);
             }
             catch (Exception hookEx)
             {
@@ -788,7 +790,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         if (
             ResumeSources.Refusal(
                 from,
-                await rows.Source(from, CancellationToken),
+                await rows.Source(from, CancellationToken).ConfigureAwait(false),
                 Metadata.Name,
                 Metadata.Input,
                 input,
@@ -798,20 +800,22 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         )
             return Refuse(refused.Code, refused.Reason);
 
-        var lineage = await rows.Lineage(from, CancellationToken);
-        var (verdict, plan) = await ResumePlanner.Plan(
-            declared.Chain,
-            declared.Hash,
-            typeof(TIn),
-            typeof(TOut),
-            ServiceProvider.GetService(
-                typeof(Microsoft.Extensions.DependencyInjection.IServiceProviderIsService)
-            ) as Microsoft.Extensions.DependencyInjection.IServiceProviderIsService,
-            lineage,
-            Metadata.ResumeAt,
-            rows.States,
-            CancellationToken
-        );
+        var lineage = await rows.Lineage(from, CancellationToken).ConfigureAwait(false);
+        var (verdict, plan) = await ResumePlanner
+            .Plan(
+                declared.Chain,
+                declared.Hash,
+                typeof(TIn),
+                typeof(TOut),
+                ServiceProvider.GetService(
+                    typeof(Microsoft.Extensions.DependencyInjection.IServiceProviderIsService)
+                ) as Microsoft.Extensions.DependencyInjection.IServiceProviderIsService,
+                lineage,
+                Metadata.ResumeAt,
+                rows.States,
+                CancellationToken
+            )
+            .ConfigureAwait(false);
 
         return plan ?? Refuse(verdict.Code!, verdict.Reason!);
     }
@@ -833,7 +837,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         try
         {
-            await rows.DeleteFor(Metadata.Id, CancellationToken.None);
+            await rows.DeleteFor(Metadata.Id, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -889,7 +893,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             ServiceProvider?.GetService(typeof(IDecisionRunRecorder))
             is IDecisionRunRecorder recorder
         )
-            return await recorder.Begin(Metadata, GetType(), CancellationToken);
+            return await recorder
+                .Begin(Metadata, GetType(), CancellationToken)
+                .ConfigureAwait(false);
 
         if (Metadata.ReplayDecisionsOf is not null)
         {
@@ -930,7 +936,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         try
         {
-            await EffectRunner.SaveChanges(CancellationToken.None);
+            await EffectRunner.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception contentEx) when (IsStoreContentRefusal(contentEx))
         {
@@ -944,7 +950,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
             try
             {
-                await EffectRunner.SaveChanges(CancellationToken.None);
+                await EffectRunner.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception stateEx)
             {
@@ -989,7 +995,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         try
         {
-            await EffectRunner.SaveChanges(CancellationToken.None);
+            await EffectRunner.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             return null;
         }
         catch (Exception contentEx) when (IsStoreContentRefusal(contentEx))
@@ -1005,12 +1011,12 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             // Without the object, the parameter effect cannot serialize the output again over
             // the placeholder. It is put back for the hooks and TrainOutput.
             var outputObject = Metadata.GetOutputObject();
-            Metadata.SetOutputObject(null);
+            Metadata.SetOutputObject(value: null);
             unrecorded.Drop(Metadata);
 
             try
             {
-                await EffectRunner.SaveChanges(CancellationToken.None);
+                await EffectRunner.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception stateEx)
             {
@@ -1069,7 +1075,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// </summary>
     private void ForgetPreviousRun()
     {
-        if (ExternalId == Metadata!.ExternalId)
+        if (string.Equals(ExternalId, Metadata!.ExternalId, StringComparison.Ordinal))
             ExternalId = Guid.NewGuid().ToString("N");
 
         Metadata = null;
@@ -1092,9 +1098,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// <exception cref="TrainException"><paramref name="metadata"/> is not <c>Pending</c>.</exception>
     public async Task<TOut> Run(TIn input, Metadata metadata)
     {
-        await this.InitializeServiceTrain(metadata);
+        await this.InitializeServiceTrain(metadata).ConfigureAwait(false);
         _metadataSuppliedForRun = true;
-        return await Run(input, CancellationToken);
+        return await Run(input, CancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1103,9 +1109,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public async Task<TOut> Run(TIn input, Metadata metadata, CancellationToken cancellationToken)
     {
         CancellationToken = cancellationToken;
-        await this.InitializeServiceTrain(metadata);
+        await this.InitializeServiceTrain(metadata).ConfigureAwait(false);
         _metadataSuppliedForRun = true;
-        return await Run(input, CancellationToken);
+        return await Run(input, CancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1125,8 +1131,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     {
         if (Metadata != null)
         {
-            Metadata.SetInputObject(null);
-            Metadata.SetOutputObject(null);
+            Metadata.SetInputObject(value: null);
+            Metadata.SetOutputObject(value: null);
         }
 
         EffectRunner?.Dispose();

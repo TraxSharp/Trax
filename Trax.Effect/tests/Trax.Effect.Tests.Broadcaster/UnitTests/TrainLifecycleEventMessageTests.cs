@@ -172,11 +172,11 @@ public class TrainLifecycleEventMessageTests
             "Train",
             "Completed",
             timestamp,
-            null,
-            null,
+            FailureJunction: null,
+            FailureReason: null,
             "Completed",
             "Worker",
-            null
+            Output: null
         );
         var msg2 = new TrainLifecycleEventMessage(
             1,
@@ -184,11 +184,11 @@ public class TrainLifecycleEventMessageTests
             "Train",
             "Completed",
             timestamp,
-            null,
-            null,
+            FailureJunction: null,
+            FailureReason: null,
             "Completed",
             "Worker",
-            null
+            Output: null
         );
         var msg3 = new TrainLifecycleEventMessage(
             2,
@@ -196,11 +196,11 @@ public class TrainLifecycleEventMessageTests
             "Train",
             "Completed",
             timestamp,
-            null,
-            null,
+            FailureJunction: null,
+            FailureReason: null,
             "Completed",
             "Worker",
-            null
+            Output: null
         );
 
         msg1.Should().Be(msg2);
@@ -216,11 +216,11 @@ public class TrainLifecycleEventMessageTests
             "Train",
             "Completed",
             DateTime.UtcNow,
-            null,
-            null,
+            FailureJunction: null,
+            FailureReason: null,
             "Completed",
             "Worker",
-            null
+            Output: null
         )
         {
             InstanceId = "host-a",
@@ -259,7 +259,7 @@ public class TrainLifecycleEventMessageTests
             "The card was declined.",
             "Failed",
             "Worker",
-            null
+            Output: null
         )
         {
             FailureException = "TrainException",

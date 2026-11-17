@@ -111,7 +111,7 @@ public class FailureClassificationTests : TestSetup
         Classifier.Throws = true;
         var train = Resolve();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<BespokeFailure>(
@@ -137,7 +137,7 @@ public class FailureClassificationTests : TestSetup
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var act = async () => await train.Run(Unit.Default, cts.Token);
+        var act = async () => await train.Run(Unit.Default, cts.Token).ConfigureAwait(false);
         await act.Should().ThrowAsync<Exception>();
 
         Classifier
@@ -180,7 +180,7 @@ public class FailureClassificationTests : TestSetup
         var train = (OutsideJunctionTrain)
             Scope.ServiceProvider.GetRequiredService<IOutsideJunctionTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<BespokeFailure>();
 
         train
@@ -205,7 +205,7 @@ public class FailureClassificationTests : TestSetup
         var train = (CarriedClassTrain)
             Scope.ServiceProvider.GetRequiredService<ICarriedClassTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<Exception>();
 
         train
@@ -223,7 +223,7 @@ public class FailureClassificationTests : TestSetup
         var train = (RemoteUnclassifiedTrain)
             Scope.ServiceProvider.GetRequiredService<IRemoteUnclassifiedTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<Exception>();
 
         train
@@ -242,7 +242,7 @@ public class FailureClassificationTests : TestSetup
         var train = (UndefinedClassInMessageTrain)
             Scope.ServiceProvider.GetRequiredService<IUndefinedClassInMessageTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train
@@ -261,7 +261,7 @@ public class FailureClassificationTests : TestSetup
         var train = (ClassInPlainMessageTrain)
             Scope.ServiceProvider.GetRequiredService<IClassInPlainMessageTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train
@@ -280,7 +280,7 @@ public class FailureClassificationTests : TestSetup
         var train = (DerivedRecordShapedTrain)
             Scope.ServiceProvider.GetRequiredService<IDerivedRecordShapedTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<DerivedTrainException>();
 
         Classifier
@@ -309,8 +309,8 @@ public class FailureClassificationTests : TestSetup
 
     private static async Task Run(ClassifiedFailingTrain train)
     {
-        var act = async () => await train.Run(Unit.Default);
-        await act.Should().ThrowAsync<Exception>();
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        await act.Should().ThrowAsync<Exception>().ConfigureAwait(false);
     }
 
     // ── probes ──────────────────────────────────────────────────────

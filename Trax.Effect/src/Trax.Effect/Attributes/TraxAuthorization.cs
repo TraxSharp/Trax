@@ -149,7 +149,7 @@ public static class TraxAuthorization
             .Where(name => name is not null && ForeignAuthorizationAttributes.Contains(name))
             .Select(name => name!)
             .Distinct(StringComparer.Ordinal)
-            .OrderBy(name => name, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToArray();
 
     /// <summary>

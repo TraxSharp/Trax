@@ -27,7 +27,8 @@ public class DecisionPageIndexTests : TestSetup
     {
         using var context = (DbContext)DataContextFactory.Create();
         await context.Database.OpenConnectionAsync();
-        await using var transaction = await context.Database.BeginTransactionAsync();
+        var transaction = await context.Database.BeginTransactionAsync();
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
         var connection = (NpgsqlConnection)context.Database.GetDbConnection();
         var npgsqlTransaction = (NpgsqlTransaction)transaction.GetDbTransaction();
 
@@ -69,11 +70,13 @@ public class DecisionPageIndexTests : TestSetup
             .Where(d => d.MetadataId == runId)
             .OrderBy(d => d.Id)
             .Take(26);
-        await using var command = (NpgsqlCommand)page.CreateDbCommand();
+        var command = (NpgsqlCommand)page.CreateDbCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.Transaction = npgsqlTransaction;
         command.CommandText = "EXPLAIN " + command.CommandText;
         var plan = new List<string>();
-        await using (var reader = await command.ExecuteReaderAsync())
+        var reader = await command.ExecuteReaderAsync();
+        await using (reader.ConfigureAwait(false))
             while (await reader.ReadAsync())
                 plan.Add(reader.GetString(0));
 
@@ -94,8 +97,9 @@ public class DecisionPageIndexTests : TestSetup
         string sql
     )
     {
-        await using var command = new NpgsqlCommand(sql, connection, transaction);
-        await command.ExecuteNonQueryAsync();
+        var command = new NpgsqlCommand(sql, connection, transaction);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     private static async Task<long> Scalar(
@@ -104,7 +108,8 @@ public class DecisionPageIndexTests : TestSetup
         string sql
     )
     {
-        await using var command = new NpgsqlCommand(sql, connection, transaction);
-        return (long)(await command.ExecuteScalarAsync())!;
+        var command = new NpgsqlCommand(sql, connection, transaction);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
     }
 }

@@ -86,7 +86,7 @@ public class NulCharacterOutcomeTests
         using var scope = _provider.CreateScope();
         var train = (NulFailureTrain)scope.ServiceProvider.GetRequiredService<INulFailureTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<FormatException>();
 
         var row = await PersistedRow(scope, train.Metadata!.Id);
@@ -108,7 +108,7 @@ public class NulCharacterOutcomeTests
         var train = (UnpairedSurrogateFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnpairedSurrogateFailureTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         var row = await PersistedRow(scope, train.Metadata!.Id);
@@ -138,7 +138,8 @@ public class NulCharacterOutcomeTests
             }
         );
 
-        var act = async () => await context.SaveChanges(CancellationToken.None);
+        var act = async () =>
+            await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<StoreRefusedContentException>();
     }
@@ -173,7 +174,10 @@ public class NulCharacterOutcomeTests
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         using var context = (IDataContext)factory.Create();
 
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == id)
+            .ConfigureAwait(false);
     }
 
     public interface INulOutputTrain : IServiceTrain<Unit, string>;

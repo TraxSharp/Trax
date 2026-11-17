@@ -166,7 +166,9 @@ public class ManifestTests
         static bool IsLoaded() =>
             AppDomain
                 .CurrentDomain.GetAssemblies()
-                .Any(a => a.GetName().Name == "System.Formats.Tar");
+                .Any(a =>
+                    string.Equals(a.GetName().Name, "System.Formats.Tar", StringComparison.Ordinal)
+                );
         IsLoaded().Should().BeFalse("the test needs an assembly not yet loaded");
         var m = NewManifest();
         m.PropertyTypeName =
@@ -352,15 +354,15 @@ public class ManifestTests
 
     #endregion
 
-    private class SomeFakeTrain { }
+    private sealed class SomeFakeTrain;
 
-    private record TestProperties : IManifestProperties
+    private sealed record TestProperties : IManifestProperties
     {
         public string Greeting { get; init; } = "";
         public int Count { get; init; }
     }
 
-    private record OtherProperties : IManifestProperties
+    private sealed record OtherProperties : IManifestProperties
     {
         public string Other { get; init; } = "";
     }

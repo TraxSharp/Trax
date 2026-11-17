@@ -27,7 +27,7 @@ public class ChangeSignalCoalescerTests
         )
         {
             if (OnFlush is not null)
-                await OnFlush();
+                await OnFlush().ConfigureAwait(false);
             lock (_lock)
                 Flushes.Add(domains.ToArray());
         }
@@ -81,7 +81,7 @@ public class ChangeSignalCoalescerTests
                 return true;
             // allowed-delay: poll interval, not a sleep-for-sync. Bounded by the caller's timeout
             // and exits the instant the condition holds.
-            await Task.Delay(15);
+            await Task.Delay(15).ConfigureAwait(false);
         }
         return condition();
     }
@@ -333,7 +333,7 @@ public class ChangeSignalCoalescerTests
             last = now;
             // allowed-delay: poll interval, not a sleep-for-sync. Bounded by the 10s deadline and
             // returns as soon as two consecutive reads match (the backlog is drained).
-            await Task.Delay(50);
+            await Task.Delay(50).ConfigureAwait(false);
         }
     }
 
@@ -574,7 +574,7 @@ public class ChangeSignalCoalescerTests
             entered.TrySetResult();
             // allowed-delay: blocks until the coalescer's stopping token cancels (the mechanism under
             // test), then throws OperationCanceledException with ct.IsCancellationRequested == true.
-            await Task.Delay(Timeout.Infinite, ct);
+            await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
         }
     }
 

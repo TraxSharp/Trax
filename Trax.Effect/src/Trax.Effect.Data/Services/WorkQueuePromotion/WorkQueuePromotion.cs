@@ -15,14 +15,20 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
     /// <inheritdoc />
     public async Task<bool> PromoteAsync(long workQueueId, CancellationToken cancellationToken)
     {
-        using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        using var context = await contextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         var promoted = await UpdateAsync(
-            context,
-            w => w.Id == workQueueId && w.ConfirmedAt == null && w.Status == WorkQueueStatus.Queued,
-            confirm: true,
-            cancellationToken
-        );
+                context,
+                w =>
+                    w.Id == workQueueId
+                    && w.ConfirmedAt == null
+                    && w.Status == WorkQueueStatus.Queued,
+                confirm: true,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
         return promoted > 0;
     }
@@ -42,17 +48,21 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
     /// <inheritdoc />
     public async Task<int> CancelStaleAsync(TimeSpan olderThan, CancellationToken cancellationToken)
     {
-        using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        using var context = await contextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         // Deleted before this pass cancels anything, so an entry is only ever deleted by a pass
         // after the one that cancelled it, however late the sweep runs.
         await DeleteAsync(
-            context,
-            CancelledPastRetention(olderThan + CancelledStagedEntryRetention),
-            cancellationToken
-        );
+                context,
+                CancelledPastRetention(olderThan + CancelledStagedEntryRetention),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
-        return await UpdateAsync(context, Stale(olderThan), confirm: false, cancellationToken);
+        return await UpdateAsync(context, Stale(olderThan), confirm: false, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -61,9 +71,12 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
         CancellationToken cancellationToken
     )
     {
-        using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        using var context = await contextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-        return await UpdateAsync(context, Stale(olderThan), confirm: true, cancellationToken);
+        return await UpdateAsync(context, Stale(olderThan), confirm: true, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static Expression<Func<WorkQueue, bool>> Stale(TimeSpan olderThan)
@@ -101,12 +114,18 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
     )
     {
         if (context is DbContext db && db.Database.IsRelational())
-            return await context.WorkQueues.Where(match).ExecuteDeleteAsync(cancellationToken);
+            return await context
+                .WorkQueues.Where(match)
+                .ExecuteDeleteAsync(cancellationToken)
+                .ConfigureAwait(false);
 
-        var entries = await context.WorkQueues.Where(match).ToListAsync(cancellationToken);
+        var entries = await context
+            .WorkQueues.Where(match)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         context.WorkQueues.RemoveRange(entries);
-        await context.SaveChanges(cancellationToken);
+        await context.SaveChanges(cancellationToken).ConfigureAwait(false);
 
         return entries.Count;
     }
@@ -137,14 +156,19 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
                         s => s.SetProperty(w => w.ConfirmedAt, now),
                         cancellationToken
                     )
+                    .ConfigureAwait(false)
                 : await context
                     .WorkQueues.Where(match)
                     .ExecuteUpdateAsync(
                         s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled),
                         cancellationToken
-                    );
+                    )
+                    .ConfigureAwait(false);
 
-        var entries = await context.WorkQueues.Where(match).ToListAsync(cancellationToken);
+        var entries = await context
+            .WorkQueues.Where(match)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         foreach (var entry in entries)
         {
@@ -154,7 +178,7 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
                 entry.Status = WorkQueueStatus.Cancelled;
         }
 
-        await context.SaveChanges(cancellationToken);
+        await context.SaveChanges(cancellationToken).ConfigureAwait(false);
 
         return entries.Count;
     }

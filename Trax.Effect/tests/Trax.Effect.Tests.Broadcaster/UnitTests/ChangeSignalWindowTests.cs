@@ -47,7 +47,7 @@ public class ChangeSignalWindowTests
                 return true;
             // allowed-delay: poll interval, not a sleep-for-sync. Bounded by the caller's timeout
             // and exits the instant the condition holds.
-            await Task.Delay(15);
+            await Task.Delay(15).ConfigureAwait(false);
         }
         return condition();
     }
@@ -68,7 +68,7 @@ public class ChangeSignalWindowTests
             // allowed-delay: poll interval that yields so the background coalescer's continuation
             // runs after the fake clock moves. Bounded by the 10s deadline; the loop exits as soon
             // as sink.Count reaches the target, so a longer delay only slows a failing test.
-            await Task.Delay(15);
+            await Task.Delay(15).ConfigureAwait(false);
         }
         sink.Count.Should().Be(targetCount);
     }

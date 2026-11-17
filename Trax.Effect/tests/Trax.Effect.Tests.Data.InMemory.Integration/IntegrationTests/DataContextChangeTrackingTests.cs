@@ -18,7 +18,7 @@ namespace Trax.Effect.Tests.Data.InMemory.Integration.IntegrationTests;
 /// </summary>
 public class DataContextChangeTrackingTests
 {
-    private InMemoryContext CreateContext(string dbName) =>
+    private static InMemoryContext CreateContext(string dbName) =>
         new(new DbContextOptionsBuilder<InMemoryContext>().UseInMemoryDatabase(dbName).Options);
 
     #region Track Tests

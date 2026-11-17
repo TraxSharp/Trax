@@ -103,7 +103,10 @@ public class InputRecordedAtStartTests
         {
             var id = Metadata!.TrainMetadataId;
             using var context = (IDataContext)factory.Create();
-            var row = await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id);
+            var row = await context
+                .Metadatas.AsNoTracking()
+                .SingleAsync(m => m.Id == id)
+                .ConfigureAwait(false);
             _seen = new SeenRow(row.TrainState, row.Input);
 
             return Unit.Default;

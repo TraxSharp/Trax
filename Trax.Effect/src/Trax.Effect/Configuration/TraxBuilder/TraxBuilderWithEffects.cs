@@ -8,7 +8,7 @@ namespace Trax.Effect.Configuration.TraxBuilder;
 /// Extension methods for <c>AddMediator()</c> target this type,
 /// enforcing that effects are configured before the mediator.
 /// </summary>
-public class TraxBuilderWithEffects
+public sealed class TraxBuilderWithEffects
 {
     /// <summary>
     /// The root builder that holds accumulated configuration state.

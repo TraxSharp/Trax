@@ -51,17 +51,20 @@ internal sealed class PostgresSnapshotNoticeSource(
         CancellationToken cancellationToken
     )
     {
-        var connection = await _dataSource.Value.OpenConnectionAsync(cancellationToken);
+        var connection = await _dataSource
+            .Value.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
         try
         {
             var subscription = new Subscription(connection);
-            await using var listen = new NpgsqlCommand($"LISTEN {Channel}", connection);
-            await listen.ExecuteNonQueryAsync(cancellationToken);
+            var listen = new NpgsqlCommand($"LISTEN {Channel}", connection);
+            await using var listenDisposal = listen.ConfigureAwait(false);
+            await listen.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             return subscription;
         }
         catch
         {
-            await connection.DisposeAsync();
+            await connection.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -71,8 +74,11 @@ internal sealed class PostgresSnapshotNoticeSource(
         // The database's own value is its pg_db_role_setting row with no role. A role's value is the one it sets in
         // this database, else the one it sets everywhere; only the roles whose value is off are named. The session's
         // value and replication role are this host's, read on a new session with the host's connection string.
-        await using var connection = await _dataSource.Value.OpenConnectionAsync(cancellationToken);
-        await using var read = new NpgsqlCommand(
+        var connection = await _dataSource
+            .Value.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        var read = new NpgsqlCommand(
             """
             WITH settings AS (
                 SELECT s.setdatabase, s.setrole, substr(c, strpos(c, '=') + 1) AS value
@@ -106,13 +112,21 @@ internal sealed class PostgresSnapshotNoticeSource(
             """,
             connection
         );
-        await using var reader = await read.ExecuteReaderAsync(cancellationToken);
-        await reader.ReadAsync(cancellationToken);
+        await using var readDisposal = read.ConfigureAwait(false);
+        var reader = await read.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
+        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
         return new SnapshotNoticeSwitch(
-            await reader.IsDBNullAsync(0, cancellationToken) ? null : reader.GetString(0),
+            await reader.IsDBNullAsync(0, cancellationToken).ConfigureAwait(false)
+                ? null
+                : reader.GetString(0),
             reader.GetBoolean(1),
-            await reader.IsDBNullAsync(2, cancellationToken) ? null : reader.GetString(2),
-            await reader.IsDBNullAsync(3, cancellationToken) ? null : reader.GetString(3),
+            await reader.IsDBNullAsync(2, cancellationToken).ConfigureAwait(false)
+                ? null
+                : reader.GetString(2),
+            await reader.IsDBNullAsync(3, cancellationToken).ConfigureAwait(false)
+                ? null
+                : reader.GetString(3),
             reader.GetBoolean(4),
             reader.GetFieldValue<string[]>(5)
         );
@@ -121,7 +135,7 @@ internal sealed class PostgresSnapshotNoticeSource(
     public async ValueTask DisposeAsync()
     {
         if (_dataSource.IsValueCreated)
-            await _dataSource.Value.DisposeAsync();
+            await _dataSource.Value.DisposeAsync().ConfigureAwait(false);
     }
 
     public void Dispose()
@@ -140,7 +154,7 @@ internal sealed class PostgresSnapshotNoticeSource(
             _connection = connection;
             _connection.Notification += (_, args) =>
             {
-                if (args.Channel == Channel)
+                if (string.Equals(args.Channel, Channel, StringComparison.Ordinal))
                     _pending.Enqueue(args.Payload);
             };
         }
@@ -151,7 +165,7 @@ internal sealed class PostgresSnapshotNoticeSource(
             // notifications in one read; each is handed out once. A timeout leaves the connection usable.
             string? next;
             while (!_pending.TryDequeue(out next))
-                if (!await _connection.WaitAsync(idle, cancellationToken))
+                if (!await _connection.WaitAsync(idle, cancellationToken).ConfigureAwait(false))
                     return _pending.TryDequeue(out next) ? next : null;
 
             return next;
@@ -159,12 +173,10 @@ internal sealed class PostgresSnapshotNoticeSource(
 
         public async Task<double> QueueUsageAsync(CancellationToken cancellationToken)
         {
-            await using var usage = new NpgsqlCommand(
-                "SELECT pg_notification_queue_usage()",
-                _connection
-            );
+            var usage = new NpgsqlCommand("SELECT pg_notification_queue_usage()", _connection);
+            await using var usageDisposal = usage.ConfigureAwait(false);
             return Convert.ToDouble(
-                await usage.ExecuteScalarAsync(cancellationToken),
+                await usage.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
                 System.Globalization.CultureInfo.InvariantCulture
             );
         }

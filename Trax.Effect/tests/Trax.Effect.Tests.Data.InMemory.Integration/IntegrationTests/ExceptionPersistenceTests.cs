@@ -36,7 +36,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJunctionFailingTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
@@ -51,7 +51,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJunctionFailingTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
@@ -65,7 +65,7 @@ public class ExceptionPersistenceTests : TestSetup
         var train = Scope.ServiceProvider.GetRequiredService<IJunctionFailingTrain>();
 
         // The exception thrown to the caller should be the ORIGINAL type
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
 
         // The message should be the ORIGINAL human-readable message, not JSON
@@ -81,7 +81,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IHttpErrorTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<HttpRequestException>();
 
         train.Metadata.Should().NotBeNull();
@@ -98,7 +98,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IHttpErrorTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         var ex = (await act.Should().ThrowAsync<HttpRequestException>()).Which;
 
         // Must be the original message, NOT a JSON blob
@@ -115,7 +115,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJsonMessageTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
@@ -131,7 +131,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJsonMessageTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
 
         // The original JSON message must be intact — not wrapped or mutated
@@ -147,7 +147,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<ISpecialCharsTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
@@ -166,7 +166,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IMultiJunctionTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
@@ -184,7 +184,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IPlainExceptionTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<ArgumentException>();
 
         train.Metadata.Should().NotBeNull();
@@ -204,7 +204,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJunctionFailingTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         // Read back from the database (not from the in-memory train object)
@@ -226,7 +226,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IHttpErrorTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<HttpRequestException>();
 
         var dataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
@@ -248,7 +248,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJsonMessageTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         var dataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
@@ -274,7 +274,7 @@ public class ExceptionPersistenceTests : TestSetup
 
         var train = Scope.ServiceProvider.GetRequiredService<IJunctionFailingTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         // FailureException should be a simple type name, not a full namespace or JSON
@@ -301,7 +301,7 @@ public class ExceptionPersistenceTests : TestSetup
 
         var train = Scope.ServiceProvider.GetRequiredService<IHttpErrorTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<HttpRequestException>();
 
         // The failure reason must NOT start with { — that would indicate a JSON blob
@@ -313,13 +313,13 @@ public class ExceptionPersistenceTests : TestSetup
 
     #region Junctions
 
-    private class AlwaysFailsJunction : Junction<string, string>
+    private sealed class AlwaysFailsJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException("junction failure");
     }
 
-    private class HttpCallJunction : Junction<string, string>
+    private sealed class HttpCallJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new HttpRequestException(
@@ -327,7 +327,7 @@ public class ExceptionPersistenceTests : TestSetup
             );
     }
 
-    private class JsonExceptionJunction : Junction<string, string>
+    private sealed class JsonExceptionJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException(
@@ -335,7 +335,7 @@ public class ExceptionPersistenceTests : TestSetup
             );
     }
 
-    private class SpecialCharsJunction : Junction<string, string>
+    private sealed class SpecialCharsJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException(
@@ -343,12 +343,12 @@ public class ExceptionPersistenceTests : TestSetup
             );
     }
 
-    private class FirstJunctionSucceeds : Junction<string, string>
+    private sealed class FirstJunctionSucceeds : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input + "-processed");
     }
 
-    private class SecondJunctionFails : Junction<string, string>
+    private sealed class SecondJunctionFails : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException("second junction failed");
@@ -358,53 +358,53 @@ public class ExceptionPersistenceTests : TestSetup
 
     #region Trains
 
-    private class JunctionFailingTrain : ServiceTrain<string, string>, IJunctionFailingTrain
+    private sealed class JunctionFailingTrain : ServiceTrain<string, string>, IJunctionFailingTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<AlwaysFailsJunction>().Resolve();
     }
 
-    private interface IJunctionFailingTrain : IServiceTrain<string, string> { }
+    private interface IJunctionFailingTrain : IServiceTrain<string, string>;
 
-    private class HttpErrorTrain : ServiceTrain<string, string>, IHttpErrorTrain
+    private sealed class HttpErrorTrain : ServiceTrain<string, string>, IHttpErrorTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<HttpCallJunction>().Resolve();
     }
 
-    private interface IHttpErrorTrain : IServiceTrain<string, string> { }
+    private interface IHttpErrorTrain : IServiceTrain<string, string>;
 
-    private class JsonMessageTrain : ServiceTrain<string, string>, IJsonMessageTrain
+    private sealed class JsonMessageTrain : ServiceTrain<string, string>, IJsonMessageTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<JsonExceptionJunction>().Resolve();
     }
 
-    private interface IJsonMessageTrain : IServiceTrain<string, string> { }
+    private interface IJsonMessageTrain : IServiceTrain<string, string>;
 
-    private class SpecialCharsTrain : ServiceTrain<string, string>, ISpecialCharsTrain
+    private sealed class SpecialCharsTrain : ServiceTrain<string, string>, ISpecialCharsTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<SpecialCharsJunction>().Resolve();
     }
 
-    private interface ISpecialCharsTrain : IServiceTrain<string, string> { }
+    private interface ISpecialCharsTrain : IServiceTrain<string, string>;
 
-    private class MultiJunctionTrain : ServiceTrain<string, string>, IMultiJunctionTrain
+    private sealed class MultiJunctionTrain : ServiceTrain<string, string>, IMultiJunctionTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<FirstJunctionSucceeds>().Chain<SecondJunctionFails>().Resolve();
     }
 
-    private interface IMultiJunctionTrain : IServiceTrain<string, string> { }
+    private interface IMultiJunctionTrain : IServiceTrain<string, string>;
 
-    private class PlainExceptionTrain : ServiceTrain<Unit, Unit>, IPlainExceptionTrain
+    private sealed class PlainExceptionTrain : ServiceTrain<Unit, Unit>, IPlainExceptionTrain
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(new ArgumentException("plain failure"));
     }
 
-    private interface IPlainExceptionTrain : IServiceTrain<Unit, Unit> { }
+    private interface IPlainExceptionTrain : IServiceTrain<Unit, Unit>;
 
     #endregion
 }

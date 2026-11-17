@@ -90,7 +90,7 @@ public class SignalRBroadcasterCompositionTests
                 })
         );
 
-        return await hostBuilder.StartAsync();
+        return await hostBuilder.StartAsync().ConfigureAwait(false);
     }
 
     [Test]

@@ -38,7 +38,7 @@ public static class TraxDeployExport
         ArgumentNullException.ThrowIfNull(args);
         for (var i = 0; i < args.Count; i++)
         {
-            if (args[i] == Argument)
+            if (string.Equals(args[i], Argument, StringComparison.Ordinal))
                 return i + 1 < args.Count && !args[i + 1].StartsWith("--", StringComparison.Ordinal)
                     ? args[i + 1]
                     : throw NoPath();

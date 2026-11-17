@@ -53,7 +53,7 @@ public class ParameterEffectTests
         new(new JsonSerializerOptions(), config);
 
     // A train whose FullName we can match against for type-based exclusion tests.
-    private sealed class FakeQuery { }
+    private sealed class FakeQuery;
 
     // An output whose serialization never terminates. Serializing this without a byte ceiling
     // exhausts memory; with a ceiling it must abort in milliseconds. This is the deterministic
@@ -330,7 +330,7 @@ public class ParameterEffectTests
         meta.Output = null;
         meta.SetOutputObject(node);
 
-        var track = async () => await effect.Track(meta);
+        var track = async () => await effect.Track(meta).ConfigureAwait(false);
 
         await track
             .Should()
@@ -355,7 +355,7 @@ public class ParameterEffectTests
         node.Self = node;
         var meta = NewMetadata(input: node);
 
-        var track = async () => await effect.Track(meta);
+        var track = async () => await effect.Track(meta).ConfigureAwait(false);
 
         await track.Should().NotThrowAsync();
         meta.Input.Should().Contain("_unserializable");
@@ -374,7 +374,7 @@ public class ParameterEffectTests
         meta.Output = null;
         meta.SetOutputObject(new ThrowingGetter());
 
-        var track = async () => await effect.Track(meta);
+        var track = async () => await effect.Track(meta).ConfigureAwait(false);
 
         await track
             .Should()
@@ -388,7 +388,7 @@ public class ParameterEffectTests
         var effect = NewEffect();
         var meta = NewMetadata(input: new ThrowingGetter());
 
-        var track = async () => await effect.Track(meta);
+        var track = async () => await effect.Track(meta).ConfigureAwait(false);
 
         await track.Should().NotThrowAsync();
         ShouldBeUnserializablePlaceholder(meta.Input, nameof(InvalidOperationException));
@@ -403,7 +403,7 @@ public class ParameterEffectTests
         var meta = NewMetadata(input: new ThrowingGetter());
         await effect.Track(meta);
 
-        var update = async () => await effect.Update(meta);
+        var update = async () => await effect.Update(meta).ConfigureAwait(false);
 
         await update.Should().NotThrowAsync();
         ShouldBeUnserializablePlaceholder(meta.Input, nameof(InvalidOperationException));
@@ -418,7 +418,7 @@ public class ParameterEffectTests
         meta.Output = null;
         meta.SetOutputObject(new CollidingNames());
 
-        var track = async () => await effect.Track(meta);
+        var track = async () => await effect.Track(meta).ConfigureAwait(false);
 
         await track.Should().NotThrowAsync();
         ShouldBeUnserializablePlaceholder(meta.Output, nameof(InvalidOperationException));
@@ -432,7 +432,8 @@ public class ParameterEffectTests
         await effect.Track(meta);
         meta.SetOutputObject(new CollidingNames());
 
-        var save = async () => await effect.SaveChanges(CancellationToken.None);
+        var save = async () =>
+            await effect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         await save.Should().NotThrowAsync();
         ShouldBeUnserializablePlaceholder(meta.Output, nameof(InvalidOperationException));
@@ -450,7 +451,7 @@ public class ParameterEffectTests
     {
         public string Name { get; set; } = "x";
 
-        public string Broken => throw new InvalidOperationException("getter failed");
+        public static string Broken => throw new InvalidOperationException("getter failed");
     }
 
     private sealed class CollidingNames
@@ -886,15 +887,27 @@ public class ParameterEffectTests
         };
 
         System
-            .ComponentModel.DataAnnotations.Validator.TryValidateProperty(0, context, null)
+            .ComponentModel.DataAnnotations.Validator.TryValidateProperty(
+                0,
+                context,
+                validationResults: null
+            )
             .Should()
             .BeFalse();
         System
-            .ComponentModel.DataAnnotations.Validator.TryValidateProperty(null, context, null)
+            .ComponentModel.DataAnnotations.Validator.TryValidateProperty(
+                value: null,
+                context,
+                validationResults: null
+            )
             .Should()
             .BeTrue("null removes the ceiling");
         System
-            .ComponentModel.DataAnnotations.Validator.TryValidateProperty(1, context, null)
+            .ComponentModel.DataAnnotations.Validator.TryValidateProperty(
+                1,
+                context,
+                validationResults: null
+            )
             .Should()
             .BeTrue();
     }
@@ -1010,7 +1023,7 @@ public class ParameterEffectTests
 
         var track = Task.Run(async () =>
         {
-            await effect.Track(meta);
+            await effect.Track(meta).ConfigureAwait(false);
             return meta;
         });
         var result = await track.WaitAsync(TimeSpan.FromSeconds(30));
@@ -1037,7 +1050,7 @@ public class ParameterEffectTests
                 var meta = NewMetadata(output: new UnboundedOutput());
                 return Task.Run(async () =>
                 {
-                    await effect.Track(meta);
+                    await effect.Track(meta).ConfigureAwait(false);
                     return meta;
                 });
             })

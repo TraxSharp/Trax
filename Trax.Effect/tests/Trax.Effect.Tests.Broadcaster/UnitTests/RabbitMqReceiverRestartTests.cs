@@ -77,7 +77,9 @@ public class RabbitMqReceiverRestartTests
         );
 
         var start = async () =>
-            await receiver.StartAsync((_, _) => Task.CompletedTask, CancellationToken.None);
+            await receiver
+                .StartAsync((_, _) => Task.CompletedTask, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await start.Should().ThrowAsync<Exception>();
         var connection = ConnectionOf(receiver);

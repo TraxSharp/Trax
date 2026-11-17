@@ -128,7 +128,7 @@ public static class TraxLogSerialization
         public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
-            writer.WriteBoolean(OmittedProperty, true);
+            writer.WriteBoolean(OmittedProperty, value: true);
             writer.WriteEndObject();
         }
     }

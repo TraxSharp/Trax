@@ -36,7 +36,7 @@ public class SqliteDispatchSqlTests : TestSetup
                 "SELECT CAST(status AS TEXT) AS \"Value\" FROM work_queue"
             )
             .ToListAsync();
-        TestContext.Out.WriteLine($"stored status: {string.Join(",", raw)}");
+        TestContext.Out.WriteLine($"stored status: {string.Join(',', raw)}");
 
         var claimed = await context
             .WorkQueues.FromSqlRaw(dialect.ClaimWorkQueueEntry(), entry.Id)
@@ -46,7 +46,7 @@ public class SqliteDispatchSqlTests : TestSetup
         claimed
             .Should()
             .NotBeNull(
-                $"the claim must find the entry; status is stored as {string.Join(",", raw)}"
+                $"the claim must find the entry; status is stored as {string.Join(',', raw)}"
             );
     }
 

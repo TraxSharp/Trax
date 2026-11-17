@@ -44,7 +44,8 @@ public class MigrateOnDeployTests
     [Test]
     public async Task A_migrate_process_creates_the_named_contexts_tables_and_does_not_start_the_host()
     {
-        await using var services = Services();
+        var services = Services();
+        await using var servicesDisposal = services.ConfigureAwait(false);
         var host = new UnstartedHost(services);
 
         await host.RunTraxAsync(["--trax-migrate"]);
@@ -56,7 +57,8 @@ public class MigrateOnDeployTests
     [Test]
     public async Task A_second_migrate_run_changes_nothing()
     {
-        await using var services = Services();
+        var services = Services();
+        await using var servicesDisposal = services.ConfigureAwait(false);
         var host = new UnstartedHost(services);
         await host.RunTraxAsync(["--trax-migrate"]);
         await Exec($"INSERT INTO {Schema}.gadgets (name) VALUES ('kept');");
@@ -80,34 +82,37 @@ public class MigrateOnDeployTests
 
     private async Task Exec(string sql)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
+        var connection = new NpgsqlConnection(_connectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand(sql, connection);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     private async Task<bool> TableExists(string table)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
+        var connection = new NpgsqlConnection(_connectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand(
             "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = @s AND table_name = @t)",
             connection
         );
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.Parameters.AddWithValue("s", Schema);
         command.Parameters.AddWithValue("t", table);
-        return (bool)(await command.ExecuteScalarAsync())!;
+        return (bool)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
     }
 
     private async Task<long> Count(string table)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            $"SELECT count(*) FROM {Schema}.{table}",
-            connection
-        );
-        return (long)(await command.ExecuteScalarAsync())!;
+        var connection = new NpgsqlConnection(_connectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand($"SELECT count(*) FROM {Schema}.{table}", connection);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
     }
 
     /// <summary>A host that records whether anything started it.</summary>

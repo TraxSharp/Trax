@@ -91,7 +91,8 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
         );
 
         if (serviceTrain.JunctionEffectRunner is not null)
-            await BeforeJunction(serviceTrain.JunctionEffectRunner, serviceTrain, previousOutput);
+            await BeforeJunction(serviceTrain.JunctionEffectRunner, serviceTrain, previousOutput)
+                .ConfigureAwait(false);
 
         Metadata.StartTimeUtc = DateTime.UtcNow;
 
@@ -99,18 +100,20 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
         var events = previousOutput.IsRight ? JunctionEventRun.For(serviceTrain.Metadata) : null;
         var position = events is null
             ? -1
-            : await JunctionSteps.Started(events, Metadata.Name, Metadata.StartTimeUtc.Value);
+            : await JunctionSteps
+                .Started(events, Metadata.Name, Metadata.StartTimeUtc.Value)
+                .ConfigureAwait(false);
 
         Either<Exception, TOut> result;
 
         try
         {
-            result = await base.RailwayJunction(previousOutput, serviceTrain);
+            result = await base.RailwayJunction(previousOutput, serviceTrain).ConfigureAwait(false);
         }
         catch (Exception thrown) when (events is not null)
         {
             // A cancellation of the run's token leaves the junction by throwing.
-            await ReportEnded(events, position, serviceTrain, thrown);
+            await ReportEnded(events, position, serviceTrain, thrown).ConfigureAwait(false);
             throw;
         }
 
@@ -121,14 +124,16 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
 
         if (events is not null)
             await ReportEnded(
-                events,
-                position,
-                serviceTrain,
-                result.IsLeft ? result.Swap().ValueUnsafe() : null
-            );
+                    events,
+                    position,
+                    serviceTrain,
+                    result.IsLeft ? result.Swap().ValueUnsafe() : null
+                )
+                .ConfigureAwait(false);
 
         if (serviceTrain.JunctionEffectRunner is not null)
-            await AfterJunction(serviceTrain.JunctionEffectRunner, serviceTrain, result);
+            await AfterJunction(serviceTrain.JunctionEffectRunner, serviceTrain, result)
+                .ConfigureAwait(false);
 
         return result;
     }
@@ -150,7 +155,9 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
             // The token this junction honours, read here because the base sets CancellationToken
             // only once the effects before it have run. Inside a Parallel branch it is the
             // branch's, so a cancelled sibling stops this branch's effects as well as its work.
-            await runner.BeforeJunctionExecution(this, serviceTrain, TokenFor(serviceTrain));
+            await runner
+                .BeforeJunctionExecution(this, serviceTrain, TokenFor(serviceTrain))
+                .ConfigureAwait(false);
         }
         catch (Exception e) when (previousOutput.IsLeft)
         {
@@ -177,7 +184,9 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
     {
         try
         {
-            await runner.AfterJunctionExecution(this, serviceTrain, TokenFor(serviceTrain));
+            await runner
+                .AfterJunctionExecution(this, serviceTrain, TokenFor(serviceTrain))
+                .ConfigureAwait(false);
         }
         catch (Exception e) when (result.IsLeft)
         {
@@ -217,17 +226,19 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
     {
         try
         {
-            await JunctionSteps.Ended(
-                events,
-                position,
-                Metadata!.Name,
-                Metadata.StartTimeUtc ?? DateTime.UtcNow,
-                Metadata.EndTimeUtc ?? DateTime.UtcNow,
-                failure,
-                failure is not null && IsCancellation(serviceTrain, failure),
-                serviceTrain.ServiceProvider,
-                serviceTrain.Logger
-            );
+            await JunctionSteps
+                .Ended(
+                    events,
+                    position,
+                    Metadata!.Name,
+                    Metadata.StartTimeUtc ?? DateTime.UtcNow,
+                    Metadata.EndTimeUtc ?? DateTime.UtcNow,
+                    failure,
+                    failure is not null && IsCancellation(serviceTrain, failure),
+                    serviceTrain.ServiceProvider,
+                    serviceTrain.Logger
+                )
+                .ConfigureAwait(false);
         }
         catch (Exception e)
         {

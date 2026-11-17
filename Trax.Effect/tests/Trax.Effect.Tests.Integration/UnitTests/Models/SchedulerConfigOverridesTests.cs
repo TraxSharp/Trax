@@ -41,7 +41,7 @@ public class SchedulerConfigOverridesTests
     {
         var row = new SchedulerConfig();
 
-        row.SetOverride<int?>("MaxActiveJobs", null);
+        row.SetOverride<int?>("MaxActiveJobs", value: null);
 
         row.TryGetOverride<int?>("MaxActiveJobs", out var value).Should().BeTrue();
         value.Should().BeNull("null is a real value for MaxActiveJobs: no limit");

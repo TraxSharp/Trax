@@ -90,7 +90,7 @@ public class RunResumesTests
         {
             Lineages++;
             return Task.FromResult<IReadOnlyList<ResumedRun>>([
-                new ResumedRun(runId, null, null, rows),
+                new ResumedRun(runId, ResumeFrom: null, ResumeAt: null, rows),
             ]);
         }
 

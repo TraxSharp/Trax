@@ -81,7 +81,7 @@ public class UnserializableParameterRunTests
 
     public sealed class ThrowingGetter
     {
-        public string Broken => throw new InvalidOperationException("getter failed");
+        public static string Broken => throw new InvalidOperationException("getter failed");
     }
 
     public sealed class CollidingNames
@@ -93,9 +93,9 @@ public class UnserializableParameterRunTests
         public int Second { get; set; } = 2;
     }
 
-    public interface IThrowingGetterOutputTrain : IServiceTrain<Unit, ThrowingGetter> { }
+    public interface IThrowingGetterOutputTrain : IServiceTrain<Unit, ThrowingGetter>;
 
-    private class ThrowingGetterOutputTrain
+    private sealed class ThrowingGetterOutputTrain
         : ServiceTrain<Unit, ThrowingGetter>,
             IThrowingGetterOutputTrain
     {
@@ -103,9 +103,9 @@ public class UnserializableParameterRunTests
             Task.FromResult<Either<Exception, ThrowingGetter>>(new ThrowingGetter());
     }
 
-    public interface ICollidingNamesOutputTrain : IServiceTrain<Unit, CollidingNames> { }
+    public interface ICollidingNamesOutputTrain : IServiceTrain<Unit, CollidingNames>;
 
-    private class CollidingNamesOutputTrain
+    private sealed class CollidingNamesOutputTrain
         : ServiceTrain<Unit, CollidingNames>,
             ICollidingNamesOutputTrain
     {
@@ -113,9 +113,9 @@ public class UnserializableParameterRunTests
             Task.FromResult<Either<Exception, CollidingNames>>(new CollidingNames());
     }
 
-    public interface IThrowingGetterInputTrain : IServiceTrain<ThrowingGetter, Unit> { }
+    public interface IThrowingGetterInputTrain : IServiceTrain<ThrowingGetter, Unit>;
 
-    private class ThrowingGetterInputTrain
+    private sealed class ThrowingGetterInputTrain
         : ServiceTrain<ThrowingGetter, Unit>,
             IThrowingGetterInputTrain
     {

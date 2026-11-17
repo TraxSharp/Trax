@@ -172,7 +172,9 @@ public class WorkQueuePromotionTests : TestSetup
         bool confirmed = false
     )
     {
-        using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
         for (var i = 0; i < count; i++)
         {
@@ -188,21 +190,24 @@ public class WorkQueuePromotionTests : TestSetup
             entry.Status = status;
             if (confirmed)
                 entry.ConfirmedAt = entry.CreatedAt;
-            await context.Track(entry);
+            await context.Track(entry).ConfigureAwait(false);
         }
 
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task<Dictionary<WorkQueueStatus, int>> CountByStatus(string trainName)
     {
-        using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
         var statuses = await context
             .WorkQueues.AsNoTracking()
             .Where(w => w.TrainName == trainName)
             .Select(w => w.Status)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
         return statuses.GroupBy(s => s).ToDictionary(g => g.Key, g => g.Count());
     }
@@ -226,17 +231,24 @@ public class WorkQueuePromotionTests : TestSetup
         if (confirmed)
             entry.ConfirmedAt = entry.CreatedAt;
 
-        using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
-        await context.Track(entry);
-        await context.SaveChanges(CancellationToken.None);
+        using var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await context.Track(entry).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         return entry.Id;
     }
 
     private async Task<WorkQueue> Load(long id)
     {
-        using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == id);
+        using var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return await context
+            .WorkQueues.AsNoTracking()
+            .SingleAsync(w => w.Id == id)
+            .ConfigureAwait(false);
     }
 
     private IDataContextProviderFactory Factory =>

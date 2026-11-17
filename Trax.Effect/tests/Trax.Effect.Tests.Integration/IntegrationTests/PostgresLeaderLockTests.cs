@@ -24,7 +24,8 @@ public class PostgresLeaderLockTests : TestSetup
 
         using var context = (DbContext)
             await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
-        await using var transaction = await context.Database.BeginTransactionAsync();
+        var transaction = await context.Database.BeginTransactionAsync();
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
 
         var acquired = await context
             .Database.SqlQuery<bool>(Dialect.TryAcquireLeaderLock(name))
@@ -44,14 +45,16 @@ public class PostgresLeaderLockTests : TestSetup
 
         using var holder = (DbContext)
             await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
-        await using var holderTransaction = await holder.Database.BeginTransactionAsync();
+        var holderTransaction = await holder.Database.BeginTransactionAsync();
+        await using var holderTransactionDisposal = holderTransaction.ConfigureAwait(false);
         (await holder.Database.SqlQuery<bool>(Dialect.TryAcquireLeaderLock(first)).SingleAsync())
             .Should()
             .BeTrue();
 
         using var other = (DbContext)
             await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
-        await using var otherTransaction = await other.Database.BeginTransactionAsync();
+        var otherTransaction = await other.Database.BeginTransactionAsync();
+        await using var otherTransactionDisposal = otherTransaction.ConfigureAwait(false);
         (await other.Database.SqlQuery<bool>(Dialect.TryAcquireLeaderLock(second)).SingleAsync())
             .Should()
             .BeTrue("a lock under another name is not the one already held");
@@ -68,13 +71,15 @@ public class PostgresLeaderLockTests : TestSetup
             .SetBasePath(AppContext.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
-        await using var connection = new NpgsqlConnection(
+        var connection = new NpgsqlConnection(
             TestPostgres.WithPort(
                 configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
             )
         );
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             SELECT count(*) FROM pg_locks
             WHERE locktype = 'advisory' AND granted AND objsubid = 1
@@ -82,6 +87,6 @@ public class PostgresLeaderLockTests : TestSetup
               AND classid::bigint = ((hashtext(@name)::bigint >> 32) & 4294967295)
             """;
         command.Parameters.AddWithValue("name", name);
-        return (long)(await command.ExecuteScalarAsync())!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
     }
 }

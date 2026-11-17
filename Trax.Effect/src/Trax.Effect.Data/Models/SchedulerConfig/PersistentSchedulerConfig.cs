@@ -5,7 +5,7 @@ namespace Trax.Effect.Data.Models.SchedulerConfig;
 /// <summary>
 /// EF Core configuration for the singleton <c>scheduler_config</c> row.
 /// </summary>
-internal class PersistentSchedulerConfig : Effect.Models.SchedulerConfig.SchedulerConfig
+internal sealed class PersistentSchedulerConfig : Effect.Models.SchedulerConfig.SchedulerConfig
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)
     {

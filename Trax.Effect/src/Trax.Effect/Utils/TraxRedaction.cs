@@ -173,7 +173,10 @@ public static class TraxRedaction
         foreach (var contract in declaringType.GetInterfaces())
         {
             var declared = contract.GetProperty(clrMember.Name);
-            if (declared is not null && declared.IsDefined(typeof(TraxSensitiveAttribute), false))
+            if (
+                declared is not null
+                && declared.IsDefined(typeof(TraxSensitiveAttribute), inherit: false)
+            )
                 return true;
         }
 
@@ -237,7 +240,7 @@ public static class TraxRedaction
             AppDomain.CurrentDomain.AssemblyLoad += (_, args) => OnLoad(args.LoadedAssembly);
 
         var built = Scan();
-        return Interlocked.CompareExchange(ref _loaded, built, null) ?? built;
+        return Interlocked.CompareExchange(ref _loaded, built, comparand: null) ?? built;
     }
 
     /// <summary>Drops what was worked out when an assembly that can hold a marked type loads.</summary>
@@ -252,15 +255,15 @@ public static class TraxRedaction
                 return;
 
             if (
-                assembly.GetName().Name == EffectAssembly
+                string.Equals(assembly.GetName().Name, EffectAssembly, StringComparison.Ordinal)
                 || assembly
                     .GetReferencedAssemblies()
                     .Any(r =>
-                        r.Name == EffectAssembly
+                        string.Equals(r.Name, EffectAssembly, StringComparison.Ordinal)
                         || r.Name is { } name && current.Assemblies.Contains(name)
                     )
             )
-                Interlocked.CompareExchange(ref _loaded, null, current);
+                Interlocked.CompareExchange(ref _loaded, value: null, current);
         }
         catch
         {
@@ -303,7 +306,7 @@ public static class TraxRedaction
 
         bool ReachesEffect(string name)
         {
-            if (name == EffectAssembly)
+            if (string.Equals(name, EffectAssembly, StringComparison.Ordinal))
                 return true;
             if (reaching.TryGetValue(name, out var known))
                 return known;
@@ -311,7 +314,7 @@ public static class TraxRedaction
                 return false;
 
             reaching[name] = false;
-            var reaches = referenced.Any(ReachesEffect);
+            var reaches = referenced.Exists(ReachesEffect);
             reaching[name] = reaches;
             return reaches;
         }
@@ -404,7 +407,9 @@ public static class TraxRedaction
                     || current
                         .GetInterfaces()
                         .Select(i => i.GetProperty(property.Name))
-                        .Any(p => p?.IsDefined(typeof(TraxSensitiveAttribute), false) == true)
+                        .Any(p =>
+                            p?.IsDefined(typeof(TraxSensitiveAttribute), inherit: false) == true
+                        )
                 )
                     return true;
 
@@ -451,7 +456,7 @@ public static class TraxRedaction
 
         return items.Count == 0
             ? Reach(typeof(object), seen, loaded)
-            : items.Any(item => Reach(item, seen, loaded));
+            : items.Exists(item => Reach(item, seen, loaded));
     }
 
     /// <summary>
@@ -463,8 +468,8 @@ public static class TraxRedaction
         || assembly.GetName().Name is { } name
             && (
                 name.StartsWith("System.", StringComparison.Ordinal)
-                || name == "System"
-                || name == "netstandard"
+                || string.Equals(name, "System", StringComparison.Ordinal)
+                || string.Equals(name, "netstandard", StringComparison.Ordinal)
             );
 
     /// <summary>
@@ -485,7 +490,7 @@ public static class TraxRedaction
         public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
-            writer.WriteBoolean(MarkerProperty, true);
+            writer.WriteBoolean(MarkerProperty, value: true);
             writer.WriteEndObject();
         }
     }

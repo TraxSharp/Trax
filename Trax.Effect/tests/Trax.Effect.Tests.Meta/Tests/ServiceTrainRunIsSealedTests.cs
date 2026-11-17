@@ -21,7 +21,10 @@ public class ServiceTrainRunIsSealedTests
     private static IEnumerable<MethodInfo> RunOverloads() =>
         typeof(ServiceTrain<,>)
             .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .Where(m => m.Name == "Run" && (m.IsPublic || m.IsFamily || m.IsFamilyOrAssembly));
+            .Where(m =>
+                string.Equals(m.Name, "Run", StringComparison.Ordinal)
+                && (m.IsPublic || m.IsFamily || m.IsFamilyOrAssembly)
+            );
 
     [Test]
     public void Every_Run_a_service_train_inherits_or_declares_is_closed_to_overriding()
@@ -55,7 +58,7 @@ public class ServiceTrainRunIsSealedTests
         var run = typeof(ServiceTrain<,>)
             .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
             .Single(m =>
-                m.Name == "Run"
+                string.Equals(m.Name, "Run", StringComparison.Ordinal)
                 && m.GetParameters() is [_, { ParameterType: var second }]
                 && second == typeof(CancellationToken)
             );

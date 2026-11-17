@@ -85,9 +85,9 @@ public class EffectRunner : IEffectRunner
     /// </remarks>
     public async Task SaveChanges(CancellationToken cancellationToken)
     {
-        await ActiveEffectProviders.RunAllAsync(provider =>
-            provider.SaveChanges(cancellationToken)
-        );
+        await ActiveEffectProviders
+            .RunAllAsync(provider => provider.SaveChanges(cancellationToken))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -101,13 +101,17 @@ public class EffectRunner : IEffectRunner
     /// </remarks>
     public async Task Track(IModel model)
     {
-        await ActiveEffectProviders.RunAllAsync(provider => provider.Track(model));
+        await ActiveEffectProviders
+            .RunAllAsync(provider => provider.Track(model))
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task Update(IModel model)
     {
-        await ActiveEffectProviders.RunAllAsync(provider => provider.Update(model));
+        await ActiveEffectProviders
+            .RunAllAsync(provider => provider.Update(model))
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -122,7 +126,7 @@ public class EffectRunner : IEffectRunner
     )
     {
         foreach (var claim in ActiveEffectProviders.OfType<IPendingRunClaim>())
-            if (!await claim.TryClaimPendingRun(metadata, cancellationToken))
+            if (!await claim.TryClaimPendingRun(metadata, cancellationToken).ConfigureAwait(false))
                 return false;
 
         return true;

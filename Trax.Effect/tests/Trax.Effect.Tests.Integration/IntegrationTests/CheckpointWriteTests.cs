@@ -326,7 +326,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
     private async Task<Models.Metadata.Metadata> Run<TTrain>()
         where TTrain : class, Effect.Services.ServiceTrain.IServiceTrain<string, string>
     {
-        var (run, _) = await _host.Run<TTrain>("graphs");
+        var (run, _) = await _host.Run<TTrain>("graphs").ConfigureAwait(false);
         _runs.Add(run.Id);
         return run;
     }

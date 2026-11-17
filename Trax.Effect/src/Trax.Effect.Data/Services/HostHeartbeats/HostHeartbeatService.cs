@@ -25,8 +25,8 @@ internal sealed class HostHeartbeatService(
         using var timer = new PeriodicTimer(HostRow.Interval, clock);
         do
         {
-            await BeatOnce(stoppingToken);
-        } while (await WaitForNextBeat(timer, stoppingToken));
+            await BeatOnce(stoppingToken).ConfigureAwait(false);
+        } while (await WaitForNextBeat(timer, stoppingToken).ConfigureAwait(false));
     }
 
     private static async Task<bool> WaitForNextBeat(
@@ -36,7 +36,7 @@ internal sealed class HostHeartbeatService(
     {
         try
         {
-            return await timer.WaitForNextTickAsync(stoppingToken);
+            return await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -48,7 +48,7 @@ internal sealed class HostHeartbeatService(
     {
         try
         {
-            await writer.Beat(stoppingToken);
+            await writer.Beat(stoppingToken).ConfigureAwait(false);
             _lastBeatFailed = false;
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }

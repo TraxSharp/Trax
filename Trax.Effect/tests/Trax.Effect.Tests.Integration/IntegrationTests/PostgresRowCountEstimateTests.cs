@@ -86,9 +86,10 @@ public class PostgresRowCountEstimateTests : TestSetup
     {
         var table = $"estimate_probe_{Guid.NewGuid():N}";
         await Execute(
-            context,
-            $"CREATE TABLE trax.{table} AS SELECT g FROM generate_series(1, {rows}) AS g"
-        );
+                context,
+                $"CREATE TABLE trax.{table} AS SELECT g FROM generate_series(1, {rows}) AS g"
+            )
+            .ConfigureAwait(false);
         return table;
     }
 

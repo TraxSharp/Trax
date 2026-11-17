@@ -32,9 +32,9 @@ public class TrainInstanceReuseTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IToggleTrain>();
 
-        var failing = async () => await train.Run(true);
+        var failing = async () => await train.Run(input: true).ConfigureAwait(false);
         await failing.Should().ThrowAsync<InvalidOperationException>();
-        await train.Run(false);
+        await train.Run(input: false);
 
         var rows = await Rows(typeof(IToggleTrain).FullName!);
 
@@ -51,10 +51,10 @@ public class TrainInstanceReuseTests : TestSetup
     {
         var train = (ExternalIdTrain)Scope.ServiceProvider.GetRequiredService<IExternalIdTrain>();
 
-        await train.Run(false);
+        await train.Run(input: false);
         var first = train.Metadata!.ExternalId;
         train.ExternalId = "chosen-for-the-second-run".PadRight(32, '0');
-        await train.Run(false);
+        await train.Run(input: false);
 
         train
             .Metadata!.ExternalId.Should()
@@ -98,7 +98,8 @@ public class TrainInstanceReuseTests : TestSetup
             .Where(m => m.Name == name)
             .OrderBy(m => m.Id)
             .Select(m => m.TrainState)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private class ToggleTrain : ServiceTrain<bool, Unit>, IToggleTrain
@@ -109,13 +110,13 @@ public class TrainInstanceReuseTests : TestSetup
             );
     }
 
-    private class SingletonToggleTrain : ToggleTrain, ISingletonToggleTrain { }
+    private sealed class SingletonToggleTrain : ToggleTrain, ISingletonToggleTrain;
 
-    private class ExternalIdTrain : ToggleTrain, IExternalIdTrain { }
+    private sealed class ExternalIdTrain : ToggleTrain, IExternalIdTrain;
 
-    public interface IToggleTrain : IServiceTrain<bool, Unit> { }
+    public interface IToggleTrain : IServiceTrain<bool, Unit>;
 
-    public interface ISingletonToggleTrain : IServiceTrain<bool, Unit> { }
+    public interface ISingletonToggleTrain : IServiceTrain<bool, Unit>;
 
-    public interface IExternalIdTrain : IServiceTrain<bool, Unit> { }
+    public interface IExternalIdTrain : IServiceTrain<bool, Unit>;
 }

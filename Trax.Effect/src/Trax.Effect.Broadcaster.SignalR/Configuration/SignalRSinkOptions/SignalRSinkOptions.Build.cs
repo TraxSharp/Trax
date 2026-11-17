@@ -2,7 +2,7 @@ using Trax.Effect.Broadcaster.SignalR.Services;
 
 namespace Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions;
 
-public partial class SignalRSinkOptions
+public sealed partial class SignalRSinkOptions
 {
     /// <summary>
     /// Produces the immutable <see cref="SignalRSinkConfiguration"/> registered in DI.

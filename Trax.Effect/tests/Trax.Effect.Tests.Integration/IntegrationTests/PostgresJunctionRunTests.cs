@@ -177,7 +177,9 @@ public class PostgresJunctionRunTests
         await writer.FlushAsync();
 
         writer.DroppedSteps.Should().Be(dropped);
-        var burst = (await Rows(metadataId)).Where(r => r.Name == "Burst").ToList();
+        var burst = (await Rows(metadataId))
+            .Where(r => string.Equals(r.Name, "Burst", StringComparison.Ordinal))
+            .ToList();
         burst
             .Should()
             .HaveCount(Junctions)
@@ -215,7 +217,9 @@ public class PostgresJunctionRunTests
                 graph.Nodes.Single(n => n.Kind == ChainStepKind.Switch).Id,
                 graph
                     .Nodes.Single(n => n.Kind == ChainStepKind.Switch)
-                    .Tracks.Single(t => t.Name == nameof(PgBin.Small))
+                    .Tracks.Single(t =>
+                        string.Equals(t.Name, nameof(PgBin.Small), StringComparison.Ordinal)
+                    )
                     .Nodes[0]
                     .Id
             );
@@ -238,25 +242,36 @@ public class PostgresJunctionRunTests
                 ManifestId = manifestId,
             }
         );
-        var run = async () => await train.Run(input, metadata);
-        await run.Should().ThrowAsync<InvalidOperationException>();
+        var run = async () => await train.Run(input, metadata).ConfigureAwait(false);
+        await run.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
+        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
         return train.Metadata!.Id;
     }
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync();
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return await context
+            .JunctionRuns.AsNoTracking()
+            .ForRun(metadataId)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task Delete(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        await context.Metadatas.Where(m => m.Id == metadataId).ExecuteDeleteAsync();
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await context
+            .Metadatas.Where(m => m.Id == metadataId)
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
     }
 }
 

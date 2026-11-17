@@ -120,7 +120,7 @@ public class QueueHookInputTests
                 if (Interlocked.Increment(ref entered) == 2)
                     bothEntered.SetResult();
 
-                await bothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                await bothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
                 return train.Input?.Id;
             }
         }
@@ -166,7 +166,7 @@ public class QueueHookInputTests
 
     public record Order(int Id);
 
-    private class OrderTrain : ServiceTrain<Order, string>
+    private sealed class OrderTrain : ServiceTrain<Order, string>
     {
         public int? QueuedOrderId { get; private set; }
 

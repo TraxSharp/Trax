@@ -11,4 +11,4 @@ namespace Trax.Effect.Attributes;
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/trax-broadcast-attribute">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
-public class TraxBroadcastAttribute : Attribute { }
+public class TraxBroadcastAttribute : Attribute;

@@ -467,7 +467,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
             : IsNumber(underlying) ? "a number"
             // The options have no enum converter, so an enum is written as its number unless the
             // type names a converter of its own.
-            : underlying.IsEnum && underlying.GetCustomAttribute<JsonConverterAttribute>() is null
+            : underlying.IsEnum && !Attribute.IsDefined(underlying, typeof(JsonConverterAttribute))
                 ? "a number"
             : null;
 
@@ -558,11 +558,12 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 
             return question switch
             {
-                ChoiceQuestion when type == "choice" => Choice(node),
-                ScoreQuestion score when type == "score" => Score(node, score.Levels.Count),
-                YesNoQuestion when type == "noul" => new YesNoAnswer(
-                    node["noul"]!.GetValue<double>()
-                ),
+                ChoiceQuestion when string.Equals(type, "choice", StringComparison.Ordinal) =>
+                    Choice(node),
+                ScoreQuestion score when string.Equals(type, "score", StringComparison.Ordinal) =>
+                    Score(node, score.Levels.Count),
+                YesNoQuestion when string.Equals(type, "noul", StringComparison.Ordinal) =>
+                    new YesNoAnswer(node["noul"]!.GetValue<double>()),
                 _ => null,
             };
         }

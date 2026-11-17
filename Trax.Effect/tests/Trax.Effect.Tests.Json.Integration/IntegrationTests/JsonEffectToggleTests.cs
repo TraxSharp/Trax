@@ -129,14 +129,22 @@ public class JsonEffectToggleTests
 
     private static int GetJsonEffectLogCount(IArrayLoggingProvider arrayProvider) =>
         arrayProvider
-            .Loggers.Where(logger => logger.Logs.Any(log => log.Category == JsonEffectCategory))
-            .SelectMany(logger => logger.Logs.Where(log => log.Category == JsonEffectCategory))
+            .Loggers.Where(logger =>
+                logger.Logs.Exists(log =>
+                    string.Equals(log.Category, JsonEffectCategory, StringComparison.Ordinal)
+                )
+            )
+            .SelectMany(logger =>
+                logger.Logs.Where(log =>
+                    string.Equals(log.Category, JsonEffectCategory, StringComparison.Ordinal)
+                )
+            )
             .Count();
 
-    private class ToggleTestTrain : ServiceTrain<Unit, Unit>, IToggleTestTrain
+    private sealed class ToggleTestTrain : ServiceTrain<Unit, Unit>, IToggleTestTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
     }
 
-    private interface IToggleTestTrain : IServiceTrain<Unit, Unit> { }
+    private interface IToggleTestTrain : IServiceTrain<Unit, Unit>;
 }

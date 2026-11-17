@@ -73,13 +73,13 @@ public class PostgresEnumVocabularyTests
     public void Every_mapped_enum_matches_the_labels_its_migrations_create()
     {
         var sql = string.Join(
-            "\n",
+            '\n',
             Directory
                 .EnumerateFiles(
                     RepoRoot.Combine("src", "Trax.Effect.Data.Postgres", "Migrations"),
                     "*.sql"
                 )
-                .OrderBy(f => f, StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
                 .Select(File.ReadAllText)
         );
 
@@ -137,7 +137,7 @@ public class PostgresEnumVocabularyTests
             typeof(Microsoft.Extensions.Logging.LogLevel).Assembly,
         }
             .SelectMany(a => a.GetTypes())
-            .Where(t => t.IsEnum && t.Name == name)
+            .Where(t => t.IsEnum && string.Equals(t.Name, name, StringComparison.Ordinal))
             .ToList();
 
         candidates.Should().ContainSingle($"the mapped enum {name} must resolve to one type");

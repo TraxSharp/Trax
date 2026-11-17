@@ -54,7 +54,11 @@ public class HostHeartbeatIntegrationTests : TestSetup
     private async Task<List<HostRow>> Rows()
     {
         using var context = (IDataContext)DataContextFactory.Create();
-        return await context.HostHeartbeats.AsNoTracking().OrderBy(h => h.InstanceId).ToListAsync();
+        return await context
+            .HostHeartbeats.AsNoTracking()
+            .OrderBy(h => h.InstanceId)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -82,7 +86,7 @@ public class HostHeartbeatIntegrationTests : TestSetup
                 "each process writes one row, keyed by its instance id"
             );
 
-        var rowA = rows.Single(r => r.InstanceId == "pod-a");
+        var rowA = rows.Single(r => string.Equals(r.InstanceId, "pod-a", StringComparison.Ordinal));
         rowA.HostName.Should().Be("host-a");
         rowA.HostEnvironment.Should().Be("kubernetes");
         rowA.TraxVersion.Should().NotBeNullOrWhiteSpace();

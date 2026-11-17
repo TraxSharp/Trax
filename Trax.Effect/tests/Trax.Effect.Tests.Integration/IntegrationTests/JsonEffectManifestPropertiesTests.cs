@@ -139,13 +139,13 @@ public class JsonEffectManifestPropertiesTests
         public string ApiKey { get; set; } = "";
     }
 
-    private class ChargeTrain : ServiceTrain<ChargeInput, Unit>, IChargeTrain
+    private sealed class ChargeTrain : ServiceTrain<ChargeInput, Unit>, IChargeTrain
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 
-    public interface IChargeTrain : IServiceTrain<ChargeInput, Unit> { }
+    public interface IChargeTrain : IServiceTrain<ChargeInput, Unit>;
 
     public class LoadQueuedJunction : EffectJunction<Unit, List<WorkQueue>>
     {
@@ -165,13 +165,13 @@ public class JsonEffectManifestPropertiesTests
             );
     }
 
-    private class LoadQueueTrain : ServiceTrain<Unit, List<WorkQueue>>, ILoadQueueTrain
+    private sealed class LoadQueueTrain : ServiceTrain<Unit, List<WorkQueue>>, ILoadQueueTrain
     {
         protected override Task<Either<Exception, List<WorkQueue>>> Junctions() =>
             Chain<LoadQueuedJunction>().Resolve();
     }
 
-    public interface ILoadQueueTrain : IServiceTrain<Unit, List<WorkQueue>> { }
+    public interface ILoadQueueTrain : IServiceTrain<Unit, List<WorkQueue>>;
 
     private sealed class CapturingLoggerProvider : ILoggerProvider
     {

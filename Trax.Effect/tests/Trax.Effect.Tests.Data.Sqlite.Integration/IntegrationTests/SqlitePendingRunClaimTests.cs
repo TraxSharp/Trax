@@ -68,7 +68,7 @@ public class SqlitePendingRunClaimTests : TestSetup
 
         using var second = Scope.ServiceProvider.CreateScope();
         var train = (CountingTrain)second.ServiceProvider.GetRequiredService<ICountingTrain>();
-        var act = async () => await train.Run(Unit.Default, staleCopy);
+        var act = async () => await train.Run(Unit.Default, staleCopy).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainAlreadyStartedException>();
         CountingTrain.BodyRuns.Should().Be(1);
@@ -99,7 +99,7 @@ public class SqlitePendingRunClaimTests : TestSetup
     {
         try
         {
-            await run;
+            await run.ConfigureAwait(false);
             return null;
         }
         catch (Exception ex)
@@ -120,8 +120,8 @@ public class SqlitePendingRunClaimTests : TestSetup
                 Input = Unit.Default,
             }
         );
-        await context.Track(metadata);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(metadata).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return metadata.Id;
     }
 
@@ -129,7 +129,10 @@ public class SqlitePendingRunClaimTests : TestSetup
     {
         using var context = (IDataContext)
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>().Create();
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == id)
+            .ConfigureAwait(false);
     }
 
     public interface ICountingTrain : IServiceTrain<Unit, Unit>;

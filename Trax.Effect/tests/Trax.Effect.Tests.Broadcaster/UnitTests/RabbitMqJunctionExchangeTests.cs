@@ -87,7 +87,14 @@ public class RabbitMqJunctionExchangeTests
             ExchangeType.Fanout,
             durable: true
         );
-        var queue = (await channel.QueueDeclareAsync(string.Empty, false, true, true)).QueueName;
+        var queue = (
+            await channel.QueueDeclareAsync(
+                string.Empty,
+                durable: false,
+                exclusive: true,
+                autoDelete: true
+            )
+        ).QueueName;
         await channel.QueueBindAsync(queue, options.ExchangeName, string.Empty);
         var legacy = new ConcurrentQueue<TrainLifecycleEventMessage>();
         var legacyGotTrainEvent = new TaskCompletionSource(
@@ -98,7 +105,7 @@ public class RabbitMqJunctionExchangeTests
         {
             var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(ea.Body.Span)!;
             legacy.Enqueue(message);
-            if (message.EventType == "Completed")
+            if (string.Equals(message.EventType, "Completed", StringComparison.Ordinal))
                 legacyGotTrainEvent.TrySetResult();
             return Task.CompletedTask;
         };
@@ -132,10 +139,13 @@ public class RabbitMqJunctionExchangeTests
         {
             // In order, each confirmed by the broker before the next is sent.
             await broadcaster.PublishAsync(
-                Message("JunctionStarted", true),
+                Message("JunctionStarted", junction: true),
                 CancellationToken.None
             );
-            await broadcaster.PublishAsync(Message("Completed", false), CancellationToken.None);
+            await broadcaster.PublishAsync(
+                Message("Completed", junction: false),
+                CancellationToken.None
+            );
             await currentGotBoth.Task.WaitAsync(Timeout);
             await legacyGotTrainEvent.Task.WaitAsync(Timeout);
         }
@@ -164,7 +174,9 @@ public class RabbitMqJunctionExchangeTests
     {
         try
         {
-            return await new ConnectionFactory { Uri = new Uri(AmqpUri) }.CreateConnectionAsync();
+            return await new ConnectionFactory { Uri = new Uri(AmqpUri) }
+                .CreateConnectionAsync()
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -179,27 +191,31 @@ public class RabbitMqJunctionExchangeTests
         TrainLifecycleEventMessage message
     )
     {
-        await channel.ExchangeDeclareAsync(exchange, ExchangeType.Fanout, durable: true);
+        await channel
+            .ExchangeDeclareAsync(exchange, ExchangeType.Fanout, durable: true)
+            .ConfigureAwait(false);
         // Signed for the exchange it is published to, so only the exchange check can drop it.
         var body = JsonSerializer.SerializeToUtf8Bytes(message);
-        await channel.BasicPublishAsync(
-            exchange,
-            string.Empty,
-            mandatory: false,
-            new BasicProperties
-            {
-                Headers = new Dictionary<string, object?>
+        await channel
+            .BasicPublishAsync(
+                exchange,
+                string.Empty,
+                mandatory: false,
+                new BasicProperties
                 {
-                    [BroadcastMessageSignature.Header] = BroadcastMessageSignature.Create(
-                        TestBroadcastKey.Value,
-                        exchange,
-                        body,
-                        DateTimeOffset.UtcNow
-                    ),
+                    Headers = new Dictionary<string, object?>
+                    {
+                        [BroadcastMessageSignature.Header] = BroadcastMessageSignature.Create(
+                            TestBroadcastKey.Value,
+                            exchange,
+                            body,
+                            DateTimeOffset.UtcNow
+                        ),
+                    },
                 },
-            },
-            body
-        );
+                body
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -229,7 +245,7 @@ public class RabbitMqJunctionExchangeTests
         await Publish(
             channel,
             options.ExchangeName,
-            Message("JunctionStarted", true) with
+            Message("JunctionStarted", junction: true) with
             {
                 ExternalId = "misplaced-step",
             }
@@ -237,7 +253,7 @@ public class RabbitMqJunctionExchangeTests
         await Publish(
             channel,
             options.EffectiveJunctionExchangeName,
-            Message("Completed", false) with
+            Message("Completed", junction: false) with
             {
                 ExternalId = "misplaced-train",
             }
@@ -245,7 +261,7 @@ public class RabbitMqJunctionExchangeTests
         await Publish(
             channel,
             options.ExchangeName,
-            Message("Completed", false) with
+            Message("Completed", junction: false) with
             {
                 ExternalId = "train",
             }
@@ -253,7 +269,7 @@ public class RabbitMqJunctionExchangeTests
         await Publish(
             channel,
             options.EffectiveJunctionExchangeName,
-            Message("JunctionStarted", true) with
+            Message("JunctionStarted", junction: true) with
             {
                 ExternalId = "step",
             }
@@ -305,8 +321,14 @@ public class RabbitMqJunctionExchangeTests
             options,
             NullLogger<RabbitMqTrainEventBroadcaster>.Instance
         );
-        await broadcaster.PublishAsync(Message("JunctionStarted", true), CancellationToken.None);
-        await broadcaster.PublishAsync(Message("Completed", false), CancellationToken.None);
+        await broadcaster.PublishAsync(
+            Message("JunctionStarted", junction: true),
+            CancellationToken.None
+        );
+        await broadcaster.PublishAsync(
+            Message("Completed", junction: false),
+            CancellationToken.None
+        );
 
         (await received.Task.WaitAsync(Timeout))
             .Should()
@@ -351,7 +373,10 @@ public class RabbitMqJunctionExchangeTests
                 )
             )
             {
-                await broadcaster.PublishAsync(Message("Completed", false), CancellationToken.None);
+                await broadcaster.PublishAsync(
+                    Message("Completed", junction: false),
+                    CancellationToken.None
+                );
                 await received.Task.WaitAsync(Timeout);
             }
 

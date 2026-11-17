@@ -24,7 +24,7 @@ public class TraxHostInfoTests
     {
         TraxHostInfo.Current = null;
         foreach (var envVar in _envVarsToClean)
-            Environment.SetEnvironmentVariable(envVar, null);
+            Environment.SetEnvironmentVariable(envVar, value: null);
     }
 
     #region AutoDetect Environment

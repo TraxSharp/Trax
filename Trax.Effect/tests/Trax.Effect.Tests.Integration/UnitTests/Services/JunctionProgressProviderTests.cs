@@ -429,7 +429,10 @@ public class JunctionProgressProviderTests
     private async Task<Metadata> StoredRow(TestTrain train)
     {
         using var context = (IDataContext)_factory.Create();
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == train.Metadata!.Id);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == train.Metadata!.Id)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -467,8 +470,8 @@ public class JunctionProgressProviderTests
             LastToken = cancellationToken;
             _entered.TrySetResult();
             if (_gate is { } gate)
-                await gate.Task;
-            return await inner.CreateDbContextAsync(cancellationToken);
+                await gate.Task.ConfigureAwait(false);
+            return await inner.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -480,7 +483,7 @@ public class JunctionProgressProviderTests
         return train;
     }
 
-    private TestJunction CreateTestJunction(string name)
+    private static TestJunction CreateTestJunction(string name)
     {
         var junction = new TestJunction();
         SetJunctionMetadata(junction, name);
@@ -535,7 +538,7 @@ public class JunctionProgressProviderTests
     /// <summary>
     /// Concrete test double for EffectTrain. Only used for property access in tests.
     /// </summary>
-    private class TestTrain : ServiceTrain<string, string>
+    private sealed class TestTrain : ServiceTrain<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<PassThrough1_263>().Resolve();
@@ -549,7 +552,7 @@ public class JunctionProgressProviderTests
     /// <summary>
     /// Concrete test double for EffectJunction.
     /// </summary>
-    private class TestJunction : EffectJunction<string, string>
+    private sealed class TestJunction : EffectJunction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input);
     }
@@ -557,7 +560,7 @@ public class JunctionProgressProviderTests
     /// <summary>
     /// Fake IEffectRunner that tracks method calls for assertions.
     /// </summary>
-    private class FakeEffectRunner : IEffectRunner
+    private sealed class FakeEffectRunner : IEffectRunner
     {
         public int UpdateCallCount { get; private set; }
         public int SaveChangesCallCount { get; private set; }

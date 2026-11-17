@@ -95,11 +95,13 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
 
         try
         {
-            using var dataContext = await _dbContextFactory.CreateDbContextAsync(ct);
+            using var dataContext = await _dbContextFactory
+                .CreateDbContextAsync(ct)
+                .ConfigureAwait(false);
 
             // WaitToReadAsync returns false only once the queue is completed and empty, so after
             // Dispose completes it the loop still writes everything queued before that, then ends.
-            while (await reader.WaitToReadAsync(ct))
+            while (await reader.WaitToReadAsync(ct).ConfigureAwait(false))
             {
                 batch.Clear();
                 // The loop is the queue's only reader, so after WaitToReadAsync returns true the
@@ -109,8 +111,8 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
 
                 try
                 {
-                    await dataContext.Logs.AddRangeAsync(batch, ct);
-                    await dataContext.SaveChanges(ct);
+                    await dataContext.Logs.AddRangeAsync(batch, ct).ConfigureAwait(false);
+                    await dataContext.SaveChanges(ct).ConfigureAwait(false);
                     dataContext.Reset();
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -122,7 +124,7 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
                     // One entry the database refuses fails the whole batch, so store the entries
                     // one at a time and lose only the ones that still fail.
                     dataContext.Reset();
-                    if (!await SaveOneByOne(dataContext, batch, ct))
+                    if (!await SaveOneByOne(dataContext, batch, ct).ConfigureAwait(false))
                         break;
                 }
             }
@@ -135,7 +137,7 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
 
     /// <summary>
     /// Stores each entry of a failed batch on its own. An entry that still fails is dropped
-    /// rather than retried, so a bad entry cannot hold up the loop. Returns <c>false</c> when
+    /// rather than retried, so a bad entry cannot hold up the loop. Returns <see langword="false"/> when
     /// shutdown cancelled it.
     /// </summary>
     private static async Task<bool> SaveOneByOne(
@@ -148,8 +150,8 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
         {
             try
             {
-                await dataContext.Logs.AddAsync(log, ct);
-                await dataContext.SaveChanges(ct);
+                await dataContext.Logs.AddAsync(log, ct).ConfigureAwait(false);
+                await dataContext.SaveChanges(ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

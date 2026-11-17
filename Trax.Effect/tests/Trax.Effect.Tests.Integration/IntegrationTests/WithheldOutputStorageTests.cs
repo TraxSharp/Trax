@@ -59,18 +59,18 @@ public class WithheldOutputStorageTests
         train.Metadata!.Output.Should().Contain("context-of-given");
     }
 
-    public interface IWithheldTrain : IServiceTrain<string, string> { }
+    public interface IWithheldTrain : IServiceTrain<string, string>;
 
     [OutputWithheldFromLifecycleHooks]
-    private class WithheldTrain : ServiceTrain<string, string>, IWithheldTrain
+    private sealed class WithheldTrain : ServiceTrain<string, string>, IWithheldTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Task.FromResult<Either<Exception, string>>($"context-of-{TrainInput}");
     }
 
-    public interface IPlainTrain : IServiceTrain<string, string> { }
+    public interface IPlainTrain : IServiceTrain<string, string>;
 
-    private class PlainTrain : ServiceTrain<string, string>, IPlainTrain
+    private sealed class PlainTrain : ServiceTrain<string, string>, IPlainTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Task.FromResult<Either<Exception, string>>($"context-of-{TrainInput}");

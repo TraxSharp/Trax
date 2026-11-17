@@ -36,7 +36,7 @@ public class PostgresDataSourceLifetimeTests
 
         await provider.DisposeAsync();
 
-        var open = async () => await dataSource.OpenConnectionAsync();
+        var open = async () => await dataSource.OpenConnectionAsync().ConfigureAwait(false);
         await open.Should()
             .ThrowAsync<ObjectDisposedException>(
                 "the container owns the data source, so disposing it closes the pool"
@@ -62,9 +62,11 @@ public class PostgresDataSourceLifetimeTests
             var factory = second.GetRequiredService<IDataContextProviderFactory>();
             using var context = await factory.CreateDbContextAsync(CancellationToken.None);
             var reading = async () =>
-                await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(
-                    context.Metadatas
-                );
+                await Microsoft
+                    .EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(
+                        context.Metadatas
+                    )
+                    .ConfigureAwait(false);
             await reading
                 .Should()
                 .NotThrowAsync(

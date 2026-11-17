@@ -97,7 +97,7 @@ public class JunctionLoggerProviderTests
                 .Subject;
             values.Should().NotContain(kv => kv.Key.StartsWith('@'));
             values
-                .Where(kv => kv.Key != "{OriginalFormat}")
+                .Where(kv => !string.Equals(kv.Key, "{OriginalFormat}", StringComparison.Ordinal))
                 .Should()
                 .AllSatisfy(kv => kv.Value.Should().BeOfType<string>());
         }
@@ -133,7 +133,9 @@ public class JunctionLoggerProviderTests
         );
 
         Func<Task> act = async () =>
-            await provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+            await provider
+                .BeforeJunctionExecution(junction, train, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*Metadata*");
     }
@@ -149,7 +151,9 @@ public class JunctionLoggerProviderTests
         );
 
         Func<Task> act = async () =>
-            await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+            await provider
+                .AfterJunctionExecution(junction, train, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*Metadata*");
     }
@@ -230,7 +234,7 @@ public class JunctionLoggerProviderTests
         public string Value { get; set; } = "";
     }
 
-    private class SensitiveEffectJunction : EffectJunction<string, Token>
+    private sealed class SensitiveEffectJunction : EffectJunction<string, Token>
     {
         public override Task<Token> Run(string input) =>
             Task.FromResult(new Token { User = input, Value = "tok-secret" });
@@ -246,7 +250,9 @@ public class JunctionLoggerProviderTests
             NullLogger<JunctionLoggerProvider>.Instance
         );
         var act = async () =>
-            await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+            await provider
+                .AfterJunctionExecution(junction, train, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should()
             .NotThrowAsync("the junction already succeeded; logging it must not fail the train");
@@ -267,7 +273,9 @@ public class JunctionLoggerProviderTests
             NullLogger<JunctionLoggerProvider>.Instance
         );
         var act = async () =>
-            await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+            await provider
+                .AfterJunctionExecution(junction, train, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
         junction.Metadata!.OutputJson.Should().Contain("\"_unserializable\":true");
@@ -298,7 +306,7 @@ public class JunctionLoggerProviderTests
         var provider = new JunctionLoggerProvider(
             TestConfig(serializeJunctionData: true),
             NullLogger<JunctionLoggerProvider>.Instance,
-            new FixedOutputPolicy(null)
+            new FixedOutputPolicy(ceiling: null)
         );
         await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
 
@@ -314,11 +322,13 @@ public class JunctionLoggerProviderTests
         );
 
         var act = async () =>
-            await provider.BeforeJunctionExecution(
-                new TestEffectJunction(),
-                new TestTrain(),
-                CancellationToken.None
-            );
+            await provider
+                .BeforeJunctionExecution(
+                    new TestEffectJunction(),
+                    new TestTrain(),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()
@@ -390,7 +400,7 @@ public class JunctionLoggerProviderTests
         act.Should().NotThrow();
     }
 
-    private class TestTrain : ServiceTrain<string, string>
+    private sealed class TestTrain : ServiceTrain<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<PassThrough1_263>().Resolve();
@@ -401,7 +411,7 @@ public class JunctionLoggerProviderTests
         }
     }
 
-    private class TestEffectJunction : EffectJunction<string, string>
+    private sealed class TestEffectJunction : EffectJunction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input + "-out");
     }

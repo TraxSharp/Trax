@@ -95,7 +95,7 @@ public class PostgresTransientFailureTests : TestSetup
     {
         try
         {
-            await act();
+            await act().ConfigureAwait(false);
         }
         catch (Exception ex)
         {

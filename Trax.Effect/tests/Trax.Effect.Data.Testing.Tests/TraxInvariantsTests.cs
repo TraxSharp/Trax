@@ -31,7 +31,8 @@ public class TraxInvariantsTests
     [OneTimeSetUp]
     public async Task CreateDatabase()
     {
-        await using (var admin = new NpgsqlConnection(Maintenance))
+        var admin = new NpgsqlConnection(Maintenance);
+        await using (admin.ConfigureAwait(false))
         {
             await admin.OpenAsync();
             await ExecAsync(admin, $"DROP DATABASE IF EXISTS {Database} WITH (FORCE)");
@@ -45,7 +46,8 @@ public class TraxInvariantsTests
     public async Task DropDatabase()
     {
         NpgsqlConnection.ClearAllPools();
-        await using var admin = new NpgsqlConnection(Maintenance);
+        var admin = new NpgsqlConnection(Maintenance);
+        await using var adminDisposal = admin.ConfigureAwait(false);
         await admin.OpenAsync();
         await ExecAsync(admin, $"DROP DATABASE IF EXISTS {Database} WITH (FORCE)");
     }
@@ -254,11 +256,15 @@ public class TraxInvariantsTests
         var invoking = new[] { new InvokingState(Machine, "Building") };
 
         var live = Guid.NewGuid();
-        await SeedSnapshotAsync(live, "Building", await SeedInvokedEntryAsync(live, null));
+        await SeedSnapshotAsync(live, "Building", await SeedInvokedEntryAsync(live, runId: null));
         await SeedSnapshotAsync(Guid.NewGuid(), "Built", token: null);
         var bare = await SeedSnapshotAsync(Guid.NewGuid(), "Building", token: null);
         var left = Guid.NewGuid();
-        var stale = await SeedSnapshotAsync(left, "Built", await SeedInvokedEntryAsync(left, null));
+        var stale = await SeedSnapshotAsync(
+            left,
+            "Built",
+            await SeedInvokedEntryAsync(left, runId: null)
+        );
         await SeedSnapshotAsync(Guid.NewGuid(), "Building", token: null, machine: "Other");
         // Stranded there on purpose: its run ended and not even the failure could be applied.
         await SeedSnapshotAsync(Guid.NewGuid(), "Building", token: null, stranded: "Building");
@@ -353,7 +359,13 @@ public class TraxInvariantsTests
         var violations = await TraxInvariants.FindViolationsAsync(ConnectionString, [], Timed);
 
         violations
-            .Where(v => v.Invariant == TraxInvariants.UserDraftWithoutOwner)
+            .Where(v =>
+                string.Equals(
+                    v.Invariant,
+                    TraxInvariants.UserDraftWithoutOwner,
+                    StringComparison.Ordinal
+                )
+            )
             .Select(v => v.Id)
             .Should()
             .Equal(
@@ -369,9 +381,11 @@ public class TraxInvariantsTests
     {
         // row_id is the primary key, so the duplicate can only be made with the key dropped. It is dropped inside a
         // transaction the check reads through and that is rolled back, so the table keeps its key.
-        await using var connection = new NpgsqlConnection(ConnectionString);
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
         await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
+        var transaction = await connection.BeginTransactionAsync();
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
         var first = await SeedSnapshotAsync(Guid.NewGuid(), "Built", token: null);
         await ExecAsync(
             connection,
@@ -529,7 +543,7 @@ public class TraxInvariantsTests
             "u3",
             createdAt: longAgo,
             state: "Building",
-            token: await SeedInvokedEntryAsync(waiting, null)
+            token: await SeedInvokedEntryAsync(waiting, runId: null)
         );
 
         var violations = (
@@ -541,7 +555,13 @@ public class TraxInvariantsTests
                 keptStates: [new KeptState(Machine, "Built")]
             )
         )
-            .Where(v => v.Invariant == TraxInvariants.DraftOlderThanMaxLifetime)
+            .Where(v =>
+                string.Equals(
+                    v.Invariant,
+                    TraxInvariants.DraftOlderThanMaxLifetime,
+                    StringComparison.Ordinal
+                )
+            )
             .Select(v => v.Id)
             .ToList();
 
@@ -564,9 +584,11 @@ public class TraxInvariantsTests
         string? token = null
     )
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             INSERT INTO trax.snapshot_draft
                 (id, user_key, owner_kind, machine, version, state, concurrency_token, created_at, updated_at,
@@ -584,7 +606,7 @@ public class TraxInvariantsTests
         );
         command.Parameters.AddWithValue("updated", updatedAt ?? DateTimeOffset.UtcNow);
         command.Parameters.AddWithValue("token", (object?)token ?? DBNull.Value);
-        return (long)(await command.ExecuteScalarAsync())!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
     }
 
     [Test]
@@ -615,7 +637,7 @@ public class TraxInvariantsTests
     {
         TraxInvariants.IsExempt(typeof(Marked), nameof(Marked.Stuck)).Should().BeTrue();
         TraxInvariants.IsExempt(typeof(Marked), nameof(Marked.Clean)).Should().BeFalse();
-        TraxInvariants.IsExempt(typeof(Marked), null).Should().BeFalse();
+        TraxInvariants.IsExempt(typeof(Marked), methodName: null).Should().BeFalse();
         TraxInvariants
             .IsExempt(typeof(MarkedFixture), nameof(MarkedFixture.Anything))
             .Should()
@@ -626,27 +648,29 @@ public class TraxInvariantsTests
             .BeTrue("a fixture's base class can carry the mark for every subclass");
     }
 
-    private class Marked
+    private sealed class Marked
     {
         [LeavesStuckRuns("simulates a host crashing mid-run")]
-        public void Stuck() { }
+        public static void Stuck() { }
 
-        public void Clean() { }
+        public static void Clean() { }
     }
 
     [LeavesStuckRuns("every test here abandons a claim")]
     private class MarkedFixture
     {
-        public void Anything() { }
+        public static void Anything() { }
     }
 
     private sealed class InheritsMarkedFixture : MarkedFixture;
 
     private static async Task<long> SeedRunAsync(string state, long? resumeFrom = null)
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             INSERT INTO trax.metadata (external_id, name, train_state, start_time, resume_from)
             VALUES (@external, 'Invariants.Train', @state::trax.train_state, now(), @resume)
@@ -659,15 +683,17 @@ public class TraxInvariantsTests
             NpgsqlTypes.NpgsqlDbType.Bigint,
             (object?)resumeFrom ?? DBNull.Value
         );
-        return (long)(await command.ExecuteScalarAsync())!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
     }
 
     // A checkpoint row of run <paramref name="runId"/>; returns its id.
     private static async Task<long> SeedCheckpointAsync(long runId)
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             INSERT INTO trax.checkpoint
                 (metadata_id, node_id, state_type, state, chain_hash, state_fingerprint)
@@ -675,7 +701,7 @@ public class TraxInvariantsTests
             RETURNING id
             """;
         command.Parameters.AddWithValue("run", runId);
-        return (long)(await command.ExecuteScalarAsync())!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
     }
 
     private const string Machine = "Invariants.Machine";
@@ -694,9 +720,11 @@ public class TraxInvariantsTests
         string? stranded = null
     )
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             INSERT INTO trax.snapshot_draft
                 (id, user_key, owner_kind, machine, version, state, concurrency_token, updated_at, invoke_token,
@@ -709,7 +737,7 @@ public class TraxInvariantsTests
         command.Parameters.AddWithValue("state", state);
         command.Parameters.AddWithValue("token", (object?)token ?? DBNull.Value);
         command.Parameters.AddWithValue("stranded", (object?)stranded ?? DBNull.Value);
-        var row = (long)(await command.ExecuteScalarAsync())!;
+        var row = (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
         Snapshots[row] = (id, token);
         return row;
     }
@@ -719,9 +747,11 @@ public class TraxInvariantsTests
     private static async Task<string> SeedInvokedEntryAsync(Guid instance, long? runId)
     {
         var external = Guid.NewGuid().ToString("N");
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             INSERT INTO trax.work_queue
                 (external_id, train_name, status, metadata_id,
@@ -734,7 +764,7 @@ public class TraxInvariantsTests
         command.Parameters.AddWithValue("run", (object?)runId ?? DBNull.Value);
         command.Parameters.AddWithValue("machine", Machine);
         command.Parameters.AddWithValue("instance", instance);
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
         return external;
     }
 
@@ -743,9 +773,11 @@ public class TraxInvariantsTests
     private static async Task<string> SeedInvokedRunAsync(Guid instance)
     {
         var external = Guid.NewGuid().ToString("N");
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             INSERT INTO trax.metadata
                 (external_id, name, train_state, start_time,
@@ -756,15 +788,17 @@ public class TraxInvariantsTests
         command.Parameters.AddWithValue("external", external);
         command.Parameters.AddWithValue("machine", Machine);
         command.Parameters.AddWithValue("instance", instance);
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
         return external;
     }
 
     private static async Task SeedClaimAsync(string key, string? receipt)
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             INSERT INTO trax.effect_claim (effect_key, receipt, owner_token, lease_expires_at, created_at)
             VALUES (@key, @receipt, @owner, now(), now())
@@ -772,7 +806,7 @@ public class TraxInvariantsTests
         command.Parameters.AddWithValue("key", key);
         command.Parameters.AddWithValue("receipt", (object?)receipt ?? DBNull.Value);
         command.Parameters.AddWithValue("owner", Guid.NewGuid());
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     private static async Task<long> SeedQueueEntryAsync(
@@ -781,9 +815,11 @@ public class TraxInvariantsTests
         long? resumeFrom = null
     )
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             INSERT INTO trax.work_queue (external_id, train_name, status, metadata_id, resume_from)
             VALUES (@external, 'Invariants.Train', @status::trax.work_queue_status, @run, @resume)
@@ -797,20 +833,22 @@ public class TraxInvariantsTests
             NpgsqlTypes.NpgsqlDbType.Bigint,
             (object?)resumeFrom ?? DBNull.Value
         );
-        return (long)(await command.ExecuteScalarAsync())!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
     }
 
     private static async Task SqlAsync(string sql)
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await ExecAsync(connection, sql);
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        await ExecAsync(connection, sql).ConfigureAwait(false);
     }
 
     private static async Task ExecAsync(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 }

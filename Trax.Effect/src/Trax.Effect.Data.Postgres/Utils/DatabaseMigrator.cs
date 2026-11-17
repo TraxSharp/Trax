@@ -117,18 +117,20 @@ public static partial class DatabaseMigrator
 
         try
         {
-            await using var lockConnection = new NpgsqlConnection(migrationConnectionString);
-            await lockConnection.OpenAsync();
-            await AcquireMigrationLock(lockConnection);
+            var lockConnection = new NpgsqlConnection(migrationConnectionString);
+            await using var lockConnectionDisposal = lockConnection.ConfigureAwait(false);
+            await lockConnection.OpenAsync().ConfigureAwait(false);
+            await AcquireMigrationLock(lockConnection).ConfigureAwait(false);
 
             try
             {
-                await lockConnection.ReloadTypesAsync();
-                await Execute(lockConnection, "create schema if not exists trax;");
+                await lockConnection.ReloadTypesAsync().ConfigureAwait(false);
+                await Execute(lockConnection, "create schema if not exists trax;")
+                    .ConfigureAwait(false);
 
                 // Set as a server option, not as Search Path: DbUp reads Search Path from the
                 // connection string as one schema name and creates it.
-                if (await ScriptSearchPath(lockConnection) is { } searchPath)
+                if (await ScriptSearchPath(lockConnection).ConfigureAwait(false) is { } searchPath)
                 {
                     migrationConnection.SearchPath = null;
                     migrationConnection.Options +=
@@ -140,7 +142,7 @@ public static partial class DatabaseMigrator
                 {
                     // Again before every attempt: a concurrent index build that gave up on its
                     // lock leaves its index invalid.
-                    await DropInvalidIndexes(lockConnection);
+                    await DropInvalidIndexes(lockConnection).ConfigureAwait(false);
 
                     var result = CreateEngineWithEmbeddedScripts(scriptConnectionString)
                         .PerformUpgrade();
@@ -155,12 +157,13 @@ public static partial class DatabaseMigrator
                         $"A Trax migration script gave up waiting for a table lock, or met a duplicate while building a unique index (attempt {attempt} of {policy.Attempts}); running the pending scripts again."
                     );
                     if (policy.Backoff > TimeSpan.Zero)
-                        await Task.Delay(policy.Backoff * attempt);
+                        await Task.Delay(policy.Backoff * attempt).ConfigureAwait(false);
                 }
             }
             finally
             {
-                await Execute(lockConnection, $"SELECT pg_advisory_unlock({MigrationLockKey});");
+                await Execute(lockConnection, $"SELECT pg_advisory_unlock({MigrationLockKey});")
+                    .ConfigureAwait(false);
             }
         }
         catch (Exception e)
@@ -185,15 +188,17 @@ public static partial class DatabaseMigrator
     /// </remarks>
     private static async Task<string?> ScriptSearchPath(NpgsqlConnection connection)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             SELECT current_setting('search_path'), n.nspname
             FROM pg_extension e
             JOIN pg_namespace n ON n.oid = e.extnamespace
             WHERE e.extname = 'pg_trgm' AND NOT n.nspname = ANY(current_schemas(false));
             """;
-        await using var reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
+        if (!await reader.ReadAsync().ConfigureAwait(false))
             return null;
 
         var path = reader.GetString(0);
@@ -235,7 +240,8 @@ public static partial class DatabaseMigrator
     private static async Task DropInvalidIndexes(NpgsqlConnection connection)
     {
         var invalid = new List<string>();
-        await using (var command = connection.CreateCommand())
+        var command = connection.CreateCommand();
+        await using (command.ConfigureAwait(false))
         {
             command.CommandText = """
                 SELECT c.relname
@@ -245,15 +251,17 @@ public static partial class DatabaseMigrator
                 WHERE n.nspname = 'trax' AND NOT i.indisvalid AND c.relname = ANY(@names);
                 """;
             command.Parameters.AddWithValue("names", ScriptIndexNames.ToArray());
-            await using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
+            var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+            await using var readerDisposal = reader.ConfigureAwait(false);
+            while (await reader.ReadAsync().ConfigureAwait(false))
                 invalid.Add(reader.GetString(0));
         }
 
         foreach (var index in invalid)
         {
             var quoted = "\"" + index.Replace("\"", "\"\"") + "\"";
-            await Execute(connection, $"DROP INDEX CONCURRENTLY IF EXISTS trax.{quoted};");
+            await Execute(connection, $"DROP INDEX CONCURRENTLY IF EXISTS trax.{quoted};")
+                .ConfigureAwait(false);
         }
     }
 
@@ -300,12 +308,13 @@ public static partial class DatabaseMigrator
     {
         while (true)
         {
-            await using var command = connection.CreateCommand();
+            var command = connection.CreateCommand();
+            await using var commandDisposal = command.ConfigureAwait(false);
             command.CommandText = $"SELECT pg_try_advisory_lock({MigrationLockKey});";
-            if ((bool)(await command.ExecuteScalarAsync())!)
+            if ((bool)(await command.ExecuteScalarAsync().ConfigureAwait(false))!)
                 return;
 
-            await Task.Delay(MigrationLockPollInterval);
+            await Task.Delay(MigrationLockPollInterval).ConfigureAwait(false);
         }
     }
 
@@ -313,8 +322,9 @@ public static partial class DatabaseMigrator
 
     private static async Task Execute(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 }

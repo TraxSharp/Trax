@@ -40,7 +40,9 @@ internal sealed class RunAttempts(IDataContextProviderFactory contexts) : IRunAt
         if (metadata.ManifestId is not { } manifestId)
             return null;
 
-        using var context = await contexts.CreateDbContextAsync(cancellationToken);
+        using var context = await contexts
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         var id = metadata.Id;
         var recent = await context
@@ -49,7 +51,8 @@ internal sealed class RunAttempts(IDataContextProviderFactory contexts) : IRunAt
             .OrderByDescending(m => m.Id)
             .Take(MaxRunsRead)
             .Select(m => new { m.TrainState, m.FailureException })
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         var failed = 0;
 
@@ -59,7 +62,10 @@ internal sealed class RunAttempts(IDataContextProviderFactory contexts) : IRunAt
             if (run.TrainState is TrainState.Completed or TrainState.Cancelled)
                 break;
 
-            if (run.TrainState == TrainState.Failed && run.FailureException != RequeuedDispatch)
+            if (
+                run.TrainState == TrainState.Failed
+                && !string.Equals(run.FailureException, RequeuedDispatch, StringComparison.Ordinal)
+            )
                 failed++;
         }
 

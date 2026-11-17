@@ -159,7 +159,7 @@ public static class ServiceExtensions
 
         if (options.Problems().ToList() is { Count: > 0 } problems)
             throw new ArgumentException(
-                $"AddNimbleDecider cannot be used: {string.Join(" ", problems)}",
+                $"AddNimbleDecider cannot be used: {string.Join(' ', problems)}",
                 nameof(configure)
             );
 

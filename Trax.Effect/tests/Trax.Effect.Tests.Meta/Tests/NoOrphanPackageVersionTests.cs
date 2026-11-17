@@ -35,9 +35,11 @@ public class NoOrphanPackageVersionTests
         var referenced = ReferencedPackages();
 
         var orphans = PinnedPackages(props)
-            .Where(p => !referenced.Contains(p))
-            .Where(p => !SanctionedStandalonePins.Contains(p, StringComparer.OrdinalIgnoreCase))
-            .OrderBy(p => p, StringComparer.Ordinal)
+            .Where(p =>
+                !referenced.Contains(p)
+                && !SanctionedStandalonePins.Contains(p, StringComparer.OrdinalIgnoreCase)
+            )
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         orphans
@@ -103,12 +105,8 @@ public class NoOrphanPackageVersionTests
             .EnumerateFiles(MonorepoRoot.Path, "*.csproj", SearchOption.AllDirectories)
             .Where(f =>
                 !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-            )
-            .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-            )
-            .Where(f =>
-                !f.Contains(
+                && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
+                && !f.Contains(
                     $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}"
                 )
             )

@@ -87,7 +87,8 @@ internal static class SensitiveQuestions
             type.IsGenericType
             && !type.IsGenericTypeDefinition
             && (
-                type.GetGenericTypeDefinition().IsDefined(typeof(TraxSensitiveAttribute), true)
+                type.GetGenericTypeDefinition()
+                    .IsDefined(typeof(TraxSensitiveAttribute), inherit: true)
                 || type.GetGenericArguments().Any(IsMarked)
             )
         )
@@ -131,8 +132,10 @@ internal static class SensitiveQuestions
 
             var name = assembly.GetName().Name;
             if (
-                name != EffectAssembly
-                && !assembly.GetReferencedAssemblies().Any(r => r.Name == EffectAssembly)
+                !string.Equals(name, EffectAssembly, StringComparison.Ordinal)
+                && !assembly
+                    .GetReferencedAssemblies()
+                    .Any(r => string.Equals(r.Name, EffectAssembly, StringComparison.Ordinal))
             )
                 return;
 

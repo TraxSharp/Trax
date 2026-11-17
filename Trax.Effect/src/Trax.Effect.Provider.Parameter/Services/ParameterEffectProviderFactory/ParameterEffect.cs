@@ -217,8 +217,8 @@ public class ParameterEffect(
         {
             foreach (var metadata in _trackedMetadatas.Keys)
             {
-                metadata.SetInputObject(null);
-                metadata.SetOutputObject(null);
+                metadata.SetInputObject(value: null);
+                metadata.SetOutputObject(value: null);
             }
         }
 

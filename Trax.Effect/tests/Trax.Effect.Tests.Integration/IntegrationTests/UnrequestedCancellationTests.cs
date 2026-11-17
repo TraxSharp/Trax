@@ -65,7 +65,7 @@ public class UnrequestedCancellationTests
         using var cts = new CancellationTokenSource();
         TokenCancelledTrain.Source = cts;
 
-        var act = async () => await train.Run(Unit.Default, cts.Token);
+        var act = async () => await train.Run(Unit.Default, cts.Token).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         var row = await PersistedRow(scope, train.Metadata!.Id);
@@ -80,7 +80,7 @@ public class UnrequestedCancellationTests
         using var scope = _provider.CreateScope();
         var train = (UnrequestedTrain)scope.ServiceProvider.GetRequiredService<IUnrequestedTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         var row = await PersistedRow(scope, train.Metadata!.Id);
@@ -108,7 +108,7 @@ public class UnrequestedCancellationTests
             $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/"
         );
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<TaskCanceledException>();
 
         var row = await PersistedRow(scope, train.Metadata!.Id);
@@ -124,7 +124,7 @@ public class UnrequestedCancellationTests
         using var scope = _provider.CreateScope();
         var train = (UnrequestedTrain)scope.ServiceProvider.GetRequiredService<IUnrequestedTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         var row = await PersistedRow(scope, train.Metadata!.Id);
@@ -143,7 +143,7 @@ public class UnrequestedCancellationTests
         var train = (FlagCancelledTrain)
             scope.ServiceProvider.GetRequiredService<IFlagCancelledTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         var row = await PersistedRow(scope, train.Metadata!.Id);
@@ -161,7 +161,10 @@ public class UnrequestedCancellationTests
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         using var context = (IDataContext)factory.Create();
 
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == id)
+            .ConfigureAwait(false);
     }
 
     // ── probes ──────────────────────────────────────────────────────
@@ -243,7 +246,7 @@ public class UnrequestedCancellationTests
             public override async Task<Unit> Run(Unit input)
             {
                 using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(200) };
-                await client.GetAsync(Target, CancellationToken);
+                await client.GetAsync(Target, CancellationToken).ConfigureAwait(false);
                 return input;
             }
         }
@@ -264,9 +267,11 @@ public class UnrequestedCancellationTests
             {
                 var id = Metadata!.TrainMetadataId;
                 using var context = (IDataContext)factory.Create();
-                var row = await context.Metadatas.SingleAsync(m => m.Id == id);
+                var row = await context
+                    .Metadatas.SingleAsync(m => m.Id == id)
+                    .ConfigureAwait(false);
                 row.CancellationRequested = true;
-                await context.SaveChanges(CancellationToken.None);
+                await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 return input;
             }
         }

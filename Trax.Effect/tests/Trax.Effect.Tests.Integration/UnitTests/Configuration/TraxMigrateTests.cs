@@ -76,7 +76,7 @@ public class TraxMigrateTests
     {
         var gate = new MigrateServeGate();
 
-        var act = async () => await gate.StartAsync(CancellationToken.None);
+        var act = async () => await gate.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()

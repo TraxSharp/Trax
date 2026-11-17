@@ -219,7 +219,7 @@ public class SignalRSinkOptionsTests
         config.Matches(wrongEvent).Should().BeFalse();
     }
 
-    private record MyShapeA(string Label);
+    private sealed record MyShapeA(string Label);
 
-    private record MyShapeB(string Label);
+    private sealed record MyShapeB(string Label);
 }

@@ -435,7 +435,7 @@ public class EffectRunnerRegistryTests
         ) => Messages.Add(formatter(state, exception));
     }
 
-    private class StubEffectProvider : IEffectProvider
+    private sealed class StubEffectProvider : IEffectProvider
     {
         public Task SaveChanges(CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -446,7 +446,7 @@ public class EffectRunnerRegistryTests
         public void Dispose() { }
     }
 
-    private class EnabledEffectFactory : IEffectProviderFactory
+    private sealed class EnabledEffectFactory : IEffectProviderFactory
     {
         public bool CreateCalled { get; private set; }
 
@@ -457,7 +457,7 @@ public class EffectRunnerRegistryTests
         }
     }
 
-    private class DisabledEffectFactory : IEffectProviderFactory
+    private sealed class DisabledEffectFactory : IEffectProviderFactory
     {
         public bool CreateCalled { get; private set; }
 
@@ -468,7 +468,7 @@ public class EffectRunnerRegistryTests
         }
     }
 
-    private class StubJunctionEffectProvider : IJunctionEffectProvider
+    private sealed class StubJunctionEffectProvider : IJunctionEffectProvider
     {
         public Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(
             EffectJunction<TIn, TOut> effectJunction,
@@ -485,7 +485,7 @@ public class EffectRunnerRegistryTests
         public void Dispose() { }
     }
 
-    private class EnabledJunctionEffectFactory : IJunctionEffectProviderFactory
+    private sealed class EnabledJunctionEffectFactory : IJunctionEffectProviderFactory
     {
         public bool CreateCalled { get; private set; }
 
@@ -496,7 +496,7 @@ public class EffectRunnerRegistryTests
         }
     }
 
-    private class DisabledJunctionEffectFactory : IJunctionEffectProviderFactory
+    private sealed class DisabledJunctionEffectFactory : IJunctionEffectProviderFactory
     {
         public bool CreateCalled { get; private set; }
 
@@ -507,14 +507,14 @@ public class EffectRunnerRegistryTests
         }
     }
 
-    private class FakeModel : IModel
+    private sealed class FakeModel : IModel
     {
         public long Id => 1;
 
         public override string ToString() => "FakeModel";
     }
 
-    private class TrackingEffectProvider : IEffectProvider
+    private sealed class TrackingEffectProvider : IEffectProvider
     {
         public bool SaveChangesCalled { get; private set; }
         public bool TrackCalled { get; private set; }
@@ -545,21 +545,21 @@ public class EffectRunnerRegistryTests
         }
     }
 
-    private class TrackingEffectFactory : IEffectProviderFactory
+    private sealed class TrackingEffectFactory : IEffectProviderFactory
     {
         public TrackingEffectProvider Provider { get; } = new();
 
         public IEffectProvider Create() => Provider;
     }
 
-    private class TrackingEffectFactory2 : IEffectProviderFactory
+    private sealed class TrackingEffectFactory2 : IEffectProviderFactory
     {
         public TrackingEffectProvider Provider { get; } = new();
 
         public IEffectProvider Create() => Provider;
     }
 
-    private class ThrowingEffectProvider(Exception exception) : IEffectProvider
+    private sealed class ThrowingEffectProvider(Exception exception) : IEffectProvider
     {
         public Task SaveChanges(CancellationToken cancellationToken) =>
             Task.FromException(exception);
@@ -571,17 +571,17 @@ public class EffectRunnerRegistryTests
         public void Dispose() { }
     }
 
-    private class ThrowingEffectFactory(Exception exception) : IEffectProviderFactory
+    private sealed class ThrowingEffectFactory(Exception exception) : IEffectProviderFactory
     {
         public IEffectProvider Create() => new ThrowingEffectProvider(exception);
     }
 
-    private class ThrowingEffectFactory2(Exception exception) : IEffectProviderFactory
+    private sealed class ThrowingEffectFactory2(Exception exception) : IEffectProviderFactory
     {
         public IEffectProvider Create() => new ThrowingEffectProvider(exception);
     }
 
-    private class ThrowingDisposeEffectProvider : IEffectProvider
+    private sealed class ThrowingDisposeEffectProvider : IEffectProvider
     {
         public bool DisposeCalled { get; private set; }
 
@@ -598,14 +598,14 @@ public class EffectRunnerRegistryTests
         }
     }
 
-    private class ThrowingDisposeEffectFactory : IEffectProviderFactory
+    private sealed class ThrowingDisposeEffectFactory : IEffectProviderFactory
     {
         public ThrowingDisposeEffectProvider Provider { get; } = new();
 
         public IEffectProvider Create() => Provider;
     }
 
-    private class ThrowingDisposeJunctionEffectProvider : IJunctionEffectProvider
+    private sealed class ThrowingDisposeJunctionEffectProvider : IJunctionEffectProvider
     {
         public bool DisposeCalled { get; private set; }
 
@@ -628,14 +628,14 @@ public class EffectRunnerRegistryTests
         }
     }
 
-    private class ThrowingDisposeJunctionEffectFactory : IJunctionEffectProviderFactory
+    private sealed class ThrowingDisposeJunctionEffectFactory : IJunctionEffectProviderFactory
     {
         public ThrowingDisposeJunctionEffectProvider Provider { get; } = new();
 
         public IJunctionEffectProvider Create() => Provider;
     }
 
-    private class AsyncTrackingEffectProvider : IEffectProvider
+    private sealed class AsyncTrackingEffectProvider : IEffectProvider
     {
         public bool TrackCompleted { get; private set; }
         public bool UpdateCompleted { get; private set; }
@@ -657,7 +657,7 @@ public class EffectRunnerRegistryTests
         public void Dispose() { }
     }
 
-    private class AsyncTrackingEffectFactory : IEffectProviderFactory
+    private sealed class AsyncTrackingEffectFactory : IEffectProviderFactory
     {
         public AsyncTrackingEffectProvider Provider { get; } = new();
 

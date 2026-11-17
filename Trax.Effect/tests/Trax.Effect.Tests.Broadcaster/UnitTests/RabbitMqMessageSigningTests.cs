@@ -59,7 +59,7 @@ public class RabbitMqMessageSigningTests
     [Test]
     public void A_message_without_a_signature_is_missing()
     {
-        Verify(null).Should().Be(BroadcastSignatureVerdict.Missing);
+        Verify(signature: null).Should().Be(BroadcastSignatureVerdict.Missing);
         Verify("").Should().Be(BroadcastSignatureVerdict.Missing);
     }
 
@@ -164,7 +164,7 @@ public class RabbitMqMessageSigningTests
         var verifier = new BroadcastMessageVerifier(Signed(), logger, time);
 
         for (var i = 0; i < 5; i++)
-            verifier.Accept("ex", Body, null).Should().BeFalse();
+            verifier.Accept("ex", Body, signature: null).Should().BeFalse();
         time.Advance(BroadcastMessageVerifier.RefusalWarningInterval);
         verifier.Accept("ex", Body, "garbage").Should().BeFalse();
 
@@ -189,10 +189,16 @@ public class RabbitMqMessageSigningTests
     public void Without_a_key_the_verifier_passes_anything_only_after_AllowUnsignedMessages()
     {
         var options = new RabbitMqBroadcasterOptions { ConnectionString = "amqp://localhost" };
-        new BroadcastMessageVerifier(options, null).Accept("ex", Body, null).Should().BeFalse();
+        new BroadcastMessageVerifier(options, logger: null)
+            .Accept("ex", Body, signature: null)
+            .Should()
+            .BeFalse();
 
         options.AllowUnsignedMessages();
-        new BroadcastMessageVerifier(options, null).Accept("ex", Body, null).Should().BeTrue();
+        new BroadcastMessageVerifier(options, logger: null)
+            .Accept("ex", Body, signature: null)
+            .Should()
+            .BeTrue();
     }
 
     #endregion
@@ -349,7 +355,7 @@ public class RabbitMqMessageSigningTests
             (message, _) =>
             {
                 received.Enqueue(message.ExternalId);
-                if (message.ExternalId == "signed")
+                if (string.Equals(message.ExternalId, "signed", StringComparison.Ordinal))
                     gotSigned.TrySetResult();
                 return Task.CompletedTask;
             },
@@ -390,7 +396,9 @@ public class RabbitMqMessageSigningTests
                     DateTimeOffset.UtcNow
                 ),
             };
-        await channel.BasicPublishAsync(exchange, string.Empty, mandatory: false, properties, body);
+        await channel
+            .BasicPublishAsync(exchange, string.Empty, mandatory: false, properties, body)
+            .ConfigureAwait(false);
     }
 
     private static TrainLifecycleEventMessage Message(string externalId) =>

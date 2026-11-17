@@ -87,7 +87,8 @@ internal sealed class JunctionEventPublisher
                     bound.CancelAfter(AttemptTimeout);
                     attempt = await attempts
                         .AttemptOf(metadata, bound.Token)
-                        .WaitAsync(AttemptTimeout, cancellationToken);
+                        .WaitAsync(AttemptTimeout, cancellationToken)
+                        .ConfigureAwait(false);
                 }
             }
             catch (Exception e)
@@ -148,7 +149,9 @@ internal sealed class JunctionEventPublisher
         try
         {
             if (_broadcaster.Value is { } broadcaster)
-                await broadcaster.PublishAsync(message, CancellationToken.None);
+                await broadcaster
+                    .PublishAsync(message, CancellationToken.None)
+                    .ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -181,7 +184,7 @@ internal sealed class JunctionEventPublisher
         {
             try
             {
-                await handler.HandleAsync(message, CancellationToken.None);
+                await handler.HandleAsync(message, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception e)
             {

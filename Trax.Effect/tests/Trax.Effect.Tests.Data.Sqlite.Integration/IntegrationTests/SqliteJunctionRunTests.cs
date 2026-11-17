@@ -124,7 +124,9 @@ public class SqliteJunctionRunTests
                 graph.Nodes.Single(n => n.Kind == ChainStepKind.Switch).Id,
                 graph
                     .Nodes.Single(n => n.Kind == ChainStepKind.Switch)
-                    .Tracks.Single(t => t.Name == nameof(LiteBin.Small))
+                    .Tracks.Single(t =>
+                        string.Equals(t.Name, nameof(LiteBin.Small), StringComparison.Ordinal)
+                    )
                     .Nodes[0]
                     .Id
             );
@@ -137,25 +139,36 @@ public class SqliteJunctionRunTests
     {
         using var scope = _provider.CreateScope();
         var train = (LiteStepsTrain)scope.ServiceProvider.GetRequiredService<ILiteStepsTrain>();
-        var run = async () => await train.Run(new LiteItem(3));
-        await run.Should().ThrowAsync<InvalidOperationException>();
+        var run = async () => await train.Run(new LiteItem(3)).ConfigureAwait(false);
+        await run.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
+        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
         return train.Metadata!.Id;
     }
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync();
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return await context
+            .JunctionRuns.AsNoTracking()
+            .ForRun(metadataId)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task Delete(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        await context.Metadatas.Where(m => m.Id == metadataId).ExecuteDeleteAsync();
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await context
+            .Metadatas.Where(m => m.Id == metadataId)
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
     }
 }
 

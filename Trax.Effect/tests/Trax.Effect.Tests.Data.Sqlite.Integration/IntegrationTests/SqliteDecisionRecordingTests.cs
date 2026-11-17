@@ -129,7 +129,9 @@ public class SqliteDecisionRecordingTests
         await Delete(original.Metadata!.Id);
         Decider.Asked = 0;
 
-        var run = async () => await Run<ILiteRouteOrder>(replayDecisionsOf: original.Metadata.Id);
+        var run = async () =>
+            await Run<ILiteRouteOrder>(replayDecisionsOf: original.Metadata.Id)
+                .ConfigureAwait(false);
 
         (await run.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()
@@ -144,7 +146,7 @@ public class SqliteDecisionRecordingTests
     public async Task A_refused_answer_is_a_row_with_why_and_its_requeue_asks_afresh()
     {
         Decider.Raw = "Banana";
-        var refuse = async () => await Run<ILiteRouteOrder>();
+        var refuse = async () => await Run<ILiteRouteOrder>().ConfigureAwait(false);
 
         (await refuse.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()
@@ -179,7 +181,7 @@ public class SqliteDecisionRecordingTests
     public async Task A_missing_answer_is_a_refused_row_with_no_answer()
     {
         Decider.Raw = null;
-        var refuse = async () => await Run<ILiteUnanswered>();
+        var refuse = async () => await Run<ILiteUnanswered>().ConfigureAwait(false);
 
         await refuse.Should().ThrowAsync<TrainException>();
         var row = (await Recorded(_lastTrain!.Metadata!.Id)).Should().ContainSingle().Subject;
@@ -213,34 +215,47 @@ public class SqliteDecisionRecordingTests
             }
         );
 
-        return (train, await train.Run(order, metadata));
+        return (train, await train.Run(order, metadata).ConfigureAwait(false));
     }
 
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
         return await context
             .RecordedDecisions.AsNoTracking()
             .Where(d => d.MetadataId == metadataId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task<Metadata> RunRow(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == metadataId);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == metadataId)
+            .ConfigureAwait(false);
     }
 
     private async Task Delete(params long[] metadataIds)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
-        await context.Metadatas.Where(m => metadataIds.Contains(m.Id)).ExecuteDeleteAsync();
+        await context
+            .Metadatas.Where(m => metadataIds.Contains(m.Id))
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
     }
 
     public sealed class LiteDecider : IDecider
@@ -345,19 +360,23 @@ public class SqliteDecisionRecordingTests
         {
             Seen.Clear();
             var id = Metadata!.TrainMetadataId;
-            using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+            using var context = await factory
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
 
             var state = await context
                 .Metadatas.AsNoTracking()
                 .Where(m => m.Id == id)
                 .Select(m => m.TrainState)
-                .SingleAsync();
+                .SingleAsync()
+                .ConfigureAwait(false);
 
             foreach (
                 var row in await context
                     .RecordedDecisions.AsNoTracking()
                     .Where(d => d.MetadataId == id)
                     .ToListAsync()
+                    .ConfigureAwait(false)
             )
                 Seen.Add((row.MetadataId, state, row.Tracks().SingleOrDefault()));
 

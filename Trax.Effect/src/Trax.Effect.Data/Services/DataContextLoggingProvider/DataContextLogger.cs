@@ -47,7 +47,13 @@ public class DataContextLogger(
         Func<TState, Exception?, string> formatter
     )
     {
-        if (categoryName == "Microsoft.EntityFrameworkCore.Database.Command")
+        if (
+            string.Equals(
+                categoryName,
+                "Microsoft.EntityFrameworkCore.Database.Command",
+                StringComparison.Ordinal
+            )
+        )
             return;
 
         if (logLevel < minimumLogLevel || IsBlacklisted(categoryName))
@@ -86,5 +92,5 @@ public class DataContextLogger(
 
     private bool IsBlacklisted(string category) =>
         exactBlacklist.Contains(category)
-        || wildcardBlacklist.Any(regex => regex.IsMatch(category));
+        || wildcardBlacklist.Exists(regex => regex.IsMatch(category));
 }

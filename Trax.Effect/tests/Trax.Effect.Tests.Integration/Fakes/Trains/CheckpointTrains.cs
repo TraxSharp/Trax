@@ -100,7 +100,7 @@ public static class CheckpointProbe
                 SavesAt[junction] = count();
         }
 
-        if (FailIn == junction)
+        if (string.Equals(FailIn, junction, StringComparison.Ordinal))
             throw new TimeoutException($"{junction} timed out");
     }
 
@@ -249,24 +249,26 @@ public sealed class MakeDirty(IDataContext context) : Junction<CheckedFindings, 
         switch (CheckpointProbe.Dirty)
         {
             case DirtyMode.UnsavedChange:
-                await context.Track(
-                    new ManifestGroup
-                    {
-                        Name = $"{CheckpointWriteNames.DirtyGroup}{Guid.NewGuid():N}",
-                    }
-                );
+                await context
+                    .Track(
+                        new ManifestGroup
+                        {
+                            Name = $"{CheckpointWriteNames.DirtyGroup}{Guid.NewGuid():N}",
+                        }
+                    )
+                    .ConfigureAwait(false);
                 break;
             case DirtyMode.OpenTransaction
                 when context is DbContext { Database: var database } && database.IsSqlite():
                 // Deferred, so it holds no lock until it writes: an immediate one would hold
                 // SQLite's write lock and make the run's own terminal write wait it out.
-                await database.OpenConnectionAsync();
+                await database.OpenConnectionAsync().ConfigureAwait(false);
                 database.UseTransaction(
                     ((SqliteConnection)database.GetDbConnection()).BeginTransaction(deferred: true)
                 );
                 break;
             case DirtyMode.OpenTransaction:
-                await context.BeginTransaction();
+                await context.BeginTransaction().ConfigureAwait(false);
                 break;
         }
 

@@ -46,7 +46,7 @@ public class RunnerNonceStorageTests : TestSetup
     {
         using var context = (IDataContext)DataContextFactory.Create();
         context.RunnerNonces.Add(new RunnerNonce { Nonce = nonce, ExpiresAt = expiresAt });
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
     }
 
     [Test]
@@ -131,7 +131,7 @@ public class RunnerNonceStorageTests : TestSetup
                     {
                         try
                         {
-                            await Insert(nonce, expiresAt);
+                            await Insert(nonce, expiresAt).ConfigureAwait(false);
                             return "inserted";
                         }
                         catch (DbUpdateException e) when (Dialect.IsUniqueViolation(e))
@@ -142,8 +142,8 @@ public class RunnerNonceStorageTests : TestSetup
                 )
         );
 
-        outcomes.Count(o => o == "inserted").Should().Be(1);
-        outcomes.Count(o => o == "conflict").Should().Be(7);
+        outcomes.Count(o => string.Equals(o, "inserted", StringComparison.Ordinal)).Should().Be(1);
+        outcomes.Count(o => string.Equals(o, "conflict", StringComparison.Ordinal)).Should().Be(7);
     }
 
     [Test]

@@ -329,7 +329,7 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
     private async Task<Models.Metadata.Metadata> Crash(string junction)
     {
         CheckpointProbe.FailIn = junction;
-        var failed = await Run();
+        var failed = await Run().ConfigureAwait(false);
         failed.TrainState.Should().Be(TrainState.Failed);
         CheckpointProbe.Reset();
         _decider.Asked = 0;
@@ -343,7 +343,9 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
         long? manifestId = null
     )
     {
-        var (run, _) = await _host.Run<IResearchTrain>(input, resumeFrom, resumeAt, manifestId);
+        var (run, _) = await _host
+            .Run<IResearchTrain>(input, resumeFrom, resumeAt, manifestId)
+            .ConfigureAwait(false);
         _runs.Add(run.Id);
         return run;
     }

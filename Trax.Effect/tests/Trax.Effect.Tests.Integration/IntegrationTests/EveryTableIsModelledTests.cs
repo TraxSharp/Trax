@@ -210,14 +210,16 @@ public class EveryTableIsModelledTests : TestSetup
     )
     {
         // The context's own connection: its connection string no longer carries the password.
-        await context.Database.OpenConnectionAsync();
-        await using var command = context.Database.GetDbConnection().CreateCommand();
+        await context.Database.OpenConnectionAsync().ConfigureAwait(false);
+        var command = context.Database.GetDbConnection().CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText =
             "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'trax'";
 
         var tables = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
+        while (await reader.ReadAsync().ConfigureAwait(false))
         {
             var table = reader.GetString(0);
             if (!tables.TryGetValue(table, out var columns))

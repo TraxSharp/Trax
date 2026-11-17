@@ -10,7 +10,7 @@ namespace Trax.Effect.Services.TrainEventBroadcaster;
 /// Lifecycle hook that publishes train state transitions to an <see cref="ITrainEventBroadcaster"/>
 /// for cross-process delivery. Registered automatically by <c>UseBroadcaster()</c>.
 /// </summary>
-internal class BroadcastLifecycleHook : ITrainLifecycleHook
+internal sealed class BroadcastLifecycleHook : ITrainLifecycleHook
 {
     private static readonly string? LocalExecutor = Assembly
         .GetEntryAssembly()
@@ -46,7 +46,7 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
     /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnStarted(Metadata metadata, CancellationToken ct)
     {
-        await PublishAsync(metadata, "Started", ct);
+        await PublishAsync(metadata, "Started", ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -58,7 +58,7 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
     /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnCompleted(Metadata metadata, CancellationToken ct)
     {
-        await PublishAsync(metadata, "Completed", ct);
+        await PublishAsync(metadata, "Completed", ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -72,7 +72,7 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
     /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
     {
-        await PublishAsync(metadata, "Failed", ct);
+        await PublishAsync(metadata, "Failed", ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -84,7 +84,7 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
     /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnCancelled(Metadata metadata, CancellationToken ct)
     {
-        await PublishAsync(metadata, "Cancelled", ct);
+        await PublishAsync(metadata, "Cancelled", ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -96,7 +96,7 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
     /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnStateChanged(Metadata metadata, CancellationToken ct)
     {
-        await PublishAsync(metadata, "StateChanged", ct);
+        await PublishAsync(metadata, "StateChanged", ct).ConfigureAwait(false);
     }
 
     private async Task PublishAsync(Metadata metadata, string eventType, CancellationToken ct)
@@ -127,6 +127,6 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
             metadata.ExternalId
         );
 
-        await _broadcaster.PublishAsync(message, ct);
+        await _broadcaster.PublishAsync(message, ct).ConfigureAwait(false);
     }
 }

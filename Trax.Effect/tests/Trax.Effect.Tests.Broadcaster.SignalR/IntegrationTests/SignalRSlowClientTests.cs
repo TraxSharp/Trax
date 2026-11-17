@@ -69,7 +69,7 @@ public class SignalRSlowClientTests
         await socket.SendAsync(
             Encoding.UTF8.GetBytes("{\"protocol\":\"json\",\"version\":1}\u001e"),
             WebSocketMessageType.Text,
-            true,
+            endOfMessage: true,
             CancellationToken.None
         );
         // Read the handshake response, so the connection is registered with the hub before the

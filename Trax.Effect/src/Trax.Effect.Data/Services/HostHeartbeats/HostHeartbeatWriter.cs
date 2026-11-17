@@ -48,12 +48,15 @@ internal sealed class HostHeartbeatWriter(
         var now = clock.GetUtcNow().UtcDateTime;
         _startedAt ??= now;
 
-        await using var context = await contexts.CreateDbContextAsync(cancellationToken);
+        var context = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
-        var row = await context.HostHeartbeats.FirstOrDefaultAsync(
-            h => h.InstanceId == host.HostInstanceId,
-            cancellationToken
-        );
+        var row = await context
+            .HostHeartbeats.FirstOrDefaultAsync(
+                h => h.InstanceId == host.HostInstanceId,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         if (row is null)
         {
             row = new HostRow { InstanceId = host.HostInstanceId };
@@ -79,9 +82,10 @@ internal sealed class HostHeartbeatWriter(
             .HostHeartbeats.Where(h =>
                 h.LastHeartbeatAt < expiredBefore && h.InstanceId != host.HostInstanceId
             )
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
         context.HostHeartbeats.RemoveRange(expired);
 
-        await context.SaveChanges(cancellationToken);
+        await context.SaveChanges(cancellationToken).ConfigureAwait(false);
     }
 }

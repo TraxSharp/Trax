@@ -50,7 +50,7 @@ public class EffectRunnerPendingClaimTests
 
         (await runner.TryClaimPendingRun(metadata, CancellationToken.None)).Should().BeFalse();
 
-        runner.TryClaimPendingRun(default!, default).ReturnsForAnyArgs(true);
+        runner.TryClaimPendingRun(default!, default).ReturnsForAnyArgs(returnThis: true);
 
         (await runner.TryClaimPendingRun(metadata, CancellationToken.None)).Should().BeTrue();
     }

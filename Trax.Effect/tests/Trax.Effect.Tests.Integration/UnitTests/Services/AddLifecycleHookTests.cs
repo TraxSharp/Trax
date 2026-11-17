@@ -284,26 +284,26 @@ public class AddLifecycleHookTests
 
     #region Test Stubs
 
-    private class StubHook : ITrainLifecycleHook { }
+    private sealed class StubHook : ITrainLifecycleHook;
 
-    private class AnotherStubHook : ITrainLifecycleHook { }
+    private sealed class AnotherStubHook : ITrainLifecycleHook;
 
-    private interface IDependency { }
+    private interface IDependency;
 
-    private class FakeDependency : IDependency { }
+    private sealed class FakeDependency : IDependency;
 
-    private class HookWithDependency(AddLifecycleHookTests.IDependency dependency)
+    private sealed class HookWithDependency(AddLifecycleHookTests.IDependency dependency)
         : ITrainLifecycleHook
     {
         public IDependency Dependency => dependency;
     }
 
-    private class StubHookFactory : ITrainLifecycleHookFactory
+    private sealed class StubHookFactory : ITrainLifecycleHookFactory
     {
         public ITrainLifecycleHook Create() => new StubHook();
     }
 
-    private class AnotherStubHookFactory : ITrainLifecycleHookFactory
+    private sealed class AnotherStubHookFactory : ITrainLifecycleHookFactory
     {
         public ITrainLifecycleHook Create() => new StubHook();
     }

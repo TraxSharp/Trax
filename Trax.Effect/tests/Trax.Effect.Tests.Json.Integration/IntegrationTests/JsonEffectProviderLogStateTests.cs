@@ -40,7 +40,7 @@ public class JsonEffectProviderLogStateTests
         values.Should().NotContain(kv => kv.Key.StartsWith('@'));
         values.Should().NotContain(kv => ReferenceEquals(kv.Value, model));
         values
-            .Single(kv => kv.Key == "Metadata")
+            .Single(kv => string.Equals(kv.Key, "Metadata", StringComparison.Ordinal))
             .Value.Should()
             .BeOfType<string>()
             .Which.Should()

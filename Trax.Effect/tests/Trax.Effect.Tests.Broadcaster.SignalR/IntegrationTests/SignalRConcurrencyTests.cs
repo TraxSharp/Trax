@@ -34,7 +34,7 @@ public class SignalRConcurrencyTests
         {
             if (condition())
                 return true;
-            await Task.Delay(20);
+            await Task.Delay(20).ConfigureAwait(false);
         }
         return condition();
     }
@@ -56,7 +56,8 @@ public class SignalRConcurrencyTests
         await Parallel.ForEachAsync(
             ids,
             new ParallelOptions { MaxDegreeOfParallelism = 16 },
-            async (id, ct) => await dispatcher.HandleAsync(Message(id, "Completed"), ct)
+            async (id, ct) =>
+                await dispatcher.HandleAsync(Message(id, "Completed"), ct).ConfigureAwait(false)
         );
 
         var ok = await WaitUntilAsync(() => received.Count >= ids.Length, Timeout);
@@ -87,7 +88,8 @@ public class SignalRConcurrencyTests
             completedIds
                 .Select(id => (id, type: "Completed"))
                 .Concat(failedIds.Select(id => (id, type: "Failed"))),
-            async (item, ct) => await dispatcher.HandleAsync(Message(item.id, item.type), ct)
+            async (item, ct) =>
+                await dispatcher.HandleAsync(Message(item.id, item.type), ct).ConfigureAwait(false)
         );
 
         var ok = await WaitUntilAsync(() => received.Count >= completedIds.Length, Timeout);

@@ -11,7 +11,7 @@ namespace Trax.Effect.Services.LifecycleHookRunner;
 /// Exceptions in individual hooks are caught and logged — a failing hook never causes
 /// the train itself to fail.
 /// </summary>
-internal class LifecycleHookRunner : ILifecycleHookRunner
+internal sealed class LifecycleHookRunner : ILifecycleHookRunner
 {
     private readonly List<ITrainLifecycleHook> _hooks;
     private readonly ILogger<LifecycleHookRunner>? _logger;
@@ -68,7 +68,7 @@ internal class LifecycleHookRunner : ILifecycleHookRunner
         {
             try
             {
-                await hook.OnStarted(metadata, ct);
+                await hook.OnStarted(metadata, ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -81,7 +81,7 @@ internal class LifecycleHookRunner : ILifecycleHookRunner
             }
         }
 
-        await OnStateChanged(metadata, ct);
+        await OnStateChanged(metadata, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ internal class LifecycleHookRunner : ILifecycleHookRunner
         {
             try
             {
-                await hook.OnCompleted(metadata, ct);
+                await hook.OnCompleted(metadata, ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -110,7 +110,7 @@ internal class LifecycleHookRunner : ILifecycleHookRunner
             }
         }
 
-        await OnStateChanged(metadata, ct);
+        await OnStateChanged(metadata, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -127,7 +127,7 @@ internal class LifecycleHookRunner : ILifecycleHookRunner
         {
             try
             {
-                await hook.OnFailed(metadata, exception, ct);
+                await hook.OnFailed(metadata, exception, ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -140,7 +140,7 @@ internal class LifecycleHookRunner : ILifecycleHookRunner
             }
         }
 
-        await OnStateChanged(metadata, ct);
+        await OnStateChanged(metadata, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -156,7 +156,7 @@ internal class LifecycleHookRunner : ILifecycleHookRunner
         {
             try
             {
-                await hook.OnCancelled(metadata, ct);
+                await hook.OnCancelled(metadata, ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -169,7 +169,7 @@ internal class LifecycleHookRunner : ILifecycleHookRunner
             }
         }
 
-        await OnStateChanged(metadata, ct);
+        await OnStateChanged(metadata, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -185,7 +185,7 @@ internal class LifecycleHookRunner : ILifecycleHookRunner
         {
             try
             {
-                await hook.OnStateChanged(metadata, ct);
+                await hook.OnStateChanged(metadata, ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

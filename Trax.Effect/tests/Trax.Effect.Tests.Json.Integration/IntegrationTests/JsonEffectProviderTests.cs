@@ -43,9 +43,12 @@ public class JsonEffectProviderTests : TestSetup
         // 3. One LifecycleHookRunner logger (ILogger<LifecycleHookRunner>) - may have empty logs
         var jsonProviderLoggers = arrayProvider
             .Loggers.Where(logger =>
-                logger.Logs.Any(log =>
-                    log.Category
-                    == "Trax.Effect.Provider.Json.Services.JsonEffect.JsonEffectProvider"
+                logger.Logs.Exists(log =>
+                    string.Equals(
+                        log.Category,
+                        "Trax.Effect.Provider.Json.Services.JsonEffect.JsonEffectProvider",
+                        StringComparison.Ordinal
+                    )
                 )
             )
             .ToList();
@@ -57,16 +60,16 @@ public class JsonEffectProviderTests : TestSetup
                 "There should be exactly one JsonEffectProvider logger with JSON metadata logs"
             );
 
-        var jsonProviderLogger = jsonProviderLoggers.First();
+        var jsonProviderLogger = jsonProviderLoggers[0];
         jsonProviderLogger
             .Logs.Should()
             .NotBeEmpty("JsonEffectProvider logger should contain JSON metadata logs");
     }
 
-    private class TestTrain : ServiceTrain<Unit, Unit>, ITestTrain
+    private sealed class TestTrain : ServiceTrain<Unit, Unit>, ITestTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
     }
 
-    private interface ITestTrain : IServiceTrain<Unit, Unit> { }
+    private interface ITestTrain : IServiceTrain<Unit, Unit>;
 }

@@ -530,7 +530,7 @@ public class InMemoryProviderTests : TestSetup
 
         var act = async () =>
         {
-            var transaction = await context.BeginTransaction();
+            var transaction = await context.BeginTransaction().ConfigureAwait(false);
             transaction.Dispose();
         };
 
@@ -545,8 +545,8 @@ public class InMemoryProviderTests : TestSetup
 
         var act = async () =>
         {
-            var transaction = await context.BeginTransaction();
-            await context.CommitTransaction();
+            var transaction = await context.BeginTransaction().ConfigureAwait(false);
+            await context.CommitTransaction().ConfigureAwait(false);
             transaction.Dispose();
         };
 
@@ -561,8 +561,8 @@ public class InMemoryProviderTests : TestSetup
 
         var act = async () =>
         {
-            var transaction = await context.BeginTransaction();
-            await context.RollbackTransaction();
+            var transaction = await context.BeginTransaction().ConfigureAwait(false);
+            await context.RollbackTransaction().ConfigureAwait(false);
             transaction.Dispose();
         };
 
@@ -577,7 +577,9 @@ public class InMemoryProviderTests : TestSetup
 
         var act = async () =>
         {
-            var transaction = await context.BeginTransaction(CancellationToken.None);
+            var transaction = await context
+                .BeginTransaction(CancellationToken.None)
+                .ConfigureAwait(false);
             transaction.Dispose();
         };
 
@@ -725,7 +727,7 @@ public class InMemoryProviderTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IFailingTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.Metadata.Should().NotBeNull();
@@ -742,7 +744,7 @@ public class InMemoryProviderTests : TestSetup
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var act = async () => await train.Run(Unit.Default, cts.Token);
+        var act = async () => await train.Run(Unit.Default, cts.Token).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         // When a train is pre-cancelled, the cancellation fires inside RunInternal
@@ -803,29 +805,29 @@ public class InMemoryProviderTests : TestSetup
 
     #region Test Trains
 
-    private class TestTrain : ServiceTrain<Unit, Unit>, ITestTrain
+    private sealed class TestTrain : ServiceTrain<Unit, Unit>, ITestTrain
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Chain<ObserveCancellation>().Resolve();
     }
 
-    private interface ITestTrain : IServiceTrain<Unit, Unit> { }
+    private interface ITestTrain : IServiceTrain<Unit, Unit>;
 
-    private class FailingTrain : ServiceTrain<Unit, Unit>, IFailingTrain
+    private sealed class FailingTrain : ServiceTrain<Unit, Unit>, IFailingTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions() =>
             new TrainException("Intentional failure for testing");
     }
 
-    private interface IFailingTrain : IServiceTrain<Unit, Unit> { }
+    private interface IFailingTrain : IServiceTrain<Unit, Unit>;
 
-    private class TypedTrain : ServiceTrain<string, int>, ITypedTrain
+    private sealed class TypedTrain : ServiceTrain<string, int>, ITypedTrain
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Task.FromResult(Extract<string, int>().Resolve());
     }
 
-    private interface ITypedTrain : IServiceTrain<string, int> { }
+    private interface ITypedTrain : IServiceTrain<string, int>;
 
     #endregion
 }

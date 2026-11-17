@@ -65,7 +65,7 @@ public class JunctionsApiTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJunctionsFailingTrain>();
 
-        var act = async () => await train.Run("hello");
+        var act = async () => await train.Run("hello").ConfigureAwait(false);
 
         await act.Should().ThrowAsync<Exception>();
 
@@ -78,45 +78,45 @@ public class JunctionsApiTests : TestSetup
 
     #region Fakes
 
-    private class StringLengthJunction : Junction<string, int>
+    private sealed class StringLengthJunction : Junction<string, int>
     {
         public override async Task<int> Run(string input) => input.Length;
     }
 
-    private class IntToStringJunction : Junction<int, string>
+    private sealed class IntToStringJunction : Junction<int, string>
     {
         public override async Task<string> Run(int input) => input.ToString();
     }
 
-    private class ThrowingJunction : Junction<string, int>
+    private sealed class ThrowingJunction : Junction<string, int>
     {
         public override Task<int> Run(string input) =>
             throw new InvalidOperationException("junction failed");
     }
 
-    private class JunctionsTrain : ServiceTrain<string, int>, IJunctionsTrain
+    private sealed class JunctionsTrain : ServiceTrain<string, int>, IJunctionsTrain
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<StringLengthJunction>().Resolve();
     }
 
-    private interface IJunctionsTrain : IServiceTrain<string, int> { }
+    private interface IJunctionsTrain : IServiceTrain<string, int>;
 
-    private class JunctionsMultiTrain : ServiceTrain<string, string>, IJunctionsMultiTrain
+    private sealed class JunctionsMultiTrain : ServiceTrain<string, string>, IJunctionsMultiTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<StringLengthJunction>().Chain<IntToStringJunction>().Resolve();
     }
 
-    private interface IJunctionsMultiTrain : IServiceTrain<string, string> { }
+    private interface IJunctionsMultiTrain : IServiceTrain<string, string>;
 
-    private class JunctionsFailingTrain : ServiceTrain<string, int>, IJunctionsFailingTrain
+    private sealed class JunctionsFailingTrain : ServiceTrain<string, int>, IJunctionsFailingTrain
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<ThrowingJunction>().Resolve();
     }
 
-    private interface IJunctionsFailingTrain : IServiceTrain<string, int> { }
+    private interface IJunctionsFailingTrain : IServiceTrain<string, int>;
 
     #endregion
 }

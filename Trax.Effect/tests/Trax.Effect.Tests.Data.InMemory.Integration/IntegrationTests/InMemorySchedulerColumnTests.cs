@@ -24,7 +24,8 @@ public class InMemorySchedulerColumnTests : TestSetup
     private async Task<IDataContext> NewContext() =>
         await Scope
             .ServiceProvider.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
     [Test]
     public async Task The_scheduler_columns_are_kept()

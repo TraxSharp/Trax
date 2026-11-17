@@ -34,7 +34,7 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         RabbitMqBroadcasterOptions options,
         ILogger<RabbitMqTrainEventReceiver>? logger = null
     )
-        : this(options, logger, null) { }
+        : this(options, logger, time: null) { }
 
     internal RabbitMqTrainEventReceiver(
         RabbitMqBroadcasterOptions options,
@@ -95,15 +95,15 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         if (_options.Problem() is { } problem)
             throw new InvalidOperationException(problem);
 
-        await ReleaseAsync();
+        await ReleaseAsync().ConfigureAwait(false);
 
         try
         {
-            await OpenAsync(handler, ct);
+            await OpenAsync(handler, ct).ConfigureAwait(false);
         }
         catch
         {
-            await ReleaseAsync();
+            await ReleaseAsync().ConfigureAwait(false);
             throw;
         }
 
@@ -133,44 +133,54 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
     )
     {
         var factory = new ConnectionFactory { Uri = new Uri(_options.ConnectionString) };
-        _connection = await factory.CreateConnectionAsync(ct);
-        _channel = await _connection.CreateChannelAsync(cancellationToken: ct);
+        _connection = await factory.CreateConnectionAsync(ct).ConfigureAwait(false);
+        _channel = await _connection
+            .CreateChannelAsync(cancellationToken: ct)
+            .ConfigureAwait(false);
         var channel = _channel;
 
         // Bound how many deliveries the broker pushes before this receiver acknowledges them.
-        await _channel.BasicQosAsync(
-            prefetchSize: 0,
-            prefetchCount: _options.PrefetchCount,
-            global: false,
-            cancellationToken: ct
-        );
+        await _channel
+            .BasicQosAsync(
+                prefetchSize: 0,
+                prefetchCount: _options.PrefetchCount,
+                global: false,
+                cancellationToken: ct
+            )
+            .ConfigureAwait(false);
 
-        await _channel.ExchangeDeclareAsync(
-            exchange: _options.ExchangeName,
-            type: ExchangeType.Fanout,
-            durable: true,
-            autoDelete: false,
-            cancellationToken: ct
-        );
+        await _channel
+            .ExchangeDeclareAsync(
+                exchange: _options.ExchangeName,
+                type: ExchangeType.Fanout,
+                durable: true,
+                autoDelete: false,
+                cancellationToken: ct
+            )
+            .ConfigureAwait(false);
 
-        var queueDeclareResult = await _channel.QueueDeclareAsync(
-            queue: string.Empty,
-            durable: false,
-            exclusive: true,
-            autoDelete: true,
-            cancellationToken: ct
-        );
+        var queueDeclareResult = await _channel
+            .QueueDeclareAsync(
+                queue: string.Empty,
+                durable: false,
+                exclusive: true,
+                autoDelete: true,
+                cancellationToken: ct
+            )
+            .ConfigureAwait(false);
         _queueName = queueDeclareResult.QueueName;
 
-        await _channel.QueueBindAsync(
-            queue: _queueName,
-            exchange: _options.ExchangeName,
-            routingKey: string.Empty,
-            cancellationToken: ct
-        );
+        await _channel
+            .QueueBindAsync(
+                queue: _queueName,
+                exchange: _options.ExchangeName,
+                routingKey: string.Empty,
+                cancellationToken: ct
+            )
+            .ConfigureAwait(false);
 
         if (BindJunctionExchange)
-            await BindJunctionsAsync(_connection, _queueName, ct);
+            await BindJunctionsAsync(_connection, _queueName, ct).ConfigureAwait(false);
 
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += async (_, ea) =>
@@ -180,12 +190,14 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
                 var signature = BroadcastMessageSignature.Read(ea.BasicProperties.Headers);
                 if (!_verifier.Accept(ea.Exchange, ea.Body.Span, signature))
                 {
-                    await channel.BasicNackAsync(
-                        ea.DeliveryTag,
-                        multiple: false,
-                        requeue: false,
-                        cancellationToken: ct
-                    );
+                    await channel
+                        .BasicNackAsync(
+                            ea.DeliveryTag,
+                            multiple: false,
+                            requeue: false,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false);
                     return;
                 }
 
@@ -193,29 +205,35 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
 
                 if (message is not null && FromItsExchange(message, ea.Exchange))
                 {
-                    await handler(message, ct);
+                    await handler(message, ct).ConfigureAwait(false);
                 }
 
-                await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, ct);
+                await channel
+                    .BasicAckAsync(ea.DeliveryTag, multiple: false, ct)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "Error processing lifecycle event from RabbitMQ.");
-                await channel.BasicNackAsync(
-                    ea.DeliveryTag,
-                    multiple: false,
-                    requeue: false,
-                    cancellationToken: ct
-                );
+                await channel
+                    .BasicNackAsync(
+                        ea.DeliveryTag,
+                        multiple: false,
+                        requeue: false,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
             }
         };
 
-        await _channel.BasicConsumeAsync(
-            queue: _queueName,
-            autoAck: false,
-            consumer: consumer,
-            cancellationToken: ct
-        );
+        await _channel
+            .BasicConsumeAsync(
+                queue: _queueName,
+                autoAck: false,
+                consumer: consumer,
+                cancellationToken: ct
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -236,20 +254,27 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         var junctions = _options.EffectiveJunctionExchangeName;
         try
         {
-            await using var channel = await connection.CreateChannelAsync(cancellationToken: ct);
-            await channel.ExchangeDeclareAsync(
-                exchange: junctions,
-                type: ExchangeType.Fanout,
-                durable: true,
-                autoDelete: false,
-                cancellationToken: ct
-            );
-            await channel.QueueBindAsync(
-                queue: queue,
-                exchange: junctions,
-                routingKey: string.Empty,
-                cancellationToken: ct
-            );
+            var channel = await connection
+                .CreateChannelAsync(cancellationToken: ct)
+                .ConfigureAwait(false);
+            await using var channelDisposal = channel.ConfigureAwait(false);
+            await channel
+                .ExchangeDeclareAsync(
+                    exchange: junctions,
+                    type: ExchangeType.Fanout,
+                    durable: true,
+                    autoDelete: false,
+                    cancellationToken: ct
+                )
+                .ConfigureAwait(false);
+            await channel
+                .QueueBindAsync(
+                    queue: queue,
+                    exchange: junctions,
+                    routingKey: string.Empty,
+                    cancellationToken: ct
+                )
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
             when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
@@ -272,7 +297,7 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
             || TrainLifecycleEventMessage.IsJunctionEvent(message.EventType);
         var expected = junction ? _options.EffectiveJunctionExchangeName : _options.ExchangeName;
 
-        if (exchange == expected)
+        if (string.Equals(exchange, expected, StringComparison.Ordinal))
             return true;
 
         _logger?.LogWarning(
@@ -300,14 +325,17 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         {
             if (_queueName is not null)
                 await IgnoringClosed(() =>
-                    _channel.QueueDeleteAsync(_queueName, cancellationToken: ct)
-                );
+                        _channel.QueueDeleteAsync(_queueName, cancellationToken: ct)
+                    )
+                    .ConfigureAwait(false);
 
-            await IgnoringClosed(() => _channel.CloseAsync(cancellationToken: ct));
+            await IgnoringClosed(() => _channel.CloseAsync(cancellationToken: ct))
+                .ConfigureAwait(false);
         }
 
         if (_connection is { IsOpen: true })
-            await IgnoringClosed(() => _connection.CloseAsync(cancellationToken: ct));
+            await IgnoringClosed(() => _connection.CloseAsync(cancellationToken: ct))
+                .ConfigureAwait(false);
 
         _logger?.LogInformation("RabbitMQ receiver stopped.");
     }
@@ -318,7 +346,7 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        await ReleaseAsync();
+        await ReleaseAsync().ConfigureAwait(false);
         GC.SuppressFinalize(this);
     }
 
@@ -334,14 +362,20 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         if (channel is not null)
         {
             if (channel.IsOpen)
-                await IgnoringClosed(() => channel.CloseAsync());
+                await IgnoringClosed(() =>
+                        channel.CloseAsync(cancellationToken: CancellationToken.None)
+                    )
+                    .ConfigureAwait(false);
             channel.Dispose();
         }
 
         if (connection is not null)
         {
             if (connection.IsOpen)
-                await IgnoringClosed(() => connection.CloseAsync());
+                await IgnoringClosed(() =>
+                        connection.CloseAsync(cancellationToken: CancellationToken.None)
+                    )
+                    .ConfigureAwait(false);
             connection.Dispose();
         }
     }
@@ -352,7 +386,7 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
     {
         try
         {
-            await close();
+            await close().ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is AlreadyClosedException or ObjectDisposedException)
         {

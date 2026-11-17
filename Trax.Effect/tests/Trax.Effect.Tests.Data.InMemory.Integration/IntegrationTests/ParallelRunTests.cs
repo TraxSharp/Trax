@@ -100,19 +100,21 @@ public class ParallelRunTests
         var route = rows.Should().ContainSingle(r => r.Kind == JunctionRunKind.Route).Subject;
         route.BranchPath.Should().Be("Parallel#0/routes");
 
-        rows.Single(r => r.Name == nameof(ParInspect))
+        rows.Single(r => string.Equals(r.Name, nameof(ParInspect), StringComparison.Ordinal))
             .TrackPosition.Should()
             .Be(route.Position, "it runs on the track its own branch took");
 
         // The plain branch's junctions run after the routing branch has taken its track.
-        rows.Where(r => r.BranchPath == "Parallel#0/plain")
+        rows.Where(r => string.Equals(r.BranchPath, "Parallel#0/plain", StringComparison.Ordinal))
             .Should()
             .HaveCount(2)
             .And.OnlyContain(
                 r => r.TrackPosition == null,
                 "a sibling's routing step is not on this branch's path"
             );
-        rows.Single(r => r.Name == nameof(ParSeal)).TrackPosition.Should().BeNull();
+        rows.Single(r => string.Equals(r.Name, nameof(ParSeal), StringComparison.Ordinal))
+            .TrackPosition.Should()
+            .BeNull();
     }
 
     [Test]
@@ -263,8 +265,8 @@ public class ParallelRunTests
             }
         );
 
-        var output = await train.Run(input, metadata);
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
+        var output = await train.Run(input, metadata).ConfigureAwait(false);
+        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
         return (train, output);
     }
 
@@ -279,7 +281,8 @@ public class ParallelRunTests
         await FluentActions
             .Awaiting(() => train.Run(new ParOrder("o")))
             .Should()
-            .ThrowAsync<BranchesFailedException>();
+            .ThrowAsync<BranchesFailedException>()
+            .ConfigureAwait(false);
         return train;
     }
 
@@ -287,7 +290,11 @@ public class ParallelRunTests
     {
         using var scope = _provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        return await context.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync();
+        return await context
+            .JunctionRuns.AsNoTracking()
+            .ForRun(metadataId)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task<List<RecordedDecision>> Recorded(long metadataId)
@@ -298,7 +305,8 @@ public class ParallelRunTests
             .RecordedDecisions.AsNoTracking()
             .Where(d => d.MetadataId == metadataId)
             .OrderBy(d => d.Id)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 }
 
@@ -359,7 +367,7 @@ internal static class ParMeeting
     public static async Task Arrive(bool isA)
     {
         (isA ? _a : _b).TrySetResult();
-        await (isA ? _b : _a).Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await (isA ? _b : _a).Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
         Met = true;
     }
 
@@ -375,8 +383,8 @@ internal static class ParMeeting
     public static async Task UntilCancelled(CancellationToken token)
     {
         var cancelled = New();
-        await using (token.Register(() => cancelled.TrySetCanceled(token)))
-            await cancelled.Task;
+        await using ((token.Register(() => cancelled.TrySetCanceled(token))).ConfigureAwait(false))
+            await cancelled.Task.ConfigureAwait(false);
     }
 
     private static TaskCompletionSource New() =>
@@ -456,7 +464,7 @@ public class ParScoreA : EffectJunction<ParOrder, ParA>
 {
     public override async Task<ParA> Run(ParOrder input)
     {
-        await ParMeeting.Arrive(isA: true);
+        await ParMeeting.Arrive(isA: true).ConfigureAwait(false);
         return new ParA(1);
     }
 }
@@ -474,7 +482,7 @@ public class ParScoreB : EffectJunction<ParOrder, ParB>
 {
     public override async Task<ParB> Run(ParOrder input)
     {
-        await ParMeeting.Arrive(isA: false);
+        await ParMeeting.Arrive(isA: false).ConfigureAwait(false);
         return new ParB(10);
     }
 }
@@ -508,7 +516,7 @@ public class ParAwaitInspection : EffectJunction<ParOrder, ParOrder>
 {
     public override async Task<ParOrder> Run(ParOrder input)
     {
-        await ParMeeting.Inspected.WaitAsync(TimeSpan.FromSeconds(30));
+        await ParMeeting.Inspected.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
         return input;
     }
 }
@@ -552,7 +560,7 @@ public class ParWaitA : EffectJunction<ParOrder, ParA>
     public override async Task<ParA> Run(ParOrder input)
     {
         ParMeeting.Waiting();
-        await ParMeeting.UntilCancelled(CancellationToken);
+        await ParMeeting.UntilCancelled(CancellationToken).ConfigureAwait(false);
         return new ParA(0);
     }
 }
@@ -562,7 +570,7 @@ public class ParWaitB : EffectJunction<ParOrder, ParB>
     public override async Task<ParB> Run(ParOrder input)
     {
         ParMeeting.Waiting();
-        await ParMeeting.UntilCancelled(CancellationToken);
+        await ParMeeting.UntilCancelled(CancellationToken).ConfigureAwait(false);
         return new ParB(0);
     }
 }

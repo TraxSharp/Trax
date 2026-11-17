@@ -81,7 +81,7 @@ public class JsonEffectProvider(
 
                 if (
                     !_previousStates.TryGetValue(model, out var previousState)
-                    || previousState != currentState
+                    || !string.Equals(previousState, currentState, StringComparison.Ordinal)
                 )
                 {
                     _previousStates[model] = currentState;

@@ -210,8 +210,9 @@ public class SqliteEveryTableIsModelledTests : TestSetup
         DbContext context
     )
     {
-        await context.Database.OpenConnectionAsync();
-        await using var command = context.Database.GetDbConnection().CreateCommand();
+        await context.Database.OpenConnectionAsync().ConfigureAwait(false);
+        var command = context.Database.GetDbConnection().CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             SELECT m.name, c.name
             FROM sqlite_master m, pragma_table_info(m.name) c
@@ -219,8 +220,9 @@ public class SqliteEveryTableIsModelledTests : TestSetup
             """;
 
         var tables = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
+        while (await reader.ReadAsync().ConfigureAwait(false))
         {
             var table = reader.GetString(0);
             if (!tables.TryGetValue(table, out var columns))

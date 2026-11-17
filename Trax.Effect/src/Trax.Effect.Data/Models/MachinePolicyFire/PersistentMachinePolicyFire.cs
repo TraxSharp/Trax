@@ -8,7 +8,7 @@ namespace Trax.Effect.Data.Models.MachinePolicyFire;
 /// whose source or target was deleted is dropped when it is fired, and a key would depend on pk_snapshot_draft, which an
 /// earlier script drops and rebuilds when it runs again (effect/0014).
 /// </summary>
-internal class PersistentMachinePolicyFire : BaseModel
+internal sealed class PersistentMachinePolicyFire : BaseModel
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)
     {

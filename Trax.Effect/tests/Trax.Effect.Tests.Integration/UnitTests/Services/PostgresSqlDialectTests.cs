@@ -39,7 +39,7 @@ public class PostgresSqlDialectTests
     {
         var dialect = Create();
         var method = dialect.GetType().GetMethod("ClaimWorkQueueEntry")!;
-        var sql = (string)method.Invoke(dialect, null)!;
+        var sql = (string)method.Invoke(dialect, parameters: null)!;
 
         sql.Should().Contain("FOR UPDATE SKIP LOCKED");
         sql.Should().Contain("trax.work_queue");
@@ -61,7 +61,7 @@ public class PostgresSqlDialectTests
     {
         var dialect = Create();
         var sql = (string)
-            dialect.GetType().GetMethod("ClaimWorkQueueEntry")!.Invoke(dialect, null)!;
+            dialect.GetType().GetMethod("ClaimWorkQueueEntry")!.Invoke(dialect, parameters: null)!;
 
         sql.Should()
             .Contain(
@@ -87,7 +87,10 @@ public class PostgresSqlDialectTests
     {
         var dialect = Create();
         var sql = (string)
-            dialect.GetType().GetMethod("LoadGroupFairQueuedJobs")!.Invoke(dialect, null)!;
+            dialect
+                .GetType()
+                .GetMethod("LoadGroupFairQueuedJobs")!
+                .Invoke(dialect, parameters: null)!;
 
         sql.Should().NotContain("b.subject_key = wq.subject_key");
         sql.Should().Contain("b.subject_key IS NOT NULL");
@@ -98,7 +101,7 @@ public class PostgresSqlDialectTests
     {
         var dialect = Create();
         var method = dialect.GetType().GetMethod("DequeueBackgroundJobs")!;
-        var sql = (string)method.Invoke(dialect, null)!;
+        var sql = (string)method.Invoke(dialect, parameters: null)!;
 
         sql.Should().Contain("trax.background_job");
         sql.Should().Contain("ORDER BY priority DESC");
@@ -110,7 +113,7 @@ public class PostgresSqlDialectTests
     {
         var dialect = Create();
         var method = dialect.GetType().GetMethod("LoadGroupFairQueuedJobs")!;
-        var sql = (string)method.Invoke(dialect, null)!;
+        var sql = (string)method.Invoke(dialect, parameters: null)!;
 
         sql.Should().Contain("ROW_NUMBER()");
         sql.Should().Contain("PARTITION BY m.manifest_group_id");

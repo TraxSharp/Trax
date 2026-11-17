@@ -1,3 +1,3 @@
 namespace Trax.Effect.Tests.Integration;
 
-public class AssemblyMarker { }
+public static class AssemblyMarker;

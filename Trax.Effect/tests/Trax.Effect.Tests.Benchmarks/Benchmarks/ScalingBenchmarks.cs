@@ -54,10 +54,22 @@ public class ScalingBenchmarks
         using var scope = _provider.CreateScope();
         return JunctionCount switch
         {
-            1 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX1Train>().Run(0),
-            3 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX3Train>().Run(0),
-            5 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX5Train>().Run(0),
-            10 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX10Train>().Run(0),
+            1 => await scope
+                .ServiceProvider.GetRequiredService<IEffectAddOneX1Train>()
+                .Run(0)
+                .ConfigureAwait(false),
+            3 => await scope
+                .ServiceProvider.GetRequiredService<IEffectAddOneX3Train>()
+                .Run(0)
+                .ConfigureAwait(false),
+            5 => await scope
+                .ServiceProvider.GetRequiredService<IEffectAddOneX5Train>()
+                .Run(0)
+                .ConfigureAwait(false),
+            10 => await scope
+                .ServiceProvider.GetRequiredService<IEffectAddOneX10Train>()
+                .Run(0)
+                .ConfigureAwait(false),
             _ => throw new ArgumentOutOfRangeException(),
         };
     }

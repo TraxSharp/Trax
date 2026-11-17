@@ -53,7 +53,10 @@ public class TraxDeployExportTests
     [Test]
     public async Task The_gate_refuses_an_exporting_process_that_starts_to_serve()
     {
-        var act = async () => await new DeployExportServeGate().StartAsync(CancellationToken.None);
+        var act = async () =>
+            await new DeployExportServeGate()
+                .StartAsync(CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()

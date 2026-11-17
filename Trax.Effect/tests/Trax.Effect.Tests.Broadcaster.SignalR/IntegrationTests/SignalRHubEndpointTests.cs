@@ -43,8 +43,10 @@ public class SignalRHubEndpointTests
     [Test]
     public async Task ClientConnects_AtCustomPath()
     {
-        await using var server = await SignalRTestServer.StartAsync(hubPath: "/hubs/custom");
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync(hubPath: "/hubs/custom");
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         await connection.StartAsync().WaitAsync(Timeout);
 
@@ -54,8 +56,10 @@ public class SignalRHubEndpointTests
     [Test]
     public async Task Hub_DeliversTraxClientEventToConnectedClient_ViaIHubContext()
     {
-        await using var server = await SignalRTestServer.StartAsync();
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync();
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var tcs = new TaskCompletionSource<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => tcs.TrySetResult(evt));
@@ -69,7 +73,7 @@ public class SignalRHubEndpointTests
             "T.IDoThing",
             "Completed",
             DateTime.UtcNow,
-            null
+            FailureReason: null
         );
         await hub.Clients.All.TrainEvent(payload);
 
@@ -82,8 +86,10 @@ public class SignalRHubEndpointTests
     [Test]
     public async Task Dispatcher_DeliversToConnectedClient_EndToEnd()
     {
-        await using var server = await SignalRTestServer.StartAsync();
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync();
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var tcs = new TaskCompletionSource<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => tcs.TrySetResult(evt));
@@ -100,10 +106,10 @@ public class SignalRHubEndpointTests
     [Test]
     public async Task Dispatcher_FilterExclusion_ExcludedEventIsNotDelivered_IncludedIs()
     {
-        await using var server = await SignalRTestServer.StartAsync(opts =>
-            opts.OnlyForEvents("Completed")
-        );
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync(opts => opts.OnlyForEvents("Completed"));
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var tcs = new TaskCompletionSource<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => tcs.TrySetResult(evt));
@@ -151,7 +157,7 @@ public class SignalRHubEndpointTests
                 })
         );
 
-        Func<Task> act = async () => await hostBuilder.StartAsync();
+        Func<Task> act = async () => await hostBuilder.StartAsync().ConfigureAwait(false);
 
         act.Should().ThrowAsync<InvalidOperationException>().Result.WithMessage("*AddSignalR()*");
     }
@@ -163,7 +169,8 @@ public class SignalRHubEndpointTests
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddSignalR();
-        await using var app = builder.Build();
+        var app = builder.Build();
+        await using var appDisposal = app.ConfigureAwait(false);
         map(app);
 
         return ((IEndpointRouteBuilder)app)

@@ -80,7 +80,7 @@ public class StateHashKeyTests
                 ReplayDecisionsOf = replayDecisionsOf,
             }
         );
-        await train.Run(input, metadata);
+        await train.Run(input, metadata).ConfigureAwait(false);
         return train.Metadata!.Id;
     }
 
@@ -92,7 +92,8 @@ public class StateHashKeyTests
             .RecordedDecisions.AsNoTracking()
             .Where(d => d.MetadataId == metadataId)
             .Select(d => d.StateHash)
-            .SingleAsync();
+            .SingleAsync()
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -382,7 +383,7 @@ internal sealed class OneValueConfiguration(string key, string value) : IConfigu
 {
     public string? this[string k]
     {
-        get => k == key ? value : null;
+        get => string.Equals(k, key, StringComparison.Ordinal) ? value : null;
         set => throw new NotSupportedException();
     }
 

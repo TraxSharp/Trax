@@ -93,7 +93,7 @@ public class PendingRunClaimTests
 
         await StartFromRow(first, id);
         var train = (CountingTrain)second.ServiceProvider.GetRequiredService<ICountingTrain>();
-        var act = async () => await train.Run(Unit.Default, staleCopy);
+        var act = async () => await train.Run(Unit.Default, staleCopy).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainAlreadyStartedException>();
         CountingTrain.BodyRuns.Should().Be(1);
@@ -122,16 +122,16 @@ public class PendingRunClaimTests
 
     private async Task StartFromRow(IServiceScope scope, long id)
     {
-        var metadata = await ReadRow(id);
+        var metadata = await ReadRow(id).ConfigureAwait(false);
         var train = (CountingTrain)scope.ServiceProvider.GetRequiredService<ICountingTrain>();
-        await train.Run(Unit.Default, metadata);
+        await train.Run(Unit.Default, metadata).ConfigureAwait(false);
     }
 
     private static async Task<Exception?> Settle(Task run)
     {
         try
         {
-            await run;
+            await run.ConfigureAwait(false);
             return null;
         }
         catch (Exception ex)
@@ -152,8 +152,8 @@ public class PendingRunClaimTests
                 Input = Unit.Default,
             }
         );
-        await context.Track(metadata);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(metadata).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         return metadata.Id;
     }
@@ -163,7 +163,10 @@ public class PendingRunClaimTests
         using var context = (IDataContext)
             _provider.GetRequiredService<IDataContextProviderFactory>().Create();
 
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == id)
+            .ConfigureAwait(false);
     }
 
     public interface ICountingTrain : IServiceTrain<Unit, Unit>;

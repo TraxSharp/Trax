@@ -57,8 +57,10 @@ public class FailureTrainNameTests
         using var scope = _provider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<TTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
-        var thrown = await act.Should().ThrowAsync<InvalidOperationException>();
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var thrown = await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .ConfigureAwait(false);
 
         return thrown
             .Which.Data["TrainExceptionData"]

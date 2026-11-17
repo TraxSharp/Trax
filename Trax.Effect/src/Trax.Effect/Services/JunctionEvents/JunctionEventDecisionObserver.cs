@@ -37,25 +37,26 @@ internal sealed class JunctionEventDecisionObserver : IDecisionObserver
         var now = DateTime.UtcNow;
 
         await run.Publish(
-            TrainLifecycleEventMessage.DecidedEventType,
-            run.OnTrack(
-                new JunctionEventPayload(
-                    run.NextPosition(),
-                    kind,
-                    key,
-                    JunctionRunState.Completed,
-                    now,
-                    now,
-                    0,
-                    QuestionKey: key,
-                    Answer: answer,
-                    Confidence: confidence,
-                    Replayed: decision.Replayed,
-                    Decider: decision.Decider?.FullName,
-                    AnswerWithheld: withheld
+                TrainLifecycleEventMessage.DecidedEventType,
+                run.OnTrack(
+                    new JunctionEventPayload(
+                        run.NextPosition(),
+                        kind,
+                        key,
+                        JunctionRunState.Completed,
+                        now,
+                        now,
+                        0,
+                        QuestionKey: key,
+                        Answer: answer,
+                        Confidence: confidence,
+                        Replayed: decision.Replayed,
+                        Decider: decision.Decider?.FullName,
+                        AnswerWithheld: withheld
+                    )
                 )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -73,22 +74,23 @@ internal sealed class JunctionEventDecisionObserver : IDecisionObserver
         // The refused answer and the reason are left out: the answer is one the run would not act
         // on, and the reason quotes it.
         await run.Publish(
-            TrainLifecycleEventMessage.DecisionRefusedEventType,
-            run.OnTrack(
-                new JunctionEventPayload(
-                    run.NextPosition(),
-                    kind,
-                    key,
-                    JunctionRunState.Failed,
-                    now,
-                    now,
-                    0,
-                    QuestionKey: key,
-                    Decider: refusal.Decider.FullName,
-                    AnswerWithheld: SensitiveQuestions.IsSensitive(refusal.QuestionType, key)
+                TrainLifecycleEventMessage.DecisionRefusedEventType,
+                run.OnTrack(
+                    new JunctionEventPayload(
+                        run.NextPosition(),
+                        kind,
+                        key,
+                        JunctionRunState.Failed,
+                        now,
+                        now,
+                        0,
+                        QuestionKey: key,
+                        Decider: refusal.Decider.FullName,
+                        AnswerWithheld: SensitiveQuestions.IsSensitive(refusal.QuestionType, key)
+                    )
                 )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -125,7 +127,7 @@ internal sealed class JunctionEventDecisionObserver : IDecisionObserver
         // names, which would give the track away.
         run.Routed(position, withheld);
 
-        await run.Publish(TrainLifecycleEventMessage.RoutedEventType, step);
+        await run.Publish(TrainLifecycleEventMessage.RoutedEventType, step).ConfigureAwait(false);
     }
 
     private static JunctionRunKind? KindOf(Question question) =>

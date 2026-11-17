@@ -40,7 +40,7 @@ internal sealed class LifecycleEventQueue(int capacity)
     /// The event given up to stay within capacity: <paramref name="message"/> itself, or the queued
     /// event it replaced. <c>null</c> when nothing was dropped.
     /// </param>
-    /// <returns><c>false</c> only when the queue was completed; nothing is dropped then.</returns>
+    /// <returns><see langword="false"/> only when the queue was completed; nothing is dropped then.</returns>
     public bool TryWrite(
         TrainLifecycleEventMessage message,
         out TrainLifecycleEventMessage? dropped
@@ -88,7 +88,7 @@ internal sealed class LifecycleEventQueue(int capacity)
     /// <param name="ct">Abandons the wait.</param>
     public async ValueTask<TrainLifecycleEventMessage?> ReadAsync(CancellationToken ct)
     {
-        await _available.WaitAsync(ct);
+        await _available.WaitAsync(ct).ConfigureAwait(false);
         lock (_items)
         {
             if (_items.First is not { } first)

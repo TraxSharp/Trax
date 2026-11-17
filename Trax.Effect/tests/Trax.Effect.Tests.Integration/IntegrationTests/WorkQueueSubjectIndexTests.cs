@@ -48,7 +48,8 @@ public class WorkQueueSubjectIndexTests : TestSetup
         using var context = (DbContext)DataContextFactory.Create();
         var connection = (NpgsqlConnection)context.Database.GetDbConnection();
         await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
+        var transaction = await connection.BeginTransactionAsync();
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
 
         // 60,000 queued entries, one in twenty carrying one of 600 subjects, and 20,000 dispatched
         // entries for the same subjects: a backlog mostly of manifest work, as a real one is.
@@ -89,14 +90,16 @@ public class WorkQueueSubjectIndexTests : TestSetup
 
     private static async Task Execute(DbConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     private static async Task<string> Explain(NpgsqlConnection connection, string subject)
     {
-        await using var command = new NpgsqlCommand(QueuedBehindLookup, connection);
+        var command = new NpgsqlCommand(QueuedBehindLookup, connection);
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.Parameters.AddWithValue("subject", subject);
         command.Parameters.AddWithValue("id", 0L);
         command.Parameters.AddWithValue("now", DateTime.UtcNow);
@@ -107,8 +110,9 @@ public class WorkQueueSubjectIndexTests : TestSetup
         );
 
         var lines = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
+        while (await reader.ReadAsync().ConfigureAwait(false))
             lines.Add(reader.GetString(0));
 
         return string.Join('\n', lines);

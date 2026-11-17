@@ -61,12 +61,12 @@ public class ChainDeclarationTests
         train.ReadInput().Should().BeNull("no metadata is attached, so the input is default");
     }
 
-    private class PassThrough : Junction<string, string>
+    private sealed class PassThrough : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input);
     }
 
-    private class WellBehavedTrain : ServiceTrain<string, string>
+    private sealed class WellBehavedTrain : ServiceTrain<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<PassThrough>().Resolve();
@@ -74,13 +74,13 @@ public class ChainDeclarationTests
         internal string ReadInput() => TrainInput;
     }
 
-    private class ReadsItsInputTrain : ServiceTrain<string, string>
+    private sealed class ReadsItsInputTrain : ServiceTrain<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             TrainInput.Length > 3 ? Chain<PassThrough>().Resolve() : Chain<PassThrough>().Resolve();
     }
 
-    private class ReadsItsOutputTrain : ServiceTrain<string, string>
+    private sealed class ReadsItsOutputTrain : ServiceTrain<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions()
         {

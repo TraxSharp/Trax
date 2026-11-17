@@ -402,7 +402,7 @@ public class DecisionRecordingTests
         var train =
             (ServiceTrain<Order, string>)
                 (object)scope.ServiceProvider.GetRequiredService<IRouteOrder>();
-        var run = async () => await train.Run(new Order("o-unbuilt", 20m));
+        var run = async () => await train.Run(new Order("o-unbuilt", 20m)).ConfigureAwait(false);
         await run.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*could not be built*");
@@ -682,7 +682,7 @@ public class DecisionRecordingTests
         if (storeInput)
             metadata.Input = System.Text.Json.JsonSerializer.Serialize(order);
 
-        await train.Run(order, metadata);
+        await train.Run(order, metadata).ConfigureAwait(false);
         return train.Metadata!.Id;
     }
 
@@ -1366,11 +1366,11 @@ public class DecisionRecordingTests
         {
             using var scope = _provider.CreateScope();
             var train = scope.ServiceProvider.GetRequiredService<TTrain>();
-            return (train, await train.Run(order));
+            return (train, await train.Run(order).ConfigureAwait(false));
         }
 
         var (started, run) = Start<TTrain>(order, replayDecisionsOf: replayDecisionsOf);
-        return (started, await run());
+        return (started, await run().ConfigureAwait(false));
     }
 
     private (TTrain Train, Func<Task<string>> Run) Start<TTrain>(
@@ -1399,7 +1399,7 @@ public class DecisionRecordingTests
             async () =>
             {
                 using (scope)
-                    return await train.Run(order, metadata);
+                    return await train.Run(order, metadata).ConfigureAwait(false);
             }
         );
     }
@@ -1431,7 +1431,7 @@ public class DecisionRecordingTests
         metadata.DecisionsRecorded = decisionsRecorded;
         metadata.ReplayAbandoned = replayAbandoned;
         context.Metadatas.Add(metadata);
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return metadata.Id;
     }
 
@@ -1440,9 +1440,11 @@ public class DecisionRecordingTests
         using var scope = _provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
-        var metadata = await context.Metadatas.SingleAsync(m => m.Id == metadataId);
+        var metadata = await context
+            .Metadatas.SingleAsync(m => m.Id == metadataId)
+            .ConfigureAwait(false);
         metadata.ReplayDecisionsOf = replayDecisionsOf;
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task Forget(long metadataId, int occurrence)
@@ -1456,7 +1458,7 @@ public class DecisionRecordingTests
             )
         );
 
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task Rewrite(
@@ -1470,7 +1472,7 @@ public class DecisionRecordingTests
         foreach (var decision in context.RecordedDecisions.Where(d => d.MetadataId == metadataId))
             change(decision);
 
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
@@ -1481,7 +1483,8 @@ public class DecisionRecordingTests
         return await context
             .RecordedDecisions.AsNoTracking()
             .Where(d => d.MetadataId == metadataId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 }
 
@@ -1931,7 +1934,7 @@ public class AfterTheChainIsBuilt(Task built) : Junction<Order, Order>
 {
     public override async Task<Order> Run(Order input)
     {
-        await built.WaitAsync(TimeSpan.FromSeconds(30));
+        await built.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
         return input;
     }
 }
@@ -1978,7 +1981,7 @@ public class DecideInAPlainTrainOffFlow(
                 new PlainRush(decider, observer, replay) { ExternalId = ExternalId }.Run(input)
             );
 
-        var output = await plain;
+        var output = await plain.ConfigureAwait(false);
         Decided = true;
         return output;
     }
@@ -2039,7 +2042,7 @@ public abstract class Meeting<TSelf> : Junction<Order, Order>
         if (Interlocked.Increment(ref _arrived) == _expected)
             all.TrySetResult();
 
-        await all.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await all.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
         return input;
     }
 }
@@ -2061,19 +2064,23 @@ public class PeekDecisions(IDataContextProviderFactory factory) : EffectJunction
     {
         Seen.Clear();
         var id = Metadata!.TrainMetadataId;
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
         var state = await context
             .Metadatas.AsNoTracking()
             .Where(m => m.Id == id)
             .Select(m => m.TrainState)
-            .SingleAsync();
+            .SingleAsync()
+            .ConfigureAwait(false);
 
         foreach (
             var decision in await context
                 .RecordedDecisions.AsNoTracking()
                 .Where(d => d.MetadataId == id)
                 .ToListAsync()
+                .ConfigureAwait(false)
         )
             Seen.Add((decision.MetadataId, state, decision.Tracks().SingleOrDefault()));
 

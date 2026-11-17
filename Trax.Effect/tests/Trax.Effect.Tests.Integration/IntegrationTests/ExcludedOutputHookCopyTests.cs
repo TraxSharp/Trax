@@ -82,7 +82,7 @@ public class ExcludedOutputHookCopyTests
         public ITrainLifecycleHook Create() => hook;
     }
 
-    private class BigFetchTrain : ServiceTrain<Unit, List<string>>, IBigFetchTrain
+    private sealed class BigFetchTrain : ServiceTrain<Unit, List<string>>, IBigFetchTrain
     {
         protected override Task<Either<Exception, List<string>>> Junctions() =>
             Task.FromResult<Either<Exception, List<string>>>(
@@ -90,5 +90,5 @@ public class ExcludedOutputHookCopyTests
             );
     }
 
-    public interface IBigFetchTrain : IServiceTrain<Unit, List<string>> { }
+    public interface IBigFetchTrain : IServiceTrain<Unit, List<string>>;
 }

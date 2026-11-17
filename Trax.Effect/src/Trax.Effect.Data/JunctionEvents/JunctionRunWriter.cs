@@ -75,7 +75,7 @@ internal sealed class JunctionRunWriter
         // The writer is often first resolved on a train run's flow. Its loop outlives that run, so
         // it must not carry the run's ambient state (its own log lines would name the run).
         using (ExecutionContext.SuppressFlow())
-            _writer = Task.Run(WriteLoopAsync);
+            _writer = Task.Run(WriteLoopAsync, CancellationToken.None);
     }
 
     /// <summary>Steps dropped because the queue was full, since the writer was created.</summary>
@@ -84,7 +84,7 @@ internal sealed class JunctionRunWriter
     /// <inheritdoc />
     public void Write(long metadataId, JunctionEventPayload step)
     {
-        if (_queue.Writer.TryWrite(new Item(metadataId, step, null)))
+        if (_queue.Writer.TryWrite(new Item(metadataId, step, Flushed: null)))
             return;
 
         // A write refused because the writer stopped is not a drop caused by a slow database.
@@ -110,8 +110,10 @@ internal sealed class JunctionRunWriter
     internal async Task FlushAsync(CancellationToken cancellationToken = default)
     {
         var flushed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        await _queue.Writer.WriteAsync(new Item(0, null, flushed), cancellationToken);
-        await flushed.Task.WaitAsync(cancellationToken);
+        await _queue
+            .Writer.WriteAsync(new Item(0, Step: null, flushed), cancellationToken)
+            .ConfigureAwait(false);
+        await flushed.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task WriteLoopAsync()
@@ -121,12 +123,13 @@ internal sealed class JunctionRunWriter
 
         try
         {
-            while (await reader.WaitToReadAsync(_abandon.Token))
+            while (await reader.WaitToReadAsync(_abandon.Token).ConfigureAwait(false))
             {
                 while (batch.Count < BatchSize && reader.TryRead(out var item))
                     batch.Add(item);
 
-                await WriteBatchAsync(batch.Where(i => i.Step is not null).ToList());
+                await WriteBatchAsync(batch.Where(i => i.Step is not null).ToList())
+                    .ConfigureAwait(false);
 
                 foreach (var item in batch)
                     item.Flushed?.TrySetResult();
@@ -164,7 +167,7 @@ internal sealed class JunctionRunWriter
 
         try
         {
-            await WriteAsync(steps);
+            await WriteAsync(steps).ConfigureAwait(false);
             Recovered();
             return;
         }
@@ -181,7 +184,7 @@ internal sealed class JunctionRunWriter
         {
             try
             {
-                await WriteAsync([step]);
+                await WriteAsync([step]).ConfigureAwait(false);
                 Recovered();
             }
             catch (Exception e)
@@ -216,7 +219,9 @@ internal sealed class JunctionRunWriter
 
     private async Task WriteAsync(IReadOnlyList<Item> steps)
     {
-        using var context = await _contexts.CreateDbContextAsync(CancellationToken.None);
+        using var context = await _contexts
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
         // Only a junction's end updates a row; every other step is a row of its own. The rows the
         // batch's ends update are read in one query, so a batch costs two round trips whatever its
@@ -238,7 +243,8 @@ internal sealed class JunctionRunWriter
                     .JunctionRuns.Where(r =>
                         runs.Contains(r.MetadataId) && positions.Contains(r.Position)
                     )
-                    .ToListAsync()
+                    .ToListAsync(CancellationToken.None)
+                    .ConfigureAwait(false)
             )
                 if (wanted.Contains((existing.MetadataId, existing.Position)))
                     rows[(existing.MetadataId, existing.Position)] = existing;
@@ -260,7 +266,7 @@ internal sealed class JunctionRunWriter
             Apply(row, step);
         }
 
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
     }
 
     private static bool Ends(JunctionEventPayload step) =>
@@ -301,11 +307,11 @@ internal sealed class JunctionRunWriter
 
         try
         {
-            await _writer.WaitAsync(cancellationToken);
+            await _writer.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            await _abandon.CancelAsync();
+            await _abandon.CancelAsync().ConfigureAwait(false);
             _logger?.LogWarning(
                 "Junction run writer stopped before its queue drained; {Remaining} steps were not written.",
                 _queue.Reader.Count
@@ -317,7 +323,7 @@ internal sealed class JunctionRunWriter
     public async ValueTask DisposeAsync()
     {
         using (var timeout = new CancellationTokenSource(DisposeDrainTimeout))
-            await StopAsync(timeout.Token);
+            await StopAsync(timeout.Token).ConfigureAwait(false);
 
         _abandon.Dispose();
     }

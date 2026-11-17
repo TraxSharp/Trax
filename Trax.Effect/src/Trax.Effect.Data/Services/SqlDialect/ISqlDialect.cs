@@ -32,7 +32,7 @@ public interface ISqlDialect
     /// for the busy timeout and fail. The scheduler reads this to run its manifest manager with no
     /// outer transaction and to start one local worker by default.
     ///
-    /// Defaults to <c>false</c>, which keeps this from breaking implementations outside this repo.
+    /// Defaults to <see langword="false"/>, which keeps this from breaking implementations outside this repo.
     /// </remarks>
     bool HasSingleWriter => false;
 
@@ -102,7 +102,7 @@ public interface ISqlDialect
     /// provider SQL, and without mistaking an unrelated database error for that answer: catch
     /// <see cref="DbUpdateException"/> only <c>when</c> this is true, and let anything else throw.
     ///
-    /// Defaults to <c>false</c>, which keeps this from breaking implementations outside this repo
+    /// Defaults to <see langword="false"/>, which keeps this from breaking implementations outside this repo
     /// and fails the safe way: a conflict such a provider does not recognise throws instead of
     /// being read as one.
     /// </remarks>
@@ -121,7 +121,7 @@ public interface ISqlDialect
     /// exception types by name, which would treat every database error as transient, a constraint
     /// violation or a syntax error included.
     ///
-    /// Defaults to <c>false</c>, which keeps this from breaking implementations outside this repo
+    /// Defaults to <see langword="false"/>, which keeps this from breaking implementations outside this repo
     /// and fails the safe way: a provider that does not recognise a failure reports it rather than
     /// retrying it.
     /// </remarks>

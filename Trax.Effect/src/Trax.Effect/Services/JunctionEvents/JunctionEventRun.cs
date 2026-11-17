@@ -58,7 +58,11 @@ internal sealed class JunctionEventRun
     /// run's external id. A decision of another train run on the same flow is not this run's.
     /// </summary>
     public static JunctionEventRun? ForDecision(string train, string runId) =>
-        Current is { } run && run.DecisionTrain == train && run.ExternalId == runId ? run : null;
+        Current is { } run
+        && string.Equals(run.DecisionTrain, train, StringComparison.Ordinal)
+        && string.Equals(run.ExternalId, runId, StringComparison.Ordinal)
+            ? run
+            : null;
 
     /// <summary>The run's row.</summary>
     public Metadata Metadata { get; }

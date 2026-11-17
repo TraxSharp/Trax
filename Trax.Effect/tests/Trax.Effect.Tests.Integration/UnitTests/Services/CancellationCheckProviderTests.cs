@@ -37,7 +37,9 @@ public class CancellationCheckProviderTests
 
         // train.Metadata is null — should be a no-op.
         Func<Task> act = async () =>
-            await provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+            await provider
+                .BeforeJunctionExecution(junction, train, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -61,7 +63,9 @@ public class CancellationCheckProviderTests
 
         // Metadata not persisted to DB — query returns default(false) → no throw.
         Func<Task> act = async () =>
-            await provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+            await provider
+                .BeforeJunctionExecution(junction, train, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -94,7 +98,7 @@ public class CancellationCheckProviderTests
             .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)!
             .SetValue(train, metadata);
 
-    private class TestTrain : ServiceTrain<string, string>
+    private sealed class TestTrain : ServiceTrain<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<PassThrough1_263>().Resolve();
@@ -105,7 +109,7 @@ public class CancellationCheckProviderTests
         }
     }
 
-    private class TestEffectJunction : EffectJunction<string, string>
+    private sealed class TestEffectJunction : EffectJunction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input);
     }

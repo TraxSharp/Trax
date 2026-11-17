@@ -107,15 +107,15 @@ public class TraxAllowAnonymousAttributeTests
     }
 
     [TraxAllowAnonymous]
-    private class DirectlyDecorated { }
+    private static class DirectlyDecorated;
 
     [TraxAllowAnonymous]
-    private class AnonymousBase { }
+    private class AnonymousBase;
 
-    private class DerivedFromAnonymousBase : AnonymousBase { }
+    private sealed class DerivedFromAnonymousBase : AnonymousBase;
 
     [TraxAllowAnonymous]
-    private interface IAnonymouslyReadable { }
+    private interface IAnonymouslyReadable;
 
-    private class ImplementsAnonymousInterface : IAnonymouslyReadable { }
+    private sealed class ImplementsAnonymousInterface : IAnonymouslyReadable;
 }

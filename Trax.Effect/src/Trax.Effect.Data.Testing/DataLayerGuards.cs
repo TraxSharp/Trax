@@ -281,7 +281,7 @@ public static class DataLayerGuards
                         + "or exempt it with a reason."
                 );
 
-            if (clr.GetCustomAttribute<TraxQueryModelAttribute>(inherit: true) is null)
+            if (!Attribute.IsDefined(clr, typeof(TraxQueryModelAttribute), inherit: true))
                 continue;
 
             var posture = TraxAuthorization.Read(clr);
@@ -399,7 +399,7 @@ public static class DataLayerGuards
             {
                 if (!perUser.Contains(t) || options.Exemptions.ContainsKey(t))
                     return false;
-                if (t.GetCustomAttribute<TraxQueryModelAttribute>(inherit: true) is null)
+                if (!Attribute.IsDefined(t, typeof(TraxQueryModelAttribute), inherit: true))
                     return false;
                 var posture = TraxAuthorization.Read(t);
                 return posture.AllowAnonymous || !posture.HasAuthorize;
@@ -518,7 +518,7 @@ public static class DataLayerGuards
             {
                 var types = ElementTypes(reference).ToList();
                 if (types.Count > 0)
-                    return types.All(entityTypeNames.Contains);
+                    return types.TrueForAll(entityTypeNames.Contains);
             }
             return false;
         }
@@ -927,7 +927,7 @@ public static class DataLayerGuards
         }
 
         parts.Reverse();
-        return string.Join(".", parts);
+        return string.Join('.', parts);
     }
 
     /// <summary>

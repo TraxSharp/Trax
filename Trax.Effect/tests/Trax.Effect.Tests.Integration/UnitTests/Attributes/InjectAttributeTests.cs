@@ -66,11 +66,11 @@ public class InjectAttributeTests
 
     #region Test helpers
 
-    private interface ITestService { }
+    private interface ITestService;
 
-    private class TestService : ITestService { }
+    private sealed class TestService : ITestService;
 
-    private class TestInjectable
+    private sealed class TestInjectable
     {
         [Inject]
         public ITestService? InjectedService { get; set; }

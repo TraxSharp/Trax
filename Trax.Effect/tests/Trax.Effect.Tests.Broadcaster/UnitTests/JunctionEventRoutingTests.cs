@@ -73,8 +73,8 @@ public class JunctionEventRoutingTests
             .Returns(Task.CompletedTask);
 
         var service = new TrainEventReceiverService(receiver, services);
-        await service.StartAsync(CancellationToken.None);
-        return (await started.Task.WaitAsync(Timeout), service);
+        await service.StartAsync(CancellationToken.None).ConfigureAwait(false);
+        return (await started.Task.WaitAsync(Timeout).ConfigureAwait(false), service);
     }
 
     [Test]

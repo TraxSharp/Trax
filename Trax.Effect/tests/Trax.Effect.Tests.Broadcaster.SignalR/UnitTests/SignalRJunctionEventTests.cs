@@ -328,7 +328,7 @@ public class SignalRJunctionEventTests
 
         var step = sent.Should().BeOfType<TraxJunctionClientEvent>().Subject;
         step.Name.Should().Be(name, $"a junction on a track gives its answer away. See {Adr}.");
-        step.NameWithheld.Should().Be(name == "(withheld)");
+        step.NameWithheld.Should().Be(string.Equals(name, "(withheld)", StringComparison.Ordinal));
         step.NodeId.Should()
             .Be(
                 step.NameWithheld ? null : ShipNode,

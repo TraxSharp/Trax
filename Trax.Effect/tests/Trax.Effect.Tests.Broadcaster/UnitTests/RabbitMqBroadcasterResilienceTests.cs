@@ -134,9 +134,9 @@ public class RabbitMqBroadcasterResilienceTests
 
         // A connection the broker has closed (a broker restart) and its channel.
         var closedConnection = Substitute.For<IConnection>();
-        closedConnection.IsOpen.Returns(false);
+        closedConnection.IsOpen.Returns(returnThis: false);
         var closedChannel = Substitute.For<IChannel>();
-        closedChannel.IsOpen.Returns(false);
+        closedChannel.IsOpen.Returns(returnThis: false);
         Set(broadcaster, "_connection", closedConnection);
         Set(broadcaster, "_channel", closedChannel);
 

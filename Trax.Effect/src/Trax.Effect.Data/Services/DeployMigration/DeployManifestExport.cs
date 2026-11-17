@@ -51,7 +51,7 @@ internal static class DeployManifestExport
         string[] Values(string kind) =>
             [
                 .. facts
-                    .Where(f => f.Kind == kind)
+                    .Where(f => string.Equals(f.Kind, kind, StringComparison.Ordinal))
                     .Select(f => f.Value)
                     .Distinct()
                     .Order(StringComparer.Ordinal),

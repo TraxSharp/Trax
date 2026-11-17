@@ -123,7 +123,9 @@ public class SystemTypeConverterTests
     private const string NotLoadedAssembly = "System.Formats.Tar";
 
     private static bool IsLoaded(string assemblyName) =>
-        AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == assemblyName);
+        AppDomain
+            .CurrentDomain.GetAssemblies()
+            .Any(a => string.Equals(a.GetName().Name, assemblyName, StringComparison.Ordinal));
 
     [Test]
     [TestCase("System.Formats.Tar.TarEntry, System.Formats.Tar")]
@@ -201,12 +203,12 @@ public class SystemTypeConverterTests
     }
 
     // Test helper classes
-    private class TestClass
+    private sealed class TestClass
     {
         public Type? TypeProperty { get; set; }
     }
 
-    private class ComplexObject
+    private sealed class ComplexObject
     {
         public string Name { get; set; } = null!;
         public Type? IntType { get; set; }

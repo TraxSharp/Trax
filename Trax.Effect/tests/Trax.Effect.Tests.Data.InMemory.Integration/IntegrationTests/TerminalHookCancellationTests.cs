@@ -49,7 +49,7 @@ public class TerminalHookCancellationTests : TestSetup
             await Task.WhenAny(Probe.Started.Task, runTask).WaitAsync(TimeSpan.FromSeconds(15));
             await cts.CancelAsync();
 
-            var awaiting = async () => await runTask;
+            var awaiting = async () => await runTask.ConfigureAwait(false);
             await awaiting.Should().ThrowAsync<OperationCanceledException>();
         }
         finally
@@ -136,36 +136,37 @@ public class TerminalHookCancellationTests : TestSetup
             new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    private class ParkedHookTrain : ServiceTrain<Unit, Unit>, IParkedHookTrain
+    private sealed class ParkedHookTrain : ServiceTrain<Unit, Unit>, IParkedHookTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
             var parked = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            await using var registration = CancellationToken.Register(() =>
-                parked.TrySetCanceled()
-            );
+            var registration = CancellationToken.Register(() => parked.TrySetCanceled());
+            await using var registrationDisposal = registration.ConfigureAwait(false);
 
             Probe.Started.TrySetResult();
-            await parked.Task;
+            await parked.Task.ConfigureAwait(false);
 
             return Resolve();
         }
     }
 
-    private class UninterruptibleHookTrain : ServiceTrain<Unit, Unit>, IUninterruptibleHookTrain
+    private sealed class UninterruptibleHookTrain
+        : ServiceTrain<Unit, Unit>,
+            IUninterruptibleHookTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
             Probe.Started.TrySetResult();
-            await Probe.Downstream.Task;
+            await Probe.Downstream.Task.ConfigureAwait(false);
 
             return Resolve();
         }
     }
 
-    private interface IParkedHookTrain : IServiceTrain<Unit, Unit> { }
+    private interface IParkedHookTrain : IServiceTrain<Unit, Unit>;
 
-    private interface IUninterruptibleHookTrain : IServiceTrain<Unit, Unit> { }
+    private interface IUninterruptibleHookTrain : IServiceTrain<Unit, Unit>;
 }

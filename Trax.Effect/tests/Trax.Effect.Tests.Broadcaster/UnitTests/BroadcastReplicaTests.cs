@@ -153,15 +153,15 @@ public class BroadcastReplicaTests
                 .Single();
 
             // ExecuteAsync runs in the background, so wait for it to subscribe before publishing.
-            await receiverService.StartAsync(CancellationToken.None);
-            await receiver.Subscribed.WaitAsync(TimeSpan.FromSeconds(10));
+            await receiverService.StartAsync(CancellationToken.None).ConfigureAwait(false);
+            await receiver.Subscribed.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
             return new Replica(provider, receiverService, handler);
         }
 
         public async ValueTask DisposeAsync()
         {
-            await _receiverService.StopAsync(CancellationToken.None);
-            await _provider.DisposeAsync();
+            await _receiverService.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await _provider.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -223,7 +223,7 @@ public class BroadcastReplicaTests
                 subs = _subs.ToList();
             }
             foreach (var sub in subs)
-                await sub(message, ct);
+                await sub(message, ct).ConfigureAwait(false);
         }
     }
 

@@ -578,7 +578,7 @@ public class SignalRTrainEventDispatcherTests
         await _client.Received(0).TrainEvent(Arg.Any<object>());
     }
 
-    private record MyShape(string Id, string TrainName);
+    private sealed record MyShape(string Id, string TrainName);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

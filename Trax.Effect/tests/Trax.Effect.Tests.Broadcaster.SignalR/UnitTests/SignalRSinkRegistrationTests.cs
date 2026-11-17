@@ -187,7 +187,7 @@ public class SignalRSinkRegistrationTests
 
         await receiver.StartAsync(handler, CancellationToken.None);
         await receiver.StopAsync(CancellationToken.None);
-        Func<Task> dispose = async () => await receiver.DisposeAsync();
+        Func<Task> dispose = async () => await receiver.DisposeAsync().ConfigureAwait(false);
         await dispose.Should().NotThrowAsync();
 
         // The no-op receiver must not invoke the supplied handler — there is no transport

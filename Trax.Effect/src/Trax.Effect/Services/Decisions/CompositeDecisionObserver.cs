@@ -174,7 +174,9 @@ internal static class DecisionObservers
             var key = new object();
             services.Remove(descriptor);
             services.Add(Keyed(descriptor, key));
-            services.AddSingleton(new DecisionObserverPart(key, null, KnownBestEffort(descriptor)));
+            services.AddSingleton(
+                new DecisionObserverPart(key, Tag: null, KnownBestEffort(descriptor))
+            );
         }
 
         if (

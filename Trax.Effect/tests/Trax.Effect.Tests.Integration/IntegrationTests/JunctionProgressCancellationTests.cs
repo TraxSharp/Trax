@@ -92,22 +92,22 @@ public class JunctionProgressCancellationTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    private class UninterruptibleJunction : EffectJunction<Unit, Unit>
+    private sealed class UninterruptibleJunction : EffectJunction<Unit, Unit>
     {
         public override async Task<Unit> Run(Unit input)
         {
             Downstream.Started.TrySetResult();
-            await Downstream.Answer.Task;
+            await Downstream.Answer.Task.ConfigureAwait(false);
             Downstream.WorkDone = true;
             return Unit.Default;
         }
     }
 
-    private class FinishesAnywayTrain : ServiceTrain<Unit, Unit>, IFinishesAnywayTrain
+    private sealed class FinishesAnywayTrain : ServiceTrain<Unit, Unit>, IFinishesAnywayTrain
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Chain<UninterruptibleJunction>().Resolve();
     }
 
-    public interface IFinishesAnywayTrain : IServiceTrain<Unit, Unit> { }
+    public interface IFinishesAnywayTrain : IServiceTrain<Unit, Unit>;
 }

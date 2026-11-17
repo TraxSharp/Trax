@@ -22,8 +22,8 @@ public interface IPendingRunClaim
     /// <param name="metadata">A run whose row already exists in the store.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>
-    /// <c>false</c> only when the row is stored and no longer <c>Pending</c>, because another
-    /// execution started it. <c>true</c> when this call moved the row, and when the row is not
+    /// <see langword="false"/> only when the row is stored and no longer <c>Pending</c>, because another
+    /// execution started it. <see langword="true"/> when this call moved the row, and when the row is not
     /// stored (a caller may hand a run a row it has not saved; that row is the run's own).
     /// </returns>
     Task<bool> TryClaimPendingRun(Metadata metadata, CancellationToken cancellationToken);
