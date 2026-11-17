@@ -42,15 +42,25 @@ generated file as a comment.
 Raising the package version can fail the build, because a new version can enable new rules.
 That pull request regenerates the profile and fixes what it reports.
 
+## The team's layer
+
+What the vendor's set does not say is added in one place and kept short: the rules the
+generator lists as added, and the APIs and syntax named in `BannedSymbols.txt` and
+`BannedSyntaxes.txt` at the repository root. It bans reading the clock, chance and the console
+from library code, and the null-forgiving operator in every form. This is the only part of the
+profile that is a choice of ours, so it is the only part worth arguing about.
+
 ## Exemplars
 
 **Enforced elsewhere:** `AnalyzerProfileTests` in Trax.Core's Tests.Meta project holds the
-generated profile to the package's defaults and fails on a suppression, and the build itself
-fails on any rule the profile reports.
+generated profile to the package's defaults and fails on a suppression, `BanLayerProbeTests`
+beside it runs the analyzers over code that breaks each ban and requires the diagnostic, and
+the build itself fails on any rule the profile reports.
 
 Not covered: the guard reads the profile and the sources of the folder it runs in. A folder
 that does not reference the package is not held to anything.
 
 ## Changelog
 
+- **2026-11-17**: Added the team's layer: banned APIs, banned syntax, and no null-forgiving operator.
 - **2026-11-17**: Recorded.

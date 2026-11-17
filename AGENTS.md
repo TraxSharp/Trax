@@ -152,6 +152,20 @@ Do not suppress warnings with `#pragma` or `<NoWarn>` unless there is no alterna
 root cause: `= null!;` for uninitialised properties, `AssertLoaded()` instead of `!`, nullable
 return types.
 
+### The analyzer profile
+
+A folder whose `Directory.Build.props` references `Meziantou.Analyzer` is under the analyzer
+profile (`Trax.Docs/adr/0061`); Trax.Core is the first. There every rule the package reports by
+default is an error, in `src` and tests alike, and nothing opts out: no `#pragma`, no `NoWarn`,
+no nearer `.editorconfig`. The root `.globalconfig` is generated; change it by editing
+`.github/scripts/generate-analyzer-profile.sh` and running it, never by hand.
+
+On top of the vendor's rules the profile bans what `BannedSymbols.txt` and `BannedSyntaxes.txt`
+at the root name. The null-forgiving operator is one of them, `null!` and `default!` included:
+give the member a real value or make it `required`, test for null, or call `NotNull()` (from
+`Trax.Core.Extensions`) to fail where the assumption breaks. A test that passes null on purpose
+writes `Null.Of<T>()`.
+
 ### Lockfiles
 
 Every project commits a `packages.lock.json`, and CI restores with `--locked-mode`. A modified
