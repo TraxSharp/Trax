@@ -27,7 +27,9 @@ public class ParAwaitInspection : EffectJunction<ParOrder, ParOrder>
 {
     public override async Task<ParOrder> Run(ParOrder input)
     {
-        await ParMeeting.Inspected.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        await ParMeeting
+            .Inspected.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None)
+            .ConfigureAwait(false);
         return input;
     }
 }

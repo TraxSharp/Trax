@@ -45,7 +45,11 @@ internal static class BranchPaths
     {
         var paths = new List<string> { Run };
 
-        for (var i = path.IndexOf('/'); i >= 0; i = path.IndexOf('/', i + 1))
+        for (
+            var i = path.IndexOf('/', StringComparison.Ordinal);
+            i >= 0;
+            i = path.IndexOf('/', i + 1)
+        )
             paths.Add(path[..i]);
 
         if (path.Length > 0)

@@ -31,7 +31,7 @@ public class OwnerScopeCompletenessTests
             PrincipalAccessorType = typeof(IOwnerPrincipal),
             NavigationScoped = navigationScoped ?? new Dictionary<Type, string>(),
             Exemptions = exemptions ?? new Dictionary<Type, string>(),
-            OwnerIdProperties = ownerIdProperties ?? new HashSet<string>(),
+            OwnerIdProperties = ownerIdProperties ?? new HashSet<string>(StringComparer.Ordinal),
             Gated = gated ?? new Dictionary<Type, string>(),
         };
 
@@ -132,7 +132,12 @@ public class OwnerScopeCompletenessTests
 
         var result = DataLayerGuards.OwnerScopeCompleteness(
             ModelOf<ScalarOwnerContext>(),
-            Options(ownerIdProperties: new HashSet<string> { nameof(AuditRow.OwnerId) })
+            Options(
+                ownerIdProperties: new HashSet<string>(StringComparer.Ordinal)
+                {
+                    nameof(AuditRow.OwnerId),
+                }
+            )
         );
 
         result.Offenders.Should().ContainSingle().Which.Should().Contain(nameof(AuditRow));

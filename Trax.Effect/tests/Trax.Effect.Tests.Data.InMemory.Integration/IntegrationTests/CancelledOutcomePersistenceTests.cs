@@ -191,7 +191,9 @@ public class CancelledOutcomePersistenceTests : TestSetup
             var parked = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            var registration = CancellationToken.Register(() => parked.TrySetCanceled());
+            var registration = CancellationToken.Register(() =>
+                parked.TrySetCanceled(CancellationToken.None)
+            );
             await using var registrationDisposal = registration.ConfigureAwait(false);
 
             Probe.Started.TrySetResult();
@@ -213,7 +215,9 @@ public class CancelledOutcomePersistenceTests : TestSetup
             var parked = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            var registration = CancellationToken.Register(() => parked.TrySetCanceled());
+            var registration = CancellationToken.Register(() =>
+                parked.TrySetCanceled(CancellationToken.None)
+            );
             await using var registrationDisposal = registration.ConfigureAwait(false);
 
             await parked.Task.ConfigureAwait(false);

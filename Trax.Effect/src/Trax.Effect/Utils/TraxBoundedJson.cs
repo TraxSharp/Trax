@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
@@ -17,12 +18,15 @@ public static class TraxBoundedJson
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static string TruncatedPlaceholder(int maxBytes) =>
-        $$"""{"_truncated": true, "_maxBytes": {{maxBytes}}}""";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""{"_truncated": true, "_maxBytes": {{maxBytes}}}"""
+        );
 
     /// <summary>
     /// Serializes <paramref name="value"/> as its runtime type, or returns
     /// <see cref="TruncatedPlaceholder"/> if it would exceed <paramref name="maxBytes"/> UTF-8
-    /// bytes. <c>null</c> <paramref name="maxBytes"/> is unbounded.
+    /// bytes. <see langword="null"/> <paramref name="maxBytes"/> is unbounded.
     /// </summary>
     /// <remarks>
     /// With a ceiling it serializes through the <c>Stream</c> overload, which flushes to the
@@ -56,7 +60,12 @@ public static class TraxBoundedJson
     }
 
     private sealed class PayloadTooLargeException(int maxBytes)
-        : Exception($"Serialized parameter exceeded {maxBytes} bytes.");
+        : Exception(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Serialized parameter exceeded {maxBytes} bytes."
+            )
+        );
 
     /// <summary>
     /// A write-only stream that forwards to an inner stream until a byte ceiling is crossed,

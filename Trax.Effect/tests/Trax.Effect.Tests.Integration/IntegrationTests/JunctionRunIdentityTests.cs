@@ -42,7 +42,7 @@ public class JunctionRunIdentityTests : TestSetup
         var junction = new RunIdProbeJunction();
         var train = BuildTrain(junction);
 
-        await train.Run(new RunIdProbeInput("run-identity"));
+        await train.Run(new RunIdProbeInput("run-identity"), CancellationToken.None);
 
         train.Metadata!.Id.Should().BeGreaterThan(0, "the run was persisted to Postgres");
         junction
@@ -61,7 +61,7 @@ public class JunctionRunIdentityTests : TestSetup
         var junction = new RunIdProbeJunction();
         var train = BuildTrain(junction);
 
-        await train.Run(new RunIdProbeInput("ordering"));
+        await train.Run(new RunIdProbeInput("ordering"), CancellationToken.None);
 
         junction.ObservedTrainMetadataId.Should().BeGreaterThan(0);
     }
@@ -75,8 +75,8 @@ public class JunctionRunIdentityTests : TestSetup
         var first = new RunIdProbeJunction();
         var second = new RunIdProbeJunction();
 
-        await BuildTrain(first).Run(new RunIdProbeInput("first"));
-        await BuildTrain(second).Run(new RunIdProbeInput("second"));
+        await BuildTrain(first).Run(new RunIdProbeInput("first"), CancellationToken.None);
+        await BuildTrain(second).Run(new RunIdProbeInput("second"), CancellationToken.None);
 
         first.ObservedTrainMetadataId.Should().BeGreaterThan(0);
         second.ObservedTrainMetadataId.Should().NotBe(first.ObservedTrainMetadataId);

@@ -11,7 +11,7 @@ public partial class TraxBuilder
     internal string? HostInstanceIdOverride { get; set; }
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Dictionary<string, string> HostLabels { get; } = new();
+    internal Dictionary<string, string> HostLabels { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Overrides the auto-detected host environment type.

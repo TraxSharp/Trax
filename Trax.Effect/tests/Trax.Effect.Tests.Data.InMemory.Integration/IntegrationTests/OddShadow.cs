@@ -28,7 +28,10 @@ public sealed class OddShadow : IDecider
     public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken ct) =>
         Task.FromResult(
             new DecisionResult(
-                new Dictionary<string, Answer> { [QuestionKey.For<Fulfilment>()] = new OddAnswer() }
+                new Dictionary<string, Answer>(StringComparer.Ordinal)
+                {
+                    [QuestionKey.For<Fulfilment>()] = new OddAnswer(),
+                }
             )
         );
 }

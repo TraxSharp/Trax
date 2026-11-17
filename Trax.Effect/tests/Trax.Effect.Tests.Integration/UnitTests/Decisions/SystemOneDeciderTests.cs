@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -116,7 +117,11 @@ public class SystemOneDeciderTests
                 new ChoiceAnswer(
                     "Refund",
                     0.8,
-                    new Dictionary<string, double> { ["Refund"] = 0.87, ["Escalate"] = 0.13 }
+                    new Dictionary<string, double>(StringComparer.Ordinal)
+                    {
+                        ["Refund"] = 0.87,
+                        ["Escalate"] = 0.13,
+                    }
                 )
                 {
                     Model = "jev-1.13.0",
@@ -200,7 +205,9 @@ public class SystemOneDeciderTests
         var decide = () => decider.Decide(Ticket, CancellationToken.None);
 
         var failure = (await decide.Should().ThrowAsync<DecisionServiceException>()).Which;
-        failure.Message.Should().Contain(((int)status).ToString());
+        failure
+            .Message.Should()
+            .Contain(((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture));
         ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
             .FailureClass.Should()
             .Be(FailureClass.Permanent);
@@ -1121,8 +1128,12 @@ public class SystemOneDeciderTests
             var port = ((IPEndPoint)probe.LocalEndpoint).Port;
             probe.Stop();
 
-            Endpoint = new Uri($"http://127.0.0.1:{port}/v1/systemone");
-            _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+            Endpoint = new Uri(
+                string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/v1/systemone")
+            );
+            _listener.Prefixes.Add(
+                string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/")
+            );
             _listener.Start();
             _ = Serve(answer);
         }
@@ -1180,7 +1191,7 @@ public class SystemOneDeciderTests
         Func<Task>? waitFor = null
     ) : HttpMessageHandler
     {
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
 
         private readonly List<(int Count, TaskCompletionSource Reached)> _watchers = [];
 

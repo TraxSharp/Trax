@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -120,7 +121,9 @@ public class QueueHookInputTests
                 if (Interlocked.Increment(ref entered) == 2)
                     bothEntered.SetResult();
 
-                await bothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                await bothEntered
+                    .Task.WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None)
+                    .ConfigureAwait(false);
                 return train.Input?.Id;
             }
         }
@@ -176,7 +179,8 @@ public class QueueHookInputTests
 
         internal Task OnQueueFor(Metadata metadata) => OnQueue(metadata, CancellationToken.None);
 
-        protected override string? QueueSubjectKey(Metadata metadata) => $"order:{TrainInput.Id}";
+        protected override string? QueueSubjectKey(Metadata metadata) =>
+            string.Create(CultureInfo.InvariantCulture, $"order:{TrainInput.Id}");
 
         protected override Task OnQueue(Metadata metadata, CancellationToken ct)
         {

@@ -47,7 +47,9 @@ public abstract class Meeting<TSelf> : Junction<Order, Order>
         if (Interlocked.Increment(ref _arrived) == _expected)
             all.TrySetResult();
 
-        await all.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        await all
+            .Task.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None)
+            .ConfigureAwait(false);
         return input;
     }
 }

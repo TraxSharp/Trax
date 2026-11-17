@@ -105,7 +105,7 @@ internal sealed class JunctionEventRun
     /// The track and withholding of each branch that has taken a track, keyed by branch path
     /// (<see cref="BranchPaths"/>). The run's own chain is the branch <see cref="BranchPaths.Run"/>.
     /// </summary>
-    private readonly ConcurrentDictionary<string, Lane> _lanes = new();
+    private readonly ConcurrentDictionary<string, Lane> _lanes = new(StringComparer.Ordinal);
 
     /// <summary>What one branch's routing steps have done to its later steps.</summary>
     private sealed class Lane

@@ -37,7 +37,7 @@ public class TrainLifecycleOverrideTests : TestSetup
     {
         var train = (RecordingTrain)Scope.ServiceProvider.GetRequiredService<IRecordingTrain>();
 
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default, CancellationToken.None);
 
         train.StartedCalled.Should().BeTrue();
         train.StartedMetadata.Should().NotBeNull();
@@ -50,7 +50,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingRecordingTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.StartedCalled.Should().BeTrue();
@@ -62,7 +63,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (ThrowingHookTrain)
             Scope.ServiceProvider.GetRequiredService<IThrowingHookTrain>();
 
-        var result = await train.Run(Unit.Default);
+        var result = await train.Run(Unit.Default, CancellationToken.None);
 
         result.Should().Be(Unit.Default);
         train.Metadata!.TrainState.Should().Be(Enums.TrainState.Completed);
@@ -77,7 +78,7 @@ public class TrainLifecycleOverrideTests : TestSetup
     {
         var train = (RecordingTrain)Scope.ServiceProvider.GetRequiredService<IRecordingTrain>();
 
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default, CancellationToken.None);
 
         train.CompletedCalled.Should().BeTrue();
         train.CompletedMetadata.Should().NotBeNull();
@@ -89,7 +90,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingRecordingTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.CompletedCalled.Should().BeFalse();
@@ -101,7 +103,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (ThrowingHookTrain)
             Scope.ServiceProvider.GetRequiredService<IThrowingHookTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -116,7 +119,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingRecordingTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.FailedCalled.Should().BeTrue();
@@ -130,7 +134,7 @@ public class TrainLifecycleOverrideTests : TestSetup
     {
         var train = (RecordingTrain)Scope.ServiceProvider.GetRequiredService<IRecordingTrain>();
 
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default, CancellationToken.None);
 
         train.FailedCalled.Should().BeFalse();
     }
@@ -141,7 +145,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (ThrowingOnFailedHookTrain)
             Scope.ServiceProvider.GetRequiredService<IThrowingOnFailedHookTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*Intentional train failure*");
     }
@@ -174,7 +179,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingRecordingTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.CancelledCalled.Should().BeFalse();
@@ -205,7 +211,7 @@ public class TrainLifecycleOverrideTests : TestSetup
     {
         var train = (RecordingTrain)Scope.ServiceProvider.GetRequiredService<IRecordingTrain>();
 
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default, CancellationToken.None);
 
         train.CallOrder.Should().ContainInOrder("OnStarted", "OnCompleted");
     }
@@ -216,7 +222,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingRecordingTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.CallOrder.Should().ContainInOrder("OnStarted", "OnFailed");
@@ -238,7 +245,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (PartialOverrideTrain)
             Scope.ServiceProvider.GetRequiredService<IPartialOverrideTrain>();
 
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default, CancellationToken.None);
 
         train.CompletedCalled.Should().BeTrue();
         train.CallOrder.Should().ContainSingle().Which.Should().Be("OnCompleted");
@@ -316,7 +323,7 @@ public class TrainLifecycleOverrideTests : TestSetup
             }
         );
 
-        await train.Run(Unit.Default, metadata);
+        await train.Run(Unit.Default, metadata, CancellationToken.None);
 
         train.StartedCalled.Should().BeTrue();
         train.CompletedCalled.Should().BeTrue();
@@ -356,7 +363,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (OutputRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IOutputRecordingTrain>();
 
-        await train.Run("test-input");
+        await train.Run("test-input", CancellationToken.None);
 
         train.CompletedCalled.Should().BeTrue();
         train.CapturedOutput.Should().NotBeNull();
@@ -368,7 +375,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (OutputRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IOutputRecordingTrain>();
 
-        await train.Run("test-input");
+        await train.Run("test-input", CancellationToken.None);
 
         var deserialized = JsonSerializer.Deserialize<TestOutputDto>(train.CapturedOutput!);
         deserialized.Should().NotBeNull();
@@ -382,7 +389,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (OutputRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<IOutputRecordingTrain>();
 
-        await train.Run("test-input");
+        await train.Run("test-input", CancellationToken.None);
 
         object? outputObj = train.CapturedOutputObject;
         outputObj.Should().NotBeNull();
@@ -403,7 +410,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         // just like in OnCompleted/OnFailed.
         var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
 
-        await train.Run("hello");
+        await train.Run("hello", CancellationToken.None);
 
         train.CapturedStartedInput.Should().Be("hello");
         train.CapturedStartedMetadataInput.Should().Be("hello");
@@ -414,7 +421,7 @@ public class TrainLifecycleOverrideTests : TestSetup
     {
         var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
 
-        await train.Run("hello");
+        await train.Run("hello", CancellationToken.None);
 
         train.CapturedInput.Should().Be("hello");
     }
@@ -424,7 +431,7 @@ public class TrainLifecycleOverrideTests : TestSetup
     {
         var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
 
-        await train.Run("hello");
+        await train.Run("hello", CancellationToken.None);
 
         train.CapturedOutput.Should().NotBeNull();
         train.CapturedOutput!.Value.Should().Be("processed:hello");
@@ -437,7 +444,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingTypedAccessTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingTypedAccessTrain>();
 
-        var act = async () => await train.Run("hello").ConfigureAwait(false);
+        var act = async () =>
+            await train.Run("hello", CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.CapturedInput.Should().Be("hello");
@@ -449,7 +457,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (FailingTypedAccessTrain)
             Scope.ServiceProvider.GetRequiredService<IFailingTypedAccessTrain>();
 
-        var act = async () => await train.Run("hello").ConfigureAwait(false);
+        var act = async () =>
+            await train.Run("hello", CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
 
         train.CapturedOutput.Should().BeNull();
@@ -460,7 +469,7 @@ public class TrainLifecycleOverrideTests : TestSetup
     {
         var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
 
-        await train.Run("hello");
+        await train.Run("hello", CancellationToken.None);
 
         train.CapturedMetadataInput.Should().Be("hello");
     }
@@ -470,7 +479,7 @@ public class TrainLifecycleOverrideTests : TestSetup
     {
         var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
 
-        await train.Run("hello");
+        await train.Run("hello", CancellationToken.None);
 
         train.CapturedMetadataOutput.Should().NotBeNull();
         train.CapturedMetadataOutput!.Value.Should().Be("processed:hello");
@@ -481,7 +490,7 @@ public class TrainLifecycleOverrideTests : TestSetup
     {
         var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
 
-        await train.Run("hello");
+        await train.Run("hello", CancellationToken.None);
 
         train.CapturedWrongTypeInput.Should().Be(0);
     }
@@ -527,7 +536,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         );
 
         using (train.EnterQueueHooks(queued))
-            await train.Run("run");
+            await train.Run("run", CancellationToken.None);
 
         train.CapturedStartedInput.Should().Be("run");
         train.CapturedInput.Should().Be("run");

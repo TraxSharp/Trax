@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -27,5 +28,10 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 public class PgParCombine : EffectJunction<(PgParA, PgParB), string>
 {
     public override Task<string> Run((PgParA, PgParB) input) =>
-        Task.FromResult($"a={input.Item1.Score}, b={input.Item2.Score}");
+        Task.FromResult(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"a={input.Item1.Score}, b={input.Item2.Score}"
+            )
+        );
 }

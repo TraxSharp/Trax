@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -165,7 +166,9 @@ public class JunctionProgressProviderTests
         using var cts = new CancellationTokenSource();
 
         var before = _provider.BeforeJunctionExecution(junction, train, cts.Token);
-        await _factory.Entered.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        await _factory
+            .Entered.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None)
+            .ConfigureAwait(false);
         await cts.CancelAsync().ConfigureAwait(false);
 
         await FluentActions
@@ -198,13 +201,15 @@ public class JunctionProgressProviderTests
             train,
             CancellationToken.None
         );
-        await _factory.Entered.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        await _factory
+            .Entered.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None)
+            .ConfigureAwait(false);
 
         var others = Enumerable
             .Range(1, 7)
             .Select(i =>
                 _provider.BeforeJunctionExecution(
-                    CreateTestJunction($"Branch{i}"),
+                    CreateTestJunction(string.Create(CultureInfo.InvariantCulture, $"Branch{i}")),
                     train,
                     CancellationToken.None
                 )
@@ -481,7 +486,7 @@ public class JunctionProgressProviderTests
         await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .Metadatas.AsNoTracking()
-            .SingleAsync(m => m.Id == train.Metadata!.Id)
+            .SingleAsync(m => m.Id == train.Metadata!.Id, cancellationToken: CancellationToken.None)
             .ConfigureAwait(false);
     }
 

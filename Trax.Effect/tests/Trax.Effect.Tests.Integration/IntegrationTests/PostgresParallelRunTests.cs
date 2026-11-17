@@ -141,7 +141,7 @@ public class PostgresParallelRunTests
     public async Task Branches_asking_one_question_each_get_a_row_and_a_requeue_replays_each()
     {
         Decider.Script(
-            byBranch: new()
+            byBranch: new(StringComparer.Ordinal)
             {
                 [""] = [PgParLane.Express, PgParLane.Ground],
                 ["Parallel#0/a"] = [PgParLane.Ground],
@@ -190,7 +190,7 @@ public class PostgresParallelRunTests
         var train = Train<IPgParWaitTrain>(scope);
 
         var running = train.Run(new PgParOrder("o"), cancel.Token);
-        await PgParSignals.BothWaiting.WaitAsync(TimeSpan.FromSeconds(30));
+        await PgParSignals.BothWaiting.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
         await cancel.CancelAsync();
 
         await FluentActions
@@ -209,8 +209,8 @@ public class PostgresParallelRunTests
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = Train<IPgParFlagTrain>(scope);
 
-        var running = train.Run(new PgParOrder("o"));
-        await PgParSignals.BothWaiting.WaitAsync(TimeSpan.FromSeconds(30));
+        var running = train.Run(new PgParOrder("o"), CancellationToken.None);
+        await PgParSignals.BothWaiting.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
 
         // What the dashboard's cancel and the scheduler's job timeout write for a run on another
         // host. Branch a's next junction reads it before it runs.
@@ -219,8 +219,9 @@ public class PostgresParallelRunTests
         await using (context.ConfigureAwait(false))
             await context
                 .Metadatas.Where(m => m.Id == train.Metadata!.Id)
-                .ExecuteUpdateAsync(s =>
-                    s.SetProperty(m => m.CancellationRequested, valueExpression: true)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.CancellationRequested, valueExpression: true),
+                    cancellationToken: CancellationToken.None
                 );
         PgParSignals.Release();
 
@@ -244,7 +245,7 @@ public class PostgresParallelRunTests
         var train = Train<IPgParFailTrain>(scope);
 
         await FluentActions
-            .Awaiting(() => train.Run(new PgParOrder("o")))
+            .Awaiting(() => train.Run(new PgParOrder("o"), CancellationToken.None))
             .Should()
             .ThrowAsync<BranchesFailedException>();
 
@@ -282,8 +283,11 @@ public class PostgresParallelRunTests
             }
         );
 
-        var output = await train.Run(input, metadata).ConfigureAwait(false);
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
+        var output = await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
+        await _provider
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return (train, output);
     }
 

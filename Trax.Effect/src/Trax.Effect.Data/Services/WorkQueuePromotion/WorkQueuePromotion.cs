@@ -8,7 +8,10 @@ using Trax.Effect.Models.WorkQueue;
 
 namespace Trax.Effect.Data.Services.WorkQueuePromotion;
 
-/// <inheritdoc />
+/// <summary>
+/// The <see cref="IWorkQueuePromotion"/> Trax registers, working on the queue table through the
+/// data context.
+/// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IWorkQueuePromotion
 {

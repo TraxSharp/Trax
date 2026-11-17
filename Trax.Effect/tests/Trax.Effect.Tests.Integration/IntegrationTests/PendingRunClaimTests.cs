@@ -68,8 +68,8 @@ public class PendingRunClaimTests
         var trainA = (CountingTrain)scopeA.ServiceProvider.GetRequiredService<ICountingTrain>();
         var trainB = (CountingTrain)scopeB.ServiceProvider.GetRequiredService<ICountingTrain>();
 
-        var runA = Task.Run(() => trainA.Run(Unit.Default, copyA));
-        var runB = Task.Run(() => trainB.Run(Unit.Default, copyB));
+        var runA = Task.Run(() => trainA.Run(Unit.Default, copyA, CancellationToken.None));
+        var runB = Task.Run(() => trainB.Run(Unit.Default, copyB, CancellationToken.None));
 
         var outcomes = await Task.WhenAll(Settle(runA), Settle(runB));
 
@@ -97,7 +97,8 @@ public class PendingRunClaimTests
 
         await StartFromRow(first, id);
         var train = (CountingTrain)second.ServiceProvider.GetRequiredService<ICountingTrain>();
-        var act = async () => await train.Run(Unit.Default, staleCopy).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, staleCopy, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainAlreadyStartedException>();
         CountingTrain.BodyRuns.Should().Be(1);
@@ -119,7 +120,7 @@ public class PendingRunClaimTests
             }
         );
 
-        await train.Run(Unit.Default, unsaved);
+        await train.Run(Unit.Default, unsaved, CancellationToken.None);
 
         CountingTrain.BodyRuns.Should().Be(1);
         (await ReadRow(unsaved.Id)).TrainState.Should().Be(TrainState.Completed);
@@ -129,7 +130,7 @@ public class PendingRunClaimTests
     {
         var metadata = await ReadRow(id).ConfigureAwait(false);
         var train = (CountingTrain)scope.ServiceProvider.GetRequiredService<ICountingTrain>();
-        await train.Run(Unit.Default, metadata).ConfigureAwait(false);
+        await train.Run(Unit.Default, metadata, CancellationToken.None).ConfigureAwait(false);
     }
 
     private static async Task<Exception?> Settle(Task run)

@@ -22,7 +22,7 @@ namespace Trax.Effect.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "docs/adr/0014-postgres-migrations-are-serialized-and-rerunnable.md")]
 [TestFixture]
-public class PostgresMigrationRerunTests
+public partial class PostgresMigrationRerunTests
 {
     private const string Adr = "docs/adr/0014-postgres-migrations-are-serialized-and-rerunnable.md";
 
@@ -44,7 +44,10 @@ public class PostgresMigrationRerunTests
                 "*.sql"
             )
             .Select(path => Path.GetFileName(path)!)
-            .Where(name => int.Parse(name[..3]) >= FirstRerunnable)
+            .Where(name =>
+                int.Parse(name[..3], System.Globalization.CultureInfo.InvariantCulture)
+                >= FirstRerunnable
+            )
             .Order(StringComparer.Ordinal)
             .Select(name => new TestCaseData(name).SetName($"{{m}}({name})"));
 
@@ -119,9 +122,9 @@ public class PostgresMigrationRerunTests
     /// <summary>What is wrong with <paramref name="statement"/>, or null when it can run again.</summary>
     private static string? Problem(string statement)
     {
-        var s = Regex.Replace(statement, @"\s+", " ").Trim().ToUpperInvariant();
+        var s = Whitespace.Replace(statement, " ").Trim().ToUpperInvariant();
 
-        if (s.StartsWith("DO "))
+        if (s.StartsWith("DO ", StringComparison.Ordinal))
             return Regex.IsMatch(s, @"\bIF\b")
                 ? null
                 : "a DO block must check the state before it changes it (an IF), or it is not a "
@@ -129,35 +132,44 @@ public class PostgresMigrationRerunTests
 
         if (Regex.IsMatch(s, @"^CREATE (UNIQUE )?INDEX\b"))
         {
-            if (!s.Contains("IF NOT EXISTS"))
+            if (!s.Contains("IF NOT EXISTS", StringComparison.Ordinal))
                 return "CREATE INDEX without IF NOT EXISTS";
             var table = Regex.Match(s, @" ON (?:ONLY )?(?:TRAX\.)?""?(\w+)""?").Groups[1].Value;
-            if (HotTables.Contains(table.ToLowerInvariant()) && !s.Contains(" CONCURRENTLY "))
+            if (
+                HotTables.Contains(table.ToLowerInvariant())
+                && !s.Contains(" CONCURRENTLY ", StringComparison.Ordinal)
+            )
                 return $"an index on {table.ToLowerInvariant()} must be built CONCURRENTLY: a plain "
                     + "CREATE INDEX blocks every write to the table while it builds";
             return null;
         }
 
-        if (s.StartsWith("CREATE OR REPLACE "))
+        if (s.StartsWith("CREATE OR REPLACE ", StringComparison.Ordinal))
             return null;
 
         if (Regex.IsMatch(s, @"^CREATE (TABLE|SCHEMA|SEQUENCE|EXTENSION)\b"))
-            return s.Contains("IF NOT EXISTS") ? null : "CREATE without IF NOT EXISTS";
+            return s.Contains("IF NOT EXISTS", StringComparison.Ordinal)
+                ? null
+                : "CREATE without IF NOT EXISTS";
 
-        if (s.StartsWith("DROP "))
-            return s.Contains("IF EXISTS") ? null : "DROP without IF EXISTS";
+        if (s.StartsWith("DROP ", StringComparison.Ordinal))
+            return s.Contains("IF EXISTS", StringComparison.Ordinal)
+                ? null
+                : "DROP without IF EXISTS";
 
-        if (s.StartsWith("ALTER TABLE "))
+        if (s.StartsWith("ALTER TABLE ", StringComparison.Ordinal))
             return AlterTableProblem(s);
 
-        if (s.StartsWith("ALTER TYPE "))
-            return s.Contains("ADD VALUE IF NOT EXISTS")
+        if (s.StartsWith("ALTER TYPE ", StringComparison.Ordinal))
+            return s.Contains("ADD VALUE IF NOT EXISTS", StringComparison.Ordinal)
                 ? null
                 : "ALTER TYPE must be ADD VALUE IF NOT EXISTS; anything else goes in a DO block that "
                     + "checks first";
 
-        if (s.StartsWith("INSERT "))
-            return s.Contains(" ON CONFLICT ") || s.Contains("NOT EXISTS")
+        if (s.StartsWith("INSERT ", StringComparison.Ordinal))
+            return
+                s.Contains(" ON CONFLICT ", StringComparison.Ordinal)
+                || s.Contains("NOT EXISTS", StringComparison.Ordinal)
                 ? null
                 : "an INSERT must say what happens ON CONFLICT, or insert WHERE NOT EXISTS";
 
@@ -174,14 +186,14 @@ public class PostgresMigrationRerunTests
         foreach (var clause in SplitTopLevel(body, ','))
         {
             var c = clause.Trim();
-            if (c.StartsWith("ADD COLUMN "))
+            if (c.StartsWith("ADD COLUMN ", StringComparison.Ordinal))
             {
-                if (!c.StartsWith("ADD COLUMN IF NOT EXISTS "))
+                if (!c.StartsWith("ADD COLUMN IF NOT EXISTS ", StringComparison.Ordinal))
                     return "ADD COLUMN without IF NOT EXISTS";
             }
-            else if (c.StartsWith("DROP "))
+            else if (c.StartsWith("DROP ", StringComparison.Ordinal))
             {
-                if (!c.Contains("IF EXISTS"))
+                if (!c.Contains("IF EXISTS", StringComparison.Ordinal))
                     return "DROP without IF EXISTS";
             }
             else if (
@@ -243,7 +255,7 @@ public class PostgresMigrationRerunTests
 
         void Add()
         {
-            var statement = Regex.Replace(current.ToString(), @"\s+", " ").Trim();
+            var statement = Whitespace.Replace(current.ToString(), " ").Trim();
             if (statement.Length > 0)
                 statements.Add(statement);
             current.Clear();
@@ -268,4 +280,7 @@ public class PostgresMigrationRerunTests
         }
         yield return text[start..];
     }
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace { get; }
 }

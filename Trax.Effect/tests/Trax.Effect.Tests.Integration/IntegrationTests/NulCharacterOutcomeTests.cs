@@ -67,7 +67,7 @@ public class NulCharacterOutcomeTests
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (NulOutputTrain)scope.ServiceProvider.GetRequiredService<INulOutputTrain>();
 
-        var output = await train.Run(Unit.Default);
+        var output = await train.Run(Unit.Default, CancellationToken.None);
 
         output.Should().Be("bytes:\0end", "the train's caller gets the output it produced");
         var row = await PersistedRow(scope, train.Metadata!.Id);
@@ -88,7 +88,8 @@ public class NulCharacterOutcomeTests
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (NulFailureTrain)scope.ServiceProvider.GetRequiredService<INulFailureTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<FormatException>();
 
         var row = await PersistedRow(scope, train.Metadata!.Id);
@@ -111,7 +112,8 @@ public class NulCharacterOutcomeTests
         var train = (UnpairedSurrogateFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnpairedSurrogateFailureTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         var row = await PersistedRow(scope, train.Metadata!.Id);
@@ -235,7 +237,7 @@ public class NulCharacterOutcomeTests
             public override Task<Unit> Run(Unit input)
             {
                 // The runtime's message quotes the input, NUL and all.
-                _ = int.Parse("12\u00003");
+                _ = int.Parse("12\u00003", System.Globalization.CultureInfo.InvariantCulture);
                 return Task.FromResult(input);
             }
         }

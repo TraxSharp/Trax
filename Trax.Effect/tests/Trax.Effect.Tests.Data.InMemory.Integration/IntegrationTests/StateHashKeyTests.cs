@@ -81,7 +81,7 @@ public class StateHashKeyTests
                 ReplayDecisionsOf = replayDecisionsOf,
             }
         );
-        await train.Run(input, metadata).ConfigureAwait(false);
+        await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
         return train.Metadata!.Id;
     }
 
@@ -167,7 +167,7 @@ public class StateHashKeyTests
             .Should()
             .BeNull($"an unkeyed hash of a sensitive state is not stored. See {Adr}.");
         logger
-            .Messages.Where(m => m.Contains("HashStatesWith"))
+            .Messages.Where(m => m.Contains("HashStatesWith", StringComparison.Ordinal))
             .Should()
             .ContainSingle("the warning is logged once per state type");
 

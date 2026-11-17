@@ -30,7 +30,8 @@ public class OwnerScopeFilterBypassTests
         {
             OwnerType = typeof(Account),
             PrincipalAccessorType = typeof(IOwnerPrincipal),
-            FilterBypassAllowlist = allowlist ?? new Dictionary<string, string>(),
+            FilterBypassAllowlist =
+                allowlist ?? new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
     private static IReadOnlyList<IReadOnlyModel> Models<TContext>()
@@ -200,7 +201,7 @@ public class OwnerScopeFilterBypassTests
         var result = Scan(
             repo,
             census: Census(
-                new Dictionary<string, string>
+                new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["src/Api/NoteResolver.cs"] =
                         "the account-deletion job erases every owner's notes on purpose",
@@ -221,7 +222,12 @@ public class OwnerScopeFilterBypassTests
 
         Scan(
             repo,
-            census: Census(new Dictionary<string, string> { ["src/Api/NoteResolver.cs"] = " " })
+            census: Census(
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["src/Api/NoteResolver.cs"] = " ",
+                }
+            )
         )
             .Offenders.Should()
             .ContainSingle()
@@ -237,7 +243,10 @@ public class OwnerScopeFilterBypassTests
         Scan(
             repo,
             census: Census(
-                new Dictionary<string, string> { ["src/Api/NoteResolver.cs"] = "used to" }
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["src/Api/NoteResolver.cs"] = "used to",
+                }
             )
         )
             .Offenders.Should()

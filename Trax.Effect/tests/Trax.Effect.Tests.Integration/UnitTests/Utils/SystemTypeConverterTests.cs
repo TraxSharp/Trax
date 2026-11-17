@@ -69,7 +69,8 @@ public class SystemTypeConverterTests
     {
         // Arrange
         var typeName = expectedType.AssemblyQualifiedName;
-        var json = $"{{\"TypeProperty\":\"{typeName!.Replace("\"", "\\\"")}\"}}";
+        var json =
+            $"{{\"TypeProperty\":\"{typeName!.Replace("\"", "\\\"", StringComparison.Ordinal)}\"}}";
 
         // Act
         var result = JsonSerializer.Deserialize<TestClass>(json, _options);
@@ -83,7 +84,8 @@ public class SystemTypeConverterTests
     {
         // Arrange
         var typeName = typeof(TestClass).AssemblyQualifiedName;
-        var json = $"{{\"TypeProperty\":\"{typeName!.Replace("\"", "\\\"")}\"}}";
+        var json =
+            $"{{\"TypeProperty\":\"{typeName!.Replace("\"", "\\\"", StringComparison.Ordinal)}\"}}";
 
         // Act
         var result = JsonSerializer.Deserialize<TestClass>(json, _options);

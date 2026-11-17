@@ -90,10 +90,10 @@ public class BroadcastChangeSinkTests
     public void ChangeDomain_MembersAreAppendOnly()
     {
         Enum.GetValues<ChangeDomain>()
-            .ToDictionary(d => d.ToString(), d => (int)d)
+            .ToDictionary(d => d.ToString(), d => (int)d, StringComparer.Ordinal)
             .Should()
             .Equal(
-                new Dictionary<string, int>
+                new Dictionary<string, int>(StringComparer.Ordinal)
                 {
                     ["WorkQueue"] = 0,
                     ["DeadLetter"] = 1,

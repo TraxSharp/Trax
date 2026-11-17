@@ -107,7 +107,7 @@ internal static class SensitiveQuestions
             Names.TryAdd(declared, 0);
 
         var name = type.Name;
-        var tick = name.IndexOf('`');
+        var tick = name.IndexOf('`', StringComparison.Ordinal);
         Names.TryAdd(tick >= 0 ? name[..tick] : name, 0);
     }
 

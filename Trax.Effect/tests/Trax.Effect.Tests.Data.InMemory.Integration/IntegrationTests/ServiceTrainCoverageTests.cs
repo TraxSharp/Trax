@@ -73,7 +73,8 @@ public class ServiceTrainCoverageTests : TestSetup
         );
         metadata.TrainState = TrainState.InProgress;
 
-        var act = async () => await train.Run("x", metadata).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run("x", metadata, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<Trax.Core.Exceptions.TrainException>();
     }

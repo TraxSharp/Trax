@@ -16,7 +16,7 @@ public class ChangeSignalCoalescerTests
 
     private sealed class CapturingSink : IChangeSignalSink
     {
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
         public List<ChangeDomain[]> Flushes { get; } = new();
 
         public Func<Task>? OnFlush { get; set; }

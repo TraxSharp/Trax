@@ -85,7 +85,8 @@ public class JunctionsApiTests : TestSetup
 
     private sealed class IntToStringJunction : Junction<int, string>
     {
-        public override async Task<string> Run(int input) => input.ToString();
+        public override async Task<string> Run(int input) =>
+            input.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private sealed class ThrowingJunction : Junction<string, int>

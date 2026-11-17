@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -131,7 +132,7 @@ public class DecisionRecordingTests
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (RouteThenFail)scope.ServiceProvider.GetRequiredService<IRouteThenFail>();
 
-        var run = () => train.Run(new Order("o3", 9000m));
+        var run = () => train.Run(new Order("o3", 9000m), CancellationToken.None);
 
         await run.Should().ThrowAsync<InvalidOperationException>();
         (await Recorded(train.Metadata!.Id))
@@ -407,7 +408,10 @@ public class DecisionRecordingTests
         var train =
             (ServiceTrain<Order, string>)
                 (object)scope.ServiceProvider.GetRequiredService<IRouteOrder>();
-        var run = async () => await train.Run(new Order("o-unbuilt", 20m)).ConfigureAwait(false);
+        var run = async () =>
+            await train
+                .Run(new Order("o-unbuilt", 20m), CancellationToken.None)
+                .ConfigureAwait(false);
         await run.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*could not be built*");
@@ -454,7 +458,7 @@ public class DecisionRecordingTests
         var row = await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.AsNoTracking()
-            .SingleAsync(m => m.Id == retry);
+            .SingleAsync(m => m.Id == retry, cancellationToken: CancellationToken.None);
         row.ReplayAbandoned.Should().BeTrue($"the retry asked afresh. See {Adr}.");
         row.ReplayDecisionsOf.Should().Be(1, "what it was queued to do is kept");
     }
@@ -553,7 +557,12 @@ public class DecisionRecordingTests
 
         await run.Should()
             .ThrowAsync<Exception>()
-            .WithMessage($"*run {retry} ran without recording its decisions*");
+            .WithMessage(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"*run {retry} ran without recording its decisions*"
+                )
+            );
         decider.Requests.Should().BeEmpty();
     }
 
@@ -579,7 +588,12 @@ public class DecisionRecordingTests
 
         await run.Should()
             .ThrowAsync<Exception>()
-            .WithMessage($"*run {original} ran on a different input*");
+            .WithMessage(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"*run {original} ran on a different input*"
+                )
+            );
         decider.Requests.Should().BeEmpty("nothing is asked before the replay is refused");
     }
 
@@ -690,7 +704,7 @@ public class DecisionRecordingTests
         if (storeInput)
             metadata.Input = System.Text.Json.JsonSerializer.Serialize(order);
 
-        await train.Run(order, metadata).ConfigureAwait(false);
+        await train.Run(order, metadata, CancellationToken.None).ConfigureAwait(false);
         return train.Metadata!.Id;
     }
 
@@ -813,7 +827,10 @@ public class DecisionRecordingTests
         (await run.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()
             .Contain(
-                $"run {other.Metadata.Id} is a run of train '{typeof(IRouteWithShadow).FullName}'"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"run {other.Metadata.Id} is a run of train '{typeof(IRouteWithShadow).FullName}'"
+                )
             );
         decider.Requests.Should().BeEmpty("the run fails before it asks anything");
         train.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
@@ -859,7 +876,7 @@ public class DecisionRecordingTests
         );
         await Rewrite(
             firstRequeue.Metadata!.Id,
-            d => d.Answer = d.Answer?.Replace("ManualCheck", "Standard")
+            d => d.Answer = d.Answer?.Replace("ManualCheck", "Standard", StringComparison.Ordinal)
         );
         await Forget(firstRequeue.Metadata.Id, occurrence: 1);
 
@@ -891,7 +908,7 @@ public class DecisionRecordingTests
 
         (await run.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()
-            .Contain($"lead back to run {second}");
+            .Contain(string.Create(CultureInfo.InvariantCulture, $"lead back to run {second}"));
         decider.Requests.Should().BeEmpty();
         train.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
     }
@@ -947,7 +964,12 @@ public class DecisionRecordingTests
 
         (await run.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()
-            .Contain($"run {unrecorded} ran without recording its decisions");
+            .Contain(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"run {unrecorded} ran without recording its decisions"
+                )
+            );
         decider.Requests.Should().BeEmpty("the run fails before it asks anything");
         train.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
     }
@@ -1105,7 +1127,8 @@ public class DecisionRecordingTests
             externalId: shared
         );
 
-        var outputs = await Task.WhenAll(replayRun(), askRun()).WaitAsync(Wait);
+        var outputs = await Task.WhenAll(replayRun(), askRun())
+            .WaitAsync(Wait, CancellationToken.None);
 
         outputs.Should().Equal("held for review", "shipped");
         decider.Requests.Should().ContainSingle("only the run that replays nothing asks");
@@ -1335,7 +1358,8 @@ public class DecisionRecordingTests
             externalId: shared
         );
 
-        var outputs = await Task.WhenAll(firstRun(), secondRun()).WaitAsync(Wait);
+        var outputs = await Task.WhenAll(firstRun(), secondRun())
+            .WaitAsync(Wait, CancellationToken.None);
 
         outputs.Should().Equal("shipped", "shipped");
         decider.Requests.Should().HaveCount(2);
@@ -1412,7 +1436,9 @@ public class DecisionRecordingTests
             async () =>
             {
                 await using (scope.ConfigureAwait(false))
-                    return await train.Run(order, metadata).ConfigureAwait(false);
+                    return await train
+                        .Run(order, metadata, CancellationToken.None)
+                        .ConfigureAwait(false);
             }
         );
     }

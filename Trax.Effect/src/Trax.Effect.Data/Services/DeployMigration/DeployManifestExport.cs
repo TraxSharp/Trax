@@ -53,7 +53,7 @@ internal static class DeployManifestExport
                 .. facts
                     .Where(f => string.Equals(f.Kind, kind, StringComparison.Ordinal))
                     .Select(f => f.Value)
-                    .Distinct()
+                    .Distinct(StringComparer.Ordinal)
                     .Order(StringComparer.Ordinal),
             ];
 
@@ -74,7 +74,10 @@ internal static class DeployManifestExport
                 .DescribeAsync(manifest, services, host, cancellationToken)
                 .ConfigureAwait(false);
 
-        manifest.Roles = [.. manifest.Roles.Distinct().Order(StringComparer.Ordinal)];
+        manifest.Roles =
+        [
+            .. manifest.Roles.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal),
+        ];
         manifest.Authentication =
         [
             .. manifest.Authentication.OrderBy(a => a.Name, StringComparer.Ordinal),

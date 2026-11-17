@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
@@ -114,7 +115,10 @@ public class RabbitMqBroadcasterResilienceTests
         await using var broadcasterDisposal = broadcaster.ConfigureAwait(false);
 
         for (var i = 0; i < 5; i++)
-            await broadcaster.PublishAsync(Message($"m{i}"), CancellationToken.None);
+            await broadcaster.PublishAsync(
+                Message(string.Create(CultureInfo.InvariantCulture, $"m{i}")),
+                CancellationToken.None
+            );
 
         // Two fit in the queue. The sender may already hold the first while it tries to connect,
         // which frees one more slot.
@@ -187,14 +191,23 @@ public class RabbitMqBroadcasterResilienceTests
         await using (broadcaster.ConfigureAwait(false))
         {
             for (var i = 0; i < 20; i++)
-                await broadcaster.PublishAsync(Message($"m{i}"), CancellationToken.None);
+                await broadcaster.PublishAsync(
+                    Message(string.Create(CultureInfo.InvariantCulture, $"m{i}")),
+                    CancellationToken.None
+                );
         }
 
         // determinism: the wait is on the TaskCompletionSource; the delay is only the ceiling.
         (await Task.WhenAny(all.Task, Task.Delay(TimeSpan.FromSeconds(10))))
             .Should()
             .Be(all.Task);
-        received.Should().Equal(Enumerable.Range(0, 20).Select(i => $"m{i}"));
+        received
+            .Should()
+            .Equal(
+                Enumerable
+                    .Range(0, 20)
+                    .Select(i => string.Create(CultureInfo.InvariantCulture, $"m{i}"))
+            );
 
         await receiver.StopAsync(CancellationToken.None);
     }
@@ -206,14 +219,15 @@ public class RabbitMqBroadcasterResilienceTests
         var factory = new ConnectionFactory { Uri = new Uri(AmqpUri) };
         var setup = await factory.CreateConnectionAsync();
         await using var setupDisposal = setup.ConfigureAwait(false);
-        var channel = await setup.CreateChannelAsync();
+        var channel = await setup.CreateChannelAsync(cancellationToken: CancellationToken.None);
         await using (channel.ConfigureAwait(false))
         {
             await channel.ExchangeDeclareAsync(
                 exchange,
                 ExchangeType.Direct,
                 durable: false,
-                autoDelete: false
+                autoDelete: false,
+                cancellationToken: CancellationToken.None
             );
         }
 
@@ -232,15 +246,15 @@ public class RabbitMqBroadcasterResilienceTests
             await broadcaster.PublishAsync(Message("mismatch"), CancellationToken.None);
 
             // determinism: the wait is on the logged refusal; the timeout is only the ceiling.
-            await logger.Logged.WaitAsync(TimeSpan.FromSeconds(15));
+            await logger.Logged.WaitAsync(TimeSpan.FromSeconds(15), CancellationToken.None);
             broadcaster.RefusedEvents.Should().Be(1);
         }
         finally
         {
             await broadcaster.DisposeAsync();
-            var cleanup = await setup.CreateChannelAsync();
+            var cleanup = await setup.CreateChannelAsync(cancellationToken: CancellationToken.None);
             await using var cleanupDisposal = cleanup.ConfigureAwait(false);
-            await cleanup.ExchangeDeleteAsync(exchange);
+            await cleanup.ExchangeDeleteAsync(exchange, cancellationToken: CancellationToken.None);
         }
     }
 

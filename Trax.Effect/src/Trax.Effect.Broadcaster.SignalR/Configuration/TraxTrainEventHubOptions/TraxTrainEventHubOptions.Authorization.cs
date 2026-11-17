@@ -63,7 +63,7 @@ public sealed partial class TraxTrainEventHubOptions
                 );
             }
 
-            if (role.Contains(','))
+            if (role.Contains(',', StringComparison.Ordinal))
             {
                 throw new ArgumentException(
                     $"RequireRoles() takes each role as its own argument; '{role}' contains a comma. "

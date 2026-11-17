@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
@@ -99,7 +100,7 @@ public class FailureClassificationTests : TestSetup
 
         Classifier
             .Seen.Should()
-            .BeOfType<BespokeFailure>(
+            .BeOfType<BespokeFailureException>(
                 "junctions enrich the exception and return it rather than wrapping it, which is "
                     + "what lets a classifier type-check instead of parsing a message"
             );
@@ -111,10 +112,11 @@ public class FailureClassificationTests : TestSetup
         Classifier.Throws = true;
         var train = Resolve();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should()
-            .ThrowAsync<BespokeFailure>(
+            .ThrowAsync<BespokeFailureException>(
                 "the train's failure is what surfaces, not the classifier's"
             );
         train
@@ -152,7 +154,7 @@ public class FailureClassificationTests : TestSetup
         var train = (ClassifiedPassingTrain)
             Scope.ServiceProvider.GetRequiredService<IClassifiedPassingTrain>();
 
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default, CancellationToken.None);
 
         Classifier.Seen.Should().BeNull();
     }
@@ -180,8 +182,9 @@ public class FailureClassificationTests : TestSetup
         var train = (OutsideJunctionTrain)
             Scope.ServiceProvider.GetRequiredService<IOutsideJunctionTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
-        await act.Should().ThrowAsync<BespokeFailure>();
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
+        await act.Should().ThrowAsync<BespokeFailureException>();
 
         train
             .SeenClass.Should()
@@ -205,7 +208,8 @@ public class FailureClassificationTests : TestSetup
         var train = (CarriedClassTrain)
             Scope.ServiceProvider.GetRequiredService<ICarriedClassTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<Exception>();
 
         train
@@ -223,7 +227,8 @@ public class FailureClassificationTests : TestSetup
         var train = (RemoteUnclassifiedTrain)
             Scope.ServiceProvider.GetRequiredService<IRemoteUnclassifiedTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<Exception>();
 
         train
@@ -242,7 +247,8 @@ public class FailureClassificationTests : TestSetup
         var train = (UndefinedClassInMessageTrain)
             Scope.ServiceProvider.GetRequiredService<IUndefinedClassInMessageTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train
@@ -261,7 +267,8 @@ public class FailureClassificationTests : TestSetup
         var train = (ClassInPlainMessageTrain)
             Scope.ServiceProvider.GetRequiredService<IClassInPlainMessageTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train
@@ -280,7 +287,8 @@ public class FailureClassificationTests : TestSetup
         var train = (DerivedRecordShapedTrain)
             Scope.ServiceProvider.GetRequiredService<IDerivedRecordShapedTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<DerivedTrainException>();
 
         Classifier
@@ -309,7 +317,8 @@ public class FailureClassificationTests : TestSetup
 
     private static async Task Run(ClassifiedFailingTrain train)
     {
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<Exception>().ConfigureAwait(false);
     }
 
@@ -337,12 +346,12 @@ public class FailureClassificationTests : TestSetup
         }
     }
 
-    public class BespokeFailure(string message) : Exception(message);
+    public class BespokeFailureException(string message) : Exception(message);
 
     public class ThrowingJunction : Junction<Unit, Unit>
     {
         public override Task<Unit> Run(Unit input) =>
-            throw new BespokeFailure("the junction could not do the thing");
+            throw new BespokeFailureException("the junction could not do the thing");
     }
 
     public interface IClassifiedFailingTrain : IServiceTrain<Unit, Unit>;
@@ -400,7 +409,7 @@ public class FailureClassificationTests : TestSetup
         public FailureClass? SeenOnExceptionData { get; private set; }
 
         protected override Task<Either<Exception, Unit>> Junctions() =>
-            throw new BespokeFailure("raised before any junction ran");
+            throw new BespokeFailureException("raised before any junction ran");
 
         protected override Task OnFailed(
             Metadata metadata,
@@ -495,7 +504,7 @@ public class FailureClassificationTests : TestSetup
     private static string RecordJson(int failureClass) =>
         "{\"trainName\":\"a\",\"trainExternalId\":\"b\",\"type\":\"X\",\"junction\":\"J\","
         + "\"message\":\"m\",\"failureClass\":"
-        + failureClass
+        + failureClass.ToString(CultureInfo.InvariantCulture)
         + "}";
 
     public class UndefinedClassInMessageJunction : Junction<Unit, Unit>

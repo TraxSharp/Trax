@@ -145,7 +145,9 @@ internal static class DecisionJson
             "choice" => new ChoiceAnswer(
                 Required(node, "choice").GetValue<string>(),
                 ReadNumber(Required(node, "confidence")),
-                node["probabilities"]?.AsObject().ToDictionary(p => p.Key, p => ReadNumber(p.Value))
+                node["probabilities"]
+                    ?.AsObject()
+                    .ToDictionary(p => p.Key, p => ReadNumber(p.Value), StringComparer.Ordinal)
             ),
             "score" => new ScoreAnswer(
                 ReadNumber(Required(node, "score")),

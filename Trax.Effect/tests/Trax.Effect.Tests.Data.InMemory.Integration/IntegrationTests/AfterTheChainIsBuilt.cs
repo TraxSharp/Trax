@@ -30,7 +30,9 @@ public class AfterTheChainIsBuilt(Task built) : Junction<Order, Order>
 {
     public override async Task<Order> Run(Order input)
     {
-        await built.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        await built
+            .WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None)
+            .ConfigureAwait(false);
         return input;
     }
 }

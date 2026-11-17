@@ -35,7 +35,7 @@ internal sealed class SequenceDecider(params Fulfilment[] choices) : IDecider
 
         return Task.FromResult(
             new DecisionResult(
-                new Dictionary<string, Answer>
+                new Dictionary<string, Answer>(StringComparer.Ordinal)
                 {
                     [QuestionKey.For<Fulfilment>()] = new ChoiceAnswer(choice.ToString()),
                 }

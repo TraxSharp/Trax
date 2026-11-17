@@ -144,7 +144,7 @@ internal static class ResumePlanner
                 cancellationToken
             )
             .ConfigureAwait(false);
-        var restored = new Dictionary<string, RestoredCheckpoint>();
+        var restored = new Dictionary<string, RestoredCheckpoint>(StringComparer.Ordinal);
 
         foreach (var (key, node) in targets)
         {
@@ -202,7 +202,7 @@ internal static class ResumePlanner
     )
     {
         var order = Order(chain);
-        var chosen = new Dictionary<string, Models.Checkpoint.Checkpoint>();
+        var chosen = new Dictionary<string, Models.Checkpoint.Checkpoint>(StringComparer.Ordinal);
         var limit = int.MaxValue;
 
         foreach (var run in lineage)
@@ -303,7 +303,7 @@ internal static class ResumePlanner
         ChainVerification
             .NodeOrder(chain)
             .Select((id, i) => (id, i))
-            .ToDictionary(n => n.id, n => n.i);
+            .ToDictionary(n => n.id, n => n.i, StringComparer.Ordinal);
 
     /// <summary>
     /// The stored routes read back as the <c>TrackTaken</c> values the chain declares. A route

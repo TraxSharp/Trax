@@ -43,7 +43,10 @@ public class DecideInAPlainTrainOffFlow(
 
         using (ExecutionContext.SuppressFlow())
             plain = Task.Run(() =>
-                new PlainRush(decider, observer, replay) { ExternalId = ExternalId }.Run(input)
+                new PlainRush(decider, observer, replay) { ExternalId = ExternalId }.Run(
+                    input,
+                    CancellationToken.None
+                )
             );
 
         var output = await plain.ConfigureAwait(false);

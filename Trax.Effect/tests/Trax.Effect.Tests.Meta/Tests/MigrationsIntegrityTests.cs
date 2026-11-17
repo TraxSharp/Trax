@@ -10,7 +10,7 @@ namespace Trax.Effect.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "docs/adr/0001-schema-changes-are-hand-written-sql.md")]
 [TestFixture]
-public class MigrationsIntegrityTests
+public partial class MigrationsIntegrityTests
 {
     public static IEnumerable<TestCaseData> MigrationProjects()
     {
@@ -42,20 +42,23 @@ public class MigrationsIntegrityTests
         sqlFiles
             .Should()
             .NotBeEmpty($"{provider} migrations folder must contain at least one .sql file.");
-
-        var numberPattern = new Regex(@"^(?<num>\d{3})_[^/]+\.sql$", RegexOptions.Compiled);
         var seenNumbers = new List<int>();
         var malformed = new List<string>();
 
         foreach (var file in sqlFiles)
         {
-            var match = numberPattern.Match(file!);
+            var match = NumberPattern.Match(file!);
             if (!match.Success)
             {
                 malformed.Add(file!);
                 continue;
             }
-            seenNumbers.Add(int.Parse(match.Groups["num"].Value));
+            seenNumbers.Add(
+                int.Parse(
+                    match.Groups["num"].Value,
+                    System.Globalization.CultureInfo.InvariantCulture
+                )
+            );
         }
 
         malformed
@@ -134,4 +137,7 @@ public class MigrationsIntegrityTests
                     + string.Join("\n  ", missing)
             );
     }
+
+    [GeneratedRegex(@"^(?<num>\d{3})_[^/]+\.sql$", RegexOptions.Compiled)]
+    private static partial Regex NumberPattern { get; }
 }

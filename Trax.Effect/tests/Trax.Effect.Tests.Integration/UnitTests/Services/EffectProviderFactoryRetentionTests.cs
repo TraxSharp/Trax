@@ -53,7 +53,8 @@ public class EffectProviderFactoryRetentionTests
 
         var retained = factories.ToDictionary(
             f => f.GetType().Name,
-            f => CountRetained(() => f.Create())
+            f => CountRetained(() => f.Create()),
+            StringComparer.Ordinal
         );
 
         retained
@@ -69,7 +70,8 @@ public class EffectProviderFactoryRetentionTests
 
         var retained = factories.ToDictionary(
             f => f.GetType().Name,
-            f => CountRetained(() => f.Create())
+            f => CountRetained(() => f.Create()),
+            StringComparer.Ordinal
         );
 
         retained

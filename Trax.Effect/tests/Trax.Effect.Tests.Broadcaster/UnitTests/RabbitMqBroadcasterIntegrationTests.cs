@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -298,7 +299,10 @@ public class RabbitMqBroadcasterIntegrationTests
         try
         {
             for (var i = 0; i < 10; i++)
-                await broadcaster.PublishAsync(SampleMessage($"m{i}"), CancellationToken.None);
+                await broadcaster.PublishAsync(
+                    SampleMessage(string.Create(CultureInfo.InvariantCulture, $"m{i}")),
+                    CancellationToken.None
+                );
 
             // determinism: the wait is on the TaskCompletionSource; the delay is only the ceiling.
             (await Task.WhenAny(entered.Task, Task.Delay(TimeSpan.FromSeconds(10))))
@@ -322,11 +326,11 @@ public class RabbitMqBroadcasterIntegrationTests
             uint ready;
             do
             {
-                ready = await channel.MessageCountAsync(queue);
+                ready = await channel.MessageCountAsync(queue, CancellationToken.None);
                 if (ready == 8)
                     break;
                 // determinism: polls the broker's counter until it reaches the expected depth.
-                await Task.Delay(50);
+                await Task.Delay(50, CancellationToken.None);
             } while (DateTime.UtcNow < deadline);
 
             ready.Should().Be(8u, "only PrefetchCount deliveries may be unacknowledged at once");

@@ -76,8 +76,12 @@ public class ChainDeclarationTests
 
     private sealed class ReadsItsInputTrain : ServiceTrain<string, string>
     {
-        protected override Task<Either<Exception, string>> Junctions() =>
-            TrainInput.Length > 3 ? Chain<PassThrough>().Resolve() : Chain<PassThrough>().Resolve();
+        protected override Task<Either<Exception, string>> Junctions()
+        {
+            // Reading the input while the chain is declared is what the test is about.
+            _ = TrainInput.Length;
+            return Chain<PassThrough>().Resolve();
+        }
     }
 
     private sealed class ReadsItsOutputTrain : ServiceTrain<string, string>

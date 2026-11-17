@@ -51,10 +51,10 @@ public class TrainInstanceReuseTests : TestSetup
     {
         var train = (ExternalIdTrain)Scope.ServiceProvider.GetRequiredService<IExternalIdTrain>();
 
-        await train.Run(input: false);
+        await train.Run(input: false, CancellationToken.None);
         var first = train.Metadata!.ExternalId;
         train.ExternalId = "chosen-for-the-second-run".PadRight(32, '0');
-        await train.Run(input: false);
+        await train.Run(input: false, CancellationToken.None);
 
         train
             .Metadata!.ExternalId.Should()

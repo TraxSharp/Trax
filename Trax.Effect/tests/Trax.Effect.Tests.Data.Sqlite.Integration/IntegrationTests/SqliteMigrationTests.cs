@@ -5,7 +5,7 @@ using Trax.Effect.Data.Sqlite.Utils;
 namespace Trax.Effect.Tests.Data.Sqlite.Integration.IntegrationTests;
 
 [TestFixture]
-public class SqliteMigrationTests
+public partial class SqliteMigrationTests
 {
     private static readonly string[] ExpectedTables =
     [
@@ -170,10 +170,8 @@ public class SqliteMigrationTests
                     typeof(DatabaseMigrator).Assembly,
                     name =>
                         int.Parse(
-                            System
-                                .Text.RegularExpressions.Regex.Match(name, @"\.(\d{3})_")
-                                .Groups[1]
-                                .Value
+                            ScriptNumber.Match(name).Groups[1].Value,
+                            System.Globalization.CultureInfo.InvariantCulture
                         ) <= 13
                 )
                 .LogToNowhere()
@@ -240,10 +238,8 @@ public class SqliteMigrationTests
                     typeof(DatabaseMigrator).Assembly,
                     name =>
                         int.Parse(
-                            System
-                                .Text.RegularExpressions.Regex.Match(name, @"\.(\d{3})_")
-                                .Groups[1]
-                                .Value
+                            ScriptNumber.Match(name).Groups[1].Value,
+                            System.Globalization.CultureInfo.InvariantCulture
                         ) <= 28
                 )
                 .LogToNowhere()
@@ -292,6 +288,9 @@ public class SqliteMigrationTests
                 File.Delete(dbPath);
         }
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\.(\d{3})_")]
+    private static partial System.Text.RegularExpressions.Regex ScriptNumber { get; }
 
     #endregion
 }

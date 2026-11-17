@@ -48,7 +48,7 @@ public class DecisionRecordingFailureTests
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (RouteOrder)scope.ServiceProvider.GetRequiredService<IRouteOrder>();
 
-        var run = () => train.Run(new Order("down", 20m));
+        var run = () => train.Run(new Order("down", 20m), CancellationToken.None);
 
         (await run.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
@@ -81,7 +81,7 @@ public class DecisionRecordingFailureTests
             }
         );
 
-        var run = () => train.Run(new Order("unconfigured", 20m), metadata);
+        var run = () => train.Run(new Order("unconfigured", 20m), metadata, CancellationToken.None);
 
         (await run.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()

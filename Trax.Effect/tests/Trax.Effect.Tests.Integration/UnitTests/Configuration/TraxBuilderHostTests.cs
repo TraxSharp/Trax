@@ -102,7 +102,7 @@ public class TraxBuilderHostTests
         services.AddTrax(trax =>
             trax.AddHostLabel("existing", "value")
                 .AddHostLabels(
-                    new Dictionary<string, string>
+                    new Dictionary<string, string>(StringComparer.Ordinal)
                     {
                         ["region"] = "us-east-1",
                         ["team"] = "platform",

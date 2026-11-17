@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 
 namespace Trax.Effect.Models.Host;
 
@@ -31,7 +32,7 @@ public record TraxHostInfo
     /// User-provided key-value labels (e.g., region, service, team).
     /// Serialized as JSONB in the database.
     /// </summary>
-    public Dictionary<string, string> Labels { get; init; } = new();
+    public Dictionary<string, string> Labels { get; init; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Process-wide singleton set once at startup by the builder.
@@ -52,7 +53,7 @@ public record TraxHostInfo
             HostName = GetHostName(),
             HostEnvironment = environment,
             HostInstanceId = instanceId,
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
     }
 
@@ -117,11 +118,14 @@ public record TraxHostInfo
     {
         try
         {
-            return $"{Environment.MachineName}-{Environment.ProcessId}";
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{Environment.MachineName}-{Environment.ProcessId}"
+            );
         }
         catch
         {
-            return $"unknown-{Environment.ProcessId}";
+            return string.Create(CultureInfo.InvariantCulture, $"unknown-{Environment.ProcessId}");
         }
     }
 }

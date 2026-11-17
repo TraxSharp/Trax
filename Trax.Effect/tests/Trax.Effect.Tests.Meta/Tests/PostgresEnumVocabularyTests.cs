@@ -15,7 +15,7 @@ namespace Trax.Effect.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "docs/adr/0006-a-closed-vocabulary-is-a-postgres-enum.md")]
 [TestFixture]
-public class PostgresEnumVocabularyTests
+public partial class PostgresEnumVocabularyTests
 {
     private const string Adr = "docs/adr/0006-a-closed-vocabulary-is-a-postgres-enum.md";
 
@@ -29,18 +29,19 @@ public class PostgresEnumVocabularyTests
 
     /// <summary>Enum name to Postgres type name, from the data source mapping.</summary>
     private static async Task<Dictionary<string, string>> DataSourceMappings() =>
-        Regex
+        DataSourceMapEnum
             .Matches(
                 await File.ReadAllTextAsync(Path.Combine(Extensions, "ModelBuilderExtensions.cs"))
-                    .ConfigureAwait(false),
-                @"npgsqlDataSourceBuilder\.MapEnum<(\w+)>\(""trax\.(\w+)""\)"
+                    .ConfigureAwait(false)
             )
-            .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
+            .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value, StringComparer.Ordinal);
 
     [Test]
     public async Task Every_mapping_list_names_the_same_enums()
     {
-        var dataSource = (await DataSourceMappings().ConfigureAwait(false)).Keys.ToHashSet();
+        var dataSource = (await DataSourceMappings().ConfigureAwait(false)).Keys.ToHashSet(
+            StringComparer.Ordinal
+        );
 
         var model = Regex
             .Matches(
@@ -49,7 +50,7 @@ public class PostgresEnumVocabularyTests
                 @"HasPostgresEnum<(\w+)>"
             )
             .Select(m => m.Groups[1].Value)
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
 
         var options = Regex
             .Matches(
@@ -58,7 +59,7 @@ public class PostgresEnumVocabularyTests
                 @"o\.MapEnum<(\w+)>\(""(\w+)"",\s*""trax""\)"
             )
             .Select(m => m.Groups[1].Value)
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
 
         dataSource.Should().NotBeEmpty();
         model
@@ -118,8 +119,8 @@ public class PostgresEnumVocabularyTests
 
             if (!labels.SetEquals(members))
                 mismatches.Add(
-                    $"{enumName} -> trax.{pgName}: C# [{string.Join(", ", members.Order())}] "
-                        + $"vs migrations [{string.Join(", ", labels.Order())}]"
+                    $"{enumName} -> trax.{pgName}: C# [{string.Join(", ", members.Order(StringComparer.Ordinal))}] "
+                        + $"vs migrations [{string.Join(", ", labels.Order(StringComparer.Ordinal))}]"
                 );
         }
 
@@ -146,4 +147,7 @@ public class PostgresEnumVocabularyTests
         candidates.Should().ContainSingle($"the mapped enum {name} must resolve to one type");
         return candidates[0];
     }
+
+    [GeneratedRegex(@"npgsqlDataSourceBuilder\.MapEnum<(\w+)>\(""trax\.(\w+)""\)")]
+    private static partial Regex DataSourceMapEnum { get; }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
 using Trax.Effect.Data.Sqlite.Utils;
@@ -75,7 +76,9 @@ public class SqliteTraxInvariantsTests
         var completed = await SeedRunAsync(TrainStateNumber.Completed);
         var kept = await SeedCheckpointAsync(completed);
         var gone = await SeedRunAsync(TrainStateNumber.Failed);
-        await ExecAsync($"DELETE FROM metadata WHERE id = {gone}");
+        await ExecAsync(
+            string.Create(CultureInfo.InvariantCulture, $"DELETE FROM metadata WHERE id = {gone}")
+        );
         var resumingEntry = await SeedQueueEntryAsync(
             StatusNumber.Queued,
             runId: null,
@@ -90,20 +93,53 @@ public class SqliteTraxInvariantsTests
             .Select(v => (v.Invariant, v.Table, v.Id))
             .Should()
             .Equal(
-                (TraxInvariants.RunInProgress, "metadata", stuck.ToString()),
+                (
+                    TraxInvariants.RunInProgress,
+                    "metadata",
+                    stuck.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ),
                 (TraxInvariants.EffectClaimInFlight, "effect_claim", "effect-abandoned"),
-                (TraxInvariants.DispatchedWithoutRun, "work_queue", orphan.ToString()),
-                (TraxInvariants.CheckpointOfCompletedRun, "checkpoint", kept.ToString()),
-                (TraxInvariants.ResumeFromMissingRun, "work_queue", resumingEntry.ToString()),
-                (TraxInvariants.ResumeFromMissingRun, "metadata", resumingRun.ToString()),
-                (TraxInvariants.InvokeTokenWithoutRun, "snapshot_draft", forged.ToString())
+                (
+                    TraxInvariants.DispatchedWithoutRun,
+                    "work_queue",
+                    orphan.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ),
+                (
+                    TraxInvariants.CheckpointOfCompletedRun,
+                    "checkpoint",
+                    kept.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ),
+                (
+                    TraxInvariants.ResumeFromMissingRun,
+                    "work_queue",
+                    resumingEntry.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ),
+                (
+                    TraxInvariants.ResumeFromMissingRun,
+                    "metadata",
+                    resumingRun.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ),
+                (
+                    TraxInvariants.InvokeTokenWithoutRun,
+                    "snapshot_draft",
+                    forged.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                )
             );
-        violations[0].Detail.Should().Be($"run {stuck} of 'Invariants.Train' is still in progress");
+        violations[0]
+            .Detail.Should()
+            .Be(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"run {stuck} of 'Invariants.Train' is still in progress"
+                )
+            );
         violations[3]
             .Detail.Should()
             .Be(
-                $"checkpoint {kept} at Checkpoint<Findings>#0 of run {completed} of "
-                    + "Invariants.Train is kept, but that run completed"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"checkpoint {kept} at Checkpoint<Findings>#0 of run {completed} of "
+                ) + "Invariants.Train is kept, but that run completed"
             );
     }
 
@@ -133,8 +169,14 @@ public class SqliteTraxInvariantsTests
             .Select(v => (v.Invariant, v.Id))
             .Should()
             .Equal(
-                (TraxInvariants.InvokingStateWithoutToken, bare.ToString()),
-                (TraxInvariants.InvokeTokenOutsideInvokingState, stale.ToString())
+                (
+                    TraxInvariants.InvokingStateWithoutToken,
+                    bare.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ),
+                (
+                    TraxInvariants.InvokeTokenOutsideInvokingState,
+                    stale.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                )
             );
     }
 
@@ -238,7 +280,11 @@ public class SqliteTraxInvariantsTests
 
         violations
             .Should()
-            .BeEquivalentTo([editable.ToString(), unborn.ToString(), running.ToString()]);
+            .BeEquivalentTo([
+                editable.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                unborn.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                running.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ]);
     }
 
     // A user's draft in state, with created_at and updated_at as SQL expressions; returns its row id.

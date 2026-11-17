@@ -41,11 +41,11 @@ public static class TraxDeployExport
             if (string.Equals(args[i], Argument, StringComparison.Ordinal))
                 return i + 1 < args.Count && !args[i + 1].StartsWith("--", StringComparison.Ordinal)
                     ? args[i + 1]
-                    : throw NoPath();
+                    : throw NoPath(nameof(args));
             if (args[i].StartsWith(Argument + "=", StringComparison.Ordinal))
                 return args[i][(Argument.Length + 1)..] is { Length: > 0 } path
                     ? path
-                    : throw NoPath();
+                    : throw NoPath(nameof(args));
         }
         return null;
     }
@@ -65,7 +65,7 @@ public static class TraxDeployExport
         return true;
     }
 
-    private static ArgumentException NoPath() =>
+    private static ArgumentException NoPath(string paramName) =>
         new(
             $"The process was started with {Argument} and no path after it. Give the file to write the deploy "
                 + $"manifest to, as in '{Argument} deploy.json', or start it without {Argument} to serve."

@@ -34,7 +34,7 @@ internal sealed class JunctionProgressProvider(IDataContextProviderFactory dataC
         ISettlesBeforeTheRunEnds
 {
     /// <summary>Guards every field below.</summary>
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
 
     /// <summary>
     /// The run's junctions that have started and not yet ended, in the order they started. More

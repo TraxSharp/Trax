@@ -22,7 +22,7 @@ namespace Trax.Effect.Tests.Integration.Fakes.Trains;
 /// </remarks>
 public static class CheckpointProbe
 {
-    private static readonly object Gate = new();
+    private static readonly Lock Gate = new();
 
     private static string? _failIn;
     private static CountdownEvent? _bothBranches;

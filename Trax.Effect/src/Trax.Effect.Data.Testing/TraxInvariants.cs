@@ -279,7 +279,10 @@ public static class TraxInvariants
                             DraftsAboveCap,
                             dialect.Table("snapshot_draft"),
                             user,
-                            $"user {user} holds {count} drafts, more than the cap of {cap}"
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"user {user} holds {count} drafts, more than the cap of {cap}"
+                            )
                         ),
                     cancellationToken
                 )
@@ -603,11 +606,11 @@ public static class TraxInvariants
         CancellationToken cancellationToken
     )
     {
-        var timedMachines = timed.Select(s => s.Machine).ToHashSet();
+        var timedMachines = timed.Select(s => s.Machine).ToHashSet(StringComparer.Ordinal);
         var removed = invoking
             .Select(s => s.Machine)
             .Where(m => !timedMachines.Contains(m))
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
         if (timedMachines.Count == 0 && removed.Count == 0 && maxDraftLifetime is null)
             return [];
 
@@ -680,7 +683,7 @@ public static class TraxInvariants
             )
                 continue;
             // The sweep counts a row written before created_at was recorded from its last write.
-            var born = await reader.IsDBNullAsync(5).ConfigureAwait(false)
+            var born = await reader.IsDBNullAsync(5, cancellationToken).ConfigureAwait(false)
                 ? null
                 : reader.GetString(5);
             var since = born ?? reader.GetString(6);
@@ -700,7 +703,11 @@ public static class TraxInvariants
                             born is null
                                 ? $"{machine} {id} has no creation time and was last written at {since}"
                                 : $"{machine} {id} was created at {since}"
-                        ) + $", longer ago than the maximum lifetime of {maxDraftLifetime}"
+                        )
+                            + string.Create(
+                                CultureInfo.InvariantCulture,
+                                $", longer ago than the maximum lifetime of {maxDraftLifetime}"
+                            )
                     )
                 );
         }
@@ -719,7 +726,7 @@ public static class TraxInvariants
         CancellationToken cancellationToken
     )
     {
-        var machines = invoking.Select(s => s.Machine).ToHashSet();
+        var machines = invoking.Select(s => s.Machine).ToHashSet(StringComparer.Ordinal);
         var table = dialect.Table("snapshot_draft");
 
         var command = connection.CreateCommand();
@@ -745,10 +752,10 @@ public static class TraxInvariants
             var rowId = reader.GetString(0);
             var id = reader.GetString(2);
             var state = reader.GetString(3);
-            var token = await reader.IsDBNullAsync(4).ConfigureAwait(false)
+            var token = await reader.IsDBNullAsync(4, cancellationToken).ConfigureAwait(false)
                 ? null
                 : reader.GetString(4);
-            var stranded = await reader.IsDBNullAsync(5).ConfigureAwait(false)
+            var stranded = await reader.IsDBNullAsync(5, cancellationToken).ConfigureAwait(false)
                 ? null
                 : reader.GetString(5);
             var invokes = invoking.Contains(new InvokingState(machine, state));
@@ -843,7 +850,7 @@ public static class TraxInvariants
                 .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
                 .Any(m =>
                     string.Equals(m.Name, methodName, StringComparison.Ordinal)
-                    && m.GetCustomAttribute<LeavesStuckRunsAttribute>(inherit: true) is not null
+                    && Attribute.IsDefined(m, typeof(LeavesStuckRunsAttribute), inherit: true)
                 );
     }
 

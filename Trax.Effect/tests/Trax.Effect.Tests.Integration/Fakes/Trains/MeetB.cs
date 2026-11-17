@@ -16,7 +16,7 @@ public sealed class MeetB : Junction<BranchB, BranchB>
     public override Task<BranchB> Run(BranchB input)
     {
         CheckpointProbe.BothBranches?.Signal();
-        CheckpointProbe.BothBranches?.Wait(TimeSpan.FromSeconds(30));
+        CheckpointProbe.BothBranches?.Wait(TimeSpan.FromSeconds(30), CancellationToken.None);
         return Task.FromResult(input);
     }
 }

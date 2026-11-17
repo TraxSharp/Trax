@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
@@ -112,8 +113,12 @@ public class RabbitMqMessageSigningTests
             Now.AddHours(-1)
         );
         var moved = signature.Replace(
-            $"t={Now.AddHours(-1).ToUnixTimeSeconds()}",
-            $"t={Now.ToUnixTimeSeconds()}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"t={Now.AddHours(-1).ToUnixTimeSeconds()}"
+            ),
+            string.Create(CultureInfo.InvariantCulture, $"t={Now.ToUnixTimeSeconds()}"),
+            StringComparison.Ordinal
         );
 
         Verify(moved).Should().Be(BroadcastSignatureVerdict.Invalid);
@@ -334,7 +339,7 @@ public class RabbitMqMessageSigningTests
             connection = await new ConnectionFactory
             {
                 Uri = new Uri(AmqpUri),
-            }.CreateConnectionAsync();
+            }.CreateConnectionAsync(CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -366,7 +371,9 @@ public class RabbitMqMessageSigningTests
         );
 
         // On one channel, in order: the two the receiver must drop, then the one it must pass on.
-        var channel = await connection.CreateChannelAsync();
+        var channel = await connection.CreateChannelAsync(
+            cancellationToken: CancellationToken.None
+        );
         await using var channelDisposal = channel.ConfigureAwait(false);
         await RawPublish(channel, options.ExchangeName, "unsigned", key: null);
         await RawPublish(channel, options.ExchangeName, "other-key", OtherKey);
@@ -374,7 +381,7 @@ public class RabbitMqMessageSigningTests
         await using (broadcaster.ConfigureAwait(false))
         {
             await broadcaster.PublishAsync(Message("signed"), CancellationToken.None);
-            await gotSigned.Task.WaitAsync(Timeout);
+            await gotSigned.Task.WaitAsync(Timeout, CancellationToken.None);
         }
 
         received.Should().Equal(["signed"]);
@@ -392,7 +399,7 @@ public class RabbitMqMessageSigningTests
         var body = JsonSerializer.SerializeToUtf8Bytes(Message(externalId));
         var properties = new BasicProperties();
         if (key is not null)
-            properties.Headers = new Dictionary<string, object?>
+            properties.Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [BroadcastMessageSignature.Header] = BroadcastMessageSignature.Create(
                     key,
@@ -402,7 +409,14 @@ public class RabbitMqMessageSigningTests
                 ),
             };
         await channel
-            .BasicPublishAsync(exchange, string.Empty, mandatory: false, properties, body)
+            .BasicPublishAsync(
+                exchange,
+                string.Empty,
+                mandatory: false,
+                properties,
+                body,
+                CancellationToken.None
+            )
             .ConfigureAwait(false);
     }
 

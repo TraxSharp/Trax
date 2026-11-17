@@ -56,13 +56,15 @@ public class SignalRSlowClientTests
         var app = builder.Build();
         await using var appDisposal = app.ConfigureAwait(false);
         app.MapTraxTrainEventHub(hub => hub.AllowAnonymous());
-        await app.StartAsync();
+        await app.StartAsync(CancellationToken.None);
 
         var address = app
             .Services.GetRequiredService<IServer>()
             .Features.Get<IServerAddressesFeature>()!
             .Addresses.First();
-        var hubUri = new Uri(address.Replace("http://", "ws://") + "/hubs/trax-events");
+        var hubUri = new Uri(
+            address.Replace("http://", "ws://", StringComparison.Ordinal) + "/hubs/trax-events"
+        );
 
         // Connect and complete the SignalR handshake, then stop reading from the socket.
         using var socket = new ClientWebSocket();
@@ -78,7 +80,7 @@ public class SignalRSlowClientTests
         var handshake = new byte[256];
         await socket
             .ReceiveAsync(handshake, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
 
         var dispatcher = app.Services.GetRequiredService<SignalRTrainEventDispatcher>();
         var reason = new string('x', 256 * 1024);
@@ -104,6 +106,6 @@ public class SignalRSlowClientTests
             );
 
         socket.Abort();
-        await app.StopAsync();
+        await app.StopAsync(CancellationToken.None);
     }
 }

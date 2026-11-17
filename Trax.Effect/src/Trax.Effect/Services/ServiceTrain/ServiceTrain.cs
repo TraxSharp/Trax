@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.ExceptionServices;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -56,7 +57,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// <summary>
     /// Runs the junction effects (junction logger, junction progress) around each
     /// <see cref="EffectJunction.EffectJunction{TIn,TOut}"/> in this train. Filled by property injection when the
-    /// train is resolved; <see cref="Run(TIn, CancellationToken)"/> throws when it is <c>null</c>.
+    /// train is resolved; <see cref="Run(TIn, CancellationToken)"/> throws when it is <see langword="null"/>.
     /// </summary>
     [Inject]
     [JsonIgnore]
@@ -66,7 +67,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// Fires the registered lifecycle hooks (broadcaster, GraphQL subscriptions, your own
     /// <c>AddLifecycleHook</c> registrations) when the run starts, completes, fails or is cancelled. Filled by
     /// property injection from the run's scope; <see cref="Run(TIn, CancellationToken)"/> throws when it is
-    /// <c>null</c>.
+    /// <see langword="null"/>.
     /// </summary>
     [Inject]
     [JsonIgnore]
@@ -105,9 +106,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// Also returns the input inside <see cref="QueueSubjectKey"/> and <see cref="OnQueue"/>,
     /// which run on an instance that has not run, when the enqueue path hands it over through
     /// <see cref="EnterQueueHooks"/>. A Trax.Mediator that predates that method does not, and
-    /// <c>TrainInput</c> then returns <c>default</c> there; the hook's <c>metadata</c> argument
+    /// <c>TrainInput</c> then returns <see langword="default"/> there; the hook's <c>metadata</c> argument
     /// carries the input on every version. Anywhere else a train with no metadata carrying an
-    /// input returns <c>default</c>.
+    /// input returns <see langword="default"/>.
     /// </remarks>
     protected TIn TrainInput =>
         IsDeclaringChain ? throw new ChainDeclarationException(TrainName, nameof(TrainInput))
@@ -186,14 +187,14 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
     /// <summary>
     /// Gets the typed output produced by this train. Set after a successful run, so it is
-    /// only meaningful in <see cref="OnCompleted"/>. Returns <c>default</c> in
+    /// only meaningful in <see cref="OnCompleted"/>. Returns <see langword="default"/> in
     /// <see cref="OnStarted"/>, <see cref="OnFailed"/>, and <see cref="OnCancelled"/>
     /// because the train either hasn't run yet, failed before producing output, or was cancelled.
     /// </summary>
     /// <remarks>
     /// Throws <see cref="ChainDeclarationException"/> while the chain is being read, because
     /// <c>Junctions()</c> is then run to record its declaration and no output exists. Returns
-    /// <c>default</c> in <see cref="QueueSubjectKey"/> and <see cref="OnQueue"/>, which are
+    /// <see langword="default"/> in <see cref="QueueSubjectKey"/> and <see cref="OnQueue"/>, which are
     /// called on an instance that has not run and has no metadata.
     /// </remarks>
     protected TOut TrainOutput =>
@@ -751,7 +752,10 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             {
                 var refusal = new ResumeRefusedException(
                     code,
-                    $"Run {ExternalId} of train '{TrainName}' was queued to resume run {from}, but "
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Run {ExternalId} of train '{TrainName}' was queued to resume run {from}, but "
+                    )
                         + $"it cannot: {reason} It is failed rather than run from the top, because a "
                         + "resume was asked for, not a fresh run."
                 );
@@ -969,7 +973,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// </summary>
     /// <returns>
     /// The content that was replaced by placeholders when the store refused it, so the hooks can
-    /// be shown what happened; <c>null</c> when the row was written in full.
+    /// be shown what happened; <see langword="null"/> when the row was written in full.
     /// </returns>
     /// <remarks>
     /// Deliberately not given the caller's token. That token is cancelled in exactly the case

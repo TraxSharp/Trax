@@ -196,7 +196,7 @@ public class BroadcastReplicaTests
     /// <summary>A fanout that delivers each publish inline to every started receiver.</summary>
     private sealed class InMemoryBus : ITrainEventBroadcaster
     {
-        private readonly object _gate = new();
+        private readonly Lock _gate = new();
         private readonly List<Func<TrainLifecycleEventMessage, CancellationToken, Task>> _subs = [];
         private readonly List<TrainLifecycleEventMessage> _published = [];
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using NUnit.Framework;
@@ -138,7 +139,10 @@ public class WorkQueueCreateTests
         act.Should()
             .Throw<ArgumentException>()
             .WithMessage(
-                $"*unpaired surrogate at position {index}*",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"*unpaired surrogate at position {index}*"
+                ),
                 "the database encodes the key as UTF-8, which has no encoding for half a "
                     + "character, so the insert would fail far from the caller"
             );

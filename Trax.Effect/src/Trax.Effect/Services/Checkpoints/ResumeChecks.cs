@@ -39,5 +39,5 @@ internal sealed record ResumeChecks(
     /// checkpoint withheld (its key is marked sensitive) is not here.
     /// </summary>
     public IReadOnlyDictionary<string, string> RestoredTracks { get; init; } =
-        new Dictionary<string, string>();
+        new Dictionary<string, string>(StringComparer.Ordinal);
 }

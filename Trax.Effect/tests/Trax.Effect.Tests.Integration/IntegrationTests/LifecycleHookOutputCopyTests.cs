@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -185,7 +186,10 @@ public class LifecycleHookOutputCopyTests
     {
         protected override Task<Either<Exception, List<string>>> Junctions() =>
             Task.FromResult<Either<Exception, List<string>>>(
-                Enumerable.Range(0, TrainInput).Select(i => $"row-{i}").ToList()
+                Enumerable
+                    .Range(0, TrainInput)
+                    .Select(i => string.Create(CultureInfo.InvariantCulture, $"row-{i}"))
+                    .ToList()
             );
     }
 
@@ -196,7 +200,10 @@ public class LifecycleHookOutputCopyTests
     {
         protected override Task<Either<Exception, List<string>>> Junctions() =>
             Task.FromResult<Either<Exception, List<string>>>(
-                Enumerable.Range(0, TrainInput).Select(i => $"row-{i}").ToList()
+                Enumerable
+                    .Range(0, TrainInput)
+                    .Select(i => string.Create(CultureInfo.InvariantCulture, $"row-{i}"))
+                    .ToList()
             );
     }
 

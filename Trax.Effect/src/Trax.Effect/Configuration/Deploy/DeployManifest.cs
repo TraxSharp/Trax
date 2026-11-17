@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -57,7 +58,10 @@ public sealed class DeployManifest
             ?? throw new InvalidOperationException("The deploy manifest is empty.");
         if (manifest.Version > CurrentVersion)
             throw new InvalidOperationException(
-                $"The deploy manifest has format version {manifest.Version}, and this build reads up to "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The deploy manifest has format version {manifest.Version}, and this build reads up to "
+                )
                     + $"{CurrentVersion}. Update the trax tool to the version of the packages the host uses."
             );
         return manifest;

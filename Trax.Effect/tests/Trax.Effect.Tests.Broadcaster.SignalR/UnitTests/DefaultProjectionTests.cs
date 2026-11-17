@@ -47,7 +47,10 @@ public class DefaultProjectionTests
     [Test]
     public void Project_DropsTrainStateExecutorOutputHostFields()
     {
-        var propertyNames = typeof(TraxClientEvent).GetProperties().Select(p => p.Name).ToHashSet();
+        var propertyNames = typeof(TraxClientEvent)
+            .GetProperties()
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.Ordinal);
 
         propertyNames
             .Should()

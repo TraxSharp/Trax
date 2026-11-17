@@ -103,7 +103,7 @@ public class JsonEffectManifestPropertiesTests
         var train = (ChargeTrain)scope.ServiceProvider.GetRequiredService<IChargeTrain>();
         _logs.Lines.Clear();
 
-        await train.Run(charge, metadata);
+        await train.Run(charge, metadata, CancellationToken.None);
 
         _logs
             .Lines.Should()

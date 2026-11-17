@@ -31,7 +31,9 @@ namespace Trax.Effect.Tests.Integration.Fixtures;
 /// </remarks>
 public sealed class CheckpointHost : IAsyncDisposable
 {
-    private static readonly ConcurrentDictionary<string, byte> SqliteFiles = new();
+    private static readonly ConcurrentDictionary<string, byte> SqliteFiles = new(
+        StringComparer.Ordinal
+    );
 
     private readonly string? _sqliteFile;
 
@@ -144,7 +146,7 @@ public sealed class CheckpointHost : IAsyncDisposable
         Exception? failure = null;
         try
         {
-            await train.Run(input, metadata).ConfigureAwait(false);
+            await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception e)
         {

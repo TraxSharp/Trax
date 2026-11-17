@@ -129,7 +129,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
         {
             body = Request(request).ToJsonString();
         }
-        catch (Unsendable unsendable)
+        catch (UnsendableException unsendable)
         {
             throw Refused(request, unsendable.Message, FailureClass.Permanent);
         }
@@ -170,14 +170,18 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
                 if (status is >= 300 and < 400)
                     throw Refused(
                         request,
-                        $"the model answered {status} {response.ReasonPhrase}, a redirect, and "
-                            + "redirects are not followed: the endpoint is the one configured",
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"the model answered {status} {response.ReasonPhrase}, a redirect, and "
+                        ) + "redirects are not followed: the endpoint is the one configured",
                         FailureClass.Permanent
                     );
 
                 failure =
-                    $"the model answered {status} {response.ReasonPhrase} ({Classify(status)})"
-                    + RequestId(response);
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"the model answered {status} {response.ReasonPhrase} ({Classify(status)})"
+                    ) + RequestId(response);
 
                 if (!IsRetryable(response.StatusCode))
                     throw Refused(request, failure, FailureClass.Permanent);
@@ -190,8 +194,10 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
             }
             catch (OperationCanceledException)
             {
-                failure =
-                    $"the model did not answer within {_options.AttemptTimeout.TotalSeconds:0.#}s";
+                failure = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"the model did not answer within {_options.AttemptTimeout.TotalSeconds:0.#}s"
+                );
             }
             catch (HttpRequestException e) when (CannotReach(e.HttpRequestError))
             {
@@ -207,7 +213,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
             {
                 failure = $"the model could not be reached: {e.Message}";
             }
-            catch (MalformedResponse e)
+            catch (MalformedResponseException e)
             {
                 failure =
                     $"the model answered with something that is not a System One response: {e.Message}";
@@ -220,7 +226,10 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
             if (attempt >= _options.MaxAttempts)
                 throw Refused(
                     request,
-                    $"{failure}, after {attempt} attempt{(attempt == 1 ? "" : "s")}",
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{failure}, after {attempt} attempt{(attempt == 1 ? "" : "s")}"
+                    ),
                     FailureClass.Transient
                 );
 
@@ -248,7 +257,11 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     public IEnumerable<string> Problems(DeclaredQuestions declared)
     {
         ArgumentNullException.ThrowIfNull(declared);
+        return ProblemsOf(declared);
+    }
 
+    private IEnumerable<string> ProblemsOf(DeclaredQuestions declared)
+    {
         if (TooManyQuestions(declared.Questions.Count) is { } tooMany)
             yield return tooMany;
 
@@ -310,10 +323,10 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
         foreach (var question in request.Questions)
         {
             if (questions.ContainsKey(question.Key))
-                throw new Unsendable(KeyUsedTwice(question));
+                throw new UnsendableException(KeyUsedTwice(question));
 
             if (QuestionProblem(question) is { } problem)
-                throw new Unsendable(problem);
+                throw new UnsendableException(problem);
 
             questions[question.Key] = question switch
             {
@@ -345,7 +358,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
                         ["false"] = yesNo.No ?? "No",
                     },
                 },
-                _ => throw new Unsendable(CannotAsk(question)),
+                _ => throw new UnsendableException(CannotAsk(question)),
             };
         }
 
@@ -359,8 +372,14 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 
     private string? TooManyQuestions(int count) =>
         count > _options.MaxQuestions
-            ? $"it asks {count} questions in one request, and the model accepts at most "
-                + $"{_options.MaxQuestions}. Split the Decide"
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"it asks {count} questions in one request, and the model accepts at most "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{_options.MaxQuestions}. Split the Decide"
+                )
             : null;
 
     private static string KeyUsedTwice(Question question) =>
@@ -403,9 +422,10 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
             < 2 => $"the question '{question.Key}' offers {criteria.Count} "
                 + $"{(criteria.Count == 1 ? noun : noun + "s")}, and the model needs at least 2 to "
                 + "choose between",
-            var count when count > _options.MaxOptions =>
+            var count when count > _options.MaxOptions => string.Create(
+                CultureInfo.InvariantCulture,
                 $"the question '{question.Key}' offers {count} {noun}s, and the model accepts at "
-                    + $"most {_options.MaxOptions}",
+            ) + string.Create(CultureInfo.InvariantCulture, $"most {_options.MaxOptions}"),
             _ => null,
         };
 
@@ -439,13 +459,13 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
         }
         catch (Exception e) when (e is JsonException or NotSupportedException)
         {
-            throw new Unsendable($"its state cannot be written as JSON: {e.Message}");
+            throw new UnsendableException($"its state cannot be written as JSON: {e.Message}");
         }
 
         return node?.GetValueKind() switch
         {
             JsonValueKind.Object or JsonValueKind.Array or JsonValueKind.String => node,
-            var kind => throw new Unsendable(
+            var kind => throw new UnsendableException(
                 $"its state is written as JSON {(kind is null ? "null" : $"{kind}".ToLowerInvariant())}, "
                     + "and the model takes a string, an object or an array. Decide from a type "
                     + "that holds the value"
@@ -496,30 +516,30 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     /// <summary>
     /// Reads the answers out of a response. An answer that cannot be read is left out, so the
     /// train fails on it as unanswered rather than acting on a guess. A body that is not a System
-    /// One response at all is thrown as <see cref="MalformedResponse"/>.
+    /// One response at all is thrown as <see cref="MalformedResponseException"/>.
     /// </summary>
     private static DecisionResult Read(string json, DecisionRequest request)
     {
-        var answers = new Dictionary<string, Answer>();
+        var answers = new Dictionary<string, Answer>(StringComparer.Ordinal);
 
         try
         {
             if (JsonNode.Parse(json) is not JsonObject root)
-                throw new MalformedResponse("the body is not a JSON object");
+                throw new MalformedResponseException("the body is not a JSON object");
 
             var model = root["model"] switch
             {
                 null => null,
                 JsonValue value when value.GetValueKind() == JsonValueKind.String =>
                     value.GetValue<string>(),
-                _ => throw new MalformedResponse("its 'model' is not a string"),
+                _ => throw new MalformedResponseException("its 'model' is not a string"),
             };
 
             // A response without its answers is not a System One response, however it is
             // otherwise shaped; read as answering nothing, it would fail the train as unanswered
             // instead of being retried.
             if (root["answers"] is not JsonObject given)
-                throw new MalformedResponse("it has no 'answers' object");
+                throw new MalformedResponseException("it has no 'answers' object");
 
             foreach (var question in request.Questions)
                 if (given[question.Key] is JsonObject node && Answer(node, question) is { } answer)
@@ -527,7 +547,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
         }
         catch (Exception e) when (e is JsonException or ArgumentException)
         {
-            throw new MalformedResponse(e.Message);
+            throw new MalformedResponseException(e.Message);
         }
 
         return new DecisionResult(answers);
@@ -535,7 +555,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 
     /// <summary>
     /// The body of a successful response as text. One whose declared character set cannot be
-    /// decoded is not a System One response, and is thrown as <see cref="MalformedResponse"/>
+    /// decoded is not a System One response, and is thrown as <see cref="MalformedResponseException"/>
     /// rather than escaping unclassified.
     /// </summary>
     private static async Task<string> Body(HttpResponseMessage response, CancellationToken ct)
@@ -546,7 +566,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
         }
         catch (InvalidOperationException e)
         {
-            throw new MalformedResponse(e.Message);
+            throw new MalformedResponseException(e.Message);
         }
     }
 
@@ -587,7 +607,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
         var choice = node["choice"]!.GetValue<string>();
         var probabilities = node["probabilities"]
             ?.AsObject()
-            .ToDictionary(p => p.Key, p => p.Value!.GetValue<double>());
+            .ToDictionary(p => p.Key, p => p.Value!.GetValue<double>(), StringComparer.Ordinal);
 
         double? confidence =
             node["confidence"] is { } given ? given.GetValue<double>()
@@ -735,8 +755,8 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
 
     /// <summary>A request that cannot be sent as it is; never worth retrying.</summary>
-    private sealed class Unsendable(string message) : Exception(message);
+    private sealed class UnsendableException(string message) : Exception(message);
 
     /// <summary>A successful status whose body is not a System One response.</summary>
-    private sealed class MalformedResponse(string message) : Exception(message);
+    private sealed class MalformedResponseException(string message) : Exception(message);
 }

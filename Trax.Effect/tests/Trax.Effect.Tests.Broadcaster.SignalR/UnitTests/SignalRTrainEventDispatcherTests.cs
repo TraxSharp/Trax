@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
@@ -479,7 +480,10 @@ public class SignalRTrainEventDispatcherTests
 
         // Four fill the queue; three more have nowhere to go.
         for (var i = 0; i < 7; i++)
-            await d.HandleAsync(Message(externalId: $"e{i}"), CancellationToken.None);
+            await d.HandleAsync(
+                Message(externalId: string.Create(CultureInfo.InvariantCulture, $"e{i}")),
+                CancellationToken.None
+            );
 
         d.DroppedEvents.Should().Be(3);
         _logger
@@ -512,7 +516,10 @@ public class SignalRTrainEventDispatcherTests
             .TrainEvent(Arg.Do<object>(o => sent.Enqueue(((TraxClientEvent)o).ExternalId)))
             .Returns(Task.CompletedTask);
         var d = Create(NewOptions().Build());
-        var ids = Enumerable.Range(0, 500).Select(i => $"id-{i}").ToArray();
+        var ids = Enumerable
+            .Range(0, 500)
+            .Select(i => string.Create(CultureInfo.InvariantCulture, $"id-{i}"))
+            .ToArray();
 
         foreach (var id in ids)
             await d.HandleAsync(Message(externalId: id), CancellationToken.None);
@@ -531,7 +538,10 @@ public class SignalRTrainEventDispatcherTests
         var d = Create(NewOptions().Build());
 
         for (var i = 0; i < 20; i++)
-            await d.HandleAsync(Message(externalId: $"q{i}"), CancellationToken.None);
+            await d.HandleAsync(
+                Message(externalId: string.Create(CultureInfo.InvariantCulture, $"q{i}")),
+                CancellationToken.None
+            );
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         var stop = d.StopAsync(CancellationToken.None);
@@ -551,13 +561,16 @@ public class SignalRTrainEventDispatcherTests
         var d = Create(NewOptions().Build());
 
         for (var i = 0; i < 5; i++)
-            await d.HandleAsync(Message(externalId: $"q{i}"), CancellationToken.None);
+            await d.HandleAsync(
+                Message(externalId: string.Create(CultureInfo.InvariantCulture, $"q{i}")),
+                CancellationToken.None
+            );
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         using var cts = new CancellationTokenSource();
         var stop = d.StopAsync(cts.Token);
         await cts.CancelAsync();
-        await stop.WaitAsync(TimeSpan.FromSeconds(10));
+        await stop.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
 
         _logger
             .Entries.Should()

@@ -24,11 +24,18 @@ namespace Trax.Effect.Tests.Data.InMemory.Integration.IntegrationTests;
 
 public class Ship : Junction<Order, string>
 {
-    public static int Ran;
+    private static int _ran;
+
+    /// <summary>How many times a Ship junction has run since it was last set.</summary>
+    public static int Ran
+    {
+        get => Volatile.Read(ref _ran);
+        set => Volatile.Write(ref _ran, value);
+    }
 
     public override Task<string> Run(Order input)
     {
-        Interlocked.Increment(ref Ran);
+        Interlocked.Increment(ref _ran);
         return Task.FromResult("shipped");
     }
 }

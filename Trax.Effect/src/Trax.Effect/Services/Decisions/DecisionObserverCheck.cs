@@ -53,7 +53,7 @@ internal sealed class DecisionObserverCheck(IServiceProvider services)
             .GetServices<DecisionObserverPart>()
             .Where(part => part.Tag is not null)
             .Select(part => part.Tag!.Name)
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
 
         IDecisionObserver? resolved;

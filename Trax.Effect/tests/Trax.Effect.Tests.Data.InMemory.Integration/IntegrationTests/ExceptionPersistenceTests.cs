@@ -185,11 +185,11 @@ public class ExceptionPersistenceTests : TestSetup
         var train = Scope.ServiceProvider.GetRequiredService<IPlainExceptionTrain>();
 
         var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
-        await act.Should().ThrowAsync<ArgumentException>();
+        await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
         train.Metadata!.TrainState.Should().Be(TrainState.Failed);
-        train.Metadata.FailureException.Should().Be("ArgumentException");
+        train.Metadata.FailureException.Should().Be("InvalidOperationException");
         train.Metadata.FailureReason.Should().Be("plain failure");
         // No junction context — falls back to "TrainException" sentinel
         train.Metadata.FailureJunction.Should().Be("TrainException");
@@ -401,7 +401,9 @@ public class ExceptionPersistenceTests : TestSetup
     private sealed class PlainExceptionTrain : ServiceTrain<Unit, Unit>, IPlainExceptionTrain
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
-            Task.FromResult<Either<Exception, Unit>>(new ArgumentException("plain failure"));
+            Task.FromResult<Either<Exception, Unit>>(
+                new InvalidOperationException("plain failure")
+            );
     }
 
     private interface IPlainExceptionTrain : IServiceTrain<Unit, Unit>;

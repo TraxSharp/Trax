@@ -27,10 +27,10 @@ public class SqliteFailureClassStorageTests : TestSetup
     public void Every_FailureClass_member_keeps_its_stored_integer()
     {
         Enum.GetValues<FailureClass>()
-            .ToDictionary(value => value.ToString(), value => (int)value)
+            .ToDictionary(value => value.ToString(), value => (int)value, StringComparer.Ordinal)
             .Should()
             .BeEquivalentTo(
-                new Dictionary<string, int>
+                new Dictionary<string, int>(StringComparer.Ordinal)
                 {
                     ["Unclassified"] = 0,
                     ["Transient"] = 1,

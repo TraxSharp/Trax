@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Effect.Models.Host;
 
@@ -130,7 +131,13 @@ public class TraxHostInfoTests
     {
         var info = TraxHostInfo.AutoDetect();
 
-        info.HostInstanceId.Should().Be($"{Environment.MachineName}-{Environment.ProcessId}");
+        info.HostInstanceId.Should()
+            .Be(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{Environment.MachineName}-{Environment.ProcessId}"
+                )
+            );
     }
 
     #endregion

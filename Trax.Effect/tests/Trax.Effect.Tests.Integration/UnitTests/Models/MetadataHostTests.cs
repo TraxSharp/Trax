@@ -26,7 +26,10 @@ public class MetadataHostTests
             HostName = "test-host",
             HostEnvironment = "lambda",
             HostInstanceId = "stream-abc",
-            Labels = new Dictionary<string, string> { ["region"] = "us-east-1" },
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["region"] = "us-east-1",
+            },
         };
 
         var metadata = Metadata.Create(
@@ -72,7 +75,7 @@ public class MetadataHostTests
             HostName = "test-host",
             HostEnvironment = "server",
             HostInstanceId = "test-1",
-            Labels = new Dictionary<string, string>
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["region"] = "us-east-1",
                 ["service"] = "api",
@@ -102,7 +105,7 @@ public class MetadataHostTests
             HostName = "test-host",
             HostEnvironment = "server",
             HostInstanceId = "test-1",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
         var metadata = Metadata.Create(

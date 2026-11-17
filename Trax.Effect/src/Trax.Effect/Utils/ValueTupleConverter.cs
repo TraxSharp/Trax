@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -44,7 +45,7 @@ internal sealed class ValueTupleConverter : JsonConverterFactory
     /// </remarks>
     public override bool CanConvert(Type typeToConvert) =>
         typeToConvert is { IsValueType: true, IsGenericType: true }
-        && typeToConvert.FullName!.StartsWith("System.ValueTuple");
+        && typeToConvert.FullName!.StartsWith("System.ValueTuple", StringComparison.Ordinal);
 
     /// <summary>
     /// Creates a converter for the specified type.
@@ -128,7 +129,12 @@ internal sealed class ValueTupleConverter : JsonConverterFactory
 
             var length = array.GetArrayLength();
             if (length != Fields.Length)
-                throw new JsonException($"Expected {Fields.Length} values, but got {length}");
+                throw new JsonException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Expected {Fields.Length} values, but got {length}"
+                    )
+                );
 
             var args = array
                 .EnumerateArray()

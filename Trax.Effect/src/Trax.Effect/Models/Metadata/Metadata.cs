@@ -785,7 +785,7 @@ public class Metadata : IModel, IDisposable
     /// Gets the deserialized input object cast to the specified type.
     /// The input is set before the train's junctions execute, so it is available in all
     /// lifecycle hooks (<c>OnStarted</c>, <c>OnCompleted</c>, <c>OnFailed</c>, <c>OnCancelled</c>).
-    /// Returns <c>default</c> if the input is null or not of type <typeparamref name="T"/>.
+    /// Returns <see langword="default"/> if the input is null or not of type <typeparamref name="T"/>.
     /// </summary>
     /// <remarks>
     /// For per-train lifecycle hooks, prefer the <c>TrainInput</c> property on
@@ -797,8 +797,8 @@ public class Metadata : IModel, IDisposable
     /// <summary>
     /// Gets the deserialized output object cast to the specified type.
     /// The output is set after a successful run, so it is only meaningful in <c>OnCompleted</c>.
-    /// Returns <c>default</c> in <c>OnStarted</c>, <c>OnFailed</c>, and <c>OnCancelled</c>.
-    /// Returns <c>default</c> if the output is null or not of type <typeparamref name="T"/>.
+    /// Returns <see langword="default"/> in <c>OnStarted</c>, <c>OnFailed</c>, and <c>OnCancelled</c>.
+    /// Returns <see langword="default"/> if the output is null or not of type <typeparamref name="T"/>.
     /// </summary>
     /// <remarks>
     /// For per-train lifecycle hooks, prefer the <c>TrainOutput</c> property on

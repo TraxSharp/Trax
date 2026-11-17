@@ -40,7 +40,7 @@ public class ParameterEffect(
     private readonly JsonSerializerOptions _options = TraxRedaction.WithRedaction(options);
 
     private readonly Dictionary<Metadata, Serialized> _trackedMetadatas = [];
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     /// <summary>
     /// Saves changes to tracked metadata objects by serializing their input and output parameters.

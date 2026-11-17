@@ -151,7 +151,7 @@ public class ParallelRunTests
     {
         // Before the fork, in each branch, and after the join: four askings of one question.
         Decider.Script(
-            byBranch: new()
+            byBranch: new(StringComparer.Ordinal)
             {
                 [""] = [ParLane.Express, ParLane.Ground],
                 ["Parallel#0/a"] = [ParLane.Ground],
@@ -200,7 +200,7 @@ public class ParallelRunTests
                 (object)scope.ServiceProvider.GetRequiredService<IParWaitTrain>();
 
         var running = train.Run(new ParOrder("o"), cancel.Token);
-        await ParMeeting.BothWaiting.WaitAsync(TimeSpan.FromSeconds(30));
+        await ParMeeting.BothWaiting.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
         await cancel.CancelAsync();
 
         await FluentActions
@@ -209,7 +209,7 @@ public class ParallelRunTests
             .ThrowAsync<OperationCanceledException>();
         train.Metadata!.TrainState.Should().Be(TrainState.Cancelled);
 
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
+        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync(CancellationToken.None);
         (await Rows(train.Metadata.Id))
             .Where(r => r.Name is nameof(ParWaitA) or nameof(ParWaitB))
             .Should()
@@ -266,8 +266,11 @@ public class ParallelRunTests
             }
         );
 
-        var output = await train.Run(input, metadata).ConfigureAwait(false);
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
+        var output = await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
+        await _provider
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return (train, output);
     }
 
@@ -281,7 +284,7 @@ public class ParallelRunTests
                 (object)scope.ServiceProvider.GetRequiredService<TTrain>();
 
         await FluentActions
-            .Awaiting(() => train.Run(new ParOrder("o")))
+            .Awaiting(() => train.Run(new ParOrder("o"), CancellationToken.None))
             .Should()
             .ThrowAsync<BranchesFailedException>()
             .ConfigureAwait(false);

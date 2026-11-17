@@ -67,7 +67,7 @@ public class SqliteParallelRunTests
     public async Task Branches_asking_one_question_each_get_a_row_and_a_requeue_replays_each()
     {
         Decider.Script(
-            new()
+            new(StringComparer.Ordinal)
             {
                 [""] = [LiteParLane.Express, LiteParLane.Ground],
                 ["Parallel#0/a"] = [LiteParLane.Ground],
@@ -133,8 +133,11 @@ public class SqliteParallelRunTests
             }
         );
 
-        await train.Run(input, metadata).ConfigureAwait(false);
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
+        await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
+        await _provider
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return train.Metadata!.Id;
     }
 

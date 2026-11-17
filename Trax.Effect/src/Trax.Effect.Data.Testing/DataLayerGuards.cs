@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
@@ -18,7 +19,7 @@ namespace Trax.Effect.Data.Testing;
 /// <see cref="GuardResult"/> the consumer asserts on with its own test framework.
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/effect-data-testing">SDK reference</seealso>
-public static class DataLayerGuards
+public static partial class DataLayerGuards
 {
     private const string DefaultBaseTypeName = "DomainDataContext";
 
@@ -221,8 +222,8 @@ public static class DataLayerGuards
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(options.OwnerType);
-        ArgumentNullException.ThrowIfNull(options.PrincipalAccessorType);
+        ArgumentNullException.ThrowIfNull(options.OwnerType, nameof(options));
+        ArgumentNullException.ThrowIfNull(options.PrincipalAccessorType, nameof(options));
 
         var offenders = new List<string>();
         var perUser = new HashSet<Type>();
@@ -325,7 +326,12 @@ public static class DataLayerGuards
                 );
         }
 
-        foreach (var (type, reason) in options.NavigationScoped.OrderBy(n => n.Key.FullName))
+        foreach (
+            var (type, reason) in options.NavigationScoped.OrderBy(
+                n => n.Key.FullName,
+                StringComparer.Ordinal
+            )
+        )
         {
             if (string.IsNullOrWhiteSpace(reason))
                 offenders.Add(
@@ -347,7 +353,7 @@ public static class DataLayerGuards
                 );
         }
 
-        foreach (var type in navigationOnly.OrderBy(t => t.FullName))
+        foreach (var type in navigationOnly.OrderBy(t => t.FullName, StringComparer.Ordinal))
         {
             if (
                 !options.NavigationScoped.ContainsKey(type) && !options.Exemptions.ContainsKey(type)
@@ -361,7 +367,12 @@ public static class DataLayerGuards
                 );
         }
 
-        foreach (var (type, reason) in options.Exemptions.OrderBy(e => e.Key.FullName))
+        foreach (
+            var (type, reason) in options.Exemptions.OrderBy(
+                e => e.Key.FullName,
+                StringComparer.Ordinal
+            )
+        )
         {
             if (string.IsNullOrWhiteSpace(reason))
                 offenders.Add(
@@ -376,7 +387,9 @@ public static class DataLayerGuards
                 );
         }
 
-        foreach (var (type, reason) in options.Gated.OrderBy(g => g.Key.FullName))
+        foreach (
+            var (type, reason) in options.Gated.OrderBy(g => g.Key.FullName, StringComparer.Ordinal)
+        )
         {
             if (string.IsNullOrWhiteSpace(reason))
                 offenders.Add(
@@ -466,7 +479,7 @@ public static class DataLayerGuards
         ArgumentNullException.ThrowIfNull(scan);
         ArgumentNullException.ThrowIfNull(models);
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(options.PrincipalAccessorType);
+        ArgumentNullException.ThrowIfNull(options.PrincipalAccessorType, nameof(options));
 
         // Entities whose root carries an owner-scope filter: the ones a bypass exposes. Keyed by
         // simple name, because that is all the source text gives.
@@ -577,15 +590,25 @@ public static class DataLayerGuards
             var what = disables ?? "every query filter, the owner scope included";
             offenders.Add(
                 perUser.Count > 0
-                    ? $"{file.Path}:{line}: IgnoreQueryFilters switches off {what} on "
+                    ? string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{file.Path}:{line}: IgnoreQueryFilters switches off {what} on "
+                    )
                         + $"{string.Join(", ", perUser)}, which holds per-user data. Every caller "
                         + "reaching this query reads every owner's rows."
-                    : $"{file.Path}:{line}: IgnoreQueryFilters switches off {what}, and the scan "
-                        + "cannot tell which set it applies to, so it may be a per-user one."
+                    : string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{file.Path}:{line}: IgnoreQueryFilters switches off {what}, and the scan "
+                    ) + "cannot tell which set it applies to, so it may be a per-user one."
             );
         }
 
-        foreach (var (path, reason) in options.FilterBypassAllowlist.OrderBy(a => a.Key))
+        foreach (
+            var (path, reason) in options.FilterBypassAllowlist.OrderBy(
+                a => a.Key,
+                StringComparer.Ordinal
+            )
+        )
         {
             if (string.IsNullOrWhiteSpace(reason))
                 offenders.Add(
@@ -610,11 +633,6 @@ public static class DataLayerGuards
         return new GuardResult(offenders, inspected, message);
     }
 
-    private static readonly Regex IgnoreQueryFiltersCall = new(
-        @"\.\s*IgnoreQueryFilters\s*\(",
-        RegexOptions.Compiled
-    );
-
     private static readonly Regex SetDeclaration = new(
         @"\b(?:DbSet|IQueryable)\s*<\s*(?:[\w.]+\.)?(?<type>\w+)\s*>\s+(?<name>\w+)\s*(?:\{|=>|=|;)",
         RegexOptions.Compiled
@@ -627,8 +645,8 @@ public static class DataLayerGuards
     );
 
     private static readonly Regex StringLiteral = new(
-        @"""((?:[^""\\]|\\.)*)""",
-        RegexOptions.Compiled
+        @"""(?<content>(?:[^""\\]|\\.)*)""",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture
     );
 
     private static readonly Regex LiteralCollection = new(
@@ -637,12 +655,12 @@ public static class DataLayerGuards
     );
 
     /// <summary>
-    /// The filter names in a named-filter disable, or <c>null</c> when they are not all string
+    /// The filter names in a named-filter disable, or <see langword="null"/> when they are not all string
     /// literals in a collection expression or array initializer.
     /// </summary>
     private static IReadOnlyList<string>? LiteralNames(string arguments) =>
         LiteralCollection.IsMatch(arguments)
-            ? StringLiteral.Matches(arguments).Select(m => m.Groups[1].Value).ToList()
+            ? StringLiteral.Matches(arguments).Select(m => m.Groups["content"].Value).ToList()
             : null;
 
     /// <summary>
@@ -965,4 +983,7 @@ public static class DataLayerGuards
 
     private static string Rel(string root, string file) =>
         Path.GetRelativePath(root, file).Replace('\\', '/');
+
+    [GeneratedRegex(@"\.\s*IgnoreQueryFilters\s*\(", RegexOptions.Compiled)]
+    private static partial Regex IgnoreQueryFiltersCall { get; }
 }

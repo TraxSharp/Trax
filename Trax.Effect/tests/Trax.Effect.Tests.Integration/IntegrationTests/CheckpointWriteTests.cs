@@ -300,7 +300,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
             .Calls.GroupBy(c => c.Instance)
             .Should()
             .OnlyContain(
-                instance => instance.Count() == 1,
+                instance => instance.Take(2).Count() == 1,
                 $"each instance's Junctions() runs once: the run's to run, another to read ({Adr})"
             );
         CountingResearchTrain.Calls.Should().ContainSingle(c => !c.Declaring);

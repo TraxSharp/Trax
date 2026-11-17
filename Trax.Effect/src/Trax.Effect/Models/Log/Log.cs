@@ -141,8 +141,8 @@ public class Log : ILog
         if (value is null)
             return null;
 
-        if (value.Contains('\0'))
-            value = value.Replace("\0", string.Empty);
+        if (value.Contains('\0', StringComparison.Ordinal))
+            value = value.Replace("\0", string.Empty, StringComparison.Ordinal);
 
         if (value.Length <= maxLength)
             return value;

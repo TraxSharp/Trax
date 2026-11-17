@@ -45,7 +45,7 @@ public class ScalingBenchmarks
             3 => new AddOneX3Train().Run(0),
             5 => new AddOneX5Train().Run(0),
             10 => new AddOneX10Train().Run(0),
-            _ => throw new ArgumentOutOfRangeException(),
+            _ => throw new System.Diagnostics.UnreachableException(),
         };
 
     [Benchmark(Description = "EffectTrain_NoEffects")]
@@ -71,7 +71,7 @@ public class ScalingBenchmarks
                 .ServiceProvider.GetRequiredService<IEffectAddOneX10Train>()
                 .Run(0)
                 .ConfigureAwait(false),
-            _ => throw new ArgumentOutOfRangeException(),
+            _ => throw new System.Diagnostics.UnreachableException(),
         };
     }
 }

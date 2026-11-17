@@ -28,12 +28,15 @@ public sealed class NonFiniteShadow : IDecider
     public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken ct) =>
         Task.FromResult(
             new DecisionResult(
-                new Dictionary<string, Answer>
+                new Dictionary<string, Answer>(StringComparer.Ordinal)
                 {
                     [QuestionKey.For<Fulfilment>()] = new ChoiceAnswer(
                         "Standard",
                         double.NaN,
-                        new Dictionary<string, double> { ["Standard"] = double.PositiveInfinity }
+                        new Dictionary<string, double>(StringComparer.Ordinal)
+                        {
+                            ["Standard"] = double.PositiveInfinity,
+                        }
                     ),
                 }
             )

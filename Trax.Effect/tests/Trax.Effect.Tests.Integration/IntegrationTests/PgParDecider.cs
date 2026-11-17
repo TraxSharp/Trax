@@ -38,7 +38,11 @@ internal sealed class PgParDecider : IDecider
         PgParLane always = PgParLane.Ground
     )
     {
-        _byBranch = (byBranch ?? []).ToDictionary(b => b.Key, b => new Queue<PgParLane>(b.Value));
+        _byBranch = (byBranch ?? []).ToDictionary(
+            b => b.Key,
+            b => new Queue<PgParLane>(b.Value),
+            StringComparer.Ordinal
+        );
         _always = always;
         _asked = 0;
     }

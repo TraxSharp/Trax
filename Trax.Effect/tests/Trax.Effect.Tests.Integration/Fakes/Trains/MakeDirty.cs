@@ -33,17 +33,20 @@ public sealed class MakeDirty(IDataContext context) : Junction<CheckedFindings, 
                 when context is DbContext { Database: var database } && database.IsSqlite():
                 // Deferred, so it holds no lock until it writes: an immediate one would hold
                 // SQLite's write lock and make the run's own terminal write wait it out.
-                await database.OpenConnectionAsync().ConfigureAwait(false);
+                await database
+                    .OpenConnectionAsync(cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
                 await database
                     .UseTransactionAsync(
                         ((SqliteConnection)database.GetDbConnection()).BeginTransaction(
                             deferred: true
-                        )
+                        ),
+                        cancellationToken: CancellationToken.None
                     )
                     .ConfigureAwait(false);
                 break;
             case DirtyMode.OpenTransaction:
-                await context.BeginTransaction().ConfigureAwait(false);
+                await context.BeginTransaction(CancellationToken.None).ConfigureAwait(false);
                 break;
         }
 

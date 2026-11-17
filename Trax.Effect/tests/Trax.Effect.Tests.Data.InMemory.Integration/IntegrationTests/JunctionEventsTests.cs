@@ -1227,8 +1227,13 @@ public class JunctionEventsTests
             }
         );
 
-        (await train.Run(input, metadata).ConfigureAwait(false)).Should().Be("loaded|stamped");
-        await provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
+        (await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false))
+            .Should()
+            .Be("loaded|stamped");
+        await provider
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return train.Metadata!.Id;
     }
 
@@ -1248,7 +1253,10 @@ public class JunctionEventsTests
         catch (Exception) when (expectFailure) { }
 
         var serviceTrain = (ServiceTrain<Parcel, string>)(object)train;
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
+        await _provider
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return (serviceTrain.Metadata!.Id, output);
     }
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -165,11 +166,14 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
 
         resumed.TrainState.Should().Be(TrainState.Completed, resumed.FailureReason);
         CheckpointProbe.Ran.Should().Equal(EveryStep, $"a full rerun stays possible ({Adr})");
+        var refusal = string.Create(
+            CultureInfo.InvariantCulture,
+            $"cannot resume run ({failed.Id}) and runs from the top"
+        );
         _host
             .Logs.Should()
             .Contain(l =>
-                l.Level == LogLevel.Warning
-                && l.Message.Contains($"cannot resume run ({failed.Id}) and runs from the top")
+                l.Level == LogLevel.Warning && l.Message.Contains(refusal, StringComparison.Ordinal)
             );
     }
 

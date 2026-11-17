@@ -82,7 +82,10 @@ public static class ServiceExtensions
             hostInfo = hostInfo with { HostInstanceId = builder.HostInstanceIdOverride };
         if (builder.HostLabels.Count > 0)
         {
-            var mergedLabels = new Dictionary<string, string>(hostInfo.Labels);
+            var mergedLabels = new Dictionary<string, string>(
+                hostInfo.Labels,
+                StringComparer.Ordinal
+            );
             foreach (var (key, value) in builder.HostLabels)
                 mergedLabels[key] = value;
             hostInfo = hostInfo with { Labels = mergedLabels };

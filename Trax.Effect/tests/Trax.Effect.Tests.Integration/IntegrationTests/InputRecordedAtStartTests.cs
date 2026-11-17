@@ -108,7 +108,7 @@ public class InputRecordedAtStartTests
             await using var contextDisposal = context.ConfigureAwait(false);
             var row = await context
                 .Metadatas.AsNoTracking()
-                .SingleAsync(m => m.Id == id)
+                .SingleAsync(m => m.Id == id, cancellationToken: CancellationToken.None)
                 .ConfigureAwait(false);
             _seen = new SeenRow(row.TrainState, row.Input);
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
@@ -87,7 +88,10 @@ public class ExcludedOutputHookCopyTests
     {
         protected override Task<Either<Exception, List<string>>> Junctions() =>
             Task.FromResult<Either<Exception, List<string>>>(
-                Enumerable.Range(0, 10_000).Select(i => $"row-{i}").ToList()
+                Enumerable
+                    .Range(0, 10_000)
+                    .Select(i => string.Create(CultureInfo.InvariantCulture, $"row-{i}"))
+                    .ToList()
             );
     }
 

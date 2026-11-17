@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
@@ -221,7 +222,7 @@ public class ModelCoverageGapTests
     private static string RecordJson(int failureClass) =>
         "{\"trainName\":\"a\",\"trainExternalId\":\"b\",\"type\":\"X\",\"junction\":\"J\","
         + "\"message\":\"m\",\"failureClass\":"
-        + failureClass
+        + failureClass.ToString(CultureInfo.InvariantCulture)
         + "}";
 
     private static Metadata NewMetadata() =>

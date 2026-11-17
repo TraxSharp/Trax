@@ -37,7 +37,7 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "test-host",
             HostEnvironment = "lambda",
             HostInstanceId = "stream-abc-123",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
         var context = (IDataContext)DataContextFactory.Create();
@@ -76,7 +76,7 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "test-host",
             HostEnvironment = "ecs",
             HostInstanceId = "task-456",
-            Labels = new Dictionary<string, string>
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["region"] = "us-east-1",
                 ["service"] = "content-shield",
@@ -114,7 +114,7 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "test-host",
             HostEnvironment = "server",
             HostInstanceId = "test-1",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
         var context = (IDataContext)DataContextFactory.Create();
@@ -145,7 +145,7 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "host-alpha",
             HostEnvironment = "lambda",
             HostInstanceId = "stream-1",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
         var context = (IDataContext)DataContextFactory.Create();
@@ -168,7 +168,7 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "host-beta",
             HostEnvironment = "ecs",
             HostInstanceId = "task-2",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
         var metadata2 = Metadata.Create(
@@ -200,7 +200,7 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "host-1",
             HostEnvironment = "lambda",
             HostInstanceId = "stream-a",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
         var context = (IDataContext)DataContextFactory.Create();
@@ -223,7 +223,7 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "host-2",
             HostEnvironment = "ecs",
             HostInstanceId = "task-b",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
         var metadata2 = Metadata.Create(

@@ -104,10 +104,17 @@ public class NoOrphanPackageVersionTests
         var files = Directory
             .EnumerateFiles(MonorepoRoot.Path, "*.csproj", SearchOption.AllDirectories)
             .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
+                !f.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
                 && !f.Contains(
-                    $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}"
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
                 )
             )
             .Concat(

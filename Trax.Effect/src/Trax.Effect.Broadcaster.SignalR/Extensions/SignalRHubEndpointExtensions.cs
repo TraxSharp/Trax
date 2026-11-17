@@ -185,7 +185,7 @@ public static class SignalRHubEndpointExtensions
     /// <summary>
     /// Resolves each policy <paramref name="posture"/> names through the host's
     /// <see cref="IAuthorizationPolicyProvider"/> and refuses an unknown one. Returns the host's
-    /// fallback policy, or <c>null</c> when it has none.
+    /// fallback policy, or <see langword="null"/> when it has none.
     /// </summary>
     private static async Task<AuthorizationPolicy?> ResolvePoliciesAsync(
         IServiceProvider services,

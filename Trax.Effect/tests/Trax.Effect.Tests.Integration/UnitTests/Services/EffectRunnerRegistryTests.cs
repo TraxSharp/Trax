@@ -249,7 +249,7 @@ public class EffectRunnerRegistryTests
     {
         var registry = new EffectRegistry();
         var first = new ThrowingEffectFactory(new InvalidOperationException("first"));
-        var second = new ThrowingEffectFactory2(new ArgumentException("second"));
+        var second = new ThrowingEffectFactory2(new NotSupportedException("second"));
 
         using var runner = new EffectRunner([first, second], registry);
         var act = () => runner.SaveChanges(CancellationToken.None);

@@ -28,7 +28,11 @@ internal sealed class LiteParDecider : IDecider
 
     public void Script(Dictionary<string, LiteParLane[]> byBranch)
     {
-        _byBranch = byBranch.ToDictionary(b => b.Key, b => new Queue<LiteParLane>(b.Value));
+        _byBranch = byBranch.ToDictionary(
+            b => b.Key,
+            b => new Queue<LiteParLane>(b.Value),
+            StringComparer.Ordinal
+        );
         _asked = 0;
     }
 

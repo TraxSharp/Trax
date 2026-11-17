@@ -251,7 +251,7 @@ public class TrainEventReceiverServiceTests
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
         while (DateTime.UtcNow < deadline && callCount <= 1)
             // allowed-delay: polls for the retry's second StartAsync call.
-            await Task.Delay(100);
+            await Task.Delay(100, CancellationToken.None);
 
         // Should not have crashed the host — service retries
         callCount.Should().BeGreaterThan(1, "the service should retry after connection failure");
@@ -288,7 +288,7 @@ public class TrainEventReceiverServiceTests
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
         while (DateTime.UtcNow < deadline && startCount <= 1)
             // allowed-delay: polls for the retry's second StartAsync call.
-            await Task.Delay(100);
+            await Task.Delay(100, CancellationToken.None);
 
         startCount.Should().BeGreaterThan(1);
 

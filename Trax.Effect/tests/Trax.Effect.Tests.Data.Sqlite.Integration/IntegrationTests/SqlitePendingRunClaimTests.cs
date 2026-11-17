@@ -44,8 +44,8 @@ public class SqlitePendingRunClaimTests : TestSetup
         var trainB = (CountingTrain)scopeB.ServiceProvider.GetRequiredService<ICountingTrain>();
 
         var outcomes = await Task.WhenAll(
-            Settle(Task.Run(() => trainA.Run(Unit.Default, copyA))),
-            Settle(Task.Run(() => trainB.Run(Unit.Default, copyB)))
+            Settle(Task.Run(() => trainA.Run(Unit.Default, copyA, CancellationToken.None))),
+            Settle(Task.Run(() => trainB.Run(Unit.Default, copyB, CancellationToken.None)))
         );
 
         CountingTrain.BodyRuns.Should().Be(1, "only one delivery may run the train");
@@ -72,7 +72,8 @@ public class SqlitePendingRunClaimTests : TestSetup
         var second = Scope.ServiceProvider.CreateAsyncScope();
         await using var secondDisposal = second.ConfigureAwait(false);
         var train = (CountingTrain)second.ServiceProvider.GetRequiredService<ICountingTrain>();
-        var act = async () => await train.Run(Unit.Default, staleCopy).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, staleCopy, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainAlreadyStartedException>();
         CountingTrain.BodyRuns.Should().Be(1);
@@ -94,7 +95,7 @@ public class SqlitePendingRunClaimTests : TestSetup
             }
         );
 
-        await train.Run(Unit.Default, unsaved);
+        await train.Run(Unit.Default, unsaved, CancellationToken.None);
 
         CountingTrain.BodyRuns.Should().Be(1);
         (await ReadRow(unsaved.Id)).TrainState.Should().Be(TrainState.Completed);

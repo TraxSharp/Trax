@@ -50,7 +50,7 @@ public class JunctionProgressCancellationTests
         Downstream.Reset();
 
         var run = train.Run(Unit.Default, cts.Token);
-        await Downstream.Started.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        await Downstream.Started.Task.WaitAsync(TimeSpan.FromSeconds(15), CancellationToken.None);
         await cts.CancelAsync();
         Downstream.Answer.SetResult();
 
@@ -67,7 +67,10 @@ public class JunctionProgressCancellationTests
         await using var contextDisposal = context.ConfigureAwait(false);
         var row = await context
             .Metadatas.AsNoTracking()
-            .SingleAsync(m => m.Id == train.Metadata!.Id);
+            .SingleAsync(
+                m => m.Id == train.Metadata!.Id,
+                cancellationToken: CancellationToken.None
+            );
 
         row.TrainState.Should()
             .Be(

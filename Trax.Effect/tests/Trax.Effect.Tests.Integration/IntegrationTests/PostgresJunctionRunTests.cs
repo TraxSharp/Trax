@@ -245,10 +245,14 @@ public class PostgresJunctionRunTests
                 ManifestId = manifestId,
             }
         );
-        var run = async () => await train.Run(input, metadata).ConfigureAwait(false);
+        var run = async () =>
+            await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
         await run.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
+        await _provider
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return train.Metadata!.Id;
     }
 

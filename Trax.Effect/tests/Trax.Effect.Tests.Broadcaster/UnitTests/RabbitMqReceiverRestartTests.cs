@@ -64,14 +64,15 @@ public class RabbitMqReceiverRestartTests
         var setup = await factory.CreateConnectionAsync();
         await using (setup.ConfigureAwait(false))
         {
-            var channel = await setup.CreateChannelAsync();
+            var channel = await setup.CreateChannelAsync(cancellationToken: CancellationToken.None);
             await using (channel.ConfigureAwait(false))
             {
                 await channel.ExchangeDeclareAsync(
                     options.ExchangeName,
                     ExchangeType.Direct,
                     durable: false,
-                    autoDelete: true
+                    autoDelete: true,
+                    cancellationToken: CancellationToken.None
                 );
             }
         }

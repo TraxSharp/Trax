@@ -33,7 +33,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
 
     /// <summary>
     /// The in-memory record of the current or most recent run: name, input/output types, start and end times,
-    /// the railway state, and <c>OutputJson</c> when the junction logger serializes output. <c>null</c> until the
+    /// the railway state, and <c>OutputJson</c> when the junction logger serializes output. <see langword="null"/> until the
     /// junction first runs, then replaced at the start of every run. It is not written to the database; junction
     /// effects read it, and the junction logger logs it.
     /// </summary>
@@ -67,7 +67,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
     /// <param name="previousOutput">The previous junction's result, or the train input.</param>
     /// <param name="serviceTrain">The running train, whose metadata and junction effect runner are used.</param>
     /// <returns>The junction's result on the railway.</returns>
-    /// <exception cref="TrainException">The train's <c>Metadata</c> is <c>null</c>.</exception>
+    /// <exception cref="TrainException">The train's <c>Metadata</c> is <see langword="null"/>.</exception>
     public async Task<Either<Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(
         Either<Exception, TIn> previousOutput,
         ServiceTrain<TTrainIn, TTrainOut> serviceTrain

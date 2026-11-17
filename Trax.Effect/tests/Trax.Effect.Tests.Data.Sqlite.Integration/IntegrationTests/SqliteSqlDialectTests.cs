@@ -169,7 +169,9 @@ public class SqliteSqlDialectTests
     [Test]
     public void TryAcquireLeaderLock_AlwaysReturnsTrue()
     {
-        var sql = _dialect.TryAcquireLeaderLock("test_lock").ToString();
+        var sql = _dialect
+            .TryAcquireLeaderLock("test_lock")
+            .ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         sql.Should().Contain("SELECT 1");
     }
@@ -177,7 +179,9 @@ public class SqliteSqlDialectTests
     [Test]
     public void TryAcquireLeaderLock_DoesNotContainAdvisoryLock()
     {
-        var sql = _dialect.TryAcquireLeaderLock("test_lock").ToString();
+        var sql = _dialect
+            .TryAcquireLeaderLock("test_lock")
+            .ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         sql.Should().NotContainEquivalentOf("pg_try_advisory_lock");
         sql.Should().NotContainEquivalentOf("advisory");

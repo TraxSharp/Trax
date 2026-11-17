@@ -53,7 +53,8 @@ public class OutcomeSaveFailureTests : TestSetup
         Probe.FailSavingState = TrainState.Completed;
         var train = (CompletingTrain)Scope.ServiceProvider.GetRequiredService<ICompletingTrain>();
 
-        var run = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var run = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
 
         await run.Should().ThrowExactlyAsync<OutcomeSaveException>();
         train
@@ -81,7 +82,8 @@ public class OutcomeSaveFailureTests : TestSetup
         Probe.FailSavingState = TrainState.Failed;
         var train = (FailingTrain)Scope.ServiceProvider.GetRequiredService<IFailingTrain>();
 
-        var run = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var run = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
 
         (await run.Should().ThrowAsync<Exception>())
             .Which.Should()

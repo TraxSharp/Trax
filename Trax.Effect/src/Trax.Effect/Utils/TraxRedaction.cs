@@ -228,7 +228,11 @@ public static class TraxRedaction
     {
         ArgumentNullException.ThrowIfNull(type);
         var loaded = LoadedTypes();
-        return loaded.Reaches.GetOrAdd(type, t => Reach(t, [], loaded.Types));
+        return loaded.Reaches.GetOrAdd(
+            type,
+            static (t, types) => Reach(t, [], types),
+            loaded.Types
+        );
     }
 
     private static Loaded LoadedTypes()

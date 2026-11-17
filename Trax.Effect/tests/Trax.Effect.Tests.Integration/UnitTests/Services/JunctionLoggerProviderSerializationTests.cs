@@ -92,7 +92,11 @@ public class JunctionLoggerProviderSerializationTests
     {
         var obj = new ObjectWithDictionary
         {
-            Totals = new Dictionary<string, int> { ["Ada"] = 1, ["bo"] = 2 },
+            Totals = new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                ["Ada"] = 1,
+                ["bo"] = 2,
+            },
         };
 
         var json = JsonSerializer.Serialize<object>(obj, _options);
@@ -218,7 +222,7 @@ public class JunctionLoggerProviderSerializationTests
 
     private sealed class ObjectWithDictionary
     {
-        public Dictionary<string, int> Totals { get; set; } = new();
+        public Dictionary<string, int> Totals { get; set; } = new(StringComparer.Ordinal);
     }
 
     private sealed class ObjectWithEnum

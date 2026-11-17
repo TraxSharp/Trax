@@ -38,7 +38,7 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
     /// domain, whatever <see cref="ChangeSignalOptions.ChannelCapacity"/> says. Registered as a singleton by <c>AddTrax</c>; not intended to be
     /// constructed directly.
     /// </summary>
-    /// <param name="options">Buffer sizing. Throws <see cref="ArgumentNullException"/> when <c>null</c>.</param>
+    /// <param name="options">Buffer sizing. Throws <see cref="ArgumentNullException"/> when <see langword="null"/>.</param>
     /// <param name="logger">Receives the throttled warning logged when signals are dropped; optional.</param>
     public TraxChangeSignal(ChangeSignalOptions options, ILogger<TraxChangeSignal>? logger = null)
     {

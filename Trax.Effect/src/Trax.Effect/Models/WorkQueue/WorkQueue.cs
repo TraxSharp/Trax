@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -335,9 +336,12 @@ public class WorkQueue : IModel
 
         // Postgres cannot store a NUL in text, and the key is compared exactly, so it is refused
         // here rather than failing the insert or being rewritten into a different key.
-        if (key.Contains('\0'))
+        if (key.Contains('\0', StringComparison.Ordinal))
             throw new ArgumentException(
-                $"A subject key cannot contain a NUL character (at position {key.IndexOf('\0')}).",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"A subject key cannot contain a NUL character (at position {key.IndexOf('\0', StringComparison.Ordinal)})."
+                ),
                 paramName
             );
 
@@ -353,7 +357,10 @@ public class WorkQueue : IModel
                 != OperationStatus.Done
             )
                 throw new ArgumentException(
-                    $"A subject key cannot contain an unpaired surrogate at position {position}. "
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"A subject key cannot contain an unpaired surrogate at position {position}. "
+                    )
                         + "It is half of a character, which cannot be stored; the key was likely "
                         + "cut in the middle of one.",
                     paramName
@@ -364,8 +371,10 @@ public class WorkQueue : IModel
 
         if (characters > MaxSubjectKeyLength)
             throw new ArgumentException(
-                $"A subject key of {characters} characters is over the limit of "
-                    + $"{MaxSubjectKeyLength}. Use a record identity, or a hash of a longer one.",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"A subject key of {characters} characters is over the limit of "
+                ) + $"{MaxSubjectKeyLength}. Use a record identity, or a hash of a longer one.",
                 paramName
             );
     }

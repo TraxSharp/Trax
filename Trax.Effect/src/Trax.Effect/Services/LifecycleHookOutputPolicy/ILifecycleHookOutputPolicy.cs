@@ -17,12 +17,12 @@ public interface ILifecycleHookOutputPolicy
 {
     /// <summary>
     /// The largest serialized copy, in UTF-8 bytes, of the output of the train named
-    /// <paramref name="trainName"/> to build for lifecycle hooks, or <c>null</c> to build none.
+    /// <paramref name="trainName"/> to build for lifecycle hooks, or <see langword="null"/> to build none.
     /// </summary>
     /// <remarks>
     /// A copy that would cross the ceiling is replaced by <c>{"_truncated": true, "_maxBytes": N}</c>,
-    /// as a stored parameter is. <c>null</c> means the output was deliberately left unserialized,
-    /// and the hooks see <c>Metadata.Output</c> as <c>null</c>.
+    /// as a stored parameter is. <see langword="null"/> means the output was deliberately left unserialized,
+    /// and the hooks see <c>Metadata.Output</c> as <see langword="null"/>.
     /// </remarks>
     int? MaxCopyBytes(string trainName);
 }

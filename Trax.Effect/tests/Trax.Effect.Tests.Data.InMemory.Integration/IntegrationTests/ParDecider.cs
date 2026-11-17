@@ -33,7 +33,11 @@ internal sealed class ParDecider : IDecider
 
     public void Script(Dictionary<string, ParLane[]>? byBranch = null, ParLane? always = null)
     {
-        _byBranch = (byBranch ?? []).ToDictionary(b => b.Key, b => new Queue<ParLane>(b.Value));
+        _byBranch = (byBranch ?? []).ToDictionary(
+            b => b.Key,
+            b => new Queue<ParLane>(b.Value),
+            StringComparer.Ordinal
+        );
         _always = always;
         _asked = 0;
     }

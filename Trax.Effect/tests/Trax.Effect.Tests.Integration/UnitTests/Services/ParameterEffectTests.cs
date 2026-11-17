@@ -464,17 +464,17 @@ public class ParameterEffectTests
     }
 
     [Test]
-    public void Dispose_ClearsTrackedAndDetachesObjects()
+    public async Task Dispose_ClearsTrackedAndDetachesObjects()
     {
         var effect = NewEffect();
         var meta = NewMetadata(input: new { V = 1 });
-        effect.Track(meta).GetAwaiter().GetResult();
+        await effect.Track(meta).ConfigureAwait(false);
 
         effect.Dispose();
 
         // After dispose, calling SaveChanges should be a no-op (no tracked items)
         Func<Task> act = () => effect.SaveChanges(default);
-        act.Should().NotThrowAsync();
+        await act.Should().NotThrowAsync().ConfigureAwait(false);
     }
 
     #region Per-train output opt-out (Feature A)

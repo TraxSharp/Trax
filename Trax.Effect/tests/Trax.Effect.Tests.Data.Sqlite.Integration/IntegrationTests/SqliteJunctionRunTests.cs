@@ -141,10 +141,14 @@ public class SqliteJunctionRunTests
         var scope = _provider.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (LiteStepsTrain)scope.ServiceProvider.GetRequiredService<ILiteStepsTrain>();
-        var run = async () => await train.Run(new LiteItem(3)).ConfigureAwait(false);
+        var run = async () =>
+            await train.Run(new LiteItem(3), CancellationToken.None).ConfigureAwait(false);
         await run.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
+        await _provider
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return train.Metadata!.Id;
     }
 

@@ -46,7 +46,7 @@ public class StateOnlyOutcomeFallbackTests
         var train = (UnwritableOutputTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableOutputTrain>();
 
-        var output = await train.Run(Unit.Default);
+        var output = await train.Run(Unit.Default, CancellationToken.None);
 
         output.Should().Be(Unwritable, "the work happened, and its caller gets its output");
         var row = store.Saved[train.Metadata!];
@@ -71,7 +71,8 @@ public class StateOnlyOutcomeFallbackTests
         var train = (UnwritableFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableFailureTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             $"*{Unwritable}*",
             "the train's own failure still reaches its caller"
@@ -94,7 +95,7 @@ public class StateOnlyOutcomeFallbackTests
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (EchoTrain)scope.ServiceProvider.GetRequiredService<IEchoTrain>();
 
-        var output = await train.Run(Unwritable);
+        var output = await train.Run(Unwritable, CancellationToken.None);
 
         output.Should().Be(Unwritable);
         var row = store.Saved[train.Metadata!];
@@ -113,7 +114,8 @@ public class StateOnlyOutcomeFallbackTests
         var train = (UnwritableOutputTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableOutputTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should()
             .ThrowAsync<TimeoutException>(
                 "a provider that failed for any reason but the store's content refusal propagates"
@@ -138,7 +140,8 @@ public class StateOnlyOutcomeFallbackTests
         var train = (UnwritableFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableFailureTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         var row = await PersistedRow(scope, train.Metadata!.Id);
@@ -162,7 +165,7 @@ public class StateOnlyOutcomeFallbackTests
         var train = (UnwritableOutputTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableOutputTrain>();
 
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default, CancellationToken.None);
 
         store.Saved[train.Metadata!].Output.Should().NotContain(Unwritable);
         hook.Output.Should()
@@ -184,7 +187,8 @@ public class StateOnlyOutcomeFallbackTests
         var train = (UnwritableFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableFailureTrain>();
 
-        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         store.Saved[train.Metadata!].FailureReason.Should().NotContain(Unwritable);
@@ -252,7 +256,9 @@ public class StateOnlyOutcomeFallbackTests
                             metadata.Output,
                             metadata.FailureReason,
                             metadata.StackTrace,
-                        }.Any(value => value?.Contains(Unwritable) ?? false)
+                        }.Any(value =>
+                            value?.Contains(Unwritable, StringComparison.Ordinal) ?? false
+                        )
                     )
                         throw new StoreRefusedContentException(
                             new InvalidDataException("the store refused the row's content")

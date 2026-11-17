@@ -4,7 +4,7 @@ namespace Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 
 public class ArrayLoggingProvider : IArrayLoggingProvider
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private bool _disposed = false;
 
     public List<ArrayLoggerEffect> Loggers { get; } = [];

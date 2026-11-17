@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Trax.Core.Exceptions;
 using Trax.Core.Monad;
 using Trax.Effect.Services.JunctionEvents;
@@ -18,8 +20,10 @@ namespace Trax.Effect.Services.Checkpoints;
 /// See Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md.
 /// A host without a data provider has no rows to write to, and its runs take no checkpoint.
 /// </remarks>
-internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, CheckpointOptions options)
-    : ICheckpointStore
+internal sealed partial class CheckpointStore(
+    IEnumerable<ICheckpointRows> rows,
+    CheckpointOptions options
+) : ICheckpointStore
 {
     private readonly ICheckpointRows? _rows = rows.FirstOrDefault();
 
@@ -82,8 +86,14 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
         if (size > options.MaxStateBytes)
             throw Refused(
                 checkpoint,
-                $"The {step} holds '{checkpoint.StateType.FullName}' as {size} bytes of JSON; the "
-                    + $"cap is {options.MaxStateBytes}. Store pointers to the data rather than the "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The {step} holds '{checkpoint.StateType.FullName}' as {size} bytes of JSON; the "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"cap is {options.MaxStateBytes}. Store pointers to the data rather than the "
+                    )
                     + "data itself."
             );
 
@@ -118,14 +128,17 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
     /// <summary>Whether a string or property name in the JSON text <paramref name="json"/> holds a NUL.</summary>
     internal static bool HoldsNul(string json)
     {
-        if (!json.Contains("\\u0000", StringComparison.OrdinalIgnoreCase) && !json.Contains('\0'))
+        if (
+            !json.Contains("\\u0000", StringComparison.OrdinalIgnoreCase)
+            && !json.Contains('\0', StringComparison.Ordinal)
+        )
             return false;
 
         var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json));
         while (reader.Read())
             if (
                 reader.TokenType is JsonTokenType.String or JsonTokenType.PropertyName
-                && reader.GetString()!.Contains('\0')
+                && reader.GetString()!.Contains('\0', StringComparison.Ordinal)
             )
                 return true;
 
@@ -181,11 +194,6 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
         return null;
     }
 
-    private static readonly System.Text.RegularExpressions.Regex RoutingSegment = new(
-        @"^(Switch|Gate|Scale)<(?<key>.+)>#\d+$",
-        System.Text.RegularExpressions.RegexOptions.CultureInvariant
-    );
-
     private static TrainException Refused(CheckpointTaken checkpoint, string reason)
     {
         var refusal = new TrainException(reason);
@@ -200,4 +208,10 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
         };
         return refusal;
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"^(Switch|Gate|Scale)<(?<key>.+)>#\d+$",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+    )]
+    private static partial System.Text.RegularExpressions.Regex RoutingSegment { get; }
 }

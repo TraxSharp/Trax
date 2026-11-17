@@ -21,7 +21,10 @@ public class MetadataModelIndexTests : TestSetup
 
         var index = metadata
             .GetIndexes()
-            .SingleOrDefault(i => i.Properties.Select(p => p.Name).SequenceEqual(["ExternalId"]));
+            .SingleOrDefault(i =>
+                i.Properties.Select(p => p.Name)
+                    .SequenceEqual(["ExternalId"], StringComparer.Ordinal)
+            );
 
         index.Should().NotBeNull("050 indexes metadata.external_id for lookups by external id");
         index!.GetDatabaseName().Should().Be("ix_metadata_external_id");

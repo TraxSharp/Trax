@@ -75,7 +75,7 @@ public interface ISqlDialect
 
     /// <summary>
     /// Returns SQL that reads the database's own estimate of how many rows a Trax table holds,
-    /// or <c>null</c> when this provider keeps no such estimate. Parameter <c>{0}</c> is the
+    /// or <see langword="null"/> when this provider keeps no such estimate. Parameter <c>{0}</c> is the
     /// table's unqualified name (for example <c>log</c>). The query returns one <c>bigint</c>
     /// column aliased as <c>"Value"</c>, and no row at all when there is no estimate to give:
     /// the table does not exist, or it has never been analyzed.
@@ -83,10 +83,10 @@ public interface ISqlDialect
     /// <remarks>
     /// An estimate is for a count shown to a person, such as a page total over millions of log
     /// rows, where an exact <c>COUNT(*)</c> would scan the whole table. It is as stale as the
-    /// table's last analyze, so never branch on it. When this returns <c>null</c>, or the query
+    /// table's last analyze, so never branch on it. When this returns <see langword="null"/>, or the query
     /// returns no row, count exactly instead.
     ///
-    /// Defaults to <c>null</c>, which is always a correct answer and keeps this from breaking
+    /// Defaults to <see langword="null"/>, which is always a correct answer and keeps this from breaking
     /// implementations outside this repo.
     /// </remarks>
     string? EstimateRowCount() => null;

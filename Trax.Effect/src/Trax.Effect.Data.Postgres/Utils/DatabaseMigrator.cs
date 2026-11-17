@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 using DbUp;
@@ -112,8 +113,11 @@ public static partial class DatabaseMigrator
         // never waits on a table lock.
         var lockTimeoutMs = (long)policy.LockTimeout.TotalMilliseconds;
         migrationConnection.Options = string.IsNullOrWhiteSpace(migrationConnection.Options)
-            ? $"-c lock_timeout={lockTimeoutMs}"
-            : $"{migrationConnection.Options} -c lock_timeout={lockTimeoutMs}";
+            ? string.Create(CultureInfo.InvariantCulture, $"-c lock_timeout={lockTimeoutMs}")
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"{migrationConnection.Options} -c lock_timeout={lockTimeoutMs}"
+            );
         var scriptConnectionString = migrationConnection.ConnectionString;
 
         try
@@ -135,7 +139,7 @@ public static partial class DatabaseMigrator
                 {
                     migrationConnection.SearchPath = null;
                     migrationConnection.Options +=
-                        $" -c search_path={searchPath.Replace(@"\", @"\\").Replace(" ", @"\ ")}";
+                        $" -c search_path={searchPath.Replace(@"\", @"\\", StringComparison.Ordinal).Replace(" ", @"\ ", StringComparison.Ordinal)}";
                     scriptConnectionString = migrationConnection.ConnectionString;
                 }
 
@@ -158,7 +162,10 @@ public static partial class DatabaseMigrator
                         ExceptionDispatchInfo.Capture(result.Error).Throw();
 
                     Console.WriteLine(
-                        $"A Trax migration script gave up waiting for a table lock, or met a duplicate while building a unique index (attempt {attempt} of {policy.Attempts}); running the pending scripts again."
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"A Trax migration script gave up waiting for a table lock, or met a duplicate while building a unique index (attempt {attempt} of {policy.Attempts}); running the pending scripts again."
+                        )
                     );
                     if (policy.Backoff > TimeSpan.Zero)
                         await Task.Delay(policy.Backoff * attempt).ConfigureAwait(false);
@@ -188,7 +195,7 @@ public static partial class DatabaseMigrator
     /// is satisfied by a <c>pg_trgm</c> in any schema, while <c>gin_trgm_ops</c> is found only
     /// through the search path. A database restored from a dump taken as another role can carry
     /// the extension in that role's schema. Only the script session's path changes; the host's
-    /// connections keep theirs. <c>null</c> when nothing needs adding.
+    /// connections keep theirs. <see langword="null"/> when nothing needs adding.
     /// </remarks>
     private static async Task<string?> ScriptSearchPath(NpgsqlConnection connection)
     {
@@ -206,7 +213,8 @@ public static partial class DatabaseMigrator
             return null;
 
         var path = reader.GetString(0);
-        var schema = "\"" + reader.GetString(1).Replace("\"", "\"\"") + "\"";
+        var schema =
+            "\"" + reader.GetString(1).Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
         return string.IsNullOrWhiteSpace(path) ? schema : $"{path}, {schema}";
     }
 
@@ -267,7 +275,7 @@ public static partial class DatabaseMigrator
 
         foreach (var index in invalid)
         {
-            var quoted = "\"" + index.Replace("\"", "\"\"") + "\"";
+            var quoted = "\"" + index.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
             await Execute(connection, $"DROP INDEX CONCURRENTLY IF EXISTS trax.{quoted};")
                 .ConfigureAwait(false);
         }
@@ -295,7 +303,7 @@ public static partial class DatabaseMigrator
             await using var streamDisposal = stream.ConfigureAwait(false);
             using var reader = new StreamReader(stream);
             var script = await reader.ReadToEndAsync().ConfigureAwait(false);
-            foreach (Match match in CreateIndexName().Matches(script))
+            foreach (Match match in CreateIndexName.Matches(script))
                 names.Add(match.Groups["name"].Value.Trim('"').ToLowerInvariant());
         }
         return names;
@@ -305,7 +313,7 @@ public static partial class DatabaseMigrator
         @"\bcreate\s+(?:unique\s+)?index\s+(?:concurrently\s+)?(?:if\s+not\s+exists\s+)?(?:\w+\.)?(?<name>""[^""]+""|\w+)\s+on\b",
         RegexOptions.IgnoreCase
     )]
-    private static partial Regex CreateIndexName();
+    private static partial Regex CreateIndexName { get; }
 
     /// <summary>
     /// Takes the migration lock, polling with <c>pg_try_advisory_lock</c> rather than waiting in

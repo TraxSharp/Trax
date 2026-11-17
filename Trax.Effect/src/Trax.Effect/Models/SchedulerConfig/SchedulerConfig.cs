@@ -183,7 +183,7 @@ public class SchedulerConfig : IModel
     /// Reads the override stored for <paramref name="name"/>.
     /// </summary>
     /// <param name="name">The setting's name, compared exactly.</param>
-    /// <param name="value">The stored value, or <c>default</c> when there is none.</param>
+    /// <param name="value">The stored value, or <see langword="default"/> when there is none.</param>
     /// <returns>
     /// True when <see cref="Overrides"/> names the setting. False when it does not, including when
     /// <see cref="Overrides"/> is null: a legacy row's columns are read directly, not through this.

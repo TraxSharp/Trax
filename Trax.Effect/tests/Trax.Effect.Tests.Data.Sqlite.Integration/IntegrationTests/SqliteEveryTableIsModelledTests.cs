@@ -47,7 +47,7 @@ public class SqliteEveryTableIsModelledTests : TestSetup
 
         migrated
             .Keys.Where(table => !mapped.ContainsKey(table) && !Unmodelled.ContainsKey(table))
-            .Order()
+            .Order(StringComparer.Ordinal)
             .Should()
             .BeEmpty(
                 "a table in the core migration set ships with its model, persistent mapping and "
@@ -73,7 +73,7 @@ public class SqliteEveryTableIsModelledTests : TestSetup
                     )
                     .Select(column => $"{table.Key}.{column}")
             )
-            .Order()
+            .Order(StringComparer.Ordinal)
             .Should()
             .BeEmpty(
                 "every column a model maps must be created by the shipped migrations, or the "

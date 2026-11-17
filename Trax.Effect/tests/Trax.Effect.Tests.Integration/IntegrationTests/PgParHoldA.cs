@@ -30,7 +30,9 @@ public class PgParHoldA : EffectJunction<PgParOrder, PgParA>
     public override async Task<PgParA> Run(PgParOrder input)
     {
         PgParSignals.Waiting();
-        await PgParSignals.Released.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        await PgParSignals
+            .Released.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None)
+            .ConfigureAwait(false);
         return new PgParA(0);
     }
 }

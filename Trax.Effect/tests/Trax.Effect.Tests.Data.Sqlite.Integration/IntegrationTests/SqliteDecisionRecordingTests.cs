@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -135,7 +136,9 @@ public class SqliteDecisionRecordingTests
 
         (await run.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()
-            .Contain($"no run {original.Metadata.Id} exists");
+            .Contain(
+                string.Create(CultureInfo.InvariantCulture, $"no run {original.Metadata.Id} exists")
+            );
         Decider.Asked.Should().Be(0);
         _lastTrain!.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
 
@@ -216,7 +219,10 @@ public class SqliteDecisionRecordingTests
             }
         );
 
-        return (train, await train.Run(order, metadata).ConfigureAwait(false));
+        return (
+            train,
+            await train.Run(order, metadata, CancellationToken.None).ConfigureAwait(false)
+        );
     }
 
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
@@ -277,7 +283,7 @@ public class SqliteDecisionRecordingTests
 
             return Task.FromResult(
                 new DecisionResult(
-                    new Dictionary<string, Answer>
+                    new Dictionary<string, Answer>(StringComparer.Ordinal)
                     {
                         [QuestionKey.For<LiteFulfilment>()] = new ChoiceAnswer(
                             Raw ?? Choice.ToString()
@@ -373,14 +379,14 @@ public class SqliteDecisionRecordingTests
                 .Metadatas.AsNoTracking()
                 .Where(m => m.Id == id)
                 .Select(m => m.TrainState)
-                .SingleAsync()
+                .SingleAsync(cancellationToken: CancellationToken.None)
                 .ConfigureAwait(false);
 
             foreach (
                 var row in await context
                     .RecordedDecisions.AsNoTracking()
                     .Where(d => d.MetadataId == id)
-                    .ToListAsync()
+                    .ToListAsync(cancellationToken: CancellationToken.None)
                     .ConfigureAwait(false)
             )
                 Seen.Add((row.MetadataId, state, row.Tracks().SingleOrDefault()));

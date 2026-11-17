@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.SignalR.Client;
 using Trax.Effect.Broadcaster.SignalR.Models;
@@ -54,7 +55,10 @@ public class SignalRConcurrencyTests
 
         var dispatcher = server.GetService<SignalRTrainEventDispatcher>();
 
-        var ids = Enumerable.Range(0, 200).Select(i => $"id-{i}").ToArray();
+        var ids = Enumerable
+            .Range(0, 200)
+            .Select(i => string.Create(CultureInfo.InvariantCulture, $"id-{i}"))
+            .ToArray();
         await Parallel.ForEachAsync(
             ids,
             new ParallelOptions { MaxDegreeOfParallelism = 16 },
@@ -83,8 +87,14 @@ public class SignalRConcurrencyTests
 
         var dispatcher = server.GetService<SignalRTrainEventDispatcher>();
 
-        var completedIds = Enumerable.Range(0, 50).Select(i => $"c-{i}").ToArray();
-        var failedIds = Enumerable.Range(0, 50).Select(i => $"f-{i}").ToArray();
+        var completedIds = Enumerable
+            .Range(0, 50)
+            .Select(i => string.Create(CultureInfo.InvariantCulture, $"c-{i}"))
+            .ToArray();
+        var failedIds = Enumerable
+            .Range(0, 50)
+            .Select(i => string.Create(CultureInfo.InvariantCulture, $"f-{i}"))
+            .ToArray();
 
         await Parallel.ForEachAsync(
             completedIds

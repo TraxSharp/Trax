@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using DbUp;
 using DbUp.Postgresql;
@@ -107,7 +108,10 @@ public class PostgresMigrationTests
                 await Exec(
                         connection,
                         "INSERT INTO trax.work_queue (external_id, train_name, input, input_type_name) "
-                            + $"VALUES ('older-writer-{inserted++}', 'Some.Train', NULL, NULL);"
+                            + string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"VALUES ('older-writer-{inserted++}', 'Some.Train', NULL, NULL);"
+                            )
                     )
                     .ConfigureAwait(false);
 
@@ -850,7 +854,7 @@ public class PostgresMigrationTests
                     .ConfigureAwait(false);
 
                 string[] tables = ["work_queue", "manifest_group", "manifest"];
-                var before = new Dictionary<string, string>();
+                var before = new Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (var table in tables)
                     before[table] = await Filenode(connection, table).ConfigureAwait(false);
 
@@ -960,7 +964,7 @@ public class PostgresMigrationTests
                 await using (observer.ConfigureAwait(false))
                 {
                     await observer.OpenAsync().ConfigureAwait(false);
-                    var waits = new HashSet<string>();
+                    var waits = new HashSet<string>(StringComparer.Ordinal);
                     var deadline = DateTime.UtcNow + Bounded;
                     while (waits.Count < 2)
                     {
@@ -1181,7 +1185,9 @@ public class PostgresMigrationTests
         var assembly = typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly;
         var resource = assembly
             .GetManifestResourceNames()
-            .Single(name => name.EndsWith("041_work_queue_confirmed_at.sql"));
+            .Single(name =>
+                name.EndsWith("041_work_queue_confirmed_at.sql", StringComparison.Ordinal)
+            );
         var stream = assembly.GetManifestResourceStream(resource)!;
         await using var streamDisposal = stream.ConfigureAwait(false);
         using var reader = new StreamReader(stream);
@@ -1218,7 +1224,11 @@ public class PostgresMigrationTests
         return scripts;
     }
 
-    private static int Number(string fileName) => int.Parse(fileName[..fileName.IndexOf('_')]);
+    private static int Number(string fileName) =>
+        int.Parse(
+            fileName[..fileName.IndexOf('_', StringComparison.Ordinal)],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
 
     private static async Task<List<string>> ExternalIds(NpgsqlConnection connection, string sql)
     {
@@ -1235,8 +1245,16 @@ public class PostgresMigrationTests
 
     private static int MigrationNumber(string resourceName)
     {
-        var file = resourceName[(resourceName.IndexOf(".Migrations.") + ".Migrations.".Length)..];
-        return int.Parse(file[..file.IndexOf('_')]);
+        var file = resourceName[
+            (
+                resourceName.IndexOf(".Migrations.", StringComparison.Ordinal)
+                + ".Migrations.".Length
+            )..
+        ];
+        return int.Parse(
+            file[..file.IndexOf('_', StringComparison.Ordinal)],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
     }
 
     private static async Task Exec(NpgsqlConnection connection, string sql)

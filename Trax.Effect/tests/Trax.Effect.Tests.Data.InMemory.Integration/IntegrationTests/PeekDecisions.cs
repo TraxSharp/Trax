@@ -40,14 +40,14 @@ public class PeekDecisions(IDataContextProviderFactory factory) : EffectJunction
             .Metadatas.AsNoTracking()
             .Where(m => m.Id == id)
             .Select(m => m.TrainState)
-            .SingleAsync()
+            .SingleAsync(cancellationToken: CancellationToken.None)
             .ConfigureAwait(false);
 
         foreach (
             var decision in await context
                 .RecordedDecisions.AsNoTracking()
                 .Where(d => d.MetadataId == id)
-                .ToListAsync()
+                .ToListAsync(cancellationToken: CancellationToken.None)
                 .ConfigureAwait(false)
         )
             Seen.Add((decision.MetadataId, state, decision.Tracks().SingleOrDefault()));

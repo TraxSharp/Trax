@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -138,7 +139,9 @@ public class EnsureSchemaCreatedTests
 
                 var start = async () => await Task.WhenAll(starts).ConfigureAwait(false);
 
-                await start.Should().NotThrowAsync($"round {round}");
+                await start
+                    .Should()
+                    .NotThrowAsync(string.Create(CultureInfo.InvariantCulture, $"round {round}"));
             }
             finally
             {

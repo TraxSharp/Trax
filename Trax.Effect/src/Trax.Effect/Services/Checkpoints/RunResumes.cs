@@ -8,7 +8,10 @@ using Trax.Effect.Services.JunctionEvents;
 
 namespace Trax.Effect.Services.Checkpoints;
 
-/// <inheritdoc />
+/// <summary>
+/// The <see cref="IRunResumes"/> Trax registers: checks a resume against the run it resumes, through
+/// the checkpoint rows of the provider in use.
+/// </summary>
 internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProvider services)
     : IRunResumes
 {
@@ -90,7 +93,9 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
                 .Distinct(StringComparer.Ordinal)
                 .ToDictionary(p => p, p => At(p), StringComparer.Ordinal),
             chosen.Keys.ToList(),
-            lineage.Count > 0 ? lineage[0].Rows.Select(r => r.NodeId).Distinct().ToList() : [],
+            lineage.Count > 0
+                ? lineage[0].Rows.Select(r => r.NodeId).Distinct(StringComparer.Ordinal).ToList()
+                : [],
             restored
         )
         {

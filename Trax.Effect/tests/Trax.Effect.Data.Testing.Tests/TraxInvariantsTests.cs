@@ -1,3 +1,4 @@
+using System.Globalization;
 using Npgsql;
 using Trax.Effect.Data.Postgres.Utils;
 
@@ -17,16 +18,21 @@ public class TraxInvariantsTests
 
     private static readonly int Port = int.TryParse(
         Environment.GetEnvironmentVariable("TRAX_TEST_PG_PORT"),
+        System.Globalization.CultureInfo.InvariantCulture,
         out var port
     )
         ? port
         : 5432;
 
-    private static readonly string Maintenance =
-        $"Host=localhost;Port={Port};Username=trax;Password=trax123;Database=postgres";
+    private static readonly string Maintenance = string.Create(
+        CultureInfo.InvariantCulture,
+        $"Host=localhost;Port={Port};Username=trax;Password=trax123;Database=postgres"
+    );
 
-    private static readonly string ConnectionString =
-        $"Host=localhost;Port={Port};Username=trax;Password=trax123;Database={Database};Include Error Detail=true";
+    private static readonly string ConnectionString = string.Create(
+        CultureInfo.InvariantCulture,
+        $"Host=localhost;Port={Port};Username=trax;Password=trax123;Database={Database};Include Error Detail=true"
+    );
 
     [OneTimeSetUp]
     public async Task CreateDatabase()
@@ -94,8 +100,11 @@ public class TraxInvariantsTests
                 new TraxInvariantViolation(
                     TraxInvariants.RunInProgress,
                     "trax.metadata",
-                    stuck.ToString(),
-                    $"run {stuck} of 'Invariants.Train' is still in progress"
+                    stuck.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"run {stuck} of 'Invariants.Train' is still in progress"
+                    )
                 )
             );
     }
@@ -138,8 +147,11 @@ public class TraxInvariantsTests
                 new TraxInvariantViolation(
                     TraxInvariants.DispatchedWithoutRun,
                     "trax.work_queue",
-                    orphan.ToString(),
-                    $"queue entry {orphan} is dispatched but its run (null) does not exist"
+                    orphan.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"queue entry {orphan} is dispatched but its run (null) does not exist"
+                    )
                 )
             );
     }
@@ -164,9 +176,11 @@ public class TraxInvariantsTests
                 new TraxInvariantViolation(
                     TraxInvariants.CheckpointOfCompletedRun,
                     "trax.checkpoint",
-                    kept.ToString(),
-                    $"checkpoint {kept} at Checkpoint<Findings>#0 of run {completed} of "
-                        + "Invariants.Train is kept, but that run completed"
+                    kept.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"checkpoint {kept} at Checkpoint<Findings>#0 of run {completed} of "
+                    ) + "Invariants.Train is kept, but that run completed"
                 )
             );
     }
@@ -176,7 +190,12 @@ public class TraxInvariantsTests
     {
         var source = await SeedRunAsync("failed");
         var gone = await SeedRunAsync("failed");
-        await SqlAsync($"DELETE FROM trax.metadata WHERE id = {gone}");
+        await SqlAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"DELETE FROM trax.metadata WHERE id = {gone}"
+            )
+        );
 
         var orphanEntry = await SeedQueueEntryAsync("queued", runId: null, resumeFrom: gone);
         await SeedQueueEntryAsync(
@@ -196,14 +215,20 @@ public class TraxInvariantsTests
                     new TraxInvariantViolation(
                         TraxInvariants.ResumeFromMissingRun,
                         "trax.work_queue",
-                        orphanEntry.ToString(),
-                        $"queue entry {orphanEntry} resumes run {gone}, which does not exist"
+                        orphanEntry.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"queue entry {orphanEntry} resumes run {gone}, which does not exist"
+                        )
                     ),
                     new TraxInvariantViolation(
                         TraxInvariants.ResumeFromMissingRun,
                         "trax.metadata",
-                        orphanRun.ToString(),
-                        $"run {orphanRun} resumes run {gone}, which does not exist"
+                        orphanRun.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"run {orphanRun} resumes run {gone}, which does not exist"
+                        )
                     ),
                 ],
                 o => o.WithStrictOrdering(),
@@ -244,7 +269,10 @@ public class TraxInvariantsTests
             .And.Subject.Select(v => v.Id)
             .Should()
             .Equal(
-                [forged.ToString(), borrowed.ToString()],
+                [
+                    forged.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    borrowed.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ],
                 "a token is good when its queue entry or, once that is gone, its run names the "
                     + "instance; one naming no run, or another instance's run, is not"
             );
@@ -289,19 +317,19 @@ public class TraxInvariantsTests
                     new TraxInvariantViolation(
                         TraxInvariants.InvokingStateWithoutToken,
                         "trax.snapshot_draft",
-                        bare.ToString(),
+                        bare.ToString(System.Globalization.CultureInfo.InvariantCulture),
                         $"{Machine} {ReadId(bare)} is in Building, which invokes a train, and holds no invoke token"
                     ),
                     new TraxInvariantViolation(
                         TraxInvariants.InvokingStateWithoutToken,
                         "trax.snapshot_draft",
-                        moved.ToString(),
+                        moved.ToString(System.Globalization.CultureInfo.InvariantCulture),
                         $"{Machine} {ReadId(moved)} is in Building, which invokes a train, and holds no invoke token"
                     ),
                     new TraxInvariantViolation(
                         TraxInvariants.InvokeTokenOutsideInvokingState,
                         "trax.snapshot_draft",
-                        stale.ToString(),
+                        stale.ToString(System.Globalization.CultureInfo.InvariantCulture),
                         $"{Machine} {left} is in Built and holds {ReadToken(stale)}, but that state invokes nothing"
                     ),
                 ],
@@ -323,13 +351,16 @@ public class TraxInvariantsTests
         await SeedSnapshotAsync(Guid.NewGuid(), "Built", token: null);
         // The trigger overwrites any revision an UPDATE sets, so the row is set below 1 with it switched off.
         await SqlAsync(
-            $"""
-            BEGIN;
-            ALTER TABLE trax.snapshot_draft DISABLE TRIGGER snapshot_draft_revision;
-            UPDATE trax.snapshot_draft SET revision = 0 WHERE row_id = {zero};
-            ALTER TABLE trax.snapshot_draft ENABLE TRIGGER snapshot_draft_revision;
-            COMMIT;
-            """
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"""
+                BEGIN;
+                ALTER TABLE trax.snapshot_draft DISABLE TRIGGER snapshot_draft_revision;
+                UPDATE trax.snapshot_draft SET revision = 0 WHERE row_id = {zero};
+                ALTER TABLE trax.snapshot_draft ENABLE TRIGGER snapshot_draft_revision;
+                COMMIT;
+                """
+            )
         );
 
         var violations = await TraxInvariants.FindViolationsAsync(ConnectionString, [], Timed);
@@ -343,7 +374,7 @@ public class TraxInvariantsTests
             .Match<TraxInvariantViolation>(v =>
                 v.Invariant == TraxInvariants.RevisionBelowOne
                 && v.Table == "trax.snapshot_draft"
-                && v.Id == zero.ToString()
+                && v.Id == zero.ToString(System.Globalization.CultureInfo.InvariantCulture)
             );
     }
 
@@ -369,7 +400,10 @@ public class TraxInvariantsTests
             .Select(v => v.Id)
             .Should()
             .Equal(
-                [empty.ToString(), blank.ToString()],
+                [
+                    empty.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    blank.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ],
                 $"a user's draft names its owner; a system row names none and is fine. See {MachineApiAdr}"
             );
         violations.Should().OnlyContain(v => v.Invariant == TraxInvariants.UserDraftWithoutOwner);
@@ -393,11 +427,14 @@ public class TraxInvariantsTests
         );
         await ExecAsync(
             connection,
-            $"""
-            INSERT INTO trax.snapshot_draft
-                (row_id, id, user_key, owner_kind, machine, version, state, concurrency_token, updated_at)
-            VALUES ({first}, gen_random_uuid(), NULL, 'system', '{Machine}', 1, 'Built', gen_random_uuid(), now())
-            """
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"""
+                INSERT INTO trax.snapshot_draft
+                    (row_id, id, user_key, owner_kind, machine, version, state, concurrency_token, updated_at)
+                VALUES ({first}, gen_random_uuid(), NULL, 'system', '{Machine}', 1, 'Built', gen_random_uuid(), now())
+                """
+            )
         );
 
         var violations = await TraxInvariants.FindViolationsAsync(connection, [], Timed);
@@ -406,7 +443,9 @@ public class TraxInvariantsTests
         violations
             .Should()
             .Contain(
-                v => v.Invariant == TraxInvariants.DuplicateRowId && v.Id == first.ToString(),
+                v =>
+                    v.Invariant == TraxInvariants.DuplicateRowId
+                    && v.Id == first.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 $"a row id names one incarnation of one instance. See {MachineApiAdr}"
             );
     }
@@ -417,7 +456,12 @@ public class TraxInvariantsTests
     {
         var idle = await SeedSnapshotAsync(Guid.NewGuid(), "Idle", token: null);
         await SeedSnapshotAsync(Guid.NewGuid(), "Idle", token: null);
-        await SqlAsync($"UPDATE trax.snapshot_draft SET due_at = now() WHERE row_id = {idle}");
+        await SqlAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"UPDATE trax.snapshot_draft SET due_at = now() WHERE row_id = {idle}"
+            )
+        );
 
         var violations = await TraxInvariants.FindViolationsAsync(ConnectionString, [], Timed);
 
@@ -426,7 +470,8 @@ public class TraxInvariantsTests
             .ContainSingle($"only a timed state holds a due time. See {MachineApiAdr}")
             .Which.Should()
             .Match<TraxInvariantViolation>(v =>
-                v.Invariant == TraxInvariants.DueAtOutsideTimedState && v.Id == idle.ToString()
+                v.Invariant == TraxInvariants.DueAtOutsideTimedState
+                && v.Id == idle.ToString(System.Globalization.CultureInfo.InvariantCulture)
             );
     }
 
@@ -452,7 +497,8 @@ public class TraxInvariantsTests
             )
             .Which.Should()
             .Match<TraxInvariantViolation>(v =>
-                v.Invariant == TraxInvariants.TimedStateWithoutDueAt && v.Id == review.ToString()
+                v.Invariant == TraxInvariants.TimedStateWithoutDueAt
+                && v.Id == review.ToString(System.Globalization.CultureInfo.InvariantCulture)
             );
     }
 
@@ -468,7 +514,12 @@ public class TraxInvariantsTests
             token: null,
             machine: "Other"
         );
-        await SqlAsync($"UPDATE trax.snapshot_draft SET due_at = now() WHERE row_id = {stale}");
+        await SqlAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"UPDATE trax.snapshot_draft SET due_at = now() WHERE row_id = {stale}"
+            )
+        );
 
         var violations = await TraxInvariants.FindViolationsAsync(
             ConnectionString,
@@ -483,7 +534,8 @@ public class TraxInvariantsTests
             )
             .Which.Should()
             .Match<TraxInvariantViolation>(v =>
-                v.Invariant == TraxInvariants.DueAtOfARemovedTimer && v.Id == stale.ToString()
+                v.Invariant == TraxInvariants.DueAtOfARemovedTimer
+                && v.Id == stale.ToString(System.Globalization.CultureInfo.InvariantCulture)
             );
     }
 
@@ -517,7 +569,8 @@ public class TraxInvariantsTests
             )
             .Which.Should()
             .Match<TraxInvariantViolation>(v =>
-                v.Invariant == TraxInvariants.DraftOlderThanMaxLifetime && v.Id == old.ToString()
+                v.Invariant == TraxInvariants.DraftOlderThanMaxLifetime
+                && v.Id == old.ToString(System.Globalization.CultureInfo.InvariantCulture)
             );
     }
 
@@ -568,7 +621,11 @@ public class TraxInvariantsTests
         violations
             .Should()
             .BeEquivalentTo(
-                [editable.ToString(), unborn.ToString(), running.ToString()],
+                [
+                    editable.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    unborn.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    running.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ],
                 $"the check reports exactly the drafts the sweep deletes for their age. See {MachineApiAdr}"
             );
     }
@@ -625,10 +682,25 @@ public class TraxInvariantsTests
         thrown
             .Which.Message.Should()
             .Contain("4 violation(s)")
-            .And.Contain($"[run-in-progress] trax.metadata {first}:")
-            .And.Contain($"[run-in-progress] trax.metadata {second}:")
+            .And.Contain(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"[run-in-progress] trax.metadata {first}:"
+                )
+            )
+            .And.Contain(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"[run-in-progress] trax.metadata {second}:"
+                )
+            )
             .And.Contain("[effect-claim-in-flight] trax.effect_claim effect-abandoned:")
-            .And.Contain($"[dispatched-without-run] trax.work_queue {orphan}:")
+            .And.Contain(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"[dispatched-without-run] trax.work_queue {orphan}:"
+                )
+            )
             .And.Contain("[LeavesStuckRuns(");
     }
 
@@ -648,7 +720,7 @@ public class TraxInvariantsTests
             .BeTrue("a fixture's base class can carry the mark for every subclass");
     }
 
-    private sealed class Marked
+    private static class Marked
     {
         [LeavesStuckRuns("simulates a host crashing mid-run")]
         public static void Stuck() { }

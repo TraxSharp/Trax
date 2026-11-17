@@ -137,7 +137,7 @@ public class LogRunLinkTests
             var rows = await context
                 .Logs.AsNoTracking()
                 .Where(l => l.Category == Category && l.Message.StartsWith(tag))
-                .ToDictionaryAsync(l => l.Message, l => l.MetadataId)
+                .ToDictionaryAsync(l => l.Message, l => l.MetadataId, StringComparer.Ordinal)
                 .ConfigureAwait(false);
 
             if (rows.Count >= count || DateTime.UtcNow > deadline)
@@ -156,7 +156,7 @@ public class LogRunLinkTests
             var logger = loggers.CreateLogger(Category);
 
             logger.LogInformation("{Tag} outer before", tag);
-            await inner.Run(tag).ConfigureAwait(false);
+            await inner.Run(tag, CancellationToken.None).ConfigureAwait(false);
             logger.LogInformation("{Tag} outer after", tag);
 
             return Unit.Default;

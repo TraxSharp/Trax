@@ -40,7 +40,7 @@ public class EveryTableIsModelledTests : TestSetup
 
         var unmapped = migrated
             .Keys.Where(table => !mapped.ContainsKey(table) && !Unmodelled.ContainsKey(table))
-            .Order()
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         unmapped
@@ -69,7 +69,7 @@ public class EveryTableIsModelledTests : TestSetup
                     )
                     .Select(column => $"{table.Key}.{column}")
             )
-            .Order()
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         missing

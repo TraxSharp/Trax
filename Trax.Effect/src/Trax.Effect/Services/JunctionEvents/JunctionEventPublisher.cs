@@ -131,7 +131,7 @@ internal sealed class JunctionEventPublisher
             MetadataId: metadata.Id,
             ExternalId: metadata.ExternalId,
             TrainName: metadata.Name,
-            TrainState: TrainState.InProgress.ToString(),
+            TrainState: nameof(TrainState.InProgress),
             Timestamp: DateTime.UtcNow,
             FailureJunction: null,
             FailureReason: null,

@@ -55,10 +55,13 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
 
         foreach (var pattern in configuration.Blacklist)
         {
-            if (pattern.Contains('*'))
+            if (pattern.Contains('*', StringComparison.Ordinal))
             {
                 // Convert wildcard to regex, escaping dots and replacing '*' with '.*'
-                var regexPattern = "^" + Regex.Escape(pattern).Replace(@"\*", ".*") + "$";
+                var regexPattern =
+                    "^"
+                    + Regex.Escape(pattern).Replace(@"\*", ".*", StringComparison.Ordinal)
+                    + "$";
                 _wildcardBlacklist.Add(new Regex(regexPattern, RegexOptions.Compiled));
             }
             else
@@ -68,7 +71,7 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
         // The provider is often built on a train run's flow (the first logger asked for). The writer
         // must not inherit that run, or its own lines would be stored against it.
         using (ExecutionContext.SuppressFlow())
-            _flushTask = Task.Run(() => FlushLoopAsync(_cts.Token));
+            _flushTask = Task.Run(() => FlushLoopAsync(_cts.Token), CancellationToken.None);
     }
 
     /// <summary>
@@ -205,7 +208,7 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
     {
         try
         {
-            await _flushTask.WaitAsync(timeout).ConfigureAwait(false);
+            await _flushTask.WaitAsync(timeout, CancellationToken.None).ConfigureAwait(false);
             return true;
         }
         catch (TimeoutException) when (!_flushTask.IsCompleted)

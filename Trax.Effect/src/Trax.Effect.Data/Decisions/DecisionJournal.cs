@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -90,7 +91,7 @@ public sealed class DecisionJournal(
     /// flow can be looked up by the train's own rows only. It grows with the trains, not the runs.
     /// </summary>
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _rowNames =
-        new();
+        new(StringComparer.Ordinal);
 
     /// <summary>
     /// True: a requeue replays what was written, so a decision that could not be written must not
@@ -304,7 +305,9 @@ public sealed class DecisionJournal(
     }
 
     /// <summary>The state types (or trains) a warning about an unkeyed hash was logged for.</summary>
-    private readonly ConcurrentDictionary<string, byte> _unkeyedWarned = new();
+    private readonly ConcurrentDictionary<string, byte> _unkeyedWarned = new(
+        StringComparer.Ordinal
+    );
 
     /// <summary>
     /// The state hash to record with the answer: Trax.Core's, unless it is unkeyed and the state
@@ -533,7 +536,9 @@ public sealed class DecisionJournal(
         var run = new DecisionRun(metadata.ExternalId, train, metadataId, replay);
 
         if (metadataId is not null)
-            _rowNames.GetOrAdd(run.Train, _ => new()).TryAdd(metadata.Name, 0);
+            _rowNames
+                .GetOrAdd(run.Train, _ => new(StringComparer.Ordinal))
+                .TryAdd(metadata.Name, 0);
 
         return run;
     }
@@ -624,7 +629,10 @@ public sealed class DecisionJournal(
             {
                 if (!seen.Add(id))
                 {
-                    broken = $"the runs it replays lead back to run {id}";
+                    broken = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"the runs it replays lead back to run {id}"
+                    );
                     break;
                 }
 
@@ -652,8 +660,11 @@ public sealed class DecisionJournal(
                 {
                     broken =
                         id == source
-                            ? $"no run {id} exists"
-                            : $"run {id}, whose decisions run {replayedBy} replays, no longer exists";
+                            ? string.Create(CultureInfo.InvariantCulture, $"no run {id} exists")
+                            : string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"run {id}, whose decisions run {replayedBy} replays, no longer exists"
+                            );
                     break;
                 }
 
@@ -661,7 +672,10 @@ public sealed class DecisionJournal(
                 // matching key or fingerprint would only make them look like this train's.
                 if (!string.Equals(link.Name, metadata.Name, StringComparison.Ordinal))
                 {
-                    broken = $"run {id} is a run of train '{link.Name}', not of this train";
+                    broken = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"run {id} is a run of train '{link.Name}', not of this train"
+                    );
                     break;
                 }
 
@@ -669,7 +683,10 @@ public sealed class DecisionJournal(
                 // would route a different request down tracks chosen for that one.
                 if (id == source && metadata.SameInput?.Invoke(link.Input) == false)
                 {
-                    broken = $"run {id} ran on a different input";
+                    broken = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"run {id} ran on a different input"
+                    );
                     break;
                 }
 
@@ -686,8 +703,10 @@ public sealed class DecisionJournal(
                 if (!link.DecisionsRecorded && (link.ReplayDecisionsOf is null || abandoned))
                 {
                     broken =
-                        $"run {id} ran without recording its decisions, so what it decided "
-                        + "cannot be known";
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"run {id} ran without recording its decisions, so what it decided "
+                        ) + "cannot be known";
                     break;
                 }
 
@@ -804,7 +823,10 @@ public sealed class DecisionJournal(
             }
             catch (JsonException e)
             {
-                var why = $"the answer run {runId} recorded to '{key}' cannot be read: {e.Message}";
+                var why = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"the answer run {runId} recorded to '{key}' cannot be read: {e.Message}"
+                );
 
                 if (!metadata.Retry)
                     throw DecisionRun.Unreplayable(metadata.Name, metadata.ExternalId, source, why);

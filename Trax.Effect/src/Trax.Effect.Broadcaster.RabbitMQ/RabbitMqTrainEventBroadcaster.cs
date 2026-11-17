@@ -371,7 +371,7 @@ internal sealed class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IA
 
         // Signed on every attempt, so a resent event carries a fresh timestamp.
         if (_options.SigningKey is { } key)
-            properties.Headers = new Dictionary<string, object?>
+            properties.Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [BroadcastMessageSignature.Header] = BroadcastMessageSignature.Create(
                     key,

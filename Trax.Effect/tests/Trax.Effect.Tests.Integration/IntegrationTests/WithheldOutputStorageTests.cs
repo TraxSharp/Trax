@@ -42,7 +42,7 @@ public class WithheldOutputStorageTests
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (WithheldTrain)scope.ServiceProvider.GetRequiredService<IWithheldTrain>();
 
-        var output = await train.Run("given");
+        var output = await train.Run("given", CancellationToken.None);
 
         output.Should().Be("context-of-given", "the caller still gets the output");
         train.Metadata!.Output.Should().BeNull("the train withholds its output from every copy");
@@ -56,7 +56,7 @@ public class WithheldOutputStorageTests
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (PlainTrain)scope.ServiceProvider.GetRequiredService<IPlainTrain>();
 
-        await train.Run("given");
+        await train.Run("given", CancellationToken.None);
 
         train.Metadata!.Output.Should().Contain("context-of-given");
     }

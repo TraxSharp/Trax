@@ -38,7 +38,7 @@ internal sealed class LifecycleEventQueue(int capacity)
     /// <param name="message">The event to queue.</param>
     /// <param name="dropped">
     /// The event given up to stay within capacity: <paramref name="message"/> itself, or the queued
-    /// event it replaced. <c>null</c> when nothing was dropped.
+    /// event it replaced. <see langword="null"/> when nothing was dropped.
     /// </param>
     /// <returns><see langword="false"/> only when the queue was completed; nothing is dropped then.</returns>
     public bool TryWrite(
@@ -83,7 +83,7 @@ internal sealed class LifecycleEventQueue(int capacity)
     }
 
     /// <summary>
-    /// Waits for the next event. Returns <c>null</c> once the queue is completed and empty.
+    /// Waits for the next event. Returns <see langword="null"/> once the queue is completed and empty.
     /// </summary>
     /// <param name="ct">Abandons the wait.</param>
     public async ValueTask<TrainLifecycleEventMessage?> ReadAsync(CancellationToken ct)
@@ -99,7 +99,7 @@ internal sealed class LifecycleEventQueue(int capacity)
         }
     }
 
-    /// <summary>Stops accepting events; the reader drains what is queued, then gets <c>null</c>.</summary>
+    /// <summary>Stops accepting events; the reader drains what is queued, then gets <see langword="null"/>.</summary>
     public void Complete()
     {
         lock (_items)

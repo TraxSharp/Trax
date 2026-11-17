@@ -112,7 +112,10 @@ public static class TraxAuthorization
         member
             .GetCustomAttributes(inherit: true)
             .Select(a => a.GetType().FullName)
-            .Where(name => name is not null && ForeignAuthorizationAttributes.Contains(name))
+            .Where(name =>
+                name is not null
+                && ForeignAuthorizationAttributes.Contains(name, StringComparer.Ordinal)
+            )
             .Select(name => name!)
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
@@ -154,5 +157,7 @@ public static class TraxAuthorization
     }
 
     private static string Short(string fullName) =>
-        "[" + fullName.Split('.')[^1].Replace("Attribute", string.Empty) + "]";
+        "["
+        + fullName.Split('.')[^1].Replace("Attribute", string.Empty, StringComparison.Ordinal)
+        + "]";
 }

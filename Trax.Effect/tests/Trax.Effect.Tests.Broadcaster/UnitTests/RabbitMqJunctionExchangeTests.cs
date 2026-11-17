@@ -72,7 +72,7 @@ public class RabbitMqJunctionExchangeTests
             connection = await new ConnectionFactory
             {
                 Uri = new Uri(AmqpUri),
-            }.CreateConnectionAsync();
+            }.CreateConnectionAsync(CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -82,22 +82,31 @@ public class RabbitMqJunctionExchangeTests
 
         var _ = connection;
         await using var _Disposal = _.ConfigureAwait(false);
-        var channel = await connection.CreateChannelAsync();
+        var channel = await connection.CreateChannelAsync(
+            cancellationToken: CancellationToken.None
+        );
         await using var channelDisposal = channel.ConfigureAwait(false);
         await channel.ExchangeDeclareAsync(
             options.ExchangeName,
             ExchangeType.Fanout,
-            durable: true
+            durable: true,
+            cancellationToken: CancellationToken.None
         );
         var queue = (
             await channel.QueueDeclareAsync(
                 string.Empty,
                 durable: false,
                 exclusive: true,
-                autoDelete: true
+                autoDelete: true,
+                cancellationToken: CancellationToken.None
             )
         ).QueueName;
-        await channel.QueueBindAsync(queue, options.ExchangeName, string.Empty);
+        await channel.QueueBindAsync(
+            queue,
+            options.ExchangeName,
+            string.Empty,
+            cancellationToken: CancellationToken.None
+        );
         var legacy = new ConcurrentQueue<TrainLifecycleEventMessage>();
         var legacyGotTrainEvent = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
@@ -111,7 +120,12 @@ public class RabbitMqJunctionExchangeTests
                 legacyGotTrainEvent.TrySetResult();
             return Task.CompletedTask;
         };
-        await channel.BasicConsumeAsync(queue, autoAck: true, consumer);
+        await channel.BasicConsumeAsync(
+            queue,
+            autoAck: true,
+            consumer,
+            cancellationToken: CancellationToken.None
+        );
 
         var receiver = new RabbitMqTrainEventReceiver(
             options,
@@ -148,8 +162,8 @@ public class RabbitMqJunctionExchangeTests
                 Message("Completed", junction: false),
                 CancellationToken.None
             );
-            await currentGotBoth.Task.WaitAsync(Timeout);
-            await legacyGotTrainEvent.Task.WaitAsync(Timeout);
+            await currentGotBoth.Task.WaitAsync(Timeout, CancellationToken.None);
+            await legacyGotTrainEvent.Task.WaitAsync(Timeout, CancellationToken.None);
         }
 
         current.Should().BeEquivalentTo(["JunctionStarted", "Completed"]);
@@ -194,7 +208,12 @@ public class RabbitMqJunctionExchangeTests
     )
     {
         await channel
-            .ExchangeDeclareAsync(exchange, ExchangeType.Fanout, durable: true)
+            .ExchangeDeclareAsync(
+                exchange,
+                ExchangeType.Fanout,
+                durable: true,
+                cancellationToken: CancellationToken.None
+            )
             .ConfigureAwait(false);
         // Signed for the exchange it is published to, so only the exchange check can drop it.
         var body = JsonSerializer.SerializeToUtf8Bytes(message);
@@ -205,7 +224,7 @@ public class RabbitMqJunctionExchangeTests
                 mandatory: false,
                 new BasicProperties
                 {
-                    Headers = new Dictionary<string, object?>
+                    Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         [BroadcastMessageSignature.Header] = BroadcastMessageSignature.Create(
                             TestBroadcastKey.Value,
@@ -215,7 +234,8 @@ public class RabbitMqJunctionExchangeTests
                         ),
                     },
                 },
-                body
+                body,
+                CancellationToken.None
             )
             .ConfigureAwait(false);
     }
@@ -244,7 +264,9 @@ public class RabbitMqJunctionExchangeTests
             CancellationToken.None
         );
 
-        var channel = await connection.CreateChannelAsync();
+        var channel = await connection.CreateChannelAsync(
+            cancellationToken: CancellationToken.None
+        );
         await using var channelDisposal = channel.ConfigureAwait(false);
         // Each published where it does not belong, then each where it does, in that order.
         await Publish(
@@ -279,7 +301,7 @@ public class RabbitMqJunctionExchangeTests
                 ExternalId = "step",
             }
         );
-        await gotBoth.Task.WaitAsync(Timeout);
+        await gotBoth.Task.WaitAsync(Timeout, CancellationToken.None);
 
         received
             .Should()
@@ -296,7 +318,7 @@ public class RabbitMqJunctionExchangeTests
         var options = NewOptions();
         var connection = await Connect();
         await using var connectionDisposal = connection.ConfigureAwait(false);
-        var setup = await connection.CreateChannelAsync();
+        var setup = await connection.CreateChannelAsync(cancellationToken: CancellationToken.None);
         await using (setup.ConfigureAwait(false))
         {
             // Declared elsewhere with another type, so declaring it as a fanout is refused.
@@ -304,7 +326,8 @@ public class RabbitMqJunctionExchangeTests
                 options.EffectiveJunctionExchangeName,
                 ExchangeType.Direct,
                 durable: false,
-                autoDelete: true
+                autoDelete: true,
+                cancellationToken: CancellationToken.None
             );
         }
 
@@ -339,7 +362,7 @@ public class RabbitMqJunctionExchangeTests
             CancellationToken.None
         );
 
-        (await received.Task.WaitAsync(Timeout))
+        (await received.Task.WaitAsync(Timeout, CancellationToken.None))
             .Should()
             .Be(
                 "Completed",
@@ -385,16 +408,19 @@ public class RabbitMqJunctionExchangeTests
                     Message("Completed", junction: false),
                     CancellationToken.None
                 );
-                await received.Task.WaitAsync(Timeout);
+                await received.Task.WaitAsync(Timeout, CancellationToken.None);
             }
 
             await receiver.StopAsync(CancellationToken.None);
         }
 
-        var probe = await connection.CreateChannelAsync();
+        var probe = await connection.CreateChannelAsync(cancellationToken: CancellationToken.None);
         await using var probeDisposal = probe.ConfigureAwait(false);
         var passive = () =>
-            probe.ExchangeDeclarePassiveAsync(options.EffectiveJunctionExchangeName);
+            probe.ExchangeDeclarePassiveAsync(
+                options.EffectiveJunctionExchangeName,
+                CancellationToken.None
+            );
         (
             await passive
                 .Should()

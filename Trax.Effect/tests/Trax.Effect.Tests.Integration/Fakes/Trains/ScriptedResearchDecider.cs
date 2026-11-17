@@ -30,7 +30,11 @@ public sealed class ScriptedResearchDecider : IDecider
         Asked++;
         return Task.FromResult(
             new DecisionResult(
-                Choices.ToDictionary(c => c.Key, c => (Answer)new ChoiceAnswer(c.Value))
+                Choices.ToDictionary(
+                    c => c.Key,
+                    c => (Answer)new ChoiceAnswer(c.Value),
+                    StringComparer.Ordinal
+                )
             )
         );
     }

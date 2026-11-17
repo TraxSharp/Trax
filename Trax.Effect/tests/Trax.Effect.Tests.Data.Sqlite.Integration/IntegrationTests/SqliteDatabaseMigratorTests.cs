@@ -122,8 +122,16 @@ public class SqliteDatabaseMigratorTests
 
     private static int MigrationNumber(string resourceName)
     {
-        var file = resourceName[(resourceName.IndexOf(".Migrations.") + ".Migrations.".Length)..];
-        return int.Parse(file[..file.IndexOf('_')]);
+        var file = resourceName[
+            (
+                resourceName.IndexOf(".Migrations.", StringComparison.Ordinal)
+                + ".Migrations.".Length
+            )..
+        ];
+        return int.Parse(
+            file[..file.IndexOf('_', StringComparison.Ordinal)],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
     }
 
     private static async Task Exec(string connectionString, string sql)

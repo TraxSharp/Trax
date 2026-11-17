@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using AwesomeAssertions;
@@ -15,7 +16,7 @@ using Trax.Effect.Extensions;
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 
 [TestFixture]
-public class DataContextLoggingProviderTests
+public partial class DataContextLoggingProviderTests
 {
     #region DataContextLogger — direct tests
 
@@ -99,11 +100,10 @@ public class DataContextLoggingProviderTests
     [Test]
     public void Log_WildcardBlacklisted_Skipped()
     {
-        var pattern = new Regex(@"^Microsoft\..*$", RegexOptions.Compiled);
         var logger = BuildLogger(
             out var channel,
             categoryName: "Microsoft.SomethingNoisy",
-            wildcards: [pattern]
+            wildcards: [Pattern]
         );
 
         logger.Log(LogLevel.Information, default, "m", exception: null, (_, _) => "m");
@@ -196,7 +196,13 @@ public class DataContextLoggingProviderTests
 
         var logger = provider.CreateLogger("TestCategory");
         for (var i = 0; i < 5; i++)
-            logger.Log(LogLevel.Information, default, i, exception: null, (s, _) => $"msg {s}");
+            logger.Log(
+                LogLevel.Information,
+                default,
+                i,
+                exception: null,
+                (s, _) => string.Create(CultureInfo.InvariantCulture, $"msg {s}")
+            );
 
         // Poll for the flush loop to land at least one batch instead of waiting a fixed
         // window: CI scheduling can delay the background writer, and once any log is
@@ -239,7 +245,13 @@ public class DataContextLoggingProviderTests
 
         const int count = 1000;
         for (var i = 0; i < count; i++)
-            logger.Log(LogLevel.Information, default, i, exception: null, (s, _) => $"msg {s}");
+            logger.Log(
+                LogLevel.Information,
+                default,
+                i,
+                exception: null,
+                (s, _) => string.Create(CultureInfo.InvariantCulture, $"msg {s}")
+            );
 
         provider.Dispose();
 
@@ -340,6 +352,9 @@ public class DataContextLoggingProviderTests
             .BeTrue("the writer is cancelled once the drain runs out");
         clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(8));
     }
+
+    [GeneratedRegex(@"^Microsoft\..*$", RegexOptions.Compiled)]
+    private static partial Regex Pattern { get; }
 
     #endregion
 }

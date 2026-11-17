@@ -14,7 +14,7 @@ internal static class HubOriginPolicy
     /// <summary>
     /// True when the request may proceed: it carries no <c>Origin</c>, or the origin is on the
     /// request's own host, or it is allowed. <paramref name="allowedOrigins"/> is the normalized
-    /// explicit list, or <c>null</c> to use the host's CORS default policy.
+    /// explicit list, or <see langword="null"/> to use the host's CORS default policy.
     /// </summary>
     public static bool IsAllowed(HttpContext context, IReadOnlyList<string>? allowedOrigins)
     {
@@ -82,7 +82,7 @@ internal static class HubOriginPolicy
         if (!requestHost.HasValue)
             return false;
 
-        var scheme = normalizedOrigin[..normalizedOrigin.IndexOf(':')];
+        var scheme = normalizedOrigin[..normalizedOrigin.IndexOf(':', StringComparison.Ordinal)];
         return TryNormalize($"{scheme}://{requestHost.Value}", out var own)
             && string.Equals(own, normalizedOrigin, StringComparison.Ordinal);
     }

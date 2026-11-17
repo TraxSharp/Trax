@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using AwesomeAssertions;
@@ -153,7 +154,7 @@ public class RabbitMqBroadcasterSenderTests
 
         await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
         // Two failed attempts wait 1s and then 2s before the third reaches the broker.
-        await published.Reaches(1).WaitAsync(Timeout);
+        await published.Reaches(1).WaitAsync(Timeout, CancellationToken.None);
         await broadcaster.DisposeAsync();
 
         await channel
@@ -191,7 +192,7 @@ public class RabbitMqBroadcasterSenderTests
         var broadcaster = Broadcaster(connection, logger, queueCapacity: 1);
 
         await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
-        await held.Entered.WaitAsync(Timeout); // the sender holds m0, so the queue is empty
+        await held.Entered.WaitAsync(Timeout, CancellationToken.None); // the sender holds m0, so the queue is empty
         await broadcaster.PublishAsync(Message("m1"), CancellationToken.None); // fills the queue
         await broadcaster.PublishAsync(Message("m2"), CancellationToken.None); // dropped
 
@@ -216,7 +217,7 @@ public class RabbitMqBroadcasterSenderTests
         var broadcaster = Broadcaster(connection, logger: null, queueCapacity: 1);
 
         await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
-        await held.Entered.WaitAsync(Timeout);
+        await held.Entered.WaitAsync(Timeout, CancellationToken.None);
         await broadcaster.PublishAsync(Message("m1"), CancellationToken.None);
         var publish = () => broadcaster.PublishAsync(Message("m2"), CancellationToken.None);
 
@@ -252,7 +253,7 @@ public class RabbitMqBroadcasterSenderTests
         var broadcaster = Broadcaster(connection, logger);
 
         await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
-        await held.Entered.WaitAsync(Timeout);
+        await held.Entered.WaitAsync(Timeout, CancellationToken.None);
         await broadcaster.PublishAsync(Message("m1"), CancellationToken.None);
         await broadcaster.PublishAsync(Message("m2"), CancellationToken.None);
 
@@ -316,7 +317,7 @@ public class RabbitMqBroadcasterSenderTests
         var broadcaster = Broadcaster(connection, new CapturingLogger());
 
         await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
-        await published.Reaches(1).WaitAsync(Timeout);
+        await published.Reaches(1).WaitAsync(Timeout, CancellationToken.None);
         await broadcaster.DisposeAsync();
 
         await connection
@@ -368,7 +369,7 @@ public class RabbitMqBroadcasterSenderTests
 
         await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
 
-        await published.Reaches(1).WaitAsync(Timeout);
+        await published.Reaches(1).WaitAsync(Timeout, CancellationToken.None);
         published.ExternalIds.Should().Equal("m0");
         stale.Received(1).Dispose();
         await broadcaster.DisposeAsync();
@@ -404,9 +405,12 @@ public class RabbitMqBroadcasterSenderTests
         broadcaster.UtcNow = () => now;
 
         for (var i = 0; i < 5; i++)
-            await broadcaster.PublishAsync(Junction($"j{i}"), CancellationToken.None);
+            await broadcaster.PublishAsync(
+                Junction(string.Create(CultureInfo.InvariantCulture, $"j{i}")),
+                CancellationToken.None
+            );
         await broadcaster.PublishAsync(Message("train"), CancellationToken.None);
-        await published.Reaches(1).WaitAsync(Timeout);
+        await published.Reaches(1).WaitAsync(Timeout, CancellationToken.None);
 
         opened
             .Should()
@@ -425,7 +429,7 @@ public class RabbitMqBroadcasterSenderTests
         now += RabbitMqTrainEventBroadcaster.FirstJunctionBackoff;
         await broadcaster.PublishAsync(Junction("again"), CancellationToken.None);
         await broadcaster.PublishAsync(Message("train-2"), CancellationToken.None);
-        await published.Reaches(2).WaitAsync(Timeout);
+        await published.Reaches(2).WaitAsync(Timeout, CancellationToken.None);
 
         opened.Should().Be(3, $"past the backoff a junction event is tried again. See {Adr}.");
         broadcaster
@@ -468,7 +472,7 @@ public class RabbitMqBroadcasterSenderTests
         );
 
         await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
-        await published.Reaches(1).WaitAsync(Timeout);
+        await published.Reaches(1).WaitAsync(Timeout, CancellationToken.None);
         await broadcaster.DisposeAsync();
 
         await second
@@ -533,7 +537,7 @@ public class RabbitMqBroadcasterSenderTests
         await broadcaster.PublishAsync(Message("refused"), CancellationToken.None);
         await broadcaster.PublishAsync(Message("behind"), CancellationToken.None);
 
-        await published.Reaches(1).WaitAsync(Timeout);
+        await published.Reaches(1).WaitAsync(Timeout, CancellationToken.None);
         published.ExternalIds.Should().Equal("behind");
         published
             .AttemptsFor("refused")
@@ -554,14 +558,14 @@ public class RabbitMqBroadcasterSenderTests
         var broadcaster = Broadcaster(connection, new CapturingLogger(), queueCapacity: 2);
 
         await broadcaster.PublishAsync(Message("held"), CancellationToken.None);
-        await held.Entered.WaitAsync(Timeout); // the sender holds this one; the queue is empty
+        await held.Entered.WaitAsync(Timeout, CancellationToken.None); // the sender holds this one; the queue is empty
         await broadcaster.PublishAsync(Message("a"), CancellationToken.None);
         await broadcaster.PublishAsync(Message("b"), CancellationToken.None); // the queue is full
         await broadcaster.PublishAsync(Message("a", "Completed"), CancellationToken.None);
         await broadcaster.PublishAsync(Message("c"), CancellationToken.None);
 
         held.Release();
-        await published.Reaches(3).WaitAsync(Timeout);
+        await published.Reaches(3).WaitAsync(Timeout, CancellationToken.None);
         await broadcaster.DisposeAsync();
 
         published
@@ -584,7 +588,7 @@ public class RabbitMqBroadcasterSenderTests
         var broadcaster = Broadcaster(connection, new CapturingLogger(), queueCapacity: 2);
 
         await broadcaster.PublishAsync(Message("held"), CancellationToken.None);
-        await held.Entered.WaitAsync(Timeout); // the sender holds this one; the queue is empty
+        await held.Entered.WaitAsync(Timeout, CancellationToken.None); // the sender holds this one; the queue is empty
         await broadcaster.PublishAsync(Message("j1", "JunctionStarted"), CancellationToken.None);
         await broadcaster.PublishAsync(Message("j2", "Decided"), CancellationToken.None); // full
         await broadcaster.PublishAsync(Message("s"), CancellationToken.None);
@@ -592,7 +596,7 @@ public class RabbitMqBroadcasterSenderTests
         await broadcaster.PublishAsync(Message("s", "Completed"), CancellationToken.None);
 
         held.Release();
-        await published.Reaches(3).WaitAsync(Timeout);
+        await published.Reaches(3).WaitAsync(Timeout, CancellationToken.None);
         await broadcaster.DisposeAsync();
 
         published
@@ -621,7 +625,7 @@ public class RabbitMqBroadcasterSenderTests
         var broadcaster = Broadcaster(connection, new CapturingLogger());
 
         await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
-        await attempted.Task.WaitAsync(Timeout);
+        await attempted.Task.WaitAsync(Timeout, CancellationToken.None);
 
         // measuring-interval: the stopwatch measures how long shutdown is held up.
         var clock = Stopwatch.StartNew();
