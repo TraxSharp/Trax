@@ -16,20 +16,32 @@ public class ThroughputStressTests : StressFixture
 {
     private static async Task<AutosaveResult> Autosave(Guid id, string snapshot)
     {
-        await using var ctx = StressDb.NewContext();
-        return await StressOrder.Service(StressDb.NewStore(ctx)).Autosave("u", id, snapshot);
+        var ctx = StressDb.NewContext();
+        await using var ctxDisposal = ctx.ConfigureAwait(false);
+        return await StressOrder
+            .Service(StressDb.NewStore(ctx))
+            .Autosave("u", id, snapshot)
+            .ConfigureAwait(false);
     }
 
     private static async Task<AdvanceOutcome> Advance(Guid id, string trigger)
     {
-        await using var ctx = StressDb.NewContext();
-        return await StressOrder.Service(StressDb.NewStore(ctx)).Advance("u", id, trigger);
+        var ctx = StressDb.NewContext();
+        await using var ctxDisposal = ctx.ConfigureAwait(false);
+        return await StressOrder
+            .Service(StressDb.NewStore(ctx))
+            .Advance("u", id, trigger)
+            .ConfigureAwait(false);
     }
 
     private static async Task<string> LoadState(Guid id)
     {
-        await using var ctx = StressDb.NewContext();
-        var loaded = await StressOrder.Service(StressDb.NewStore(ctx)).Load("u", id);
+        var ctx = StressDb.NewContext();
+        await using var ctxDisposal = ctx.ConfigureAwait(false);
+        var loaded = await StressOrder
+            .Service(StressDb.NewStore(ctx))
+            .Load("u", id)
+            .ConfigureAwait(false);
         return loaded is LoadResult.Loaded l ? l.Snapshot.State : "not-loaded";
     }
 
@@ -47,11 +59,13 @@ public class ThroughputStressTests : StressFixture
             async i =>
             {
                 // Soft save a cart, drive it to Review server-side, then soft save an updated review.
-                (await Autosave(ids[i], StressOrder.DraftWithItems(i + 1)))
+                (await Autosave(ids[i], StressOrder.DraftWithItems(i + 1)).ConfigureAwait(false))
                     .Should()
                     .BeOfType<AutosaveResult.Saved>();
-                (await Advance(ids[i], "Next")).Should().BeOfType<AdvanceOutcome.Advanced>();
-                (await Autosave(ids[i], StressOrder.ReviewJson(i + 1, i + 2)))
+                (await Advance(ids[i], "Next").ConfigureAwait(false))
+                    .Should()
+                    .BeOfType<AdvanceOutcome.Advanced>();
+                (await Autosave(ids[i], StressOrder.ReviewJson(i + 1, i + 2)).ConfigureAwait(false))
                     .Should()
                     .BeOfType<AutosaveResult.Saved>();
                 Interlocked.Add(ref ops, 3);

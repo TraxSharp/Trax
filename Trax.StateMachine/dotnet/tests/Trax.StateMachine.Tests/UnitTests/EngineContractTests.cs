@@ -115,7 +115,7 @@ public class EngineContractTests
             .Should()
             .BeEmpty(
                 $"an outcome case replays through the outcome entry point, not Advance ({Adr}): "
-                    + string.Join("\n", diffs)
+                    + string.Join('\n', diffs)
             );
     }
 

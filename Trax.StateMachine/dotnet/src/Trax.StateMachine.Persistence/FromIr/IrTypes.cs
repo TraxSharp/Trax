@@ -156,7 +156,12 @@ internal sealed partial class IrTypes
             clr,
             FieldAttributes.Private
         );
-        var property = type.DefineProperty(name, PropertyAttributes.None, clr, null);
+        var property = type.DefineProperty(
+            name,
+            PropertyAttributes.None,
+            clr,
+            parameterTypes: null
+        );
         const MethodAttributes accessor =
             MethodAttributes.Public | MethodAttributes.SpecialName | MethodAttributes.HideBySig;
 
@@ -167,7 +172,7 @@ internal sealed partial class IrTypes
         il.Emit(OpCodes.Ret);
         property.SetGetMethod(get);
 
-        var set = type.DefineMethod($"set_{name}", accessor, null, [clr]);
+        var set = type.DefineMethod($"set_{name}", accessor, returnType: null, [clr]);
         il = set.GetILGenerator();
         il.Emit(OpCodes.Ldarg_0);
         il.Emit(OpCodes.Ldarg_1);

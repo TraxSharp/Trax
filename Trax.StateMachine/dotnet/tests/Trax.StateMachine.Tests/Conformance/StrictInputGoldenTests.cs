@@ -61,13 +61,19 @@ public class StrictInputGoldenTests
             if (@case["field"] is { } field)
                 input[field.GetValue<string>()] = @case["value"]?.DeepClone();
             var expect = Answer(StrictInputMachine.Machine.Advance(snapshot, trigger, input));
-            if (expect.ToJsonString() != @case["expect"]!.ToJsonString())
+            if (
+                !string.Equals(
+                    expect.ToJsonString(),
+                    @case["expect"]!.ToJsonString(),
+                    StringComparison.Ordinal
+                )
+            )
                 diffs.Add(
                     $"{@case["name"]}: file says {@case["expect"]!.ToJsonString()}, engine {expect.ToJsonString()}"
                 );
         }
 
-        diffs.Should().BeEmpty(string.Join("\n", diffs));
+        diffs.Should().BeEmpty(string.Join('\n', diffs));
     }
 
     private static string Write()
@@ -118,7 +124,7 @@ public class StrictInputGoldenTests
         sb.Append("  \"trigger\": ").Append(CanonicalJson.Serialize(trigger)).Append(",\n");
         sb.Append("  \"validInput\": ").Append(CanonicalJson.Serialize(valid)).Append(",\n");
         sb.Append("  \"cases\": [\n    ");
-        sb.Append(string.Join(",\n    ", lines));
+        sb.AppendJoin(",\n    ", lines);
         sb.Append("\n  ]\n}\n");
         return sb.ToString();
     }
@@ -141,7 +147,13 @@ public class StrictInputGoldenTests
 
     private static void Update(string path, string content)
     {
-        if (Environment.GetEnvironmentVariable("UPDATE_CONFORMANCE") != "1")
+        if (
+            !string.Equals(
+                Environment.GetEnvironmentVariable("UPDATE_CONFORMANCE"),
+                "1",
+                StringComparison.Ordinal
+            )
+        )
             return;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);

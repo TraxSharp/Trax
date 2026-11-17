@@ -10,10 +10,36 @@ package: Trax.StateMachine.Persistence
 namespace: Trax.StateMachine.Persistence
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Machine.cs
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Fluent.cs
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Invokes.cs
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Timers.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IMachine.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/EffectBinding.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/BuiltMachine.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IIrStateBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IIrMachineBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IIrTransitionBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IMachineBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IStartBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IReadRuleBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ITimerBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IDifferentialBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IStateBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ITransitionBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/MachineBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IInvokeBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/InvokeOutcomeKind.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/InvokeOutcome.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/OutcomeEdge.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/SpawnDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/InvokeDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/OutcomeTriggers.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/MachineTimers.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/TimerDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/SnapshotTimer.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/TimerTriggers.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IsoDuration.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IsoDurationJsonConverter.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/MachineTrigger.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/TriggerKind.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/MachineState.cs
 redirect_from:
   - /docs/sdk-reference/statemachine-api/fluent-authoring
 ---

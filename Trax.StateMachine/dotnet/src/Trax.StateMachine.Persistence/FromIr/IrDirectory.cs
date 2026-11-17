@@ -82,7 +82,7 @@ internal static class IrDirectory
             if (
                 ir["id"] is not JsonValue id
                 || id.GetValueKind() != JsonValueKind.String
-                || id.GetValue<string>() != name
+                || !string.Equals(id.GetValue<string>(), name, StringComparison.Ordinal)
             )
                 throw new InvalidOperationException(
                     $"{path} holds the machine {ir["id"]?.ToJsonString() ?? "with no id"}; an IR file is named for its id."
@@ -107,7 +107,7 @@ internal static class IrDirectory
         this IServiceCollection services,
         string directory,
         params Assembly[] trainAssemblies
-    ) => services.AddIrMachinesFrom(directory, null, trainAssemblies);
+    ) => services.AddIrMachinesFrom(directory, policies: null, trainAssemblies);
 
     /// <summary>
     /// As <see cref="AddIrMachinesFrom(IServiceCollection, string, Assembly[])"/>, and, when the host file has policies,

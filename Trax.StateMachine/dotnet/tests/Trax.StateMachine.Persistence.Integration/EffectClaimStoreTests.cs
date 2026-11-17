@@ -52,7 +52,8 @@ public class EffectClaimStoreTests
             .BeOfType<ClaimResult.Won>();
 
         // Releasing an absent key is harmless.
-        var act = async () => await TestDb.NewClaims().Release($"never:{Guid.NewGuid()}");
+        var act = async () =>
+            await TestDb.NewClaims().Release($"never:{Guid.NewGuid()}").ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 

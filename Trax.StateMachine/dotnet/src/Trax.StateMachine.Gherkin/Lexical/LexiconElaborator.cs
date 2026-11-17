@@ -3,12 +3,6 @@ using System.Text.Json.Nodes;
 namespace Trax.StateMachine.Gherkin.Lexical;
 
 /// <summary>
-/// The fields of a train's input and output, as the host reads them from its records: each a field in the IR's shape,
-/// sorted by name. Null fields mean the train was not found, with <see cref="Problem"/> saying why.
-/// </summary>
-internal sealed record TrainShape(JsonArray? Input, JsonArray? Output, string? Problem);
-
-/// <summary>
 /// Turns a parsed lexicon into the glossary it means (<c>conformance/glossary.schema.json</c>, version 1), filling in
 /// what the lexicon implies: a machine's noun from its id, its context from what writes it, a train's full name, its
 /// input wiring by name, each done outcome's reduction and example. Every key written records the line it came from,
@@ -590,7 +584,11 @@ internal sealed class LexiconElaborator
     }
 
     private static JsonObject? OutputField(JsonArray output, string name) =>
-        output.OfType<JsonObject>().FirstOrDefault(f => f["name"]?.GetValue<string>() == name);
+        output
+            .OfType<JsonObject>()
+            .FirstOrDefault(f =>
+                string.Equals(f["name"]?.GetValue<string>(), name, StringComparison.Ordinal)
+            );
 
     // A Returns: field agrees with the record's when it has the same type, format, nullability and values. The record's
     // numeric bounds are its CLR type's, which no lexicon restates, so they are not compared.
@@ -615,8 +613,16 @@ internal sealed class LexiconElaborator
         );
 
     private static bool SameType(JsonObject a, JsonObject b) =>
-        a["type"]?.GetValue<string>() == b["type"]?.GetValue<string>()
-        && a["format"]?.GetValue<string>() == b["format"]?.GetValue<string>();
+        string.Equals(
+            a["type"]?.GetValue<string>(),
+            b["type"]?.GetValue<string>(),
+            StringComparison.Ordinal
+        )
+        && string.Equals(
+            a["format"]?.GetValue<string>(),
+            b["format"]?.GetValue<string>(),
+            StringComparison.Ordinal
+        );
 
     private static string Describe(JsonObject shape)
     {
@@ -624,7 +630,7 @@ internal sealed class LexiconElaborator
         var format = shape["format"]?.GetValue<string>();
         return format is not null ? $"a {format}"
             : type is "integer" or "array" or "object"
-                ? $"an {(type == "array" ? "list" : type)}".Replace(
+                ? $"an {(string.Equals(type, "array", StringComparison.Ordinal) ? "list" : type)}".Replace(
                     "an list",
                     "a list",
                     StringComparison.Ordinal
@@ -697,7 +703,7 @@ internal sealed class LexiconElaborator
         }
         if (state.Requires is { } requires)
         {
-            json["requires"] = Rule(requires, "context", own, null);
+            json["requires"] = Rule(requires, "context", own, what: null);
             Map(P(at, "requires"), requires.Line);
         }
         return json;
@@ -761,7 +767,7 @@ internal sealed class LexiconElaborator
         string what
     )
     {
-        if (reduce.Kind == "custom")
+        if (string.Equals(reduce.Kind, "custom", StringComparison.Ordinal))
             return new JsonObject { ["reduce"] = "custom", ["name"] = reduce.Name };
         if (reduce.Steps is not { } sets)
             return new JsonObject { ["reduce"] = reduce.Kind };
@@ -815,7 +821,7 @@ internal sealed class LexiconElaborator
             json["fails"] = guard.Fails;
             Map(P(at, "fails"), guard.FailsLine);
         }
-        json["rule"] = Rule(guard.Rule, "context", context, null);
+        json["rule"] = Rule(guard.Rule, "context", context, what: null);
         return json;
     }
 
@@ -892,7 +898,15 @@ internal sealed class LexiconElaborator
             }
             foreach (
                 var n in record.Keys.Where(k =>
-                    !written.OfType<JsonObject>().Any(f => f["name"]!.GetValue<string>() == k)
+                    !written
+                        .OfType<JsonObject>()
+                        .Any(f =>
+                            string.Equals(
+                                f["name"]!.GetValue<string>(),
+                                k,
+                                StringComparison.Ordinal
+                            )
+                        )
                 )
             )
                 Problem(
@@ -938,7 +952,11 @@ internal sealed class LexiconElaborator
         {
             if (!Once(inputLines, item.Field, item, item.Line, x => x.Line, "the train input"))
                 continue;
-            var from = item.From == item.Field && item.Field == "owner" ? Owner : item.From;
+            var from =
+                string.Equals(item.From, item.Field, StringComparison.Ordinal)
+                && string.Equals(item.Field, "owner", StringComparison.Ordinal)
+                    ? Owner
+                    : item.From;
             input[item.Field] = from;
             Map(P(P(at, "input"), item.Field), item.Line);
         }
@@ -955,7 +973,7 @@ internal sealed class LexiconElaborator
                 );
             foreach (var name in names.Where(n => !input.ContainsKey(n)))
             {
-                if (name == "owner")
+                if (string.Equals(name, "owner", StringComparison.Ordinal))
                     input[name] = Owner;
                 else if (allContext.Contains(name))
                     input[name] = name;
@@ -1055,7 +1073,7 @@ internal sealed class LexiconElaborator
                 json1["when"] = Rule(when, "input", outputs, "what the train returns");
                 Map(P(o, "when"), outcome.Line);
             }
-            if (outcome.Kind == "done" && reduce is not null)
+            if (string.Equals(outcome.Kind, "done", StringComparison.Ordinal) && reduce is not null)
             {
                 json1["reduce"] = new JsonObject
                 {
@@ -1066,7 +1084,7 @@ internal sealed class LexiconElaborator
             }
             outcomes[outcome.Phrase] = json1;
 
-            if (outcome.Kind != "done" || output.Count == 0)
+            if (!string.Equals(outcome.Kind, "done", StringComparison.Ordinal) || output.Count == 0)
                 continue;
             var given = Equalities(outcome.When);
             var values = new JsonObject();
@@ -1108,14 +1126,17 @@ internal sealed class LexiconElaborator
     private static Dictionary<string, LxValue> Equalities(LxRule? when)
     {
         var given = new Dictionary<string, LxValue>(StringComparer.Ordinal);
-        if (when is null || when.Connective == "or")
+        if (when is null || string.Equals(when.Connective, "or", StringComparison.Ordinal))
             return given;
         foreach (var atom in when.Atoms)
             if (atom.Source is null or "input")
             {
-                if (atom.Kind == "equals")
+                if (string.Equals(atom.Kind, "equals", StringComparison.Ordinal))
                     given[atom.Field] = atom.Value!;
-                else if (atom.Kind == "compare" && atom.Op == "eq")
+                else if (
+                    string.Equals(atom.Kind, "compare", StringComparison.Ordinal)
+                    && string.Equals(atom.Op, "eq", StringComparison.Ordinal)
+                )
                     given[atom.Field] = atom.Value!;
             }
         return given;
@@ -1199,7 +1220,9 @@ internal sealed class LexiconElaborator
             json[key] = value?.DeepClone();
         json["nullable"] = field.MayBeEmpty;
         json["constraints"] = field.Where is { } where
-            ? new JsonArray(Rule(where, source, new() { [field.Name] = json }, null))
+            ? new JsonArray(
+                Rule(where, source, new(StringComparer.Ordinal) { [field.Name] = json }, what: null)
+            )
             : new JsonArray();
         if (field.Minimum is { } minimum)
             json["minimum"] = Number(minimum);
@@ -1207,7 +1230,9 @@ internal sealed class LexiconElaborator
             json["maximum"] = Number(maximum);
         if (field.Enum is { } values)
         {
-            if (json["type"]?.GetValue<string>() != "string")
+            if (
+                !string.Equals(json["type"]?.GetValue<string>(), "string", StringComparison.Ordinal)
+            )
                 Problem(
                     field.Line,
                     $"'{field.Name}' is {Describe(shape)}, and only a string is one of a list of values."
@@ -1235,7 +1260,14 @@ internal sealed class LexiconElaborator
                 var map = new JsonObject { ["type"] = "object", ["values"] = values };
                 // A key that is any string has no shape to check, as the host writes a Dictionary<string, T>.
                 var keys = Shape(type.Key!, line);
-                if (keys.Count > 1 || keys["type"]?.GetValue<string>() != "string")
+                if (
+                    keys.Count > 1
+                    || !string.Equals(
+                        keys["type"]?.GetValue<string>(),
+                        "string",
+                        StringComparison.Ordinal
+                    )
+                )
                 {
                     keys["nullable"] = false;
                     map["keys"] = keys;
@@ -1314,8 +1346,10 @@ internal sealed class LexiconElaborator
             return atoms[0];
         return new JsonObject
         {
-            ["rule"] = rule.Connective == "or" ? "any" : "all",
-            ["rules"] = new JsonArray(atoms.Select(a => (JsonNode?)a).ToArray()),
+            ["rule"] = string.Equals(rule.Connective, "or", StringComparison.Ordinal)
+                ? "any"
+                : "all",
+            ["rules"] = new JsonArray(atoms.Cast<JsonNode?>().ToArray()),
         };
     }
 
@@ -1326,17 +1360,30 @@ internal sealed class LexiconElaborator
         string? what
     )
     {
-        if (atom.Kind == "custom")
+        if (string.Equals(atom.Kind, "custom", StringComparison.Ordinal))
             return new JsonObject { ["rule"] = "custom", ["name"] = atom.Name };
         var from = atom.Source ?? source;
-        var shape = from == source ? fields.GetValueOrDefault(atom.Field) : null;
-        if (what is not null && from == source && shape is null)
+        var shape = string.Equals(from, source, StringComparison.Ordinal)
+            ? fields.GetValueOrDefault(atom.Field)
+            : null;
+        if (
+            what is not null
+            && string.Equals(from, source, StringComparison.Ordinal)
+            && shape is null
+        )
             Problem(atom.Line, $"'{atom.Field}' is not one of {what} ({Names(fields.Keys)}).");
         var json = new JsonObject { ["source"] = from, ["field"] = atom.Field };
         switch (atom.Kind)
         {
             case "equals" when atom.Value is LxBool b:
-                if (shape is not null && shape["type"]?.GetValue<string>() != "boolean")
+                if (
+                    shape is not null
+                    && !string.Equals(
+                        shape["type"]?.GetValue<string>(),
+                        "boolean",
+                        StringComparison.Ordinal
+                    )
+                )
                     Problem(
                         atom.Line,
                         $"'{atom.Field}' is {Describe(shape)}, so it is not true or false."
@@ -1344,7 +1391,14 @@ internal sealed class LexiconElaborator
                 return Leaf("boolEquals", json, ("value", JsonValue.Create(b.Value)));
             case "equals":
                 var text = ((LxText)atom.Value!).Text;
-                if (shape is not null && shape["type"]?.GetValue<string>() != "string")
+                if (
+                    shape is not null
+                    && !string.Equals(
+                        shape["type"]?.GetValue<string>(),
+                        "string",
+                        StringComparison.Ordinal
+                    )
+                )
                     Problem(
                         atom.Line,
                         $"'{atom.Field}' is {Describe(shape)}, so its value is not quoted."
@@ -1357,10 +1411,13 @@ internal sealed class LexiconElaborator
                 return Leaf(atom.Kind, json, ("type", JsonValue.Create(atom.Type)));
             case "compare" or "count" or "length":
                 var bound = ((LxNumber)atom.Value!).Number;
-                if (atom.Kind != "compare" && !double.IsInteger(bound))
+                if (
+                    !string.Equals(atom.Kind, "compare", StringComparison.Ordinal)
+                    && !double.IsInteger(bound)
+                )
                     Problem(atom.Line, "a count or a length is a whole number.");
                 if (
-                    atom.Kind == "compare"
+                    string.Equals(atom.Kind, "compare", StringComparison.Ordinal)
                     && shape is not null
                     && shape["type"]?.GetValue<string>() is not ("number" or "integer")
                 )
@@ -1446,7 +1503,7 @@ internal sealed class LexiconElaborator
                         $"'{field}' may not be empty, so its value is never nothing."
                     );
                 return null;
-            case LxText t when type == "string":
+            case LxText t when string.Equals(type, "string", StringComparison.Ordinal):
                 var declared = (shape["enum"] as JsonArray)
                     ?.Select(a => a!.GetValue<string>())
                     .FirstOrDefault(a =>
@@ -1454,7 +1511,10 @@ internal sealed class LexiconElaborator
                     );
                 // Rules compare a value as written, so a value in another case than its declared one would never
                 // match one.
-                if (declared is not null && declared != t.Text)
+                if (
+                    declared is not null
+                    && !string.Equals(declared, t.Text, StringComparison.Ordinal)
+                )
                     Problem(
                         value.Line,
                         $"\"{t.Text}\" is \"{declared}\" in the values of '{field}'; write it as declared."
@@ -1471,24 +1531,24 @@ internal sealed class LexiconElaborator
                 )
                     Problem(value.Line, $"\"{t.Text}\" is not one of the values of '{field}'.");
                 return JsonValue.Create(t.Text);
-            case LxNumber n when type == "integer":
+            case LxNumber n when string.Equals(type, "integer", StringComparison.Ordinal):
                 if (!double.IsInteger(n.Number))
                     Problem(
                         value.Line,
                         $"'{field}' is an integer, so its value is a whole number."
                     );
                 return Number(n.Number);
-            case LxNumber n when type == "number":
+            case LxNumber n when string.Equals(type, "number", StringComparison.Ordinal):
                 return Number(n.Number);
-            case LxBool b when type == "boolean":
+            case LxBool b when string.Equals(type, "boolean", StringComparison.Ordinal):
                 return JsonValue.Create(b.Value);
-            case LxList list when type == "array":
+            case LxList list when string.Equals(type, "array", StringComparison.Ordinal):
                 var items = new JsonArray();
                 foreach (var item in list.Items)
                     items.Add(Typed(item, shape["values"] as JsonObject, field));
                 return items;
         }
-        if (type == "object")
+        if (string.Equals(type, "object", StringComparison.Ordinal))
         {
             Problem(
                 value.Line,

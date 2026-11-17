@@ -3,69 +3,6 @@ using System.Text;
 
 namespace Trax.StateMachine.Gherkin.Lexical;
 
-internal enum TokenKind
-{
-    /// <summary>A run of anything but whitespace, a quote, a comma or a bracket.</summary>
-    Word,
-
-    /// <summary>A quoted text, its escapes read.</summary>
-    Text,
-    Comma,
-    Open,
-    Close,
-}
-
-internal readonly record struct Token(TokenKind Kind, string Value)
-{
-    internal bool Is(string word) =>
-        Kind == TokenKind.Word && string.Equals(Value, word, StringComparison.Ordinal);
-
-    public override string ToString() =>
-        Kind switch
-        {
-            TokenKind.Text => $"\"{Value.Replace("\"", "\\\"", StringComparison.Ordinal)}\"",
-            TokenKind.Comma => ",",
-            TokenKind.Open => "[",
-            TokenKind.Close => "]",
-            _ => Value,
-        };
-}
-
-/// <summary>The blocks a lexicon line can open, and the root every lexicon is.</summary>
-internal enum Block
-{
-    Root,
-    Actor,
-    Type,
-    Machine,
-    State,
-    Trigger,
-    Guard,
-    Runs,
-    View,
-    Field,
-}
-
-/// <summary>One keyword of the closed set: its text, its one form, where it may stand and the block it opens.</summary>
-internal sealed record Keyword(string Text, string Form, Block[] Under, Block? Opens = null)
-{
-    /// <summary>Whether the keyword ends in a colon and takes words after it, or stands alone (<c>Differential</c>).</summary>
-    internal bool TakesWords => Text.EndsWith(':');
-}
-
-/// <summary>One lexicon line: where it is, its keyword and the tokens after it.</summary>
-internal sealed record LexLine(int Number, Keyword Keyword, IReadOnlyList<Token> Tokens)
-{
-    /// <summary>
-    /// A line already reported as a problem, kept only because it opens a block: the lines under it attach to it and
-    /// are not each refused for having no block to go under.
-    /// </summary>
-    internal bool Broken { get; init; }
-}
-
-/// <summary>A problem with a lexicon, at its line (0 for the file as a whole).</summary>
-internal sealed record LexProblem(int Line, string Message);
-
 /// <summary>
 /// The lexicon's lines as Gherkin's are read: every line starts with a keyword from a closed set, whitespace outside
 /// quotes never matters, <c>#</c> outside quotes starts a note, and inside quotes <c>\"</c> is a quote and <c>\\</c> a
@@ -305,7 +242,8 @@ internal static class LexiconSyntax
         best ??= Keywords
             .Select(k => k.Text)
             .FirstOrDefault(k =>
-                guess.StartsWith(Bare(k) + " ", StringComparison.Ordinal) || guess == Bare(k)
+                guess.StartsWith(Bare(k) + " ", StringComparison.Ordinal)
+                || string.Equals(guess, Bare(k), StringComparison.Ordinal)
             );
         var shown = guess.Length == 0 ? tokens[0].ToString() : guess;
         return best is null

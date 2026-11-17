@@ -5,25 +5,6 @@ using static Trax.StateMachine.Rules;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
-public enum IngestState
-{
-    Idle,
-    Fetching,
-    NeedsReview,
-    Fetched,
-    FetchFailed,
-    Cancelled,
-    Approved,
-}
-
-public enum IngestTrigger
-{
-    Start,
-    Retry,
-    Abandon,
-    Approve,
-}
-
 /// <summary>
 /// One stage of an ingest: <c>Fetching</c> invokes <see cref="IFetchTrain"/>, a sure output goes to
 /// <c>Fetched</c>, an unsure one to <c>NeedsReview</c>, a failure to <c>FetchFailed</c> (retried by entering

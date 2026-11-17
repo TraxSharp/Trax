@@ -43,7 +43,9 @@ public class DiscardEffectTests(StoreProvider provider)
         var send = Task.Run(async () =>
         {
             using var scope = host.Scope();
-            return await host.Service(scope, "ship").Send(new Actor.Client(owner), id, "s-1");
+            return await host.Service(scope, "ship")
+                .Send(new Actor.Client(owner), id, "s-1")
+                .ConfigureAwait(false);
         });
         await charge.Entered;
 
@@ -93,7 +95,7 @@ public class DiscardEffectTests(StoreProvider provider)
         {
             var n = Interlocked.Increment(ref _calls);
             _entered.TrySetResult();
-            await _released.Task;
+            await _released.Task.ConfigureAwait(false);
             return $"receipt-{n}";
         }
     }

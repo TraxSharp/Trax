@@ -56,11 +56,11 @@ public sealed record Snapshot
     /// reference).
     /// </summary>
     /// <param name="other">The snapshot to compare with.</param>
-    public bool Equals(Snapshot? other) =>
+    public bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] Snapshot? other) =>
         other is not null
-        && Machine == other.Machine
+        && string.Equals(Machine, other.Machine, StringComparison.Ordinal)
         && Version == other.Version
-        && State == other.State
+        && string.Equals(State, other.State, StringComparison.Ordinal)
         && JsonNode.DeepEquals(Context, other.Context);
 
     /// <summary>

@@ -42,7 +42,7 @@ internal sealed class ChangeFeedStartupValidator(
         SnapshotNoticeSwitch read;
         try
         {
-            read = await notices.ReadSwitchAsync(cancellationToken);
+            read = await notices.ReadSwitchAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

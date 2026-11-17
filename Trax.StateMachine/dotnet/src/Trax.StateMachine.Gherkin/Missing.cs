@@ -4,40 +4,6 @@ using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
 
-internal enum GapKind
-{
-    /// <summary>A machine no scenario uses, so none is derived.</summary>
-    Machine,
-
-    /// <summary>A trigger no scenario fires, so it is not served.</summary>
-    Trigger,
-
-    /// <summary>A state no scenario reaches.</summary>
-    State,
-
-    /// <summary>A guard no scenario uses.</summary>
-    Guard,
-
-    /// <summary>A guarded move no scenario shows refused.</summary>
-    Refusal,
-
-    /// <summary>An invoked train's outcome no scenario shows.</summary>
-    Outcome,
-
-    /// <summary>A view no scenario reads, so it is not served.</summary>
-    View,
-
-    /// <summary>An actor a rule admits by its roles that no scenario shows: a grant nobody meant.</summary>
-    Grant,
-}
-
-/// <summary>
-/// Something the glossary names that no scenario shows, and, when one can be written, a scenario to paste that shows it.
-/// A stub is offered only if the features with it pasted derive with no problem, and what they derive differs only by
-/// what the stub claims (ADR <c>Trax.Docs/adr/0058</c>). A stub guesses where the move goes: read it before pasting it.
-/// </summary>
-internal sealed record Gap(GapKind Kind, string Machine, string What, string Message, string? Stub);
-
 internal static class Missing
 {
     private const string Person = "Ada";
@@ -118,7 +84,7 @@ internal static class Missing
             // the scenarios showed it holding on the move and failing on the refusal, whether a Given set it up or
             // the When's value did. A guard the trigger names is on its edge with no refusal shown, which shows nothing.
             bool Decides(GlossaryGuard guard) =>
-                edges.Any(e =>
+                edges.Exists(e =>
                     e.Guard is not null
                     && JsonNode.DeepEquals(e.Guard, guard.Rule)
                     && Shown(m, $"guard {e.From} {e.Trigger}")
@@ -229,7 +195,11 @@ internal static class Missing
                     : machine
                         .Guards.Values.Where(g =>
                             heldFor.Contains((m, edge.Trigger, g.Name))
-                            && !guardSteps.Any(x => x.Machine == m && x.Name == g.Name && !x.Holds)
+                            && !guardSteps.Exists(x =>
+                                string.Equals(x.Machine, m, StringComparison.Ordinal)
+                                && string.Equals(x.Name, g.Name, StringComparison.Ordinal)
+                                && !x.Holds
+                            )
                         )
                         .ToList();
                 if (!Shown(m, $"guard {edge.From} {edge.Trigger}") && guards.Count > 0)
@@ -288,15 +258,19 @@ internal static class Missing
                     [ViewStub(glossary, view, baseline)]
                 );
 
-        foreach (var line in baseline.Access!.Split('\n').Where(l => l.Contains("(no scenario)")))
+        foreach (
+            var line in baseline
+                .Access!.Split('\n')
+                .Where(l => l.Contains("(no scenario)", StringComparison.Ordinal))
+        )
             gaps.Add(
                 new Gap(
                     GapKind.Grant,
-                    line[..line.IndexOf(' ')],
-                    line[..line.IndexOf(':')],
+                    line[..line.IndexOf(' ', StringComparison.Ordinal)],
+                    line[..line.IndexOf(':', StringComparison.Ordinal)],
                     $"{line}: an actor marked (no scenario) is admitted by its roles alone. Give it roles of its own, or "
                         + "show it in a scenario.",
-                    null
+                    Stub: null
                 )
             );
         return (gaps, []);
@@ -332,21 +306,35 @@ internal static class Missing
             return false;
 
         foreach (var (id, ir) in baseline.Irs)
-            if (id != claim.Machine && stubbed.Irs.GetValueOrDefault(id) != ir)
+            if (
+                !string.Equals(id, claim.Machine, StringComparison.Ordinal)
+                && !string.Equals(stubbed.Irs.GetValueOrDefault(id), ir, StringComparison.Ordinal)
+            )
                 return false;
-        if (stubbed.Irs.Keys.Any(id => id != claim.Machine && !baseline.Irs.ContainsKey(id)))
+        if (
+            stubbed.Irs.Keys.Any(id =>
+                !string.Equals(id, claim.Machine, StringComparison.Ordinal)
+                && !baseline.Irs.ContainsKey(id)
+            )
+        )
             return false;
         if (!claim.NewMachine && !baseline.Irs.ContainsKey(claim.Machine))
             return false;
 
-        if (Outside(JsonNode.Parse(baseline.Host!)!.AsObject(), claim) != Outside(host, claim))
+        if (
+            !string.Equals(
+                Outside(JsonNode.Parse(baseline.Host!)!.AsObject(), claim),
+                Outside(host, claim),
+                StringComparison.Ordinal
+            )
+        )
             return false;
 
         var before = baseline.Access!.Split('\n').ToHashSet(StringComparer.Ordinal);
         var after = stubbed.Access!.Split('\n').ToHashSet(StringComparer.Ordinal);
         return before
-            .Except(after)
-            .Concat(after.Except(before))
+            .Except(after, StringComparer.Ordinal)
+            .Concat(after.Except(before, StringComparer.Ordinal))
             .All(line =>
                 claim switch
                 {
@@ -419,7 +407,11 @@ internal static class Missing
                                 ((Meaning.Happens)meaning).Machine,
                                 ((Meaning.Happens)meaning).Trigger
                             );
-                        foreach (var h in holding.Where(h => h.Machine == machine))
+                        foreach (
+                            var h in holding.Where(h =>
+                                string.Equals(h.Machine, machine, StringComparison.Ordinal)
+                            )
+                        )
                             held.Add((machine, trigger, h.Guard));
                         holding.Clear();
                         break;
@@ -430,7 +422,10 @@ internal static class Missing
 
     // Where a stub tries a move to: every other state first, then the same one.
     private static IEnumerable<string> Targets(GlossaryMachine machine, string from) =>
-        machine.States.Keys.Where(s => s != from).Order(StringComparer.Ordinal).Append(from);
+        machine
+            .States.Keys.Where(s => !string.Equals(s, from, StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .Append(from);
 
     // A user's machine is set up by its owner having one; a system machine, which the host starts, by a move of its own.
     private static IEnumerable<Claim> MachineStubs(Glossary glossary, GlossaryMachine machine)
@@ -475,7 +470,7 @@ internal static class Missing
         var lines = Arrange(glossary, machine, from);
         lines.Add($"When {when}");
         lines.Add(
-            $"Then {Instance(machine)} {(to == from ? StillPhrase(machine.States[to]) : machine.States[to])}"
+            $"Then {Instance(machine)} {(string.Equals(to, from, StringComparison.Ordinal) ? StillPhrase(machine.States[to]) : machine.States[to])}"
         );
         return new Claim(
             Scenario($"{trigger.Name} from {from}", lines),
@@ -598,7 +593,7 @@ internal static class Missing
         {
             "integer" => JsonValue.Create(long.Parse(value, CultureInfo.InvariantCulture)),
             "number" => JsonValue.Create(double.Parse(value, CultureInfo.InvariantCulture)),
-            "boolean" => JsonValue.Create(value == "true"),
+            "boolean" => JsonValue.Create(string.Equals(value, "true", StringComparison.Ordinal)),
             _ => JsonValue.Create(value),
         };
 
@@ -620,7 +615,9 @@ internal static class Missing
     private static Claim ViewStub(Glossary glossary, GlossaryView view, Derived baseline)
     {
         var read = glossary.Machines[view.Reads[0].Machine];
-        var field = view.Fields.First(f => f.Machine == read.Id);
+        var field = view.Fields.First(f =>
+            string.Equals(f.Machine, read.Id, StringComparison.Ordinal)
+        );
         var lines = Arrange(glossary, read, read.Initial);
         if (read.IsSystem)
             lines.Insert(0, $"Given {Person} is {glossary.Actors.Values.First().Noun}");
@@ -650,7 +647,7 @@ internal static class Missing
         {
             lines.Add($"Given {Person} is {glossary.Actors[machine.OwnedBy![0]].Noun}");
             lines.Add($"And {Person} {machine.Start}");
-            if (state != machine.Initial)
+            if (!string.Equals(state, machine.Initial, StringComparison.Ordinal))
                 lines.Add($"And {Instance(machine)} {machine.States[state]}");
         }
         else
@@ -687,14 +684,14 @@ internal static class Missing
     // A user's instance by its owner, the system's by its name, and a keyed one by its name and a sample key.
     private static string Instance(GlossaryMachine machine) =>
         machine.KeyedBy is { } parts
-            ? $"{machine.Reference} {string.Join(" ", parts.Select(p => $"\"{p}-1\""))}"
+            ? $"{machine.Reference} {string.Join(' ', parts.Select(p => $"\"{p}-1\""))}"
         : machine.IsSystem ? machine.Reference
         : $"{Person}'s {machine.Reference}";
 
     // "is a draft" as a stay: "is still a draft".
     private static string StillPhrase(string phrase)
     {
-        var space = phrase.IndexOf(' ');
+        var space = phrase.IndexOf(' ', StringComparison.Ordinal);
         return space < 0 ? $"{phrase} still" : $"{phrase[..space]} still{phrase[space..]}";
     }
 

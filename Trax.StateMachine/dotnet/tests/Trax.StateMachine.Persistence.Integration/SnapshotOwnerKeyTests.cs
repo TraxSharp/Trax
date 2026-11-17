@@ -51,7 +51,8 @@ public class SnapshotOwnerKeyTests
             .NewContext()
             .SnapshotDrafts.AsNoTracking()
             .Where(x => x.Id == id)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
     [TestCase("")]
     [TestCase("  ")]
@@ -149,7 +150,15 @@ public class SnapshotOwnerKeyTests
             .ThrowAsync<ArgumentException>();
         await FluentActions
             .Awaiting(() =>
-                service.Advance(key!, id, "Coin", null, null, clientResult: "{}", default)
+                service.Advance(
+                    key!,
+                    id,
+                    "Coin",
+                    input: null,
+                    requestId: null,
+                    clientResult: "{}",
+                    default
+                )
             )
             .Should()
             .ThrowAsync<ArgumentException>();

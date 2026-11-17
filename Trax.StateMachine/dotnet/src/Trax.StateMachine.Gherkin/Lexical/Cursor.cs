@@ -200,7 +200,16 @@ internal sealed class Cursor(LexLine line)
         if (partial && Peek.Is("may"))
         {
             MayBeEmpty();
-            return new LxField(name, null, true, null, null, null, null, Line);
+            return new LxField(
+                name,
+                Type: null,
+                MayBeEmpty: true,
+                Minimum: null,
+                Maximum: null,
+                Enum: null,
+                Where: null,
+                Line
+            );
         }
         Expect("is");
         var type = Type();
@@ -279,14 +288,14 @@ internal sealed class Cursor(LexLine line)
         if (!article.Is("a") && !article.Is("an"))
             throw Form($"'{article}' is where 'a' or 'an' and a type go");
         var name = Word("a type");
-        if (name == "list")
+        if (string.Equals(name, "list", StringComparison.Ordinal))
         {
             if (!Peek.Is("of"))
                 return new LxTypeRef(LxTypeRef.Simple, "array");
             Expect("of");
             return new LxTypeRef(LxTypeRef.List, "array", Element(Word("the type of its items")));
         }
-        if (name == "map")
+        if (string.Equals(name, "map", StringComparison.Ordinal))
         {
             Expect("of");
             var key = Element(Word("the type of its keys"));
@@ -336,7 +345,10 @@ internal sealed class Cursor(LexLine line)
         while (Peek.Is("and") || Peek.Is("or"))
         {
             var word = Next("and").Value;
-            if (connective is not null && connective != word)
+            if (
+                connective is not null
+                && !string.Equals(connective, word, StringComparison.Ordinal)
+            )
                 throw new FormError(
                     "a rule joins its parts with 'and' or with 'or', never both on one line. A rule that needs both "
                         + "is a custom rule, written in C# and named here."
@@ -353,7 +365,7 @@ internal sealed class Cursor(LexLine line)
         {
             var name = Word("a custom rule");
             Expect("holds");
-            return new LxAtom("custom", null, name, Line, Name: name);
+            return new LxAtom("custom", Source: null, name, Line, Name: name);
         }
         string? source = null;
         if (
@@ -390,7 +402,10 @@ internal sealed class Cursor(LexLine line)
         if (next.Is("a") || next.Is("an"))
         {
             var type = Type();
-            if (type.Kind == LxTypeRef.List && type.Element!.Kind == LxTypeRef.Simple)
+            if (
+                string.Equals(type.Kind, LxTypeRef.List, StringComparison.Ordinal)
+                && string.Equals(type.Element!.Kind, LxTypeRef.Simple, StringComparison.Ordinal)
+            )
                 return new LxAtom(
                     "arrayOf",
                     source,
@@ -399,7 +414,7 @@ internal sealed class Cursor(LexLine line)
                     Type: JsonType(type.Element.Name)
                 );
             if (
-                type.Kind == LxTypeRef.Simple
+                string.Equals(type.Kind, LxTypeRef.Simple, StringComparison.Ordinal)
                 && type.Name
                     is "string"
                         or "number"
@@ -427,7 +442,7 @@ internal sealed class Cursor(LexLine line)
         }
         if (next.Is("true") || next.Is("false") || next.Kind == TokenKind.Text)
             return new LxAtom("equals", source, field, Line, Value: Value());
-        var (comparison, bound) = Compare(null);
+        var (comparison, bound) = Compare(fewer: null);
         if (Peek.Is("characters"))
         {
             Expect("characters");
@@ -445,7 +460,7 @@ internal sealed class Cursor(LexLine line)
         {
             Expect("at");
             op = Peek.Is("most") ? "lte" : "gte";
-            Expect(op == "lte" ? "most" : "least");
+            Expect(string.Equals(op, "lte", StringComparison.Ordinal) ? "most" : "least");
         }
         else if (Peek.Is("more"))
         {

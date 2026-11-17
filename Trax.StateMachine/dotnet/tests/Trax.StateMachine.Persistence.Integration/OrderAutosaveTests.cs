@@ -34,6 +34,7 @@ public class OrderAutosaveTests
                     id,
                     ((RehydrationResult.Ok)TestOrder.Machine.Rehydrate(PlacedJson())).Snapshot
                 )
+                .ConfigureAwait(false)
         )
             .Should()
             .BeTrue();

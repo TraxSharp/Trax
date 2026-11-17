@@ -105,7 +105,7 @@ public class TriggerInputValidationTests
             RangeMachine.Machine.Advance(open, poke, new JsonObject { ["x"] = 1 })
         );
         RangeMachine
-            .Machine.Advance(open, poke, null)
+            .Machine.Advance(open, poke, input: null)
             .Should()
             .BeOfType<AdvanceResult.Transitioned>();
         RangeMachine

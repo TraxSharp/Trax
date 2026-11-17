@@ -140,7 +140,9 @@ public class ClientSendTests
             }
         );
 
-        var answer = await server.EventAsync("i-1", trigger, null, "r1", null).WaitAsync(Wait);
+        var answer = await server
+            .EventAsync("i-1", trigger, input: null, "r1", clientResult: null)
+            .WaitAsync(Wait);
 
         answer.Problem!.Code.Should().Be("NO_TRANSITION");
         host.Requests.Should().Be(0);
@@ -260,7 +262,7 @@ public class ClientSendTests
     public async Task Stopping_and_disposing_let_go_of_the_retry_timers()
     {
         var server = new HandServer();
-        var controller = Open(server, null);
+        var controller = Open(server, predictor: null);
         await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
         var running = Timers(controller);
 
@@ -301,7 +303,7 @@ public class ClientSendTests
         var server = new StepServer();
         using var controller = Open(server, id: "i-1", retryDelays: []);
         var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
-        var sync = controller.SyncToAsync("Unlocked", null, []);
+        var sync = controller.SyncToAsync("Unlocked", fields: null, []);
 
         var start = controller.StartAsync();
         (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
@@ -350,7 +352,7 @@ public class ClientSendTests
         using var controller = Open(server, id: "i-1", retryDelays: []);
         var start = controller.StartAsync();
         var read = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
-        if (answer == "TRANSPORT")
+        if (string.Equals(answer, "TRANSPORT", StringComparison.Ordinal))
             read.SetException(new HttpRequestException("dropped"));
         else
             read.SetResult(ServerAnswer.Refused(answer, "No."));
@@ -579,7 +581,7 @@ public class ClientSendTests
         public RehydrationResult Rehydrate(string json) => inner.Rehydrate(json);
 
         public string Serialize(Snapshot snapshot) =>
-            snapshot.State == "Unlocked"
+            string.Equals(snapshot.State, "Unlocked", StringComparison.Ordinal)
                 ? throw new ArgumentException(
                     "NaN and Infinity are not valid canonical JSON numbers."
                 )
@@ -714,7 +716,7 @@ public class ClientSendTests
         {
             Read.TrySetResult(cancellationToken);
             // allowed-delay: ends only when the controller cancels the read, which is what the test waits for.
-            await Task.Delay(Timeout.Infinite, cancellationToken);
+            await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException("Unreachable.");
         }
 

@@ -153,7 +153,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
             );
         if (
             !TimerTriggers.TryParse(trigger, out var timedState)
-            || timedState != snapshot.State
+            || !string.Equals(timedState, snapshot.State, StringComparison.Ordinal)
             || !_def.Timers.TryGetValue(fromState, out var timer)
         )
             return new AdvanceResult.Rejected(
@@ -282,7 +282,10 @@ public sealed class SnapshotMachine<TState, TTrigger>
                 $"Unknown state '{snapshot.State}'."
             );
         var trigger = OutcomeTriggers.Name(fromState, kind);
-        if (triggerState is not null && triggerState != snapshot.State)
+        if (
+            triggerState is not null
+            && !string.Equals(triggerState, snapshot.State, StringComparison.Ordinal)
+        )
             return new AdvanceResult.Rejected(
                 RefusalCode.NoTransition,
                 $"No transition from '{snapshot.State}' on '{triggerState}.{OutcomeTriggers.Suffix(kind)}'."
@@ -390,7 +393,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
                 "Snapshot is missing required fields (machine, version, state, context)."
             );
 
-        if (machine != _def.Id)
+        if (!string.Equals(machine, _def.Id, StringComparison.Ordinal))
             return new RehydrationResult.Error(
                 RefusalCode.UnknownMachine,
                 $"Snapshot machine '{machine}' does not match '{_def.Id}'."
@@ -515,7 +518,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
         return _def
             .Transitions.Where(t => t.From.Equals(fromState))
             .Select(t => t.Trigger.ToString())
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
     }
 
@@ -531,7 +534,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
     {
         var states = Enum.GetValues<TState>()
             .Select(s => s.ToString()!)
-            .OrderBy(s => s, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToArray();
 
         // An invoking state's outcome edges are edges too, under their outcome trigger (Fetching.done), as the
@@ -560,8 +563,8 @@ public sealed class SnapshotMachine<TState, TTrigger>
 
         var triggers = edges
             .Select(t => t.Trigger)
-            .Distinct()
-            .OrderBy(t => t, StringComparer.Ordinal)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToArray();
 
         var transitions = edges

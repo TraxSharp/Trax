@@ -32,10 +32,10 @@ public class RefusalCodeParityTests
                     BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly
                 )
             )
-            .Where(p => p.Name is "Code" or "Reason")
             .Where(p =>
-                (Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType)
-                != typeof(RefusalCode)
+                p.Name is "Code" or "Reason"
+                && (Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType)
+                    != typeof(RefusalCode)
             )
             .Select(p => $"{p.DeclaringType!.FullName}.{p.Name}: {p.PropertyType.Name}")
             .ToList();
@@ -126,14 +126,16 @@ public class RefusalCodeParityTests
             var uncovered = entry["uncovered"] is not null;
             if (scope is not ("engine" or "client" or "host"))
                 wrong.Add($"{code}: scope '{scope}'");
-            else if (scope == "host")
+            else if (string.Equals(scope, "host", StringComparison.Ordinal))
             {
                 if (uncovered)
                     wrong.Add($"{code}: a host code needs no 'uncovered'");
             }
             else
             {
-                var held = (scope == "engine" ? engine : client).Contains(code);
+                var held = (
+                    string.Equals(scope, "engine", StringComparison.Ordinal) ? engine : client
+                ).Contains(code);
                 if (held && uncovered)
                     wrong.Add($"{code}: a case holds it, so 'uncovered' is stale");
                 if (!held && !uncovered)

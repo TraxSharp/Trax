@@ -79,7 +79,7 @@ public class CascadePolicyTests
             [new FeatureFile("shop.feature", Shop)]
         );
 
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         var policies = JsonNode.Parse(derived.Host!)!["policies"]!.AsArray();
         policies
             .Select(p =>

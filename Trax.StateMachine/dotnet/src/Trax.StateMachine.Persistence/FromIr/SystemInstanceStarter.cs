@@ -17,7 +17,8 @@ internal sealed class SystemInstanceStarter(IServiceScopeFactory scopes, HostFil
 {
     public async Task StartingAsync(CancellationToken cancellationToken)
     {
-        await using var scope = scopes.CreateAsyncScope();
+        var scope = scopes.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
         foreach (
             var entry in host
@@ -25,13 +26,15 @@ internal sealed class SystemInstanceStarter(IServiceScopeFactory scopes, HostFil
                 .OrderBy(m => m.Id, StringComparer.Ordinal)
         )
         {
-            await instances.Start(entry.Id, KeyOf(entry.SystemKey!), null, cancellationToken);
+            await instances
+                .Start(entry.Id, KeyOf(entry.SystemKey!), context: null, cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 
     /// <summary>The key a system machine's fixed key (<c>shop/main</c>) names its instance by: <c>("main")</c>.</summary>
     internal static MachineKey KeyOf(string systemKey) =>
-        MachineKey.Of(systemKey[(systemKey.IndexOf('/') + 1)..]);
+        MachineKey.Of(systemKey[(systemKey.IndexOf('/', StringComparison.Ordinal) + 1)..]);
 
     /// <summary>The instance id a system machine's key gives it, as <see cref="StartingAsync"/> starts it.</summary>
     internal static Guid IdOf(string machine, string systemKey) =>

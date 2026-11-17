@@ -38,10 +38,26 @@ public class TriggerMetadataTests
             .Triggers.Should()
             .BeEquivalentTo(
                 [
-                    new MachineTrigger(nameof(CheckoutTrigger.Back), TriggerKind.Client, null),
-                    new MachineTrigger(nameof(CheckoutTrigger.Next), TriggerKind.Client, null),
-                    new MachineTrigger(nameof(CheckoutTrigger.Pay), TriggerKind.EffectBound, null),
-                    new MachineTrigger(nameof(CheckoutTrigger.Restart), TriggerKind.Client, null),
+                    new MachineTrigger(
+                        nameof(CheckoutTrigger.Back),
+                        TriggerKind.Client,
+                        InputType: null
+                    ),
+                    new MachineTrigger(
+                        nameof(CheckoutTrigger.Next),
+                        TriggerKind.Client,
+                        InputType: null
+                    ),
+                    new MachineTrigger(
+                        nameof(CheckoutTrigger.Pay),
+                        TriggerKind.EffectBound,
+                        InputType: null
+                    ),
+                    new MachineTrigger(
+                        nameof(CheckoutTrigger.Restart),
+                        TriggerKind.Client,
+                        InputType: null
+                    ),
                 ],
                 $"a delegate machine declares no input records, so no trigger has an input type ({Adr})"
             );

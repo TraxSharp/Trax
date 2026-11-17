@@ -36,7 +36,7 @@ public static class StateMachinesBuilderExtensions
     public static TraxBuilderWithEffects AddStateMachines(
         this TraxBuilderWithEffects builder,
         params Assembly[] assemblies
-    ) => builder.AddStateMachines(null, assemblies);
+    ) => builder.AddStateMachines(configure: null, assemblies);
 
     /// <summary>
     /// Add state-machine persistence with host-level options (see <see cref="StateMachineOptions"/>, e.g. the
@@ -204,7 +204,7 @@ public static class StateMachinesBuilderExtensions
                 && !machineTypes.Contains(type)
             )
             .Select(type => type.FullName)
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToList();
         if (misplaced.Count > 0)
@@ -369,42 +369,4 @@ public static class StateMachinesBuilderExtensions
             "Discard: delete one of the caller's instances, cancelling a run its state invoked first."
         ),
     ];
-}
-
-/// <summary>
-/// The IR hash (<see cref="IMachine.SchemaHash"/>) of each registered machine by name, which the store writes to a
-/// row's <c>ir_hash</c>. Null for a machine with no exportable IR, and for a name no registered machine has.
-/// </summary>
-internal sealed class MachineIrHashes(IEnumerable<IMachine> machines)
-{
-    private readonly Lazy<IReadOnlyDictionary<string, IMachine>> _byName = new(() =>
-        machines
-            .GroupBy(m => m.Name, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal)
-    );
-
-    /// <summary>The IR hash of the machine named <paramref name="machine"/>, or null.</summary>
-    public string? Of(string machine) =>
-        _byName.Value.TryGetValue(machine, out var found) ? found.SchemaHash : null;
-}
-
-/// <summary>
-/// What a write that does not say does to a row's timer, by machine, state and context, from the registered machines'
-/// timers (see <see cref="EfSnapshotStore.Timers"/>). Null for a name no registered machine has, and for a duration the
-/// context cannot give.
-/// </summary>
-internal sealed class MachineTimerLookup(IEnumerable<IMachine> machines)
-{
-    private readonly Lazy<IReadOnlyDictionary<string, IMachineInternals>> _byName = new(() =>
-        machines
-            .OfType<IMachineInternals>()
-            .GroupBy(m => ((IMachine)m).Name, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal)
-    );
-
-    /// <summary>The timer a write in <paramref name="state"/> keeps from entry, none, or null when it cannot tell.</summary>
-    public SnapshotTimer? Of(string machine, string state, JsonObject context) =>
-        _byName.Value.TryGetValue(machine, out var found)
-            ? found.TimerFor(state, context, restart: false).Timer
-            : null;
 }

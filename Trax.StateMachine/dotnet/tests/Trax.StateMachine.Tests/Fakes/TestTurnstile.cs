@@ -3,18 +3,6 @@ using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
-public enum TurnstileState
-{
-    Locked,
-    Unlocked,
-}
-
-public enum TurnstileTrigger
-{
-    Coin,
-    Push,
-}
-
 /// <summary>
 /// A self-contained turnstile machine used by the engine unit tests. It exercises a guard
 /// (accepted coins), a reducer that records input (recordCoin), a reducer that clears context

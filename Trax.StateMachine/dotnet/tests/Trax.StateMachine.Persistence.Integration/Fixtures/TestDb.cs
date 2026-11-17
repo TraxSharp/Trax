@@ -48,7 +48,7 @@ public static class TestDb
         ISnapshotStore? store = null
     )
     {
-        if (!await (store ?? NewStore()).Upsert(userKey, id, Parse(json)))
+        if (!await (store ?? NewStore()).Upsert(userKey, id, Parse(json)).ConfigureAwait(false))
             throw new InvalidOperationException($"Could not seed draft {id} for {userKey}.");
     }
 
@@ -72,14 +72,16 @@ public static class TestDb
     /// </summary>
     public static async Task BackdateDraft(string userKey, Guid id, DateTimeOffset updatedAt)
     {
-        await using var conn = new NpgsqlConnection(PostgresSetup.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
+        var conn = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connDisposal = conn.ConfigureAwait(false);
+        await conn.OpenAsync().ConfigureAwait(false);
+        var cmd = conn.CreateCommand();
+        await using var cmdDisposal = cmd.ConfigureAwait(false);
         cmd.CommandText =
             "UPDATE trax.snapshot_draft SET updated_at = @ts WHERE user_key = @uk AND id = @id";
         cmd.Parameters.AddWithValue("@ts", updatedAt);
         cmd.Parameters.AddWithValue("@uk", userKey);
         cmd.Parameters.AddWithValue("@id", id);
-        await cmd.ExecuteNonQueryAsync();
+        await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 }

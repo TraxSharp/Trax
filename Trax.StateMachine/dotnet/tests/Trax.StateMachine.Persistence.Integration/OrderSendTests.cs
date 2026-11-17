@@ -26,12 +26,20 @@ public class OrderSendTests
     }
 
     private static async Task SeedReview(string user, Guid id) =>
-        (await TestOrder.Service(TestDb.NewStore()).Autosave(user, id, TestOrder.ReviewJson(1, 2)))
+        (
+            await TestOrder
+                .Service(TestDb.NewStore())
+                .Autosave(user, id, TestOrder.ReviewJson(1, 2))
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeOfType<AutosaveResult.Saved>();
 
     private static async Task<Snapshot> Load(string user, Guid id) =>
-        ((LoadResult.Loaded)await TestOrder.Service(TestDb.NewStore()).Load(user, id)).Snapshot;
+        (
+            (LoadResult.Loaded)
+                await TestOrder.Service(TestDb.NewStore()).Load(user, id).ConfigureAwait(false)
+        ).Snapshot;
 
     [Test]
     public async Task Places_an_order_exactly_once_and_folds_the_receipt_into_the_snapshot()
@@ -148,7 +156,7 @@ public class OrderSendTests
         await SeedReview("u", id);
 
         var failing = new CountingEffect(fail: true);
-        var act = async () => await NewRunner(failing).Run("u", id, "r1");
+        var act = async () => await NewRunner(failing).Run("u", id, "r1").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         (await Load("u", id)).State.Should().Be("Review");
@@ -323,7 +331,7 @@ public class OrderSendTests
         )
         {
             var n = Interlocked.Increment(ref _calls);
-            await request.CancelAsync();
+            await request.CancelAsync().ConfigureAwait(false);
             return $"receipt-{n}";
         }
     }

@@ -3,21 +3,6 @@ using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
-public enum CheckoutState
-{
-    Cart,
-    Review,
-    Paid,
-}
-
-public enum CheckoutTrigger
-{
-    Next,
-    Back,
-    Pay,
-    Restart,
-}
-
 /// <summary>
 /// The C# twin of the TypeScript <c>checkout</c> machine — a 3-state, guard-branched flow over a
 /// multi-key context. Behavior mirrors the TS definition exactly so both engines agree on the shared

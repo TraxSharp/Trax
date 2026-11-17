@@ -53,13 +53,18 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
     )
     {
         using var scope = _host.Scope();
-        return await _host.Service(scope, machine).Advance(User, id, trigger, null, requestId);
+        return await _host
+            .Service(scope, machine)
+            .Advance(User, id, trigger, input: null, requestId)
+            .ConfigureAwait(false);
     }
 
     private async Task FireDueTimer(Guid id)
     {
-        await RawSql.SetDueAt(_host, id, (await RawSql.Now(_host)).AddMinutes(-1));
-        (await Reconciler.FireDueTimersOnce(CancellationToken.None))
+        await RawSql
+            .SetDueAt(_host, id, (await RawSql.Now(_host).ConfigureAwait(false)).AddMinutes(-1))
+            .ConfigureAwait(false);
+        (await Reconciler.FireDueTimersOnce(CancellationToken.None).ConfigureAwait(false))
             .Should()
             .ContainSingle(r => r.InstanceId == id)
             .Which.Outcome.Should()

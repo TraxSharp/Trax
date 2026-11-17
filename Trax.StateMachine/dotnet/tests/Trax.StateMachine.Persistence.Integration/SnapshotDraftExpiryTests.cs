@@ -35,7 +35,7 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
     private static async Task<Guid> Saved(InstanceHost host, string user, string json)
     {
         var id = Guid.NewGuid();
-        await host.SeedDraft(user, id, json);
+        await host.SeedDraft(user, id, json).ConfigureAwait(false);
         return id;
     }
 
@@ -47,7 +47,7 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
     )
     {
         using var scope = host.Scope();
-        return await host.Service(scope, machine).Load(user, id);
+        return await host.Service(scope, machine).Load(user, id).ConfigureAwait(false);
     }
 
     [Test]
@@ -82,9 +82,10 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
         using var scope = host.Scope();
         DateTimeOffset? at = DateTimeOffset.UtcNow - ago;
         await scope
-            .ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.DataContext.IDataContext>()
+            .ServiceProvider.GetRequiredService<Effect.Data.Services.DataContext.IDataContext>()
             .SnapshotDrafts.Where(d => d.Id == id)
-            .ExecuteUpdateAsync(x => x.SetProperty(d => d.CreatedAt, at));
+            .ExecuteUpdateAsync(x => x.SetProperty(d => d.CreatedAt, at))
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -177,10 +178,16 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
     private static async Task<Snapshot> PlaceOrder(InstanceHost host, string user, Guid id)
     {
         // An order has an effect, so the generic save does not serve it: the review draft is seeded through the store.
-        await host.Seed(user, id, TestDb.Parse(OrderMachine.ReviewSnapshot(1)));
+        await host.Seed(user, id, TestDb.Parse(OrderMachine.ReviewSnapshot(1)))
+            .ConfigureAwait(false);
         using var scope = host.Scope();
         var registry = scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>();
-        return (await registry.EffectRunner("order")!.Run(user, id, $"send-{Guid.NewGuid()}"))
+        return (
+            await registry
+                .EffectRunner("order")!
+                .Run(user, id, $"send-{Guid.NewGuid()}")
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot;

@@ -171,16 +171,16 @@ internal sealed partial record Glossary(
 
         var triggers = machine.ContainsKey("triggers")
             ? Map(at["triggers"], machine["triggers"], 0, Names.MemberAt, ReadTrigger)
-            : new();
+            : new(StringComparer.Ordinal);
         var guards = machine.ContainsKey("guards")
             ? Map(at["guards"], machine["guards"], 0, Names.WordAt, ReadGuard)
-            : new();
+            : new(StringComparer.Ordinal);
         var invokes = machine.ContainsKey("invokes")
             ? Map(at["invokes"], machine["invokes"], 0, Names.MemberAt, ReadInvoke)
-            : new();
+            : new(StringComparer.Ordinal);
         var links = machine.ContainsKey("links")
             ? Map(at["links"], machine["links"], 0, Names.PhraseAt, ReadLink)
-            : new();
+            : new(StringComparer.Ordinal);
         var rules = machine.ContainsKey("rules")
             ? Map(
                 at["rules"],
@@ -189,7 +189,7 @@ internal sealed partial record Glossary(
                 CustomNameAt,
                 (a, n, o) => ReadHandler(a, n, o, rule: true)
             )
-            : new();
+            : new(StringComparer.Ordinal);
         var reductions = machine.ContainsKey("reductions")
             ? Map(
                 at["reductions"],
@@ -198,7 +198,7 @@ internal sealed partial record Glossary(
                 CustomNameAt,
                 (a, n, o) => ReadHandler(a, n, o, rule: false)
             )
-            : new();
+            : new(StringComparer.Ordinal);
         var migrations = new SortedDictionary<int, string>();
         if (machine.ContainsKey("migrations"))
             foreach (var (from, type) in at["migrations"].Object(machine["migrations"]))
@@ -239,7 +239,14 @@ internal sealed partial record Glossary(
     private static GlossaryState ReadState(At at, string name, JsonNode? node)
     {
         if (node is not JsonObject shape)
-            return new GlossaryState(name, Names.PhraseAt(at, node), false, null, null, null);
+            return new GlossaryState(
+                name,
+                Names.PhraseAt(at, node),
+                Committed: false,
+                Requires: null,
+                Context: null,
+                ContextNames: null
+            );
         at.Closed(shape, "phrase", "committed", "requires", "context");
         var phrase = Names.PhraseAt(at["phrase"], at.Required(shape, "phrase"));
         if (shape.ContainsKey("committed"))
@@ -458,14 +465,14 @@ internal sealed partial record Glossary(
                     .Fail(
                         $"has a field named '{HostInvoke.Owner}', which a train's input reads as the owner."
                     );
-            if (machine.ContextNames.Contains(ViewField.State))
+            if (machine.ContextNames.Contains(ViewField.State, StringComparer.Ordinal))
                 throw m["context"]
                     .Fail("has a field named 'state', which a view reads as the machine's state.");
             foreach (var shape in machine.Shapes.Values.Where(s => s.ContextNames is not null))
             {
                 var c = m["states"][shape.Name]["context"];
                 Distinct(c, shape.ContextNames!);
-                if (shape.ContextNames!.Contains(ViewField.State))
+                if (shape.ContextNames!.Contains(ViewField.State, StringComparer.Ordinal))
                     throw c.Fail(
                         "has a field named 'state', which a view reads as the machine's state."
                     );
@@ -493,13 +500,15 @@ internal sealed partial record Glossary(
                     throw t["guard"].Fail($"'{named}' is not one of the machine's guards.");
                 Unique(steps, t["phrase"], Said(trigger.Phrase, machine));
                 Distinct(t["input"], trigger.InputNames);
-                if (trigger.InputNames.Contains(SubjectSlot))
+                if (trigger.InputNames.Contains(SubjectSlot, StringComparer.Ordinal))
                     throw t["input"]
                         .Fail(
                             $"has a field named '{SubjectSlot}', which a phrase uses for the machine."
                         );
                 var placeholders = Placeholders(t["phrase"], trigger.Phrase).ToList();
-                var subjects = placeholders.Count(p => p == SubjectSlot);
+                var subjects = placeholders.Count(p =>
+                    string.Equals(p, SubjectSlot, StringComparison.Ordinal)
+                );
                 // A user's instance is named by its owner where {subject} is, a keyed system machine's by its name and
                 // key there; a system machine at a fixed key is named by its name.
                 if (!machine.IsSystem && subjects != 1)
@@ -519,8 +528,12 @@ internal sealed partial record Glossary(
                         .Fail(
                             $"names a system machine, which is '{machine.Reference}', never {{{SubjectSlot}}}."
                         );
-                foreach (var placeholder in placeholders.Where(p => p != SubjectSlot))
-                    if (!trigger.InputNames.Contains(placeholder))
+                foreach (
+                    var placeholder in placeholders.Where(p =>
+                        !string.Equals(p, SubjectSlot, StringComparison.Ordinal)
+                    )
+                )
+                    if (!trigger.InputNames.Contains(placeholder, StringComparer.Ordinal))
                         throw t["phrase"]
                             .Fail($"'{{{placeholder}}}' is not one of the trigger's input fields.");
             }
@@ -531,7 +544,7 @@ internal sealed partial record Glossary(
                 if (!machine.States.ContainsKey(invoke.State))
                     throw v.Fail($"'{invoke.State}' is not one of the machine's states.");
                 foreach (var (field, from) in invoke.Input)
-                    if (from == HostInvoke.Owner)
+                    if (string.Equals(from, HostInvoke.Owner, StringComparison.Ordinal))
                     {
                         // The owner's id is the server's to give, and a system machine has none.
                         if (machine.IsSystem)
@@ -552,7 +565,7 @@ internal sealed partial record Glossary(
                 {
                     if (!invoke.Outcomes.TryGetValue(phrase, out var outcome))
                         throw v["examples"][phrase].Fail("is not one of the outcomes.");
-                    if (outcome.Kind != "done")
+                    if (!string.Equals(outcome.Kind, "done", StringComparison.Ordinal))
                         throw v["examples"]
                             [phrase]
                             .Fail($"is a {outcome.Kind} outcome, which has no output to give.");
@@ -620,7 +633,10 @@ internal sealed partial record Glossary(
     }
 
     private HashSet<string> Keyed() =>
-        Machines.Values.Where(m => m.KeyedBy is not null).Select(m => m.Id).ToHashSet();
+        Machines
+            .Values.Where(m => m.KeyedBy is not null)
+            .Select(m => m.Id)
+            .ToHashSet(StringComparer.Ordinal);
 
     // Every custom rule and reduction the machine names has a handler, and every handler is named; one trigger at most
     // runs an effect, sent by a person with no input of theirs; and each version before the machine's has its migration.
@@ -663,7 +679,7 @@ internal sealed partial record Glossary(
                 throw e.Fail("is on a system machine, and a person sends an effect's trigger.");
             if (
                 Placeholders(m["triggers"][trigger.Name]["phrase"], trigger.Phrase)
-                    .Any(p => p != SubjectSlot)
+                    .Any(p => !string.Equals(p, SubjectSlot, StringComparison.Ordinal))
             )
                 throw m["triggers"]
                     [trigger.Name]["phrase"]
@@ -675,7 +691,11 @@ internal sealed partial record Glossary(
                 trigger.InputNames.Count > 0
                 && (
                     trigger.InputNames is not [ReceiptField]
-                    || trigger.Input[0]!["type"]!.GetValue<string>() != "string"
+                    || !string.Equals(
+                        trigger.Input[0]!["type"]!.GetValue<string>(),
+                        "string",
+                        StringComparison.Ordinal
+                    )
                 )
             )
                 throw m["triggers"]
@@ -723,7 +743,7 @@ internal sealed partial record Glossary(
     private static bool IsCustom(JsonObject o, string key) =>
         o[key] is JsonValue v
         && v.GetValueKind() == System.Text.Json.JsonValueKind.String
-        && v.GetValue<string>() == "custom"
+        && string.Equals(v.GetValue<string>(), "custom", StringComparison.Ordinal)
         && o["name"] is JsonValue n
         && n.GetValueKind() == System.Text.Json.JsonValueKind.String;
 
@@ -800,8 +820,8 @@ internal sealed partial record Glossary(
         var rest = phrase;
         while (true)
         {
-            var open = rest.IndexOf('{');
-            var close = rest.IndexOf('}');
+            var open = rest.IndexOf('{', StringComparison.Ordinal);
+            var close = rest.IndexOf('}', StringComparison.Ordinal);
             if (open < 0 && close < 0)
                 return names;
             if (open < 0 || close < open)
@@ -820,229 +840,3 @@ internal sealed partial record Glossary(
     [GeneratedRegex(@"\A[A-Za-z_][A-Za-z0-9_]*\z", RegexOptions.CultureInvariant)]
     private static partial Regex Placeholder();
 }
-
-/// <summary>
-/// An actor, with the noun a feature names a person by (<c>Given Ada is a customer</c>), and its roles or any signed-in
-/// caller.
-/// </summary>
-internal sealed record GlossaryActor(
-    string Name,
-    string Noun,
-    IReadOnlyList<string> Roles,
-    bool AnyAuthenticated
-);
-
-/// <summary>
-/// One machine of a glossary, owned by the actors in <see cref="OwnedBy"/> (one or more) or the system's.
-/// <see cref="Reference"/> is a user's machine's noun (<c>order</c>, said as
-/// <c>Ada's order</c>) or a system machine's name (<c>the shop</c>).
-/// </summary>
-internal sealed record GlossaryMachine(
-    string Id,
-    IReadOnlyList<string>? OwnedBy,
-    string? SystemKey,
-    string Reference,
-    string? Start,
-    string Initial,
-    JsonArray Context,
-    IReadOnlyList<string> ContextNames,
-    IReadOnlyDictionary<string, string> States,
-    IReadOnlyDictionary<string, GlossaryTrigger> Triggers,
-    IReadOnlyDictionary<string, GlossaryGuard> Guards,
-    IReadOnlyDictionary<string, GlossaryInvoke> Invokes,
-    IReadOnlyDictionary<string, GlossaryLink> Links
-)
-{
-    /// <summary>
-    /// A keyed system machine's key parts by name: one instance per key, started and moved by host code and never by
-    /// the host at startup. Null for a user's machine and for a system machine at a fixed <see cref="SystemKey"/>.
-    /// </summary>
-    internal IReadOnlyList<string>? KeyedBy { get; init; }
-
-    /// <summary>Whether the system owns the machine's instances, at a fixed key or keyed.</summary>
-    internal bool IsSystem => SystemKey is not null || KeyedBy is not null;
-
-    /// <summary>The machine's definition version, which its snapshots carry and migrations step from. Defaults to 1.</summary>
-    internal int Version { get; init; } = 1;
-
-    /// <summary>The context a new instance starts with, when the glossary gives one; else each field's zero.</summary>
-    internal JsonObject? InitialContext { get; init; }
-
-    /// <summary>Whether derivation writes the IR's differential block from the scenarios' walks.</summary>
-    internal bool Differential { get; init; }
-
-    /// <summary>Each state's shape: its phrase, whether it is committed, its rule and its own context.</summary>
-    internal IReadOnlyDictionary<string, GlossaryState> Shapes { get; init; } =
-        new Dictionary<string, GlossaryState>(StringComparer.Ordinal);
-
-    /// <summary>The custom rules the machine names, by name.</summary>
-    internal IReadOnlyDictionary<string, GlossaryHandler> Rules { get; init; } =
-        new Dictionary<string, GlossaryHandler>(StringComparer.Ordinal);
-
-    /// <summary>The custom reductions the machine names, by name.</summary>
-    internal IReadOnlyDictionary<string, GlossaryHandler> Reductions { get; init; } =
-        new Dictionary<string, GlossaryHandler>(StringComparer.Ordinal);
-
-    /// <summary>The C# type of each forward migration, by the version it steps from.</summary>
-    internal IReadOnlyDictionary<int, string> Migrations { get; init; } =
-        new Dictionary<int, string>();
-
-    /// <summary>
-    /// The custom rules as an in-memory run answers them: each with its example. Derivation and <c>trax machine run</c>
-    /// load no assembly, so a scenario that needs the real rule is tagged <c>@host</c>.
-    /// </summary>
-    internal IReadOnlyDictionary<string, Func<JsonObject, JsonNode?, bool>> ExampleRules =>
-        Rules.ToDictionary(
-            r => r.Key,
-            r =>
-            {
-                var holds = r.Value.Example.GetValue<bool>();
-                return (Func<JsonObject, JsonNode?, bool>)((_, _) => holds);
-            },
-            StringComparer.Ordinal
-        );
-
-    /// <summary>The custom reductions as an in-memory run answers them: the context with the example's fields set.</summary>
-    internal IReadOnlyDictionary<
-        string,
-        Func<JsonObject, JsonNode?, JsonObject>
-    > ExampleReductions =>
-        Reductions.ToDictionary(
-            r => r.Key,
-            r =>
-            {
-                var example = r.Value.Example.AsObject();
-                return (Func<JsonObject, JsonNode?, JsonObject>)(
-                    (context, _) =>
-                    {
-                        var next = (JsonObject)context.DeepClone();
-                        foreach (var (name, value) in example)
-                            next[name] = value?.DeepClone();
-                        return next;
-                    }
-                );
-            },
-            StringComparer.Ordinal
-        );
-
-    /// <summary>A state's context fields: its own, or the machine's.</summary>
-    internal JsonArray ContextOf(string state) =>
-        Shapes.TryGetValue(state, out var shape) && shape.Context is { } own ? own : Context;
-
-    /// <summary>Every context field name of the machine, its own and its states'.</summary>
-    internal IReadOnlySet<string> AllContextNames =>
-        ContextNames
-            .Concat(Shapes.Values.SelectMany(s => s.ContextNames ?? []))
-            .ToHashSet(StringComparer.Ordinal);
-
-    /// <summary>
-    /// The type of a context field, from the machine's context and then its states' in name order, or null when no
-    /// context has it.
-    /// </summary>
-    internal string? FieldType(string field) =>
-        Context
-            .Concat(
-                Shapes
-                    .Values.OrderBy(s => s.Name, StringComparer.Ordinal)
-                    .SelectMany(s => s.Context ?? [])
-            )
-            .FirstOrDefault(f => f!["name"]!.GetValue<string>() == field)
-            ?["type"]?.GetValue<string>();
-}
-
-/// <summary>
-/// One state of a glossary machine: <see cref="Phrase"/>, whether it is <see cref="Committed"/>, the rule its context
-/// <see cref="Requires"/>, and its own <see cref="Context"/>, null when it has the machine's.
-/// </summary>
-internal sealed record GlossaryState(
-    string Name,
-    string Phrase,
-    bool Committed,
-    JsonObject? Requires,
-    JsonArray? Context,
-    IReadOnlyList<string>? ContextNames
-);
-
-internal sealed record GlossaryTrigger(
-    string Name,
-    string Phrase,
-    JsonArray Input,
-    IReadOnlyList<string> InputNames,
-    JsonObject? Reduce
-)
-{
-    /// <summary>The run-once effect a send of the trigger runs, or null.</summary>
-    internal GlossaryEffect? Effect { get; init; }
-
-    /// <summary>
-    /// The guard that decides the trigger, when more than one could: its edges take it, and it must hold on every move
-    /// and fail on every refusal the scenarios show.
-    /// </summary>
-    internal string? Guard { get; init; }
-}
-
-/// <summary>
-/// A trigger's run-once effect: the full name of its <c>ISnapshotEffect</c> interface (server-only, written to the host
-/// file), the key prefix its claims are taken under (in the IR), and the receipt an in-memory run answers with.
-/// </summary>
-internal sealed record GlossaryEffect(string Type, string? KeyPrefix, string Example);
-
-/// <summary>
-/// A custom rule or reduction: its name in the IR, the full name of its C# type (server-only, written to the host file),
-/// and the example an in-memory run answers with: whether the rule holds, or the fields the reduction sets.
-/// </summary>
-internal sealed record GlossaryHandler(string Name, string Type, JsonNode Example);
-
-/// <summary>
-/// A guard: its rule, and the words a Given or a Then says it holds or fails in. A guard whose rule reads only the
-/// trigger's input has no such words (<see cref="Holds"/> and <see cref="Fails"/> may be null): a When shows it.
-/// </summary>
-internal sealed record GlossaryGuard(string Name, string? Holds, string? Fails, JsonObject Rule)
-{
-    /// <summary>Whether the guard reads nothing but the trigger's input, so only a When's value decides it.</summary>
-    internal bool OnInput => ReadsOnlyInput(IrMachine.ReadRule(Rule));
-
-    internal static bool ReadsOnlyInput(StateMachine.Rule rule) =>
-        rule switch
-        {
-            StateMachine.Rule.All all => all.Rules.Count > 0 && all.Rules.All(ReadsOnlyInput),
-            StateMachine.Rule.Any any => any.Rules.Count > 0 && any.Rules.All(ReadsOnlyInput),
-            StateMachine.Rule.Custom => false,
-            StateMachine.Rule.Present r => r.Source == RuleSource.Input,
-            StateMachine.Rule.Absent r => r.Source == RuleSource.Input,
-            StateMachine.Rule.OfType r => r.Source == RuleSource.Input,
-            StateMachine.Rule.NonEmpty r => r.Source == RuleSource.Input,
-            StateMachine.Rule.OneOf r => r.Source == RuleSource.Input,
-            StateMachine.Rule.Compare r => r.Source == RuleSource.Input,
-            StateMachine.Rule.Count r => r.Source == RuleSource.Input,
-            StateMachine.Rule.Length r => r.Source == RuleSource.Input,
-            StateMachine.Rule.BoolEquals r => r.Source == RuleSource.Input,
-            StateMachine.Rule.ArrayOf r => r.Source == RuleSource.Input,
-            _ => false,
-        };
-}
-
-internal sealed record GlossaryInvoke(
-    string State,
-    string Train,
-    IReadOnlyDictionary<string, string> Input,
-    JsonArray Output,
-    IReadOnlyList<string> OutputNames,
-    IReadOnlyDictionary<string, GlossaryOutcome> Outcomes,
-    IReadOnlyDictionary<string, JsonObject> Examples
-);
-
-internal sealed record GlossaryOutcome(
-    string Phrase,
-    string Kind,
-    JsonObject? When,
-    JsonObject? Reduce
-);
-
-internal sealed record GlossaryLink(string Phrase, string Machine, string Field);
-
-internal sealed record GlossaryView(
-    string Name,
-    IReadOnlyList<ViewRead> Reads,
-    IReadOnlyList<ViewField> Fields
-);

@@ -15,7 +15,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
     private static readonly IReadOnlyDictionary<string, Served> Known = new Dictionary<
         string,
         Served
-    >
+    >(StringComparer.Ordinal)
     {
         ["checkout"] = Served.Of(DeclarativeCheckout.Built),
         ["gauge"] = Served.Of(GaugeMachine.Built),
@@ -45,7 +45,9 @@ public sealed class ConformanceTestee(bool fromIr = false)
 
     // The handlers every testee binds: a custom guard named `throws`, which throws, and a custom reduction named
     // `nests`, which sets the context's `deep` to 600 arrays nested one in another.
-    private static readonly Dictionary<string, Func<JsonObject, JsonNode?, bool>> KitGuards = new()
+    private static readonly Dictionary<string, Func<JsonObject, JsonNode?, bool>> KitGuards = new(
+        StringComparer.Ordinal
+    )
     {
         ["throws"] = (_, _) => throw new InvalidOperationException("throws"),
     };
@@ -53,7 +55,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
     private static readonly Dictionary<
         string,
         Func<JsonObject, JsonNode?, JsonObject>
-    > KitReducers = new()
+    > KitReducers = new(StringComparer.Ordinal)
     {
         ["nests"] = (context, _) =>
         {
@@ -63,7 +65,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
         },
     };
 
-    private readonly Dictionary<string, Served> _loaded = new();
+    private readonly Dictionary<string, Served> _loaded = new(StringComparer.Ordinal);
 
     /// <summary>Answers one request line with one answer line.</summary>
     public string Answer(string line)
@@ -77,11 +79,11 @@ public sealed class ConformanceTestee(bool fromIr = false)
     private JsonObject Handle(JsonObject request)
     {
         var op = request["op"]!.GetValue<string>();
-        if (op == "end")
+        if (string.Equals(op, "end", StringComparison.Ordinal))
             return new JsonObject();
-        if (op == "canonical")
+        if (string.Equals(op, "canonical", StringComparison.Ordinal))
             return new JsonObject { ["wire"] = Canonical(request) };
-        if (op == "load")
+        if (string.Equals(op, "load", StringComparison.Ordinal))
             return Load(request);
 
         var name = request["machine"]!.GetValue<string>();
@@ -92,7 +94,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
         {
             "advance" => machine.Step(op, SnapshotOf(request), Trigger(request), request["input"]),
             "outcome" => machine.Step(op, SnapshotOf(request), Trigger(request), request["input"]),
-            "timer" => machine.Step(op, SnapshotOf(request), Trigger(request), null),
+            "timer" => machine.Step(op, SnapshotOf(request), Trigger(request), input: null),
             "rehydrate" => machine.Rehydrate(
                 request["text"]!.GetValue<string>(),
                 request["fromServer"]?.GetValue<bool>() == true
@@ -144,7 +146,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
     {
         var ir = (JsonObject)request["ir"]!.DeepClone();
         // An IR nested deeper than any reader takes, built here (conformance/PROTOCOL.md, tooDeep).
-        if (request["tooDeep"]?.GetValue<string>() == "ir")
+        if (string.Equals(request["tooDeep"]?.GetValue<string>(), "ir", StringComparison.Ordinal))
         {
             if (ir["initialContext"] is not JsonObject initial)
                 ir["initialContext"] = initial = new JsonObject();
@@ -191,7 +193,13 @@ public sealed class ConformanceTestee(bool fromIr = false)
 
     private static Snapshot Deepened(JsonObject request, Snapshot snapshot)
     {
-        if (request["tooDeep"]?.GetValue<string>() != "context")
+        if (
+            !string.Equals(
+                request["tooDeep"]?.GetValue<string>(),
+                "context",
+                StringComparison.Ordinal
+            )
+        )
             return snapshot;
         var context = (JsonObject)snapshot.Context.DeepClone();
         context["deep"] = Nested();
@@ -207,7 +215,8 @@ public sealed class ConformanceTestee(bool fromIr = false)
         JsonObject request,
         (string Target, PlannedEvent? Fields, IReadOnlyList<string> Navigation, int? MaxDepth) plan
     ) =>
-        request["tooDeep"]?.GetValue<string>() == "input" && plan.Fields is { } fields
+        string.Equals(request["tooDeep"]?.GetValue<string>(), "input", StringComparison.Ordinal)
+        && plan.Fields is { } fields
             ? plan with
             {
                 Fields = fields with { Input = Nested() },

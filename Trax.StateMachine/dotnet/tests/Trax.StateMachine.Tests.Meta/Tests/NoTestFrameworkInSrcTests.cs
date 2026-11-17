@@ -82,8 +82,10 @@ public class NoTestFrameworkInSrcTests
                 .Load(proj)
                 .Descendants("PackageReference")
                 .Select(e => e.Attribute("Include")?.Value)
-                .Where(v => v is not null)
-                .Where(v => TestFrameworkPackages.Contains(v, StringComparer.OrdinalIgnoreCase))
+                .Where(v =>
+                    v is not null
+                    && TestFrameworkPackages.Contains(v, StringComparer.OrdinalIgnoreCase)
+                )
                 .ToList();
 
             if (referenced.Count > 0)
@@ -215,8 +217,10 @@ public class NoTestFrameworkInSrcTests
             var referenced = document
                 .Descendants("PackageReference")
                 .Select(e => e.Attribute("Include")?.Value)
-                .Where(v => v is not null)
-                .Where(v => TestProjectOnlyPackages.Contains(v, StringComparer.OrdinalIgnoreCase))
+                .Where(v =>
+                    v is not null
+                    && TestProjectOnlyPackages.Contains(v, StringComparer.OrdinalIgnoreCase)
+                )
                 .ToList();
 
             if (referenced.Count > 0)

@@ -53,6 +53,7 @@ public class GenericRulesTests
                         Context = new JsonObject(),
                     }
                 )
+                .ConfigureAwait(false)
         ).Should().BeTrue();
         return id;
     }
@@ -63,8 +64,10 @@ public class GenericRulesTests
         var owner = NewUser();
         var id = await Seed(owner, ViewerReadMachine.Id);
         var registry = Registry(new ViewerReadMachine());
-        await using var withoutRole = Caller();
-        await using var withRole = Caller(ViewerReadMachine.Viewer);
+        var withoutRole = Caller();
+        await using var withoutRoleDisposal = withoutRole.ConfigureAwait(false);
+        var withRole = Caller(ViewerReadMachine.Viewer);
+        await using var withRoleDisposal = withRole.ConfigureAwait(false);
 
         var refused = await new LoadSnapshotJunction(
             registry,
@@ -106,10 +109,16 @@ public class GenericRulesTests
         );
         var host = await registry
             .Service(ViewerReadMachine.Id)!
-            .Advance(owner, id, nameof(TurnstileTrigger.Coin), null, requestId);
+            .Advance(owner, id, nameof(TurnstileTrigger.Coin), input: null, requestId);
         var client = await registry
             .Service(ViewerReadMachine.Id)!
-            .Advance(DeskRoles.Client(owner), id, nameof(TurnstileTrigger.Coin), null, requestId);
+            .Advance(
+                DeskRoles.Client(owner),
+                id,
+                nameof(TurnstileTrigger.Coin),
+                input: null,
+                requestId
+            );
 
         generic
             .Problem!.Code.Should()

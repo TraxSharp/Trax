@@ -25,7 +25,8 @@ internal sealed class SpawnsStartupValidator(
     public async Task StartingAsync(CancellationToken cancellationToken)
     {
         _checked = true;
-        await using var scope = scopeFactory.CreateAsyncScope();
+        var scope = scopeFactory.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var registered = machines.ToList();
         var problems = registered
             .SelectMany(m => Problems(m, registered, scope.ServiceProvider))
@@ -139,7 +140,7 @@ internal sealed class SpawnsStartupValidator(
             string initial;
             try
             {
-                initial = child.InitialSnapshot(null).State;
+                initial = child.InitialSnapshot(context: null).State;
             }
             catch (ArgumentException ex)
             {

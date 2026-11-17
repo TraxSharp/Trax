@@ -240,7 +240,7 @@ public class TraxHttpTransportTests
         )
         {
             // allowed-delay: ends only when the request is cancelled, which is what the test waits for.
-            await Task.Delay(Timeout.Infinite, cancellationToken);
+            await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException("Unreachable.");
         }
     }
@@ -269,7 +269,7 @@ public class TraxHttpTransportTests
             CancellationToken cancellationToken
         )
         {
-            await answer.WaitAsync(cancellationToken);
+            await answer.WaitAsync(cancellationToken).ConfigureAwait(false);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""{"data":{"x":1}}"""),
@@ -327,7 +327,7 @@ public class TraxHttpTransportTests
         )
         {
             // allowed-delay: the trickle itself; the test waits on the transport's timeout, not on this.
-            await Task.Delay(50, cancellationToken);
+            await Task.Delay(50, cancellationToken).ConfigureAwait(false);
             buffer.Span[0] = (byte)' ';
             return 1;
         }

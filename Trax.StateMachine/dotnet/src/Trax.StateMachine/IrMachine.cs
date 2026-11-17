@@ -80,9 +80,14 @@ public sealed class IrMachine
     )
     {
         ArgumentNullException.ThrowIfNull(ir);
-        _guards = customGuards ?? new Dictionary<string, Func<JsonObject, JsonNode?, bool>>();
+        _guards =
+            customGuards
+            ?? new Dictionary<string, Func<JsonObject, JsonNode?, bool>>(StringComparer.Ordinal);
         _reducers =
-            customReducers ?? new Dictionary<string, Func<JsonObject, JsonNode?, JsonObject>>();
+            customReducers
+            ?? new Dictionary<string, Func<JsonObject, JsonNode?, JsonObject>>(
+                StringComparer.Ordinal
+            );
         try
         {
             // An IR built in memory, where no parser held it to a depth, is refused before anything recurses over it.
@@ -151,7 +156,8 @@ public sealed class IrMachine
                     .Select(e => ReadEdge(e!.AsObject(), state, name))
                     .ToList();
                 var output =
-                    kind == "done" && o["output"] is JsonObject schema
+                    string.Equals(kind, "done", StringComparison.Ordinal)
+                    && o["output"] is JsonObject schema
                         ? ReadSchema(schema)
                         : ContextSchema.Empty;
                 _outcomes[name] = new Outcome(state, kind, edges, output);
@@ -243,7 +249,7 @@ public sealed class IrMachine
                 RefusalCode.OutcomeBound,
                 "This step is completed by the outcome of its work, not by an action."
             );
-        if (_timers.Values.Any(t => t.Trigger == trigger))
+        if (_timers.Values.Any(t => string.Equals(t.Trigger, trigger, StringComparison.Ordinal)))
             return Rejected(
                 RefusalCode.TimerBound,
                 "This step moves on by itself when its time is up, not by an action."
@@ -252,7 +258,10 @@ public sealed class IrMachine
             return Rejected(RefusalCode.NoTransition, $"Unknown trigger '{trigger}'.");
 
         var matches = _transitions
-            .Where(t => t.From == snapshot.State && t.Trigger == trigger)
+            .Where(t =>
+                string.Equals(t.From, snapshot.State, StringComparison.Ordinal)
+                && string.Equals(t.Trigger, trigger, StringComparison.Ordinal)
+            )
             .ToList();
         if (matches.Count == 0)
             return Rejected(
@@ -287,7 +296,7 @@ public sealed class IrMachine
             return Rejected(RefusalCode.NoTransition, $"Unknown trigger '{trigger}'.");
         if (!_states.Contains(snapshot.State))
             return Rejected(RefusalCode.NoTransition, $"Unknown state '{snapshot.State}'.");
-        if (triggerState != snapshot.State)
+        if (!string.Equals(triggerState, snapshot.State, StringComparison.Ordinal))
             return Rejected(
                 RefusalCode.NoTransition,
                 $"No transition from '{snapshot.State}' on '{trigger}'."
@@ -323,7 +332,10 @@ public sealed class IrMachine
         ArgumentNullException.ThrowIfNull(snapshot);
         if (!_states.Contains(snapshot.State))
             return Rejected(RefusalCode.NoTransition, $"Unknown state '{snapshot.State}'.");
-        if (!_timers.TryGetValue(snapshot.State, out var timer) || timer.Trigger != trigger)
+        if (
+            !_timers.TryGetValue(snapshot.State, out var timer)
+            || !string.Equals(timer.Trigger, trigger, StringComparison.Ordinal)
+        )
             return Rejected(
                 RefusalCode.NoTransition,
                 $"No timer fires from '{snapshot.State}' on '{trigger}'."
@@ -378,9 +390,9 @@ public sealed class IrMachine
             return false;
         try
         {
-            return _transitions.Any(t =>
-                t.From == snapshot.State
-                && t.Trigger == trigger
+            return _transitions.Exists(t =>
+                string.Equals(t.From, snapshot.State, StringComparison.Ordinal)
+                && string.Equals(t.Trigger, trigger, StringComparison.Ordinal)
                 && Passes(t.Guard, snapshot.Context, input)
             );
         }
@@ -395,9 +407,9 @@ public sealed class IrMachine
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         return _transitions
-            .Where(t => t.From == snapshot.State)
+            .Where(t => string.Equals(t.From, snapshot.State, StringComparison.Ordinal))
             .Select(t => t.Trigger)
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
     }
 
@@ -445,10 +457,10 @@ public sealed class IrMachine
     // A trigger a client may move with: one a transition fires on, not bound to the effect, an outcome or a timer. A
     // trigger the IR declares and no transition uses is not one, as in the other engines.
     private bool Navigable(string trigger) =>
-        _transitions.Any(t => t.Trigger == trigger)
+        _transitions.Exists(t => string.Equals(t.Trigger, trigger, StringComparison.Ordinal))
         && !EffectTriggers.Contains(trigger)
         && !_outcomes.ContainsKey(trigger)
-        && !_timers.Values.Any(t => t.Trigger == trigger);
+        && !_timers.Values.Any(t => string.Equals(t.Trigger, trigger, StringComparison.Ordinal));
 
     private bool NamesUnhandled(Rule? rule) =>
         rule switch
@@ -494,7 +506,7 @@ public sealed class IrMachine
                 RefusalCode.Malformed,
                 "Snapshot is missing required fields (machine, version, state, context)."
             );
-        if (machine != Id)
+        if (!string.Equals(machine, Id, StringComparison.Ordinal))
             return new RehydrationResult.Error(
                 RefusalCode.UnknownMachine,
                 $"Snapshot machine '{machine}' does not match '{Id}'."
@@ -587,7 +599,7 @@ public sealed class IrMachine
             return error;
         if (
             _invariants.TryGetValue(state, out var invariant)
-            && !RuleEvaluator.Evaluate(invariant, context, null, guards)
+            && !RuleEvaluator.Evaluate(invariant, context, input: null, guards)
         )
             return GuardRejected;
         return null;

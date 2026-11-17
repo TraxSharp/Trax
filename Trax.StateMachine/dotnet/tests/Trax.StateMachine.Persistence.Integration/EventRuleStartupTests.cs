@@ -300,18 +300,21 @@ public class EventRuleStartupTests
             .BeFalse($"AnyAuthenticated restricts nothing beyond signing in. See {Adr}");
 
         var events = new Dictionary<string, CallerRule>(StringComparer.Ordinal) { ["Open"] = open };
-        new MachineRules(events, open, null, null)
+        new MachineRules(events, open, Get: null, Watch: null)
             .AnyGated.Should()
             .BeFalse($"nothing beyond signing in is required. See {Adr}");
         new MachineRules(
-            new Dictionary<string, CallerRule>(events) { ["Approve"] = policy },
+            new Dictionary<string, CallerRule>(events, StringComparer.Ordinal)
+            {
+                ["Approve"] = policy,
+            },
             open,
-            null,
-            null
+            Get: null,
+            Watch: null
         )
             .AnyGated.Should()
             .BeTrue($"a policy-gated event is a restricted event. See {Adr}");
-        new MachineRules(events, role, null, null)
+        new MachineRules(events, role, Get: null, Watch: null)
             .AnyGated.Should()
             .BeTrue(
                 $"a start rule stricter than AnyAuthenticated restricts who creates an instance. See {Adr}"
@@ -359,22 +362,4 @@ public class EventRuleStartupTests
                 $"without the opt-in no client reaches a machine through the generic mutations. See {Adr}"
             );
     }
-}
-
-/// <summary>The generic state-machine trains that carry a GraphQL exposure.</summary>
-internal static class GenericMutationExposure
-{
-    /// <summary>Every generic state-machine train type that declares a <see cref="TraxMutationAttribute"/>.</summary>
-    public static IReadOnlyList<Type> Exposed() =>
-        new[]
-        {
-            typeof(SaveSnapshot),
-            typeof(AdvanceSnapshot),
-            typeof(LoadSnapshot),
-            typeof(SendSnapshot),
-            typeof(StartSnapshot),
-            typeof(DiscardSnapshot),
-        }
-            .Where(type => type.GetCustomAttribute<TraxMutationAttribute>() is not null)
-            .ToList();
 }

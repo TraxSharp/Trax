@@ -97,8 +97,10 @@ public class MachineExportIrTests
             .Be("paidWith");
         var coin = ir["transitions"]!
             .AsArray()
-            .Select(t => (JsonObject)t!)
-            .Single(t => t["trigger"]!.GetValue<string>() == "Coin");
+            .Cast<JsonObject>()
+            .Single(t =>
+                string.Equals(t["trigger"]!.GetValue<string>(), "Coin", StringComparison.Ordinal)
+            );
         ((JsonObject)coin["guard"]!)["rule"]!.GetValue<string>().Should().Be("oneOf");
     }
 

@@ -33,7 +33,8 @@ public class PostgresSetup
     [OneTimeSetUp]
     public async Task Up()
     {
-        await using (var admin = new NpgsqlConnection(Maintenance))
+        var admin = new NpgsqlConnection(Maintenance);
+        await using (admin.ConfigureAwait(false))
         {
             await admin.OpenAsync();
             await Exec(admin, $"DROP DATABASE IF EXISTS {Database} WITH (FORCE)");
@@ -48,15 +49,17 @@ public class PostgresSetup
     public async Task Down()
     {
         NpgsqlConnection.ClearAllPools();
-        await using var admin = new NpgsqlConnection(Maintenance);
+        var admin = new NpgsqlConnection(Maintenance);
+        await using var adminDisposal = admin.ConfigureAwait(false);
         await admin.OpenAsync();
         await Exec(admin, $"DROP DATABASE IF EXISTS {Database} WITH (FORCE)");
     }
 
     private static async Task Exec(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 }

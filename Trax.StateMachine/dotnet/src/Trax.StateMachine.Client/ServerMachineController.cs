@@ -4,211 +4,6 @@ using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Client;
 
-/// <summary>The codes a client reports of its own, beside the server's refusal codes.</summary>
-public static class ClientProblemCodes
-{
-    /// <summary>The instance was deleted, or the server holds none the caller may read.</summary>
-    public const string Gone = "GONE";
-
-    /// <summary>The request never reached the server, or its answer never came back (offline, a 5xx, an auth error).</summary>
-    public const string TransportError = "TRANSPORT_ERROR";
-
-    /// <summary>A retry was asked for, but nothing has failed since the last one was retried.</summary>
-    public const string NothingToRetry = "NOTHING_TO_RETRY";
-
-    /// <summary>The controller was disposed before the server answered.</summary>
-    public const string Disposed = "DISPOSED";
-
-    /// <summary>
-    /// There is no instance to send to, and none is being started or read: the start was refused or failed, or the first
-    /// read gave up. <see cref="ServerMachineController.RetryAsync"/> resends a start that failed, and reads again after a
-    /// first read that gave up.
-    /// </summary>
-    public const string NotReady = "NOT_READY";
-}
-
-/// <summary>Whether a problem is the server's refusal or a request that did not get through.</summary>
-public enum MachineProblemKind
-{
-    /// <summary>The server, or the controller on its behalf, refused.</summary>
-    Rejected,
-
-    /// <summary>The request did not reach the server, or its answer did not come back.</summary>
-    Transport,
-}
-
-/// <summary>The last refusal or transport failure, shown until the next event the server confirms.</summary>
-/// <param name="Kind">Whether it was refused or never got through.</param>
-/// <param name="Code">The contract: a refusal code (<c>GUARD_FAILED</c>) or one of <see cref="ClientProblemCodes"/>.</param>
-/// <param name="Message">What to tell a person. It is not part of the contract.</param>
-public sealed record MachineProblem(MachineProblemKind Kind, string Code, string Message);
-
-/// <summary>
-/// Why a controller stopped for good: the instance is gone, this client is out of date and must reload, or the host
-/// refused the socket.
-/// </summary>
-/// <param name="Code">
-/// <see cref="ClientProblemCodes.Gone"/>, <c>CLIENT_OUTDATED</c>, or the code of a stream that ended for good
-/// (<see cref="StreamMessage.Refused"/>): <c>UNAUTHENTICATED</c> or <c>FORBIDDEN</c> for a socket or a stream the host
-/// refused, a code of <see cref="GraphQLMachineServerOptions.TerminalStreamErrors"/>, or
-/// <see cref="ClientProblemCodes.TransportError"/> for a stream that could not be opened or followed.
-/// </param>
-/// <param name="Message">What to tell a person.</param>
-/// <param name="Deleted">
-/// With <see cref="ClientProblemCodes.Gone"/>: true when the instance was deleted or expired, false when the server
-/// answered <c>NOT_FOUND</c>, which does not tell a missing instance from another caller's. Null otherwise.
-/// </param>
-public sealed record MachineError(string Code, string Message, bool? Deleted = null);
-
-/// <summary>Where a controller is.</summary>
-public enum MachineStatus
-{
-    /// <summary>No snapshot from the server yet.</summary>
-    Loading,
-
-    /// <summary>Showing what the server confirmed, and any prediction on top of it.</summary>
-    Ready,
-
-    /// <summary>Stopped for good; see <see cref="MachineView.Error"/>.</summary>
-    Stopped,
-}
-
-/// <summary>What a controller holds, as one immutable value: a new one on every change.</summary>
-public sealed record MachineView
-{
-    /// <summary>Loading until the first snapshot from the server, stopped once gone or outdated.</summary>
-    public MachineStatus Status { get; init; }
-
-    /// <summary>The instance's id, once started or given.</summary>
-    public string? Id { get; init; }
-
-    /// <summary>What to show: the newest prediction while an event is pending, else what the server confirmed.</summary>
-    public Snapshot? Snapshot { get; init; }
-
-    /// <summary>The last snapshot the server confirmed.</summary>
-    public Snapshot? Confirmed { get; init; }
-
-    /// <summary>The incarnation of the instance the view holds.</summary>
-    public string? RowId { get; init; }
-
-    /// <summary>The revision of <see cref="Confirmed"/>.</summary>
-    public long? Revision { get; init; }
-
-    /// <summary>When the state's timer is due, as the server says; null when it has none. The client never fires it.</summary>
-    public DateTimeOffset? DueAt { get; init; }
-
-    /// <summary>Whether an event is in flight or queued.</summary>
-    public bool Pending { get; init; }
-
-    /// <summary>The last refusal or transport failure, until the next event the server confirms.</summary>
-    public MachineProblem? Problem { get; init; }
-
-    /// <summary>Why the controller stopped, once it has.</summary>
-    public MachineError? Error { get; init; }
-
-    /// <summary>
-    /// Whether a sync (<see cref="ServerMachineController.SyncToAsync"/>) is running, or the last one did not settle
-    /// <see cref="SyncOutcome.Synced"/>: the server is not where the page is. A page holds a leave guard on it.
-    /// </summary>
-    public bool Unsaved { get; init; }
-}
-
-/// <summary>What one send came to. Never an exception.</summary>
-public abstract record SendOutcome
-{
-    private SendOutcome() { }
-
-    /// <summary>The server applied it and stored <see cref="Snapshot"/>.</summary>
-    public sealed record Confirmed(ServerSnapshot Snapshot) : SendOutcome;
-
-    /// <summary>The server refused it.</summary>
-    public sealed record Refused(MachineProblem Problem) : SendOutcome;
-
-    /// <summary>It did not get through, or the server could not take it yet; <see cref="ServerMachineController.RetryAsync"/> resends it.</summary>
-    public sealed record Failed(MachineProblem Problem) : SendOutcome;
-
-    /// <summary>The controller stopped for good before or while it was sent.</summary>
-    public sealed record Stopped(MachineError Error) : SendOutcome;
-}
-
-/// <summary>What one sync came to. Never an exception.</summary>
-public abstract record SyncOutcome
-{
-    private SyncOutcome() { }
-
-    /// <summary>The server is at the target with the fields applied, as <see cref="Snapshot"/> holds it.</summary>
-    public sealed record Synced(ServerSnapshot Snapshot) : SyncOutcome;
-
-    /// <summary>A later sync took over; this one sent nothing after the event it had in flight.</summary>
-    public sealed record Superseded : SyncOutcome;
-
-    /// <summary>No events reach the target from what the server holds.</summary>
-    public sealed record Unreachable : SyncOutcome;
-
-    /// <summary>The planner stopped at its depth, or the sync sent as many events as it may (twice the machine's states).</summary>
-    public sealed record Exceeded : SyncOutcome;
-
-    /// <summary>
-    /// The target is not a state, <see cref="Trigger"/> is not one a client may move with, or <see cref="Code"/> says
-    /// the fields input or the confirmed context nests too deep (<see cref="PlanResult.Invalid"/>).
-    /// </summary>
-    public sealed record Invalid(string? Trigger, string? Target) : SyncOutcome
-    {
-        /// <summary><c>INVALID_INPUT</c> or <c>INVALID_CONTEXT</c> for a value nested too deep to plan with, or null.</summary>
-        public RefusalCode? Code { get; init; }
-    }
-
-    /// <summary>The server refused an event twice, the second time after the instance was read again.</summary>
-    public sealed record Refused(MachineProblem Problem) : SyncOutcome;
-
-    /// <summary>An event did not get through; syncing again plans from what the server confirmed.</summary>
-    public sealed record Failed(MachineProblem Problem) : SyncOutcome;
-
-    /// <summary>The controller stopped for good before or while it synced.</summary>
-    public sealed record Stopped(MachineError Error) : SyncOutcome;
-}
-
-/// <summary>How a <see cref="ServerMachineController"/> is built.</summary>
-public sealed record ServerMachineOptions
-{
-    /// <summary>The machine as the host's client manifest lists it: its id, IR and IR hash.</summary>
-    public required ClientManifestMachine Machine { get; init; }
-
-    /// <summary>The server's operations and change stream for that machine.</summary>
-    public required IMachineServer Server { get; init; }
-
-    /// <summary>
-    /// The engine to predict with (<see cref="MachinePredictor.For{TState,TTrigger}"/>). Without one, an event is sent
-    /// with no prediction and the view shows only what the server confirmed. Its IR hash must be the manifest's.
-    /// </summary>
-    public IMachinePredictor? Predictor { get; init; }
-
-    /// <summary>An existing instance to open. Without it, <see cref="ServerMachineController.StartAsync"/> creates one.</summary>
-    public string? Id { get; init; }
-
-    /// <summary>The start's input, when the machine's start takes one.</summary>
-    public JsonNode? StartInput { get; init; }
-
-    /// <summary>
-    /// The request id of the start, minted when null. A controller that replaces a disposed one passes the same id, so
-    /// the server answers the retried start with the instance it already created.
-    /// </summary>
-    public string? StartRequestId { get; init; }
-
-    /// <summary>
-    /// Mints a request id; a new GUID by default. A custom one must mint 1 to 200 characters, not blank, with no control
-    /// character: the server answers any other <c>INVALID_REQUEST_ID</c>. One that throws fails what it was minting for
-    /// (a send, or the start) <c>INVALID_REQUEST_ID</c>, sends nothing for it, and the controller carries on.
-    /// </summary>
-    public Func<string>? NewRequestId { get; init; }
-
-    /// <summary>
-    /// Delays between retries of a <c>SERVER_OUTDATED</c> answer (another node of a rolling deploy answered) and of a read
-    /// the transport failed. After the last, the event fails and <see cref="ServerMachineController.RetryAsync"/> resends it.
-    /// </summary>
-    public IReadOnlyList<TimeSpan>? RetryDelays { get; init; }
-}
-
 /// <summary>
 /// Drives one instance of a machine a server owns. The server applies every transition; the client only predicts.
 /// </summary>
@@ -271,7 +66,7 @@ public sealed class ServerMachineController : IDisposable
     private readonly JsonNode? _startInput;
     private readonly Func<string> _newRequestId;
     private readonly IReadOnlyList<TimeSpan> _retryDelays;
-    private readonly object _startGate = new();
+    private readonly Lock _startGate = new();
     private readonly JsonObject _ir;
     private IrMachine? _planner;
 
@@ -353,7 +148,10 @@ public sealed class ServerMachineController : IDisposable
         _ir = options.Machine.Ir;
         _server = options.Server;
         _predictor = options.Predictor;
-        if (_predictor is not null && _predictor.IrHash != options.Machine.IrHash)
+        if (
+            _predictor is not null
+            && !string.Equals(_predictor.IrHash, options.Machine.IrHash, StringComparison.Ordinal)
+        )
             throw new ArgumentException(
                 $"The predictor's machine '{_shape.Id}' (IR {_predictor.IrHash}) is another version than the manifest's "
                     + $"(IR {options.Machine.IrHash}). Export the manifest again from a host that runs this version.",
@@ -480,7 +278,7 @@ public sealed class ServerMachineController : IDisposable
                 _readFailed = false;
                 var waiter = NewOutcome();
                 _startWaiters.Add(waiter);
-                _ = OpeningAsync(() => ReadAsync(null));
+                _ = OpeningAsync(() => ReadAsync(rowId: null));
                 return waiter.Task;
             }
             var request = _lastFailed;
@@ -565,7 +363,7 @@ public sealed class ServerMachineController : IDisposable
         if (view.Snapshot is not { } shown || view.Status == MachineStatus.Stopped)
             return false;
         if (!Predicts(shown.State, trigger))
-            return Available(shown).Contains(trigger);
+            return Available(shown).Contains(trigger, StringComparer.Ordinal);
         return _predictor.CanFire(shown, trigger, input);
     }
 
@@ -656,7 +454,7 @@ public sealed class ServerMachineController : IDisposable
             return OpeningAsync(() =>
             {
                 Listen(id);
-                return ReadAsync(null);
+                return ReadAsync(rowId: null);
             });
         }
         if (_startRequestId is null && !TryMint(out _startRequestId, out _))
@@ -704,7 +502,7 @@ public sealed class ServerMachineController : IDisposable
         _opened = true;
         try
         {
-            await open();
+            await open().ConfigureAwait(false);
         }
         finally
         {
@@ -740,7 +538,9 @@ public sealed class ServerMachineController : IDisposable
         try
         {
             answer = Answered(
-                await _server.StartAsync(_startInput?.DeepClone(), requestId, _alive)
+                await _server
+                    .StartAsync(_startInput?.DeepClone(), requestId, _alive)
+                    .ConfigureAwait(false)
             );
         }
         catch (Exception ex)
@@ -757,24 +557,28 @@ public sealed class ServerMachineController : IDisposable
             return;
         if (answer.Problem is { } problem)
         {
-            if (problem.Code == ServerOutdated && attempt < _retryDelays.Count)
+            if (
+                string.Equals(problem.Code, ServerOutdated, StringComparison.Ordinal)
+                && attempt < _retryDelays.Count
+            )
             {
                 // Another node of a rolling deploy answered: another may run this version. The start settles once the
                 // retry has.
                 await Later(
-                    attempt,
-                    () => CreateAsync(requestId, attempt + 1),
-                    () => Task.CompletedTask
-                );
+                        attempt,
+                        () => CreateAsync(requestId, attempt + 1),
+                        () => Task.CompletedTask
+                    )
+                    .ConfigureAwait(false);
                 return;
             }
-            if (problem.Code == ClientOutdated)
+            if (string.Equals(problem.Code, ClientOutdated, StringComparison.Ordinal))
             {
                 Stop(new MachineError(ClientOutdated, problem.Message));
                 return;
             }
             _problem = Refusal(problem.Code, problem.Message);
-            var retryable = problem.Code == ServerOutdated;
+            var retryable = string.Equals(problem.Code, ServerOutdated, StringComparison.Ordinal);
             _startFailed = retryable;
             Emit();
             SettleStart(
@@ -880,7 +684,7 @@ public sealed class ServerMachineController : IDisposable
                 if (unreadable is not null)
                 {
                     // Not a snapshot this client can hold: the push is dropped and the instance read again.
-                    Reload(null);
+                    Reload(rowId: null);
                     return;
                 }
                 if (taken)
@@ -915,7 +719,7 @@ public sealed class ServerMachineController : IDisposable
                 return;
             default:
                 // A reload, or a message this version does not know: read the instance again.
-                Reload(null);
+                Reload(rowId: null);
                 return;
         }
     }
@@ -945,13 +749,13 @@ public sealed class ServerMachineController : IDisposable
         ServerAnswer answer;
         try
         {
-            answer = Answered(await _server.GetAsync(id, _alive));
+            answer = Answered(await _server.GetAsync(id, _alive).ConfigureAwait(false));
         }
         catch (Exception ex)
         {
             if (_disposed || _error is not null)
                 return;
-            await ReadFailedAsync(rowId, attempt, TransportFailure(ex));
+            await ReadFailedAsync(rowId, attempt, TransportFailure(ex)).ConfigureAwait(false);
             return;
         }
         if (_disposed || _error is not null)
@@ -959,32 +763,36 @@ public sealed class ServerMachineController : IDisposable
 
         if (answer.Problem is { } problem)
         {
-            if (problem.Code == ServerOutdated && attempt < _retryDelays.Count)
+            if (
+                string.Equals(problem.Code, ServerOutdated, StringComparison.Ordinal)
+                && attempt < _retryDelays.Count
+            )
             {
                 await Later(
-                    attempt,
-                    () => ReadAsync(rowId, attempt + 1),
-                    () =>
-                    {
-                        EndRead();
-                        Pump();
-                        return Task.CompletedTask;
-                    }
-                );
+                        attempt,
+                        () => ReadAsync(rowId, attempt + 1),
+                        () =>
+                        {
+                            EndRead();
+                            Pump();
+                            return Task.CompletedTask;
+                        }
+                    )
+                    .ConfigureAwait(false);
                 return;
             }
             var first = _confirmed is null;
             EndRead();
-            if (problem.Code == ClientOutdated)
+            if (string.Equals(problem.Code, ClientOutdated, StringComparison.Ordinal))
                 Stop(new MachineError(ClientOutdated, problem.Message));
-            else if (problem.Code == NotFound)
+            else if (string.Equals(problem.Code, NotFound, StringComparison.Ordinal))
                 Stop(new MachineError(ClientProblemCodes.Gone, problem.Message, Deleted: false));
             else
             {
                 _problem = Refusal(problem.Code, problem.Message);
                 // A first read another version kept answering failed past every retry; any other refusal is the
                 // host's answer, and reading again would get it again.
-                var failed = problem.Code == ServerOutdated;
+                var failed = string.Equals(problem.Code, ServerOutdated, StringComparison.Ordinal);
                 _readFailed = first && failed;
                 Emit();
                 // A push may have opened the instance meanwhile: whoever waits for the start has it.
@@ -1002,14 +810,18 @@ public sealed class ServerMachineController : IDisposable
         var changed = Accept(snapshot, Source.Load, out var unreadable);
         if (unreadable is not null)
         {
-            await ReadFailedAsync(rowId, attempt, unreadable);
+            await ReadFailedAsync(rowId, attempt, unreadable).ConfigureAwait(false);
             return;
         }
         // A push of the incarnation now held is taken after the read; one of another incarnation is kept until a read
         // of that incarnation answers.
         var buffered = _buffered;
         var dropped = false;
-        if (buffered is not null && _error is null && buffered.RowId == _rowId)
+        if (
+            buffered is not null
+            && _error is null
+            && string.Equals(buffered.RowId, _rowId, StringComparison.Ordinal)
+        )
         {
             _buffered = null;
             changed = Accept(buffered, Source.Push, out var unreadablePush) || changed;
@@ -1018,7 +830,7 @@ public sealed class ServerMachineController : IDisposable
         EndRead();
         // A kept push this client cannot hold is dropped, as one that came now would be, and the instance read again.
         if (dropped && !_disposed && _error is null)
-            Reload(null);
+            Reload(rowId: null);
         if (_error is not null)
             return;
         // The first snapshot ends whatever failure the reads before it showed.
@@ -1046,28 +858,29 @@ public sealed class ServerMachineController : IDisposable
         _problem = failure;
         Emit();
         await Later(
-            attempt,
-            () => ReadAsync(rowId, attempt + 1),
-            () =>
-            {
-                var first = _confirmed is null;
-                EndRead();
-                if (!_disposed && _error is null)
+                attempt,
+                () => ReadAsync(rowId, attempt + 1),
+                () =>
                 {
-                    // A first read that failed past every retry is RetryAsync's to read again. One a push opened the
-                    // instance during settles whoever waits for the start with it.
-                    if (first)
+                    var first = _confirmed is null;
+                    EndRead();
+                    if (!_disposed && _error is null)
                     {
-                        _readFailed = true;
-                        SettleStart(new SendOutcome.Failed(failure));
+                        // A first read that failed past every retry is RetryAsync's to read again. One a push opened the
+                        // instance during settles whoever waits for the start with it.
+                        if (first)
+                        {
+                            _readFailed = true;
+                            SettleStart(new SendOutcome.Failed(failure));
+                        }
+                        else
+                            SettleStart(new SendOutcome.Confirmed(ConfirmedSnapshot()));
                     }
-                    else
-                        SettleStart(new SendOutcome.Confirmed(ConfirmedSnapshot()));
+                    Pump();
+                    return Task.CompletedTask;
                 }
-                Pump();
-                return Task.CompletedTask;
-            }
-        );
+            )
+            .ConfigureAwait(false);
     }
 
     private void EndRead()
@@ -1109,18 +922,21 @@ public sealed class ServerMachineController : IDisposable
     {
         unreadable = null;
         var rowId = incoming.RowId;
-        var otherIncarnation = rowId is not null && _rowId is not null && rowId != _rowId;
+        var otherIncarnation =
+            rowId is not null
+            && _rowId is not null
+            && !string.Equals(rowId, _rowId, StringComparison.Ordinal);
 
         if (otherIncarnation && source != Source.Load)
         {
             // The row was deleted and created again: its revisions restart, so they say nothing against the ones held.
             // A read already pending answers without saying which incarnation it read, so unless it asked for this one,
             // another read asks for it after.
-            if (!_reloading || _reloadRowId != rowId)
+            if (!_reloading || !string.Equals(_reloadRowId, rowId, StringComparison.Ordinal))
                 Reload(rowId);
             if (
                 _buffered is null
-                || _buffered.RowId != rowId
+                || !string.Equals(_buffered.RowId, rowId, StringComparison.Ordinal)
                 || !OlderOrSame(incoming.Revision, _buffered.Revision)
             )
                 _buffered = incoming;
@@ -1136,7 +952,7 @@ public sealed class ServerMachineController : IDisposable
                 && _dueAt is null
                 && incoming.DueAtKnown
                 && incoming.DueAt is not null
-                && _confirmed?.State == incoming.State
+                && string.Equals(_confirmed?.State, incoming.State, StringComparison.Ordinal)
             )
             {
                 _dueAt = incoming.DueAt;
@@ -1187,7 +1003,9 @@ public sealed class ServerMachineController : IDisposable
         // it keeps the one held only while the instance stays in the state it was given for; in any other state a timed
         // state is read once for it.
         var sameState =
-            !otherIncarnation && _confirmed is not null && _confirmed.State == snapshot.State;
+            !otherIncarnation
+            && _confirmed is not null
+            && string.Equals(_confirmed.State, snapshot.State, StringComparison.Ordinal);
         var timed = _shape.TimedStates.Contains(snapshot.State);
         if (incoming.DueAtKnown)
             _dueAt = incoming.DueAt;
@@ -1199,7 +1017,7 @@ public sealed class ServerMachineController : IDisposable
         {
             _dueAt = null;
             if (timed && source != Source.Load)
-                Reload(null);
+                Reload(rowId: null);
         }
         _confirmed = snapshot;
         _rowId = rowId ?? _rowId;
@@ -1290,14 +1108,16 @@ public sealed class ServerMachineController : IDisposable
         try
         {
             answer = Answered(
-                await _server.EventAsync(
-                    request.Id,
-                    request.Trigger,
-                    request.Input?.DeepClone(),
-                    request.RequestId,
-                    request.ClientResult,
-                    _alive
-                )
+                await _server
+                    .EventAsync(
+                        request.Id,
+                        request.Trigger,
+                        request.Input?.DeepClone(),
+                        request.RequestId,
+                        request.ClientResult,
+                        _alive
+                    )
+                    .ConfigureAwait(false)
             );
         }
         catch (Exception ex)
@@ -1331,20 +1151,21 @@ public sealed class ServerMachineController : IDisposable
             return;
         }
 
-        if (problem.Code == ClientOutdated)
+        if (string.Equals(problem.Code, ClientOutdated, StringComparison.Ordinal))
         {
             Stop(new MachineError(ClientOutdated, problem.Message));
             return;
         }
-        if (problem.Code == ServerOutdated)
+        if (string.Equals(problem.Code, ServerOutdated, StringComparison.Ordinal))
         {
             if (attempt < _retryDelays.Count)
             {
                 await Later(
-                    attempt,
-                    () => DeliverAsync(entry, request, attempt + 1),
-                    () => Task.CompletedTask
-                );
+                        attempt,
+                        () => DeliverAsync(entry, request, attempt + 1),
+                        () => Task.CompletedTask
+                    )
+                    .ConfigureAwait(false);
                 return;
             }
             _lastFailed = request;
@@ -1352,12 +1173,12 @@ public sealed class ServerMachineController : IDisposable
             Finish(entry, new SendOutcome.Failed(_problem));
             return;
         }
-        if (problem.Code == ClientDivergence)
+        if (string.Equals(problem.Code, ClientDivergence, StringComparison.Ordinal))
         {
             // The predictor and the server disagree about this step: what the client holds cannot be trusted, and the
             // next event would be predicted from it too, so it waits for the read.
             _resyncing = true;
-            Reload(null);
+            Reload(rowId: null);
         }
         _problem = Refusal(problem.Code, problem.Message);
         Finish(entry, new SendOutcome.Refused(_problem));
@@ -1384,7 +1205,7 @@ public sealed class ServerMachineController : IDisposable
 
     private async Task<SyncOutcome> SyncAsync(long generation, SyncRequest request)
     {
-        var outcome = await SyncCoreAsync(generation, request);
+        var outcome = await SyncCoreAsync(generation, request).ConfigureAwait(false);
         // Only the newest sync says whether the page is saved; a superseded one leaves it to the one that took over.
         if (generation == _syncGeneration && !_disposed)
         {
@@ -1419,7 +1240,7 @@ public sealed class ServerMachineController : IDisposable
                     TaskCreationOptions.RunContinuationsAsynchronously
                 );
                 _syncWaiters.Add(waiter);
-                await waiter.Task;
+                await waiter.Task.ConfigureAwait(false);
             }
             if (generation != _syncGeneration)
                 return new SyncOutcome.Superseded();
@@ -1435,8 +1256,16 @@ public sealed class ServerMachineController : IDisposable
                 // At the target with only the fields event left, which rests on a rule this client cannot evaluate: the
                 // server applied it there when it confirmed it, and nothing has been confirmed since.
                 case PlanResult.Undetermined { Events.Count: 0 } undetermined
-                    when undetermined.Trigger == request.Fields?.Trigger
-                        && _confirmed!.State == request.Target
+                    when string.Equals(
+                        undetermined.Trigger,
+                        request.Fields?.Trigger,
+                        StringComparison.Ordinal
+                    )
+                        && string.Equals(
+                            _confirmed!.State,
+                            request.Target,
+                            StringComparison.Ordinal
+                        )
                         && fieldsAnswered.Set
                         && fieldsAnswered.Revision == _revision:
                     return new SyncOutcome.Synced(ConfirmedSnapshot());
@@ -1445,7 +1274,13 @@ public sealed class ServerMachineController : IDisposable
                     // fields event with the fields' input.
                     next =
                         undetermined.Events.Count > 0 ? undetermined.Events[0]
-                        : undetermined.Trigger == request.Fields?.Trigger ? request.Fields
+                        : request.Fields is { } fields
+                        && string.Equals(
+                            undetermined.Trigger,
+                            fields.Trigger,
+                            StringComparison.Ordinal
+                        )
+                            ? fields
                         : new PlannedEvent(undetermined.Trigger);
                     break;
                 case PlanResult.Invalid invalid:
@@ -1469,12 +1304,13 @@ public sealed class ServerMachineController : IDisposable
                 return new SyncOutcome.Exceeded();
             sent++;
 
-            var outcome = await Enqueue(new QueuedEvent(next.Trigger, next.Input?.DeepClone()));
+            var outcome = await Enqueue(new QueuedEvent(next.Trigger, next.Input?.DeepClone()))
+                .ConfigureAwait(false);
             if (generation != _syncGeneration)
                 return new SyncOutcome.Superseded();
             fieldsAnswered =
                 outcome is SendOutcome.Confirmed confirmed
-                && next.Trigger == request.Fields?.Trigger
+                && string.Equals(next.Trigger, request.Fields?.Trigger, StringComparison.Ordinal)
                     ? (confirmed.Snapshot.Revision, true)
                     : default;
             switch (outcome)
@@ -1486,8 +1322,14 @@ public sealed class ServerMachineController : IDisposable
                         return new SyncOutcome.Refused(refused.Problem);
                     reread = true;
                     // A divergence is read again already, and nothing is sent until it answers.
-                    if (refused.Problem.Code != ClientDivergence)
-                        Reload(null);
+                    if (
+                        !string.Equals(
+                            refused.Problem.Code,
+                            ClientDivergence,
+                            StringComparison.Ordinal
+                        )
+                    )
+                        Reload(rowId: null);
                     continue;
                 case SendOutcome.Refused refused:
                     return new SyncOutcome.Refused(refused.Problem);
@@ -1588,14 +1430,14 @@ public sealed class ServerMachineController : IDisposable
     {
         try
         {
-            await Task.Delay(delay, token);
+            await Task.Delay(delay, token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             return;
         }
         if (!_disposed && _error is null)
-            await next();
+            await next().ConfigureAwait(false);
     }
 
     // An answer with neither a snapshot nor a problem is not one: it fails as a transport failure would.

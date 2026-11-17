@@ -43,8 +43,8 @@ public class SnapshotWatchHubTests(StoreProvider provider)
     private async Task<(Guid Id, long RowId)> Saved()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, TestTurnstile.InitialJson);
-        return (id, await _host.RowId(id));
+        await _host.SeedDraft(User, id, TestTurnstile.InitialJson).ConfigureAwait(false);
+        return (id, await _host.RowId(id).ConfigureAwait(false));
     }
 
     private async Task Coin(Guid id)
@@ -54,6 +54,7 @@ public class SnapshotWatchHubTests(StoreProvider provider)
             await _host
                 .Service(scope, "turnstile")
                 .Advance(User, id, "Coin", new JsonObject { ["coin"] = "quarter" })
+                .ConfigureAwait(false)
         )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
@@ -62,7 +63,7 @@ public class SnapshotWatchHubTests(StoreProvider provider)
     private static async Task<SnapshotRowChange> Next(SnapshotWatch watch)
     {
         using var timeout = new CancellationTokenSource(Within);
-        return await watch.Changes.ReadAsync(timeout.Token);
+        return await watch.Changes.ReadAsync(timeout.Token).ConfigureAwait(false);
     }
 
     // Whether the watch ends within the bound, once whatever it still holds is read.
@@ -71,7 +72,8 @@ public class SnapshotWatchHubTests(StoreProvider provider)
         using var timeout = new CancellationTokenSource(Within);
         try
         {
-            await foreach (var _ in watch.Changes.ReadAllAsync(timeout.Token)) { }
+            await foreach (var _ in watch.Changes.ReadAllAsync(timeout.Token).ConfigureAwait(false))
+            { }
             return true;
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested)
@@ -84,7 +86,8 @@ public class SnapshotWatchHubTests(StoreProvider provider)
     public async Task The_first_change_is_the_row_as_it_is_and_each_write_follows()
     {
         var (id, rowId) = await Saved();
-        await using var watch = Hub.Watch(rowId);
+        var watch = Hub.Watch(rowId);
+        await using var watchDisposal = watch.ConfigureAwait(false);
 
         var first = await Next(watch);
         first.Kind.Should().Be(SnapshotRowChangeKind.Changed);
@@ -136,7 +139,8 @@ public class SnapshotWatchHubTests(StoreProvider provider)
         var (brokenId, broken) = await Saved();
         var (healthyId, healthy) = await Saved();
         var brokenWatch = Hub.Watch(broken);
-        await using var healthyWatch = Hub.Watch(healthy);
+        var healthyWatch = Hub.Watch(healthy);
+        await using var healthyWatchDisposal = healthyWatch.ConfigureAwait(false);
         (await Next(brokenWatch)).Revision.Should().Be(1);
         (await Next(healthyWatch)).Revision.Should().Be(1);
 
@@ -193,7 +197,8 @@ public class SnapshotWatchHubTests(StoreProvider provider)
     [Test]
     public async Task Watching_every_row_reports_writes_and_deletes()
     {
-        await using var all = Hub.WatchAll("turnstile");
+        var all = Hub.WatchAll("turnstile");
+        await using var allDisposal = all.ConfigureAwait(false);
         (await Next(all))
             .Kind.Should()
             .Be(SnapshotRowChangeKind.Reload, "a watch on every row starts by listing again");

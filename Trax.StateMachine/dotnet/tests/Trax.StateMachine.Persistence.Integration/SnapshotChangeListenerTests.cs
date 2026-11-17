@@ -65,7 +65,7 @@ public class SnapshotChangeListenerTests
         foreach (var hosted in _host.Services.GetServices<IHostedService>())
             if (hosted is ISnapshotChangeListener)
             {
-                await hosted.StartAsync(CancellationToken.None);
+                await hosted.StartAsync(CancellationToken.None).ConfigureAwait(false);
                 _started.Add(hosted);
             }
         _counting = _host.Services.GetRequiredService<CountingDataContextFactory>();
@@ -77,17 +77,17 @@ public class SnapshotChangeListenerTests
 
         // Every reader is told to reload first, once the listener is listening.
         foreach (var feed in started)
-            (await feed.HearsReload(HearWithin))
+            (await feed.HearsReload(HearWithin).ConfigureAwait(false))
                 .Should()
                 .BeTrue(
                     $"a reader's first change is a reload, sent once the listener listens. See {Adr}"
                 );
 
         // A write each reader hears proves the listener is subscribed before the test goes on.
-        var probe = await Seed();
-        await Touch(probe);
+        var probe = await Seed().ConfigureAwait(false);
+        await Touch(probe).ConfigureAwait(false);
         foreach (var feed in started)
-            (await feed.Hears(probe, HearWithin))
+            (await feed.Hears(probe, HearWithin).ConfigureAwait(false))
                 .Should()
                 .BeTrue("the listener hands on the row id of a committed write");
         return started;
@@ -109,48 +109,56 @@ public class SnapshotChangeListenerTests
                         State = "Locked",
                         Context = new JsonObject(),
                     }
-                );
-        return (await _host.Rows(id)).Single().RowId;
+                )
+                .ConfigureAwait(false);
+        return (await _host.Rows(id).ConfigureAwait(false)).Single().RowId;
     }
 
     // A committed write by raw SQL, on a connection of the test's own, so it reads nothing through the host.
     private static async Task Touch(long rowId)
     {
-        await using var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText =
             "UPDATE trax.snapshot_draft SET concurrency_token = gen_random_uuid() WHERE row_id = @row";
         command.Parameters.AddWithValue("@row", rowId);
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     private static async Task<List<(int Pid, string? State)>> ListenerSessions()
     {
-        await using var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText =
             "SELECT pid, state FROM pg_stat_activity "
             + "WHERE application_name = @name AND datname = current_database()";
         command.Parameters.AddWithValue("@name", ApplicationName);
         var sessions = new List<(int, string?)>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
+        while (await reader.ReadAsync().ConfigureAwait(false))
             sessions.Add((reader.GetInt32(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
         return sessions;
     }
 
     private static async Task<long> TerminateListenerSessions()
     {
-        await using var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText =
             "SELECT count(*) FROM (SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
             + "WHERE application_name = @name AND datname = current_database()) terminated";
         command.Parameters.AddWithValue("@name", ApplicationName);
-        return (long)(await command.ExecuteScalarAsync())!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
     }
 
     [Test]
@@ -181,7 +189,8 @@ public class SnapshotChangeListenerTests
         await Listen();
         var row = await Seed();
         var hub = _host.Services.GetRequiredService<SnapshotWatchHub>();
-        await using var watch = hub.Watch(row);
+        var watch = hub.Watch(row);
+        await using var watchDisposal = watch.ConfigureAwait(false);
         var first = await Next(watch);
         first.Kind.Should().Be(SnapshotRowChangeKind.Changed);
 
@@ -200,7 +209,7 @@ public class SnapshotChangeListenerTests
     private static async Task<SnapshotRowChange> Next(SnapshotWatch watch)
     {
         using var timeout = new CancellationTokenSource(HearWithin);
-        return await watch.Changes.ReadAsync(timeout.Token);
+        return await watch.Changes.ReadAsync(timeout.Token).ConfigureAwait(false);
     }
 
     [Test]
@@ -229,7 +238,10 @@ public class SnapshotChangeListenerTests
             .BeTrue("the insert's own notice is handed on");
         var before = _counting!.Count;
 
-        await SnapshotNotices.Notify(SnapshotNotices.Channel, unwatched.ToString());
+        await SnapshotNotices.Notify(
+            SnapshotNotices.Channel,
+            unwatched.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
         await Touch(marker);
         (await feed.Hears(marker, HearWithin)).Should().BeTrue();
 
@@ -249,8 +261,16 @@ public class SnapshotChangeListenerTests
         meters.InstrumentPublished = (instrument, listener) =>
         {
             if (
-                instrument.Meter.Name == StateMachineInstruments.MeterName
-                && instrument.Name == StateMachineInstruments.SnapshotNoticeMalformed
+                string.Equals(
+                    instrument.Meter.Name,
+                    StateMachineInstruments.MeterName,
+                    StringComparison.Ordinal
+                )
+                && string.Equals(
+                    instrument.Name,
+                    StateMachineInstruments.SnapshotNoticeMalformed,
+                    StringComparison.Ordinal
+                )
             )
                 listener.EnableMeasurementEvents(instrument);
         };
@@ -291,8 +311,16 @@ public class SnapshotChangeListenerTests
         meters.InstrumentPublished = (instrument, listener) =>
         {
             if (
-                instrument.Meter.Name == StateMachineInstruments.MeterName
-                && instrument.Name == StateMachineInstruments.NotificationQueueUsage
+                string.Equals(
+                    instrument.Meter.Name,
+                    StateMachineInstruments.MeterName,
+                    StringComparison.Ordinal
+                )
+                && string.Equals(
+                    instrument.Name,
+                    StateMachineInstruments.NotificationQueueUsage,
+                    StringComparison.Ordinal
+                )
             )
                 listener.EnableMeasurementEvents(instrument);
         };
@@ -332,14 +360,16 @@ public class SnapshotChangeListenerTests
             );
             flood = Task.Run(async () =>
             {
-                await using var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
-                await connection.OpenAsync();
-                await using var notify = connection.CreateCommand();
+                var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+                await using var connectionDisposal = connection.ConfigureAwait(false);
+                await connection.OpenAsync().ConfigureAwait(false);
+                var notify = connection.CreateCommand();
+                await using var notifyDisposal = notify.ConfigureAwait(false);
                 notify.CommandText =
                     $"SELECT pg_notify('{SnapshotNotices.Channel}', '999999999999')";
                 while (!stop.IsCancellationRequested)
                 {
-                    await notify.ExecuteNonQueryAsync();
+                    await notify.ExecuteNonQueryAsync().ConfigureAwait(false);
                     flooding.TrySetResult();
                 }
             });
@@ -363,20 +393,24 @@ public class SnapshotChangeListenerTests
 
     private static async Task<DateTime> DatabaseNow()
     {
-        await using var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = "SELECT clock_timestamp()";
-        return (DateTime)(await command.ExecuteScalarAsync())!;
+        return (DateTime)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
     }
 
     // When the listener's session last started reading the queue, once that is after since; null if it does not
     // within the bound.
     private static async Task<DateTime?> QueueReadAfter(DateTime since)
     {
-        await using var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText =
             "SELECT query_start FROM pg_stat_activity WHERE application_name = @name "
             + "AND datname = current_database() AND query = 'SELECT pg_notification_queue_usage()' "
@@ -386,10 +420,10 @@ public class SnapshotChangeListenerTests
         var deadline = DateTime.UtcNow + HearWithin;
         while (DateTime.UtcNow < deadline)
         {
-            if (await command.ExecuteScalarAsync() is DateTime started)
+            if (await command.ExecuteScalarAsync().ConfigureAwait(false) is DateTime started)
                 return started;
             // allowed-delay: polls pg_stat_activity until the session's next reading shows.
-            await Task.Delay(50);
+            await Task.Delay(50).ConfigureAwait(false);
         }
         return null;
     }
@@ -401,12 +435,17 @@ public class SnapshotChangeListenerTests
         var row = await Seed();
         var sentinel = await Seed();
         var hub = _host.Services.GetRequiredService<SnapshotWatchHub>();
-        await using var watch = hub.Watch(row);
+        var watch = hub.Watch(row);
+        await using var watchDisposal = watch.ConfigureAwait(false);
         (await Next(watch)).Revision.Should().Be(1);
-        await using var sentinelWatch = hub.Watch(sentinel);
+        var sentinelWatch = hub.Watch(sentinel);
+        await using var sentinelWatchDisposal = sentinelWatch.ConfigureAwait(false);
         (await Next(sentinelWatch)).Revision.Should().Be(1);
 
-        await SnapshotNotices.Notify(SnapshotNotices.Channel, row.ToString());
+        await SnapshotNotices.Notify(
+            SnapshotNotices.Channel,
+            row.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
         // Two later writes to another watched row, each read in a burst of its own after the forged one's.
         await Touch(sentinel);
         (await Next(sentinelWatch)).Revision.Should().Be(2);
@@ -442,7 +481,10 @@ public class SnapshotChangeListenerTests
             await entered.WaitAsync(HearWithin);
             await Touch(row);
             for (var i = 0; i < Notices; i++)
-                await SnapshotNotices.Notify(SnapshotNotices.Channel, row.ToString());
+                await SnapshotNotices.Notify(
+                    SnapshotNotices.Channel,
+                    row.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                );
             var marker = await Seed();
             await Touch(marker);
             (await feed.Hears(marker, HearWithin))
@@ -509,7 +551,8 @@ public class SnapshotChangeListenerTests
         var row = (await host.Rows(id)).Single().RowId;
 
         var hub = host.Services.GetRequiredService<SnapshotWatchHub>();
-        await using var watch = hub.Watch(row);
+        var watch = hub.Watch(row);
+        await using var watchDisposal = watch.ConfigureAwait(false);
         (await Next(watch)).Revision.Should().Be(1);
 
         // The baseline poll has read the row, so the write below is compared against revision 1.
@@ -575,7 +618,7 @@ public class SnapshotChangeListenerTests
             if (listener.LastPolled.Contains(rowId))
                 return true;
             // allowed-delay: polls the listener's last poll until it has read the row.
-            await Task.Delay(20);
+            await Task.Delay(20).ConfigureAwait(false);
         }
         return false;
     }
@@ -598,7 +641,9 @@ public class SnapshotChangeListenerTests
         {
             try
             {
-                await foreach (var change in listener.ChangesAsync(_stop.Token))
+                await foreach (
+                    var change in listener.ChangesAsync(_stop.Token).ConfigureAwait(false)
+                )
                     _heard.Writer.TryWrite(change);
             }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested)
@@ -624,7 +669,7 @@ public class SnapshotChangeListenerTests
             using var timeout = new CancellationTokenSource(within);
             try
             {
-                while (await _heard.Reader.WaitToReadAsync(timeout.Token))
+                while (await _heard.Reader.WaitToReadAsync(timeout.Token).ConfigureAwait(false))
                 while (_heard.Reader.TryRead(out var heard))
                     if (match(heard))
                         return true;
@@ -638,8 +683,8 @@ public class SnapshotChangeListenerTests
 
         public async ValueTask DisposeAsync()
         {
-            await _stop.CancelAsync();
-            await _loop;
+            await _stop.CancelAsync().ConfigureAwait(false);
+            await _loop.ConfigureAwait(false);
             _stop.Dispose();
         }
     }

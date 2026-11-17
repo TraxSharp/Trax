@@ -14,7 +14,7 @@ namespace Trax.StateMachine.Tests.Meta.Tests;
 /// </summary>
 [TestFixture]
 [Property("adr", "docs/adr/0004-the-machine-clients-share-one-surface-table.md")]
-public class ClientSurfaceTests
+public partial class ClientSurfaceTests
 {
     private const string Adr = "docs/adr/0004-the-machine-clients-share-one-surface-table.md";
 
@@ -35,11 +35,6 @@ public class ClientSurfaceTests
         "| --- | --- | --- | --- | --- |",
         "| Send | `A.send` | `B.SendAsync` | `C.send` | — not yet |",
     ];
-
-    private static readonly Regex Name = new(
-        @"^`([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)`$",
-        RegexOptions.CultureInvariant
-    );
 
     private static readonly Assembly[] ClientAssemblies =
     [
@@ -248,7 +243,7 @@ public class ClientSurfaceTests
                         "conformance/testees.json has a testee without a `language` string."
                     )
             )
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal);
 
         ReadTable()
@@ -260,7 +255,10 @@ public class ClientSurfaceTests
     private static Table ReadTable()
     {
         var path = Path.Combine(RepoRoot.Path, "..", "conformance", "client", "PROTOCOL.md");
-        return Parse(File.ReadAllText(path).Replace("\r\n", "\n").Split('\n'), CSharp);
+        return Parse(
+            File.ReadAllText(path).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'),
+            CSharp
+        );
     }
 
     // The two tables, read strictly: a header row whose first cell is `Type` or `Member` and whose other cells name
@@ -292,15 +290,16 @@ public class ClientSurfaceTests
                 i++;
                 continue;
             }
-            var headerCells = Cells(header, i + 1, null);
+            var headerCells = Cells(header, i + 1, count: null);
             var first = headerCells[0];
             var columns = headerCells[1..];
-            var isTypes = first == "Type";
+            var isTypes = string.Equals(first, "Type", StringComparison.Ordinal);
             if (
-                (!isTypes && first != "Member")
+                (!isTypes && !string.Equals(first, "Member", StringComparison.Ordinal))
                 || columns.Length == 0
                 || columns.Any(c => c.Length == 0)
-                || columns.Distinct(StringComparer.Ordinal).Count() != columns.Length
+                || columns.Distinct(StringComparer.Ordinal).Take(columns.Length + 1).Count()
+                    != columns.Length
             )
                 throw new AssertionException(
                     $"PROTOCOL.md:{i + 1}: a table this test does not know: {header}"
@@ -319,7 +318,10 @@ public class ClientSurfaceTests
                     $"PROTOCOL.md:{i + 1}: the {first} table has no {language} column: {header}"
                 );
             var separator = "|" + string.Concat(Enumerable.Repeat(" --- |", headerCells.Length));
-            if (i + 1 >= lines.Length || lines[i + 1] != separator)
+            if (
+                i + 1 >= lines.Length
+                || !string.Equals(lines[i + 1], separator, StringComparison.Ordinal)
+            )
                 throw new AssertionException($"PROTOCOL.md:{i + 2}: no separator row");
             i += 2;
 
@@ -384,7 +386,7 @@ public class ClientSurfaceTests
                 );
             return null;
         }
-        if (cell == "—")
+        if (string.Equals(cell, "—", StringComparison.Ordinal))
             throw new AssertionException($"PROTOCOL.md:{number}: a `—` gives its reason");
         var match = Name.Match(cell);
         return match.Success
@@ -397,7 +399,9 @@ public class ClientSurfaceTests
     private static Type? FindType(string name) =>
         ClientAssemblies
             .SelectMany(a => a.GetExportedTypes())
-            .SingleOrDefault(t => !t.IsNested && t.Name == name);
+            .SingleOrDefault(t =>
+                !t.IsNested && string.Equals(t.Name, name, StringComparison.Ordinal)
+            );
 
     // A type's public members as a caller names them: methods, properties, events and fields, instance and static, its
     // own and inherited ones (an interface's from the interfaces it extends), as the TypeScript check reads a type's;
@@ -417,17 +421,23 @@ public class ClientSurfaceTests
             .Concat(
                 type.IsInterface ? type.GetInterfaces().SelectMany(i => i.GetMembers(flags)) : []
             )
-            .Where(m => m.DeclaringType != typeof(object))
             .Where(m =>
-                m.MemberType
+                m.DeclaringType != typeof(object)
+                && m.MemberType
                     is MemberTypes.Method
                         or MemberTypes.Property
                         or MemberTypes.Event
                         or MemberTypes.Field
+                && m is not MethodInfo { IsSpecialName: true }
+                && !m.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false)
             )
-            .Where(m => m is not MethodInfo { IsSpecialName: true })
-            .Where(m => !m.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false))
             .Select(m => m.Name)
             .ToHashSet(StringComparer.Ordinal);
     }
+
+    [GeneratedRegex(
+        @"^`([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)`$",
+        RegexOptions.CultureInvariant
+    )]
+    private static partial Regex Name { get; }
 }

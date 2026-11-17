@@ -68,7 +68,11 @@ public static class CorpusReplay
             var wantWire = expect["wire"]?.GetValue<string>();
             var wantReason = expect["reason"]?.GetValue<string>();
 
-            if (outcome != wantOutcome || wire != wantWire || reason != wantReason)
+            if (
+                !string.Equals(outcome, wantOutcome, StringComparison.Ordinal)
+                || !string.Equals(wire, wantWire, StringComparison.Ordinal)
+                || !string.Equals(reason, wantReason, StringComparison.Ordinal)
+            )
             {
                 var payload = input is null ? "" : " " + input.ToJsonString();
                 diffs.Add(

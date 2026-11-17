@@ -5,10 +5,22 @@ type: reference
 area: machines
 nav_order: 23
 source:
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Invokes.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IInvokeBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/InvokeOutcomeKind.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/InvokeOutcome.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/OutcomeEdge.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/SpawnDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/InvokeDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/OutcomeTriggers.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokeOutcomeDelivery.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokeOutcomeReasons.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/EndedPage.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokedRunEnd.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokeDelivery.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokeOutcomeReconciler.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokeOutcomeHookFactory.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokedRunOutcomes.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IInvokedRunOutcomes.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokesStartupValidator.cs
   - Trax.Mediator/src/Trax.Mediator/Services/InvokedTrains/InvokedTrainLauncher.cs
 ---

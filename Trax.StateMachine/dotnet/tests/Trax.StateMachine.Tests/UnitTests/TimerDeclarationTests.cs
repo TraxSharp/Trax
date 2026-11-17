@@ -159,7 +159,7 @@ public class TimerDeclarationTests
     [Test]
     public void The_timed_state_is_locked()
     {
-        var service = ReminderMachine.AsMachine().CreateService(null!, null);
+        var service = ReminderMachine.AsMachine().CreateService(null!, claims: null);
 
         // The locked set is private to the draft service: it is what autosave may not leave or rewrite.
         var locked =
@@ -433,7 +433,13 @@ public class TimerDeclarationTests
         var file = Helpers.FixturePaths.IrFile("reminder");
         var exported = IrExporter.Export(ReminderMachine.Built);
 
-        if (Environment.GetEnvironmentVariable("UPDATE_IR") == "1")
+        if (
+            string.Equals(
+                Environment.GetEnvironmentVariable("UPDATE_IR"),
+                "1",
+                StringComparison.Ordinal
+            )
+        )
             File.WriteAllText(file, exported + "\n");
 
         File.ReadAllText(file)
@@ -463,7 +469,7 @@ public class TimerDeclarationTests
 
     [Test]
     public void Entering_a_timed_state_with_duration_null() =>
-        ShouldBeInvalidInput(EnterFetching(null));
+        ShouldBeInvalidInput(EnterFetching(patience: null));
 
     [Test]
     public void Entering_a_timed_state_with_duration_zero() =>

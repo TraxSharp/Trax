@@ -45,8 +45,16 @@ public class ClientDivergenceMeterTests
         listener.InstrumentPublished = (instrument, l) =>
         {
             if (
-                instrument.Meter.Name == StateMachineInstruments.MeterName
-                && instrument.Name == StateMachineInstruments.ClientDivergence
+                string.Equals(
+                    instrument.Meter.Name,
+                    StateMachineInstruments.MeterName,
+                    StringComparison.Ordinal
+                )
+                && string.Equals(
+                    instrument.Name,
+                    StateMachineInstruments.ClientDivergence,
+                    StringComparison.Ordinal
+                )
             )
                 l.EnableMeasurementEvents(instrument);
         };

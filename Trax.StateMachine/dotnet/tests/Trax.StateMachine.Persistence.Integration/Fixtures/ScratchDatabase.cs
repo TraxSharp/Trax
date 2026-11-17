@@ -32,34 +32,39 @@ internal sealed class ScratchDatabase : IAsyncDisposable
         var scratch = new ScratchDatabase(
             $"trax_sm_scratch_{Environment.ProcessId}_{Guid.NewGuid():N}"[..48]
         );
-        await Admin($"CREATE DATABASE {scratch.Name}");
-        await DatabaseMigrator.Migrate(scratch.ConnectionString);
+        await Admin($"CREATE DATABASE {scratch.Name}").ConfigureAwait(false);
+        await DatabaseMigrator.Migrate(scratch.ConnectionString).ConfigureAwait(false);
         return scratch;
     }
 
     /// <summary>Runs <paramref name="sql"/> on a new session of the database.</summary>
     public async Task Execute(string sql)
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand(sql, connection);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
         // A database setting reaches new sessions only, so no pooled one may outlive the change.
         NpgsqlConnection.ClearPool(connection);
     }
 
     public async ValueTask DisposeAsync()
     {
-        await using (var connection = new NpgsqlConnection(ConnectionString))
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using (connection.ConfigureAwait(false))
             NpgsqlConnection.ClearPool(connection);
-        await Admin($"DROP DATABASE IF EXISTS {Name} WITH (FORCE)");
+        await Admin($"DROP DATABASE IF EXISTS {Name} WITH (FORCE)").ConfigureAwait(false);
     }
 
     private static async Task Admin(string sql)
     {
-        await using var admin = new NpgsqlConnection(Maintenance);
-        await admin.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, admin);
-        await command.ExecuteNonQueryAsync();
+        var admin = new NpgsqlConnection(Maintenance);
+        await using var adminDisposal = admin.ConfigureAwait(false);
+        await admin.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand(sql, admin);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 }

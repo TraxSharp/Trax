@@ -148,7 +148,7 @@ public class ServeFeaturesTests
             FeatureGlossary.Read(glossary),
             [new FeatureFile("machines.feature", feature)]
         );
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         foreach (var (id, ir) in derived.Irs)
             File.WriteAllText(Path.Combine(dir, id + ".ir.json"), ir);
         File.WriteAllText(Path.Combine(dir, "host.json"), derived.Host);
@@ -182,7 +182,11 @@ public class ServeFeaturesTests
         File.WriteAllText(
             ir,
             File.ReadAllText(ir)
-                .Replace("\"committedStates\":[]", "\"committedStates\":[\"Placed\"]")
+                .Replace(
+                    "\"committedStates\":[]",
+                    "\"committedStates\":[\"Placed\"]",
+                    StringComparison.Ordinal
+                )
         );
         var services = new ServiceCollection();
 
@@ -285,7 +289,7 @@ public class ServeFeaturesTests
     [Test]
     public void ServeFeatures_names_the_output_range_a_train_needs()
     {
-        var dir = Write(Scoring.Replace("{range}", ""), Tallying);
+        var dir = Write(Scoring.Replace("{range}", "", StringComparison.Ordinal), Tallying);
         try
         {
             var services = new ServiceCollection();
@@ -323,7 +327,11 @@ public class ServeFeaturesTests
     public void ServeFeatures_serves_a_train_output_whose_range_the_glossary_gives()
     {
         var dir = Write(
-            Scoring.Replace("{range}", ", \"minimum\": -2147483648, \"maximum\": 2147483647"),
+            Scoring.Replace(
+                "{range}",
+                ", \"minimum\": -2147483648, \"maximum\": 2147483647",
+                StringComparison.Ordinal
+            ),
             Tallying
         );
         try
@@ -354,12 +362,3 @@ public class ServeFeaturesTests
         options.Invoking(o => o.ServeFeatures(_dir)).Should().Throw<InvalidOperationException>();
     }
 }
-
-/// <summary>The input of the train the tally's Scoring state invokes.</summary>
-public sealed record ScoreTallyInput;
-
-/// <summary>Its output: an integer per name, so the glossary's values need an int's range.</summary>
-public sealed record ScoreTallyOutput(Dictionary<string, int> Totals);
-
-/// <summary>The train, named by its interface; registering the machine never runs it.</summary>
-public interface IScoreTallyTrain : IServiceTrain<ScoreTallyInput, ScoreTallyOutput>;

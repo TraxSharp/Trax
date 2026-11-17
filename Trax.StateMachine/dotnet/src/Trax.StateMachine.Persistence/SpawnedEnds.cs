@@ -24,12 +24,14 @@ internal static class SpawnedEnds
         CancellationToken cancellationToken
     )
     {
-        await using var scope = scopes.CreateAsyncScope();
+        var scope = scopes.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         try
         {
             await scope
                 .ServiceProvider.GetRequiredService<InvokeOutcomeDelivery>()
-                .DeliverEndOf(owner, machine, id, cancellationToken);
+                .DeliverEndOf(owner, machine, id, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

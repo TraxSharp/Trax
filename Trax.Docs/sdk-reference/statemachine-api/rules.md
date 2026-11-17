@@ -10,6 +10,8 @@ package: Trax.StateMachine
 namespace: Trax.StateMachine
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/Rules.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/FieldMatcher.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/SetBuilder.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/MemberPath.cs
 ---
 

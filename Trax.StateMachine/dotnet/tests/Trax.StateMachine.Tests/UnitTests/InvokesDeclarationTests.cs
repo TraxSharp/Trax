@@ -464,7 +464,7 @@ public class InvokesDeclarationTests
     {
         var idle = At(IngestState.Idle, new JsonObject { ["source"] = "s" });
 
-        var result = IngestMachine.Machine.AdvanceOutcome(idle, "Fetching.done", null);
+        var result = IngestMachine.Machine.AdvanceOutcome(idle, "Fetching.done", input: null);
 
         result
             .Should()
@@ -552,7 +552,7 @@ public class InvokesDeclarationTests
                 "the twin never starts a train, so the IR shipped to the browser does not name the server's "
                     + "train interface"
             );
-        var edges = done["edges"]!.AsArray().Select(e => (JsonObject)e!).ToList();
+        var edges = done["edges"]!.AsArray().Cast<JsonObject>().ToList();
         edges.Select(e => e["to"]!.GetValue<string>()).Should().Equal("NeedsReview", "Fetched");
         edges[0]["guard"]!["rule"]!.GetValue<string>().Should().Be("boolEquals");
         edges[0]["guard"]!["source"]!.GetValue<string>().Should().Be("input");
@@ -599,7 +599,13 @@ public class InvokesDeclarationTests
         var file = FixturePaths.IrFile("ingest");
         var exported = IrExporter.Export(IngestMachine.Built);
 
-        if (Environment.GetEnvironmentVariable("UPDATE_IR") == "1")
+        if (
+            string.Equals(
+                Environment.GetEnvironmentVariable("UPDATE_IR"),
+                "1",
+                StringComparison.Ordinal
+            )
+        )
             File.WriteAllText(file, exported + "\n");
 
         File.ReadAllText(file)

@@ -134,16 +134,22 @@ public class EffectBindingTests(StoreProvider provider)
         var host = new HostMachine(
             "feature-checkout",
             IrMachines.Hash(ir),
-            null,
+            SystemKey: null,
             AccessRule.AnyAuthenticated,
             AccessRule.AnyAuthenticated,
-            new Dictionary<string, TriggerAccess>(),
-            new Dictionary<string, HostInvoke>()
+            new Dictionary<string, TriggerAccess>(StringComparer.Ordinal),
+            new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
         )
         {
-            Effects = new Dictionary<string, string> { ["Pay"] = typeof(CountingCharge).FullName! },
-            Rules = new Dictionary<string, string> { ["priced"] = typeof(TotalIsPriced).FullName! },
-            Reductions = new Dictionary<string, string>
+            Effects = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Pay"] = typeof(CountingCharge).FullName!,
+            },
+            Rules = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["priced"] = typeof(TotalIsPriced).FullName!,
+            },
+            Reductions = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["add-item"] = typeof(AddPricedItem).FullName!,
             },

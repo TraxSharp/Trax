@@ -23,7 +23,7 @@ public class DeclarativeTurnstileTests
             .Should()
             .BeEmpty(
                 "a declaratively-authored turnstile must reproduce the corpus exactly:\n"
-                    + string.Join("\n", diffs)
+                    + string.Join('\n', diffs)
             );
     }
 

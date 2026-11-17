@@ -321,7 +321,7 @@ public class TransportTests
         )
         {
             // determinism: not a fixed delay, a wait only the request's cancellation ends.
-            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException("unreachable");
         }
     }
@@ -527,9 +527,9 @@ public class TransportTests
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         var host = Task.Run(async () =>
         {
-            using var tcp = await listener.AcceptTcpClientAsync();
+            using var tcp = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
             var stream = tcp.GetStream();
-            await HandshakeAsync(stream);
+            await HandshakeAsync(stream).ConfigureAwait(false);
             using var socket = WebSocket.CreateFromStream(
                 stream,
                 new WebSocketCreationOptions
@@ -539,38 +539,43 @@ public class TransportTests
                 }
             );
             var buffer = new byte[4096];
-            await socket.ReceiveAsync(buffer, CancellationToken.None);
-            await socket.SendAsync(
-                Encoding.UTF8.GetBytes("{\"type\":\"connection_ack\"}"),
-                WebSocketMessageType.Text,
-                true,
-                CancellationToken.None
-            );
+            await socket.ReceiveAsync(buffer, CancellationToken.None).ConfigureAwait(false);
+            await socket
+                .SendAsync(
+                    Encoding.UTF8.GetBytes("{\"type\":\"connection_ack\"}"),
+                    WebSocketMessageType.Text,
+                    endOfMessage: true,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
             var large = Encoding.UTF8.GetBytes(
                 "{\"type\":\"ping\",\"payload\":\"" + new string('x', 64 * 1024) + "\"}"
             );
             try
             {
-                await socket.SendAsync(
-                    large,
-                    WebSocketMessageType.Text,
-                    true,
-                    CancellationToken.None
-                );
-                await socket.ReceiveAsync(buffer, CancellationToken.None);
+                await socket
+                    .SendAsync(
+                        large,
+                        WebSocketMessageType.Text,
+                        endOfMessage: true,
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
+                await socket.ReceiveAsync(buffer, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception)
             {
                 // The client gave up on the connection.
             }
         });
-        await using var client = new GraphQLSubscriptionSocket(
+        var client = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions
             {
                 Endpoint = new Uri($"ws://127.0.0.1:{port}/graphql"),
                 MaxMessageSize = 1024,
             }
         );
+        await using var clientDisposal = client.ConfigureAwait(false);
         var sink = new Sink();
 
         using var subscription = client.Subscribe(
@@ -590,7 +595,7 @@ public class TransportTests
         var one = new byte[1];
         while (!request.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal))
         {
-            if (await stream.ReadAsync(one) == 0)
+            if (await stream.ReadAsync(one).ConfigureAwait(false) == 0)
                 throw new IOException("The client closed before its handshake ended.");
             request.Append((char)one[0]);
         }
@@ -606,6 +611,6 @@ public class TransportTests
         var response =
             "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
             + $"Sec-WebSocket-Accept: {accept}\r\nSec-WebSocket-Protocol: graphql-transport-ws\r\n\r\n";
-        await stream.WriteAsync(Encoding.ASCII.GetBytes(response));
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(response)).ConfigureAwait(false);
     }
 }

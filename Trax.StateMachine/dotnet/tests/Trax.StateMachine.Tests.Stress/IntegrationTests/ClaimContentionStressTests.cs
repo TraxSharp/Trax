@@ -14,8 +14,9 @@ public class ClaimContentionStressTests : StressFixture
 {
     private static async Task<ClaimResult> Claim(string key, TimeSpan lease)
     {
-        await using var ctx = StressDb.NewContext();
-        return await StressDb.NewClaims(ctx).TryClaim(key, lease);
+        var ctx = StressDb.NewContext();
+        await using var ctxDisposal = ctx.ConfigureAwait(false);
+        return await StressDb.NewClaims(ctx).TryClaim(key, lease).ConfigureAwait(false);
     }
 
     [Test]
@@ -56,7 +57,7 @@ public class ClaimContentionStressTests : StressFixture
             StressProfile.MaxConcurrency,
             async i =>
             {
-                (await Claim($"reclaim:{run}:{i}", TimeSpan.FromSeconds(-10)))
+                (await Claim($"reclaim:{run}:{i}", TimeSpan.FromSeconds(-10)).ConfigureAwait(false))
                     .Should()
                     .BeOfType<ClaimResult.Won>();
                 return 0;

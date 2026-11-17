@@ -7,13 +7,8 @@ namespace Trax.StateMachine.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0006-tests-synchronise-on-a-signal.md")]
 [TestFixture]
-public class NoFixedTaskDelayTests
+public partial class NoFixedTaskDelayTests
 {
-    private static readonly Regex DelayCall = new(
-        @"\b(Task\.Delay|Thread\.Sleep)\s*\(",
-        RegexOptions.Compiled
-    );
-
     private static readonly Regex Justification = new(
         @"(?i)(determinism:|allowed-delay:|measuring-interval:|negative-wait:)",
         RegexOptions.Compiled
@@ -46,9 +41,11 @@ public class NoFixedTaskDelayTests
                 continue;
 
             var raw = File.ReadAllText(file);
-            var lines = raw.Replace("\r\n", "\n").Split('\n');
+            var lines = raw.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
             var stripped = SourceText.StripCommentsAndStrings(raw);
-            var strippedLines = stripped.Replace("\r\n", "\n").Split('\n');
+            var strippedLines = stripped
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n');
 
             var rel = RepoRoot.Relative(file).Replace('\\', '/');
             var count = 0;
@@ -113,4 +110,7 @@ public class NoFixedTaskDelayTests
         }
         return false;
     }
+
+    [GeneratedRegex(@"\b(Task\.Delay|Thread\.Sleep)\s*\(", RegexOptions.Compiled)]
+    private static partial Regex DelayCall { get; }
 }

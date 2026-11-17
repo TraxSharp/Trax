@@ -67,7 +67,8 @@ internal static class MachineFiles
                     );
                 foreach (
                     var from in invoke.Input.Values.Where(f =>
-                        f != HostInvoke.Owner && !names.Fields.Contains(f)
+                        !string.Equals(f, HostInvoke.Owner, StringComparison.Ordinal)
+                        && !names.Fields.Contains(f)
                     )
                 )
                     problems.Add(
@@ -75,7 +76,7 @@ internal static class MachineFiles
                     );
                 // $owner is the server's value; a context field under that name would be one a client writes.
                 if (
-                    invoke.Input.Values.Contains(HostInvoke.Owner)
+                    invoke.Input.Values.Contains(HostInvoke.Owner, StringComparer.Ordinal)
                     && names.Fields.Contains(HostInvoke.Owner)
                 )
                     problems.Add(
@@ -101,11 +102,17 @@ internal static class MachineFiles
                 problems.Add(
                     $"{at} fires '{policy.Trigger}', which is not one of '{policy.Target}''s triggers."
                 );
-            if (policy.Shape == "broadcast" && !target.States.Contains(policy.By))
+            if (
+                string.Equals(policy.Shape, "broadcast", StringComparison.Ordinal)
+                && !target.States.Contains(policy.By)
+            )
                 problems.Add(
                     $"{at} reaches '{policy.Target}' in '{policy.By}', which is not one of its states."
                 );
-            if (policy.Shape == "linked" && !target.Fields.Contains(policy.By))
+            if (
+                string.Equals(policy.Shape, "linked", StringComparison.Ordinal)
+                && !target.Fields.Contains(policy.By)
+            )
                 problems.Add(
                     $"{at} links by '{policy.By}', which no context of '{policy.Target}' has."
                 );
@@ -150,7 +157,7 @@ internal static class MachineFiles
         var rules = new SortedSet<string>(StringComparer.Ordinal);
         var reductions = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var (key, value) in ir)
-            if (key != "differential")
+            if (!string.Equals(key, "differential", StringComparison.Ordinal))
                 Glossary.CustomNames(value, rules, reductions);
         Pair(problems, $"'{id}' names the custom rule", "rule", rules, machine.Rules.Keys);
         Pair(
@@ -188,9 +195,9 @@ internal static class MachineFiles
     )
     {
         var have = given.ToHashSet(StringComparer.Ordinal);
-        foreach (var name in needed.Order(StringComparer.Ordinal).Where(n => !have.Contains(n)))
+        foreach (var name in needed.Where(n => !have.Contains(n)).Order(StringComparer.Ordinal))
             problems.Add($"{what} '{name}', and {HostFileName} names no {kind} type for it.");
-        foreach (var name in have.Order(StringComparer.Ordinal).Where(n => !needed.Contains(n)))
+        foreach (var name in have.Where(n => !needed.Contains(n)).Order(StringComparer.Ordinal))
             problems.Add(
                 $"{HostFileName} names a {kind} type for '{name}', which {what.Split(' ')[0]}'s IR does not have."
             );
@@ -198,7 +205,7 @@ internal static class MachineFiles
 
     /// <summary>Why an IR is not the one its host entry was derived from, or null when it is.</summary>
     internal static string? Mismatch(HostFile host, string id, JsonObject ir) =>
-        host.Machines[id].SchemaHash == Hash(ir)
+        string.Equals(host.Machines[id].SchemaHash, Hash(ir), StringComparison.Ordinal)
             ? null
             : $"{HostFileName} was derived from another IR of '{id}'. Derive them again together.";
 

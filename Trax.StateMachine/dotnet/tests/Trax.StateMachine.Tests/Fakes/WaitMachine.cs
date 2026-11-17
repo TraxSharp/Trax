@@ -3,22 +3,6 @@ using Ingest.Contracts;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
-public enum WaitState
-{
-    Idle,
-    Fetching,
-    Fetched,
-    FetchFailed,
-    Cancelled,
-    TimedOut,
-}
-
-public enum WaitTrigger
-{
-    Start,
-    Retry,
-}
-
 /// <summary>
 /// A timed invoking state: <c>Idle -(Start)-> Fetching</c>, where Fetching invokes <see cref="IFetchTrain"/> and
 /// leaves for TimedOut once it has been held for the duration in the context's <c>patience</c> field, bounded by

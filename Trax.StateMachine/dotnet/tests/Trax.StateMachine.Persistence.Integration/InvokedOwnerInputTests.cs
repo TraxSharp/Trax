@@ -37,22 +37,22 @@ public class InvokedOwnerInputTests(StoreProvider provider)
                         Convert.ToHexStringLower(
                             SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalJson.Serialize(ir)))
                         ),
-                        null,
+                        SystemKey: null,
                         AccessRule.AnyAuthenticated,
                         AccessRule.AnyAuthenticated,
-                        new Dictionary<string, TriggerAccess>
+                        new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
                         {
                             ["Start"] = anyone,
                             ["Retry"] = anyone,
                             ["Abandon"] = anyone,
                             ["Approve"] = anyone,
                         },
-                        new Dictionary<string, HostInvoke>
+                        new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
                         {
                             ["Fetching"] = new(
                                 "Fetching",
                                 typeof(IBorrowFromIrTrain).FullName!,
-                                new Dictionary<string, string>
+                                new Dictionary<string, string>(StringComparer.Ordinal)
                                 {
                                     ["source"] = "source",
                                     ["memberId"] = HostInvoke.Owner,
@@ -164,9 +164,3 @@ public class InvokedOwnerInputTests(StoreProvider provider)
         throw new FileNotFoundException($"conformance/machines/{name}/{name}.ir.json");
     }
 }
-
-/// <summary>A train whose subject is its input: the member the machine's owner is.</summary>
-public sealed record BorrowFromIrInput(string Source, string MemberId);
-
-/// <summary>The train, named by its interface; the recording launcher never runs it.</summary>
-public interface IBorrowFromIrTrain : IServiceTrain<BorrowFromIrInput, FetchFromIrOutput>;

@@ -9,9 +9,22 @@ nav_order: 6
 package: Trax.StateMachine
 namespace: Trax.StateMachine
 source:
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Fluent.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/EffectBinding.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/BuiltMachine.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IIrStateBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IIrMachineBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IIrTransitionBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IMachineBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IStartBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IReadRuleBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ITimerBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IDifferentialBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IStateBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ITransitionBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/MachineBuilder.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/SnapshotMachine.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/MachineDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/MigrationResult.cs
 ---
 
 # Migrations

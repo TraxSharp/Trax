@@ -80,12 +80,12 @@ public class InvokedTrainBoardTests
             glossary,
             [new FeatureFile("paying.feature", Ordering)]
         );
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
 
         var board = FeatureMachines.Board(derived.Irs, derived.Host!);
 
         board
-            .Stickies.Where(s => s.Kind == "event")
+            .Stickies.Where(s => string.Equals(s.Kind, "event", StringComparison.Ordinal))
             .Select(s => s.Label)
             .Should()
             .Contain(["Paying done → Placed", "Paying done → Declined", "Paying failed → Unpaid"]);
@@ -96,13 +96,14 @@ public class InvokedTrainBoardTests
     {
         var glossary = Glossary.Replace(
             "\"train\": \"Shop.ITakePayment\",",
-            "\"train\": \"Shop.ITakePayment\", \"input\": { \"customerId\": \"$owner\" },"
+            "\"train\": \"Shop.ITakePayment\", \"input\": { \"customerId\": \"$owner\" },",
+            StringComparison.Ordinal
         );
         var derived = FeatureMachines.Derive(
             FeatureGlossary.Read(glossary),
             [new FeatureFile("paying.feature", Ordering)]
         );
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
 
         JsonNode.Parse(derived.Host!)!["machines"]!["order"]!["invokes"]!["Paying"]!["input"]!
             .ToJsonString()
@@ -130,7 +131,11 @@ public class InvokedTrainBoardTests
             [
                 new FeatureFile(
                     "paying.feature",
-                    Ordering.Replace("Then Ada's order is unpaid", "Then Ada's order is a draft")
+                    Ordering.Replace(
+                        "Then Ada's order is unpaid",
+                        "Then Ada's order is a draft",
+                        StringComparison.Ordinal
+                    )
                 ),
             ]
         );

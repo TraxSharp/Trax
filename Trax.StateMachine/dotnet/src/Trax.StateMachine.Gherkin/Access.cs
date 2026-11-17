@@ -61,7 +61,12 @@ internal sealed class Access
             {
                 // Start is granted to the owning actors whose people the features show starting one.
                 var starters = owners
-                    .Where(a => starts.Any(s => s.Machine == machine.Id && s.Actor == a.Name))
+                    .Where(a =>
+                        starts.Exists(s =>
+                            string.Equals(s.Machine, machine.Id, StringComparison.Ordinal)
+                            && string.Equals(s.Actor, a.Name, StringComparison.Ordinal)
+                        )
+                    )
                     .ToList();
                 if (starters.Count > 0)
                 {
@@ -79,7 +84,10 @@ internal sealed class Access
             foreach (var trigger in machine.Triggers.Keys.Order(StringComparer.Ordinal))
             {
                 var fired = observations
-                    .Where(x => x.Machine == machine.Id && x.Trigger == trigger)
+                    .Where(x =>
+                        string.Equals(x.Machine, machine.Id, StringComparison.Ordinal)
+                        && string.Equals(x.Trigger, trigger, StringComparison.Ordinal)
+                    )
                     .ToList();
                 var byPerson = fired.Where(x => x.Person is not null).ToList();
                 var byServer = fired.Where(x => x.Person is null).ToList();
@@ -102,11 +110,22 @@ internal sealed class Access
 
                 // Each trigger is granted the owning actors shown firing it, and only them.
                 var granted =
-                    owners?.Where(a => allowed.Any(x => x.Actor == a.Name)).ToList() ?? [];
-                var clash = denied.FirstOrDefault(d => granted.Any(a => a.Name == d.Actor));
+                    owners
+                        ?.Where(a =>
+                            allowed.Exists(x =>
+                                string.Equals(x.Actor, a.Name, StringComparison.Ordinal)
+                            )
+                        )
+                        .ToList()
+                    ?? [];
+                var clash = denied.FirstOrDefault(d =>
+                    granted.Exists(a => string.Equals(a.Name, d.Actor, StringComparison.Ordinal))
+                );
                 if (clash is not null)
                 {
-                    var also = allowed.First(x => x.Actor == clash.Actor);
+                    var also = allowed.First(x =>
+                        string.Equals(x.Actor, clash.Actor, StringComparison.Ordinal)
+                    );
                     problems.Add(
                         new Problem(
                             clash.Scenario.File,
@@ -142,9 +161,21 @@ internal sealed class Access
                     if (!rule.ContainsKey("anyAuthenticated"))
                         foreach (var edge in irs[machine.Id]["transitions"]!.AsArray())
                             if (
-                                edge!["trigger"]!.GetValue<string>() == trigger
-                                && edge["to"]!.GetValue<string>() == machine.Initial
-                                && edge["from"]!.GetValue<string>() != machine.Initial
+                                string.Equals(
+                                    edge!["trigger"]!.GetValue<string>(),
+                                    trigger,
+                                    StringComparison.Ordinal
+                                )
+                                && string.Equals(
+                                    edge["to"]!.GetValue<string>(),
+                                    machine.Initial,
+                                    StringComparison.Ordinal
+                                )
+                                && !string.Equals(
+                                    edge["from"]!.GetValue<string>(),
+                                    machine.Initial,
+                                    StringComparison.Ordinal
+                                )
                             )
                                 problems.Add(
                                     new Problem(
@@ -172,7 +203,7 @@ internal sealed class Access
         foreach (
             var group in walks
                 .SelectMany(w => w.Views)
-                .GroupBy(v => v.View)
+                .GroupBy(v => v.View, StringComparer.Ordinal)
                 .OrderBy(g => g.Key, StringComparer.Ordinal)
         )
         {
@@ -196,10 +227,10 @@ internal sealed class Access
             }
             var readers = group
                 .Select(v => glossary.Actors[v.Actor])
-                .DistinctBy(a => a.Name)
+                .DistinctBy(a => a.Name, StringComparer.Ordinal)
                 .OrderBy(a => a.Name, StringComparer.Ordinal)
                 .ToList();
-            var rule = readers.Any(a => a.AnyAuthenticated)
+            var rule = readers.Exists(a => a.AnyAuthenticated)
                 ? new JsonObject { ["anyAuthenticated"] = true }
                 : new JsonObject
                 {
@@ -207,7 +238,7 @@ internal sealed class Access
                         new JsonArray(
                             readers
                                 .SelectMany(a => a.Roles)
-                                .Distinct()
+                                .Distinct(StringComparer.Ordinal)
                                 .Order(StringComparer.Ordinal)
                                 .Select(r => (JsonNode?)r)
                                 .ToArray()
@@ -243,7 +274,11 @@ internal sealed class Access
                 ["readers"] = rule,
             };
             var others = glossary
-                .Actors.Values.Where(a => readers.All(r => r.Name != a.Name) && Admits(rule, a))
+                .Actors.Values.Where(a =>
+                    readers.TrueForAll(r =>
+                        !string.Equals(r.Name, a.Name, StringComparison.Ordinal)
+                    ) && Admits(rule, a)
+                )
                 .Select(a => $"{a.Name} (no scenario)");
             lines.Add(
                 $"view {group.Key}: {string.Join(", ", readers.Select(r => r.Name).Concat(others.Order(StringComparer.Ordinal)))}"
@@ -309,82 +344,4 @@ internal sealed class Access
                 .Intersect(actor.Roles, StringComparer.Ordinal)
                 .Any()
         );
-}
-
-/// <summary>
-/// The rules each timer acts under, written into the IR as the exporter writes them (<c>BuiltMachine.TimerRules</c>):
-/// the rules of everything that enters the timed state, widened through timers and invoked trains' outcomes until
-/// nothing changes. A host serving the IR rebuilds the machine and refuses it if these differ from its access.
-/// </summary>
-internal static class TimerRules
-{
-    internal static void Fill(JsonObject ir, JsonObject access)
-    {
-        if (ir["timers"] is not JsonArray timers || timers.Count == 0)
-            return;
-        var entered = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
-        SortedSet<string> Of(string state) =>
-            entered.TryGetValue(state, out var set)
-                ? set
-                : entered[state] = new SortedSet<string>(StringComparer.Ordinal);
-
-        foreach (var edge in ir["transitions"]!.AsArray())
-            Of(edge!["to"]!.GetValue<string>())
-                .Add(Text(access["triggers"]?[edge["trigger"]!.GetValue<string>()]));
-        if (access["start"] is { } start)
-            Of(ir["initialState"]!.GetValue<string>()).Add(Text(start));
-
-        var server = timers
-            .Select(t =>
-                (From: t!["state"]!.GetValue<string>(), To: t["target"]!.GetValue<string>())
-            )
-            .Concat(
-                (ir["outcomes"] as JsonObject ?? []).SelectMany(o =>
-                    o.Value!["edges"]!
-                        .AsArray()
-                        .Select(e =>
-                            (
-                                From: o.Value["state"]!.GetValue<string>(),
-                                To: e!["to"]!.GetValue<string>()
-                            )
-                        )
-                )
-            )
-            .ToList();
-        bool changed;
-        do
-        {
-            changed = false;
-            foreach (var (from, to) in server)
-                if (entered.TryGetValue(from, out var source))
-                    foreach (var rule in source.ToList())
-                        changed |= Of(to).Add(rule);
-        } while (changed);
-
-        foreach (var timer in timers)
-        {
-            var state = timer!["state"]!.GetValue<string>();
-            timer["rules"] = new JsonArray(
-                (entered.TryGetValue(state, out var rules) ? rules : [])
-                    .Select(r => (JsonNode?)r)
-                    .ToArray()
-            );
-        }
-    }
-
-    // A rule as the census writes it: Requires(x), Requires(one of a, b), AnyAuthenticated, or undeclared.
-    private static string Text(JsonNode? rule) =>
-        rule switch
-        {
-            JsonObject r when r.ContainsKey("anyAuthenticated") => "AnyAuthenticated",
-            JsonObject r when r["roles"] is JsonArray sets => string.Join(
-                " and ",
-                sets.Select(set =>
-                    set!.AsArray() is { Count: 1 } one
-                        ? $"Requires({one[0]})"
-                        : $"Requires(one of {string.Join(", ", set.AsArray().Select(x => x!.GetValue<string>()))})"
-                )
-            ),
-            _ => "undeclared",
-        };
 }

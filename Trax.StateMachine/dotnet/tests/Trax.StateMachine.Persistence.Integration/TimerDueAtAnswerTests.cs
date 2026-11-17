@@ -38,7 +38,7 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
 
     private async Task<DateTimeOffset?> RowDueAt(Guid id) =>
         (
-            await RawSql.Timer(_host, id)
+            await RawSql.Timer(_host, id).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"No row holds the id {id}.")
         ).DueAt;
 
@@ -63,7 +63,7 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
             started = (
                 await _host
                     .Service(scope, ExpiringMachine.Id)
-                    .Start(new Actor.Client(User), null, "start-due")
+                    .Start(new Actor.Client(User), input: null, "start-due")
             )
                 .Should()
                 .BeOfType<StartOutcome.Started>()
@@ -76,7 +76,7 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
             (
                 await _host
                     .Service(scope, ExpiringMachine.Id)
-                    .Start(new Actor.Client(User), null, "start-due")
+                    .Start(new Actor.Client(User), input: null, "start-due")
             )
                 .Should()
                 .BeOfType<StartOutcome.Started>()
@@ -206,7 +206,8 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
         var id = Guid.NewGuid();
         await _host.SeedDraft(User, id, ReminderMachine.Json("Idle"));
         var hub = _host.Services.GetRequiredService<SnapshotWatchHub>();
-        await using var watch = hub.Watch(await _host.RowId(id));
+        var watch = hub.Watch(await _host.RowId(id));
+        await using var watchDisposal = watch.ConfigureAwait(false);
 
         var first = await Next(watch);
         first.DueAt.Should().BeNull("Idle has no timer");
@@ -228,6 +229,6 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
     private static async Task<SnapshotRowChange> Next(SnapshotWatch watch)
     {
         using var timeout = new CancellationTokenSource(Within);
-        return await watch.Changes.ReadAsync(timeout.Token);
+        return await watch.Changes.ReadAsync(timeout.Token).ConfigureAwait(false);
     }
 }

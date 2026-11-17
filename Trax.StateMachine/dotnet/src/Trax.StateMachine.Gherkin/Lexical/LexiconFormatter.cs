@@ -46,7 +46,7 @@ internal static class LexiconFormatter
             var note = Note(raw.TrimEnd('\r'));
             if (!byNumber.TryGetValue(number, out var line))
             {
-                rows.Add(new Row(-1, null, [], note));
+                rows.Add(new Row(-1, Keyword: null, [], note));
                 continue;
             }
             var at = open.FindLastIndex(b => line.Keyword.Under.Contains(b));
@@ -81,7 +81,7 @@ internal static class LexiconFormatter
             var end = i;
             while (
                 end < rows.Count
-                && rows[end].Keyword == row.Keyword
+                && string.Equals(rows[end].Keyword, row.Keyword, StringComparison.Ordinal)
                 && rows[end].Depth == row.Depth
                 && rows[end].Tokens.Count >= 2
             )

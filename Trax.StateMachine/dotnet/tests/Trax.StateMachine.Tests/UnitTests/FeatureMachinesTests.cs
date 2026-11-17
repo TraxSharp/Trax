@@ -92,7 +92,7 @@ public class FeatureMachinesTests
         var board = FeatureMachines.Board(derived.Irs, derived.Host!);
         board.Stickies.Should().Contain(s => s.Kind == "command" && s.Label == "Place");
         board
-            .Stickies.Single(s => s.Kind == "command")
+            .Stickies.Single(s => string.Equals(s.Kind, "command", StringComparison.Ordinal))
             .Scenarios.Single()
             .Should()
             .Be(new FeatureScenarioRef("ordering.feature", 3, "Ada places her order"));
@@ -104,7 +104,8 @@ public class FeatureMachinesTests
         var glossary = FeatureGlossary.Read(
             Glossary.Replace(
                 "\"Placed\": \"is placed\" }",
-                "\"Placed\": \"is placed\", \"Ready\": \"is ready\" }"
+                "\"Placed\": \"is placed\", \"Ready\": \"is ready\" }",
+                StringComparison.Ordinal
             )
         );
         FeatureFile[] features =
@@ -175,7 +176,9 @@ public class FeatureMachinesTests
         derived.Succeeded.Should().BeFalse();
         derived.Irs.Should().BeEmpty();
         var loops = derived
-            .Problems.Where(p => p.Message.Contains("form a cycle no event breaks"))
+            .Problems.Where(p =>
+                p.Message.Contains("form a cycle no event breaks", StringComparison.Ordinal)
+            )
             .ToList();
         loops
             .Should()
@@ -247,7 +250,8 @@ public class FeatureMachinesTests
         var glossary = FeatureGlossary.Read(
             Glossary.Replace(
                 "\"Placed\": \"is placed\" }",
-                "\"Placed\": \"is placed\", \"Expired\": \"has expired\" }"
+                "\"Placed\": \"is placed\", \"Expired\": \"has expired\" }",
+                StringComparison.Ordinal
             )
         );
         FeatureFile[] features =
@@ -292,7 +296,7 @@ public class FeatureMachinesTests
 
         var derived = FeatureMachines.Derive(glossary, CascadeFeatures);
 
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         derived
             .Host.Should()
             .Contain("\"shape\":\"toSystem\"")
@@ -355,7 +359,7 @@ public class FeatureMachinesTests
     {
         var glossary = FeatureGlossary.Read(CascadeGlossary);
         var derived = FeatureMachines.Derive(glossary, CascadeFeatures);
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         FeatureFile probe = new(
             "probe.feature",
             $"""
@@ -447,7 +451,7 @@ public class FeatureMachinesTests
 
         var derived = FeatureMachines.Derive(glossary, features);
 
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         var policies = Trax
             .StateMachine.Features.HostFile.Read(derived.Host!)
             .Policies.Select(p => $"{p.Shape} {p.Id}")
@@ -464,7 +468,10 @@ public class FeatureMachinesTests
     {
         var glossary = FeatureGlossary.Read(Glossary);
         var derived = FeatureMachines.Derive(glossary, Features);
-        var irs = new Dictionary<string, string> { ["order"] = "{ not json" };
+        var irs = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["order"] = "{ not json",
+        };
 
         FluentActions
             .Invoking(() => FeatureMachines.Run(glossary, Features, irs, derived.Host!))
@@ -483,7 +490,7 @@ public class FeatureMachinesTests
     {
         var glossary = FeatureGlossary.Read(Glossary);
         var derived = FeatureMachines.Derive(glossary, Features);
-        var none = new Dictionary<string, string>();
+        var none = new Dictionary<string, string>(StringComparer.Ordinal);
 
         FluentActions
             .Invoking(() => FeatureMachines.Run(glossary, Features, none, derived.Host!))
@@ -504,7 +511,10 @@ public class FeatureMachinesTests
         var derived = FeatureMachines.Derive(glossary, Features);
         var ir = System.Text.Json.Nodes.JsonNode.Parse(derived.Irs["order"])!.AsObject();
         ir["description"] = "edited by hand";
-        var irs = new Dictionary<string, string> { ["order"] = ir.ToJsonString() };
+        var irs = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["order"] = ir.ToJsonString(),
+        };
 
         FluentActions
             .Invoking(() => FeatureMachines.Run(glossary, Features, irs, derived.Host!))

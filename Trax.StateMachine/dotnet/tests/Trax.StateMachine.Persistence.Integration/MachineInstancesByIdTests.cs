@@ -67,7 +67,8 @@ public class MachineInstancesByIdTests
     [Test]
     public async Task Host_code_advances_a_served_machine_by_its_id_and_the_history_records_the_host()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
         var outcome = await instances.Advance("p-shop", "main", "Open");
@@ -92,7 +93,8 @@ public class MachineInstancesByIdTests
     [Test]
     public async Task Host_code_starts_a_served_machine_by_its_id_at_its_key()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
         var started = await instances.Start("p-shop", "main");
@@ -105,7 +107,8 @@ public class MachineInstancesByIdTests
     [Test]
     public async Task A_system_machine_at_a_fixed_key_is_refused_at_another()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
         var start = () => instances.Start("p-shop", "second");
@@ -130,7 +133,8 @@ public class MachineInstancesByIdTests
     [Test]
     public async Task An_id_the_host_does_not_serve_is_refused()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
         var advance = () => instances.Advance("p-nothing", "main", "Open");
@@ -145,7 +149,8 @@ public class MachineInstancesByIdTests
     [Test]
     public async Task A_user_owned_machine_is_refused_by_its_id()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
         var start = () => instances.Start("p-order", "main", new JsonObject());

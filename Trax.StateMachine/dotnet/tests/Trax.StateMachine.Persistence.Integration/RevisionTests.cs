@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CsCheck;
@@ -71,12 +72,16 @@ public class RevisionTests(StoreProvider provider)
     {
         var id = Guid.NewGuid();
         using var scope = _host.Scope();
-        var saved = await _host.Service(scope, machine).Autosave(User, id, json);
+        var saved = await _host
+            .Service(scope, machine)
+            .Autosave(User, id, json)
+            .ConfigureAwait(false);
         if (saved is AutosaveResult.Rejected { Code: RefusalCode.SaveNotAllowed })
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
                     .Insert(User, id, Parse(json))
+                    .ConfigureAwait(false)
             )
                 .Should()
                 .BeTrue();
@@ -106,13 +111,17 @@ public class RevisionTests(StoreProvider provider)
     )
     {
         using var scope = _host.Scope();
-        return await _host.Service(scope, machine).Advance(User, id, trigger, input, requestId);
+        return await _host
+            .Service(scope, machine)
+            .Advance(User, id, trigger, input, requestId)
+            .ConfigureAwait(false);
     }
 
     private async Task<Guid> DraftInBuilding()
     {
-        var id = await Saved(BuildMachine.Id, BuildMachine.Json("Draft", Source));
-        (await Advance(BuildMachine.Id, id, "Build"))
+        var id = await Saved(BuildMachine.Id, BuildMachine.Json("Draft", Source))
+            .ConfigureAwait(false);
+        (await Advance(BuildMachine.Id, id, "Build").ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot.State.Should()
@@ -126,7 +135,8 @@ public class RevisionTests(StoreProvider provider)
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .WorkQueues.Where(w => w.ExternalId == token)
-            .ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled));
+            .ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled))
+            .ConfigureAwait(false);
     }
 
     #region One test per write site
@@ -174,18 +184,17 @@ public class RevisionTests(StoreProvider provider)
     {
         // The hatch has nothing to protect, so its autosave is the blind upsert; the ledger's is guarded (it has a
         // committed state), and overwrites through UpdateWithRequest.
-        var (machine, first, second) =
-            write == "upsert"
-                ? (
-                    PlainHatchMachine.Id,
-                    PlainHatchMachine.Json(HatchState.Shut),
-                    PlainHatchMachine.Json(HatchState.Open)
-                )
-                : (
-                    LedgerMachine.Id,
-                    LedgerMachine.Json(LedgerState.Counting, 1),
-                    LedgerMachine.Json(LedgerState.Counting, 1, 2)
-                );
+        var (machine, first, second) = string.Equals(write, "upsert", StringComparison.Ordinal)
+            ? (
+                PlainHatchMachine.Id,
+                PlainHatchMachine.Json(HatchState.Shut),
+                PlainHatchMachine.Json(HatchState.Open)
+            )
+            : (
+                LedgerMachine.Id,
+                LedgerMachine.Json(LedgerState.Counting, 1),
+                LedgerMachine.Json(LedgerState.Counting, 1, 2)
+            );
         var id = await Saved(machine, first);
         var r0 = await _host.Revision(id);
 
@@ -429,7 +438,7 @@ public class RevisionTests(StoreProvider provider)
                     id,
                     UnlockedTurnstile,
                     token,
-                    null
+                    request: null
                 ),
                 _ => await store.Upsert(User, id, UnlockedTurnstile),
             };
@@ -505,17 +514,18 @@ public class RevisionTests(StoreProvider provider)
         {
             case nameof(RefusalCode.GuardFailed):
             {
-                var id = await Saved("turnstile", TestTurnstile.InitialJson);
+                var id = await Saved("turnstile", TestTurnstile.InitialJson).ConfigureAwait(false);
                 return (
                     id,
                     async () =>
                         (
                             await Advance(
-                                "turnstile",
-                                id,
-                                "Coin",
-                                new JsonObject { ["coin"] = "penny" }
-                            )
+                                    "turnstile",
+                                    id,
+                                    "Coin",
+                                    new JsonObject { ["coin"] = "penny" }
+                                )
+                                .ConfigureAwait(false)
                         )
                             .Should()
                             .BeOfType<AdvanceOutcome.Rejected>()
@@ -527,25 +537,27 @@ public class RevisionTests(StoreProvider provider)
             {
                 var machine = "declarative-turnstile";
                 var id = await Saved(
-                    machine,
-                    new JsonObject
-                    {
-                        ["machine"] = machine,
-                        ["version"] = 1,
-                        ["state"] = "Locked",
-                        ["context"] = new JsonObject(),
-                    }.ToJsonString()
-                );
+                        machine,
+                        new JsonObject
+                        {
+                            ["machine"] = machine,
+                            ["version"] = 1,
+                            ["state"] = "Locked",
+                            ["context"] = new JsonObject(),
+                        }.ToJsonString()
+                    )
+                    .ConfigureAwait(false);
                 return (
                     id,
                     async () =>
                         (
                             await Advance(
-                                machine,
-                                id,
-                                "Coin",
-                                new JsonObject { ["coin"] = "quarter", ["x"] = 1 }
-                            )
+                                    machine,
+                                    id,
+                                    "Coin",
+                                    new JsonObject { ["coin"] = "quarter", ["x"] = 1 }
+                                )
+                                .ConfigureAwait(false)
                         )
                             .Should()
                             .BeOfType<AdvanceOutcome.Rejected>()
@@ -555,10 +567,8 @@ public class RevisionTests(StoreProvider provider)
             }
             case nameof(RefusalCode.Forbidden):
             {
-                var id = await Saved(
-                    GatedTurnstileMachine.Id,
-                    GatedTurnstileMachine.Json("Locked")
-                );
+                var id = await Saved(GatedTurnstileMachine.Id, GatedTurnstileMachine.Json("Locked"))
+                    .ConfigureAwait(false);
                 return (
                     id,
                     async () =>
@@ -568,6 +578,7 @@ public class RevisionTests(StoreProvider provider)
                             await _host
                                 .Service(scope, GatedTurnstileMachine.Id)
                                 .Advance(new Actor.Client(User), id, "Coin")
+                                .ConfigureAwait(false)
                         )
                             .Should()
                             .BeOfType<AdvanceOutcome.Rejected>()
@@ -578,17 +589,18 @@ public class RevisionTests(StoreProvider provider)
             }
             case nameof(RefusalCode.EffectBound):
             {
-                var id = await Saved("order", OrderMachine.ReviewSnapshot(1));
+                var id = await Saved("order", OrderMachine.ReviewSnapshot(1)).ConfigureAwait(false);
                 return (
                     id,
                     async () =>
                         (
                             await Advance(
-                                "order",
-                                id,
-                                "Place",
-                                new JsonObject { ["receipt"] = "forged" }
-                            )
+                                    "order",
+                                    id,
+                                    "Place",
+                                    new JsonObject { ["receipt"] = "forged" }
+                                )
+                                .ConfigureAwait(false)
                         )
                             .Should()
                             .BeOfType<AdvanceOutcome.Rejected>()
@@ -598,14 +610,17 @@ public class RevisionTests(StoreProvider provider)
             }
             case nameof(RefusalCode.RequestIdReused):
             {
-                var id = await Saved("turnstile", TestTurnstile.InitialJson);
-                (await Advance("turnstile", id, "Coin", Quarter, "r1"))
+                var id = await Saved("turnstile", TestTurnstile.InitialJson).ConfigureAwait(false);
+                (await Advance("turnstile", id, "Coin", Quarter, "r1").ConfigureAwait(false))
                     .Should()
                     .BeOfType<AdvanceOutcome.Advanced>();
                 return (
                     id,
                     async () =>
-                        (await Advance("turnstile", id, "Push", requestId: "r1"))
+                        (
+                            await Advance("turnstile", id, "Push", requestId: "r1")
+                                .ConfigureAwait(false)
+                        )
                             .Should()
                             .BeOfType<AdvanceOutcome.Rejected>()
                             .Which.Reason.Should()
@@ -614,14 +629,17 @@ public class RevisionTests(StoreProvider provider)
             }
             case "ring-replay":
             {
-                var id = await Saved("turnstile", TestTurnstile.InitialJson);
-                (await Advance("turnstile", id, "Coin", Quarter, "r1"))
+                var id = await Saved("turnstile", TestTurnstile.InitialJson).ConfigureAwait(false);
+                (await Advance("turnstile", id, "Coin", Quarter, "r1").ConfigureAwait(false))
                     .Should()
                     .BeOfType<AdvanceOutcome.Advanced>();
                 return (
                     id,
                     async () =>
-                        (await Advance("turnstile", id, "Coin", Quarter, "r1"))
+                        (
+                            await Advance("turnstile", id, "Coin", Quarter, "r1")
+                                .ConfigureAwait(false)
+                        )
                             .Should()
                             .BeOfType<AdvanceOutcome.Advanced>("a retry replays")
                             .Which.Snapshot.State.Should()
@@ -630,7 +648,7 @@ public class RevisionTests(StoreProvider provider)
             }
             case "stale-token-conflict":
             {
-                var id = await Saved("turnstile", TestTurnstile.InitialJson);
+                var id = await Saved("turnstile", TestTurnstile.InitialJson).ConfigureAwait(false);
                 return (
                     id,
                     async () =>
@@ -640,6 +658,7 @@ public class RevisionTests(StoreProvider provider)
                             await scope
                                 .ServiceProvider.GetRequiredService<ISnapshotStore>()
                                 .Update(User, id, UnlockedTurnstile, Guid.NewGuid())
+                                .ConfigureAwait(false)
                         )
                             .Should()
                             .BeFalse("the token is stale");
@@ -650,8 +669,12 @@ public class RevisionTests(StoreProvider provider)
             {
                 // A draft in a committed state answers an identical save without writing.
                 var closed = LedgerMachine.Json(LedgerState.Closed, 1);
-                var id = await Saved(LedgerMachine.Id, LedgerMachine.Json(LedgerState.Counting, 1));
-                (await Advance(LedgerMachine.Id, id, nameof(LedgerTrigger.Close)))
+                var id = await Saved(LedgerMachine.Id, LedgerMachine.Json(LedgerState.Counting, 1))
+                    .ConfigureAwait(false);
+                (
+                    await Advance(LedgerMachine.Id, id, nameof(LedgerTrigger.Close))
+                        .ConfigureAwait(false)
+                )
                     .Should()
                     .BeOfType<AdvanceOutcome.Advanced>();
                 return (
@@ -659,7 +682,12 @@ public class RevisionTests(StoreProvider provider)
                     async () =>
                     {
                         using var scope = _host.Scope();
-                        (await _host.Service(scope, LedgerMachine.Id).Autosave(User, id, closed))
+                        (
+                            await _host
+                                .Service(scope, LedgerMachine.Id)
+                                .Autosave(User, id, closed)
+                                .ConfigureAwait(false)
+                        )
                             .Should()
                             .BeOfType<AutosaveResult.Saved>();
                     }
@@ -667,7 +695,8 @@ public class RevisionTests(StoreProvider provider)
             }
             case "refused-save":
             {
-                var id = await Saved(LedgerMachine.Id, LedgerMachine.Json(LedgerState.Open));
+                var id = await Saved(LedgerMachine.Id, LedgerMachine.Json(LedgerState.Open))
+                    .ConfigureAwait(false);
                 return (
                     id,
                     async () =>
@@ -681,6 +710,7 @@ public class RevisionTests(StoreProvider provider)
                                     id,
                                     """{"machine":"ledger","version":1,"state":"Open","context":{}}"""
                                 )
+                                .ConfigureAwait(false)
                         )
                             .Should()
                             .BeOfType<AutosaveResult.Rejected>()
@@ -690,7 +720,7 @@ public class RevisionTests(StoreProvider provider)
                 );
             }
             default:
-                throw new ArgumentOutOfRangeException(nameof(refusal), refusal, null);
+                throw new ArgumentOutOfRangeException(nameof(refusal), refusal, message: null);
         }
     }
 
@@ -738,7 +768,8 @@ public class RevisionTests(StoreProvider provider)
                             using var scope = _host.Scope();
                             return await scope
                                 .ServiceProvider.GetRequiredService<ISnapshotStore>()
-                                .Update(User, id, UnlockedTurnstile, token);
+                                .Update(User, id, UnlockedTurnstile, token)
+                                .ConfigureAwait(false);
                         })
                     )
             )
@@ -813,7 +844,7 @@ public class RevisionTests(StoreProvider provider)
             using var scope = _host.Scope();
             var service = _host.Service(scope, "turnstile");
             return service.Serialize(
-                (await service.Load(User, id))
+                (await service.Load(User, id).ConfigureAwait(false))
                     .Should()
                     .BeOfType<LoadResult.Loaded>()
                     .Subject.Snapshot
@@ -879,7 +910,7 @@ public class RevisionTests(StoreProvider provider)
             )..
         ];
         return int.Parse(
-            file[..file.IndexOf('_')],
+            file[..file.IndexOf('_', StringComparison.Ordinal)],
             System.Globalization.CultureInfo.InvariantCulture
         );
     }
@@ -892,19 +923,22 @@ public class RevisionTests(StoreProvider provider)
         var connectionString =
             $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={database};Include Error Detail=true";
 
-        await using (var admin = new NpgsqlConnection(maintenance))
+        var creator = new NpgsqlConnection(maintenance);
+        await using (creator.ConfigureAwait(false))
         {
-            await admin.OpenAsync();
-            await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
-            await Exec(admin, $"CREATE DATABASE {database}");
+            await creator.OpenAsync().ConfigureAwait(false);
+            await Exec(creator, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)")
+                .ConfigureAwait(false);
+            await Exec(creator, $"CREATE DATABASE {database}").ConfigureAwait(false);
         }
 
         try
         {
-            await using (var setup = new NpgsqlConnection(connectionString))
+            var setup = new NpgsqlConnection(connectionString);
+            await using (setup.ConfigureAwait(false))
             {
-                await setup.OpenAsync();
-                await Exec(setup, "CREATE SCHEMA IF NOT EXISTS trax;");
+                await setup.OpenAsync().ConfigureAwait(false);
+                await Exec(setup, "CREATE SCHEMA IF NOT EXISTS trax;").ConfigureAwait(false);
             }
             var upTo = DeployChanges
                 .To.PostgresqlDatabase(connectionString)
@@ -918,35 +952,43 @@ public class RevisionTests(StoreProvider provider)
                 .PerformUpgrade();
             upTo.Successful.Should().BeTrue(upTo.Error?.ToString());
 
-            await using (var before = new NpgsqlConnection(connectionString))
+            var before = new NpgsqlConnection(connectionString);
+            await using (before.ConfigureAwait(false))
             {
-                await before.OpenAsync();
+                await before.OpenAsync().ConfigureAwait(false);
                 await Exec(
-                    before,
-                    """
-                    INSERT INTO trax.snapshot_draft
-                        (id, user_key, owner_kind, machine, version, state, context, concurrency_token, updated_at)
-                    VALUES
-                        (gen_random_uuid(), 'u1', 'user', 'turnstile', 1, 'Locked', '{}', gen_random_uuid(), now()),
-                        (gen_random_uuid(), NULL, 'system', 'turnstile', 1, 'Locked', '{}', gen_random_uuid(), now())
-                    """
-                );
+                        before,
+                        """
+                        INSERT INTO trax.snapshot_draft
+                            (id, user_key, owner_kind, machine, version, state, context, concurrency_token, updated_at)
+                        VALUES
+                            (gen_random_uuid(), 'u1', 'user', 'turnstile', 1, 'Locked', '{}', gen_random_uuid(), now()),
+                            (gen_random_uuid(), NULL, 'system', 'turnstile', 1, 'Locked', '{}', gen_random_uuid(), now())
+                        """
+                    )
+                    .ConfigureAwait(false);
             }
 
-            await Trax.Effect.Data.Postgres.Utils.DatabaseMigrator.Migrate(connectionString);
+            await Effect
+                .Data.Postgres.Utils.DatabaseMigrator.Migrate(connectionString)
+                .ConfigureAwait(false);
 
-            await using var after = new NpgsqlConnection(connectionString);
-            await after.OpenAsync();
-            await using var read = after.CreateCommand();
+            var after = new NpgsqlConnection(connectionString);
+            await using var afterDisposal = after.ConfigureAwait(false);
+            await after.OpenAsync().ConfigureAwait(false);
+            var read = after.CreateCommand();
+            await using var readDisposal = read.ConfigureAwait(false);
             read.CommandText = "SELECT revision, row_id FROM trax.snapshot_draft ORDER BY row_id";
-            await AssertEachRowAtOne(read);
+            await AssertEachRowAtOne(read).ConfigureAwait(false);
         }
         finally
         {
             NpgsqlConnection.ClearAllPools();
-            await using var admin = new NpgsqlConnection(maintenance);
-            await admin.OpenAsync();
-            await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
+            var admin = new NpgsqlConnection(maintenance);
+            await using var adminDisposal = admin.ConfigureAwait(false);
+            await admin.OpenAsync().ConfigureAwait(false);
+            await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)")
+                .ConfigureAwait(false);
         }
     }
 
@@ -968,10 +1010,12 @@ public class RevisionTests(StoreProvider provider)
                 .PerformUpgrade();
             upTo.Successful.Should().BeTrue(upTo.Error?.ToString());
 
-            await using (var before = new SqliteConnection(connectionString))
+            var before = new SqliteConnection(connectionString);
+            await using (before.ConfigureAwait(false))
             {
-                await before.OpenAsync();
-                await using var insert = before.CreateCommand();
+                await before.OpenAsync().ConfigureAwait(false);
+                var insert = before.CreateCommand();
+                await using var insertDisposal = insert.ConfigureAwait(false);
                 insert.CommandText = $"""
                     INSERT INTO snapshot_draft
                         (id, user_key, owner_kind, machine, version, state, context, concurrency_token, updated_at)
@@ -981,16 +1025,20 @@ public class RevisionTests(StoreProvider provider)
                         ('{Guid.NewGuid():D}', NULL, 1, 'turnstile', 1, 'Locked', '{"{}"}', '{Guid.NewGuid():D}',
                          '2026-10-09 00:00:00+00:00')
                     """;
-                await insert.ExecuteNonQueryAsync();
+                await insert.ExecuteNonQueryAsync().ConfigureAwait(false);
             }
 
-            await Trax.Effect.Data.Sqlite.Utils.DatabaseMigrator.Migrate(connectionString);
+            await Effect
+                .Data.Sqlite.Utils.DatabaseMigrator.Migrate(connectionString)
+                .ConfigureAwait(false);
 
-            await using var after = new SqliteConnection(connectionString);
-            await after.OpenAsync();
-            await using var read = after.CreateCommand();
+            var after = new SqliteConnection(connectionString);
+            await using var afterDisposal = after.ConfigureAwait(false);
+            await after.OpenAsync().ConfigureAwait(false);
+            var read = after.CreateCommand();
+            await using var readDisposal = read.ConfigureAwait(false);
             read.CommandText = "SELECT revision, row_id FROM snapshot_draft ORDER BY row_id";
-            await AssertEachRowAtOne(read);
+            await AssertEachRowAtOne(read).ConfigureAwait(false);
         }
         finally
         {
@@ -1002,8 +1050,9 @@ public class RevisionTests(StoreProvider provider)
     private static async Task AssertEachRowAtOne(System.Data.Common.DbCommand read)
     {
         var rows = new List<(long Revision, long RowId)>();
-        await using (var reader = await read.ExecuteReaderAsync())
-            while (await reader.ReadAsync())
+        var reader = await read.ExecuteReaderAsync().ConfigureAwait(false);
+        await using (reader.ConfigureAwait(false))
+            while (await reader.ReadAsync().ConfigureAwait(false))
                 rows.Add((reader.GetInt64(0), reader.GetInt64(1)));
 
         rows.Should().HaveCount(2);
@@ -1017,9 +1066,10 @@ public class RevisionTests(StoreProvider provider)
 
     private static async Task Exec(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     [Test]
@@ -1031,20 +1081,24 @@ public class RevisionTests(StoreProvider provider)
             trax.AddEffects(effects => effects.UseInMemory())
                 .AddStateMachines(typeof(OrderMachine).Assembly)
         );
-        await using var host = services.BuildServiceProvider();
+        var host = services.BuildServiceProvider();
+        await using var hostDisposal = host.ConfigureAwait(false);
         var id = Guid.NewGuid();
 
         async Task<long?> Stored()
         {
-            await using var scope = host.CreateAsyncScope();
+            var readScope = host.CreateAsyncScope();
+            await using var readScopeDisposal = readScope.ConfigureAwait(false);
             return (
-                await scope
+                await readScope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
                     .Get(User, "turnstile", id)
+                    .ConfigureAwait(false)
             )!.Revision;
         }
 
-        await using (var scope = host.CreateAsyncScope())
+        var scope = host.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
@@ -1057,8 +1111,9 @@ public class RevisionTests(StoreProvider provider)
             .Be(1, $"InMemory has no trigger, so the store bumps it. See {Adr}");
 
         AdvanceOutcome advanced;
-        await using (var scope = host.CreateAsyncScope())
-            advanced = await scope
+        var advanceScope = host.CreateAsyncScope();
+        await using (advanceScope.ConfigureAwait(false))
+            advanced = await advanceScope
                 .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
                 .Service("turnstile")!
                 .Advance(User, id, "Coin", Quarter);
@@ -1120,7 +1175,7 @@ public class RevisionTests(StoreProvider provider)
             _rows[(userKey, id)] = new StoredSnapshot(
                 TestTurnstile.Machine.Serialize(snapshot),
                 Guid.NewGuid(),
-                null,
+                LastRequestId: null,
                 DateTimeOffset.UtcNow
             );
             return Task.FromResult(true);
@@ -1166,6 +1221,7 @@ public class RevisionTests(StoreProvider provider)
         Outcome,
     }
 
+    [StructLayout(LayoutKind.Auto)]
     private readonly record struct Op(Kind Kind, int Variant)
     {
         public override string ToString() =>
@@ -1188,7 +1244,7 @@ public class RevisionTests(StoreProvider provider)
         AnOperation
             .Array[1, 20]
             .SampleAsync(
-                async ops => await new RevisionModel(this).Run(ops),
+                async ops => await new RevisionModel(this).Run(ops).ConfigureAwait(false),
                 iter: Iterations,
                 threads: 1,
                 print: ops =>
@@ -1232,8 +1288,8 @@ public class RevisionTests(StoreProvider provider)
             foreach (var op in ops)
             {
                 _step++;
-                await Apply(op);
-                await Check(op);
+                await Apply(op).ConfigureAwait(false);
+                await Check(op).ConfigureAwait(false);
             }
         }
 
@@ -1243,16 +1299,16 @@ public class RevisionTests(StoreProvider provider)
             {
                 case Kind.Save:
                     var (state, items) = Saves[op.Variant];
-                    await Save(state, items);
+                    await Save(state, items).ConfigureAwait(false);
                     break;
                 case Kind.Reset:
-                    await Save("Draft", 0);
+                    await Save("Draft", 0).ConfigureAwait(false);
                     break;
                 case Kind.AdvanceValid:
                     if (_orderState is { } current)
-                        await Fire(TriggerFrom(current), $"a{_step}");
+                        await Fire(TriggerFrom(current), $"a{_step}").ConfigureAwait(false);
                     else
-                        (await Advance("Next", $"a{_step}"))
+                        (await Advance("Next", $"a{_step}").ConfigureAwait(false))
                             .Should()
                             .BeOfType<AdvanceOutcome.NotFound>();
                     break;
@@ -1260,16 +1316,17 @@ public class RevisionTests(StoreProvider provider)
                     // Place is effect-bound from Review and has no edge elsewhere: refused either way.
                     (
                         await Advance(
-                            "Place",
-                            $"a{_step}",
-                            new JsonObject { ["receipt"] = "forged" }
-                        )
+                                "Place",
+                                $"a{_step}",
+                                new JsonObject { ["receipt"] = "forged" }
+                            )
+                            .ConfigureAwait(false)
                     )
                         .Should()
                         .NotBeOfType<AdvanceOutcome.Advanced>();
                     break;
                 case Kind.Replay:
-                    await Replay();
+                    await Replay().ConfigureAwait(false);
                     break;
                 case Kind.StaleAdvance:
                     using (var scope = Host.Scope())
@@ -1281,17 +1338,18 @@ public class RevisionTests(StoreProvider provider)
                                     _order,
                                     Order("Review", 3),
                                     Guid.NewGuid(),
-                                    null
+                                    request: null
                                 )
+                                .ConfigureAwait(false)
                         )
                             .Should()
                             .BeFalse("a stale token writes nothing");
                     break;
                 case Kind.Send:
-                    await Send();
+                    await Send().ConfigureAwait(false);
                     break;
                 case Kind.Outcome:
-                    await StepBuild();
+                    await StepBuild().ConfigureAwait(false);
                     break;
             }
         }
@@ -1326,7 +1384,8 @@ public class RevisionTests(StoreProvider provider)
         {
             using var scope = Host.Scope();
             return await Host.Service(scope, "order")
-                .Advance(_user, _order, trigger, input, requestId);
+                .Advance(_user, _order, trigger, input, requestId)
+                .ConfigureAwait(false);
         }
 
         // The soft save does not serve the order, which has an effect, and writes nothing; the model's save is host
@@ -1338,26 +1397,32 @@ public class RevisionTests(StoreProvider provider)
             (
                 await Host.Service(scope, "order")
                     .Autosave(_user, _order, TestOrder.Machine.Serialize(Order(state, items)))
+                    .ConfigureAwait(false)
             )
                 .Should()
                 .BeOfType<AutosaveResult.Rejected>()
                 .Which.Code.Should()
                 .Be(RefusalCode.SaveNotAllowed);
 
-            if (_orderState == "Placed" && state != "Draft")
+            if (
+                string.Equals(_orderState, "Placed", StringComparison.Ordinal)
+                && !string.Equals(state, "Draft", StringComparison.Ordinal)
+            )
                 return;
             var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
-            var stored = await store.Get(_user, "order", _order);
+            var stored = await store.Get(_user, "order", _order).ConfigureAwait(false);
             (
                 stored is null
-                    ? await store.Insert(_user, _order, Order(state, items))
-                    : await store.UpdateWithRequest(
-                        _user,
-                        _order,
-                        Order(state, items),
-                        stored.Token,
-                        stored.LastRequest
-                    )
+                    ? await store.Insert(_user, _order, Order(state, items)).ConfigureAwait(false)
+                    : await store
+                        .UpdateWithRequest(
+                            _user,
+                            _order,
+                            Order(state, items),
+                            stored.Token,
+                            stored.LastRequest
+                        )
+                        .ConfigureAwait(false)
             )
                 .Should()
                 .BeTrue();
@@ -1375,8 +1440,8 @@ public class RevisionTests(StoreProvider provider)
         private async Task Fire(string trigger, string requestId)
         {
             var from = _orderState!;
-            var outcome = await Advance(trigger, requestId);
-            if (from == "Draft" && _items == 0)
+            var outcome = await Advance(trigger, requestId).ConfigureAwait(false);
+            if (string.Equals(from, "Draft", StringComparison.Ordinal) && _items == 0)
             {
                 // Review holds at least one item, so Next from an empty draft is refused.
                 outcome.Should().BeOfType<AdvanceOutcome.Rejected>();
@@ -1397,17 +1462,20 @@ public class RevisionTests(StoreProvider provider)
         {
             if (_orderState is null || _last is not { } last)
                 return;
-            if (last.Trigger == "Place")
+            if (string.Equals(last.Trigger, "Place", StringComparison.Ordinal))
             {
                 // A send's request: effect-bound from Review, a replay anywhere else. Neither writes.
-                (await Advance("Place", last.Id, new JsonObject { ["receipt"] = "forged" }))
+                (
+                    await Advance("Place", last.Id, new JsonObject { ["receipt"] = "forged" })
+                        .ConfigureAwait(false)
+                )
                     .Should()
                     .NotBeNull();
                 return;
             }
             // A retry of the recorded request replays wherever the draft is, the state it fired from included, and
             // writes nothing.
-            (await Advance(last.Trigger, last.Id))
+            (await Advance(last.Trigger, last.Id).ConfigureAwait(false))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>("a retry of the recorded request replays");
         }
@@ -1419,7 +1487,8 @@ public class RevisionTests(StoreProvider provider)
                 outcome = await scope
                     .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
                     .EffectRunner("order")!
-                    .Run(_user, _order, $"s{_step}");
+                    .Run(_user, _order, $"s{_step}")
+                    .ConfigureAwait(false);
 
             switch (_orderState)
             {
@@ -1461,19 +1530,23 @@ public class RevisionTests(StoreProvider provider)
                             await scope
                                 .ServiceProvider.GetRequiredService<ISnapshotStore>()
                                 .Insert(_user, _build, Parse(BuildMachine.Json("Draft", Source)))
+                                .ConfigureAwait(false)
                         )
                             .Should()
                             .BeTrue();
                     _buildState = "Draft";
                     break;
                 case "Building":
-                    var token = (await Host.Rows(_build)).Single().InvokeToken!;
-                    await test.CancelEntry(token);
+                    var token = (await Host.Rows(_build).ConfigureAwait(false))
+                        .Single()
+                        .InvokeToken!;
+                    await test.CancelEntry(token).ConfigureAwait(false);
                     using (var scope = Host.Scope())
                         (
                             await scope
                                 .ServiceProvider.GetRequiredService<IInvokedRunOutcomes>()
                                 .Deliver(token)
+                                .ConfigureAwait(false)
                         )
                             .Should()
                             .Be("BuildCancelled");
@@ -1483,7 +1556,14 @@ public class RevisionTests(StoreProvider provider)
                     using (var scope = Host.Scope())
                         (
                             await Host.Service(scope, BuildMachine.Id)
-                                .Advance(_user, _build, _buildState == "Draft" ? "Build" : "Retry")
+                                .Advance(
+                                    _user,
+                                    _build,
+                                    string.Equals(_buildState, "Draft", StringComparison.Ordinal)
+                                        ? "Build"
+                                        : "Retry"
+                                )
+                                .ConfigureAwait(false)
                         )
                             .Should()
                             .BeOfType<AdvanceOutcome.Advanced>();
@@ -1497,12 +1577,12 @@ public class RevisionTests(StoreProvider provider)
         {
             if (_orderState is { } state)
             {
-                var row = (await Host.Rows(_order)).Single();
+                var row = (await Host.Rows(_order).ConfigureAwait(false)).Single();
                 row.State.Should().Be(state, $"after step {_step} ({op})");
                 (JsonNode.Parse(row.Context)!["items"] as JsonArray)!
                     .Count.Should()
                     .Be(_items, $"after step {_step} ({op})");
-                (await Host.Revision(_order))
+                (await Host.Revision(_order).ConfigureAwait(false))
                     .Should()
                     .Be(
                         _orderRevision,
@@ -1512,11 +1592,11 @@ public class RevisionTests(StoreProvider provider)
 
             if (_buildState is { } build)
             {
-                (await Host.Rows(_build))
+                (await Host.Rows(_build).ConfigureAwait(false))
                     .Single()
                     .State.Should()
                     .Be(build, $"after step {_step} ({op})");
-                (await Host.Revision(_build))
+                (await Host.Revision(_build).ConfigureAwait(false))
                     .Should()
                     .Be(
                         _buildRevision,
@@ -1527,87 +1607,4 @@ public class RevisionTests(StoreProvider provider)
     }
 
     #endregion
-}
-
-/// <summary>
-/// Concurrent advances of one instance, on Postgres: each successful write takes the next revision, and none is
-/// repeated or skipped. See
-/// <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.
-/// </summary>
-[TestFixture]
-[Property(
-    "adr",
-    "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md"
-)]
-public class RevisionConcurrencyTests
-{
-    private const string Adr =
-        "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
-
-    private const string User = "u1";
-
-    private InstanceHost _host = null!;
-
-    [SetUp]
-    public void SetUp() => _host = InstanceHost.Create(StoreProvider.Postgres);
-
-    [TearDown]
-    public void TearDown() => _host.Dispose();
-
-    [Test]
-    public async Task Twenty_concurrent_advances_leave_contiguous_revisions()
-    {
-        const int Callers = 20;
-        var id = Guid.NewGuid();
-        using (var scope = _host.Scope())
-            (
-                await scope
-                    .ServiceProvider.GetRequiredService<ISnapshotStore>()
-                    .Upsert(
-                        User,
-                        id,
-                        new Snapshot
-                        {
-                            Machine = BuildMachine.Id,
-                            Version = 1,
-                            State = "Draft",
-                            Context = new JsonObject { ["source"] = "repo" },
-                        }
-                    )
-            ).Should().BeTrue();
-
-        // Edit is a self-loop on Draft: every caller's advance is valid, and only the token race refuses one.
-        var advanced = await Task.WhenAll(
-                Enumerable
-                    .Range(0, Callers)
-                    .Select(_ =>
-                        Task.Run(async () =>
-                        {
-                            for (var attempt = 0; attempt < 500; attempt++)
-                            {
-                                using var scope = _host.Scope();
-                                var outcome = await _host
-                                    .Service(scope, BuildMachine.Id)
-                                    .Advance(User, id, "Edit");
-                                if (outcome is AdvanceOutcome.Advanced done)
-                                    return done;
-                                outcome.Should().BeOfType<AdvanceOutcome.Conflict>();
-                            }
-                            throw new InvalidOperationException("an advance lost every race");
-                        })
-                    )
-            )
-            .WaitAsync(TimeSpan.FromSeconds(120));
-
-        (await _host.Revision(id))
-            .Should()
-            .Be(1 + Callers, $"the insert and each successful advance bumped once. See {Adr}");
-        advanced
-            .Select(a => a.Revision)
-            .Should()
-            .BeEquivalentTo(
-                Enumerable.Range(2, Callers).Select(r => (long?)r),
-                "each successful write reports the revision it made, none repeated or skipped"
-            );
-    }
 }

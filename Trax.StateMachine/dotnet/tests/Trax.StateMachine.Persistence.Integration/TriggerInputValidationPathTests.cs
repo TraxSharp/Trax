@@ -71,11 +71,11 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
             case "junction":
             {
                 var id = Guid.NewGuid();
-                await _host.SeedDraft(User, id, LockedJson(Machine));
+                await _host.SeedDraft(User, id, LockedJson(Machine)).ConfigureAwait(false);
                 return new Path(
                     id,
                     SnapshotOwnerKind.User,
-                    path == "service"
+                    string.Equals(path, "service", StringComparison.Ordinal)
                         ? input => ViaService(id, input)
                         : input => ViaJunction(id, input)
                 );
@@ -83,7 +83,9 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
             case "instances":
             {
                 var key = MachineKey.Of("input", Guid.NewGuid().ToString());
-                var instance = await _host.Start<SystemDeclarativeTurnstileMachine>(key);
+                var instance = await _host
+                    .Start<SystemDeclarativeTurnstileMachine>(key)
+                    .ConfigureAwait(false);
                 return new Path(
                     instance.Id,
                     SnapshotOwnerKind.System,
@@ -91,7 +93,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
                 );
             }
             default:
-                throw new ArgumentOutOfRangeException(nameof(path), path, null);
+                throw new ArgumentOutOfRangeException(nameof(path), path, message: null);
         }
     }
 
@@ -99,7 +101,10 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
     {
         using var scope = _host.Scope();
         return Code(
-            await _host.Service(scope, Machine).Advance(User, id, "Coin", input, requestId)
+            await _host
+                .Service(scope, Machine)
+                .Advance(User, id, "Coin", input, requestId)
+                .ConfigureAwait(false)
         );
     }
 
@@ -107,15 +112,17 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
     {
         using var scope = _host.Scope();
         var registry = scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>();
-        var output = await new AdvanceSnapshotJunction(registry, new FakePrincipal(User)).Run(
-            new AdvanceSnapshotInput
-            {
-                Machine = Machine,
-                Id = id,
-                Trigger = "Coin",
-                Input = input?.ToJsonString(),
-            }
-        );
+        var output = await new AdvanceSnapshotJunction(registry, new FakePrincipal(User))
+            .Run(
+                new AdvanceSnapshotInput
+                {
+                    Machine = Machine,
+                    Id = id,
+                    Trigger = "Coin",
+                    Input = input?.ToJsonString(),
+                }
+            )
+            .ConfigureAwait(false);
         return output.Problem?.Code;
     }
 
@@ -126,6 +133,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
             await scope
                 .ServiceProvider.GetRequiredService<IMachineInstances>()
                 .Advance<SystemDeclarativeTurnstileMachine>(key, "Coin", input)
+                .ConfigureAwait(false)
         );
     }
 

@@ -346,7 +346,7 @@ public class MarkedMachineTests
             name,
             TypeAttributes.Public
                 | TypeAttributes.Class
-                | (isAbstract ? TypeAttributes.Abstract : 0),
+                | (isAbstract ? TypeAttributes.Abstract : TypeAttributes.AnsiClass),
             parent
         );
         if (generic)

@@ -525,7 +525,7 @@ public class PolicyDerivationTests
         // Closing a sheet tallies the quiz, and the tallied quiz clears the closed sheets: the clear comes after the
         // close by construction. A scoring train that also reaches Tallied from Scoring races the close.
         static Dictionary<string, JsonObject> Irs(bool train) =>
-            new()
+            new(StringComparer.Ordinal)
             {
                 ["quiz"] = JsonNode
                     .Parse(
@@ -574,7 +574,7 @@ public class PolicyDerivationTests
     {
         // Scoring sends the open sheets to marking, whose train closes them, and a scoring train tallies the quiz,
         // which clears the closed sheets. The clear waits for the marking train, not for the policy itself.
-        var irs = new Dictionary<string, JsonObject>
+        var irs = new Dictionary<string, JsonObject>(StringComparer.Ordinal)
         {
             ["quiz"] = JsonNode
                 .Parse(
@@ -627,7 +627,7 @@ public class PolicyDerivationTests
         // timer shorter than the policy runner's interval can fire before the close lands; one at least as long, or
         // one whose duration a context field holds, is a time a person chose.
         var timer = after is null ? """{ "name": "grace", "min": "PT0S", "max": "PT1H" }""" : null;
-        var irs = new Dictionary<string, JsonObject>
+        var irs = new Dictionary<string, JsonObject>(StringComparer.Ordinal)
         {
             ["quiz"] = JsonNode
                 .Parse(

@@ -50,7 +50,10 @@ public class StartTests(StoreProvider provider)
     )
     {
         using var scope = _host.Scope();
-        return await _host.Service(scope, machine).Start(actor, input, requestId);
+        return await _host
+            .Service(scope, machine)
+            .Start(actor, input, requestId)
+            .ConfigureAwait(false);
     }
 
     private static StartOutcome.Started Started(StartOutcome outcome) =>
@@ -338,7 +341,7 @@ public class StartTests(StoreProvider provider)
             scope.ServiceProvider.GetRequiredService<IEffectClaimStore>()
         );
 
-        (await service.Start(new Actor.Client(user), null, "s1"))
+        (await service.Start(new Actor.Client(user), input: null, "s1"))
             .Should()
             .BeOfType<StartOutcome.Rejected>(
                 $"only code creates a system-owned instance. See {Adr}"
@@ -362,7 +365,8 @@ public class StartTests(StoreProvider provider)
                     {
                         using var scope = host.Scope();
                         return await host.Service(scope, StartableMachine.Id)
-                            .Start(new Actor.Client(user), Note(), "s1");
+                            .Start(new Actor.Client(user), Note(), "s1")
+                            .ConfigureAwait(false);
                     })
                 )
         );
@@ -382,9 +386,11 @@ public class StartTests(StoreProvider provider)
     {
         if (provider == StoreProvider.Postgres)
         {
-            await using var conn = new NpgsqlConnection(PostgresSetup.ConnectionString);
+            var conn = new NpgsqlConnection(PostgresSetup.ConnectionString);
+            await using var connDisposal = conn.ConfigureAwait(false);
             await conn.OpenAsync();
-            await using var column = conn.CreateCommand();
+            var column = conn.CreateCommand();
+            await using var columnDisposal = column.ConfigureAwait(false);
             column.CommandText =
                 "SELECT count(*) FROM information_schema.columns "
                 + "WHERE table_schema = 'trax' AND table_name = 'snapshot_draft' AND column_name = 'start_request_id'";
@@ -392,12 +398,14 @@ public class StartTests(StoreProvider provider)
                 .Should()
                 .Be(1, $"start keeps its request id on the row. See {Adr}");
 
-            await using var index = conn.CreateCommand();
+            var index = conn.CreateCommand();
+            await using var indexDisposal = index.ConfigureAwait(false);
             index.CommandText =
                 "SELECT indexdef FROM pg_indexes WHERE schemaname = 'trax' AND tablename = 'snapshot_draft' "
                 + "AND indexdef LIKE '%start_request_id%'";
             var definitions = new List<string>();
-            await using (var reader = await index.ExecuteReaderAsync())
+            var reader = await index.ExecuteReaderAsync();
+            await using (reader.ConfigureAwait(false))
                 while (await reader.ReadAsync())
                     definitions.Add(reader.GetString(0));
             definitions
@@ -415,16 +423,19 @@ public class StartTests(StoreProvider provider)
         {
             var connectionString = $"Data Source={file}";
             await SqliteMigrator.Migrate(connectionString);
-            await using var conn = new SqliteConnection(connectionString);
+            var conn = new SqliteConnection(connectionString);
+            await using var connDisposal = conn.ConfigureAwait(false);
             await conn.OpenAsync();
-            await using var column = conn.CreateCommand();
+            var column = conn.CreateCommand();
+            await using var columnDisposal = column.ConfigureAwait(false);
             column.CommandText =
                 "SELECT count(*) FROM pragma_table_info('snapshot_draft') WHERE name = 'start_request_id'";
             ((long)(await column.ExecuteScalarAsync())!)
                 .Should()
                 .Be(1, $"start keeps its request id on the row. See {Adr}");
 
-            await using var index = conn.CreateCommand();
+            var index = conn.CreateCommand();
+            await using var indexDisposal = index.ConfigureAwait(false);
             index.CommandText =
                 "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'snapshot_draft' "
                 + "AND sql LIKE '%start_request_id%'";

@@ -5,8 +5,18 @@ type: how-to
 area: machines
 nav_order: 4
 source:
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Invokes.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IInvokeBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/InvokeOutcomeKind.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/InvokeOutcome.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/OutcomeEdge.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/SpawnDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/InvokeDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/OutcomeTriggers.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokeOutbox.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/EnteringInvoke.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokeWrite.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/DraftCap.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/CreateWrite.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SpawnsStartupValidator.cs
 ---
 

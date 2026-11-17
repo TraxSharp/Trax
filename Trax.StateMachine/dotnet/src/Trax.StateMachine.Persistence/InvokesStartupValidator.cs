@@ -35,7 +35,8 @@ internal sealed class InvokesStartupValidator(
     public async Task StartingAsync(CancellationToken cancellationToken)
     {
         _checked = true;
-        await using var scope = scopeFactory.CreateAsyncScope();
+        var scope = scopeFactory.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var problems = machines.SelectMany(m => Problems(m, scope.ServiceProvider)).ToList();
         if (problems.Count > 0)
             throw new InvalidOperationException(

@@ -114,7 +114,7 @@ public class MultiActorOwnershipTests
             .Should()
             .BeFalse("a visitor owns no assignment");
         MachineRulesStartupValidator
-            .Problems([machine], new StateMachineOptions(), null)
+            .Problems([machine], new StateMachineOptions(), caller: null)
             .Result.Should()
             .BeEmpty();
     }
@@ -124,7 +124,11 @@ public class MultiActorOwnershipTests
     {
         var derived = Derive(
             Lanes,
-            Glossary.Replace("\"roles\": [\"fixer\"]", "\"roles\": [\"fixer\", \"triage\"]")
+            Glossary.Replace(
+                "\"roles\": [\"fixer\"]",
+                "\"roles\": [\"fixer\", \"triage\"]",
+                StringComparison.Ordinal
+            )
         );
 
         derived

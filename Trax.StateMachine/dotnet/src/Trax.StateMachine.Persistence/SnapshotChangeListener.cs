@@ -70,7 +70,7 @@ internal sealed class SnapshotChangeListener(
     private IReadOnlyCollection<long> _lastPolled = [];
 
     private readonly ILogger _logger = logger ?? NullLogger<SnapshotChangeListener>.Instance;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly List<Reader> _readers = [];
     private readonly CancellationTokenSource _stopping = new();
     private CancellationTokenSource? _run;
@@ -92,7 +92,7 @@ internal sealed class SnapshotChangeListener(
     }
 
     public IAsyncEnumerable<SnapshotChange> ChangesAsync(CancellationToken cancellationToken) =>
-        ChangesAsync(cancellationToken, null);
+        ChangesAsync(cancellationToken, watched: null);
 
     public async IAsyncEnumerable<SnapshotChange> ChangesAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken,
@@ -109,7 +109,10 @@ internal sealed class SnapshotChangeListener(
                 cancellationToken,
                 _stopping.Token
             );
-            while (await reader.TryReadAsync(linked.Token, _stopping.Token) is { } next)
+            while (
+                await reader.TryReadAsync(linked.Token, _stopping.Token).ConfigureAwait(false)
+                    is { } next
+            )
                 yield return next;
         }
         finally
@@ -161,14 +164,15 @@ internal sealed class SnapshotChangeListener(
             _stopped = true;
             loop = _loop;
         }
-        await _stopping.CancelAsync();
+        await _stopping.CancelAsync().ConfigureAwait(false);
         if (loop is not null)
             await loop.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     // The container may dispose this more than once (it is registered under several service types), so disposing is
     // stopping, which is idempotent; the token source has no timer, so it is left to the collector.
-    public async ValueTask DisposeAsync() => await StopAsync(CancellationToken.None);
+    public async ValueTask DisposeAsync() =>
+        await StopAsync(CancellationToken.None).ConfigureAwait(false);
 
     public void Dispose()
     {
@@ -191,10 +195,11 @@ internal sealed class SnapshotChangeListener(
         {
             try
             {
-                await using var subscription = await source.SubscribeAsync(stoppingToken);
+                var subscription = await source.SubscribeAsync(stoppingToken).ConfigureAwait(false);
+                await using var subscriptionDisposal = subscription.ConfigureAwait(false);
                 StateMachineMeter.ReportQueueUsage(
                     this,
-                    await subscription.QueueUsageAsync(stoppingToken)
+                    await subscription.QueueUsageAsync(stoppingToken).ConfigureAwait(false)
                 );
                 var sampled = Stopwatch.GetTimestamp();
                 Live();
@@ -210,12 +215,14 @@ internal sealed class SnapshotChangeListener(
                     {
                         StateMachineMeter.ReportQueueUsage(
                             this,
-                            await subscription.QueueUsageAsync(stoppingToken)
+                            await subscription.QueueUsageAsync(stoppingToken).ConfigureAwait(false)
                         );
                         sampled = Stopwatch.GetTimestamp();
                         due = QueueUsageInterval;
                     }
-                    var payload = await subscription.NextAsync(due, stoppingToken);
+                    var payload = await subscription
+                        .NextAsync(due, stoppingToken)
+                        .ConfigureAwait(false);
                     if (payload is null)
                         continue;
                     if (TryParseRowId(payload, out var rowId))
@@ -236,7 +243,7 @@ internal sealed class SnapshotChangeListener(
                     "Lost the snapshot change notices; listening again in {Delay}. Watchers re-read their rows when it does.",
                     delay
                 );
-                if (!await Wait(delay, stoppingToken))
+                if (!await Wait(delay, stoppingToken).ConfigureAwait(false))
                     break;
                 delay = delay * 2 > ReconnectDelayCap ? ReconnectDelayCap : delay * 2;
             }
@@ -266,7 +273,7 @@ internal sealed class SnapshotChangeListener(
             try
             {
                 var scope = Watched();
-                var current = await ReadRevisions(scope, stoppingToken);
+                var current = await ReadRevisions(scope, stoppingToken).ConfigureAwait(false);
                 Volatile.Write(ref _lastPolled, [.. current.Keys]);
                 if (known is null || (scope.EveryRow && !(knew?.Covers(scope) ?? false)))
                     Live(stoppingToken);
@@ -293,7 +300,7 @@ internal sealed class SnapshotChangeListener(
                 known = current;
                 knew = scope;
                 delay = ReconnectDelay;
-                if (!await _writes.WaitAsync(PollInterval, stoppingToken))
+                if (!await _writes.WaitAsync(PollInterval, stoppingToken).ConfigureAwait(false))
                     break;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -311,7 +318,7 @@ internal sealed class SnapshotChangeListener(
                     "Could not poll the state-machine table for changes; polling again in {Delay}. Watchers re-read their rows when it succeeds.",
                     delay
                 );
-                if (!await Wait(delay, stoppingToken))
+                if (!await Wait(delay, stoppingToken).ConfigureAwait(false))
                     break;
                 delay = delay * 2 > ReconnectDelayCap ? ReconnectDelayCap : delay * 2;
             }
@@ -354,7 +361,8 @@ internal sealed class SnapshotChangeListener(
         CancellationToken cancellationToken
     )
     {
-        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var rows = db.SnapshotDrafts.AsNoTracking();
         if (scope.EveryRow && scope.Machines is null)
             return await rows.Select(d => new
@@ -367,7 +375,8 @@ internal sealed class SnapshotChangeListener(
                     r => r.RowId,
                     r => new PolledRow(r.Revision, r.Machine),
                     cancellationToken
-                );
+                )
+                .ConfigureAwait(false);
 
         var revisions = new Dictionary<long, PolledRow>();
         if (scope.EveryRow && scope.Machines is { Count: > 0 } machines)
@@ -382,6 +391,7 @@ internal sealed class SnapshotChangeListener(
                         d.Machine,
                     })
                     .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false)
             )
                 revisions[row.RowId] = new PolledRow(row.Revision, row.Machine);
         }
@@ -395,6 +405,7 @@ internal sealed class SnapshotChangeListener(
                     d.Machine,
                 })
                 .ToListAsync(cancellationToken)
+                .ConfigureAwait(false)
         )
             revisions[row.RowId] = new PolledRow(row.Revision, row.Machine);
         return revisions;
@@ -463,7 +474,7 @@ internal sealed class SnapshotChangeListener(
     {
         try
         {
-            await Task.Delay(delay, stoppingToken);
+            await Task.Delay(delay, stoppingToken).ConfigureAwait(false);
             return true;
         }
         catch (OperationCanceledException)
@@ -505,7 +516,7 @@ internal sealed class SnapshotChangeListener(
                 return SnapshotChange.Reload.Instance;
             try
             {
-                return await _buffer.Reader.ReadAsync(cancellationToken);
+                return await _buffer.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stopping.IsCancellationRequested)
             {

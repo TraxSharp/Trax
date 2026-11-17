@@ -5,20 +5,6 @@ using Trax.StateMachine.Persistence;
 
 namespace Trax.StateMachine.Tests.Stress.Fakes;
 
-public enum OrderState
-{
-    Draft,
-    Review,
-    Placed,
-}
-
-public enum OrderTrigger
-{
-    Next,
-    Place,
-    Reset,
-}
-
 /// <summary>
 /// An effectful order machine (<c>Draft → Review → Placed</c>), the same shape the correctness suite uses:
 /// <c>Placed</c> is committed and <c>Place</c> runs the irreversible effect exactly once. The stress tests

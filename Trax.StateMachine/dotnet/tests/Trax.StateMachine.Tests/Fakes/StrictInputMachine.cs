@@ -4,36 +4,6 @@ using Trax.StateMachine.Tests.Helpers;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
-public enum StrictState
-{
-    Open,
-    Done,
-}
-
-public enum StrictTrigger
-{
-    Submit,
-    Check,
-}
-
-public enum StrictColor
-{
-    Red,
-    DarkGreen,
-
-    [JsonStringEnumMemberName("sky-blue")]
-    SkyBlue,
-}
-
-/// <summary>A flags enum, which no schema can describe: <c>SchemaFormatTests</c> checks a record holding one is refused.</summary>
-[Flags]
-public enum StrictFlags
-{
-    None = 0,
-    Bold = 1,
-    Italic = 2,
-}
-
 /// <summary>
 /// A declarative machine whose <c>Submit</c> takes a <see cref="StrictInput"/>: one field of every CLR type the
 /// schema gives a domain, a format or a range beyond its JSON type. <c>Check</c> declares the same record but its

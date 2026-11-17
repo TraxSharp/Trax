@@ -29,14 +29,16 @@ public class MachineFromIrTests
 
     // The access the hand-written conformance machines declare, as their host entries say it. A timer's rules are
     // computed from it and are in the IR, so an entry that disagrees exports a different IR.
-    private static readonly Dictionary<string, Func<JsonObject, HostMachine>> Hosts = new()
+    private static readonly Dictionary<string, Func<JsonObject, HostMachine>> Hosts = new(
+        StringComparer.Ordinal
+    )
     {
         ["turnstile"] = ir => Host(ir),
         ["gauge"] = ir => Host(ir),
         ["reminder"] = ir =>
             Host(ir) with
             {
-                Triggers = new Dictionary<string, TriggerAccess>
+                Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
                 {
                     ["Open"] = new(Editors),
                     ["Extend"] = new(AccessRule.AnyAuthenticated),
@@ -129,7 +131,10 @@ public class MachineFromIrTests
         var ir = Ir("reminder");
         var host = Hosts["reminder"](ir) with
         {
-            Triggers = new Dictionary<string, TriggerAccess> { ["Open"] = new(Editors) },
+            Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
+            {
+                ["Open"] = new(Editors),
+            },
         };
 
         var create = () => IrMachines.Create(new IrMachines.Source(ir, host), Trains);
@@ -185,12 +190,12 @@ public class MachineFromIrTests
         var ir = Ir("ingest");
         var host = Host(ir) with
         {
-            Invokes = new Dictionary<string, HostInvoke>
+            Invokes = new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
             {
                 ["Fetching"] = new(
                     "Fetching",
                     "Ingest.Contracts.IMissingTrain",
-                    new Dictionary<string, string>()
+                    new Dictionary<string, string>(StringComparer.Ordinal)
                 ),
             },
         };
@@ -211,7 +216,7 @@ public class MachineFromIrTests
         {
             Start = AccessRule.AnyAuthenticated,
             Read = AccessRule.AnyAuthenticated,
-            Triggers = new Dictionary<string, TriggerAccess>
+            Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
             {
                 ["Coin"] = new(AccessRule.AnyAuthenticated),
                 ["Push"] = TriggerAccess.Server,
@@ -226,7 +231,7 @@ public class MachineFromIrTests
             .NotContain("Push", "a server-only trigger is not in the typed API");
         ((IMachineInternals)machine).ServerTriggers.Should().Equal("Push");
         MachineRulesStartupValidator
-            .Problems([machine], new StateMachineOptions(), null)
+            .Problems([machine], new StateMachineOptions(), caller: null)
             .Result.Should()
             .BeEmpty();
         machine
@@ -241,7 +246,7 @@ public class MachineFromIrTests
         var ir = Ir("ingest");
         var host = Hosts["ingest"](ir) with
         {
-            Triggers = new Dictionary<string, TriggerAccess>
+            Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
             {
                 ["Start"] = TriggerAccess.Server,
                 ["Abandon"] = new(AccessRule.AnyAuthenticated),
@@ -271,7 +276,10 @@ public class MachineFromIrTests
         var host = Hosts["ingest"](ir) with
         {
             SystemKey = "ingest/main",
-            Triggers = new Dictionary<string, TriggerAccess> { ["Start"] = TriggerAccess.Server },
+            Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
+            {
+                ["Start"] = TriggerAccess.Server,
+            },
         };
         var machine = IrMachines.Create(new IrMachines.Source(ir, host), Trains);
 
@@ -334,7 +342,9 @@ public class MachineFromIrTests
 
         var machine = IrMachines.Create(new IrMachines.Source(ir, Hosts["ingest"](ir)), Trains);
 
-        var context = machine.States.Single(s => s.Name == "Fetched").ContextType!;
+        var context = machine
+            .States.Single(s => string.Equals(s.Name, "Fetched", StringComparison.Ordinal))
+            .ContextType!;
         context
             .GetProperty("Fingerprint")!
             .GetCustomAttribute<System.Text.Json.Serialization.JsonPropertyNameAttribute>()!
@@ -355,20 +365,20 @@ public class MachineFromIrTests
         new(
             ir["id"]!.GetValue<string>(),
             Hash(ir),
-            null,
-            null,
-            null,
-            new Dictionary<string, TriggerAccess>(),
-            new Dictionary<string, HostInvoke>()
+            SystemKey: null,
+            Start: null,
+            Read: null,
+            new Dictionary<string, TriggerAccess>(StringComparer.Ordinal),
+            new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
         );
 
     private static Dictionary<string, HostInvoke> Fetching(string state) =>
-        new()
+        new(StringComparer.Ordinal)
         {
             [state] = new(
                 state,
                 typeof(IFetchTrain).FullName!,
-                new Dictionary<string, string> { ["source"] = "source" }
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["source"] = "source" }
             ),
         };
 

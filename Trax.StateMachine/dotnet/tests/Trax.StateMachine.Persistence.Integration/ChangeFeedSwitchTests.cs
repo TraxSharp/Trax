@@ -90,7 +90,8 @@ public class ChangeFeedSwitchTests
     {
         await _db.Execute($"ALTER DATABASE {_db.Name} SET trax.snapshot_notify = 'OFF'");
         using var host = Host(StateMachineChangeFeed.Notify);
-        await using var notices = await SnapshotNotices.Listen(_db.ConnectionString);
+        var notices = await SnapshotNotices.Listen(_db.ConnectionString);
+        await using var noticesDisposal = notices.ConfigureAwait(false);
 
         var id = Guid.NewGuid();
         await host.SeedDraft(User, id, TestTurnstile.InitialJson);

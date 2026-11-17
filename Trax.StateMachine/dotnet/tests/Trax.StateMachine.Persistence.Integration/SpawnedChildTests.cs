@@ -234,9 +234,12 @@ public class SpawnedChildTests(StoreProvider provider)
     private static async Task<Guid> Packing(InstanceHost host)
     {
         var id = Guid.NewGuid();
-        await host.Seed(User, id, ConsignmentMachine.At(ConsignmentState.Open));
+        await host.Seed(User, id, ConsignmentMachine.At(ConsignmentState.Open))
+            .ConfigureAwait(false);
         using var scope = host.Scope();
-        var packed = await host.Service(scope, ConsignmentMachine.Id).Advance(User, id, "Pack");
+        var packed = await host.Service(scope, ConsignmentMachine.Id)
+            .Advance(User, id, "Pack")
+            .ConfigureAwait(false);
         packed.Should().BeOfType<AdvanceOutcome.Advanced>(packed.ToString());
         return id;
     }
@@ -244,7 +247,10 @@ public class SpawnedChildTests(StoreProvider provider)
     private static async Task<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> Parent(
         InstanceHost host,
         Guid id
-    ) => (await host.Rows(id)).Single(r => r.Machine == ConsignmentMachine.Id);
+    ) =>
+        (await host.Rows(id).ConfigureAwait(false)).Single(r =>
+            string.Equals(r.Machine, ConsignmentMachine.Id, StringComparison.Ordinal)
+        );
 
     private static Guid ChildId(Trax.Effect.Models.SnapshotDraft.SnapshotDraft parent) =>
         Guid.Parse(JsonNode.Parse(parent.Context)!["parcelId"]!.GetValue<string>());

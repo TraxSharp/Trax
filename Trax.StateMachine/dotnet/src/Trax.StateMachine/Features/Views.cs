@@ -3,25 +3,6 @@ using System.Text.RegularExpressions;
 
 namespace Trax.StateMachine.Features;
 
-/// <summary>One machine a view reads: the caller's own instances of a user machine, or a system instance at its key.</summary>
-internal sealed record ViewRead(string Machine, string? Key);
-
-/// <summary>
-/// One field a view shows: a machine's state (<see cref="Source"/> is <c>state</c>), labelled per state if it gives
-/// labels, or one of the machine's context fields.
-/// </summary>
-internal sealed record ViewField(
-    string Name,
-    string Machine,
-    string Source,
-    IReadOnlyDictionary<string, string>? Labels
-)
-{
-    internal const string State = "state";
-
-    internal bool IsState => Source == State;
-}
-
 /// <summary>
 /// The view shape the glossary and the host file share: what a view reads and the fields it shows. The checks that
 /// need the machines (that a read machine exists and is read with its key exactly when it is a system machine) are
@@ -180,7 +161,7 @@ internal static partial class Views
                     .Fail(
                         $"'{machine}' is a user's machine: a view reads the caller's own, never one by key."
                     );
-            if (systemKey is not null && key != systemKey)
+            if (systemKey is not null && !string.Equals(key, systemKey, StringComparison.Ordinal))
                 throw itemAt.Fail(
                     $"'{machine}' is a system machine: a view reads it at its key, '{systemKey}'."
                 );

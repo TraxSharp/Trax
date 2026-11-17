@@ -25,7 +25,10 @@ public class FuzzTests
     private static void Fuzz(ConformanceTestee testee, bool irs)
     {
         var seed = Environment.GetEnvironmentVariable("TRAX_FUZZ_SEED") ?? "1";
-        var cases = int.Parse(Environment.GetEnvironmentVariable("TRAX_FUZZ_CASES") ?? "300");
+        var cases = int.Parse(
+            Environment.GetEnvironmentVariable("TRAX_FUZZ_CASES") ?? "300",
+            System.Globalization.CultureInfo.InvariantCulture
+        );
         var (exitCode, report) = TwinEngine.RunFuzzer(
             $"--seed {seed} --cases {cases}{(irs ? " --irs" : "")} {TypeScriptTestee}",
             line => Answer(testee, line),

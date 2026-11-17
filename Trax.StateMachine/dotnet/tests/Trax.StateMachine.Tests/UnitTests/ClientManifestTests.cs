@@ -124,7 +124,7 @@ public class ClientManifestTests
     }
 
     private static int Occurrences(string text, string part) =>
-        (text.Length - text.Replace(part, "").Length) / part.Length;
+        (text.Length - text.Replace(part, "", StringComparison.Ordinal).Length) / part.Length;
 
     [Test]
     public void A_newer_format_is_refused_naming_both()

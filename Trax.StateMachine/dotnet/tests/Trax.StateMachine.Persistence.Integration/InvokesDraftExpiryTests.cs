@@ -114,24 +114,28 @@ public class InvokesDraftExpiryTests(StoreProvider provider)
 
     private static async Task SeedIdleDraftHolding(InstanceHost host, Guid id, string token)
     {
-        await host.SeedDraft("u1", id, UnlockedJson);
+        await host.SeedDraft("u1", id, UnlockedJson).ConfigureAwait(false);
         using (var scope = host.Scope())
         {
             var store = host.Instances(scope);
-            var stored = await store.Get(DraftOwner.User("u1"), "turnstile", id);
+            var stored = await store
+                .Get(DraftOwner.User("u1"), "turnstile", id)
+                .ConfigureAwait(false);
             (
-                await store.SetInvokeToken(
-                    DraftOwner.User("u1"),
-                    "turnstile",
-                    id,
-                    stored!.Token,
-                    new InvokeTokenWrite(token)
-                )
+                await store
+                    .SetInvokeToken(
+                        DraftOwner.User("u1"),
+                        "turnstile",
+                        id,
+                        stored!.Token,
+                        new InvokeTokenWrite(token)
+                    )
+                    .ConfigureAwait(false)
             )
                 .Should()
                 .BeTrue();
         }
-        await host.Backdate(id, SnapshotOwnerKind.User, LongAgo);
+        await host.Backdate(id, SnapshotOwnerKind.User, LongAgo).ConfigureAwait(false);
 
         using var read = host.Scope();
         (
@@ -139,6 +143,7 @@ public class InvokesDraftExpiryTests(StoreProvider provider)
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .SnapshotDrafts.AsNoTracking()
                 .SingleAsync(x => x.Id == id)
+                .ConfigureAwait(false)
         )
             .InvokeToken.Should()
             .Be(token);

@@ -42,7 +42,11 @@ internal sealed class LexiconParser
             return;
         }
         _open.RemoveRange(at + 1, _open.Count - at - 1);
-        if (keyword.Text == "Version:" && _open[at].Block == Block.Root && !first)
+        if (
+            string.Equals(keyword.Text, "Version:", StringComparison.Ordinal)
+            && _open[at].Block == Block.Root
+            && !first
+        )
         {
             _problems.Add(
                 new LexProblem(line.Number, "'Version: 1' is the first line of a lexicon.")
@@ -219,10 +223,14 @@ internal sealed class LexiconParser
     private object? Discard(LexLine line, Cursor c, Block under) =>
         under switch
         {
-            Block.Machine => ReadMachine(line, c, new LxMachine("x", null, 0)),
-            Block.State => ReadState(line, c, new LxState("X", "x", false, 0)),
+            Block.Machine => ReadMachine(line, c, new LxMachine("x", noun: null, 0)),
+            Block.State => ReadState(line, c, new LxState("X", "x", committed: false, 0)),
             Block.Trigger => ReadTrigger(line, c, new LxTrigger("X", "x", 0)),
-            Block.Guard => ReadGuard(line, c, new LxGuard("x", new LxRule([], null, 0), 0)),
+            Block.Guard => ReadGuard(
+                line,
+                c,
+                new LxGuard("x", new LxRule([], Connective: null, 0), 0)
+            ),
             Block.Runs => ReadRuns(line, c, new LxRuns("X", "X", 0)),
             _ => null,
         };
@@ -243,9 +251,9 @@ internal sealed class LexiconParser
             case "System keyed by:":
                 if (m.SystemLine != 0)
                     throw Again("System", m.SystemLine);
-                if (line.Keyword.Text == "System at:")
+                if (string.Equals(line.Keyword.Text, "System at:", StringComparison.Ordinal))
                     m.SystemAt = c.Word("the system key");
-                if (line.Keyword.Text == "System keyed by:")
+                if (string.Equals(line.Keyword.Text, "System keyed by:", StringComparison.Ordinal))
                     m.KeyedBy = c.Words("a key part");
                 m.SystemLine = n;
                 return null;
@@ -341,7 +349,9 @@ internal sealed class LexiconParser
                 var example = c.Next("true or false");
                 if (!example.Is("true") && !example.Is("false"))
                     throw c.Form("a rule's example is true or false");
-                m.Rules.Add(new LxHandler(name, type, example.Is("true"), null, n));
+                m.Rules.Add(
+                    new LxHandler(name, type, example.Is("true"), ReductionExample: null, n)
+                );
                 return null;
             }
             case "Reduction:":
@@ -351,7 +361,7 @@ internal sealed class LexiconParser
                 var type = c.Word("the reduction's type");
                 c.Comma();
                 c.Expect("example");
-                m.Reductions.Add(new LxHandler(name, type, null, c.Assignments(), n));
+                m.Reductions.Add(new LxHandler(name, type, RuleExample: null, c.Assignments(), n));
                 return null;
             }
         }
@@ -392,19 +402,19 @@ internal sealed class LexiconParser
                 trigger.Input.Add(c.Field(partial: false));
                 return null;
             case "Sets:":
-                Reduce(new LxReduce("set", c.Sets(), null, n));
+                Reduce(new LxReduce("set", c.Sets(), Name: null, n));
                 return null;
             case "Keeps":
-                Reduce(new LxReduce("keep", null, null, n));
+                Reduce(new LxReduce("keep", Steps: null, Name: null, n));
                 return null;
             case "Clears":
-                Reduce(new LxReduce("clear", null, null, n));
+                Reduce(new LxReduce("clear", Steps: null, Name: null, n));
                 return null;
             case "Resets":
-                Reduce(new LxReduce("reset", null, null, n));
+                Reduce(new LxReduce("reset", Steps: null, Name: null, n));
                 return null;
             case "Reduces with:":
-                Reduce(new LxReduce("custom", null, c.Word("a reduction"), n));
+                Reduce(new LxReduce("custom", Steps: null, c.Word("a reduction"), n));
                 return null;
             case "Guarded by:":
                 if (trigger.Guard is not null)
@@ -530,7 +540,7 @@ internal sealed class LexiconParser
                             kind = "cancelled";
                         }
                     }
-                    runs.Outcomes.Add(new LxOutcome(phrase, kind, null, n));
+                    runs.Outcomes.Add(new LxOutcome(phrase, kind, When: null, n));
                 }
                 else
                     runs.Outcomes.Add(new LxOutcome(phrase, "done", c.Rule(), n));
@@ -615,6 +625,3 @@ internal sealed class LexiconParser
     private static FormError Again(string keyword, int line) =>
         new($"'{keyword}' is already given at line {line}, and is given once.");
 }
-
-/// <summary>A line not in its keyword's form: the message names the form.</summary>
-internal sealed class FormError(string message) : Exception(message);

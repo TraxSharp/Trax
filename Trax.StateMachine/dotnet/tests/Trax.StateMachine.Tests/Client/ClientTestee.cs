@@ -36,7 +36,7 @@ public sealed class ClientTestee : IAsyncDisposable
         JsonObject answer;
         try
         {
-            answer = await HandleAsync(request);
+            answer = await HandleAsync(request).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -59,44 +59,56 @@ public sealed class ClientTestee : IAsyncDisposable
         switch (op)
         {
             case "open":
-                await CloseAsync();
+                await CloseAsync().ConfigureAwait(false);
                 return Open(request);
             case "dispose":
-                await CloseAsync();
+                await CloseAsync().ConfigureAwait(false);
                 return new JsonObject { ["disposed"] = true };
             case "end":
-                await CloseAsync();
+                await CloseAsync().ConfigureAwait(false);
                 return new JsonObject();
         }
         if (_controller is not { } controller)
             return new JsonObject { ["error"] = "no client is open" };
         return op switch
         {
-            "start" => await Settled(controller.StartAsync()),
+            "start" => await Settled(controller.StartAsync()).ConfigureAwait(false),
             "send" => OutcomeOf(
-                await controller.SendAsync(
-                    request["trigger"]!.GetValue<string>(),
-                    request["tooDeep"]?.GetValue<string>() == "input"
-                        ? TooDeep()
-                        : request["input"]?.DeepClone()
-                )
-            ),
-            "build" => await BuildAsync(request),
-            "headers" => Headers(request),
-            "retry" => OutcomeOf(await controller.RetryAsync()),
-            "sync" => SyncOf(
-                await controller.SyncToAsync(
-                    request["target"]!.GetValue<string>(),
-                    request["fields"] is JsonObject fields
-                        ? new PlannedEvent(
-                            fields["trigger"]!.GetValue<string>(),
-                            request["tooDeep"]?.GetValue<string>() == "input"
-                                ? TooDeep()
-                                : fields["input"]?.DeepClone()
+                await controller
+                    .SendAsync(
+                        request["trigger"]!.GetValue<string>(),
+                        string.Equals(
+                            request["tooDeep"]?.GetValue<string>(),
+                            "input",
+                            StringComparison.Ordinal
                         )
-                        : null,
-                    request["navigation"]!.AsArray().Select(t => t!.GetValue<string>()).ToList()
-                )
+                            ? TooDeep()
+                            : request["input"]?.DeepClone()
+                    )
+                    .ConfigureAwait(false)
+            ),
+            "build" => await BuildAsync(request).ConfigureAwait(false),
+            "headers" => Headers(request),
+            "retry" => OutcomeOf(await controller.RetryAsync().ConfigureAwait(false)),
+            "sync" => SyncOf(
+                await controller
+                    .SyncToAsync(
+                        request["target"]!.GetValue<string>(),
+                        request["fields"] is JsonObject fields
+                            ? new PlannedEvent(
+                                fields["trigger"]!.GetValue<string>(),
+                                string.Equals(
+                                    request["tooDeep"]?.GetValue<string>(),
+                                    "input",
+                                    StringComparison.Ordinal
+                                )
+                                    ? TooDeep()
+                                    : fields["input"]?.DeepClone()
+                            )
+                            : null,
+                        request["navigation"]!.AsArray().Select(t => t!.GetValue<string>()).ToList()
+                    )
+                    .ConfigureAwait(false)
             ),
             "view" => ViewOf(controller.View),
             "can" => new JsonObject
@@ -116,7 +128,7 @@ public sealed class ClientTestee : IAsyncDisposable
                         .ToArray()
                 ),
             },
-            "discard" => await DiscardAsync(controller.View.Id),
+            "discard" => await DiscardAsync(controller.View.Id).ConfigureAwait(false),
             _ => new JsonObject { ["unsupported"] = true },
         };
     }
@@ -127,12 +139,18 @@ public sealed class ClientTestee : IAsyncDisposable
     {
         if (id is null || _server is not { } server)
             return new JsonObject { ["error"] = "no instance to discard" };
-        var problem = await server.DiscardAsync(id, _newRequestId());
+        var problem = await server.DiscardAsync(id, _newRequestId()).ConfigureAwait(false);
         if (problem is null)
             return new JsonObject { ["outcome"] = "discarded" };
         return new JsonObject
         {
-            ["outcome"] = problem.Code == ClientProblemCodes.TransportError ? "failed" : "refused",
+            ["outcome"] = string.Equals(
+                problem.Code,
+                ClientProblemCodes.TransportError,
+                StringComparison.Ordinal
+            )
+                ? "failed"
+                : "refused",
             ["code"] = problem.Code,
         };
     }
@@ -148,7 +166,7 @@ public sealed class ClientTestee : IAsyncDisposable
 
     private static async Task<JsonObject> Settled(Task started)
     {
-        await started;
+        await started.ConfigureAwait(false);
         return new JsonObject { ["settled"] = true };
     }
 
@@ -190,7 +208,7 @@ public sealed class ClientTestee : IAsyncDisposable
         if (built.Code is { } code)
             return new JsonObject { ["built"] = false, ["code"] = code };
         built.Controller!.Dispose();
-        await built.Socket!.DisposeAsync();
+        await built.Socket!.DisposeAsync().ConfigureAwait(false);
         return new JsonObject { ["built"] = true };
     }
 
@@ -292,7 +310,7 @@ public sealed class ClientTestee : IAsyncDisposable
                     RetryDelays = Delays(request["retryDelays"]),
                 }
             );
-            return new Built(socket, server, controller, newRequestId, null);
+            return new Built(socket, server, controller, newRequestId, Code: null);
         }
         // A client refusing cleartext to another host refuses to be built, before it sends anything, and so does one
         // given an option out of range.
@@ -301,10 +319,10 @@ public sealed class ClientTestee : IAsyncDisposable
             if (socket is not null)
                 _ = socket.DisposeAsync().AsTask();
             return new Built(
-                null,
-                null,
-                null,
-                null,
+                Socket: null,
+                Server: null,
+                Controller: null,
+                NewRequestId: null,
                 ex.Message.Contains("not over TLS", StringComparison.Ordinal)
                     ? "INSECURE_TRANSPORT"
                     : "INVALID_OPTION"
@@ -444,14 +462,14 @@ public sealed class ClientTestee : IAsyncDisposable
         _controller = null;
         _server = null;
         if (_socket is { } socket)
-            await socket.DisposeAsync();
+            await socket.DisposeAsync().ConfigureAwait(false);
         _socket = null;
     }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
-        await CloseAsync();
+        await CloseAsync().ConfigureAwait(false);
         _http.Dispose();
     }
 }

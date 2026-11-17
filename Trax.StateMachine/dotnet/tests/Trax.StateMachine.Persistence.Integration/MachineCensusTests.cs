@@ -68,7 +68,10 @@ public class MachineCensusTests
         Entry(census, RuledDeskMachine.Id, "start").Rule.Should().Contain(DeskRoles.Operator);
 
         census
-            .Where(e => e.Machine == RuledDeskMachine.Id && e.Kind != "Read")
+            .Where(e =>
+                string.Equals(e.Machine, RuledDeskMachine.Id, StringComparison.Ordinal)
+                && !string.Equals(e.Kind, "Read", StringComparison.Ordinal)
+            )
             .Should()
             .AllSatisfy(e =>
                 e.Surfaces.Should()
@@ -82,7 +85,10 @@ public class MachineCensusTests
 
         // Outcome triggers are the server's own: listed, never reachable by a client.
         var outcomes = census
-            .Where(e => e.Machine == RuledBuildMachine.Id && e.Kind == nameof(TriggerKind.Outcome))
+            .Where(e =>
+                string.Equals(e.Machine, RuledBuildMachine.Id, StringComparison.Ordinal)
+                && string.Equals(e.Kind, nameof(TriggerKind.Outcome), StringComparison.Ordinal)
+            )
             .ToList();
         outcomes
             .Select(e => e.Name)
@@ -130,7 +136,9 @@ public class MachineCensusTests
                 );
 
         census
-            .Where(e => e.Kind == nameof(TriggerKind.Outcome))
+            .Where(e =>
+                string.Equals(e.Kind, nameof(TriggerKind.Outcome), StringComparison.Ordinal)
+            )
             .Should()
             .AllSatisfy(e =>
                 e.Surfaces.Should()

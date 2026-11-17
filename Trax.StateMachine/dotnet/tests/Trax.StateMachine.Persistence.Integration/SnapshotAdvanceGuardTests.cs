@@ -7,37 +7,6 @@ using Trax.StateMachine.Persistence.Mutations;
 
 namespace Trax.StateMachine.Persistence.Integration;
 
-public enum LogState
-{
-    Open,
-}
-
-public enum LogTrigger
-{
-    Append,
-}
-
-/// <summary>A one-state machine whose only edge appends <c>input.text</c> to the text it already holds.</summary>
-public sealed class LogMachine : Machine<LogState, LogTrigger>
-{
-    protected override void Configure(IMachineBuilder<LogState, LogTrigger> m)
-    {
-        m.Id("log").Version(1).StartsAt(LogState.Open, () => new JsonObject());
-        m.In(LogState.Open)
-            .On(LogTrigger.Append)
-            .Reduce(
-                (ctx, input) =>
-                    new JsonObject
-                    {
-                        ["text"] =
-                            (ctx["text"]?.GetValue<string>() ?? "")
-                            + (input?["text"]?.GetValue<string>() ?? ""),
-                    }
-            )
-            .To(LogState.Open);
-    }
-}
-
 /// <summary>
 /// What the authoritative advance refuses before it writes: an oversized input or result, and a result no
 /// store can hold. In each case the stored draft must be exactly what it was.
@@ -61,11 +30,13 @@ public class SnapshotAdvanceGuardTests
     private static async Task<Guid> Saved(string machine, string state, string context)
     {
         var id = Guid.NewGuid();
-        await TestDb.Seed(
-            "u",
-            id,
-            $"{{\"machine\":\"{machine}\",\"version\":1,\"state\":\"{state}\",\"context\":{context}}}"
-        );
+        await TestDb
+            .Seed(
+                "u",
+                id,
+                $"{{\"machine\":\"{machine}\",\"version\":1,\"state\":\"{state}\",\"context\":{context}}}"
+            )
+            .ConfigureAwait(false);
         return id;
     }
 
@@ -89,9 +60,9 @@ public class SnapshotAdvanceGuardTests
 
     private static async Task<string> Load(string machine, Guid id) =>
         (
-            await new LoadSnapshotJunction(NewRegistry(), User).Run(
-                new LoadSnapshotInput { Machine = machine, Id = id }
-            )
+            await new LoadSnapshotJunction(NewRegistry(), User)
+                .Run(new LoadSnapshotInput { Machine = machine, Id = id })
+                .ConfigureAwait(false)
         ).Snapshot!;
 
     [Test]

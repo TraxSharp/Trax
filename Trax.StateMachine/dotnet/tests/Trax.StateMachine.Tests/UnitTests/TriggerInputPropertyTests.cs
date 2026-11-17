@@ -73,10 +73,14 @@ public class TriggerInputPropertyTests
                 input.Remove(field);
                 return input;
             case Mutation.ChangeKind:
-                input[field] = field == "tags" ? "not-a-list" : true;
+                input[field] = string.Equals(field, "tags", StringComparison.Ordinal)
+                    ? "not-a-list"
+                    : true;
                 return input;
             case Mutation.Stringify:
-                input[numeric] = input[numeric]!.GetValue<int>().ToString();
+                input[numeric] = input[numeric]!
+                    .GetValue<int>()
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture);
                 return input;
             case Mutation.AddField:
                 input["extra"] = pick;
@@ -100,7 +104,7 @@ public class TriggerInputPropertyTests
                     _ => JsonValue.Create(pick),
                 };
             default:
-                throw new ArgumentOutOfRangeException(nameof(mutation), mutation, null);
+                throw new ArgumentOutOfRangeException(nameof(mutation), mutation, message: null);
         }
     }
 
@@ -120,7 +124,10 @@ public class TriggerInputPropertyTests
                 batch =>
                 {
                     var twin = TwinEngine.Replay(
-                        new Dictionary<string, JsonObject> { ["range"] = ir },
+                        new Dictionary<string, JsonObject>(StringComparer.Ordinal)
+                        {
+                            ["range"] = ir,
+                        },
                         batch
                             .Select(b => new TwinEngine.Sequence(
                                 "range",

@@ -69,6 +69,8 @@ public sealed record ClientManifest
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        RespectNullableAnnotations = true,
+        RespectRequiredConstructorParameters = true,
     };
 
     // Where a shared output schema is written, and how an outcome points at it.
@@ -109,8 +111,8 @@ public sealed record ClientManifest
     private static void ShareOutputSchemas(JsonObject root)
     {
         var shared = OutcomesWithOutput(root)
-            .GroupBy(o => CanonicalJson.Serialize(o["output"]!.AsObject()))
-            .Where(g => g.Count() > 1)
+            .GroupBy(o => CanonicalJson.Serialize(o["output"]!.AsObject()), StringComparer.Ordinal)
+            .Where(g => g.Skip(1).Any())
             .Select(g =>
                 (
                     Name: "output-"
@@ -147,7 +149,8 @@ public sealed record ClientManifest
             if (outcome["output"]![Ref] is not JsonValue pointer)
                 continue;
             var target =
-                pointer.TryGetValue<string>(out var text) && text.StartsWith(RefPrefix)
+                pointer.TryGetValue<string>(out var text)
+                && text.StartsWith(RefPrefix, StringComparison.Ordinal)
                     ? defs[text[RefPrefix.Length..]]
                     : null;
             outcome["output"] =
@@ -206,7 +209,7 @@ public sealed record ClientManifest
         catch (InvalidOperationException ex)
         {
             // A value of the wrong kind where a JsonObject is expected (the IR) is refused this way.
-            throw Malformed(null, ex.Message, ex);
+            throw Malformed(path: null, ex.Message, ex);
         }
 
         // A null in a list is not a nullable annotation's to refuse: it is found here.
@@ -233,7 +236,7 @@ public sealed record ClientManifest
                 || r.RoleSets.Any(set => set is null || set.Any(role => role is null))
             )
         )
-            throw Malformed(null, "A role set, role or policy is null.");
+            throw Malformed(path: null, "A role set, role or policy is null.");
         return manifest;
     }
 
@@ -248,127 +251,4 @@ public sealed record ClientManifest
                 + $": {reason.Trim()} Export it again from the host.",
             inner
         );
-}
-
-/// <summary>One exposed machine in a <see cref="ClientManifest"/>.</summary>
-public sealed record ClientManifestMachine
-{
-    /// <summary>The machine's id (<c>topic-map</c>).</summary>
-    public required string Id { get; init; }
-
-    /// <summary>The SHA-256 of the machine's IR, which every one of its document ids carries.</summary>
-    public required string IrHash { get; init; }
-
-    /// <summary>The machine's IR, from which a twin is generated.</summary>
-    public required JsonObject Ir { get; init; }
-
-    /// <summary>
-    /// The IR's text as the host exported it, canonical JSON: the bytes <see cref="IrHash"/> is the SHA-256 of, and
-    /// the bytes a twin generated from it hashes again, so the twin and the documents name one version.
-    /// </summary>
-    public string IrText() => CanonicalJson.Serialize(Ir);
-
-    /// <summary>Null: each of the machine's operations is held to its own declared rule.</summary>
-    public ClientManifestRequirement? Requires { get; init; }
-
-    /// <summary>The machine's persisted documents, ordered by operation.</summary>
-    public IReadOnlyList<ClientManifestDocument> Documents { get; init; } = [];
-}
-
-/// <summary>One exposed train in a <see cref="ClientManifest"/>.</summary>
-public sealed record ClientManifestTrain
-{
-    /// <summary>The train's field as the schema serves it (<c>startRun</c>).</summary>
-    public required string Field { get; init; }
-
-    /// <summary><c>mutation</c> or <c>query</c>: the root the field is under.</summary>
-    public required string Root { get; init; }
-
-    /// <summary>The namespace the field sits under (<c>dispatch</c>, <c>discover</c>, or the train's own), or null.</summary>
-    public string? Namespace { get; init; }
-
-    /// <summary>
-    /// The type the train's field answers with, as SDL writes it (<c>StartRunResponse!</c>). The types it names are in
-    /// <see cref="ClientManifest.Types"/>; the type holding the field is not, since it holds every other train too.
-    /// </summary>
-    public string? Answer { get; init; }
-
-    /// <summary>What a caller needs to run the train, as its attributes declare it.</summary>
-    public ClientManifestRequirement? Requires { get; init; }
-
-    /// <summary>The arguments the train's field takes, in the order the schema declares them.</summary>
-    public IReadOnlyList<ClientManifestArgument> Arguments { get; init; } = [];
-
-    /// <summary>
-    /// Whether the caller who starts a run of the train may follow it, through the documents in
-    /// <see cref="ClientManifest.Progress"/>.
-    /// </summary>
-    public bool Progress { get; init; }
-}
-
-/// <summary>One query model in a <see cref="ClientManifest"/>: an entity a host serves as a field under <c>discover</c>.</summary>
-public sealed record ClientManifestQueryModel
-{
-    /// <summary>The query model's field (<c>orders</c>).</summary>
-    public required string Field { get; init; }
-
-    /// <summary>The namespace the field sits under, or null when it is directly under <c>discover</c>.</summary>
-    public string? Namespace { get; init; }
-
-    /// <summary>
-    /// The field's type as SDL writes it: a connection (<c>OrdersConnection</c>) when the model is paged, a list
-    /// otherwise. The types it names are in <see cref="ClientManifest.Types"/>.
-    /// </summary>
-    public string? Answer { get; init; }
-
-    /// <summary>The arguments the field takes (<c>first</c>, <c>after</c>, <c>where</c>, <c>order</c>, ...).</summary>
-    public IReadOnlyList<ClientManifestArgument> Arguments { get; init; } = [];
-
-    /// <summary>What a caller needs to read it, as the entity's attributes declare it.</summary>
-    public ClientManifestRequirement? Requires { get; init; }
-}
-
-/// <summary>One argument of a field in a <see cref="ClientManifest"/>.</summary>
-public sealed record ClientManifestArgument
-{
-    /// <summary>The argument's name (<c>input</c>).</summary>
-    public required string Name { get; init; }
-
-    /// <summary>Its type as SDL writes it (<c>StartRunInput!</c>); the types it names are in <see cref="ClientManifest.Types"/>.</summary>
-    public required string Type { get; init; }
-
-    /// <summary>Its default value as GraphQL writes it, or null when it has none.</summary>
-    public string? Default { get; init; }
-}
-
-/// <summary>One persisted document a client sends by its id.</summary>
-public sealed record ClientManifestDocument
-{
-    /// <summary>The id a client sends in place of the document.</summary>
-    public required string Id { get; init; }
-
-    /// <summary>
-    /// The operation: a machine's field (<c>start</c>, an event, <c>get</c>, <c>changed</c>), runProgress's, or a
-    /// view's field.
-    /// </summary>
-    public required string Operation { get; init; }
-
-    /// <summary>The document's text, which the host runs for the id.</summary>
-    public required string Document { get; init; }
-}
-
-/// <summary>What a caller needs to reach an operation, as its declaration says. The server enforces it either way.</summary>
-public sealed record ClientManifestRequirement
-{
-    /// <summary>Whether anyone may call it, signed in or not (<c>[TraxAllowAnonymous]</c>).</summary>
-    public bool Anonymous { get; init; }
-
-    /// <summary>
-    /// The role sets, one per attribute that names roles: the caller holds at least one role of every set. Empty when
-    /// no role is required.
-    /// </summary>
-    public IReadOnlyList<IReadOnlyList<string>> RoleSets { get; init; } = [];
-
-    /// <summary>Policies the caller must satisfy, each of them.</summary>
-    public IReadOnlyList<string> Policies { get; init; } = [];
 }

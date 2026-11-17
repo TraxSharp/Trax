@@ -64,7 +64,7 @@ internal sealed class DraftSweeper(
         {
             try
             {
-                while (await SweepOnce(stoppingToken) >= BatchSize)
+                while (await SweepOnce(stoppingToken).ConfigureAwait(false) >= BatchSize)
                     stoppingToken.ThrowIfCancellationRequested();
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -72,7 +72,7 @@ internal sealed class DraftSweeper(
                 // A sweep that fails (the database is away) is tried again on the next tick.
                 logger?.LogWarning(ex, "The draft sweep failed; it runs again on its next tick.");
             }
-        } while (await timer.WaitForNextTickAsync(stoppingToken));
+        } while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
     }
 
     /// <summary>
@@ -98,7 +98,8 @@ internal sealed class DraftSweeper(
             now - options.MaxDraftLifetime,
             _kept.Value
         );
-        await using var scope = scopes.CreateAsyncScope();
+        var scope = scopes.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var services = scope.ServiceProvider;
         var context = services.GetRequiredService<IDataContext>();
         var store = new EfSnapshotStore(context, services.GetService<ISqlDialect>())
@@ -106,19 +107,16 @@ internal sealed class DraftSweeper(
             Writes = services.GetService<SnapshotWriteSignal>(),
         };
 
-        var expired = await store.ReadExpired(
-            _machines.Value.Keys.ToList(),
-            expiredBefore,
-            BatchSize,
-            cancellationToken
-        );
+        var expired = await store
+            .ReadExpired(_machines.Value.Keys.ToList(), expiredBefore, BatchSize, cancellationToken)
+            .ConfigureAwait(false);
         if (afterRead is not null)
-            await afterRead(expired.Select(d => d.Id).ToList());
+            await afterRead(expired.Select(d => d.Id).ToList()).ConfigureAwait(false);
 
         var runs = services.GetService<IInvokedRunCancellation>();
         var deleted = 0;
         foreach (var draft in expired)
-            if (await Delete(store, runs, draft, expiredBefore))
+            if (await Delete(store, runs, draft, expiredBefore).ConfigureAwait(false))
                 deleted++;
         return deleted;
     }
@@ -141,7 +139,7 @@ internal sealed class DraftSweeper(
         var keyList = keys.Select(k => k.Key).ToList();
         if (
             DraftClaimHold.LedgerHolds(
-                await store.LedgerClaims(keyList, CancellationToken.None),
+                await store.LedgerClaims(keyList, CancellationToken.None).ConfigureAwait(false),
                 keys,
                 draft.State
             )
@@ -153,8 +151,10 @@ internal sealed class DraftSweeper(
         {
             if (runs is null)
                 return false;
-            await runs.Cancel(token, CancellationToken.None);
+            await runs.Cancel(token, CancellationToken.None).ConfigureAwait(false);
         }
-        return await store.DeleteExpired(draft, expiredBefore, () => store.ReleaseLedger(keyList));
+        return await store
+            .DeleteExpired(draft, expiredBefore, () => store.ReleaseLedger(keyList))
+            .ConfigureAwait(false);
     }
 }

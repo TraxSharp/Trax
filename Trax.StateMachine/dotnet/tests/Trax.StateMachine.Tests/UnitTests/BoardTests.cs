@@ -106,7 +106,11 @@ public class BoardTests
         );
         derived.Problems.Should().BeEmpty();
         return Board.Draw(
-            derived.Irs.ToDictionary(kv => kv.Key, kv => JsonNode.Parse(kv.Value)!.AsObject()),
+            derived.Irs.ToDictionary(
+                kv => kv.Key,
+                kv => JsonNode.Parse(kv.Value)!.AsObject(),
+                StringComparer.Ordinal
+            ),
             HostFile.Read(derived.Host!)
         );
     }

@@ -43,8 +43,13 @@ public class InvokeTokenStoreTests(StoreProvider provider)
         using var scope = _host.Scope();
         var store = _host.Instances(scope);
         var id = Guid.NewGuid();
-        (await store.Insert(DraftOwner.System, id, Turnstile(state))).Should().BeTrue();
-        return (id, (await store.Get(DraftOwner.System, "turnstile", id))!.Token);
+        (await store.Insert(DraftOwner.System, id, Turnstile(state)).ConfigureAwait(false))
+            .Should()
+            .BeTrue();
+        return (
+            id,
+            (await store.Get(DraftOwner.System, "turnstile", id).ConfigureAwait(false))!.Token
+        );
     }
 
     [Test]
@@ -238,10 +243,17 @@ public class InvokeTokenStoreTests(StoreProvider provider)
             .Should()
             .BeTrue();
 
-        (await store.ApplyByInvokeToken(stale, Turnstile("Locked"), null))
+        (await store.ApplyByInvokeToken(stale, Turnstile("Locked"), nextInvokeToken: null))
             .Should()
             .BeFalse("a completion whose token was replaced is a no-transition");
-        (await store.ApplyByInvokeToken(live, Turnstile("Locked"), null, Guid.NewGuid()))
+        (
+            await store.ApplyByInvokeToken(
+                live,
+                Turnstile("Locked"),
+                nextInvokeToken: null,
+                Guid.NewGuid()
+            )
+        )
             .Should()
             .BeFalse("the row no longer carries that concurrency token");
         (await store.GetByInvokeToken(live)).Should().NotBeNull();
@@ -276,7 +288,7 @@ public class InvokeTokenStoreTests(StoreProvider provider)
                 id,
                 Turnstile("Unlocked", new JsonObject { ["paidWith"] = "quarter" }),
                 stored.Token,
-                null
+                request: null
             )
         )
             .Should()

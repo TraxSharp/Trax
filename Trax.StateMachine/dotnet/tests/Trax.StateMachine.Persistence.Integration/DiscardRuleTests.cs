@@ -33,24 +33,29 @@ public class DiscardRuleTests(StoreProvider provider)
     private async Task<Guid> Seed(string user, string machine, string state, JsonObject context)
     {
         var id = Guid.NewGuid();
-        await _host.Seed(
-            user,
-            id,
-            new Snapshot
-            {
-                Machine = machine,
-                Version = 1,
-                State = state,
-                Context = context,
-            }
-        );
+        await _host
+            .Seed(
+                user,
+                id,
+                new Snapshot
+                {
+                    Machine = machine,
+                    Version = 1,
+                    State = state,
+                    Context = context,
+                }
+            )
+            .ConfigureAwait(false);
         return id;
     }
 
     private async Task<DiscardOutcome> Discard(string machine, Actor.Client actor, Guid id)
     {
         using var scope = _host.Scope();
-        return await _host.Service(scope, machine).Discard(actor, id, $"d-{Guid.NewGuid():N}");
+        return await _host
+            .Service(scope, machine)
+            .Discard(actor, id, $"d-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
     }
 
     private static IEnumerable<TestCaseData> ServerStates()
@@ -151,7 +156,7 @@ public class DiscardRuleTests(StoreProvider provider)
                         DeskRoles.Client(owner, DeskRoles.Operator),
                         approved,
                         nameof(ApprovalTrigger.Approve),
-                        null,
+                        input: null,
                         "approve-1"
                     )
             )

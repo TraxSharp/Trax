@@ -15,11 +15,13 @@ public class ExactlyOnceStressTests : StressFixture
 {
     private static async Task SeedReview(Guid id)
     {
-        await using var ctx = StressDb.NewContext();
+        var ctx = StressDb.NewContext();
+        await using var ctxDisposal = ctx.ConfigureAwait(false);
         (
             await StressOrder
                 .Service(StressDb.NewStore(ctx))
                 .Autosave("u", id, StressOrder.ReviewJson(1, 2))
+                .ConfigureAwait(false)
         )
             .Should()
             .BeOfType<AutosaveResult.Saved>();
@@ -27,8 +29,12 @@ public class ExactlyOnceStressTests : StressFixture
 
     private static async Task<string> LoadState(Guid id)
     {
-        await using var ctx = StressDb.NewContext();
-        var loaded = await StressOrder.Service(StressDb.NewStore(ctx)).Load("u", id);
+        var ctx = StressDb.NewContext();
+        await using var ctxDisposal = ctx.ConfigureAwait(false);
+        var loaded = await StressOrder
+            .Service(StressDb.NewStore(ctx))
+            .Load("u", id)
+            .ConfigureAwait(false);
         return loaded is LoadResult.Loaded l ? l.Snapshot.State : "not-loaded";
     }
 
@@ -38,7 +44,8 @@ public class ExactlyOnceStressTests : StressFixture
         ISnapshotEffect effect
     )
     {
-        await using var ctx = StressDb.NewContext();
+        var ctx = StressDb.NewContext();
+        await using var ctxDisposal = ctx.ConfigureAwait(false);
         var claims = StressDb.NewClaims(ctx);
         var runner = new SnapshotEffectRunner<OrderState, OrderTrigger>(
             StressOrder.Service(StressDb.NewStore(ctx), claims),
@@ -50,7 +57,7 @@ public class ExactlyOnceStressTests : StressFixture
             StressOrder.EffectKey,
             receiptKey: "orderId"
         );
-        return await runner.Run("u", id, requestId);
+        return await runner.Run("u", id, requestId).ConfigureAwait(false);
     }
 
     [Test]
@@ -66,7 +73,7 @@ public class ExactlyOnceStressTests : StressFixture
             StressProfile.MaxConcurrency,
             async i =>
             {
-                await SeedReview(ids[i]);
+                await SeedReview(ids[i]).ConfigureAwait(false);
                 return 0;
             }
         );

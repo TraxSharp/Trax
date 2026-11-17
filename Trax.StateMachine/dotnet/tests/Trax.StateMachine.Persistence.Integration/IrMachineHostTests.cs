@@ -48,7 +48,7 @@ public class IrMachineHostTests(StoreProvider provider)
                     {
                         Start = riders,
                         Read = riders,
-                        Triggers = new Dictionary<string, TriggerAccess>
+                        Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
                         {
                             ["Coin"] = new(riders),
                             ["Push"] = anyone,
@@ -61,19 +61,22 @@ public class IrMachineHostTests(StoreProvider provider)
                     {
                         Start = AccessRule.AnyAuthenticated,
                         Read = AccessRule.AnyAuthenticated,
-                        Triggers = new Dictionary<string, TriggerAccess>
+                        Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
                         {
                             ["Start"] = anyone,
                             ["Retry"] = anyone,
                             ["Abandon"] = anyone,
                             ["Approve"] = anyone,
                         },
-                        Invokes = new Dictionary<string, HostInvoke>
+                        Invokes = new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
                         {
                             ["Fetching"] = new(
                                 "Fetching",
                                 typeof(IFetchFromIrTrain).FullName!,
-                                new Dictionary<string, string> { ["source"] = "source" }
+                                new Dictionary<string, string>(StringComparer.Ordinal)
+                                {
+                                    ["source"] = "source",
+                                }
                             ),
                         },
                     }
@@ -119,7 +122,7 @@ public class IrMachineHostTests(StoreProvider provider)
                 Host(ir) with
                 {
                     Start = AccessRule.AnyAuthenticated,
-                    Triggers = new Dictionary<string, TriggerAccess>
+                    Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
                     {
                         ["Coin"] = new(AccessRule.AnyAuthenticated),
                         ["Push"] = new(AccessRule.AnyAuthenticated),
@@ -132,7 +135,7 @@ public class IrMachineHostTests(StoreProvider provider)
         var problems = await MachineRulesStartupValidator.Problems(
             [unread],
             new StateMachineOptions(),
-            null
+            caller: null
         );
 
         problems.Should().ContainSingle().Which.Should().Contain("get, changed, discard");
@@ -268,23 +271,10 @@ public class IrMachineHostTests(StoreProvider provider)
             Convert.ToHexStringLower(
                 SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalJson.Serialize(ir)))
             ),
-            null,
-            null,
-            null,
-            new Dictionary<string, TriggerAccess>(),
-            new Dictionary<string, HostInvoke>()
+            SystemKey: null,
+            Start: null,
+            Read: null,
+            new Dictionary<string, TriggerAccess>(StringComparer.Ordinal),
+            new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
         );
 }
-
-/// <summary>The input of the train the ingest machine served from its IR invokes.</summary>
-public sealed record FetchFromIrInput(string Source);
-
-/// <summary>Its output, the schema the IR's done outcome declares.</summary>
-public sealed record FetchFromIrOutput
-{
-    public string Fingerprint { get; init; } = "";
-    public bool Unsure { get; init; }
-}
-
-/// <summary>The train, named by its interface; the recording launcher never runs it.</summary>
-public interface IFetchFromIrTrain : IServiceTrain<FetchFromIrInput, FetchFromIrOutput>;

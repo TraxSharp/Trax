@@ -128,7 +128,7 @@ public static class IrExporter
             throw new InvalidOperationException(
                 $"IR export refuses the machine '{machine.Definition.Id}': the IR cannot carry a C# delegate, so a "
                     + "generated twin would accept what the server refuses. "
-                    + string.Join(" ", problems.Select(p => char.ToUpperInvariant(p[0]) + p[1..]))
+                    + string.Join(' ', problems.Select(p => char.ToUpperInvariant(p[0]) + p[1..]))
             );
     }
 
@@ -359,9 +359,9 @@ public static class IrExporter
                 obj["reduce"] = WriteReduction(dt.Reduce);
 
             var effect = machine.Effects.FirstOrDefault(e =>
-                e.From.ToString() == from
-                && e.Trigger.ToString() == trigger
-                && e.To.ToString() == to
+                string.Equals(e.From.ToString(), from, StringComparison.Ordinal)
+                && string.Equals(e.Trigger.ToString(), trigger, StringComparison.Ordinal)
+                && string.Equals(e.To.ToString(), to, StringComparison.Ordinal)
             );
             // The IR reaches every browser: the edge says it is effect-bound and which claim keys it writes, and
             // the effect's type stays on the server.
@@ -572,7 +572,7 @@ public static class IrExporter
     private static JsonArray ToSortedArray(IEnumerable<string> values)
     {
         var array = new JsonArray();
-        foreach (var value in values.OrderBy(v => v, StringComparer.Ordinal))
+        foreach (var value in values.Order(StringComparer.Ordinal))
             array.Add(value);
         return array;
     }

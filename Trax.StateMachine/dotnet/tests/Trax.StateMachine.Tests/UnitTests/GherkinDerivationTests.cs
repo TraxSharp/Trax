@@ -89,14 +89,18 @@ public class GherkinDerivationTests
         var ir = JsonNode.Parse(derived.Irs["order"])!.AsObject();
         var place = ir["transitions"]!
             .AsArray()
-            .Single(t => t!["trigger"]!.GetValue<string>() == "Place")!;
+            .Single(t =>
+                string.Equals(t!["trigger"]!.GetValue<string>(), "Place", StringComparison.Ordinal)
+            )!;
         place["from"]!.GetValue<string>().Should().Be("Draft");
         place["to"]!.GetValue<string>().Should().Be("Placed");
         place["guard"]!["field"]!.GetValue<string>().Should().Be("loaves");
         place["guardMessage"]!.GetValue<string>().Should().Be("Add something first.");
         var order = ir["transitions"]!
             .AsArray()
-            .Single(t => t!["trigger"]!.GetValue<string>() == "Order")!;
+            .Single(t =>
+                string.Equals(t!["trigger"]!.GetValue<string>(), "Order", StringComparison.Ordinal)
+            )!;
         order["to"]!.GetValue<string>().Should().Be("Draft");
         order["reduce"].Should().NotBeNull("a trigger's glossary reduction is its edges'");
 

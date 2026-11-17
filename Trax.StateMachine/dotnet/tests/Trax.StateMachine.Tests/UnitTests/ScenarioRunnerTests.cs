@@ -86,7 +86,7 @@ public class ScenarioRunnerTests
         "customer",
         "a customer",
         ["customer"],
-        false
+        AnyAuthenticated: false
     );
     private static readonly Person Ada = new("Ada", Customer);
     private static readonly Person Bo = new("Bo", Customer);
@@ -108,7 +108,9 @@ public class ScenarioRunnerTests
         await driver.Pass(TimeSpan.FromDays(9_000_000));
 
         await FluentActions
-            .Awaiting(async () => await driver.Pass(TimeSpan.FromDays(9_000_000)))
+            .Awaiting(async () =>
+                await driver.Pass(TimeSpan.FromDays(9_000_000)).ConfigureAwait(false)
+            )
             .Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*9000000.00:00:00*");
@@ -120,8 +122,10 @@ public class ScenarioRunnerTests
         var driver = Driver();
         await driver.Start(Ada, "order");
 
-        (await driver.Fire(Ada, Ada.Key(), "Rush", null)).Should().BeOfType<Answer.NotServed>();
-        (await driver.Fire(Ada, Ada.Key(), "Bake", null))
+        (await driver.Fire(Ada, Ada.Key(), "Rush", input: null))
+            .Should()
+            .BeOfType<Answer.NotServed>();
+        (await driver.Fire(Ada, Ada.Key(), "Bake", input: null))
             .Should()
             .BeOfType<Answer.NotServed>("the server fires Bake");
     }
@@ -132,7 +136,7 @@ public class ScenarioRunnerTests
         var driver = Driver();
         await driver.Start(Ada, "order");
 
-        (await driver.Fire(Bo, Ada.Key(), "Place", null))
+        (await driver.Fire(Bo, Ada.Key(), "Place", input: null))
             .Should()
             .Be(new Answer.Refused(RefusalCode.NotFound, "No draft with that id."));
     }
@@ -149,7 +153,13 @@ public class ScenarioRunnerTests
         var report = Run(Ordering, irs, host);
 
         report
-            .Scenarios.Single(s => s.Scenario.Name == "Placing an order with something in it")
+            .Scenarios.Single(s =>
+                string.Equals(
+                    s.Scenario.Name,
+                    "Placing an order with something in it",
+                    StringComparison.Ordinal
+                )
+            )
             .Failure!.Message.Should()
             .Contain("FORBIDDEN \"You may not do this.\"");
     }
@@ -231,10 +241,12 @@ public class ScenarioRunnerTests
         var resolver = new StepResolver(glossary);
         var session = new ScenarioSession(glossary, Driver());
         async Task<string?> Step(StepKind kind, string text) =>
-            await session.Step(
-                new FeatureStep(kind, text, 0),
-                resolver.Resolve(text, session.People, out _, out _)!
-            );
+            await session
+                .Step(
+                    new FeatureStep(kind, text, 0),
+                    resolver.Resolve(text, session.People, out _, out _)!
+                )
+                .ConfigureAwait(false);
 
         (await Step(StepKind.Given, "Ada is a customer")).Should().BeNull();
         (await Step(StepKind.Given, "Ada has an order")).Should().BeNull();
@@ -306,11 +318,15 @@ public class ScenarioRunnerTests
         );
 
         report
-            .Scenarios.Single(s => s.Scenario.Name == "Juggling")
+            .Scenarios.Single(s =>
+                string.Equals(s.Scenario.Name, "Juggling", StringComparison.Ordinal)
+            )
             .Status.Should()
             .Be(ScenarioStatus.Undefined);
         report
-            .Scenarios.Where(s => s.Scenario.Name != "Juggling")
+            .Scenarios.Where(s =>
+                !string.Equals(s.Scenario.Name, "Juggling", StringComparison.Ordinal)
+            )
             .SelectMany(s => s.Steps)
             .Should()
             .OnlyContain(s => s.Status == null);
@@ -357,7 +373,11 @@ public class ScenarioRunnerTests
         );
         derived.Problems.Should().BeEmpty();
         return (
-            derived.Irs.ToDictionary(kv => kv.Key, kv => JsonNode.Parse(kv.Value)!.AsObject()),
+            derived.Irs.ToDictionary(
+                kv => kv.Key,
+                kv => JsonNode.Parse(kv.Value)!.AsObject(),
+                StringComparer.Ordinal
+            ),
             JsonNode.Parse(derived.Host!)!.AsObject()
         );
     }
@@ -401,9 +421,4 @@ public class ScenarioRunnerTests
         problems.Should().BeEmpty();
         return Gherkin.Walk.Run(scenarios.Single(), glossary, new StepResolver(glossary));
     }
-}
-
-internal static class PersonKeys
-{
-    internal static InstanceKey Key(this Person person) => new("order", person.Name);
 }

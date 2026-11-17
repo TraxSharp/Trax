@@ -58,8 +58,10 @@ public class IrExporterTests
     {
         var coin = Ir()["transitions"]!
             .AsArray()
-            .Select(t => (JsonObject)t!)
-            .Single(t => t["trigger"]!.GetValue<string>() == "Coin");
+            .Cast<JsonObject>()
+            .Single(t =>
+                string.Equals(t["trigger"]!.GetValue<string>(), "Coin", StringComparison.Ordinal)
+            );
 
         var guard = (JsonObject)coin["guard"]!;
         guard["rule"]!.GetValue<string>().Should().Be("oneOf");
@@ -139,8 +141,10 @@ public class IrExporterTests
 
         var cst = ir["transitions"]!
             .AsArray()
-            .Select(t => (JsonObject)t!)
-            .Single(t => t["trigger"]!.GetValue<string>() == "Cst");
+            .Cast<JsonObject>()
+            .Single(t =>
+                string.Equals(t["trigger"]!.GetValue<string>(), "Cst", StringComparison.Ordinal)
+            );
         var effect = (JsonObject)cst["effect"]!;
 
         effect.Select(p => p.Key).Should().Equal("keyPrefix");
@@ -156,17 +160,21 @@ public class IrExporterTests
         ir["id"]!.GetValue<string>().Should().Be("rich");
         ir["committedStates"]!.AsArray().Select(n => n!.GetValue<string>()).Should().Contain("B");
 
-        var transitions = ir["transitions"]!.AsArray().Select(t => (JsonObject)t!).ToList();
+        var transitions = ir["transitions"]!.AsArray().Cast<JsonObject>().ToList();
 
         // The Cst transition carries an effect (key derived from machine id + trigger), a custom guard, and
         // a custom reducer.
-        var cst = transitions.Single(t => t["trigger"]!.GetValue<string>() == "Cst");
+        var cst = transitions.Single(t =>
+            string.Equals(t["trigger"]!.GetValue<string>(), "Cst", StringComparison.Ordinal)
+        );
         ((JsonObject)cst["effect"]!)["keyPrefix"]!.GetValue<string>().Should().Be("rich:Cst");
         ((JsonObject)cst["guard"]!)["rule"]!.GetValue<string>().Should().Be("custom");
         ((JsonObject)cst["reduce"]!)["reduce"]!.GetValue<string>().Should().Be("custom");
 
         // The Set1 guard is an `all` containing every simple rule kind.
-        var set1 = transitions.Single(t => t["trigger"]!.GetValue<string>() == "Set1");
+        var set1 = transitions.Single(t =>
+            string.Equals(t["trigger"]!.GetValue<string>(), "Set1", StringComparison.Ordinal)
+        );
         var kinds = ((JsonObject)set1["guard"]!)["rules"]!
             .AsArray()
             .Select(r => ((JsonObject)r!)["rule"]!.GetValue<string>())

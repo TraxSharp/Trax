@@ -45,16 +45,17 @@ public class DraftLifetimeTests(StoreProvider provider)
     {
         var id = Guid.NewGuid();
         await host.Seed(
-            user,
-            id,
-            new Snapshot
-            {
-                Machine = machine,
-                Version = 1,
-                State = state,
-                Context = context,
-            }
-        );
+                user,
+                id,
+                new Snapshot
+                {
+                    Machine = machine,
+                    Version = 1,
+                    State = state,
+                    Context = context,
+                }
+            )
+            .ConfigureAwait(false);
         return id;
     }
 
@@ -65,7 +66,8 @@ public class DraftLifetimeTests(StoreProvider provider)
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.Where(d => d.Id == id)
-            .ExecuteUpdateAsync(x => x.SetProperty(d => d.CreatedAt, at));
+            .ExecuteUpdateAsync(x => x.SetProperty(d => d.CreatedAt, at))
+            .ConfigureAwait(false);
     }
 
     private static IEnumerable<TestCaseData> KeptStates()
@@ -236,7 +238,9 @@ public class DraftLifetimeTests(StoreProvider provider)
         Guid owner;
         using (var scope = host.Scope())
             owner = (
-                (ClaimResult.Won)await Claims(scope).TryClaim(key, TimeSpan.FromMinutes(5), null)
+                (ClaimResult.Won)
+                    await Claims(scope)
+                        .TryClaim(key, TimeSpan.FromMinutes(5), contentFingerprint: null)
             ).OwnerToken;
 
         try
@@ -270,7 +274,7 @@ public class DraftLifetimeTests(StoreProvider provider)
         var key = Key(host, "ship", user, id);
         using (var scope = host.Scope())
             // A claim whose lease has passed with no receipt: whoever held it is gone.
-            (await Claims(scope).TryClaim(key, TimeSpan.FromMinutes(-1), null))
+            (await Claims(scope).TryClaim(key, TimeSpan.FromMinutes(-1), contentFingerprint: null))
                 .Should()
                 .BeOfType<ClaimResult.Won>();
 
@@ -303,7 +307,7 @@ public class DraftLifetimeTests(StoreProvider provider)
         host
             .Services.GetServices<IMachine>()
             .OfType<IMachineInternals>()
-            .Single(m => ((IMachine)m).Name == machine)
+            .Single(m => string.Equals(((IMachine)m).Name, machine, StringComparison.Ordinal))
             .EffectKeys(user, id)
             .Single();
 
@@ -319,7 +323,8 @@ public class DraftLifetimeTests(StoreProvider provider)
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .EffectClaims.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.EffectKey == key);
+            .FirstOrDefaultAsync(x => x.EffectKey == key)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Records each cancel, and whether the draft still existed when it was asked for.</summary>

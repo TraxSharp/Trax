@@ -62,7 +62,7 @@ internal sealed class MachinePolicyRunner(
         {
             try
             {
-                while (await PassOnce(stoppingToken) > 0) { }
+                while (await PassOnce(stoppingToken).ConfigureAwait(false) > 0) { }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -73,7 +73,7 @@ internal sealed class MachinePolicyRunner(
             }
             try
             {
-                await Task.Delay(options.Interval, stoppingToken);
+                await Task.Delay(options.Interval, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -86,7 +86,11 @@ internal sealed class MachinePolicyRunner(
     private readonly Lazy<List<string>> _served = new(() =>
         policies
             .ById.Where(p =>
-                machines.OfType<IMachineInternals>().Any(m => ((IMachine)m).Name == p.Value.Target)
+                machines
+                    .OfType<IMachineInternals>()
+                    .Any(m =>
+                        string.Equals(((IMachine)m).Name, p.Value.Target, StringComparison.Ordinal)
+                    )
             )
             .Select(p => p.Key)
             .ToList()
@@ -99,20 +103,22 @@ internal sealed class MachinePolicyRunner(
         if (served.Count == 0)
             return 0;
         List<MachinePolicyFire> owed;
-        await using (var scope = scopes.CreateAsyncScope())
+        var scope = scopes.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             owed = await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .MachinePolicyFires.AsNoTracking()
                 .Where(f => served.Contains(f.Policy))
                 .OrderBy(f => f.Id)
                 .Take(options.BatchSize)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
 
         var worked = 0;
         foreach (var row in owed)
             try
             {
-                if (await Work(row, cancellationToken))
+                if (await Work(row, cancellationToken).ConfigureAwait(false))
                     worked++;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -132,11 +138,14 @@ internal sealed class MachinePolicyRunner(
     // host.
     private async Task<bool> Work(MachinePolicyFire row, CancellationToken cancellationToken)
     {
-        await using var scope = scopes.CreateAsyncScope();
+        var scope = scopes.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var services = scope.ServiceProvider;
         var context = services.GetRequiredService<IDataContext>();
-        using var transaction = await context.BeginTransaction(cancellationToken);
-        if (!await Lock(context, row.Id, cancellationToken))
+        using var transaction = await context
+            .BeginTransaction(cancellationToken)
+            .ConfigureAwait(false);
+        if (!await Lock(context, row.Id, cancellationToken).ConfigureAwait(false))
             return false;
         var fired = false;
 
@@ -148,27 +157,36 @@ internal sealed class MachinePolicyRunner(
             return false;
         if (row.TargetRowId is { } target)
         {
-            if (!await Fire(services, context, policy, target, cancellationToken))
+            if (
+                !await Fire(services, context, policy, target, cancellationToken)
+                    .ConfigureAwait(false)
+            )
                 return false;
             fired = true;
-            await Delete(context, row.Id, cancellationToken);
+            await Delete(context, row.Id, cancellationToken).ConfigureAwait(false);
         }
-        else if (policy.Shape == "broadcast")
-            await Expand(context, row, policy, cancellationToken);
+        else if (string.Equals(policy.Shape, "broadcast", StringComparison.Ordinal))
+            await Expand(context, row, policy, cancellationToken).ConfigureAwait(false);
         else
         {
             var busy = new List<long>();
-            foreach (var found in await Targets(context, row, policy, cancellationToken))
-                if (await Fire(services, context, policy, found, cancellationToken))
+            foreach (
+                var found in await Targets(context, row, policy, cancellationToken)
+                    .ConfigureAwait(false)
+            )
+                if (
+                    await Fire(services, context, policy, found, cancellationToken)
+                        .ConfigureAwait(false)
+                )
                     fired = true;
                 else
                     busy.Add(found);
             // A busy target gets a row of its own, so a later pass fires it and the others are not fired twice.
             if (busy.Count > 0)
-                await Owe(context, row, busy, cancellationToken);
-            await Delete(context, row.Id, cancellationToken);
+                await Owe(context, row, busy, cancellationToken).ConfigureAwait(false);
+            await Delete(context, row.Id, cancellationToken).ConfigureAwait(false);
         }
-        await transaction.Commit();
+        await transaction.Commit().ConfigureAwait(false);
         // The fires were written in this transaction, so the store left the signal to it: a change feed that polls
         // reads them now rather than at its next interval.
         if (fired)
@@ -187,17 +205,20 @@ internal sealed class MachinePolicyRunner(
     {
         // Claimed before the waiting instances are read: a row committed after the read could owe a fire to an instance
         // that entered the state after it, so only rows already there when the read starts are coalesced.
-        var coalesced = await LockUnexpanded(context, row.Policy, cancellationToken);
+        var coalesced = await LockUnexpanded(context, row.Policy, cancellationToken)
+            .ConfigureAwait(false);
         await context
             .MachinePolicyFires.Where(f => coalesced.Contains(f.Id))
-            .ExecuteDeleteAsync(cancellationToken);
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
         var waiting = await context
             .SnapshotDrafts.AsNoTracking()
             .Where(d => d.Machine == policy.Target && d.State == policy.By)
             .OrderBy(d => d.RowId)
             .Select(d => d.RowId)
             .Take(options.FanOutCap + 1)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
         if (waiting.Count > options.FanOutCap)
         {
             logger.LogWarning(
@@ -211,8 +232,8 @@ internal sealed class MachinePolicyRunner(
             waiting.RemoveAt(waiting.Count - 1);
         }
         if (AfterWaitingRead is { } after)
-            await after();
-        await Owe(context, row, waiting, cancellationToken);
+            await after().ConfigureAwait(false);
+        await Owe(context, row, waiting, cancellationToken).ConfigureAwait(false);
     }
 
     // One row of the policy per target, from the same source.
@@ -235,7 +256,7 @@ internal sealed class MachinePolicyRunner(
                 CreatedAt = now,
             })
         );
-        await context.SaveChanges(cancellationToken);
+        await context.SaveChanges(cancellationToken).ConfigureAwait(false);
     }
 
     // A linked policy's targets: the source owner's instances of the target machine whose link field holds the source's
@@ -247,7 +268,7 @@ internal sealed class MachinePolicyRunner(
         CancellationToken cancellationToken
     )
     {
-        if (policy.Shape == "toSystem")
+        if (string.Equals(policy.Shape, "toSystem", StringComparison.Ordinal))
         {
             var id = SystemInstanceStarter.IdOf(policy.Target, policy.By);
             return await context
@@ -258,14 +279,16 @@ internal sealed class MachinePolicyRunner(
                     && d.OwnerKind == SnapshotOwnerKind.System
                 )
                 .Select(d => d.RowId)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
         }
 
         var source = await context
             .SnapshotDrafts.AsNoTracking()
             .Where(d => d.RowId == row.SourceRowId)
             .Select(d => new { d.OwnerKind, d.UserKey })
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
         if (source is not { OwnerKind: SnapshotOwnerKind.User, UserKey: { } owner })
             return [];
         var candidates = await Linking(context, policy.By, row.SourceInstanceId)
@@ -275,7 +298,8 @@ internal sealed class MachinePolicyRunner(
                 && d.UserKey == owner
             )
             .Select(d => new { d.RowId, d.Context })
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
         // The database narrowed the rows to those whose link field spells the id; the id is matched as a Guid here.
         return candidates
             .Where(c =>
@@ -345,7 +369,8 @@ internal sealed class MachinePolicyRunner(
         CancellationToken cancellationToken
     )
     {
-        var fired = await TryFire(services, context, policy, target, cancellationToken);
+        var fired = await TryFire(services, context, policy, target, cancellationToken)
+            .ConfigureAwait(false);
         if (fired is ServerFire.Fired.Busy busy)
         {
             logger.LogDebug(
@@ -389,10 +414,11 @@ internal sealed class MachinePolicyRunner(
             _byName.Value,
             target,
             policy.Trigger,
-            null,
+            input: null,
             TransitionNote.Policy(policy.Trigger),
             state =>
-                policy.Shape == "broadcast" && state != policy.By
+                string.Equals(policy.Shape, "broadcast", StringComparison.Ordinal)
+                && !string.Equals(state, policy.By, StringComparison.Ordinal)
                     ? $"it left {policy.By} before the policy reached it"
                     : null,
             cancellationToken
@@ -418,11 +444,13 @@ internal sealed class MachinePolicyRunner(
                         id
                     )
                     .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false)
             )
                 is [_];
         return await context
             .MachinePolicyFires.AsNoTracking()
-            .AnyAsync(f => f.Id == id, cancellationToken);
+            .AnyAsync(f => f.Id == id, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     // The policy's unexpanded rows this transaction can claim, its own among them: on Postgres a row another host
@@ -444,12 +472,14 @@ internal sealed class MachinePolicyRunner(
                     """,
                     policy
                 )
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
         return await context
             .MachinePolicyFires.AsNoTracking()
             .Where(f => f.Policy == policy && f.TargetRowId == null)
             .Select(f => f.Id)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static Task<int> Delete(

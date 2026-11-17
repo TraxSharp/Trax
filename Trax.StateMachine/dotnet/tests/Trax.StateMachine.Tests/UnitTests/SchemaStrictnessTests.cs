@@ -38,7 +38,7 @@ public class SchemaStrictnessTests
     {
         public Dictionary<string, int> Counts { get; init; } = [];
         public IReadOnlyDictionary<string, string?> Notes { get; init; } =
-            new Dictionary<string, string?>();
+            new Dictionary<string, string?>(StringComparer.Ordinal);
         public Dictionary<string, Inner> Inners { get; init; } = [];
         public Dictionary<string, List<byte>> Bytes { get; init; } = [];
         public List<long> Longs { get; init; } = [];
@@ -53,7 +53,7 @@ public class SchemaStrictnessTests
     }
 
     private static FieldSchema Field(ContextSchema schema, string name) =>
-        schema.Fields.Single(f => f.Name == name);
+        schema.Fields.Single(f => string.Equals(f.Name, name, StringComparison.Ordinal));
 
     private static string? Validate<T>(JsonObject input) =>
         SchemaValidator.ValidateInput(SchemaReflection.ForInput(typeof(T)), input);
@@ -112,10 +112,14 @@ public class SchemaStrictnessTests
         var ir = JsonNode.Parse(IrExporter.Export(m.Build()))!;
 
         var fields = ir["inputs"]!["Build"]!["fields"]!.AsArray();
-        var @long = fields.Single(f => f!["name"]!.GetValue<string>() == "long")!;
+        var @long = fields.Single(f =>
+            string.Equals(f!["name"]!.GetValue<string>(), "long", StringComparison.Ordinal)
+        )!;
         @long["minimum"]!.GetValue<double>().Should().Be(-9223372036854774784d);
         @long["maximum"]!.GetValue<double>().Should().Be(9223372036854774784d);
-        var @byte = fields.Single(f => f!["name"]!.GetValue<string>() == "byte")!;
+        var @byte = fields.Single(f =>
+            string.Equals(f!["name"]!.GetValue<string>(), "byte", StringComparison.Ordinal)
+        )!;
         @byte["minimum"]!.GetValue<double>().Should().Be(0);
         @byte["maximum"]!.GetValue<double>().Should().Be(255);
     }

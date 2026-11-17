@@ -31,7 +31,7 @@ public class StrictInputParityTests
             .ToList();
 
         var twin = TwinEngine.Replay(
-            new Dictionary<string, JsonObject> { ["strict"] = ir },
+            new Dictionary<string, JsonObject>(StringComparer.Ordinal) { ["strict"] = ir },
             inputs
                 .Select(input => new TwinEngine.Sequence(
                     "strict",
@@ -42,7 +42,7 @@ public class StrictInputParityTests
         );
 
         var names = cases.Select(c => c.Name).Prepend("valid input").ToList();
-        var expected = cases.Select(c => c.Valid).Prepend(true).ToList();
+        var expected = cases.Select(c => c.Valid).Prepend(element: true).ToList();
         var diffs = new List<string>();
         if (!StrictInputMachine.ClrReads(StrictInputMachine.ValidInput(), out var invalid))
             diffs.Add($"valid input: the CLR does not read it: {invalid}");
@@ -63,14 +63,24 @@ public class StrictInputParityTests
                 _ => ("unknown", null),
             };
             var answer = twin[i][0];
-            if (answer.Outcome != outcome || answer.Reason != reason)
+            if (
+                !string.Equals(answer.Outcome, outcome, StringComparison.Ordinal)
+                || !string.Equals(answer.Reason, reason, StringComparison.Ordinal)
+            )
                 diffs.Add(
                     $"{names[i]}: C# {outcome} {reason}, twin {answer.Outcome} {answer.Reason}"
                 );
             var want = expected[i] ? "transitioned" : "rejected";
-            if (outcome != want)
+            if (!string.Equals(outcome, want, StringComparison.Ordinal))
                 diffs.Add($"{names[i]}: C# {outcome} {reason}, the CLR type says {want}");
-            if (!expected[i] && reason != RefusalCode.InvalidInput.ToWire())
+            if (
+                !expected[i]
+                && !string.Equals(
+                    reason,
+                    RefusalCode.InvalidInput.ToWire(),
+                    StringComparison.Ordinal
+                )
+            )
                 diffs.Add($"{names[i]}: refused as {reason}, not invalid-input");
         }
 
@@ -78,7 +88,7 @@ public class StrictInputParityTests
             .Should()
             .BeEmpty(
                 $"both engines give each value the verdict of its CLR type ({Adr}):\n"
-                    + string.Join("\n", diffs)
+                    + string.Join('\n', diffs)
             );
     }
 }

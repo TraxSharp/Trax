@@ -72,7 +72,7 @@ public class DifferentialCorpusReplayTests
     public void Replay_returns_no_diffs_when_the_engine_reproduces_every_case()
     {
         var diffs = DifferentialCorpus.Replay(TestTurnstile.Machine, MatchingCorpus);
-        diffs.Should().BeEmpty(string.Join("\n", diffs));
+        diffs.Should().BeEmpty(string.Join('\n', diffs));
     }
 
     [Test]
@@ -101,7 +101,11 @@ public class DifferentialCorpusReplayTests
 
         var outcomeCases = JsonNode.Parse(corpus)!["cases"]!
             .AsArray()
-            .Where(c => c!["when"]!["trigger"]!.GetValue<string>().StartsWith("Fetching."))
+            .Where(c =>
+                c!["when"]!["trigger"]!
+                    .GetValue<string>()
+                    .StartsWith("Fetching.", StringComparison.Ordinal)
+            )
             .ToList();
         outcomeCases
             .Should()
@@ -112,7 +116,7 @@ public class DifferentialCorpusReplayTests
 
         var diffs = DifferentialCorpus.Replay(IngestMachine.Machine, corpus);
 
-        diffs.Should().BeEmpty(string.Join("\n", diffs));
+        diffs.Should().BeEmpty(string.Join('\n', diffs));
     }
 
     [Test]
@@ -156,7 +160,7 @@ public class DifferentialCorpusReplayTests
             .Should()
             .BeEmpty(
                 "a timer case replays through AdvanceTimer, never Advance (Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md): "
-                    + string.Join("\n", diffs)
+                    + string.Join('\n', diffs)
             );
     }
 }

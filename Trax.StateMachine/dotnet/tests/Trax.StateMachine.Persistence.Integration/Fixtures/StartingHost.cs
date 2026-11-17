@@ -19,7 +19,7 @@ internal static class StartingHost
     // Long enough never to be reached by a host that starts, so it only names a hang.
     private static readonly TimeSpan Hang = TimeSpan.FromSeconds(30);
 
-    /// <summary>The exception starting the host threw, or <c>null</c> when it started.</summary>
+    /// <summary>The exception starting the host threw, or <see langword="null"/> when it started.</summary>
     /// <param name="configure">The state-machine options, such as the generic opt-in.</param>
     /// <param name="machines">The only machines the host registers.</param>
     public static Task<Exception?> Start(
@@ -39,7 +39,7 @@ internal static class StartingHost
         );
 
     /// <summary>
-    /// The exception starting the host threw, or <c>null</c> when it started, with the machines
+    /// The exception starting the host threw, or <see langword="null"/> when it started, with the machines
     /// <c>AddStateMachines</c> discovers in <paramref name="assembly"/> registered as it registers them.
     /// </summary>
     /// <param name="configure">The state-machine options.</param>
@@ -74,10 +74,10 @@ internal static class StartingHost
         {
             var hosted = provider.GetServices<IHostedService>().ToList();
             foreach (var service in hosted.OfType<IHostedLifecycleService>())
-                await service.StartingAsync(timeout.Token);
+                await service.StartingAsync(timeout.Token).ConfigureAwait(false);
             foreach (var service in hosted)
             {
-                await service.StartAsync(timeout.Token);
+                await service.StartAsync(timeout.Token).ConfigureAwait(false);
                 started.Add(service);
             }
             return null;
@@ -89,8 +89,8 @@ internal static class StartingHost
         finally
         {
             foreach (var service in started)
-                await service.StopAsync(CancellationToken.None);
-            await provider.DisposeAsync();
+                await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await provider.DisposeAsync().ConfigureAwait(false);
             SqliteConnection.ClearAllPools();
             try
             {

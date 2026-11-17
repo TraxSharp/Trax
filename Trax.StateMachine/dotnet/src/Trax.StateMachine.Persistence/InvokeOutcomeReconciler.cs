@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -112,6 +113,7 @@ internal sealed class InvokeOutcomeReconciler(
     private readonly ConcurrentDictionary<long, TimerError> _timerErrors = new();
 
     // DatabaseFailures counts the throws that were the database's, which back the row off but are not attempts.
+    [StructLayout(LayoutKind.Auto)]
     private readonly record struct TimerError(
         long Revision,
         int Attempts,
@@ -204,8 +206,8 @@ internal sealed class InvokeOutcomeReconciler(
         string? after = null;
         do
         {
-            var page = await EndedPage(after, among: null, cancellationToken);
-            await DeliverAll(page.Tokens, results, cancellationToken);
+            var page = await EndedPage(after, among: null, cancellationToken).ConfigureAwait(false);
+            await DeliverAll(page.Tokens, results, cancellationToken).ConfigureAwait(false);
             after = page.Next;
         } while (after is not null);
 
@@ -214,11 +216,13 @@ internal sealed class InvokeOutcomeReconciler(
             do
             {
                 EndedPage page;
-                await using (var scope = scopes.CreateAsyncScope())
+                var scope = scopes.CreateAsyncScope();
+                await using (scope.ConfigureAwait(false))
                     page = await scope
                         .ServiceProvider.GetRequiredService<InvokeOutcomeDelivery>()
-                        .ChildrenEnded(_ending.Value, PageSize, after, cancellationToken);
-                await DeliverAll(page.Tokens, results, cancellationToken);
+                        .ChildrenEnded(_ending.Value, PageSize, after, cancellationToken)
+                        .ConfigureAwait(false);
+                await DeliverAll(page.Tokens, results, cancellationToken).ConfigureAwait(false);
                 after = page.Next;
             } while (after is not null);
 
@@ -252,20 +256,20 @@ internal sealed class InvokeOutcomeReconciler(
             return results;
 
         ForgetExpiredTimerBackoffs();
-        await FinishAbandonedEffectsOnce(cancellationToken);
+        await FinishAbandonedEffectsOnce(cancellationToken).ConfigureAwait(false);
         // The rows read in this sweep, and those backing off: none is read twice, so a page of rows that cannot move
         // now (waiting on a claim, or lost to another host) never keeps the sweep from the rows behind it.
         var seen = new HashSet<long>(TimerBackingOff());
         var moved = 0;
         while (moved < PageSize)
         {
-            var page = await DuePage(seen, cancellationToken);
+            var page = await DuePage(seen, cancellationToken).ConfigureAwait(false);
             if (page.Count == 0)
                 break;
             foreach (var row in page)
             {
                 seen.Add(row.RowId);
-                var result = await FireIsolated(row, cancellationToken);
+                var result = await FireIsolated(row, cancellationToken).ConfigureAwait(false);
                 results.Add(result);
                 TimerFired?.Invoke(result);
                 if (result.Moved && ++moved >= PageSize)
@@ -300,13 +304,16 @@ internal sealed class InvokeOutcomeReconciler(
                 _effectNotHere.TryRemove(rowId, out _);
 
         IReadOnlyList<AbandonedEffect> abandoned;
-        await using (var scope = scopes.CreateAsyncScope())
+        var readScope = scopes.CreateAsyncScope();
+        await using (readScope.ConfigureAwait(false))
         {
-            var services = scope.ServiceProvider;
+            var services = readScope.ServiceProvider;
             abandoned = await new EfSnapshotStore(
                 services.GetRequiredService<IDataContext>(),
                 services.GetService<ISqlDialect>()
-            ).ReadAbandonedEffects(withEffects, AbandonedEffectBatch, cancellationToken);
+            )
+                .ReadAbandonedEffects(withEffects, AbandonedEffectBatch, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         foreach (var effect in abandoned)
@@ -319,7 +326,8 @@ internal sealed class InvokeOutcomeReconciler(
                 continue;
             try
             {
-                await using var scope = scopes.CreateAsyncScope();
+                var scope = scopes.CreateAsyncScope();
+                await using var scopeDisposal = scope.ConfigureAwait(false);
                 var runner =
                     scope
                         .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
@@ -329,7 +337,9 @@ internal sealed class InvokeOutcomeReconciler(
                     _effectNotHere[effect.RowId] = now + WaitingRecheck;
                     continue;
                 }
-                await runner.FinishAbandoned(effect.UserKey, effect.Id, cancellationToken);
+                await runner
+                    .FinishAbandoned(effect.UserKey, effect.Id, cancellationToken)
+                    .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -356,15 +366,19 @@ internal sealed class InvokeOutcomeReconciler(
         CancellationToken cancellationToken
     )
     {
-        await using var scope = scopes.CreateAsyncScope();
+        var scope = scopes.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var services = scope.ServiceProvider;
-        await using var context = await services
+        var context = await services
             .GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(cancellationToken);
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await services
             .GetRequiredService<InvokeOutbox>()
             .StoreOver(context, services.GetService<ISqlDialect>())
-            .ReadDue(_byName.Value.Keys.ToList(), skip, PageSize, cancellationToken);
+            .ReadDue(_byName.Value.Keys.ToList(), skip, PageSize, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     // Fires one due row in a transaction of its own. A throw rolls back this row only: it is counted, backed off and,
@@ -375,34 +389,40 @@ internal sealed class InvokeOutcomeReconciler(
     )
     {
         if (AfterRead is { } afterRead)
-            await afterRead(row);
+            await afterRead(row).ConfigureAwait(false);
         try
         {
-            await using var scope = scopes.CreateAsyncScope();
+            var scope = scopes.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var services = scope.ServiceProvider;
             var outbox = services.GetRequiredService<InvokeOutbox>();
-            await using var context = await services
+            var context = await services
                 .GetRequiredService<IDataContextProviderFactory>()
-                .CreateDbContextAsync(cancellationToken);
+                .CreateDbContextAsync(cancellationToken)
+                .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             var store = outbox.StoreOver(context, services.GetService<ISqlDialect>());
 
             TimerFireResult result;
-            var transaction = await context.BeginTransaction(cancellationToken);
+            var transaction = await context
+                .BeginTransaction(cancellationToken)
+                .ConfigureAwait(false);
             try
             {
                 // Locked before anything is decided, so neither a client's write nor an effect runner's check can
                 // slip between what the fire reads and what it writes.
-                result = await store.LockDue(row, cancellationToken)
+                result = await store.LockDue(row, cancellationToken).ConfigureAwait(false)
                     ? await FireOne(context, store, outbox, row, cancellationToken)
+                        .ConfigureAwait(false)
                     : new TimerFireResult(row.Id, TimerFireResult.Lost);
-                await transaction.Commit();
+                await transaction.Commit().ConfigureAwait(false);
                 services.GetService<SnapshotWriteSignal>()?.Written();
             }
             catch
             {
                 try
                 {
-                    await transaction.Rollback();
+                    await transaction.Rollback().ConfigureAwait(false);
                 }
                 catch (Exception)
                 {
@@ -418,14 +438,19 @@ internal sealed class InvokeOutcomeReconciler(
             _timerErrors.TryRemove(row.RowId, out _);
 
             // A timer may have ended a child: its parent is told now, rather than at the next sweep.
-            if (result.Outcome == TimerFireResult.Fired && _ending.Value.ContainsKey(row.Machine))
-                await SpawnedEnds.Notify(
-                    scopes,
-                    new DraftOwner(row.OwnerKind, row.UserKey),
-                    row.Machine,
-                    row.Id,
-                    cancellationToken
-                );
+            if (
+                string.Equals(result.Outcome, TimerFireResult.Fired, StringComparison.Ordinal)
+                && _ending.Value.ContainsKey(row.Machine)
+            )
+                await SpawnedEnds
+                    .Notify(
+                        scopes,
+                        new DraftOwner(row.OwnerKind, row.UserKey),
+                        row.Machine,
+                        row.Id,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
             return result;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -434,7 +459,7 @@ internal sealed class InvokeOutcomeReconciler(
         }
         catch (Exception ex)
         {
-            return await FireThrew(row, ex, cancellationToken);
+            return await FireThrew(row, ex, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -479,15 +504,19 @@ internal sealed class InvokeOutcomeReconciler(
         bool cleared;
         try
         {
-            await using var scope = scopes.CreateAsyncScope();
+            var scope = scopes.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var services = scope.ServiceProvider;
-            await using var context = await services
+            var context = await services
                 .GetRequiredService<IDataContextProviderFactory>()
-                .CreateDbContextAsync(cancellationToken);
+                .CreateDbContextAsync(cancellationToken)
+                .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             cleared = await services
                 .GetRequiredService<InvokeOutbox>()
                 .StoreOver(context, services.GetService<ISqlDialect>())
-                .ClearDue(row, cancellationToken);
+                .ClearDue(row, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -545,7 +574,7 @@ internal sealed class InvokeOutcomeReconciler(
         if (machine.TimerTriggerOf(current.State) is not { } trigger)
             return new TimerFireResult(
                 row.Id,
-                await store.ClearDue(row, cancellationToken)
+                await store.ClearDue(row, cancellationToken).ConfigureAwait(false)
                     ? TimerFireResult.Cleared
                     : TimerFireResult.Lost
             );
@@ -553,14 +582,18 @@ internal sealed class InvokeOutcomeReconciler(
         // A row with an effect pending on it is never read here: the due-timer query passes it over, and the fire's
         // conditional update matches only a row with none. A claim the earlier ledger recorded holds the timer the
         // same way until the next send records or drops it.
-        if (await EffectHold(store, machine, row, current, cancellationToken) is { } wait)
+        if (
+            await EffectHold(store, machine, row, current, cancellationToken)
+                .ConfigureAwait(false) is
+            { } wait
+        )
         {
             RecordTimerWaiting(row.RowId, wait);
             return new TimerFireResult(row.Id, TimerFireResult.Waiting);
         }
         _timerWaiting.TryRemove(row.RowId, out _);
         if (AfterClaimCheck is { } afterClaimCheck)
-            await afterClaimCheck(row);
+            await afterClaimCheck(row).ConfigureAwait(false);
 
         string? failure;
         switch (machine.AdvanceTimer(current, trigger))
@@ -570,17 +603,19 @@ internal sealed class InvokeOutcomeReconciler(
                 failure = StorableJson.Problem(next.Context);
                 if (failure is not null)
                     break;
-                var write = await outbox.FireTimer(
-                    context,
-                    store,
-                    row,
-                    next,
-                    leaving: machine.Entering(current.State) is not null
-                        && next.State != current.State,
-                    entering: machine.Entering(next.State),
-                    cancellationToken,
-                    trigger
-                );
+                var write = await outbox
+                    .FireTimer(
+                        context,
+                        store,
+                        row,
+                        next,
+                        leaving: machine.Entering(current.State) is not null
+                            && !string.Equals(next.State, current.State, StringComparison.Ordinal),
+                        entering: machine.Entering(next.State),
+                        cancellationToken,
+                        trigger
+                    )
+                    .ConfigureAwait(false);
                 switch (write)
                 {
                     case InvokeWrite.Written:
@@ -602,7 +637,7 @@ internal sealed class InvokeOutcomeReconciler(
 
         // A timer that cannot be applied would be read and refused at every sweep, so its due time is cleared and the
         // failure counted once. The instance stays where it is, and an event still moves it.
-        if (!await store.ClearDue(row, cancellationToken))
+        if (!await store.ClearDue(row, cancellationToken).ConfigureAwait(false))
             return new TimerFireResult(row.Id, TimerFireResult.Lost);
         StateMachineMeter.TimerFireFailed.Add(
             1,
@@ -638,7 +673,7 @@ internal sealed class InvokeOutcomeReconciler(
             .ToList();
         if (keys.Count == 0)
             return null;
-        var claims = await store.LedgerClaims(keys, cancellationToken);
+        var claims = await store.LedgerClaims(keys, cancellationToken).ConfigureAwait(false);
         if (claims.Count == 0)
             return null;
         if (claims.Any(c => c.Receipt is null && c.LeaseLive))
@@ -699,8 +734,8 @@ internal sealed class InvokeOutcomeReconciler(
         var now = Time.GetUtcNow();
         _timerErrors.AddOrUpdate(
             row.RowId,
-            _ => new TimerError(row.Revision, 0, now + TimerErrorBackoff, 1),
-            (_, last) =>
+            (_, arg) => new TimerError(arg.Revision, 0, now + TimerErrorBackoff, 1),
+            (_, last, arg) =>
             {
                 var failures = last.DatabaseFailures + 1;
                 var wait = TimerErrorBackoff * Math.Pow(2, Math.Min(failures - 1, 16));
@@ -709,7 +744,8 @@ internal sealed class InvokeOutcomeReconciler(
                     DatabaseFailures = failures,
                     Until = now + (wait > NotHereBackoffCap ? NotHereBackoffCap : wait),
                 };
-            }
+            },
+            row
         );
     }
 
@@ -719,17 +755,18 @@ internal sealed class InvokeOutcomeReconciler(
         var now = Time.GetUtcNow();
         var next = _timerErrors.AddOrUpdate(
             row.RowId,
-            _ => new TimerError(row.Revision, 1, now + TimerErrorBackoff),
-            (_, last) =>
+            (_, arg) => new TimerError(arg.Revision, 1, now + TimerErrorBackoff),
+            (_, last, arg) =>
             {
-                var attempts = last.Revision == row.Revision ? last.Attempts + 1 : 1;
+                var attempts = last.Revision == arg.Revision ? last.Attempts + 1 : 1;
                 var wait = TimerErrorBackoff * Math.Pow(2, Math.Min(attempts - 1, 16));
                 return new TimerError(
-                    row.Revision,
+                    arg.Revision,
                     attempts,
                     now + (wait > NotHereBackoffCap ? NotHereBackoffCap : wait)
                 );
-            }
+            },
+            row
         );
         return next.Attempts;
     }
@@ -764,15 +801,16 @@ internal sealed class InvokeOutcomeReconciler(
         var now = Time.GetUtcNow();
         _timerNotHere.AddOrUpdate(
             rowId,
-            _ => new Backoff(1, now + NotHereBackoff),
-            (_, last) =>
+            (_, arg) => new Backoff(1, arg + NotHereBackoff),
+            (_, last, arg) =>
             {
                 var wait = NotHereBackoff * Math.Pow(2, Math.Min(last.Attempts, 16));
                 return new Backoff(
                     last.Attempts + 1,
-                    now + (wait > NotHereBackoffCap ? NotHereBackoffCap : wait)
+                    arg + (wait > NotHereBackoffCap ? NotHereBackoffCap : wait)
                 );
-            }
+            },
+            now
         );
     }
 
@@ -802,11 +840,14 @@ internal sealed class InvokeOutcomeReconciler(
     {
         if (_byName.Value.Count == 0)
             return null;
-        await using var scope = scopes.CreateAsyncScope();
+        var scope = scopes.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var services = scope.ServiceProvider;
-        await using var context = await services
+        var context = await services
             .GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(cancellationToken);
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var due = await services
             .GetRequiredService<InvokeOutbox>()
             .StoreOver(context, services.GetService<ISqlDialect>())
@@ -814,7 +855,8 @@ internal sealed class InvokeOutcomeReconciler(
                 _byName.Value.Keys.ToList(),
                 TimerBackingOff().ToList(),
                 cancellationToken
-            );
+            )
+            .ConfigureAwait(false);
         return (due, UntilBackoffEnds()) switch
         {
             ({ } a, { } b) => a < b ? a : b,
@@ -838,8 +880,9 @@ internal sealed class InvokeOutcomeReconciler(
 
         foreach (var chunk in tokens.Distinct(StringComparer.Ordinal).Chunk(PageSize))
         {
-            var page = await EndedPage(after: null, among: chunk, cancellationToken);
-            await DeliverAll(page.Tokens, results, cancellationToken);
+            var page = await EndedPage(after: null, among: chunk, cancellationToken)
+                .ConfigureAwait(false);
+            await DeliverAll(page.Tokens, results, cancellationToken).ConfigureAwait(false);
         }
 
         return results;
@@ -851,10 +894,12 @@ internal sealed class InvokeOutcomeReconciler(
         CancellationToken cancellationToken
     )
     {
-        await using var scope = scopes.CreateAsyncScope();
+        var scope = scopes.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<InvokeOutcomeDelivery>()
-            .Ended(_invoking.Value, PageSize, after, among, cancellationToken);
+            .Ended(_invoking.Value, PageSize, after, among, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task DeliverAll(
@@ -864,7 +909,10 @@ internal sealed class InvokeOutcomeReconciler(
     )
     {
         foreach (var token in tokens)
-            if (!BackingOff(token) && await TryDeliver(token, cancellationToken) is { } delivered)
+            if (
+                !BackingOff(token)
+                && await TryDeliver(token, cancellationToken).ConfigureAwait(false) is { } delivered
+            )
                 results.Add(delivered);
     }
 
@@ -877,10 +925,12 @@ internal sealed class InvokeOutcomeReconciler(
         try
         {
             InvokeDelivery result;
-            await using (var scope = scopes.CreateAsyncScope())
+            var scope = scopes.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
                 result = await scope
                     .ServiceProvider.GetRequiredService<InvokeOutcomeDelivery>()
-                    .Deliver(invokeToken, cancellationToken);
+                    .Deliver(invokeToken, cancellationToken)
+                    .ConfigureAwait(false);
             Record(invokeToken, result);
             Delivered?.Invoke(invokeToken, result);
             return result;
@@ -913,15 +963,16 @@ internal sealed class InvokeOutcomeReconciler(
         var now = Time.GetUtcNow();
         _notHere.AddOrUpdate(
             invokeToken,
-            _ => new Backoff(1, now + NotHereBackoff),
-            (_, last) =>
+            (_, arg) => new Backoff(1, arg + NotHereBackoff),
+            (_, last, arg) =>
             {
                 var wait = NotHereBackoff * Math.Pow(2, Math.Min(last.Attempts, 16));
                 return new Backoff(
                     last.Attempts + 1,
-                    now + (wait > NotHereBackoffCap ? NotHereBackoffCap : wait)
+                    arg + (wait > NotHereBackoffCap ? NotHereBackoffCap : wait)
                 );
-            }
+            },
+            now
         );
     }
 
@@ -937,6 +988,7 @@ internal sealed class InvokeOutcomeReconciler(
                 _notHere.TryRemove(token, out _);
     }
 
+    [StructLayout(LayoutKind.Auto)]
     private readonly record struct Backoff(int Attempts, DateTimeOffset Until);
 
     /// <inheritdoc/>
@@ -967,7 +1019,7 @@ internal sealed class InvokeOutcomeReconciler(
                 Sweeping?.Invoke();
                 try
                 {
-                    await SweepOnce(stoppingToken);
+                    await SweepOnce(stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -985,9 +1037,14 @@ internal sealed class InvokeOutcomeReconciler(
                 try
                 {
                     // A full batch may leave more due behind it, so the next one is fired at once.
-                    while ((await FireDueTimersOnce(stoppingToken)).Count(r => r.Moved) >= PageSize)
+                    while (
+                        (await FireDueTimersOnce(stoppingToken).ConfigureAwait(false))
+                            .Where(r => r.Moved)
+                            .Take(PageSize)
+                            .Count() >= PageSize
+                    )
                         stoppingToken.ThrowIfCancellationRequested();
-                    nextTimer = await UntilNextTimer(stoppingToken);
+                    nextTimer = await UntilNextTimer(stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -1002,7 +1059,7 @@ internal sealed class InvokeOutcomeReconciler(
                 }
                 _firstSweep.TrySetResult();
 
-                await Wait(wake.Reader, nextTimer, stoppingToken);
+                await Wait(wake.Reader, nextTimer, stoppingToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -1010,7 +1067,7 @@ internal sealed class InvokeOutcomeReconciler(
             // Stopping.
         }
 
-        await listening;
+        await listening.ConfigureAwait(false);
     }
 
     // Delivers the notices as they come, in deduplicated batches, until the next full sweep is due: the interval
@@ -1039,7 +1096,7 @@ internal sealed class InvokeOutcomeReconciler(
             );
             try
             {
-                await wake.WaitToReadAsync(interval.Token);
+                await wake.WaitToReadAsync(interval.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
             {
@@ -1060,7 +1117,7 @@ internal sealed class InvokeOutcomeReconciler(
 
             try
             {
-                await DeliverAmong(batch, stoppingToken);
+                await DeliverAmong(batch, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -1097,7 +1154,8 @@ internal sealed class InvokeOutcomeReconciler(
         {
             try
             {
-                await using var subscription = await source.SubscribeAsync(stoppingToken);
+                var subscription = await source.SubscribeAsync(stoppingToken).ConfigureAwait(false);
+                await using var subscriptionDisposal = subscription.ConfigureAwait(false);
                 _hearing = true;
                 delay = ResubscribeDelay;
                 if (!first)
@@ -1106,7 +1164,7 @@ internal sealed class InvokeOutcomeReconciler(
                 _listening.TrySetResult();
                 Subscribed?.Invoke();
                 while (true)
-                    Notice(wake, await subscription.NextAsync(stoppingToken));
+                    Notice(wake, await subscription.NextAsync(stoppingToken).ConfigureAwait(false));
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -1123,7 +1181,7 @@ internal sealed class InvokeOutcomeReconciler(
                 );
                 try
                 {
-                    await Task.Delay(delay, stoppingToken);
+                    await Task.Delay(delay, stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -1145,55 +1203,6 @@ internal sealed class InvokeOutcomeReconciler(
     private void AskForSweep(ChannelWriter<string?> wake)
     {
         Interlocked.Exchange(ref _sweepAsked, 1);
-        wake.TryWrite(null);
-    }
-}
-
-/// <summary>
-/// The fast path: on the host that ran an invoked train, delivers its outcome as soon as its terminal write has
-/// committed, when this host registers the machine that invoked it. Runs outside the train's execution context, so
-/// nothing ambient from the run (its log scope, its caller) reaches the delivery. Never throws: the reconciler's
-/// sweep delivers whatever this misses.
-/// </summary>
-internal sealed class InvokeOutcomeHookFactory(InvokeOutcomeReconciler reconciler)
-    : ITrainLifecycleHookFactory
-{
-    // Long enough for a delivery that queues the next run; a hook never holds the run that called it longer.
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
-
-    public ITrainLifecycleHook Create() => new Hook(reconciler);
-
-    private sealed class Hook(InvokeOutcomeReconciler reconciler) : ITrainLifecycleHook
-    {
-        public Task OnCompleted(Metadata metadata, CancellationToken ct) => Deliver(metadata);
-
-        public Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct) =>
-            Deliver(metadata);
-
-        public Task OnCancelled(Metadata metadata, CancellationToken ct) => Deliver(metadata);
-
-        private async Task Deliver(Metadata metadata)
-        {
-            if (
-                metadata.InvokingMachine is not { } machine
-                || !reconciler.Handles(machine)
-                || string.IsNullOrEmpty(metadata.ExternalId)
-            )
-                return;
-
-            var token = metadata.ExternalId;
-            try
-            {
-                using var bounded = new CancellationTokenSource(Bound);
-                Task delivery;
-                using (ExecutionContext.SuppressFlow())
-                    delivery = Task.Run(() => reconciler.TryDeliver(token, bounded.Token));
-                await delivery;
-            }
-            catch (Exception)
-            {
-                // TryDeliver logs its own failures; a bound that ran out leaves the run to the sweep.
-            }
-        }
+        wake.TryWrite(item: null);
     }
 }

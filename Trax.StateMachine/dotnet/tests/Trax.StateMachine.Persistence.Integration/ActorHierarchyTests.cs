@@ -71,7 +71,7 @@ public class ActorHierarchyTests
         var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator)
             .Append(typeof(Actor).Assembly.Location)
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .Select(path => MetadataReference.CreateFromFile(path));
 
         return CSharpCompilation

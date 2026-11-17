@@ -166,7 +166,7 @@ internal static class Board
                 var cause in stickies
                     .Values.Where(s =>
                         s.Kind == Kind.Event
-                        && s.Machine == policy.When
+                        && string.Equals(s.Machine, policy.When, StringComparison.Ordinal)
                         && s.Label.EndsWith($"→ {policy.Enters}", StringComparison.Ordinal)
                     )
                     .ToList()

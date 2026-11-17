@@ -52,8 +52,10 @@ public class InvokesReservedStateTests(StoreProvider provider)
         var id = Guid.NewGuid();
         using var scope = _host.Scope();
         var service = _host.Service(scope, BuildMachine.Id);
-        await TestDb.Seed(User, id, BuildMachine.Json("Draft", Source), Store(scope));
-        (await service.Advance(User, id, "Build"))
+        await TestDb
+            .Seed(User, id, BuildMachine.Json("Draft", Source), Store(scope))
+            .ConfigureAwait(false);
+        (await service.Advance(User, id, "Build").ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot.State.Should()

@@ -66,7 +66,9 @@ public class SnapshotChangeNotifyTests
     private static JsonObject Quarter => new() { ["coin"] = "quarter" };
 
     private async Task<string> RowId(Guid id) =>
-        (await _host.Rows(id)).Single().RowId.ToString(CultureInfo.InvariantCulture);
+        (await _host.Rows(id).ConfigureAwait(false))
+            .Single()
+            .RowId.ToString(CultureInfo.InvariantCulture);
 
     private async Task<Guid> SavedHatch()
     {
@@ -76,6 +78,7 @@ public class SnapshotChangeNotifyTests
             await _host
                 .Service(scope, PlainHatchMachine.Id)
                 .Autosave(User, id, PlainHatchMachine.Json(HatchState.Shut))
+                .ConfigureAwait(false)
         )
             .Should()
             .BeOfType<AutosaveResult.Saved>();
@@ -85,7 +88,7 @@ public class SnapshotChangeNotifyTests
     private async Task<Guid> SeededTurnstile()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, TestTurnstile.InitialJson);
+        await _host.SeedDraft(User, id, TestTurnstile.InitialJson).ConfigureAwait(false);
         return id;
     }
 
@@ -93,7 +96,12 @@ public class SnapshotChangeNotifyTests
     {
         var id = Guid.NewGuid();
         using var scope = _host.Scope();
-        (await scope.ServiceProvider.GetRequiredService<ISnapshotStore>().Insert(User, id, Locked))
+        (
+            await scope
+                .ServiceProvider.GetRequiredService<ISnapshotStore>()
+                .Insert(User, id, Locked)
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeTrue();
         return id;
@@ -120,22 +128,26 @@ public class SnapshotChangeNotifyTests
                         Context = node["context"]!.AsObject().DeepClone().AsObject(),
                     }
                 )
+                .ConfigureAwait(false)
         ).Should().BeTrue();
         return id;
     }
 
     private async Task ShouldNotifyOnce(Guid id)
     {
-        var rowId = await RowId(id);
-        (await _notices.Collect()).Should().ContainSingle(p => p == rowId, Because);
+        var rowId = await RowId(id).ConfigureAwait(false);
+        (await _notices.Collect().ConfigureAwait(false))
+            .Should()
+            .ContainSingle(p => p == rowId, Because);
     }
 
     private static async Task Exec(NpgsqlConnection connection, string sql, long rowId)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
         command.Parameters.AddWithValue("@row", rowId);
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     [Test]
@@ -182,7 +194,7 @@ public class SnapshotChangeNotifyTests
 
         var rowId = await RowId(id);
         (await _notices.Collect())
-            .Where(p => p == rowId)
+            .Where(p => string.Equals(p, rowId, StringComparison.Ordinal))
             .Should()
             .HaveCount(
                 2,
@@ -319,7 +331,8 @@ public class SnapshotChangeNotifyTests
         var rowId = long.Parse(await RowId(id), CultureInfo.InvariantCulture);
         await _notices.Drain();
 
-        await using (var connection = new NpgsqlConnection(PostgresSetup.ConnectionString))
+        var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using (connection.ConfigureAwait(false))
         {
             await connection.OpenAsync();
             await Exec(
@@ -379,10 +392,12 @@ public class SnapshotChangeNotifyTests
         await _notices.Drain();
 
         // One statement deleting many rows, as a sweep deletes the drafts it has expired.
-        await using (var connection = new NpgsqlConnection(PostgresSetup.ConnectionString))
+        var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using (connection.ConfigureAwait(false))
         {
             await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
+            var command = connection.CreateCommand();
+            await using var commandDisposal = command.ConfigureAwait(false);
             command.CommandText = "DELETE FROM trax.snapshot_draft WHERE id = ANY(@ids)";
             command.Parameters.AddWithValue("@ids", ids.ToArray());
             (await command.ExecuteNonQueryAsync()).Should().Be(Rows);
@@ -400,9 +415,11 @@ public class SnapshotChangeNotifyTests
         var row = long.Parse(rowId, CultureInfo.InvariantCulture);
         await _notices.Drain();
 
-        await using var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
         await connection.OpenAsync();
-        await using (var rolledBack = await connection.BeginTransactionAsync())
+        var rolledBack = await connection.BeginTransactionAsync();
+        await using (rolledBack.ConfigureAwait(false))
         {
             await Exec(
                 connection,
@@ -433,10 +450,12 @@ public class SnapshotChangeNotifyTests
         var row = long.Parse(rowId, CultureInfo.InvariantCulture);
         await _notices.Drain();
 
-        await using (var connection = new NpgsqlConnection(PostgresSetup.ConnectionString))
+        var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using (connection.ConfigureAwait(false))
         {
             await connection.OpenAsync();
-            await using var transaction = await connection.BeginTransactionAsync();
+            var transaction = await connection.BeginTransactionAsync();
+            await using var transactionDisposal = transaction.ConfigureAwait(false);
             await Exec(
                 connection,
                 "UPDATE trax.snapshot_draft SET concurrency_token = gen_random_uuid() WHERE row_id = @row",
@@ -515,7 +534,7 @@ public class SnapshotChangeNotifyTests
         second.Should().NotBe(first, "a re-created row is a new incarnation");
         var heard = await _notices.Collect();
         heard
-            .Where(p => p == first)
+            .Where(p => string.Equals(p, first, StringComparison.Ordinal))
             .Should()
             .HaveCount(2, $"the insert and the delete of the first incarnation. See {Adr}");
         heard.Should().ContainSingle(p => p == second, Because);
@@ -569,10 +588,12 @@ public class SnapshotChangeNotifyTests
         var migrations = NotifyingMigrations();
         migrations.Should().ContainSingle($"one migration adds the notify trigger. See {Adr}");
 
-        await using var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
         await connection.OpenAsync();
         var before = await NotifyTriggers(connection);
-        await using (var rerun = connection.CreateCommand())
+        var rerun = connection.CreateCommand();
+        await using (rerun.ConfigureAwait(false))
         {
             rerun.CommandText = migrations[0].Sql;
             await rerun.ExecuteNonQueryAsync();
@@ -587,15 +608,17 @@ public class SnapshotChangeNotifyTests
     // The triggers on the draft table whose function notifies the snapshot change channel, by name.
     private static async Task<List<string>> NotifyTriggers(NpgsqlConnection connection)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText =
             "SELECT t.tgname FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid "
             + "WHERE t.tgrelid = 'trax.snapshot_draft'::regclass AND NOT t.tgisinternal "
             + "AND p.prosrc LIKE '%' || @channel || '%' ORDER BY t.tgname";
         command.Parameters.AddWithValue("@channel", SnapshotNotices.Channel);
         var names = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
+        while (await reader.ReadAsync().ConfigureAwait(false))
             names.Add(reader.GetString(0));
         return names;
     }

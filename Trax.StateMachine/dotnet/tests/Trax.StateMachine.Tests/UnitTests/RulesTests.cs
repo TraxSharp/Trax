@@ -36,7 +36,7 @@ public class RulesTests
         var reduction = SetAll(
             Set((Ctx c) => c.Name).FromInput((Paid p) => p.Coin),
             Set((Ctx c) => c.Total).FromInput((Paid p) => p.Amount),
-            Set((Ctx c) => c.Flag).ToValue(true)
+            Set((Ctx c) => c.Flag).ToValue(value: true)
         );
 
         reduction
@@ -145,11 +145,11 @@ public class RulesTests
         Field((Ctx c) => c.Flag)
             .IsTrue()
             .Should()
-            .Be(new Rule.BoolEquals(RuleSource.Context, "flag", true));
+            .Be(new Rule.BoolEquals(RuleSource.Context, "flag", Value: true));
         Field((Ctx c) => c.Flag)
             .IsFalse()
             .Should()
-            .Be(new Rule.BoolEquals(RuleSource.Context, "flag", false));
+            .Be(new Rule.BoolEquals(RuleSource.Context, "flag", Value: false));
         Field((Ctx c) => c.Items)
             .ArrayOf(JsonFieldType.String)
             .Should()

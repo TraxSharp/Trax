@@ -59,7 +59,7 @@ public class DeclarativeAuthoringDefectTests
                 .BeNull("DateTimeOffset");
             ValidateOwnJson(new EnumContext(Kind.Express)).Should().BeNull("enum");
             ValidateOwnJson(new UnsignedContext(3)).Should().BeNull("uint");
-            ValidateOwnJson(new MapContext(new() { ["a"] = 1 }))
+            ValidateOwnJson(new MapContext(new(StringComparer.Ordinal) { ["a"] = 1 }))
                 .Should()
                 .BeNull("Dictionary<string,int>");
         }
@@ -82,7 +82,7 @@ public class DeclarativeAuthoringDefectTests
     public void The_reflected_types_match_what_System_Text_Json_writes()
     {
         var value = new WideContext(
-            null,
+            MaybeId: null,
             new DateOnly(2026, 9, 28),
             TimeSpan.FromMinutes(5),
             // The largest ulong both engines can tell from one past ulong.MaxValue; see below.
@@ -91,7 +91,7 @@ public class DeclarativeAuthoringDefectTests
             'x',
             [Guid.NewGuid()],
             [Kind.Standard, Kind.Express],
-            new Dictionary<string, string> { ["a"] = "b" },
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["a"] = "b" },
             new Dictionary<int, bool> { [1] = true }
         );
 
@@ -102,7 +102,9 @@ public class DeclarativeAuthoringDefectTests
             .Should()
             .Be("'big' is out of range.");
 
-        var fields = SchemaReflection.For<WideContext>().Fields.ToDictionary(f => f.Name);
+        var fields = SchemaReflection
+            .For<WideContext>()
+            .Fields.ToDictionary(f => f.Name, StringComparer.Ordinal);
         fields["labels"].Type.Should().Be(JsonFieldType.Object);
         fields["labels"]
             .Constraints.Should()

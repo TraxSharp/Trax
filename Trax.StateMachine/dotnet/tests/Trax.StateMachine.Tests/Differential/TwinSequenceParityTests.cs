@@ -230,7 +230,7 @@ public class TwinSequenceParityTests
             Op.Timer when subject.TimerTriggers.Count > 0 => new Step(
                 Op.Timer,
                 subject.TimerTriggers[pick % subject.TimerTriggers.Count],
-                null
+                Input: null
             ),
             _ => new Step(Op.Advance, subject.Triggers[pick % subject.Triggers.Count], input),
         };
@@ -326,10 +326,10 @@ public class TwinSequenceParityTests
                 if (
                     step.Op == Op.Advance
                     && (
-                        subject.OutcomeTriggers.Contains(step.Trigger)
-                        || subject.TimerTriggers.Contains(step.Trigger)
+                        subject.OutcomeTriggers.Contains(step.Trigger, StringComparer.Ordinal)
+                        || subject.TimerTriggers.Contains(step.Trigger, StringComparer.Ordinal)
                     )
-                    && outcome != "rejected"
+                    && !string.Equals(outcome, "rejected", StringComparison.Ordinal)
                 )
                     diffs.Add($"[{subject.Name} #{i} step {n}] C# advance applied {step.Trigger}");
 
@@ -337,7 +337,11 @@ public class TwinSequenceParityTests
                 var twinOutcome = answer["outcome"]!.GetValue<string>();
                 var twinReason = answer["reason"]?.GetValue<string>();
                 var twinWire = answer["wire"]!.GetValue<string>();
-                if (outcome != twinOutcome || reason != twinReason || wire != twinWire)
+                if (
+                    !string.Equals(outcome, twinOutcome, StringComparison.Ordinal)
+                    || !string.Equals(reason, twinReason, StringComparison.Ordinal)
+                    || !string.Equals(wire, twinWire, StringComparison.Ordinal)
+                )
                 {
                     diffs.Add(
                         $"[{subject.Name} #{i} step {n}: {step.Op} {step.Trigger} "
@@ -352,7 +356,7 @@ public class TwinSequenceParityTests
         diffs
             .Should()
             .BeEmpty(
-                $"the engines agree after every step ({Adr}):\n" + string.Join("\n", diffs.Take(10))
+                $"the engines agree after every step ({Adr}):\n" + string.Join('\n', diffs.Take(10))
             );
     }
 

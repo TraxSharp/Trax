@@ -46,9 +46,13 @@ public class FluentCheckoutTests
         CheckoutConformanceTests
             .AdvanceFixtures()
             .Where(c =>
-                JsonNode.Parse(File.ReadAllText((string)c.Arguments[0]!))!["expect"]!
-                    ["reason"]
-                    ?.GetValue<string>() != RefusalCode.InvalidInput.ToWire()
+                !string.Equals(
+                    JsonNode.Parse(File.ReadAllText((string)c.Arguments[0]!))!["expect"]!
+                        ["reason"]
+                        ?.GetValue<string>(),
+                    RefusalCode.InvalidInput.ToWire(),
+                    StringComparison.Ordinal
+                )
             );
 
     [TestCaseSource(nameof(DelegateAdvanceFixtures))]
@@ -66,7 +70,13 @@ public class FluentCheckoutTests
             input
         );
 
-        if (expect["outcome"]!.GetValue<string>() == "transitioned")
+        if (
+            string.Equals(
+                expect["outcome"]!.GetValue<string>(),
+                "transitioned",
+                StringComparison.Ordinal
+            )
+        )
             result
                 .Should()
                 .BeOfType<AdvanceResult.Transitioned>()
@@ -96,7 +106,7 @@ public class FluentCheckoutTests
 
         var result = FluentCheckout.Machine.Rehydrate(json);
 
-        if (expect["result"]!.GetValue<string>() == "ok")
+        if (string.Equals(expect["result"]!.GetValue<string>(), "ok", StringComparison.Ordinal))
             result
                 .Should()
                 .BeOfType<RehydrationResult.Ok>()

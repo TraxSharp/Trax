@@ -23,7 +23,7 @@ public class MachineBuilderTests
         Other,
     }
 
-    private interface IFakeEffect { }
+    private interface IFakeEffect;
 
     private static BuiltMachine<S, T> Minimal()
     {

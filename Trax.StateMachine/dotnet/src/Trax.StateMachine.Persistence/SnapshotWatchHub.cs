@@ -76,7 +76,7 @@ internal sealed class SnapshotWatchHub(
     internal static TimeSpan CoalesceLimit { get; set; } = TimeSpan.FromMilliseconds(100);
 
     private readonly ILogger _logger = logger ?? NullLogger<SnapshotWatchHub>.Instance;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly Dictionary<long, WatchedRow> _rows = [];
     private readonly List<SnapshotWatch> _all = [];
 
@@ -138,7 +138,7 @@ internal sealed class SnapshotWatchHub(
                 _pending.Add(rowId);
             Start();
         }
-        _wake.Writer.TryWrite(true);
+        _wake.Writer.TryWrite(item: true);
         return watch;
     }
 
@@ -177,7 +177,7 @@ internal sealed class SnapshotWatchHub(
             loop = _loop;
             hearing = _hearing;
         }
-        await _stopping.CancelAsync();
+        await _stopping.CancelAsync().ConfigureAwait(false);
         if (loop is not null)
             await loop.WaitAsync(cancellationToken).ConfigureAwait(false);
         if (hearing is not null)
@@ -187,7 +187,8 @@ internal sealed class SnapshotWatchHub(
 
     // The container may dispose this more than once (it is registered under several service types), so disposing is
     // stopping, which is idempotent; the token source has no timer, so it is left to the collector.
-    public async ValueTask DisposeAsync() => await StopAsync(CancellationToken.None);
+    public async ValueTask DisposeAsync() =>
+        await StopAsync(CancellationToken.None).ConfigureAwait(false);
 
     public void Dispose()
     {
@@ -252,7 +253,7 @@ internal sealed class SnapshotWatchHub(
             return new SnapshotWatchScope(
                 [.. _rows.Keys],
                 EveryRow: _all.Count > 0,
-                Machines: _all.Count == 0 || _all.Any(w => w.Machine is null)
+                Machines: _all.Count == 0 || _all.Exists(w => w.Machine is null)
                     ? null
                     : _all.Select(w => w.Machine!).ToHashSet(StringComparer.Ordinal)
             );
@@ -264,7 +265,9 @@ internal sealed class SnapshotWatchHub(
     {
         try
         {
-            await foreach (var change in listener.ChangesAsync(sessionToken, WatchedRows))
+            await foreach (
+                var change in listener.ChangesAsync(sessionToken, WatchedRows).ConfigureAwait(false)
+            )
             {
                 lock (_gate)
                 {
@@ -286,7 +289,7 @@ internal sealed class SnapshotWatchHub(
                             break;
                     }
                 }
-                _wake.Writer.TryWrite(true);
+                _wake.Writer.TryWrite(item: true);
             }
         }
         catch (OperationCanceledException) when (sessionToken.IsCancellationRequested)
@@ -301,10 +304,10 @@ internal sealed class SnapshotWatchHub(
     {
         try
         {
-            while (await _wake.Reader.WaitToReadAsync(stoppingToken))
+            while (await _wake.Reader.WaitToReadAsync(stoppingToken).ConfigureAwait(false))
             {
                 _wake.Reader.TryRead(out _);
-                await Settle(stoppingToken);
+                await Settle(stoppingToken).ConfigureAwait(false);
                 List<long> burst;
                 lock (_gate)
                 {
@@ -323,7 +326,7 @@ internal sealed class SnapshotWatchHub(
 
                 try
                 {
-                    var read = await ReadRows(burst, stoppingToken);
+                    var read = await ReadRows(burst, stoppingToken).ConfigureAwait(false);
                     lock (_gate)
                         foreach (var rowId in burst)
                             Deliver(rowId, read.GetValueOrDefault(rowId));
@@ -342,8 +345,8 @@ internal sealed class SnapshotWatchHub(
                     );
                     lock (_gate)
                         _pending.UnionWith(burst);
-                    await Task.Delay(RetryDelay, stoppingToken);
-                    _wake.Writer.TryWrite(true);
+                    await Task.Delay(RetryDelay, stoppingToken).ConfigureAwait(false);
+                    _wake.Writer.TryWrite(item: true);
                 }
             }
         }
@@ -363,7 +366,7 @@ internal sealed class SnapshotWatchHub(
             long before;
             lock (_gate)
                 before = _hints;
-            await Task.Delay(CoalesceWindow, stoppingToken);
+            await Task.Delay(CoalesceWindow, stoppingToken).ConfigureAwait(false);
             lock (_gate)
                 if (_hints == before)
                     return;
@@ -376,7 +379,8 @@ internal sealed class SnapshotWatchHub(
     )
     {
         var found = new Dictionary<long, SnapshotRowChange>(rowIds.Count);
-        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         foreach (var chunk in rowIds.Chunk(ReadBatch))
         {
             var rows = await db
@@ -399,7 +403,8 @@ internal sealed class SnapshotWatchHub(
                     d.DueAt,
                     HasInvokeToken = d.InvokeToken != null,
                 })
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
             foreach (var row in rows)
                 found[row.RowId] = Unreadable(row.Machine, row.State, row.Context) is { } reason
                     ? SnapshotRowChange.UnreadableRow(
@@ -526,7 +531,7 @@ internal sealed class SnapshotWatchHub(
             : _seen.TryGetValue(rowId, out var seen) ? seen
             : null;
         return known is null
-            ? SnapshotRowChange.GoneRow(rowId, null)
+            ? SnapshotRowChange.GoneRow(rowId, machine: null)
             : SnapshotRowChange.GoneRow(rowId, known.Machine) with
             {
                 Revision = known.Revision,
@@ -596,177 +601,4 @@ internal sealed class SnapshotWatchHub(
         // The last re-read of the row, handed to a watcher that joins later.
         public SnapshotRowChange? Latest { get; set; }
     }
-}
-
-/// <summary>
-/// One open watch on <see cref="SnapshotWatchHub"/>. Read <see cref="Changes"/> until it completes; dispose it to
-/// stop watching.
-/// </summary>
-internal sealed class SnapshotWatch : IAsyncDisposable, IDisposable
-{
-    private readonly SnapshotWatchHub _hub;
-    private readonly Channel<SnapshotRowChange> _buffer;
-
-    internal SnapshotWatch(SnapshotWatchHub hub, long? rowId, string? machine)
-    {
-        _hub = hub;
-        RowId = rowId;
-        Machine = machine;
-        _buffer = rowId is null
-            ? Channel.CreateBounded<SnapshotRowChange>(
-                new BoundedChannelOptions(SnapshotWatchHub.AllCapacity)
-                {
-                    SingleReader = true,
-                    FullMode = BoundedChannelFullMode.Wait,
-                }
-            )
-            // A row watch keeps only the latest change: each change is the whole row, so a skipped revision
-            // loses nothing, and a terminal change replaces whatever was waiting.
-            : Channel.CreateBounded<SnapshotRowChange>(
-                new BoundedChannelOptions(1)
-                {
-                    SingleReader = true,
-                    FullMode = BoundedChannelFullMode.DropOldest,
-                }
-            );
-    }
-
-    /// <summary>The row watched, or null for a watch on every row.</summary>
-    public long? RowId { get; }
-
-    /// <summary>The machine a watch on every row is limited to, or null.</summary>
-    public string? Machine { get; }
-
-    /// <summary>The changes, until the watch ends.</summary>
-    public ChannelReader<SnapshotRowChange> Changes => _buffer.Reader;
-
-    // The highest revision handed to this watch. Guarded by the hub's gate.
-    internal long Delivered { get; set; }
-
-    // Whether the hub still counts this watch. Guarded by the hub's gate.
-    internal bool Registered { get; set; } = true;
-
-    internal bool Offer(SnapshotRowChange change) => _buffer.Writer.TryWrite(change);
-
-    internal void Complete() => _buffer.Writer.TryComplete();
-
-    public void Dispose() => _hub.Release(this);
-
-    public ValueTask DisposeAsync()
-    {
-        _hub.Release(this);
-        return ValueTask.CompletedTask;
-    }
-}
-
-/// <summary>What a <see cref="SnapshotWatch"/> hands on.</summary>
-internal enum SnapshotRowChangeKind
-{
-    /// <summary>The row as it is now, at a revision newer than the watcher had.</summary>
-    Changed,
-
-    /// <summary>The row no longer exists: deleted or expired. The end of a watch on it.</summary>
-    Gone,
-
-    /// <summary>This host cannot read the row (written by another version, or by hand). The end of a watch on it.</summary>
-    Unreadable,
-
-    /// <summary>For a watch on every row only: changes may have been missed, so list again.</summary>
-    Reload,
-}
-
-/// <summary>
-/// One row as the hub re-read it. <see cref="Context"/> is the row's context as JSON text, set only on
-/// <see cref="SnapshotRowChangeKind.Changed"/>; the identifying fields are set whenever the hub read the row.
-/// </summary>
-internal sealed record SnapshotRowChange(
-    SnapshotRowChangeKind Kind,
-    long RowId,
-    long Revision,
-    string? Machine,
-    Guid? Id,
-    SnapshotOwnerKind? OwnerKind,
-    string? UserKey,
-    int Version,
-    string? State,
-    string? Context,
-    string? IrHash,
-    DateTimeOffset? UpdatedAt
-)
-{
-    /// <summary>Whether the row is gone.</summary>
-    public bool Deleted => Kind is SnapshotRowChangeKind.Gone;
-
-    /// <summary>Whether the row's state waits on a train run it invoked (it holds an invoke token).</summary>
-    public bool HasInvokeToken { get; init; }
-
-    /// <summary>When the row was created, where the store recorded it.</summary>
-    public DateTimeOffset? CreatedAt { get; init; }
-
-    /// <summary>
-    /// For <see cref="SnapshotRowChangeKind.Changed"/>: when the timer of the row's state fires, read with the row, or
-    /// null when that state has none. It travels beside the snapshot, never inside it.
-    /// </summary>
-    public DateTimeOffset? DueAt { get; init; }
-
-    /// <summary>
-    /// For <see cref="SnapshotRowChangeKind.Unreadable"/>: why this host cannot read the row, a rehydration error code
-    /// (unknown machine, unknown state, a context that is not a JSON object).
-    /// </summary>
-    public RefusalCode? UnreadableReason { get; init; }
-
-    internal static readonly SnapshotRowChange ReloadAll = new(
-        SnapshotRowChangeKind.Reload,
-        0,
-        0,
-        null,
-        null,
-        null,
-        null,
-        0,
-        null,
-        null,
-        null,
-        null
-    );
-
-    internal static SnapshotRowChange GoneRow(long rowId, string? machine) =>
-        new(
-            SnapshotRowChangeKind.Gone,
-            rowId,
-            0,
-            machine,
-            null,
-            null,
-            null,
-            0,
-            null,
-            null,
-            null,
-            null
-        );
-
-    internal static SnapshotRowChange UnreadableRow(
-        long rowId,
-        long revision,
-        string machine,
-        Guid id,
-        SnapshotOwnerKind ownerKind,
-        string? userKey,
-        string? irHash
-    ) =>
-        new(
-            SnapshotRowChangeKind.Unreadable,
-            rowId,
-            revision,
-            machine,
-            id,
-            ownerKind,
-            userKey,
-            0,
-            null,
-            null,
-            irHash,
-            null
-        );
 }

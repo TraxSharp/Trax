@@ -158,7 +158,7 @@ internal static class CanonicalJson
         }
 
         // Fold the decimal point into a single digit string.
-        var dot = mantissa.IndexOf('.');
+        var dot = mantissa.IndexOf('.', StringComparison.Ordinal);
         string allDigits;
         int fracLen;
         if (dot >= 0)

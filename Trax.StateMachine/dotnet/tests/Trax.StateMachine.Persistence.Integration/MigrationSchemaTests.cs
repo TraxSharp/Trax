@@ -115,11 +115,15 @@ public class MigrationSchemaTests
         var id = Guid.NewGuid();
 
         // snapshot_draft: insert, read back (context survives), then a token-guarded update + replay marker.
-        (await With(ctx, c => new EfSnapshotStore(c, dialect).Upsert(userKey, id, Sample())))
+        (
+            await With(ctx, c => new EfSnapshotStore(c, dialect).Upsert(userKey, id, Sample()))
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeTrue();
 
-        var stored = await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id));
+        var stored = await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id))
+            .ConfigureAwait(false);
         stored
             .Should()
             .NotBeNull(
@@ -132,21 +136,23 @@ public class MigrationSchemaTests
         var advanced = Sample() with { State = "Locked", Context = new JsonObject() };
         (
             await With(
-                ctx,
-                c =>
-                    new EfSnapshotStore(c, dialect).Update(
-                        userKey,
-                        id,
-                        advanced,
-                        stored.Token,
-                        "req-1"
-                    )
-            )
+                    ctx,
+                    c =>
+                        new EfSnapshotStore(c, dialect).Update(
+                            userKey,
+                            id,
+                            advanced,
+                            stored.Token,
+                            "req-1"
+                        )
+                )
+                .ConfigureAwait(false)
         )
             .Should()
             .BeTrue();
 
-        var after = await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id));
+        var after = await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id))
+            .ConfigureAwait(false);
         after.Should().NotBeNull();
         after!.Json.Should().Contain("\"state\":\"Locked\"");
         after.LastRequestId.Should().Be("req-1");
@@ -154,89 +160,99 @@ public class MigrationSchemaTests
         // The request scope columns (048 / 013): the trigger and from-state recorded with the request id.
         (
             await With(
-                ctx,
-                c =>
-                    new EfSnapshotStore(c, dialect).UpdateWithRequest(
-                        userKey,
-                        id,
-                        Sample(),
-                        after.Token,
-                        new AppliedRequest("req-2", "Coin", "Locked")
-                    )
-            )
+                    ctx,
+                    c =>
+                        new EfSnapshotStore(c, dialect).UpdateWithRequest(
+                            userKey,
+                            id,
+                            Sample(),
+                            after.Token,
+                            new AppliedRequest("req-2", "Coin", "Locked")
+                        )
+                )
+                .ConfigureAwait(false)
         )
             .Should()
             .BeTrue();
-        var scoped = await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id));
+        var scoped = await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id))
+            .ConfigureAwait(false);
         scoped!.LastRequest.Should().Be(new AppliedRequest("req-2", "Coin", "Locked"));
 
         // The owner kind and the invoke token (070 / 032): a system row beside the user's under the same id,
         // a token set on it, and the conditional update by that token.
         (
             await With(
-                ctx,
-                c =>
-                    ((IMachineInstanceStore)new EfSnapshotStore(c, dialect)).Insert(
-                        DraftOwner.System,
-                        id,
-                        Sample()
-                    )
-            )
+                    ctx,
+                    c =>
+                        ((IMachineInstanceStore)new EfSnapshotStore(c, dialect)).Insert(
+                            DraftOwner.System,
+                            id,
+                            Sample()
+                        )
+                )
+                .ConfigureAwait(false)
         )
             .Should()
             .BeTrue("a system row is unique among system rows, apart from the user's");
         var system = await With(
-            ctx,
-            c =>
-                ((IMachineInstanceStore)new EfSnapshotStore(c, dialect)).Get(
-                    DraftOwner.System,
-                    "turnstile",
-                    id
-                )
-        );
+                ctx,
+                c =>
+                    ((IMachineInstanceStore)new EfSnapshotStore(c, dialect)).Get(
+                        DraftOwner.System,
+                        "turnstile",
+                        id
+                    )
+            )
+            .ConfigureAwait(false);
         system.Should().NotBeNull();
         var token = $"run-{id:N}";
         (
             await With(
-                ctx,
-                c =>
-                    ((IMachineInstanceStore)new EfSnapshotStore(c, dialect)).SetInvokeToken(
-                        DraftOwner.System,
-                        "turnstile",
-                        id,
-                        system!.Token,
-                        new InvokeTokenWrite(token)
-                    )
-            )
+                    ctx,
+                    c =>
+                        ((IMachineInstanceStore)new EfSnapshotStore(c, dialect)).SetInvokeToken(
+                            DraftOwner.System,
+                            "turnstile",
+                            id,
+                            system!.Token,
+                            new InvokeTokenWrite(token)
+                        )
+                )
+                .ConfigureAwait(false)
         )
             .Should()
             .BeTrue();
         (
             await With(
-                ctx,
-                c =>
-                    ((IMachineInstanceStore)new EfSnapshotStore(c, dialect)).ApplyByInvokeToken(
-                        token,
-                        advanced,
-                        nextInvokeToken: null
-                    )
-            )
+                    ctx,
+                    c =>
+                        ((IMachineInstanceStore)new EfSnapshotStore(c, dialect)).ApplyByInvokeToken(
+                            token,
+                            advanced,
+                            nextInvokeToken: null
+                        )
+                )
+                .ConfigureAwait(false)
         )
             .Should()
             .BeTrue();
-        (await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id)))!
+        (
+            await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id))
+                .ConfigureAwait(false)
+        )!
             .Json.Should()
             .Be(scoped.Json, "the user's draft under the same id is untouched");
 
         // created_at (071 / 033): written on insert and left alone by every update since.
         var rows = await With(
-            ctx,
-            c =>
-                c.SnapshotDrafts.AsNoTracking()
-                    .Where(x => x.Id == id)
-                    .Select(x => new { x.CreatedAt, x.UpdatedAt })
-                    .ToListAsync()
-        );
+                ctx,
+                c =>
+                    c.SnapshotDrafts.AsNoTracking()
+                        .Where(x => x.Id == id)
+                        .Select(x => new { x.CreatedAt, x.UpdatedAt })
+                        .ToListAsync()
+            )
+            .ConfigureAwait(false);
         rows.Should().HaveCount(2);
         rows.Should()
             .OnlyContain(
@@ -247,19 +263,29 @@ public class MigrationSchemaTests
         // effect_claim: claim, confirm in-flight (no receipt), fenced complete, receipt readable back.
         var key = $"charge:{id}";
         var claim = await With(
-            ctx,
-            c => new EfEffectClaimStore(c, dialect).TryClaim(key, TimeSpan.FromMinutes(5))
-        );
+                ctx,
+                c => new EfEffectClaimStore(c, dialect).TryClaim(key, TimeSpan.FromMinutes(5))
+            )
+            .ConfigureAwait(false);
         claim.Should().BeOfType<ClaimResult.Won>();
         var owner = ((ClaimResult.Won)claim).OwnerToken;
 
-        (await With(ctx, c => new EfEffectClaimStore(c, dialect).GetReceipt(key)))
+        (
+            await With(ctx, c => new EfEffectClaimStore(c, dialect).GetReceipt(key))
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeNull();
-        (await With(ctx, c => new EfEffectClaimStore(c, dialect).Complete(key, owner, "rcpt-1")))
+        (
+            await With(ctx, c => new EfEffectClaimStore(c, dialect).Complete(key, owner, "rcpt-1"))
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeTrue();
-        (await With(ctx, c => new EfEffectClaimStore(c, dialect).GetReceipt(key)))
+        (
+            await With(ctx, c => new EfEffectClaimStore(c, dialect).GetReceipt(key))
+                .ConfigureAwait(false)
+        )
             .Should()
             .Be("rcpt-1");
 
@@ -267,24 +293,29 @@ public class MigrationSchemaTests
         var bound = $"charge-bound:{id}";
         var fingerprint = SnapshotFingerprint.Of("{\"machine\":\"turnstile\"}");
         var boundClaim = await With(
-            ctx,
-            c =>
-                new EfEffectClaimStore(c, dialect).TryClaim(
-                    bound,
-                    TimeSpan.FromMinutes(5),
-                    fingerprint
-                )
-        );
+                ctx,
+                c =>
+                    new EfEffectClaimStore(c, dialect).TryClaim(
+                        bound,
+                        TimeSpan.FromMinutes(5),
+                        fingerprint
+                    )
+            )
+            .ConfigureAwait(false);
         var boundOwner = boundClaim.Should().BeOfType<ClaimResult.Won>().Which.OwnerToken;
         (
             await With(
-                ctx,
-                c => new EfEffectClaimStore(c, dialect).Complete(bound, boundOwner, "rcpt-2")
-            )
+                    ctx,
+                    c => new EfEffectClaimStore(c, dialect).Complete(bound, boundOwner, "rcpt-2")
+                )
+                .ConfigureAwait(false)
         )
             .Should()
             .BeTrue();
-        (await With(ctx, c => new EfEffectClaimStore(c, dialect).GetCompleted(bound)))
+        (
+            await With(ctx, c => new EfEffectClaimStore(c, dialect).GetCompleted(bound))
+                .ConfigureAwait(false)
+        )
             .Should()
             .Be(
                 new CompletedEffect("rcpt-2", fingerprint),
@@ -295,30 +326,34 @@ public class MigrationSchemaTests
 
     private static async Task<T> With<T>(Func<IDataContext> ctx, Func<IDataContext, Task<T>> op)
     {
-        await using var context = ctx();
-        return await op(context);
+        var context = ctx();
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await op(context).ConfigureAwait(false);
     }
 
     private static async Task CreatePostgresDatabase(string database)
     {
-        await using var admin = new NpgsqlConnection(Maintenance);
-        await admin.OpenAsync();
-        await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
-        await Exec(admin, $"CREATE DATABASE {database}");
+        var admin = new NpgsqlConnection(Maintenance);
+        await using var adminDisposal = admin.ConfigureAwait(false);
+        await admin.OpenAsync().ConfigureAwait(false);
+        await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)").ConfigureAwait(false);
+        await Exec(admin, $"CREATE DATABASE {database}").ConfigureAwait(false);
     }
 
     private static async Task DropPostgresDatabase(string database)
     {
-        await using var admin = new NpgsqlConnection(Maintenance);
-        await admin.OpenAsync();
-        await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
+        var admin = new NpgsqlConnection(Maintenance);
+        await using var adminDisposal = admin.ConfigureAwait(false);
+        await admin.OpenAsync().ConfigureAwait(false);
+        await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)").ConfigureAwait(false);
     }
 
     private static async Task Exec(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     private static void TryDelete(string file)

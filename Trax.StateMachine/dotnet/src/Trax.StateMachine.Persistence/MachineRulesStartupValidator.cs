@@ -30,13 +30,15 @@ internal sealed class MachineRulesStartupValidator(
     public async Task StartingAsync(CancellationToken cancellationToken)
     {
         _checked = true;
-        await using var scope = scopeFactory.CreateAsyncScope();
+        var scope = scopeFactory.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var caller = scope.ServiceProvider.GetService<ICallerAuthorization>();
         var problems = await Problems(
-            RegisteredMachines.Distinct(machines).ToList(),
-            options,
-            caller
-        );
+                RegisteredMachines.Distinct(machines).ToList(),
+                options,
+                caller
+            )
+            .ConfigureAwait(false);
         if (problems.Count > 0)
             throw new InvalidOperationException(
                 $"{problems.Count} problem(s) stop this host from serving its state machines to clients:"
@@ -151,7 +153,9 @@ internal sealed class MachineRulesStartupValidator(
                     );
             }
 
-            problems.AddRange(await RuleProblems(machine, internals, reach, caller));
+            problems.AddRange(
+                await RuleProblems(machine, internals, reach, caller).ConfigureAwait(false)
+            );
         }
 
         return problems;
@@ -255,7 +259,7 @@ internal sealed class MachineRulesStartupValidator(
                 .SelectMany(r => r.Rule.Policies.Select(p => (r.Where, Policy: p)))
                 .Distinct()
         )
-            if (caller is null || !await caller.IsPolicyRegistered(policy))
+            if (caller is null || !await caller.IsPolicyRegistered(policy).ConfigureAwait(false))
                 problems.Add(
                     $"The machine '{name}' is {reach}, and {where} requires the policy '{policy}', which this host "
                         + (

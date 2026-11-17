@@ -10,9 +10,15 @@ package: Trax.StateMachine.Persistence
 namespace: Trax.StateMachine.Persistence
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StateMachinesBuilderExtensions.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/MachineIrHashes.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/MachineTimerLookup.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StateMachineOptions.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StateMachineChangeFeed.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/GenericStateMachineMutationOptions.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/MachineCensus.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/MachineCensusEntry.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StateMachineInstruments.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StateMachineMeter.cs
 redirect_from:
   - /docs/sdk-reference/statemachine-api/add-trax-state-machines
 ---

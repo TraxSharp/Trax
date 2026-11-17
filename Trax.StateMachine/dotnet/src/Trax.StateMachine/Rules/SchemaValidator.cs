@@ -12,7 +12,7 @@ namespace Trax.StateMachine;
 /// names and of its CLR type's format, no fields outside the
 /// schema, each field's constraints satisfied, a nested record's fields checked the same way, and every value of
 /// a dictionary or element of a list checked against its type, and every key of a dictionary against its key type.
-/// Returns <c>null</c> when valid, else a
+/// Returns <see langword="null"/> when valid, else a
 /// message. The message is non-contract detail (only "valid vs not" is the contract), so it is free to differ
 /// from a hand-written validator's wording. This is the schema-derived replacement for a hand-written
 /// <c>Holds(...)</c>.
@@ -34,7 +34,7 @@ internal static partial class SchemaValidator
         ValidateObject(schema.Fields, context, "");
 
     /// <summary>
-    /// Checks a trigger's input (or a train's output) against <paramref name="schema"/>. No input (<c>null</c>)
+    /// Checks a trigger's input (or a train's output) against <paramref name="schema"/>. No input (<see langword="null"/>)
     /// is read as an empty object, so it passes exactly when every field is nullable; anything other than an
     /// object is refused. Never throws: an input that cannot be read (a duplicate key, which a parsed
     /// <see cref="JsonObject"/> throws on when enumerated) is refused like any other bad input.

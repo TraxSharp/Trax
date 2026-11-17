@@ -51,7 +51,8 @@ public class SystemInstanceStarterTests
     [Test]
     public async Task A_host_its_startup_checks_refuse_starts_no_system_instance()
     {
-        await using var provider = Build(withClash: true);
+        var provider = Build(withClash: true);
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var refused = await Starting(provider);
 
@@ -66,7 +67,8 @@ public class SystemInstanceStarterTests
     [Test]
     public async Task A_host_that_starts_starts_its_system_instance()
     {
-        await using var provider = Build(withClash: false);
+        var provider = Build(withClash: false);
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         (await Starting(provider)).Should().BeNull();
 
@@ -110,7 +112,7 @@ public class SystemInstanceStarterTests
                     .GetServices<IHostedService>()
                     .OfType<IHostedLifecycleService>()
             )
-                await service.StartingAsync(CancellationToken.None);
+                await service.StartingAsync(CancellationToken.None).ConfigureAwait(false);
             return null;
         }
         catch (Exception ex)
@@ -122,10 +124,12 @@ public class SystemInstanceStarterTests
     private static async Task<int> SystemRows(IServiceProvider provider)
     {
         var id = SystemInstanceStarter.IdOf("p-shop", "p-shop/main");
-        await using var scope = provider.CreateAsyncScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
-            .CountAsync(d => d.Id == id);
+            .CountAsync(d => d.Id == id)
+            .ConfigureAwait(false);
     }
 }

@@ -247,7 +247,7 @@ public class RegistryJunctionTests
         // No client result: no check (older clients that don't send it are unaffected).
         var idNone = Guid.NewGuid();
         await Save(idNone);
-        (await Advance(idNone, null)).Problem.Should().BeNull();
+        (await Advance(idNone, clientResult: null)).Problem.Should().BeNull();
     }
 
     [Test]
@@ -278,7 +278,7 @@ public class RegistryJunctionTests
     [Test]
     public async Task An_unauthenticated_request_is_a_typed_problem()
     {
-        var anon = new FakePrincipal(null);
+        var anon = new FakePrincipal(userKey: null);
 
         var output = await new SaveSnapshotJunction(NewRegistry(), anon).Run(
             new SaveSnapshotInput

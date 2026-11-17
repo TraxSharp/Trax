@@ -10,13 +10,34 @@ package: Trax.StateMachine
 namespace: Trax.StateMachine
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/Rule.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/RuleSource.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/JsonFieldType.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/CompareOp.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/Reduction.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/ValueSource.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/SetStep.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/ContextSchema.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/FieldSchema.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/DeclarativeModel.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/DeclarativeTransition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/DifferentialModel.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/RuleEvaluator.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/ReductionEvaluator.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/MachineDefinition.cs
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Fluent.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/MigrationResult.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/EffectBinding.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/BuiltMachine.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IIrStateBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IIrMachineBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IIrTransitionBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IMachineBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IStartBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IReadRuleBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ITimerBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IDifferentialBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IStateBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ITransitionBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/MachineBuilder.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/StorableJson.cs
 ---
 

@@ -67,7 +67,9 @@ public class AdvanceTests
     [TestCase("Unlocked", "Coin")]
     public void Advance_with_no_wired_edge_is_no_transition(string state, string trigger)
     {
-        var snapshot = state == "Locked" ? Locked() : Unlocked();
+        var snapshot = string.Equals(state, "Locked", StringComparison.Ordinal)
+            ? Locked()
+            : Unlocked();
 
         var result = TestTurnstile.Machine.Advance(
             snapshot,

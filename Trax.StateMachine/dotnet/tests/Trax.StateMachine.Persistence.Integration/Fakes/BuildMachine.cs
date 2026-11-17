@@ -5,34 +5,6 @@ using static Trax.StateMachine.Rules;
 
 namespace Trax.StateMachine.Persistence.Integration.Fakes;
 
-public sealed record BuildInput(string Source);
-
-/// <summary>A pointer to what the build produced, never the artifact itself.</summary>
-public sealed record BuildOutput
-{
-    public string Artifact { get; init; } = "";
-}
-
-/// <summary>The train <see cref="BuildMachine"/> invokes, named by its interface. These tests never run it.</summary>
-public interface IBuildTrain : IServiceTrain<BuildInput, BuildOutput>;
-
-public enum BuildState
-{
-    Draft,
-    Building,
-    Built,
-    BuildFailed,
-    BuildCancelled,
-}
-
-public enum BuildTrigger
-{
-    Build,
-    StopBuild,
-    Retry,
-    Edit,
-}
-
 /// <summary>
 /// A user's wizard whose <c>Building</c> state invokes <see cref="IBuildTrain"/>: a user enters it with <c>Build</c>
 /// and leaves it with <c>StopBuild</c>; its outcome goes to <c>Built</c>, <c>BuildFailed</c> or

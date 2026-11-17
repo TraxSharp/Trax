@@ -29,7 +29,7 @@ internal sealed class HandServer : IMachineServer
     public async Task Answer(ServerMachineController controller, ServerAnswer read)
     {
         _read.SetResult(read);
-        await controller.StartAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await controller.StartAsync().WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
     }
 
     public Task<ServerAnswer> StartAsync(

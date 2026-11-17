@@ -114,7 +114,10 @@ public class DefaultsParityTests
     {
         var codes = Defaults["closeCodes"]!;
         foreach (var refused in codes["refused"]!.AsObject())
-            new SocketClosedException("closed", int.Parse(refused.Key))
+            new SocketClosedException(
+                "closed",
+                int.Parse(refused.Key, System.Globalization.CultureInfo.InvariantCulture)
+            )
                 .Refused.Should()
                 .BeTrue(refused.Key);
         foreach (var transient in codes["transient"]!.AsArray())

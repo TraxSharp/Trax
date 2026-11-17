@@ -82,7 +82,8 @@ public partial class IrFormatParityTests
             .AsArray()
             .ToDictionary(
                 c => c!["name"]!.GetValue<string>(),
-                c => c!["ir"]!["irFormat"]?.GetValue<int>()
+                c => c!["ir"]!["irFormat"]?.GetValue<int>(),
+                StringComparer.Ordinal
             );
 
         cases["ir-format-too-new"].Should().Be(IrExporter.FormatVersion + 1);
@@ -93,7 +94,10 @@ public partial class IrFormatParityTests
     {
         var match = declaration.Match(source);
         match.Success.Should().BeTrue($"{file} declares {name}");
-        return int.Parse(match.Groups["version"].Value);
+        return int.Parse(
+            match.Groups["version"].Value,
+            System.Globalization.CultureInfo.InvariantCulture
+        );
     }
 
     [GeneratedRegex(@"^export const irFormatVersion = (?<version>\d+);$", RegexOptions.Multiline)]

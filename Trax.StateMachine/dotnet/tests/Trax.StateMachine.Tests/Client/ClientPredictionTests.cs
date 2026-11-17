@@ -113,7 +113,7 @@ public class ClientPredictionTests
 
         var push = controller.SendAsync("Push");
         (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
-            ServerAnswer.Of(At(null, "Locked"))
+            ServerAnswer.Of(At(revision: null, "Locked"))
         );
         (await push.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
         controller.View.Revision.Should().BeNull();
@@ -242,7 +242,7 @@ public class ClientPredictionTests
         using var controller = Open(server, MachinePredictor.For(DeclarativeTurnstile.Built));
         await server.Answer(controller, ServerAnswer.Of(At(10, "Locked")));
         server.Push(new StreamMessage.Changed(At(11, "Locked") with { RowId = "row-a" }));
-        await Until(controller, v => v.RowId == "row-a");
+        await Until(controller, v => string.Equals(v.RowId, "row-a", StringComparison.Ordinal));
 
         // The instance is deleted and created again while a reload's read is pending. A read's answer carries no
         // incarnation, so the pending one cannot say which it read.
@@ -255,7 +255,7 @@ public class ClientPredictionTests
             ServerAnswer.Of(recreated)
         );
 
-        await Until(controller, v => v.RowId == "row-b");
+        await Until(controller, v => string.Equals(v.RowId, "row-b", StringComparison.Ordinal));
         controller.View.Revision.Should().Be(1);
         controller.View.Confirmed!.State.Should().Be("Unlocked");
     }
@@ -430,8 +430,8 @@ public class ClientPredictionTests
         controller.Changed += Check;
         try
         {
-            Check(null, EventArgs.Empty);
-            await reached.Task.WaitAsync(Wait);
+            Check(sender: null, EventArgs.Empty);
+            await reached.Task.WaitAsync(Wait).ConfigureAwait(false);
         }
         finally
         {

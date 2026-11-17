@@ -139,7 +139,9 @@ internal static partial class ValueFormats
             var minutes = Number(m, 10);
             if (minutes >= 60 || hours * 60 + minutes > 14 * 60)
                 return false;
-            var offset = (hours * 60 + minutes) * (m.Groups[8].Value == "-" ? -1 : 1);
+            var offset =
+                (hours * 60 + minutes)
+                * (string.Equals(m.Groups[8].Value, "-", StringComparison.Ordinal) ? -1 : 1);
             return local - offset >= 0 && local - offset <= LastMinute;
         }
         return zoneless
@@ -198,18 +200,21 @@ internal static partial class ValueFormats
     )]
     private static partial Regex UuidPattern();
 
-    [GeneratedRegex("^([0-9]{4})-([0-9]{2})-([0-9]{2})\\z", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(
+        "^([0-9]{4})-([0-9]{2})-([0-9]{2})\\z",
+        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+    )]
     private static partial Regex DatePattern();
 
     [GeneratedRegex(
         "^([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\\.[0-9]{1,7})?\\z",
-        RegexOptions.CultureInvariant
+        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
     )]
     private static partial Regex TimePattern();
 
     [GeneratedRegex(
         "^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\\.[0-9]{1,7})?(?:(Z)|([+-])([0-9]{2}):([0-9]{2}))?\\z",
-        RegexOptions.CultureInvariant
+        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
     )]
     private static partial Regex DateTimePattern();
 
@@ -231,11 +236,11 @@ internal static partial class ValueFormats
             return false;
         var scheme = match.Groups[1].Value.ToLowerInvariant();
         var rest = value[match.Length..];
-        if (scheme == "mailto")
+        if (string.Equals(scheme, "mailto", StringComparison.Ordinal))
         {
-            var query = rest.IndexOf('?');
+            var query = rest.IndexOf('?', StringComparison.Ordinal);
             var address = query < 0 ? rest : rest[..query];
-            var at = address.IndexOf('@');
+            var at = address.IndexOf('@', StringComparison.Ordinal);
             return at > 0
                 && MailboxPattern().IsMatch(address[..at])
                 && IsHost(address[(at + 1)..])
@@ -250,10 +255,10 @@ internal static partial class ValueFormats
                 return false;
             // A file URI's path starting "//" would be read as a UNC share, and a ':' in it as a drive.
             if (
-                scheme == "file"
+                string.Equals(scheme, "file", StringComparison.Ordinal)
                 && (
                     rest[end..].StartsWith("//", StringComparison.Ordinal)
-                    || rest[end..].Contains(':')
+                    || rest[end..].Contains(':', StringComparison.Ordinal)
                 )
             )
                 return false;
@@ -261,7 +266,7 @@ internal static partial class ValueFormats
         }
         else if (KnownSchemes.Contains(scheme))
             return false;
-        var hash = rest.IndexOf('#');
+        var hash = rest.IndexOf('#', StringComparison.Ordinal);
         return hash < 0
             ? IsUriText(rest)
             : IsUriText(rest[..hash]) && IsUriText(rest[(hash + 1)..]);
@@ -293,14 +298,14 @@ internal static partial class ValueFormats
 
     private static bool IsAuthority(string authority, string scheme)
     {
-        if (scheme == "file")
+        if (string.Equals(scheme, "file", StringComparison.Ordinal))
             return authority.Length == 0 || IsHost(authority);
-        if (scheme == "net.pipe")
+        if (string.Equals(scheme, "net.pipe", StringComparison.Ordinal))
             return IsHost(authority);
         var colon = authority.StartsWith('[')
-            ? authority.IndexOf(':', authority.IndexOf(']') + 1)
-            : authority.IndexOf(':');
-        if (authority.StartsWith('[') && authority.IndexOf(']') < 0)
+            ? authority.IndexOf(':', authority.IndexOf(']', StringComparison.Ordinal) + 1)
+            : authority.IndexOf(':', StringComparison.Ordinal);
+        if (authority.StartsWith('[') && authority.IndexOf(']', StringComparison.Ordinal) < 0)
             return false;
         var host = colon < 0 ? authority : authority[..colon];
         var port = colon < 0 ? null : authority[(colon + 1)..];
@@ -350,7 +355,10 @@ internal static partial class ValueFormats
     // A path, query or fragment: unreserved and reserved characters but "#", and %HH escapes.
     private static bool IsUriText(string text) => UriTextPattern().IsMatch(text);
 
-    [GeneratedRegex("^([A-Za-z][A-Za-z0-9+.\\-]+):", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(
+        "^([A-Za-z][A-Za-z0-9+.\\-]+):",
+        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+    )]
     private static partial Regex SchemePattern();
 
     [GeneratedRegex("^[A-Za-z0-9._+\\-]+\\z", RegexOptions.CultureInvariant)]

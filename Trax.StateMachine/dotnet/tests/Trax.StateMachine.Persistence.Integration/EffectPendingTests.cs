@@ -53,15 +53,19 @@ public class EffectPendingTests(StoreProvider provider)
     // A started instance moved into Review, where its effect runs from.
     private async Task<Guid> InReview()
     {
-        var id = await Drive.Start(_host, _owner, Machine);
-        (await Drive.Event(_host, _owner, Machine, id, nameof(PendingPayTrigger.Go)))
+        var id = await Drive.Start(_host, _owner, Machine).ConfigureAwait(false);
+        (
+            await Drive
+                .Event(_host, _owner, Machine, id, nameof(PendingPayTrigger.Go))
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
         return id;
     }
 
     private async Task<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> Row(Guid id) =>
-        (await _host.Rows(id)).Single();
+        (await _host.Rows(id).ConfigureAwait(false)).Single();
 
     private static void ShouldBeEffectInProgress(AdvanceOutcome outcome, string because) =>
         outcome
@@ -161,7 +165,12 @@ public class EffectPendingTests(StoreProvider provider)
             $"UPDATE {_host.DraftTable} SET created_at = @p0 WHERE row_id = @p1",
             provider == StoreProvider.Postgres
                 ? DateTimeOffset.UtcNow.AddDays(-30)
-                : DateTimeOffset.UtcNow.AddDays(-30).ToString("yyyy-MM-dd HH:mm:ss.FFFFFFFzzz"),
+                : DateTimeOffset
+                    .UtcNow.AddDays(-30)
+                    .ToString(
+                        "yyyy-MM-dd HH:mm:ss.FFFFFFFzzz",
+                        System.Globalization.CultureInfo.InvariantCulture
+                    ),
             await _host.RowId(id)
         );
         await Drive.SweepDrafts(_host);
@@ -265,7 +274,7 @@ public class EffectPendingTests(StoreProvider provider)
         (await Row(id)).State.Should().Be(nameof(PendingPayState.Paid));
         _charge.Calls.Should().Be(2);
         _charge
-            .Keys.Distinct()
+            .Keys.Distinct(StringComparer.Ordinal)
             .Should()
             .ContainSingle($"a run again keeps the effect's key ({Adr})");
         (await RawSql.PendingEffect(_host, id)).Token.Should().BeNull();
@@ -287,7 +296,7 @@ public class EffectPendingTests(StoreProvider provider)
         await Drive.SweepTimers(_host);
 
         (await Row(id)).State.Should().Be(nameof(PendingPayState.Paid), $"({Adr})");
-        _charge.KeysOf(id).Distinct().Should().ContainSingle();
+        _charge.KeysOf(id).Distinct(StringComparer.Ordinal).Should().ContainSingle();
         _charge.KeysOf(id).Should().HaveCount(2);
         (await RawSql.PendingEffect(_host, id)).Token.Should().BeNull();
         (await Drive.Send(_host, _owner, Machine, id, "s-first"))
@@ -345,8 +354,16 @@ public class EffectPendingTests(StoreProvider provider)
         listener.InstrumentPublished = (instrument, l) =>
         {
             if (
-                instrument.Meter.Name == StateMachineInstruments.MeterName
-                && instrument.Name == "trax.machine.effect.abandoned"
+                string.Equals(
+                    instrument.Meter.Name,
+                    StateMachineInstruments.MeterName,
+                    StringComparison.Ordinal
+                )
+                && string.Equals(
+                    instrument.Name,
+                    "trax.machine.effect.abandoned",
+                    StringComparison.Ordinal
+                )
             )
                 l.EnableMeasurementEvents(instrument);
         };

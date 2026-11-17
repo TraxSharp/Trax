@@ -29,7 +29,7 @@ public class IrSchemaTests
             .Should()
             .BeEmpty(
                 "every exported IR matches conformance/ir.schema.json:\n"
-                    + string.Join("\n", invalid)
+                    + string.Join('\n', invalid)
             );
     }
 

@@ -58,14 +58,15 @@ internal static class ServerFire
                 x.Revision,
                 x.InvokeToken
             ))
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
         if (due is null)
             return new Fired.Failed("the instance is gone");
         if (beforeFiring?.Invoke(due.State) is { } skip)
             return new Fired.Failed(skip);
         if (!machines.TryGetValue(due.Machine, out var machine))
             return new Fired.Failed($"this host does not serve {due.Machine}");
-        if (!await store.LockDue(due, cancellationToken))
+        if (!await store.LockDue(due, cancellationToken).ConfigureAwait(false))
             return new Fired.Busy("another write holds it");
         if (machine.Rehydrate(due.Json) is not RehydrationResult.Ok readable)
             return new Fired.Failed("this host cannot read it");
@@ -75,18 +76,20 @@ internal static class ServerFire
         {
             case AdvanceResult.Transitioned transitioned:
                 var next = transitioned.Snapshot;
-                var write = await outbox.FireTimer(
-                    context,
-                    store,
-                    due,
-                    next,
-                    leaving: machine.Entering(current.State) is not null
-                        && next.State != current.State,
-                    entering: machine.Entering(next.State),
-                    cancellationToken,
-                    trigger,
-                    note
-                );
+                var write = await outbox
+                    .FireTimer(
+                        context,
+                        store,
+                        due,
+                        next,
+                        leaving: machine.Entering(current.State) is not null
+                            && !string.Equals(next.State, current.State, StringComparison.Ordinal),
+                        entering: machine.Entering(next.State),
+                        cancellationToken,
+                        trigger,
+                        note
+                    )
+                    .ConfigureAwait(false);
                 return write switch
                 {
                     InvokeWrite.Written => new Fired.Moved(next.State),
@@ -152,12 +155,13 @@ internal static class ServerFire
                 x.Revision,
                 x.InvokeToken
             ))
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
         if (due is null)
             return new Fired.Failed("the instance is gone");
         if (!machines.TryGetValue(due.Machine, out var machine))
             return new Fired.Failed($"this host does not serve {due.Machine}");
-        if (!await store.LockDue(due, cancellationToken))
+        if (!await store.LockDue(due, cancellationToken).ConfigureAwait(false))
             return new Fired.Busy("another write holds it");
         if (machine.Rehydrate(due.Json) is not RehydrationResult.Ok readable)
             return new Fired.Failed("this host cannot read it");
@@ -166,17 +170,22 @@ internal static class ServerFire
         if (contextJson is not null)
             next = next with { Context = contextJson };
         var owner = new DraftOwner(due.OwnerKind, due.UserKey);
-        var write = await outbox.FireTimer(
-            context,
-            store,
-            due,
-            next,
-            leaving: machine.Entering(current.State) is not null && state != current.State,
-            entering: state != current.State ? machine.Entering(state) : null,
-            cancellationToken,
-            null,
-            TransitionNote.Save(owner)
-        );
+        var write = await outbox
+            .FireTimer(
+                context,
+                store,
+                due,
+                next,
+                leaving: machine.Entering(current.State) is not null
+                    && !string.Equals(state, current.State, StringComparison.Ordinal),
+                entering: !string.Equals(state, current.State, StringComparison.Ordinal)
+                    ? machine.Entering(state)
+                    : null,
+                cancellationToken,
+                trigger: null,
+                TransitionNote.Save(owner)
+            )
+            .ConfigureAwait(false);
         return write switch
         {
             InvokeWrite.Written => new Fired.Moved(state),

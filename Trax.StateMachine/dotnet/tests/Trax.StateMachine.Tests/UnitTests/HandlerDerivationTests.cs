@@ -213,13 +213,17 @@ public class HandlerDerivationTests
 
         report
             .Passed.Should()
-            .BeTrue(string.Join("\n", report.Scenarios.Select(s => $"{s.Name}: {s.Status}")));
+            .BeTrue(string.Join('\n', report.Scenarios.Select(s => $"{s.Name}: {s.Status}")));
         report
-            .Scenarios.Single(s => s.Name == "Two items cost twice one")
+            .Scenarios.Single(s =>
+                string.Equals(s.Name, "Two items cost twice one", StringComparison.Ordinal)
+            )
             .Status.Should()
             .Be(FeatureStatus.Skipped);
         report
-            .Scenarios.Where(s => s.Name != "Two items cost twice one")
+            .Scenarios.Where(s =>
+                !string.Equals(s.Name, "Two items cost twice one", StringComparison.Ordinal)
+            )
             .Should()
             .OnlyContain(s => s.Status == FeatureStatus.Passed);
     }
@@ -231,7 +235,8 @@ public class HandlerDerivationTests
             Glossary,
             Features.Replace(
                 "When Ada adds \"jam\" to her checkout",
-                "When Ada adds jam to her checkout"
+                "When Ada adds jam to her checkout",
+                StringComparison.Ordinal
             )
         );
 
@@ -275,7 +280,10 @@ public class HandlerDerivationTests
     )
     {
         Glossary.Should().Contain(from);
-        var act = () => Trax.StateMachine.Features.Glossary.Read(Glossary.Replace(from, to));
+        var act = () =>
+            Trax.StateMachine.Features.Glossary.Read(
+                Glossary.Replace(from, to, StringComparison.Ordinal)
+            );
 
         act.Should().Throw<FormatException>().WithMessage(message);
     }
@@ -293,14 +301,17 @@ public class HandlerDerivationTests
                 (
                     host with
                     {
-                        Effects = new Dictionary<string, string>(),
+                        Effects = new Dictionary<string, string>(StringComparer.Ordinal),
                     },
                     "*runs an effect on 'Pay'*"
                 ),
                 (
                     host with
                     {
-                        Rules = new Dictionary<string, string>(host.Rules) { ["extra"] = "A.B" },
+                        Rules = new Dictionary<string, string>(host.Rules, StringComparer.Ordinal)
+                        {
+                            ["extra"] = "A.B",
+                        },
                     },
                     "*rule type for 'extra'*"
                 ),

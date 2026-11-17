@@ -3,21 +3,6 @@ using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Persistence.Integration.Fakes;
 
-public enum OrderState
-{
-    Draft,
-    Review,
-    Placed,
-}
-
-public enum OrderTrigger
-{
-    Next,
-    Back,
-    Place,
-    Reset,
-}
-
 /// <summary>
 /// A neutral effectful wizard: <c>Draft -&gt; Review -&gt; Placed</c>, with <c>Placed</c> committed and an
 /// irreversible "place the order" effect on the <c>Place</c> transition. It exercises everything the

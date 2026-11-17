@@ -52,7 +52,11 @@ public class MachineInstanceIdTests
         id.Version.Should().Be(5);
         (id.Variant & 0b1100).Should().Be(0b1000, "RFC 9562 variant");
         // Pinned: a change to the root namespace or the encoding orphans every stored instance.
-        MachineInstanceId.Root.Should().Be(new Guid("0d3cd492-3485-4ca5-8fdc-e20b35ed5a85"));
+        MachineInstanceId
+            .Root.Should()
+            .Be(
+                new Guid(0xd3cd492, 0x3485, 0x4ca5, 0x8f, 0xdc, 0xe2, 0xb, 0x35, 0xed, 0x5a, 0x85) /* 0d3cd492-3485-4ca5-8fdc-e20b35ed5a85 */
+            );
         id.Should().Be(MachineInstanceId.For("ingest", MachineKey.Of("source", "partition-1")));
     }
 
@@ -61,9 +65,39 @@ public class MachineInstanceIdTests
     {
         // RFC 9562 / RFC 4122: the DNS namespace and "www.example.com".
         MachineInstanceId
-            .UuidV5(new Guid("6ba7b810-9dad-11d1-80b4-00c04fd430c8"), "www.example.com"u8)
+            .UuidV5(
+                new Guid(
+                    0x6ba7b810,
+                    0x9dad,
+                    0x11d1,
+                    0x80,
+                    0xb4,
+                    0x0,
+                    0xc0,
+                    0x4f,
+                    0xd4,
+                    0x30,
+                    0xc8
+                ) /* 6ba7b810-9dad-11d1-80b4-00c04fd430c8 */
+                ,
+                "www.example.com"u8
+            )
             .Should()
-            .Be(new Guid("2ed6657d-e927-568b-95e1-2665a8aea6a2"));
+            .Be(
+                new Guid(
+                    0x2ed6657d,
+                    0xe927,
+                    0x568b,
+                    0x95,
+                    0xe1,
+                    0x26,
+                    0x65,
+                    0xa8,
+                    0xae,
+                    0xa6,
+                    0xa2
+                ) /* 2ed6657d-e927-568b-95e1-2665a8aea6a2 */
+            );
     }
 
     [Test]

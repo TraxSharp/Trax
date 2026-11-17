@@ -269,7 +269,9 @@ public class TimerDerivationTests
     private static JsonNode Timer(Derived derived, string machine, string state) =>
         JsonNode.Parse(derived.Irs[machine])!["timers"]!
             .AsArray()
-            .Single(t => t!["state"]!.GetValue<string>() == state)!;
+            .Single(t =>
+                string.Equals(t!["state"]!.GetValue<string>(), state, StringComparison.Ordinal)
+            )!;
 
     private static Derived Derive(string feature) =>
         FeatureDerivation.Derive(

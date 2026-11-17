@@ -44,11 +44,12 @@ public class EventAuthorizationTests(StoreProvider provider)
     private async Task<Guid> DeskIn(string owner, DeskState state)
     {
         var id = Guid.NewGuid();
-        await _host.Seed(owner, id, RuledDeskMachine.In(state));
+        await _host.Seed(owner, id, RuledDeskMachine.In(state)).ConfigureAwait(false);
         return id;
     }
 
-    private async Task<string> StateOf(Guid id) => (await _host.Rows(id)).Single().State;
+    private async Task<string> StateOf(Guid id) =>
+        (await _host.Rows(id).ConfigureAwait(false)).Single().State;
 
     [Test]
     public async Task A_client_without_the_role_gets_forbidden_and_nothing_is_written()
@@ -87,7 +88,7 @@ public class EventAuthorizationTests(StoreProvider provider)
     /// <summary>A caller in the matrix: who it is and the roles it holds.</summary>
     public sealed record Caller(string Name, string[] Roles)
     {
-        public bool Authenticated => Name != "none";
+        public bool Authenticated => !string.Equals(Name, "none", StringComparison.Ordinal);
 
         public bool Holds(string role) => Roles.Contains(role, StringComparer.Ordinal);
 
@@ -227,7 +228,7 @@ public class EventAuthorizationTests(StoreProvider provider)
                     $"the rule is checked before the input. See {Adr}"
                 );
 
-            var outcome = await service.Advance(actor, id, rule.ToString(), null, "ok");
+            var outcome = await service.Advance(actor, id, rule.ToString(), input: null, "ok");
             if (allowed)
                 outcome.Should().BeOfType<AdvanceOutcome.Advanced>();
             else
@@ -283,7 +284,7 @@ public class EventAuthorizationTests(StoreProvider provider)
         using (var scope = _host.Scope())
             outcome = await _host
                 .Service(scope, RuledDeskMachine.Id)
-                .Advance(owner, id, nameof(DeskTrigger.OperatorOnly), null, "host-1");
+                .Advance(owner, id, nameof(DeskTrigger.OperatorOnly), input: null, "host-1");
 
         outcome
             .Should()
@@ -309,16 +310,19 @@ public class EventAuthorizationTests(StoreProvider provider)
                     var allowed = Satisfies(caller, rule);
 
                     var owner = NewUser();
-                    var id = await DeskIn(owner, DeskState.Open);
-                    var before = (await _host.Rows(id)).Single().ConcurrencyToken;
+                    var id = await DeskIn(owner, DeskState.Open).ConfigureAwait(false);
+                    var before = (await _host.Rows(id).ConfigureAwait(false))
+                        .Single()
+                        .ConcurrencyToken;
 
                     AdvanceOutcome outcome;
                     using (var scope = _host.Scope())
                         outcome = await _host
                             .Service(scope, RuledDeskMachine.Id)
-                            .Advance(DeskRoles.Client(owner, roles), id, rule.ToString());
+                            .Advance(DeskRoles.Client(owner, roles), id, rule.ToString())
+                            .ConfigureAwait(false);
 
-                    var row = (await _host.Rows(id)).Single();
+                    var row = (await _host.Rows(id).ConfigureAwait(false)).Single();
                     var writes = row.ConcurrencyToken == before ? 0 : 1;
                     (outcome is AdvanceOutcome.Rejected { Reason: RefusalCode.Forbidden })
                         .Should()

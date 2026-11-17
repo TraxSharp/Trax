@@ -13,14 +13,15 @@ namespace Trax.StateMachine.Tests.Client;
 /// and this process answers its requests, each when it settles.
 /// </summary>
 [Category(Categories.CrossEngine)]
-public class ClientConformanceTests
+public partial class ClientConformanceTests
 {
     private static readonly TimeSpan RunnerTimeout = TimeSpan.FromMinutes(2);
 
     [Test]
     public async Task The_CSharp_client_passes_every_transcript_of_the_kit()
     {
-        await using var testee = new ClientTestee();
+        var testee = new ClientTestee();
+        await using var testeeDisposal = testee.ConfigureAwait(false);
         var start = new ProcessStartInfo(
             "node",
             $"conformance/client/run.mjs --name {ClientTestee.Client} --stdio"
@@ -41,18 +42,22 @@ public class ClientConformanceTests
         // when it settles: a send waits on the host while the runner goes on.
         var conversation = Task.Run(async () =>
         {
-            while (await process.StandardOutput.ReadLineAsync() is { } request)
+            while (
+                await process.StandardOutput.ReadLineAsync().ConfigureAwait(false) is { } request
+            )
             {
                 var answering = testee.AnswerAsync(request);
                 answers.Add(
                     Task.Run(async () =>
                     {
-                        var answer = await answering;
-                        await writing.WaitAsync();
+                        var answer = await answering.ConfigureAwait(false);
+                        await writing.WaitAsync().ConfigureAwait(false);
                         try
                         {
-                            await process.StandardInput.WriteLineAsync(answer);
-                            await process.StandardInput.FlushAsync();
+                            await process
+                                .StandardInput.WriteLineAsync(answer)
+                                .ConfigureAwait(false);
+                            await process.StandardInput.FlushAsync().ConfigureAwait(false);
                         }
                         finally
                         {
@@ -103,7 +108,7 @@ public class ClientConformanceTests
             .Select(Path.GetFileNameWithoutExtension)
             .Count(name =>
                 entries.Any(e =>
-                    (string?)e!["case"] == name
+                    string.Equals((string?)e!["case"], name, StringComparison.Ordinal)
                     || (
                         e["prefix"] is { } prefix
                         && name!.StartsWith((string)prefix!, StringComparison.Ordinal)
@@ -120,18 +125,16 @@ public class ClientConformanceTests
     {
         var clientKit = Path.Combine(FixturePaths.ConformanceRoot, "client");
         var protocol = File.ReadAllText(Path.Combine(clientKit, "PROTOCOL.md"));
-        var block = Regex.Match(
-            protocol,
-            @"^```json lacks\n(.*?)^```$",
-            RegexOptions.Multiline | RegexOptions.Singleline
-        );
+        var block = LacksBlock.Match(protocol);
         block.Success.Should().BeTrue("PROTOCOL.md has a `json lacks` block");
         var lacked = JsonNode
             .Parse(block.Groups[1].Value)!
             .AsArray()
-            .Where(e => (string?)e!["client"] == ClientTestee.Client)
+            .Where(e =>
+                string.Equals((string?)e!["client"], ClientTestee.Client, StringComparison.Ordinal)
+            )
             .Select(e => (string)e!["capability"]!)
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
         return Directory
             .GetFiles(Path.Combine(clientKit, "transcripts"), "*.json")
             .Count(path =>
@@ -143,4 +146,10 @@ public class ClientConformanceTests
                 ).Any(n => lacked.Contains((string)n!))
             );
     }
+
+    [GeneratedRegex(
+        @"^```json lacks\n(.*?)^```$",
+        RegexOptions.Multiline | RegexOptions.Singleline
+    )]
+    private static partial Regex LacksBlock { get; }
 }

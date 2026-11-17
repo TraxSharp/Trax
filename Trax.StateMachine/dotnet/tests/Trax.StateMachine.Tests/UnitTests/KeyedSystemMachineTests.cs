@@ -167,7 +167,8 @@ public class KeyedSystemMachineTests
             """
             "views": { "tickets": { "reads": [ { "machine": "ticket" } ], "fields": { "status": { "from": "ticket.state" } } } },
             "machines": {
-            """
+            """,
+            StringComparison.Ordinal
         );
 
         var read = () => Trax.StateMachine.Features.Glossary.Read(glossary);

@@ -106,5 +106,9 @@ public static class MachineConformance
 
     // Committed artifacts carry a trailing newline; the in-memory forms do not.
     private static bool Same(string file, string inMemory) =>
-        file.TrimEnd('\n', '\r') == inMemory.TrimEnd('\n', '\r');
+        string.Equals(
+            file.TrimEnd('\n', '\r'),
+            inMemory.TrimEnd('\n', '\r'),
+            StringComparison.Ordinal
+        );
 }

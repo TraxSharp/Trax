@@ -222,7 +222,8 @@ public class MachineStreamTests
                 JsonNode.Parse(
                     """{"data":{"turnstileChanged":{"state":"Locked","revision":1,"rowId":ROW,"context":{}}}}""".Replace(
                         "ROW",
-                        rowId
+                        rowId,
+                        StringComparison.Ordinal
                     )
                 )!
         );

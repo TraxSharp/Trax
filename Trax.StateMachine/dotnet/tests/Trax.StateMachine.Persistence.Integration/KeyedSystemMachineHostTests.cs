@@ -54,7 +54,7 @@ public class KeyedSystemMachineHostTests
             FeatureGlossary.Read(Glossary),
             [new FeatureFile("tickets.feature", Tickets)]
         );
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         foreach (var (id, ir) in derived.Irs)
             File.WriteAllText(Path.Combine(_dir, id + ".ir.json"), ir);
         File.WriteAllText(Path.Combine(_dir, "host.json"), derived.Host);
@@ -91,7 +91,8 @@ public class KeyedSystemMachineHostTests
     [Test]
     public async Task The_host_starts_no_instance_of_it()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         (
             await scope
@@ -106,7 +107,8 @@ public class KeyedSystemMachineHostTests
     [Test]
     public async Task Host_code_starts_and_moves_each_instance_by_its_key()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
         (await instances.Advance("ticket", "T-12", "Triage"))
@@ -136,7 +138,8 @@ public class KeyedSystemMachineHostTests
     [Test]
     public async Task A_key_with_another_number_of_parts_is_refused()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
         await instances.Start("ticket", "T-12");
 

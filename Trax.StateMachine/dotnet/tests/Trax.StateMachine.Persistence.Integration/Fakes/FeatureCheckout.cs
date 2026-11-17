@@ -95,7 +95,7 @@ public static class FeatureCheckout
             FeatureGlossary.Read(Glossary),
             [new FeatureFile("checkout.feature", Features)]
         );
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         var ir = JsonNode.Parse(derived.Irs["feature-checkout"])!.AsObject();
         return IrMachines.Create(
             new IrMachines.Source(ir, HostFile.Read(derived.Host!).Machines["feature-checkout"]),
@@ -105,55 +105,4 @@ public static class FeatureCheckout
 
     internal static long ItemsCount(JsonObject context) =>
         context["items"] is JsonArray items ? items.Count : 0;
-}
-
-/// <summary>The checkout's charge.</summary>
-public interface IFeatureCharge : ISnapshotEffect;
-
-/// <summary>A charge that counts its calls and returns a receipt per call.</summary>
-public sealed class CountingCharge : IFeatureCharge
-{
-    private int _calls;
-
-    public int Calls => Volatile.Read(ref _calls);
-
-    public Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default) =>
-        Task.FromResult($"charge-{Interlocked.Increment(ref _calls)}");
-}
-
-/// <summary>The total is the price of the items.</summary>
-public sealed class TotalIsPriced : ICustomRule
-{
-    public bool Holds(JsonObject context, JsonNode? input) =>
-        context["total"] is JsonValue total
-        && total.GetValueKind() == JsonValueKind.Number
-        && total.ToJsonString()
-            == (FeatureCheckout.ItemsCount(context) * FeatureCheckout.UnitPrice).ToString(
-                CultureInfo.InvariantCulture
-            );
-}
-
-/// <summary>Appends the item and prices the cart.</summary>
-public sealed class AddPricedItem : ICustomReduction
-{
-    public JsonObject Reduce(JsonObject context, JsonNode? input)
-    {
-        var next = (JsonObject)context.DeepClone();
-        var items = next["items"] as JsonArray ?? [];
-        items.Add(input!["item"]!.GetValue<string>());
-        next["items"] = items;
-        next["total"] = items.Count * FeatureCheckout.UnitPrice;
-        return next;
-    }
-}
-
-/// <summary>Version 1 had no total: price the items.</summary>
-public sealed class BackfillTotal : IMachineMigration
-{
-    public MigrationResult Migrate(string state, JsonObject context)
-    {
-        var next = (JsonObject)context.DeepClone();
-        next["total"] = FeatureCheckout.ItemsCount(context) * FeatureCheckout.UnitPrice;
-        return new MigrationResult(state, next);
-    }
 }

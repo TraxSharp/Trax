@@ -90,7 +90,7 @@ public class PlanTests
     {
         var machine = new IrMachine(
             WizardIr(),
-            new Dictionary<string, Func<JsonObject, JsonNode?, bool>>
+            new Dictionary<string, Func<JsonObject, JsonNode?, bool>>(StringComparer.Ordinal)
             {
                 ["approved"] = (_, _) => true,
             }
@@ -124,7 +124,7 @@ public class PlanTests
                 return machine.Serialize(s);
             }
         );
-        var plan = EventPlanner.Plan(graph, from, "Review", Fill, Navigation, null);
+        var plan = EventPlanner.Plan(graph, from, "Review", Fill, Navigation, maxDepth: null);
         return (plan, advanced, serialized);
     }
 
@@ -148,7 +148,7 @@ public class PlanTests
         var asked = 0;
         var machine = new IrMachine(
             WizardIr(),
-            new Dictionary<string, Func<JsonObject, JsonNode?, bool>>
+            new Dictionary<string, Func<JsonObject, JsonNode?, bool>>(StringComparer.Ordinal)
             {
                 ["approved"] = (_, _) =>
                 {
@@ -189,15 +189,15 @@ public class PlanTests
         var start = Wizard("Review");
 
         machine
-            .Plan(start, "Nowhere", null, Navigation)
+            .Plan(start, "Nowhere", fields: null, Navigation)
             .Should()
             .Be(new PlanResult.Invalid(Target: "Nowhere"));
         machine
-            .Plan(start, "Sent", null, ["Next", "Send"])
+            .Plan(start, "Sent", fields: null, ["Next", "Send"])
             .Should()
             .Be(new PlanResult.Invalid(Trigger: "Send"));
         machine
-            .Plan(start, "Details", null, ["Review.after"])
+            .Plan(start, "Details", fields: null, ["Review.after"])
             .Should()
             .Be(new PlanResult.Invalid(Trigger: "Review.after"));
         machine
@@ -216,9 +216,11 @@ public class PlanTests
         var start = VaultMachine.Built.Definition.CreateInitialSnapshot();
         var ir = (JsonObject)JsonNode.Parse(File.ReadAllText(FixturePaths.IrFile("vault")))!;
 
-        Triggers(VaultMachine.Built.Plan(start, "Sealed", null, ["Seal"])).Should().Equal("Seal");
+        Triggers(VaultMachine.Built.Plan(start, "Sealed", fields: null, ["Seal"]))
+            .Should()
+            .Equal("Seal");
         new IrMachine(ir)
-            .Plan(start, "Sealed", null, ["Seal"])
+            .Plan(start, "Sealed", fields: null, ["Seal"])
             .Should()
             .BeOfType<PlanResult.Undetermined>()
             .Which.Trigger.Should()
@@ -231,7 +233,7 @@ public class PlanTests
         var start = DeclarativeCheckout.Built.Definition.CreateInitialSnapshot();
 
         DeclarativeCheckout
-            .Built.Plan(start, "Paid", null, ["Next", "Pay"])
+            .Built.Plan(start, "Paid", fields: null, ["Next", "Pay"])
             .Should()
             .Be(new PlanResult.Invalid(Trigger: "Pay"));
     }
@@ -256,7 +258,7 @@ public class PlanTests
         m.In(DoorState.Open).On(DoorTrigger.Close).To(DoorState.Shut);
         var door = m.Build();
 
-        door.Plan(door.Definition.CreateInitialSnapshot(), "Shut", null, ["Close", "Lock"])
+        door.Plan(door.Definition.CreateInitialSnapshot(), "Shut", fields: null, ["Close", "Lock"])
             .Should()
             .Be(new PlanResult.Invalid(Trigger: "Lock"));
     }
@@ -267,8 +269,13 @@ public class PlanTests
         var start = DeclarativeCheckout.Built.Definition.CreateInitialSnapshot();
         var ir = (JsonObject)JsonNode.Parse(File.ReadAllText(FixturePaths.IrFile("checkout")))!;
 
-        var compiled = DeclarativeCheckout.Built.Plan(start, "Cart", null, ["Next", "Back"]);
-        var fromIr = new IrMachine(ir).Plan(start, "Cart", null, ["Next", "Back"]);
+        var compiled = DeclarativeCheckout.Built.Plan(
+            start,
+            "Cart",
+            fields: null,
+            ["Next", "Back"]
+        );
+        var fromIr = new IrMachine(ir).Plan(start, "Cart", fields: null, ["Next", "Back"]);
 
         Triggers(compiled).Should().BeEmpty();
         Triggers(fromIr).Should().BeEmpty();

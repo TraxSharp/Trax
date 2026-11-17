@@ -53,11 +53,11 @@ public class ServerRecordTests(StoreProvider provider)
     // A started instance an operator rejected into Revising.
     private async Task<Guid> RevisingByOperator()
     {
-        var id = await Drive.Start(_host, _owner, Machine);
-        (await Fire(_owner, id, RecordDeskTrigger.Submit))
+        var id = await Drive.Start(_host, _owner, Machine).ConfigureAwait(false);
+        (await Fire(_owner, id, RecordDeskTrigger.Submit).ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
-        (await Fire(_operator, id, RecordDeskTrigger.Reject))
+        (await Fire(_operator, id, RecordDeskTrigger.Reject).ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
         return id;
@@ -66,23 +66,31 @@ public class ServerRecordTests(StoreProvider provider)
     // A started instance its owner moved into Revising.
     private async Task<Guid> RevisingByOwner()
     {
-        var id = await Drive.Start(_host, _owner, Machine);
-        (await Fire(_owner, id, RecordDeskTrigger.Revise))
+        var id = await Drive.Start(_host, _owner, Machine).ConfigureAwait(false);
+        (await Fire(_owner, id, RecordDeskTrigger.Revise).ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
         return id;
     }
 
     private async Task MakeOld(Guid id) =>
-        await _host.Execute(
-            $"UPDATE {_host.DraftTable} SET created_at = @p0, updated_at = @p0 WHERE row_id = @p1",
-            provider == StoreProvider.Postgres
-                ? DateTimeOffset.UtcNow.AddDays(-30)
-                : DateTimeOffset.UtcNow.AddDays(-30).ToString("yyyy-MM-dd HH:mm:ss.FFFFFFFzzz"),
-            await _host.RowId(id)
-        );
+        await _host
+            .Execute(
+                $"UPDATE {_host.DraftTable} SET created_at = @p0, updated_at = @p0 WHERE row_id = @p1",
+                provider == StoreProvider.Postgres
+                    ? DateTimeOffset.UtcNow.AddDays(-30)
+                    : DateTimeOffset
+                        .UtcNow.AddDays(-30)
+                        .ToString(
+                            "yyyy-MM-dd HH:mm:ss.FFFFFFFzzz",
+                            System.Globalization.CultureInfo.InvariantCulture
+                        ),
+                await _host.RowId(id).ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
 
-    private async Task<string> State(Guid id) => (await _host.Rows(id)).Single().State;
+    private async Task<string> State(Guid id) =>
+        (await _host.Rows(id).ConfigureAwait(false)).Single().State;
 
     [Test]
     public async Task A_row_a_gated_event_moved_is_kept_and_refuses_discard()
@@ -228,8 +236,8 @@ public class ServerRecordTests(StoreProvider provider)
     {
         var kept = await RevisingByOwner();
         var draft = await Drive.Start(_host, _owner, Machine);
-        (await RawSql.SetServerRecord(_host, kept, null)).Should().Be(1);
-        (await RawSql.SetServerRecord(_host, draft, null)).Should().Be(1);
+        (await RawSql.SetServerRecord(_host, kept, value: null)).Should().Be(1);
+        (await RawSql.SetServerRecord(_host, draft, value: null)).Should().Be(1);
 
         (await Drive.Discard(_host, _owner, Machine, kept))
             .Should()

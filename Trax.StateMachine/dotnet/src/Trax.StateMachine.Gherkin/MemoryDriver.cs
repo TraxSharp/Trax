@@ -84,7 +84,10 @@ internal sealed class MemoryDriver(
                 || access.Client is not { } rule
             )
                 return new(new Answer.NotServed($"no client fires {key.Machine} {trigger}"));
-            if (key.Owner is not null && key.Owner != person.Name)
+            if (
+                key.Owner is not null
+                && !string.Equals(key.Owner, person.Name, StringComparison.Ordinal)
+            )
                 return new(new Answer.Refused(RefusalCode.NotFound, NotFoundMessage));
             if (key.Owner is not null && !_snapshots.ContainsKey(key))
                 return new(new Answer.Refused(RefusalCode.NotFound, NotFoundMessage));
@@ -161,7 +164,7 @@ internal sealed class MemoryDriver(
         if (!Admits(served.Readers, person.Actor))
             return new((null, new Answer.Refused(RefusalCode.Forbidden, ForbiddenMessage)));
         foreach (var read in served.Reads.Where(r => r.Key is not null))
-            Of(new InstanceKey(read.Machine, null));
+            Of(new InstanceKey(read.Machine, Owner: null));
         return new(
             (
                 ViewValues.Shown(
@@ -200,19 +203,26 @@ internal sealed class MemoryDriver(
         if (depth > PolicyDepth)
             return;
         foreach (
-            var policy in host.Policies.Where(p => p.When == source.Machine && p.Enters == entered)
+            var policy in host.Policies.Where(p =>
+                string.Equals(p.When, source.Machine, StringComparison.Ordinal)
+                && string.Equals(p.Enters, entered, StringComparison.Ordinal)
+            )
         )
         {
-            if (policy.Shape == "toSystem")
-                Of(new InstanceKey(policy.Target, null));
+            if (string.Equals(policy.Shape, "toSystem", StringComparison.Ordinal))
+                Of(new InstanceKey(policy.Target, Owner: null));
             var reached = _order
                 .Where(key =>
-                    key.Machine == policy.Target
+                    string.Equals(key.Machine, policy.Target, StringComparison.Ordinal)
                     && policy.Shape switch
                     {
-                        "broadcast" => _snapshots[key].State == policy.By,
+                        "broadcast" => string.Equals(
+                            _snapshots[key].State,
+                            policy.By,
+                            StringComparison.Ordinal
+                        ),
                         "toSystem" => key.Owner is null,
-                        _ => key.Owner == source.Owner,
+                        _ => string.Equals(key.Owner, source.Owner, StringComparison.Ordinal),
                     }
                 )
                 .ToList();
@@ -262,7 +272,10 @@ internal sealed class MemoryDriver(
 
     private TimeSpan? TimerOf(InstanceKey key, string state) =>
         irs[key.Machine]["timers"] is JsonArray timers
-        && timers.FirstOrDefault(t => t!["state"]!.GetValue<string>() == state) is { } timer
+        && timers.FirstOrDefault(t =>
+            string.Equals(t!["state"]!.GetValue<string>(), state, StringComparison.Ordinal)
+        )
+            is { } timer
         && IsoDuration.TryParse(timer["after"]!.GetValue<string>(), out var after)
             ? after
             : null;

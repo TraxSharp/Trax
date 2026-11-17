@@ -37,7 +37,7 @@ public static class RichExportMachine
         public string? Note { get; init; }
     }
 
-    private sealed class ThingEffect { }
+    private sealed class ThingEffect;
 
     public static readonly BuiltMachine<RState, RTrigger> Built = Build();
 

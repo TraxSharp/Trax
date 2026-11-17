@@ -212,12 +212,3 @@ public class InvokeDerivationTests
             [("game.feature", feature)]
         );
 }
-
-/// <summary>The input of the train the game's invoking states run.</summary>
-public sealed record AimInput;
-
-/// <summary>Its output, whose fields the host reads by name: <c>result</c> before <c>shots</c>.</summary>
-public sealed record AimOutput(string Shots, string Result);
-
-/// <summary>The train, named by its interface; deriving and serving the machine never runs it.</summary>
-public interface IAimTrain : IServiceTrain<AimInput, AimOutput>;

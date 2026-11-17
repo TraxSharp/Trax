@@ -27,7 +27,7 @@ internal static class Provenance
         );
         void Add(string machine, string part, FeatureScenario scenario)
         {
-            if (!machines.Contains(machine))
+            if (!machines.Contains(machine, StringComparer.Ordinal))
                 return;
             if (!parts.TryGetValue(machine, out var byPart))
                 parts[machine] = byPart = new(StringComparer.Ordinal);

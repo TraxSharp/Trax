@@ -4,19 +4,6 @@ using static Trax.StateMachine.Rules;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
-public enum RangeState
-{
-    Open,
-    Ranged,
-}
-
-public enum RangeTrigger
-{
-    Build,
-    Poke,
-    Back,
-}
-
 /// <summary>
 /// A declarative machine whose <c>Build</c> takes a <see cref="RangeInput"/>: two integers, a nullable note and a
 /// non-empty list of tags. <c>Poke</c> declares no input. The context of Open holds a non-empty <c>tags</c> list

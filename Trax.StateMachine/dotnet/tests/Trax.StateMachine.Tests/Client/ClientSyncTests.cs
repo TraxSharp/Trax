@@ -125,9 +125,11 @@ public class ClientSyncTests
         using var controller = Open(server, MachinePredictor.FromIr(Wizard));
         await server.Answer(controller, ServerAnswer.Of(At(1, "Review", Filled())));
 
-        var outcome = await controller.SyncToAsync("Sent", null, ["Next", "Send"]).WaitAsync(Wait);
+        var outcome = await controller
+            .SyncToAsync("Sent", fields: null, ["Next", "Send"])
+            .WaitAsync(Wait);
 
-        outcome.Should().Be(new SyncOutcome.Invalid("Send", null));
+        outcome.Should().Be(new SyncOutcome.Invalid("Send", Target: null));
         server.Events.Reader.TryRead(out _).Should().BeFalse();
         controller.View.Unsaved.Should().BeTrue();
     }
@@ -151,7 +153,7 @@ public class ClientSyncTests
     }
 
     private static async Task<HandServer.Sent> Next(HandServer server) =>
-        await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait).ConfigureAwait(false);
 
     private static ServerMachineController Open(HandServer server, IMachinePredictor? predictor) =>
         new(

@@ -48,7 +48,9 @@ public class SqliteSnapshotChangePollTests
         {
             try
             {
-                await foreach (var change in listener!.ChangesAsync(stop.Token))
+                await foreach (
+                    var change in listener!.ChangesAsync(stop.Token).ConfigureAwait(false)
+                )
                     if (change is SnapshotChange.Row(var rowId))
                         heard.Writer.TryWrite(rowId);
                     else
@@ -66,7 +68,7 @@ public class SqliteSnapshotChangePollTests
             try
             {
                 while (true)
-                    if (await heard.Reader.ReadAsync(timeout.Token) == rowId)
+                    if (await heard.Reader.ReadAsync(timeout.Token).ConfigureAwait(false) == rowId)
                         return true;
             }
             catch (OperationCanceledException) when (timeout.IsCancellationRequested)
@@ -137,7 +139,9 @@ public class SqliteSnapshotChangePollTests
             try
             {
                 await foreach (
-                    var change in listener.ChangesAsync(stop.Token, () => new([watched]))
+                    var change in listener
+                        .ChangesAsync(stop.Token, () => new([watched]))
+                        .ConfigureAwait(false)
                 )
                     if (change is SnapshotChange.Row(var rowId))
                         heard.Writer.TryWrite(rowId);
@@ -196,13 +200,15 @@ public class SqliteSnapshotChangePollTests
             {
                 try
                 {
-                    await foreach (var change in listener.ChangesAsync(stop.Token))
+                    await foreach (
+                        var change in listener.ChangesAsync(stop.Token).ConfigureAwait(false)
+                    )
                         if (change is SnapshotChange.Reload)
                             listening.TrySetResult();
                 }
                 catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
             });
-            await listening.Task.WaitAsync(HearWithin);
+            await listening.Task.WaitAsync(HearWithin).ConfigureAwait(false);
             return (stop, reading);
         }
 
@@ -304,56 +310,65 @@ public class SqliteSnapshotChangePollTests
         async Task<(Guid Id, long RowId)> Saved()
         {
             var id = Guid.NewGuid();
-            await host.SeedDraft(User, id, TestTurnstile.InitialJson);
-            return (id, (await host.Rows(id)).Single().RowId);
+            await host.SeedDraft(User, id, TestTurnstile.InitialJson).ConfigureAwait(false);
+            return (id, (await host.Rows(id).ConfigureAwait(false)).Single().RowId);
         }
 
         try
         {
             // Another watch keeps the poll running, with a baseline that has none of the rows below.
-            var (_, other) = await Saved();
+            var (_, other) = await Saved().ConfigureAwait(false);
             var keeping = hub.Watch(other);
             using (var first = new CancellationTokenSource(HearWithin))
-                await keeping.Changes.ReadAsync(first.Token);
-            await using var all = watchAll ? hub.WatchAll(null) : null;
-            if (all is not null)
-                using (var first = new CancellationTokenSource(HearWithin))
-                    (await all.Changes.ReadAsync(first.Token))
-                        .Kind.Should()
-                        .Be(SnapshotRowChangeKind.Reload);
-
-            // Each row joins the watched set and is deleted at once, most often before the next poll reads it.
-            for (var i = 0; i < 3; i++)
+                await keeping.Changes.ReadAsync(first.Token).ConfigureAwait(false);
+            var all = watchAll ? hub.WatchAll(machine: null) : null;
+            try
             {
-                var (id, rowId) = await Saved();
-                var watch = hub.Watch(rowId);
-                using (var first = new CancellationTokenSource(HearWithin))
-                    (await watch.Changes.ReadAsync(first.Token))
-                        .Kind.Should()
-                        .Be(SnapshotRowChangeKind.Changed);
-                using (var scope = host.Scope())
-                    await scope
-                        .ServiceProvider.GetRequiredService<ISnapshotStore>()
-                        .Delete(User, id);
+                if (all is not null)
+                    using (var first = new CancellationTokenSource(HearWithin))
+                        (await all.Changes.ReadAsync(first.Token).ConfigureAwait(false))
+                            .Kind.Should()
+                            .Be(SnapshotRowChangeKind.Reload);
 
-                // Within two polls, and a second for the hub's re-read on a slow machine.
-                using var next = new CancellationTokenSource(
-                    listener.PollInterval * 2 + TimeSpan.FromSeconds(1)
-                );
-                (await watch.Changes.ReadAsync(next.Token))
-                    .Kind.Should()
-                    .Be(
-                        SnapshotRowChangeKind.Gone,
-                        $"the next poll reports a watched row that is missing, though it never saw it. See {Adr}"
+                // Each row joins the watched set and is deleted at once, most often before the next poll reads it.
+                for (var i = 0; i < 3; i++)
+                {
+                    var (id, rowId) = await Saved().ConfigureAwait(false);
+                    var watch = hub.Watch(rowId);
+                    using (var first = new CancellationTokenSource(HearWithin))
+                        (await watch.Changes.ReadAsync(first.Token).ConfigureAwait(false))
+                            .Kind.Should()
+                            .Be(SnapshotRowChangeKind.Changed);
+                    using (var scope = host.Scope())
+                        await scope
+                            .ServiceProvider.GetRequiredService<ISnapshotStore>()
+                            .Delete(User, id)
+                            .ConfigureAwait(false);
+
+                    // Within two polls, and a second for the hub's re-read on a slow machine.
+                    using var next = new CancellationTokenSource(
+                        listener.PollInterval * 2 + TimeSpan.FromSeconds(1)
                     );
-                await watch.DisposeAsync();
+                    (await watch.Changes.ReadAsync(next.Token).ConfigureAwait(false))
+                        .Kind.Should()
+                        .Be(
+                            SnapshotRowChangeKind.Gone,
+                            $"the next poll reports a watched row that is missing, though it never saw it. See {Adr}"
+                        );
+                    await watch.DisposeAsync().ConfigureAwait(false);
+                }
+                await keeping.DisposeAsync().ConfigureAwait(false);
             }
-            await keeping.DisposeAsync();
+            finally
+            {
+                if (all is not null)
+                    await all.DisposeAsync().ConfigureAwait(false);
+            }
         }
         finally
         {
-            await hub.StopAsync(CancellationToken.None);
-            await listener.StopAsync(CancellationToken.None);
+            await hub.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await listener.StopAsync(CancellationToken.None).ConfigureAwait(false);
         }
     }
 }

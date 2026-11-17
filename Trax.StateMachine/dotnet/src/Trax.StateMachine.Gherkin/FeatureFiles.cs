@@ -5,54 +5,6 @@ using Io.Cucumber.Messages.Types;
 
 namespace Trax.StateMachine.Gherkin;
 
-/// <summary>Given, When or Then, with And and But resolved to the keyword before them.</summary>
-internal enum StepKind
-{
-    Given,
-    When,
-    Then,
-}
-
-/// <summary>One step of a scenario, at the line it is written on.</summary>
-internal sealed record FeatureStep(StepKind Kind, string Text, long Line);
-
-/// <summary>
-/// One scenario, or one row of an outline, with its Background steps first. It is identified by file and line, never
-/// by name: outlines repeat names. An outline row's line is the row's; <see cref="OutlineLine"/> is its header's.
-/// </summary>
-internal sealed record FeatureScenario(
-    string File,
-    long Line,
-    string Name,
-    long? OutlineLine,
-    IReadOnlyList<FeatureStep> Steps,
-    IReadOnlyList<string> Tags
-)
-{
-    internal string Id => $"{File}:{Line}";
-
-    /// <summary>
-    /// The tag of a scenario that needs a handler only the host has (a custom rule's or reduction's C#, an effect's real
-    /// receipt): derivation reads its steps and nothing more, an in-memory run skips it, and the host bindings run it.
-    /// </summary>
-    internal const string HostOnlyTag = "@host";
-
-    /// <summary>Whether the scenario is tagged <see cref="HostOnlyTag"/>.</summary>
-    internal bool HostOnly => Tags.Contains(HostOnlyTag, StringComparer.Ordinal);
-}
-
-/// <summary>Something derivation cannot accept, at the file and line it is about.</summary>
-internal sealed record Problem(string File, long Line, string Message)
-{
-    /// <summary>The file a problem with the glossary itself names, rather than a feature.</summary>
-    internal const string Glossary = "glossary";
-
-    /// <summary>For a problem with the glossary, the JSON pointer of the key it is about, when there is one.</summary>
-    internal string? Pointer { get; init; }
-
-    public override string ToString() => $"{File}:{Line}: {Message}";
-}
-
 /// <summary>
 /// Reads feature files with Cucumber's own parser (ADR 0058) into scenarios: Backgrounds, Rules, outlines and
 /// And/But are resolved by the parser. What derivation does not read is refused rather than skipped: a data table, a

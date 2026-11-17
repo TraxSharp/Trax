@@ -122,7 +122,7 @@ public class SnapshotStoreDefaultMembersTests
         written.Should().BeTrue();
         var stored = (await contract.Get("u", id))!;
         stored.LastRequestId.Should().Be("req-1");
-        stored.LastRequest.Should().Be(new AppliedRequest("req-1", null, null));
+        stored.LastRequest.Should().Be(new AppliedRequest("req-1", Trigger: null, FromState: null));
     }
 
     [Test]

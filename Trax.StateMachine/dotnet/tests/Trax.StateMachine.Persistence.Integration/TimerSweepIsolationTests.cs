@@ -48,18 +48,25 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         _host.Services.GetRequiredService<InvokeOutcomeReconciler>();
 
     private async Task MakeDue(Guid id, TimeSpan ago) =>
-        (await RawSql.SetDueAt(_host, id, (await RawSql.Now(_host)) - ago)).Should().Be(1);
+        (
+            await RawSql
+                .SetDueAt(_host, id, (await RawSql.Now(_host).ConfigureAwait(false)) - ago)
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(1);
 
     // A system instance in the timed Waiting, whose timer enters Building and queues a run the launcher refuses.
     private async Task<Guid> Queueing()
     {
         var key = MachineKey.Of("sweep", Guid.NewGuid().ToString("N"));
-        var instance = await _host.Start<QueueingTimerMachine>(key);
+        var instance = await _host.Start<QueueingTimerMachine>(key).ConfigureAwait(false);
         using var scope = _host.Scope();
         (
             await scope
                 .ServiceProvider.GetRequiredService<IMachineInstances>()
                 .Advance<QueueingTimerMachine>(key, nameof(QueueingTimerTrigger.Open))
+                .ConfigureAwait(false)
         )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
@@ -70,12 +77,13 @@ public class TimerSweepIsolationTests(StoreProvider provider)
     private async Task<Guid> Reminder()
     {
         var key = MachineKey.Of("sweep", Guid.NewGuid().ToString("N"));
-        var instance = await _host.Start<SystemReminderMachine>(key);
+        var instance = await _host.Start<SystemReminderMachine>(key).ConfigureAwait(false);
         using var scope = _host.Scope();
         (
             await scope
                 .ServiceProvider.GetRequiredService<IMachineInstances>()
                 .Advance<SystemReminderMachine>(key, nameof(ReminderTrigger.Open))
+                .ConfigureAwait(false)
         )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
@@ -85,14 +93,18 @@ public class TimerSweepIsolationTests(StoreProvider provider)
     private async Task<Guid> ChargeInReview()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, TimedChargeMachine.Json("Review"));
+        await _host.SeedDraft(User, id, TimedChargeMachine.Json("Review")).ConfigureAwait(false);
         return id;
     }
 
     private IEnumerable<string> EffectKeys(Guid id) =>
         (
             (IMachineInternals)
-                _host.Services.GetServices<IMachine>().Single(m => m.Name == TimedChargeMachine.Id)
+                _host
+                    .Services.GetServices<IMachine>()
+                    .Single(m =>
+                        string.Equals(m.Name, TimedChargeMachine.Id, StringComparison.Ordinal)
+                    )
         ).EffectKeysOf(new DraftOwner(SnapshotOwnerKind.User, User), id);
 
     [Test]
@@ -191,10 +203,9 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         var time = new SteppingTime();
         Reconciler.Time = time;
         Reconciler.TimerFireAttempts = 2;
-        _launcher.Failure =
-            failure == "timeout"
-                ? () => new InvalidOperationException("The enqueue failed.", new TimeoutException())
-                : () => new DroppedConnectionException();
+        _launcher.Failure = string.Equals(failure, "timeout", StringComparison.Ordinal)
+            ? () => new InvalidOperationException("The enqueue failed.", new TimeoutException())
+            : () => new DroppedConnectionException();
         var row = await Queueing();
         await MakeDue(row, TimeSpan.FromMinutes(1));
         var due = (await RawSql.Timer(_host, row))!.DueAt;
@@ -300,7 +311,7 @@ public class TimerSweepIsolationTests(StoreProvider provider)
             if (row.Id != id)
                 return;
             paused.TrySetResult();
-            await release.Task;
+            await release.Task.ConfigureAwait(false);
         };
 
         // The sweep holds the row and is about to write the timer's move; the send loads the draft and tries to mark
@@ -312,7 +323,8 @@ public class TimerSweepIsolationTests(StoreProvider provider)
             using var scope = _host.Scope();
             return await _host
                 .Service(scope, TimedChargeMachine.Id)
-                .Send(new Actor.Client(User), id, "charge-1");
+                .Send(new Actor.Client(User), id, "charge-1")
+                .ConfigureAwait(false);
         });
         release.TrySetResult();
 
@@ -347,7 +359,8 @@ public class TimerSweepIsolationTests(StoreProvider provider)
             using var scope = _host.Scope();
             return await _host
                 .Service(scope, TimedChargeMachine.Id)
-                .Send(new Actor.Client(User), id, "charge-1");
+                .Send(new Actor.Client(User), id, "charge-1")
+                .ConfigureAwait(false);
         });
         await _charge.Entered.WaitAsync(Bound);
 
@@ -500,8 +513,11 @@ public class TimerSweepIsolationTests(StoreProvider provider)
             _listener.InstrumentPublished = (instrument, listener) =>
             {
                 if (
-                    instrument.Meter.Name == StateMachineInstruments.MeterName
-                    && instrument.Name == instrumentName
+                    string.Equals(
+                        instrument.Meter.Name,
+                        StateMachineInstruments.MeterName,
+                        StringComparison.Ordinal
+                    ) && string.Equals(instrument.Name, instrumentName, StringComparison.Ordinal)
                 )
                     listener.EnableMeasurementEvents(instrument);
             };

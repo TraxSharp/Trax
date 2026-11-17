@@ -130,7 +130,7 @@ public class AccessDerivationTests
         );
 
         MachineRulesStartupValidator
-            .Problems([machine], new StateMachineOptions(), null)
+            .Problems([machine], new StateMachineOptions(), caller: null)
             .Result.Should()
             .BeEmpty();
     }

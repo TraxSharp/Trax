@@ -52,7 +52,9 @@ public class EffectCommitIntegrityTests
     private static async Task<Guid> SeedReview(params int[] items)
     {
         var id = Guid.NewGuid();
-        (await Write(id, OrderMachine.ReviewSnapshot(items))).Should().BeTrue();
+        (await Write(id, OrderMachine.ReviewSnapshot(items)).ConfigureAwait(false))
+            .Should()
+            .BeTrue();
         return id;
     }
 
@@ -62,7 +64,10 @@ public class EffectCommitIntegrityTests
         TestDb.NewStore().Upsert(User, id, Parse(json));
 
     private static async Task<Snapshot> Stored(Guid id) =>
-        (await Orders().Load(User, id)).Should().BeOfType<LoadResult.Loaded>().Which.Snapshot;
+        (await Orders().Load(User, id).ConfigureAwait(false))
+            .Should()
+            .BeOfType<LoadResult.Loaded>()
+            .Which.Snapshot;
 
     private static int ItemCount(Snapshot snapshot) => snapshot.Context["items"]!.AsArray().Count;
 
@@ -181,7 +186,7 @@ public class EffectCommitIntegrityTests
         var charge = new GatedCharge { CancelAfterCharging = true };
         charge.Release();
 
-        var first = async () => await Runner(charge).Run(User, id, "req-1");
+        var first = async () => await Runner(charge).Run(User, id, "req-1").ConfigureAwait(false);
         await first.Should().ThrowAsync<OperationCanceledException>();
 
         charge.CancelAfterCharging = false;
@@ -347,7 +352,7 @@ public class EffectCommitIntegrityTests
             lock (ChargedItemCounts)
                 ChargedItemCounts.Add(ItemCount(snapshot));
             _entered.TrySetResult();
-            await _gate.Task;
+            await _gate.Task.ConfigureAwait(false);
             if (CancelAfterCharging)
                 throw new OperationCanceledException("the caller went away after the charge");
             return $"receipt-{n}";
@@ -439,8 +444,8 @@ public class EffectCommitIntegrityTests
             CancellationToken cancellationToken = default
         )
         {
-            await inner.Delete(userKey, machine, id, cancellationToken);
-            await request.CancelAsync();
+            await inner.Delete(userKey, machine, id, cancellationToken).ConfigureAwait(false);
+            await request.CancelAsync().ConfigureAwait(false);
         }
 
         public Task<bool> Upsert(
@@ -484,8 +489,8 @@ public class EffectCommitIntegrityTests
 
         public async Task Release(string effectKey, CancellationToken cancellationToken = default)
         {
-            await request.CancelAsync();
-            await inner.Release(effectKey, cancellationToken);
+            await request.CancelAsync().ConfigureAwait(false);
+            await inner.Release(effectKey, cancellationToken).ConfigureAwait(false);
         }
 
         public Task<bool> ReleaseOwned(
@@ -527,7 +532,7 @@ public class EffectCommitIntegrityTests
             _rows[(userKey, id)] = new StoredSnapshot(
                 Json(snapshot),
                 Guid.NewGuid(),
-                null,
+                LastRequestId: null,
                 DateTimeOffset.UtcNow
             );
             return Task.FromResult(true);

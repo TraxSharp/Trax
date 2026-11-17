@@ -117,7 +117,7 @@ internal sealed record HostFile(
             && value.GetValueKind() == System.Text.Json.JsonValueKind.String
         )
         {
-            if (value.GetValue<string>() != "user")
+            if (!string.Equals(value.GetValue<string>(), "user", StringComparison.Ordinal))
                 throw at["owner"].Fail("must be \"user\" or { \"system\": key }.");
         }
         else
@@ -327,7 +327,7 @@ internal sealed record HostFile(
                         .Fail("a system machine's triggers are fired by the server only.");
             foreach (var invoke in machine.Invokes.Values)
             foreach (var (field, from) in invoke.Input)
-                if (from == HostInvoke.Owner)
+                if (string.Equals(from, HostInvoke.Owner, StringComparison.Ordinal))
                     throw m["invokes"]
                         [invoke.State]["input"][field]
                         .Fail($"a system machine has no owner, so nothing is {HostInvoke.Owner}.");
@@ -374,7 +374,7 @@ internal sealed record HostFile(
                             .Fail(
                                 $"'{target.Id}' is a user's machine; toSystem acts on a system one."
                             );
-                    if (policy.By != target.SystemKey)
+                    if (!string.Equals(policy.By, target.SystemKey, StringComparison.Ordinal))
                         throw p["then"]["key"].Fail($"'{target.Id}' is at '{target.SystemKey}'.");
                     break;
                 case "broadcast":
@@ -410,7 +410,10 @@ internal sealed record HostFile(
                 view.Reads,
                 view.Fields,
                 systemKeys,
-                Machines.Values.Where(m => m.KeyedBy is not null).Select(m => m.Id).ToHashSet()
+                Machines
+                    .Values.Where(m => m.KeyedBy is not null)
+                    .Select(m => m.Id)
+                    .ToHashSet(StringComparer.Ordinal)
             );
 
         foreach (var machine in Provenance.Keys)
@@ -418,106 +421,3 @@ internal sealed record HostFile(
                 throw at["provenance"][machine].Fail($"'{machine}' is not a machine here.");
     }
 }
-
-/// <summary>
-/// One machine of a host file. <see cref="SystemKey"/> is null for a machine its users own and for a keyed system
-/// machine.
-/// </summary>
-internal sealed record HostMachine(
-    string Id,
-    string SchemaHash,
-    string? SystemKey,
-    AccessRule? Start,
-    AccessRule? Read,
-    IReadOnlyDictionary<string, TriggerAccess> Triggers,
-    IReadOnlyDictionary<string, HostInvoke> Invokes
-)
-{
-    /// <summary>
-    /// A keyed system machine's key parts by name (<c>{ "system": { "keyedBy": [...] } }</c>): one instance per key,
-    /// which host code starts and moves through <c>IMachineInstances</c>. The host starts none at startup.
-    /// </summary>
-    internal IReadOnlyList<string>? KeyedBy { get; init; }
-
-    /// <summary>Whether the system owns the machine's instances, at a fixed key or keyed.</summary>
-    internal bool IsSystem => SystemKey is not null || KeyedBy is not null;
-
-    /// <summary>The <c>ISnapshotEffect</c> interface each effect-bound trigger runs, by trigger, as a full name.</summary>
-    internal IReadOnlyDictionary<string, string> Effects { get; init; } =
-        new Dictionary<string, string>(StringComparer.Ordinal);
-
-    /// <summary>The <c>ICustomRule</c> type of each custom rule the IR names, by name, as a full name.</summary>
-    internal IReadOnlyDictionary<string, string> Rules { get; init; } =
-        new Dictionary<string, string>(StringComparer.Ordinal);
-
-    /// <summary>The <c>ICustomReduction</c> type of each custom reduction the IR names, by name, as a full name.</summary>
-    internal IReadOnlyDictionary<string, string> Reductions { get; init; } =
-        new Dictionary<string, string>(StringComparer.Ordinal);
-
-    /// <summary>The <c>IMachineMigration</c> type of each version step, by the version it steps from.</summary>
-    internal IReadOnlyDictionary<int, string> Migrations { get; init; } =
-        new Dictionary<int, string>();
-}
-
-/// <summary>
-/// Who a client rule admits: every role set met by one of its roles, or, with no sets, any signed-in caller. The
-/// same reading as <see cref="CallerRule"/>'s role sets.
-/// </summary>
-internal sealed record AccessRule(IReadOnlyList<IReadOnlyList<string>> RoleSets)
-{
-    internal static readonly AccessRule AnyAuthenticated = new([]);
-
-    internal bool IsAnyAuthenticated => RoleSets.Count == 0;
-}
-
-/// <summary>A trigger's access: a client rule, or the server alone (a timer or a policy fires it).</summary>
-internal sealed record TriggerAccess(AccessRule? Client)
-{
-    internal static readonly TriggerAccess Server = new((AccessRule?)null);
-
-    internal bool IsServer => Client is null;
-}
-
-/// <summary>
-/// The train a state invokes and its input: each train field from a context field, or from <see cref="Owner"/>.
-/// </summary>
-internal sealed record HostInvoke(
-    string State,
-    string Train,
-    IReadOnlyDictionary<string, string> Input
-)
-{
-    /// <summary>
-    /// The source that gives a train field the instance owner's qualified principal id (its user key). It is the
-    /// server's to set: no context holds it, so no client can write it. A system machine has no owner.
-    /// </summary>
-    internal const string Owner = "$owner";
-}
-
-/// <summary>
-/// The server acting when <see cref="When"/> enters <see cref="Enters"/>: on <see cref="Target"/> by
-/// <see cref="By"/>, which is the link field (linked), the state its instances wait in (broadcast) or the system key
-/// (toSystem).
-/// </summary>
-internal sealed record HostPolicy(
-    string Shape,
-    string When,
-    string Enters,
-    string Target,
-    string Trigger,
-    string By
-)
-{
-    /// <summary>The policy's identity: what it waits for and what it fires, <c>shop.Open&gt;order.Bake</c>.</summary>
-    internal string Id => $"{When}.{Enters}>{Target}.{Trigger}";
-}
-
-internal sealed record HostView(
-    string Name,
-    IReadOnlyList<ViewRead> Reads,
-    IReadOnlyList<ViewField> Fields,
-    AccessRule Readers
-);
-
-/// <summary>A scenario that produced part of a machine, by file and line; never its steps.</summary>
-internal sealed record Provenance(string File, long Line, string Scenario);

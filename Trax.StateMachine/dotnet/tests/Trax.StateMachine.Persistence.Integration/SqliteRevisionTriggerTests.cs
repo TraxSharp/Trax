@@ -21,8 +21,10 @@ public class SqliteRevisionTriggerTests
 
     private async Task<long> Seeded(Guid id)
     {
-        await _host.SeedDraft("trigger-user", id, PlainTimerMachine.Json("Idle"));
-        return await _host.RowId(id);
+        await _host
+            .SeedDraft("trigger-user", id, PlainTimerMachine.Json("Idle"))
+            .ConfigureAwait(false);
+        return await _host.RowId(id).ConfigureAwait(false);
     }
 
     private Task<int> Update(string set, long rowId, params object?[] values) =>

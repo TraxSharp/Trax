@@ -4,120 +4,6 @@ using Trax.StateMachine.Features;
 namespace Trax.StateMachine.Gherkin;
 
 /// <summary>
-/// Sets up a context in which a guard holds or fails, for <c>Given Ada's order has nothing in it</c>. Only a guard on one
-/// context field can be set up: a guard on the step's input is said in the When, and one combining rules or bound by
-/// name is set up through the Whens that reach it.
-/// </summary>
-internal static class Satisfy
-{
-    internal static JsonObject? Context(
-        GlossaryMachine machine,
-        string guardName,
-        bool holds,
-        JsonObject context,
-        out string? why
-    )
-    {
-        why = null;
-        var rule = IrMachine.ReadRule(machine.Guards[guardName].Rule);
-        var copy = (JsonObject)context.DeepClone();
-        var phrase =
-            (holds ? machine.Guards[guardName].Holds : machine.Guards[guardName].Fails)
-            ?? guardName;
-        string? field = rule switch
-        {
-            Rule.Present r when r.Source == RuleSource.Context => r.Field,
-            Rule.Absent r when r.Source == RuleSource.Context => r.Field,
-            Rule.NonEmpty r when r.Source == RuleSource.Context => r.Field,
-            Rule.Compare r when r.Source == RuleSource.Context => r.Field,
-            Rule.BoolEquals r when r.Source == RuleSource.Context => r.Field,
-            Rule.Count r when r.Source == RuleSource.Context => r.Field,
-            Rule.Length r when r.Source == RuleSource.Context => r.Field,
-            Rule.OneOf r when r.Source == RuleSource.Context => r.Field,
-            _ => null,
-        };
-        if (field is null)
-        {
-            why = rule is Rule.All or Rule.Any or Rule.Custom
-                ? $"'{phrase}' cannot be set up by a Given: its guard combines rules. Reach it through the Whens that make it so."
-                : $"'{phrase}' reads the step's input, not the context, so it is said in the When, not a Given.";
-            return null;
-        }
-        var type = machine.FieldType(field);
-        if (type is null)
-        {
-            why =
-                $"'{phrase}' reads '{field}', which is not one of the {machine.Reference}'s context fields.";
-            return null;
-        }
-
-        JsonNode? value = (rule, holds) switch
-        {
-            (Rule.Present, true) or (Rule.Absent, false) or (Rule.NonEmpty, true) => Sample(type),
-            (Rule.Present, false) or (Rule.Absent, true) => null,
-            (Rule.NonEmpty, false) => Empty(type),
-            (Rule.Compare c, _) => Number(type, Side(c.Op, c.Value, holds)),
-            (Rule.BoolEquals b, _) => JsonValue.Create(b.Value == holds),
-            (Rule.Count c, _) => new JsonArray(
-                Enumerable
-                    .Range(0, (int)Math.Max(0, Side(c.Op, c.Value, holds)))
-                    .Select(_ => (JsonNode?)Sample("string"))
-                    .ToArray()
-            ),
-            (Rule.Length c, _) => JsonValue.Create(
-                new string('x', (int)Math.Max(0, Side(c.Op, c.Value, holds)))
-            ),
-            (Rule.OneOf o, true) when o.Values.Count > 0 => JsonValue.Create(o.Values[0]),
-            (Rule.OneOf o, _) => JsonValue.Create(string.Concat(o.Values) + "-other"),
-            _ => null,
-        };
-        copy[field] = value;
-        if (RuleEvaluator.Evaluate(rule, copy, null) != holds)
-        {
-            why = $"No value of '{field}' makes '{phrase}' {(holds ? "hold" : "fail")}.";
-            return null;
-        }
-        return copy;
-    }
-
-    // A number on the side of the comparison the guard should land on.
-    private static double Side(CompareOp op, double value, bool holds) =>
-        (op, holds) switch
-        {
-            (CompareOp.GreaterThan, true) or (CompareOp.LessOrEqual, false) => Math.Floor(value)
-                + 1,
-            (CompareOp.GreaterOrEqual, true) or (CompareOp.LessThan, false) => Math.Ceiling(value),
-            (CompareOp.LessThan, true) or (CompareOp.GreaterOrEqual, false) => Math.Ceiling(value)
-                - 1,
-            (CompareOp.LessOrEqual, true) or (CompareOp.GreaterThan, false) => Math.Floor(value),
-            (CompareOp.EqualTo, true) => value,
-            _ => value + 1,
-        };
-
-    private static JsonNode Number(string type, double value) =>
-        type == "integer" ? JsonValue.Create((long)value) : JsonValue.Create(value);
-
-    private static JsonNode? Sample(string type) =>
-        type switch
-        {
-            "string" => JsonValue.Create("x"),
-            "integer" or "number" => JsonValue.Create(1),
-            "boolean" => JsonValue.Create(true),
-            "array" => new JsonArray(JsonValue.Create("x")),
-            _ => new JsonObject { ["x"] = "x" },
-        };
-
-    private static JsonNode? Empty(string type) =>
-        type switch
-        {
-            "string" => JsonValue.Create(""),
-            "array" => new JsonArray(),
-            "object" => new JsonObject(),
-            _ => null,
-        };
-}
-
-/// <summary>
 /// Merges every scenario's observations of one machine into its IR. Per state and trigger: one target makes an edge; a
 /// move when a guard holds and a refusal when it fails make a guarded edge, with the refusal's message; disagreement is
 /// refused, naming both scenarios; silence is no edge.
@@ -138,23 +24,33 @@ internal static class Merge
 
         var observations = walks
             .SelectMany(w => w.Observations)
-            .Where(o => o.Machine == machine.Id && o.Result is not Result.Denied);
+            .Where(o =>
+                string.Equals(o.Machine, machine.Id, StringComparison.Ordinal)
+                && o.Result is not Result.Denied
+            );
         foreach (var pair in observations.GroupBy(o => (o.From, o.Trigger)))
         {
             var moves = pair.Where(o => o.Result is Result.Moved).ToList();
             var refusals = pair.Where(o => o.Result is Result.Refused).ToList();
-            var targets = moves.Select(o => ((Result.Moved)o.Result).To).Distinct().ToList();
+            var targets = moves
+                .Select(o => ((Result.Moved)o.Result).To)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
             var messages = refusals
                 .Select(o => ((Result.Refused)o.Result).Message)
                 .OfType<string>()
-                .Distinct()
+                .Distinct(StringComparer.Ordinal)
                 .ToList();
             Problem At(Observation o, string message) => new(o.Scenario.File, o.Line, message);
 
             if (targets.Count > 1)
             {
-                var a = moves.First(o => ((Result.Moved)o.Result).To == targets[0]);
-                var b = moves.First(o => ((Result.Moved)o.Result).To == targets[1]);
+                var a = moves.First(o =>
+                    string.Equals(((Result.Moved)o.Result).To, targets[0], StringComparison.Ordinal)
+                );
+                var b = moves.First(o =>
+                    string.Equals(((Result.Moved)o.Result).To, targets[1], StringComparison.Ordinal)
+                );
                 problems.Add(
                     At(
                         b,
@@ -196,7 +92,9 @@ internal static class Merge
             if (machine.Triggers[pair.Key.Trigger].Guard is { } named)
             {
                 // The glossary names the guard: it must be what the scenarios show.
-                var rule = guards.Single(g => g.Name == named).Rule;
+                var rule = guards
+                    .Single(g => string.Equals(g.Name, named, StringComparison.Ordinal))
+                    .Rule;
                 var broken =
                     moves.FirstOrDefault(o => !Holds(machine, rule, o))
                     ?? refusals.FirstOrDefault(o => Holds(machine, rule, o));
@@ -221,8 +119,8 @@ internal static class Merge
                 // which condition decides.
                 var deciding = guards
                     .Where(g =>
-                        moves.All(o => Holds(machine, g.Rule, o))
-                        && refusals.All(o => !Holds(machine, g.Rule, o))
+                        moves.TrueForAll(o => Holds(machine, g.Rule, o))
+                        && refusals.TrueForAll(o => !Holds(machine, g.Rule, o))
                     )
                     .ToList();
                 if (deciding.Count != 1)
@@ -291,7 +189,10 @@ internal static class Merge
         // rule, and one only ever denied is one no one may fire, so neither is served (a client sending it is refused).
         var served = walks
             .SelectMany(w => w.Observations)
-            .Where(o => o.Machine == machine.Id && o.Result is not Result.Denied)
+            .Where(o =>
+                string.Equals(o.Machine, machine.Id, StringComparison.Ordinal)
+                && o.Result is not Result.Denied
+            )
             .Select(o => o.Trigger)
             .Distinct(StringComparer.Ordinal)
             .ToList();
@@ -373,17 +274,23 @@ internal static class Merge
 
         var observations = walks
             .SelectMany(w => w.Observations)
-            .Where(o => o.Machine == machine.Id)
+            .Where(o => string.Equals(o.Machine, machine.Id, StringComparison.Ordinal))
             .ToList();
         foreach (
-            var o in observations.Where(o => o.Input is not null && served.Contains(o.Trigger))
+            var o in observations.Where(o =>
+                o.Input is not null && served.Contains(o.Trigger, StringComparer.Ordinal)
+            )
         )
             Add(samples, o.Trigger, o.Input!);
-        foreach (var o in walks.SelectMany(w => w.Outcomes).Where(o => o.Machine == machine.Id))
+        foreach (
+            var o in walks
+                .SelectMany(w => w.Outcomes)
+                .Where(o => string.Equals(o.Machine, machine.Id, StringComparison.Ordinal))
+        )
         {
             var invoke = machine.Invokes[o.State];
             if (
-                invoke.Outcomes[o.Phrase].Kind == "done"
+                string.Equals(invoke.Outcomes[o.Phrase].Kind, "done", StringComparison.Ordinal)
                 && outcomes.ContainsKey($"{o.State}.done")
                 && invoke.Examples.TryGetValue(o.Phrase, out var example)
             )
@@ -395,7 +302,16 @@ internal static class Merge
             StringComparer.Ordinal
         );
         foreach (var o in observations.Where(o => o.Arranged))
-            if (!(o.From == machine.Initial && CanonicalJson.Serialize(o.Context) == initial))
+            if (
+                !(
+                    string.Equals(o.From, machine.Initial, StringComparison.Ordinal)
+                    && string.Equals(
+                        CanonicalJson.Serialize(o.Context),
+                        initial,
+                        StringComparison.Ordinal
+                    )
+                )
+            )
                 Add(seeds, o.From, o.Context);
 
         var block = new JsonObject();
@@ -440,7 +356,7 @@ internal static class Merge
     {
         var observed = walks
             .SelectMany(w => w.Outcomes)
-            .Where(o => o.Machine == machine.Id)
+            .Where(o => string.Equals(o.Machine, machine.Id, StringComparison.Ordinal))
             .ToList();
         // Two outcomes of one run going to the same state reserve it once.
         var reserved = outcomes
@@ -459,8 +375,11 @@ internal static class Merge
             .ToList();
         foreach (var (state, target) in reserved)
         {
-            var at = observed.FirstOrDefault(o => o.State == state && o.To == target);
-            if (target == machine.Initial)
+            var at = observed.FirstOrDefault(o =>
+                string.Equals(o.State, state, StringComparison.Ordinal)
+                && string.Equals(o.To, target, StringComparison.Ordinal)
+            );
+            if (string.Equals(target, machine.Initial, StringComparison.Ordinal))
                 problems.Add(
                     new Problem(
                         at?.Scenario.File ?? Problem.Glossary,
@@ -473,14 +392,19 @@ internal static class Merge
                         Pointer = $"/machines/{machine.Id}/invokes/{state}",
                     }
                 );
-            foreach (var into in edges.Where(e => e.To == target && e.From != target))
+            foreach (
+                var into in edges.Where(e =>
+                    string.Equals(e.To, target, StringComparison.Ordinal)
+                    && !string.Equals(e.From, target, StringComparison.Ordinal)
+                )
+            )
             {
                 var by = walks
                     .SelectMany(w => w.Observations)
                     .FirstOrDefault(o =>
-                        o.Machine == machine.Id
-                        && o.From == into.From
-                        && o.Trigger == into.Trigger
+                        string.Equals(o.Machine, machine.Id, StringComparison.Ordinal)
+                        && string.Equals(o.From, into.From, StringComparison.Ordinal)
+                        && string.Equals(o.Trigger, into.Trigger, StringComparison.Ordinal)
                         && o.Result is Result.Moved
                     );
                 problems.Add(
@@ -496,13 +420,23 @@ internal static class Merge
                     }
                 );
             }
-            foreach (var timer in timers.Where(t => t!["target"]!.GetValue<string>() == target))
+            foreach (
+                var timer in timers.Where(t =>
+                    string.Equals(
+                        t!["target"]!.GetValue<string>(),
+                        target,
+                        StringComparison.Ordinal
+                    )
+                )
+            )
             {
                 var from = timer!["state"]!.GetValue<string>();
                 var by = walks
                     .SelectMany(w => w.Timers)
                     .FirstOrDefault(o =>
-                        o.Machine == machine.Id && o.From == from && o.To == target
+                        string.Equals(o.Machine, machine.Id, StringComparison.Ordinal)
+                        && string.Equals(o.From, from, StringComparison.Ordinal)
+                        && string.Equals(o.To, target, StringComparison.Ordinal)
                     );
                 problems.Add(
                     new Problem(
@@ -529,22 +463,32 @@ internal static class Merge
         var outcomes = new JsonObject();
         var observed = walks
             .SelectMany(w => w.Outcomes)
-            .Where(o => o.Machine == machine.Id)
+            .Where(o => string.Equals(o.Machine, machine.Id, StringComparison.Ordinal))
             .ToList();
         foreach (var invoke in machine.Invokes.Values.OrderBy(i => i.State, StringComparer.Ordinal))
         foreach (var kind in new[] { "done", "failed", "cancelled" })
         {
             var edges = new JsonArray();
-            foreach (var outcome in invoke.Outcomes.Values.Where(o => o.Kind == kind))
+            foreach (
+                var outcome in invoke.Outcomes.Values.Where(o =>
+                    string.Equals(o.Kind, kind, StringComparison.Ordinal)
+                )
+            )
             {
                 var targets = observed
-                    .Where(o => o.State == invoke.State && o.Phrase == outcome.Phrase)
+                    .Where(o =>
+                        string.Equals(o.State, invoke.State, StringComparison.Ordinal)
+                        && string.Equals(o.Phrase, outcome.Phrase, StringComparison.Ordinal)
+                    )
                     .Select(o => o.To)
-                    .Distinct()
+                    .Distinct(StringComparer.Ordinal)
                     .ToList();
                 if (targets.Count > 1)
                 {
-                    var o = observed.First(x => x.Phrase == outcome.Phrase && x.To == targets[1]);
+                    var o = observed.First(x =>
+                        string.Equals(x.Phrase, outcome.Phrase, StringComparison.Ordinal)
+                        && string.Equals(x.To, targets[1], StringComparison.Ordinal)
+                    );
                     problems.Add(
                         new Problem(
                             o.Scenario.File,
@@ -561,7 +505,9 @@ internal static class Merge
                 if (!machine.IsSystem && machine.Invokes.ContainsKey(targets[0]))
                 {
                     var chained = observed.First(o =>
-                        o.State == invoke.State && o.Phrase == outcome.Phrase && o.To == targets[0]
+                        string.Equals(o.State, invoke.State, StringComparison.Ordinal)
+                        && string.Equals(o.Phrase, outcome.Phrase, StringComparison.Ordinal)
+                        && string.Equals(o.To, targets[0], StringComparison.Ordinal)
                     );
                     problems.Add(
                         new Problem(
@@ -601,7 +547,7 @@ internal static class Merge
                 ["outcome"] = kind,
                 ["edges"] = edges,
             };
-            if (kind == "done")
+            if (string.Equals(kind, "done", StringComparison.Ordinal))
                 entry["output"] = new JsonObject { ["fields"] = ByName(invoke.Output) };
             outcomes[$"{invoke.State}.{kind}"] = entry;
         }
@@ -618,15 +564,30 @@ internal static class Merge
     {
         var timers = new JsonArray();
         var shown = new Dictionary<string, TimerObservation>(StringComparer.Ordinal);
-        var moved = walks.SelectMany(w => w.Timers).Where(o => o.Machine == machine.Id).ToList();
-        var stays = walks.SelectMany(w => w.Stays).Where(o => o.Machine == machine.Id).ToList();
-        foreach (var state in moved.Select(o => o.From).Distinct().Order(StringComparer.Ordinal))
+        var moved = walks
+            .SelectMany(w => w.Timers)
+            .Where(o => string.Equals(o.Machine, machine.Id, StringComparison.Ordinal))
+            .ToList();
+        var stays = walks
+            .SelectMany(w => w.Stays)
+            .Where(o => string.Equals(o.Machine, machine.Id, StringComparison.Ordinal))
+            .ToList();
+        foreach (
+            var state in moved
+                .Select(o => o.From)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+        )
         {
-            var fired = moved.Where(o => o.From == state).ToList();
-            var targets = fired.Select(o => o.To).Distinct().ToList();
+            var fired = moved
+                .Where(o => string.Equals(o.From, state, StringComparison.Ordinal))
+                .ToList();
+            var targets = fired.Select(o => o.To).Distinct(StringComparer.Ordinal).ToList();
             if (targets.Count > 1)
             {
-                var other = fired.First(o => o.To == targets[1]);
+                var other = fired.First(o =>
+                    string.Equals(o.To, targets[1], StringComparison.Ordinal)
+                );
                 problems.Add(
                     new Problem(
                         other.Scenario.File,
@@ -658,7 +619,10 @@ internal static class Merge
                     )
                 );
             foreach (
-                var stay in stays.Where(s => s.State == state && s.Elapsed >= shortest.Elapsed)
+                var stay in stays.Where(s =>
+                    string.Equals(s.State, state, StringComparison.Ordinal)
+                    && s.Elapsed >= shortest.Elapsed
+                )
             )
                 problems.Add(
                     new Problem(
@@ -667,7 +631,7 @@ internal static class Merge
                         $"{machine.Id} is still {state} after {Said(stay.Elapsed)} here, and leaves it after {Said(shortest.Elapsed)} in '{shortest.Scenario.Name}' ({shortest.Scenario.Id})."
                     )
                 );
-            if (targets[0] == state)
+            if (string.Equals(targets[0], state, StringComparison.Ordinal))
                 problems.Add(
                     new Problem(
                         shortest.Scenario.File,
@@ -699,7 +663,7 @@ internal static class Merge
         // A loop of timers alone the host refuses to build (EFF-219): say so here, at the scenarios that showed them.
         var next = shown.ToDictionary(s => s.Key, s => s.Value.To, StringComparer.Ordinal);
         foreach (var loop in TimerLoops.Find(next, machine.States.Keys.ToList()))
-        foreach (var state in loop.Distinct())
+        foreach (var state in loop.Distinct(StringComparer.Ordinal))
             problems.Add(
                 new Problem(
                     shown[state].Scenario.File,

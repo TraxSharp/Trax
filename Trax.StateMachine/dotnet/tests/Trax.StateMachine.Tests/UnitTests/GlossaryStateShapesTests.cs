@@ -110,7 +110,11 @@ public class GlossaryStateShapesTests
     {
         var act = () =>
             Glossary.Read(
-                Receipts.Replace("\"committed\": true,", "\"committed\": true, \"final\": true,")
+                Receipts.Replace(
+                    "\"committed\": true,",
+                    "\"committed\": true, \"final\": true,",
+                    StringComparison.Ordinal
+                )
             );
 
         act.Should().Throw<FormatException>().WithMessage("*/machines/checkout/states/Paid*final*");
@@ -227,12 +231,12 @@ public class GlossaryStateShapesTests
     {
         var glossary = TurnstileGlossary.Replace(
             "\"initial\": \"Locked\",",
-            "\"initial\": \"Locked\", \"differential\": true,"
+            "\"initial\": \"Locked\", \"differential\": true,",
+            StringComparison.Ordinal
         );
         var features =
             Turnstile
             + """
-
 
                   Scenario: Pushing an unlocked turnstile it was left in
                     Given Ada's turnstile is unlocked
@@ -300,10 +304,4 @@ public class GlossaryStateShapesTests
 
     private static Derived Derive(string glossary, params (string, string)[] features) =>
         FeatureDerivation.Derive(Glossary.Read(glossary), features);
-}
-
-/// <summary>A migration that keeps the snapshot as it was, for a machine whose versions differ in nothing stored.</summary>
-public sealed class KeepsTheSnapshot : IMachineMigration
-{
-    public MigrationResult Migrate(string state, JsonObject context) => new(state, context);
 }

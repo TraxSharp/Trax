@@ -38,11 +38,13 @@ public class RequestIdScopeTests
     private static async Task<Guid> Saved(string machine, string state, string context)
     {
         var id = Guid.NewGuid();
-        await TestDb.Seed(
-            "u",
-            id,
-            $"{{\"machine\":\"{machine}\",\"version\":1,\"state\":\"{state}\",\"context\":{context}}}"
-        );
+        await TestDb
+            .Seed(
+                "u",
+                id,
+                $"{{\"machine\":\"{machine}\",\"version\":1,\"state\":\"{state}\",\"context\":{context}}}"
+            )
+            .ConfigureAwait(false);
         return id;
     }
 
@@ -66,9 +68,9 @@ public class RequestIdScopeTests
 
     private static async Task<string> Load(string machine, Guid id) =>
         (
-            await new LoadSnapshotJunction(NewRegistry(), User).Run(
-                new LoadSnapshotInput { Machine = machine, Id = id }
-            )
+            await new LoadSnapshotJunction(NewRegistry(), User)
+                .Run(new LoadSnapshotInput { Machine = machine, Id = id })
+                .ConfigureAwait(false)
         ).Snapshot!;
 
     [Test]
@@ -192,18 +194,24 @@ public class RequestIdScopeTests
     {
         var user = $"u-{Guid.NewGuid():N}";
         var id = Guid.NewGuid();
-        (await TestDb.NewStore().Upsert(user, id, LogSnapshot(""))).Should().BeTrue();
+        (await TestDb.NewStore().Upsert(user, id, LogSnapshot("")).ConfigureAwait(false))
+            .Should()
+            .BeTrue();
         return (user, id);
     }
 
     private static async Task<string> Append(string user, Guid id, string text, string requestId) =>
-        (await Log().Advance(user, id, "Append", new JsonObject { ["text"] = text }, requestId))
+        (
+            await Log()
+                .Advance(user, id, "Append", new JsonObject { ["text"] = text }, requestId)
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot.Context["text"]!.GetValue<string>();
 
     private static async Task<string> StoredText(string user, Guid id) =>
-        ((LoadResult.Loaded)await Log().Load(user, id)).Snapshot.Context[
+        ((LoadResult.Loaded)await Log().Load(user, id).ConfigureAwait(false)).Snapshot.Context[
             "text"
         ]!.GetValue<string>();
 
@@ -355,9 +363,10 @@ public class RequestIdScopeTests
             .Select(_ =>
                 Task.Run(async () =>
                 {
-                    await release.Task;
+                    await release.Task.ConfigureAwait(false);
                     return await Log()
-                        .Advance(user, id, "Append", new JsonObject { ["text"] = "b" }, "r2");
+                        .Advance(user, id, "Append", new JsonObject { ["text"] = "b" }, "r2")
+                        .ConfigureAwait(false);
                 })
             )
             .ToList();

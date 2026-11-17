@@ -18,11 +18,7 @@ public class ConformanceTests
     public static IEnumerable<TestCaseData> AdvanceFixtures()
     {
         var dir = FixturePaths.AdvanceDir("turnstile");
-        foreach (
-            var path in Directory
-                .EnumerateFiles(dir, "*.json")
-                .OrderBy(p => p, StringComparer.Ordinal)
-        )
+        foreach (var path in Directory.EnumerateFiles(dir, "*.json").Order(StringComparer.Ordinal))
             yield return new TestCaseData(path).SetName(
                 $"advance/{Path.GetFileNameWithoutExtension(path)}"
             );
@@ -31,11 +27,7 @@ public class ConformanceTests
     public static IEnumerable<TestCaseData> RehydrateFixtures()
     {
         var dir = FixturePaths.RehydrateDir("turnstile");
-        foreach (
-            var path in Directory
-                .EnumerateFiles(dir, "*.json")
-                .OrderBy(p => p, StringComparer.Ordinal)
-        )
+        foreach (var path in Directory.EnumerateFiles(dir, "*.json").Order(StringComparer.Ordinal))
             yield return new TestCaseData(path).SetName(
                 $"rehydrate/{Path.GetFileNameWithoutExtension(path)}"
             );
@@ -61,7 +53,13 @@ public class ConformanceTests
 
         var result = DeclarativeTurnstile.Machine.Advance(given, trigger, input);
 
-        if (expect["outcome"]!.GetValue<string>() == "transitioned")
+        if (
+            string.Equals(
+                expect["outcome"]!.GetValue<string>(),
+                "transitioned",
+                StringComparison.Ordinal
+            )
+        )
         {
             var expected = ToSnapshot((JsonObject)expect["snapshot"]!);
             result
@@ -93,7 +91,7 @@ public class ConformanceTests
 
         var result = TestTurnstile.Machine.Rehydrate(json);
 
-        if (expect["result"]!.GetValue<string>() == "ok")
+        if (string.Equals(expect["result"]!.GetValue<string>(), "ok", StringComparison.Ordinal))
         {
             var expected = ToSnapshot((JsonObject)expect["snapshot"]!);
             result.Should().BeOfType<RehydrationResult.Ok>().Which.Snapshot.Should().Be(expected);

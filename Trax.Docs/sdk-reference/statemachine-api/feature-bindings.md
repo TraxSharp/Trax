@@ -10,7 +10,13 @@ package: Trax.StateMachine.Gherkin.Reqnroll
 namespace: Trax.StateMachine.Gherkin.Reqnroll
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin.Reqnroll/TraxFeatures.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin.Reqnroll/FeatureActor.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin.Reqnroll/FeatureCredential.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin.Reqnroll/TraxFeatureDriverOptions.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin.Reqnroll/RegisteredStep.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin.Reqnroll/TraxFeatureSteps.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin.Reqnroll/FeatureStepFailedException.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin.Reqnroll/HostFeatureRun.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin.Reqnroll/FeatureScenario.cs
 ---
 

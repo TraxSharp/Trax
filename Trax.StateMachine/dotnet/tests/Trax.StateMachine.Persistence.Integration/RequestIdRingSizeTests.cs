@@ -37,7 +37,8 @@ public class RequestIdRingSizeTests(StoreProvider provider)
         using var scope = _host.Scope();
         return await _host
             .Service(scope, BuildMachine.Id)
-            .Advance(User, id, nameof(BuildTrigger.Edit), null, requestId);
+            .Advance(User, id, nameof(BuildTrigger.Edit), input: null, requestId)
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -101,7 +102,7 @@ public class RequestIdRingSizeTests(StoreProvider provider)
     )
     {
         var id = Guid.NewGuid();
-        var value = kind == "quoted" ? Quoted : Cjk;
+        var value = string.Equals(kind, "quoted", StringComparison.Ordinal) ? Quoted : Cjk;
         var snapshot = BuildMachine.Json(
             nameof(BuildState.Draft),
             new JsonObject { ["source"] = value }
@@ -206,11 +207,13 @@ public class RequestIdRingSizeTests(StoreProvider provider)
     private async Task<string> StoredText(Guid id) =>
         (string)
             (
-                await _host.Scalar(
-                    provider == StoreProvider.Postgres
-                        ? $"SELECT recent_requests::text FROM {_host.DraftTable} WHERE row_id = @p0"
-                        : $"SELECT recent_requests FROM {_host.DraftTable} WHERE row_id = @p0",
-                    await _host.RowId(id)
-                )
+                await _host
+                    .Scalar(
+                        provider == StoreProvider.Postgres
+                            ? $"SELECT recent_requests::text FROM {_host.DraftTable} WHERE row_id = @p0"
+                            : $"SELECT recent_requests FROM {_host.DraftTable} WHERE row_id = @p0",
+                        await _host.RowId(id).ConfigureAwait(false)
+                    )
+                    .ConfigureAwait(false)
             )!;
 }

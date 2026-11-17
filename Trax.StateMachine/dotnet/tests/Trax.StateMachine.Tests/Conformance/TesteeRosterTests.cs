@@ -13,7 +13,7 @@ namespace Trax.StateMachine.Tests.Conformance;
 /// the folder: a new language folder alone runs no other.
 /// </summary>
 [Category(Categories.CrossEngine)]
-public class TesteeRosterTests
+public partial class TesteeRosterTests
 {
     private static readonly string[] NotLanguages = ["conformance", "docs"];
     private static readonly string[] Kits = ["engine", "client", "operations"];
@@ -36,7 +36,7 @@ public class TesteeRosterTests
         )!["suites"]!
             .AsArray()
             .Select(s => s!.AsObject())
-            .SingleOrDefault(s => (string)s["name"]! == name)
+            .SingleOrDefault(s => string.Equals((string)s["name"]!, name, StringComparison.Ordinal))
         ?? throw new InvalidOperationException($"packages.json has no suite named {name}.");
 
     [Test]
@@ -66,8 +66,8 @@ public class TesteeRosterTests
         var protocol = File.ReadAllText(
             Path.Combine(FixturePaths.ConformanceRoot, "client", "PROTOCOL.md")
         );
-        var headers = Regex
-            .Matches(protocol, @"^\| (?:Type|Member) \|(.*)\|$", RegexOptions.Multiline)
+        var headers = SurfaceHeader
+            .Matches(protocol)
             .Select(m => m.Groups[1].Value.Split('|', StringSplitOptions.TrimEntries).ToList())
             .ToList();
         headers.Should().HaveCount(2, "the client surface has a table of types and one of members");
@@ -128,7 +128,10 @@ public class TesteeRosterTests
                 File.Exists(path)
                     .Should()
                     .BeTrue($"{test} is {Text(row, "folder")}'s {kit} testee");
-                if (kit == "operations" || !test.EndsWith(".cs", StringComparison.Ordinal))
+                if (
+                    string.Equals(kit, "operations", StringComparison.Ordinal)
+                    || !test.EndsWith(".cs", StringComparison.Ordinal)
+                )
                     continue;
                 // The suite runs only the CrossEngine tests of its project.
                 var suite = Suite(Text(row, "suite"));
@@ -148,14 +151,19 @@ public class TesteeRosterTests
         needs.Success.Should().BeTrue("the CI result job lists what it needs on one line");
         var gate = needs.Groups[1].Value.Split(',', StringSplitOptions.TrimEntries);
 
-        foreach (var name in Rows().Select(r => Text(r!, "suite")).Distinct())
+        foreach (var name in Rows().Select(r => Text(r!, "suite")).Distinct(StringComparer.Ordinal))
         {
             var suite = Suite(name);
             // A suite with a dotnet block runs in the suite job's matrix; one without has a job of its own that reads
             // suite-names.
             var job = suite.ContainsKey("dotnet")
                 ? "suite"
-                : jobs.Where(j => j.Value.Contains($"outputs.suite-names), '{name}')"))
+                : jobs.Where(j =>
+                        j.Value.Contains(
+                            $"outputs.suite-names), '{name}')",
+                            StringComparison.Ordinal
+                        )
+                    )
                     .Select(j => j.Key)
                     .SingleOrDefault();
             job.Should().NotBeNull($"a job of ci.yml runs the suite {name}");
@@ -166,7 +174,7 @@ public class TesteeRosterTests
     [Test]
     public void Every_list_of_expected_failures_is_a_rows_and_for_a_kit_it_has_a_testee_for()
     {
-        var dirs = new Dictionary<string, string>
+        var dirs = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["engine"] = Path.Combine(FixturePaths.ConformanceRoot, "expected-failures"),
             ["client"] = Path.Combine(FixturePaths.ConformanceRoot, "client", "expected-failures"),
@@ -183,7 +191,10 @@ public class TesteeRosterTests
             foreach (var file in Directory.GetFiles(dir))
             {
                 var name = Path.GetFileNameWithoutExtension(file);
-                var row = Rows().SingleOrDefault(r => Text(r!, "name") == name);
+                var row = Rows()
+                    .SingleOrDefault(r =>
+                        string.Equals(Text(r!, "name"), name, StringComparison.Ordinal)
+                    );
                 row.Should().NotBeNull($"{file} is named for a testee of testees.json");
                 Path.GetExtension(file).Should().Be(".json", file);
                 row![kit]!
@@ -198,7 +209,7 @@ public class TesteeRosterTests
     private static Dictionary<string, string> Jobs(string ci)
     {
         var body = ci[(ci.IndexOf("\njobs:\n", StringComparison.Ordinal) + "\njobs:\n".Length)..];
-        var starts = Regex.Matches(body, @"^  ([A-Za-z0-9_-]+):\s*$", RegexOptions.Multiline);
+        var starts = JobStart.Matches(body);
         return starts
             .Select(
                 (m, i) =>
@@ -207,6 +218,12 @@ public class TesteeRosterTests
                         body[m.Index..(i + 1 < starts.Count ? starts[i + 1].Index : body.Length)]
                     )
             )
-            .ToDictionary();
+            .ToDictionary(StringComparer.Ordinal);
     }
+
+    [GeneratedRegex(@"^  ([A-Za-z0-9_-]+):\s*$", RegexOptions.Multiline)]
+    private static partial Regex JobStart { get; }
+
+    [GeneratedRegex(@"^\| (?:Type|Member) \|(.*)\|$", RegexOptions.Multiline)]
+    private static partial Regex SurfaceHeader { get; }
 }

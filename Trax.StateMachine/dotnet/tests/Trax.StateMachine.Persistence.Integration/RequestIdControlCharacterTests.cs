@@ -73,7 +73,7 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
         {
             outcome = await _host
                 .Service(scope, ExpiringMachine.Id)
-                .Start(new Actor.Client(user), null, requestId);
+                .Start(new Actor.Client(user), input: null, requestId);
             generic = await new StartSnapshotJunction(
                 Registry(scope),
                 new FakePrincipal(user),
@@ -105,7 +105,7 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
         {
             outcome = await _host
                 .Service(scope, PlainTimerMachine.Id)
-                .Advance(new Actor.Client(User), id, "Wait", null, requestId);
+                .Advance(new Actor.Client(User), id, "Wait", input: null, requestId);
             generic = await new AdvanceSnapshotJunction(
                 Registry(scope),
                 new FakePrincipal(User),
@@ -222,7 +222,7 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
         (
             await _host
                 .Service(scope, PlainTimerMachine.Id)
-                .Advance(new Actor.Client(User), id, "Wait", null, requestId)
+                .Advance(new Actor.Client(User), id, "Wait", input: null, requestId)
         )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();

@@ -19,11 +19,13 @@ public class EfSnapshotStoreTests
 
     private static async Task<string?> Scalar(string sql)
     {
-        await using var conn = new NpgsqlConnection(PostgresSetup.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
+        var conn = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connDisposal = conn.ConfigureAwait(false);
+        await conn.OpenAsync().ConfigureAwait(false);
+        var cmd = conn.CreateCommand();
+        await using var cmdDisposal = cmd.ConfigureAwait(false);
         cmd.CommandText = sql;
-        var result = await cmd.ExecuteScalarAsync();
+        var result = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
         return result == DBNull.Value ? null : result?.ToString();
     }
 
@@ -104,7 +106,8 @@ public class EfSnapshotStoreTests
     [Test]
     public async Task Delete_is_idempotent_on_a_missing_row()
     {
-        var act = async () => await TestDb.NewStore().Delete("u", Guid.NewGuid());
+        var act = async () =>
+            await TestDb.NewStore().Delete("u", Guid.NewGuid()).ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -165,7 +168,7 @@ public class EfSnapshotStoreTests
         // DraftOwner.User always carries a key; an owner built without one must not fall through to a query
         // that would match every user's draft, or none.
         IMachineInstanceStore store = TestDb.NewStore();
-        var keyless = new DraftOwner(Trax.Effect.Enums.SnapshotOwnerKind.User, null);
+        var keyless = new DraftOwner(Trax.Effect.Enums.SnapshotOwnerKind.User, UserKey: null);
 
         var get = () => store.Get(keyless, "turnstile", Guid.NewGuid(), CancellationToken.None);
 

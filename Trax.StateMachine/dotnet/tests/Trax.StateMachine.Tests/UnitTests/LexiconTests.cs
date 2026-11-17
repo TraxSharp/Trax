@@ -156,7 +156,7 @@ public partial class LexiconTests
         var path = Path.Combine(Valid, "battleship.lexicon");
         var text = File.ReadAllText(path);
         var flat = string.Join(
-            "\n",
+            '\n',
             text.Split('\n').Select(l => l.TrimStart()).Select(l => Columns().Replace(l, "\t"))
         );
 
@@ -189,7 +189,8 @@ public partial class LexiconTests
         Lexicon
             .Read(
                 path,
-                text.Replace("Version: 1", "Version:1").Replace("State: Open", "State:Open")
+                text.Replace("Version: 1", "Version:1", StringComparison.Ordinal)
+                    .Replace("State: Open", "State:Open", StringComparison.Ordinal)
             )
             .Json.Should()
             .Be(Lexicon.Read(path, text).Json)

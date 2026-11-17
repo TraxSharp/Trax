@@ -28,7 +28,7 @@ public class DiscardTests(StoreProvider provider)
     private static async Task<Guid> Draft(InstanceHost host, string user)
     {
         var id = Guid.NewGuid();
-        await host.SeedDraft(user, id, UnlockedJson);
+        await host.SeedDraft(user, id, UnlockedJson).ConfigureAwait(false);
         return id;
     }
 
@@ -41,7 +41,8 @@ public class DiscardTests(StoreProvider provider)
     {
         using var scope = host.Scope();
         return await host.Service(scope, "turnstile")
-            .Discard(new Actor.Client(user), id, requestId);
+            .Discard(new Actor.Client(user), id, requestId)
+            .ConfigureAwait(false);
     }
 
     [Test]

@@ -21,7 +21,7 @@ public class SchemaFormatTests
     private static FieldSchema Field(string name) =>
         SchemaReflection
             .ForInput(typeof(StrictInputMachine.StrictInput))
-            .Fields.Single(f => f.Name == name);
+            .Fields.Single(f => string.Equals(f.Name, name, StringComparison.Ordinal));
 
     [Test]
     public void An_enum_exports_its_names_as_the_machine_json_writes_them()
@@ -170,7 +170,10 @@ public class SchemaFormatTests
     {
         var ir = JsonNode.Parse(IrExporter.Export(StrictInputMachine.Built))!;
         var fields = ir["inputs"]!["Submit"]!["fields"]!.AsArray();
-        JsonNode F(string name) => fields.Single(f => f!["name"]!.GetValue<string>() == name)!;
+        JsonNode F(string name) =>
+            fields.Single(f =>
+                string.Equals(f!["name"]!.GetValue<string>(), name, StringComparison.Ordinal)
+            )!;
 
         F("color")["enum"]!.ToJsonString().Should().Be("""["red","darkGreen","sky-blue"]""");
         F("color")["enumExact"]!.ToJsonString().Should().Be("""["sky-blue"]""");
@@ -210,11 +213,15 @@ public class SchemaFormatTests
     ];
 
     private static readonly Gen<string> AHost = Gen.OneOf(
-        UriText.Select(t => t.Replace("/", "").Replace("?", "").Replace("#", "")),
-        Gen.Int[0, 300].Array[1, 5].Select(octets => string.Join(".", octets)),
+        UriText.Select(t =>
+            t.Replace("/", "", StringComparison.Ordinal)
+                .Replace("?", "", StringComparison.Ordinal)
+                .Replace("#", "", StringComparison.Ordinal)
+        ),
+        Gen.Int[0, 300].Array[1, 5].Select(octets => string.Join('.', octets)),
         Gen.Int[0, 65535]
             .Array[1, 9]
-            .Select(groups => "[" + string.Join(":", groups.Select(g => g.ToString("x"))) + "]"),
+            .Select(groups => "[" + string.Join(':', groups.Select(g => g.ToString("x"))) + "]"),
         Gen.Int[0, 65535].Select(g => $"[::{g:x}]"),
         UriText.Select(t => "[" + t + "]")
     );

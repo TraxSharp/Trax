@@ -3,18 +3,6 @@ using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Persistence.Integration.Fakes;
 
-public enum TurnstileState
-{
-    Locked,
-    Unlocked,
-}
-
-public enum TurnstileTrigger
-{
-    Coin,
-    Push,
-}
-
 /// <summary>A turnstile with no committed states — exercises the fast (last-writer-wins) autosave path.</summary>
 public static class TestTurnstile
 {

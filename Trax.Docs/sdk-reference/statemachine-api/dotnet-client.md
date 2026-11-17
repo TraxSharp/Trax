@@ -10,10 +10,33 @@ package: Trax.StateMachine.Client
 namespace: Trax.StateMachine.Client
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/ServerMachineController.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/ClientProblemCodes.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/MachineProblemKind.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/MachineProblem.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/MachineError.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/MachineStatus.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/MachineView.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/SendOutcome.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/SyncOutcome.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/ServerMachineOptions.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/IMachineServer.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/ServerSnapshot.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/ServerProblem.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/ServerAnswer.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/StreamMessage.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/GraphQLMachineServer.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/GraphQLMachineServerOptions.cs
   - Trax.StateMachine/dotnet/src/Trax.Client/GraphQLSubscriptionSocket.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/ISubscriptionSink.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/ISubscriptionSocket.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/GraphQLSubscriptionSocketOptions.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/SubscriptionErrorException.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/SocketClosedException.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/SocketUnavailableException.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/MachinePredictor.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/IMachinePredictor.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/IPartialPredictor.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/MachineShape.cs
 ---
 
 # .NET client

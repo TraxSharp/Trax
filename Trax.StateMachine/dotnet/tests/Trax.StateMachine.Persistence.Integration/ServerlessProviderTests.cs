@@ -71,8 +71,10 @@ public class ServerlessProviderTests
             trax.AddEffects(effects => provider(effects))
                 .AddStateMachines(typeof(OrderMachine).Assembly)
         );
-        await using var host = services.BuildServiceProvider();
-        await using var scope = host.CreateAsyncScope();
+        var host = services.BuildServiceProvider();
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var scope = host.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var sp = scope.ServiceProvider;
 
         var id = Guid.NewGuid();
@@ -81,6 +83,7 @@ public class ServerlessProviderTests
         (
             await sp.GetRequiredService<ISnapshotStore>()
                 .Upsert("u1", id, Fixtures.TestDb.Parse(OrderMachine.ReviewSnapshot(1)))
+                .ConfigureAwait(false)
         )
             .Should()
             .BeTrue();

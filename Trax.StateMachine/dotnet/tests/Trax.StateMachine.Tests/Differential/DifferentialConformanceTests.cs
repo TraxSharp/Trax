@@ -40,7 +40,7 @@ public class DifferentialConformanceTests
             .Should()
             .BeEmpty(
                 "the C# engine must reproduce the TypeScript oracle's differential corpus exactly:\n"
-                    + string.Join("\n", diffs)
+                    + string.Join('\n', diffs)
             );
     }
 }

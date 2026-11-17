@@ -63,7 +63,7 @@ internal static class IrMachines
         {
             throw new InvalidOperationException(Refuse(ex.Message), ex);
         }
-        if (ir["id"]!.GetValue<string>() != id)
+        if (!string.Equals(ir["id"]!.GetValue<string>(), id, StringComparison.Ordinal))
             throw new InvalidOperationException(
                 Refuse($"the IR's id is '{ir["id"]}', and the host file's entry is '{id}'.")
             );
@@ -74,7 +74,7 @@ internal static class IrMachines
         // which the store writes to every instance's ir_hash.
         var canonical = CanonicalJson.Serialize(Canonicalizable(ir));
         var hash = Hash(canonical);
-        if (host.SchemaHash != hash)
+        if (!string.Equals(host.SchemaHash, hash, StringComparison.Ordinal))
             throw new InvalidOperationException(
                 Refuse(
                     $"the host file's entry was derived from the IR {host.SchemaHash}, and this IR is {hash}. "
@@ -128,7 +128,7 @@ internal static class IrMachines
             var cause = ex is TargetInvocationException { InnerException: { } inner } ? inner : ex;
             throw new InvalidOperationException(Refuse(cause.Message), cause);
         }
-        if (exported != canonical)
+        if (!string.Equals(exported, canonical, StringComparison.Ordinal))
             throw new InvalidOperationException(
                 Refuse(
                     "the machine built from it exports a different IR, so the server would not run what the file and "
@@ -173,7 +173,13 @@ internal static class IrMachines
     private static IEnumerable<string> Unservable(JsonObject ir)
     {
         foreach (var (name, outcome) in ir["outcomes"] as JsonObject ?? [])
-            if (outcome!["outcome"]!.GetValue<string>() != "done")
+            if (
+                !string.Equals(
+                    outcome!["outcome"]!.GetValue<string>(),
+                    "done",
+                    StringComparison.Ordinal
+                )
+            )
                 foreach (var edge in outcome["edges"]!.AsArray())
                     if (edge!["guard"] is not null)
                         yield return $"the outcome {name} has a guarded edge, and only a done outcome's edges take "
@@ -331,7 +337,11 @@ internal static class IrMachines
         )
         {
             if (
-                outcome["outcome"]!.GetValue<string>() != "done"
+                !string.Equals(
+                    outcome["outcome"]!.GetValue<string>(),
+                    "done",
+                    StringComparison.Ordinal
+                )
                 || outcome["output"] is not JsonObject declared
                 || !trains.TryGetValue(outcome["state"]!.GetValue<string>(), out var train)
             )
@@ -399,8 +409,8 @@ internal static class IrMachines
         foreach (
             var key in declared
                 .Select(kv => kv.Key)
-                .Union(reflected.Select(kv => kv.Key))
-                .Where(k => k != "name")
+                .Union(reflected.Select(kv => kv.Key), StringComparer.Ordinal)
+                .Where(k => !string.Equals(k, "name", StringComparison.Ordinal))
                 .Order(StringComparer.Ordinal)
         )
         {
@@ -410,7 +420,7 @@ internal static class IrMachines
             var needs = reflected.ContainsKey(key);
             if (has && needs && nested.Contains(key))
             {
-                if (key == "fields")
+                if (string.Equals(key, "fields", StringComparison.Ordinal))
                     CompareFields(file as JsonArray, train as JsonArray, path, differences);
                 else
                     CompareShape(file!.AsObject(), train!.AsObject(), $"{path}.{key}", differences);
@@ -418,7 +428,7 @@ internal static class IrMachines
             }
             var written = has ? CanonicalJson.Serialize(file) : null;
             var wanted = needs ? CanonicalJson.Serialize(train) : null;
-            if (written == wanted)
+            if (string.Equals(written, wanted, StringComparison.Ordinal))
                 continue;
             differences.Add(
                 !has ? $"{path} has no \"{key}\"; write \"{key}\": {wanted}"

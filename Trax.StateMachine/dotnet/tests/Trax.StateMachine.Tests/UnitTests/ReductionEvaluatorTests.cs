@@ -45,7 +45,7 @@ public class ReductionEvaluatorTests
         var result = ReductionEvaluator.Apply(
             new Reduction.Reset(),
             new JsonObject { ["stale"] = 1 },
-            null,
+            input: null,
             initial
         );
 
@@ -83,7 +83,7 @@ public class ReductionEvaluatorTests
         var result = Apply(
             new Reduction.Set([
                 new SetStep("paidWith", new ValueSource.FromInput("coin")),
-                new SetStep("flag", new ValueSource.Constant(true)),
+                new SetStep("flag", new ValueSource.Constant(Value: true)),
                 new SetStep("missing", new ValueSource.FromInput("absent")),
             ]),
             new JsonObject(),
@@ -99,7 +99,9 @@ public class ReductionEvaluatorTests
     public void Custom_uses_the_registered_reducer_and_carries_forward_when_unregistered()
     {
         var context = new JsonObject { ["a"] = 1 };
-        var reducers = new Dictionary<string, Func<JsonObject, JsonNode?, JsonObject>>
+        var reducers = new Dictionary<string, Func<JsonObject, JsonNode?, JsonObject>>(
+            StringComparer.Ordinal
+        )
         {
             ["double"] = (ctx, _) => new JsonObject { ["a"] = ctx["a"]!.GetValue<int>() * 2 },
         };
@@ -107,7 +109,7 @@ public class ReductionEvaluatorTests
         ReductionEvaluator.Apply(
             new Reduction.Custom("double"),
             context,
-            null,
+            input: null,
             NoInitial,
             reducers
         )["a"]!
@@ -116,7 +118,7 @@ public class ReductionEvaluatorTests
             .Be(2);
 
         ReductionEvaluator
-            .Apply(new Reduction.Custom("unregistered"), context, null, NoInitial, reducers)
+            .Apply(new Reduction.Custom("unregistered"), context, input: null, NoInitial, reducers)
             .ToJsonString()
             .Should()
             .Be(

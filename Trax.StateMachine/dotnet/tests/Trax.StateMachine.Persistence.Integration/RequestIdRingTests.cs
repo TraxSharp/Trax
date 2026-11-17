@@ -72,28 +72,31 @@ public class RequestIdRingTests
                 n % 2 == 1 ? nameof(TurnstileTrigger.Coin) : nameof(TurnstileTrigger.Push),
                 n % 2 == 1 ? new JsonObject { ["coin"] = "quarter" } : null,
                 RequestId(n)
-            );
+            )
+            .ConfigureAwait(false);
         outcome.Should().BeOfType<AdvanceOutcome.Advanced>($"request {n} fires");
     }
 
     // A write no client request made, as an outcome or a host's own update is.
     private static async Task ServerWrite(Guid id)
     {
-        await using var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
+        var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand(
             "UPDATE trax.snapshot_draft SET concurrency_token = gen_random_uuid(), updated_at = now() "
                 + "WHERE user_key = @user AND id = @id",
             connection
         );
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.Parameters.AddWithValue("user", User);
         command.Parameters.AddWithValue("id", id);
-        (await command.ExecuteNonQueryAsync()).Should().Be(1);
+        (await command.ExecuteNonQueryAsync().ConfigureAwait(false)).Should().Be(1);
     }
 
     private static async Task<IEnumerable<string>> Ring(Guid id)
     {
-        var stored = await TestDb.NewStore().Get(User, id);
+        var stored = await TestDb.NewStore().Get(User, id).ConfigureAwait(false);
         stored.Should().NotBeNull();
         stored!.RecentRequests.Should().NotBeNull("the row records its recent client requests");
         return stored.RecentRequests!.Select(r => r.RequestId);

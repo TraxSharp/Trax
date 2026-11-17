@@ -5,489 +5,6 @@ using Trax.StateMachine;
 
 namespace Trax.StateMachine.Persistence;
 
-/// <summary>The total result of <see cref="ISnapshotDraftService.Load(string, Guid, CancellationToken)"/>.</summary>
-public abstract record LoadResult
-{
-    /// <summary>The draft exists and rehydrated cleanly.</summary>
-    /// <param name="Snapshot">The validated snapshot, at the machine's current definition version.</param>
-    public sealed record Loaded(Snapshot Snapshot) : LoadResult
-    {
-        /// <summary>
-        /// The instance's revision, bumped by every write, or <c>null</c> where the store does not record one. It
-        /// travels beside the snapshot, never inside it.
-        /// </summary>
-        public long? Revision { get; init; }
-
-        /// <summary>
-        /// The row's surrogate key, which names one incarnation of the instance, or <c>null</c> where the store does
-        /// not record one.
-        /// </summary>
-        public long? RowId { get; init; }
-
-        /// <summary>
-        /// When the timer of the state the instance is in fires, or <c>null</c> when that state has no timer (or the
-        /// store does not record one). It travels beside the snapshot, never inside it.
-        /// </summary>
-        public DateTimeOffset? DueAt { get; init; }
-
-        /// <summary>
-        /// The concurrency token the draft was read with. The effect runner commits its receipt only while the draft
-        /// still carries it, so the receipt is recorded on the content the effect ran on.
-        /// </summary>
-        internal Guid Token { get; init; }
-
-        /// <summary>The effect pending on the draft's row when it was read, or null when none was.</summary>
-        internal PendingEffect? Effect { get; init; }
-    }
-
-    /// <summary>
-    /// No draft exists for this user and id, or it had been idle longer than the configured draft TTL and
-    /// was deleted by this read. Treat it as "start fresh".
-    /// </summary>
-    public sealed record NotFound : LoadResult;
-
-    /// <summary>A stored row exists but failed rehydration; the row is left untouched.</summary>
-    /// <param name="Code">A rehydration error code, one of <see cref="RefusalCode"/>.</param>
-    /// <param name="Message">A human-readable explanation of what failed validation.</param>
-    public sealed record Invalid(RefusalCode Code, string Message) : LoadResult
-    {
-        /// <summary>The exception behind an unexpected failure, kept for the server's log and never in <see cref="Message"/>.</summary>
-        internal Exception? Exception { get; init; }
-    }
-
-    private LoadResult() { }
-}
-
-/// <summary>The total result of <see cref="SnapshotDraftService{TState,TTrigger}.Autosave"/>.</summary>
-public abstract record AutosaveResult
-{
-    /// <summary>The client snapshot validated and was persisted.</summary>
-    /// <param name="Snapshot">The snapshot as stored, after rehydration (and any version migration).</param>
-    public sealed record Saved(Snapshot Snapshot) : AutosaveResult
-    {
-        /// <summary>
-        /// The instance's revision as this save left it (the stored one when the save wrote nothing), or <c>null</c>
-        /// where the store does not report one. It travels beside the snapshot, never inside it.
-        /// </summary>
-        public long? Revision { get; init; }
-
-        /// <summary>
-        /// The row's surrogate key, which names one incarnation of the instance, or <c>null</c> where the store does
-        /// not record one.
-        /// </summary>
-        public long? RowId { get; init; }
-
-        /// <summary>
-        /// When the timer of the state the instance is in fires, or <c>null</c> when that state has no timer (or the
-        /// store does not record one). It travels beside the snapshot, never inside it.
-        /// </summary>
-        public DateTimeOffset? DueAt { get; init; }
-    }
-
-    /// <summary>The snapshot was refused and nothing was written.</summary>
-    /// <param name="Code">
-    /// <c>TOO_LARGE</c> (over <see cref="SnapshotLimits.MaxSnapshotBytes"/>), <c>DRAFT_COMMITTED</c> (the stored
-    /// draft is in a committed state or an effect's target and the save would change it in any way other than a
-    /// reset to the initial state that the machine declares from that state), <c>STATE_RESERVED</c> (the save would create a draft in, or move one into, a committed state or
-    /// the target of an effect-bound transition, which only the effect runner reaches), <c>DRAFT_UNREADABLE</c>
-    /// (the stored draft fails rehydration, so only a reset to the initial state may overwrite it), or a
-    /// <see cref="RefusalCode"/> value when the payload failed validation.
-    /// </param>
-    /// <param name="Message">A human-readable explanation of the refusal.</param>
-    public sealed record Rejected(RefusalCode Code, string Message) : AutosaveResult
-    {
-        /// <summary>The exception behind an unexpected failure, kept for the server's log and never in <see cref="Message"/>.</summary>
-        internal Exception? Exception { get; init; }
-    }
-
-    /// <summary>The draft changed elsewhere between read and write — reload and retry.</summary>
-    public sealed record Conflict : AutosaveResult;
-
-    private AutosaveResult() { }
-}
-
-/// <summary>The total result of <see cref="SnapshotDraftService{TState,TTrigger}.Advance(string, Guid, string, JsonNode, string, CancellationToken)"/>.</summary>
-public abstract record AdvanceOutcome
-{
-    /// <summary>
-    /// The trigger fired and the result was persisted, or the request was a replay of the one the draft
-    /// last recorded and nothing was fired again.
-    /// </summary>
-    /// <param name="Snapshot">The draft's snapshot after the advance (or the current one, on a replay).</param>
-    public sealed record Advanced(Snapshot Snapshot) : AdvanceOutcome
-    {
-        /// <summary>
-        /// The revision this advance left the instance at: the revision it read plus one, since the write is guarded
-        /// by the token read with it, so it is reported without reading the row back. On a replay, the revision the
-        /// instance is at. <c>null</c> where the store does not record one. It travels beside the snapshot, never
-        /// inside it.
-        /// </summary>
-        public long? Revision { get; init; }
-
-        /// <summary>
-        /// The row's surrogate key, which names one incarnation of the instance, or <c>null</c> where the store does
-        /// not record one.
-        /// </summary>
-        public long? RowId { get; init; }
-
-        /// <summary>
-        /// When the timer of the state the instance is in fires, or <c>null</c> when that state has no timer, the
-        /// server cleared it, or it is not recorded yet. Meaningful only while <see cref="DueAtKnown"/> is true.
-        /// </summary>
-        public DateTimeOffset? DueAt { get; init; }
-
-        /// <summary>
-        /// False when this answer is a replay of a request the instance has moved past since: the ring records the
-        /// result, not its due time, so <see cref="DueAt"/> is null and says nothing about the replayed state's
-        /// timer. True on every other answer, where a null <see cref="DueAt"/> means there is no timer.
-        /// </summary>
-        public bool DueAtKnown { get; init; } = true;
-    }
-
-    /// <summary>The advance was refused and the stored draft is unchanged.</summary>
-    /// <param name="Reason">
-    /// A machine rejection reason (see <see cref="RefusalCode"/>), or one of the service's own:
-    /// <c>EFFECT_BOUND</c> (the trigger runs the machine's irreversible effect from this state, so only
-    /// <see cref="ISnapshotEffectRunner.Run"/> may fire it), <c>REQUEST_ID_REUSED</c>, <c>TOO_LARGE</c>,
-    /// <c>DRAFT_CHANGED</c> (from <see cref="ISnapshotEffectRunner.Run"/> only: the effect already ran on content
-    /// the draft no longer holds, so its receipt is not recorded and the effect does not run again),
-    /// <c>CLIENT_DIVERGENCE</c>, or <see cref="RefusalCode.Malformed"/> when the resulting context
-    /// could not be stored.
-    /// </param>
-    /// <param name="Detail">Extra context for the reason, such as the failing guard; null when there is none.</param>
-    public sealed record Rejected(RefusalCode Reason, string? Detail) : AdvanceOutcome
-    {
-        /// <summary>The exception behind an <c>INTERNAL_ERROR</c>, kept for the server's log and never in <see cref="Detail"/>.</summary>
-        internal Exception? Exception { get; init; }
-    }
-
-    /// <summary>No draft exists for this user and id, so there is nothing to advance.</summary>
-    public sealed record NotFound : AdvanceOutcome;
-
-    /// <summary>The stored draft failed rehydration, so it could not be advanced; it is left untouched.</summary>
-    /// <param name="Code">A rehydration error code, one of <see cref="RefusalCode"/>.</param>
-    /// <param name="Message">A human-readable explanation of what failed validation.</param>
-    public sealed record LoadError(RefusalCode Code, string Message) : AdvanceOutcome
-    {
-        /// <summary>The exception behind an unexpected failure, kept for the server's log and never in <see cref="Message"/>.</summary>
-        internal Exception? Exception { get; init; }
-    }
-
-    /// <summary>Another writer advanced this draft first — the client's view is stale.</summary>
-    public sealed record Conflict : AdvanceOutcome;
-
-    private AdvanceOutcome() { }
-}
-
-/// <summary>The total result of <see cref="ISnapshotDraftService.Start"/>.</summary>
-public abstract record StartOutcome
-{
-    /// <summary>The instance was created, or the request was a retry of the start that created it.</summary>
-    /// <param name="Id">The instance id the server minted.</param>
-    /// <param name="Snapshot">The instance's snapshot.</param>
-    /// <param name="Revision">The instance's revision.</param>
-    /// <param name="Created">True when this request created the instance; false when it replayed an earlier start.</param>
-    public sealed record Started(Guid Id, Snapshot Snapshot, long Revision, bool Created)
-        : StartOutcome
-    {
-        /// <summary>
-        /// When the timer of the state the instance is in fires, or <c>null</c> when that state has no timer (or the
-        /// store does not record one). It travels beside the snapshot, never inside it.
-        /// </summary>
-        public DateTimeOffset? DueAt { get; init; }
-    }
-
-    /// <summary>The start was refused and nothing was written.</summary>
-    /// <param name="Code">Why, for example one of <see cref="RefusalCode"/>.</param>
-    /// <param name="Message">A human-readable explanation of the refusal.</param>
-    public sealed record Rejected(RefusalCode Code, string Message) : StartOutcome;
-
-    private StartOutcome() { }
-}
-
-/// <summary>The total result of <see cref="ISnapshotDraftService.Discard"/>.</summary>
-public abstract record DiscardOutcome
-{
-    /// <summary>The instance is gone, whether this request deleted it or it was already gone.</summary>
-    public sealed record Discarded : DiscardOutcome;
-
-    /// <summary>The discard was refused and the instance is unchanged.</summary>
-    /// <param name="Code">Why, for example one of <see cref="RefusalCode"/>.</param>
-    /// <param name="Message">A human-readable explanation of the refusal.</param>
-    public sealed record Rejected(RefusalCode Code, string Message) : DiscardOutcome;
-
-    private DiscardOutcome() { }
-}
-
-/// <summary>
-/// The machine-agnostic face of <see cref="SnapshotDraftService{TState,TTrigger}"/>. Its methods take and
-/// return only strings/JSON and the non-generic result unions, so a registry can hold one of these per
-/// machine keyed by name and a single generic mutation can serve every machine.
-/// </summary>
-/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/persistence-ports#isnapshotdraftservice">SDK reference</seealso>
-public interface ISnapshotDraftService
-{
-    /// <summary>
-    /// Reads the caller's draft and rehydrates it, validating the stored JSON on the way out. A draft idle
-    /// past the configured TTL is deleted, with its effect claims, and reported as <see cref="LoadResult.NotFound"/>.
-    /// </summary>
-    /// <param name="userKey">
-    /// The owner of the draft; drafts are always scoped to one user. A null, empty or whitespace key names no
-    /// owner and is refused, on every method of this service.
-    /// </param>
-    /// <param name="id">The draft's id.</param>
-    /// <param name="cancellationToken">Cancels the store read.</param>
-    /// <exception cref="ArgumentException"><paramref name="userKey"/> is null, empty or whitespace.</exception>
-    Task<LoadResult> Load(string userKey, Guid id, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// <see cref="Load(string, Guid, CancellationToken)"/> on behalf of <paramref name="actor"/>: a
-    /// <see cref="Actor.Client"/> reads only its own drafts, and only when it meets the machine's declared
-    /// <c>Get</c> rule beyond that owner-only floor. A caller the rule does not admit, a client with no user key, and
-    /// any actor that is not a client are answered <see cref="LoadResult.NotFound"/>, exactly as an unknown id is, so
-    /// the answer reveals nothing. A service that does not override this answers <see cref="LoadResult.NotFound"/>
-    /// to every actor.
-    /// </summary>
-    /// <param name="actor">Who reads it.</param>
-    /// <param name="id">The draft's id.</param>
-    /// <param name="cancellationToken">Cancels the store read and the rule's policy checks.</param>
-    Task<LoadResult> Load(Actor actor, Guid id, CancellationToken cancellationToken = default) =>
-        Task.FromResult<LoadResult>(new LoadResult.NotFound());
-
-    /// <summary>
-    /// The soft path: validates a client-provided snapshot and persists it as-is. Invalid or oversized
-    /// data is never stored. The soft path never creates a committed state: a save that would create a draft
-    /// in, or move one into, a committed state or an effect-bound transition's target is rejected as
-    /// <c>STATE_RESERVED</c>. Nor does it rewrite a draft already in one: any change to such a draft is rejected as
-    /// <c>DRAFT_COMMITTED</c> except a reset to the initial state that the machine itself declares from that
-    /// state, and a save identical to the stored draft is answered as saved without writing. A stored draft that
-    /// fails rehydration may only be reset to the initial state (anything else is <c>DRAFT_UNREADABLE</c>), a new
-    /// draft is only ever created, never written over one created meanwhile, and a concurrent write yields
-    /// <c>Conflict</c>. A machine with no committed states and no effect is last writer wins. Saving a snapshot in
-    /// the initial state releases the draft's settled effect claims: one still in flight within its lease, or a
-    /// completed one whose receipt the replaced draft never recorded, is kept, so the effect is not run again.
-    /// </summary>
-    /// <param name="userKey">The owner of the draft.</param>
-    /// <param name="id">The draft's id; the draft is created if it does not exist.</param>
-    /// <param name="snapshotJson">The client's serialized snapshot.</param>
-    /// <param name="cancellationToken">Cancels the store calls.</param>
-    Task<AutosaveResult> Autosave(
-        string userKey,
-        Guid id,
-        string snapshotJson,
-        CancellationToken cancellationToken = default
-    );
-
-    /// <summary>
-    /// The authoritative path: reads the stored snapshot, fires <paramref name="trigger"/> on it, and
-    /// persists the result under an optimistic-concurrency check, never trusting a client-computed state.
-    /// A lost race comes back as <c>Conflict</c>, not an exception. A trigger bound to the machine's
-    /// irreversible effect from the stored state is refused as <c>EFFECT_BOUND</c>: only the effect runner
-    /// (the send path) fires it, after the effect has run.
-    /// </summary>
-    /// <param name="userKey">The owner of the draft.</param>
-    /// <param name="id">The draft's id; it must already exist.</param>
-    /// <param name="trigger">The trigger name, matched against the machine's trigger enum.</param>
-    /// <param name="input">The trigger's input, validated against its declared schema; null when it takes none.</param>
-    /// <param name="requestId">
-    /// An optional idempotency key. A repeat of the request the draft last recorded (same id and trigger)
-    /// returns the current snapshot without firing again, unless the draft has since moved back to the
-    /// state that request fired from, in which case it fires as a new request. The same id with a
-    /// different trigger is refused as <c>REQUEST_ID_REUSED</c>. Null never replays.
-    /// </param>
-    /// <param name="cancellationToken">Cancels the store calls.</param>
-    Task<AdvanceOutcome> Advance(
-        string userKey,
-        Guid id,
-        string trigger,
-        JsonNode? input = null,
-        string? requestId = null,
-        CancellationToken cancellationToken = default
-    );
-
-    /// <summary>
-    /// <see cref="Advance(string, Guid, string, JsonNode?, string?, CancellationToken)"/> that first
-    /// compares the result with <paramref name="clientResult"/>, the canonical snapshot the client's twin
-    /// computed, and persists nothing when they differ: the advance is refused as
-    /// <c>CLIENT_DIVERGENCE</c> and the stored draft is unchanged. A null <paramref name="clientResult"/>
-    /// is a plain advance. A service that does not override this cannot check before it writes, so it
-    /// refuses any client result rather than persisting an advance it would then report as refused.
-    /// </summary>
-    Task<AdvanceOutcome> Advance(
-        string userKey,
-        Guid id,
-        string trigger,
-        JsonNode? input,
-        string? requestId,
-        string? clientResult,
-        CancellationToken cancellationToken = default
-    ) =>
-        clientResult is null
-            ? Advance(userKey, id, trigger, input, requestId, cancellationToken)
-            : throw new NotSupportedException(
-                $"{GetType().Name} cannot compare a client result before it persists an advance."
-            );
-
-    /// <summary>
-    /// Serializes a snapshot to the machine's canonical wire JSON: the exact string a client twin must
-    /// produce for a <c>clientResult</c> comparison to match.
-    /// </summary>
-    /// <param name="snapshot">The snapshot to serialize.</param>
-    string Serialize(Snapshot snapshot);
-
-    /// <summary>
-    /// <see cref="Advance(string, Guid, string, JsonNode?, string?, CancellationToken)"/> on behalf of
-    /// <paramref name="actor"/>: a <see cref="Actor.Client"/> acts on its own drafts and must meet the event's
-    /// declared rule, checked per event against the roles and policies it holds now. One that does not is refused
-    /// as <c>FORBIDDEN</c> before a request id is replayed, the input is validated or anything is written, after
-    /// only an unknown trigger (<c>NO_TRANSITION</c>) and an effect- or outcome-bound one. A client with no user
-    /// key is refused as <c>FORBIDDEN</c>. Host code acting on a user's draft is a client too, holding the roles
-    /// it is given; host code drives a system-owned instance through <see cref="IMachineInstances"/>. On a machine that declares no rule at all, an authenticated client may fire
-    /// every event, as before rules; once a machine declares any rule, an event without one is refused.
-    /// A service that does not override this refuses every actor.
-    /// </summary>
-    Task<AdvanceOutcome> Advance(
-        Actor actor,
-        Guid id,
-        string trigger,
-        JsonNode? input = null,
-        string? requestId = null,
-        CancellationToken cancellationToken = default
-    ) =>
-        Task.FromResult<AdvanceOutcome>(
-            new AdvanceOutcome.Rejected(
-                RefusalCode.Forbidden,
-                $"{GetType().Name} does not check event rules."
-            )
-        );
-
-    /// <summary>
-    /// <see cref="Advance(Actor, Guid, string, JsonNode?, string?, CancellationToken)"/> that first compares the
-    /// result with <paramref name="clientResult"/>, as
-    /// <see cref="Advance(string, Guid, string, JsonNode?, string?, string?, CancellationToken)"/> does. A
-    /// service that does not override this refuses every actor.
-    /// </summary>
-    Task<AdvanceOutcome> Advance(
-        Actor actor,
-        Guid id,
-        string trigger,
-        JsonNode? input,
-        string? requestId,
-        string? clientResult,
-        CancellationToken cancellationToken = default
-    ) =>
-        Task.FromResult<AdvanceOutcome>(
-            new AdvanceOutcome.Rejected(
-                RefusalCode.Forbidden,
-                $"{GetType().Name} does not check event rules."
-            )
-        );
-
-    /// <summary>
-    /// Runs the machine's effect for the draft on behalf of <paramref name="actor"/>, as
-    /// <see cref="ISnapshotEffectRunner.Run"/> does, after checking a <see cref="Actor.Client"/> against the
-    /// effect-bound event's declared rule, though a send names no trigger: a caller the rule does not admit is
-    /// refused as <c>FORBIDDEN</c> before the draft is read or the effect claimed. A machine with no effect answers
-    /// <c>NO_EFFECT</c>. A service that does not override this refuses every actor.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// The service was built by <see cref="IMachine.CreateService"/> rather than taken from
-    /// <see cref="ISnapshotMachineRegistry.Service"/>, so it has no effect runner.
-    /// </exception>
-    Task<AdvanceOutcome> Send(
-        Actor actor,
-        Guid id,
-        string requestId,
-        CancellationToken cancellationToken = default
-    ) =>
-        Task.FromResult<AdvanceOutcome>(
-            new AdvanceOutcome.Rejected(
-                RefusalCode.Forbidden,
-                $"{GetType().Name} does not check event rules."
-            )
-        );
-
-    /// <summary>
-    /// Starts a new instance for a client from the machine's declared start input: the input is validated against
-    /// the start's record (never the context type), the start's rule is checked, the declared reduction is applied to
-    /// the initial context, and the server mints the id; the row is inserted at revision 1, with the run its initial
-    /// state invokes, if any, in the same transaction. A retry with the same <paramref name="requestId"/> and input
-    /// returns the same instance with <c>Created</c> false; the same request id with a different input is refused as
-    /// <c>REQUEST_ID_REUSED</c>. Refusals write nothing and come back as <see cref="StartOutcome.Rejected"/> (see
-    /// <see cref="RefusalCode"/>). A service that does not implement it throws
-    /// <see cref="NotSupportedException"/>.
-    /// </summary>
-    /// <param name="actor">Who starts it: a <see cref="Actor.Client"/> naming a user; anything else is refused.</param>
-    /// <param name="input">The start input; null when the machine's start takes none.</param>
-    /// <param name="requestId">
-    /// The client's idempotency key for this start: 1 to <see cref="RequestIdRing.MaxRequestIdLength"/> characters,
-    /// not blank. Unique per owner, user and machine.
-    /// </param>
-    /// <param name="cancellationToken">Cancels the store calls.</param>
-    Task<StartOutcome> Start(
-        Actor actor,
-        JsonObject? input,
-        string requestId,
-        CancellationToken cancellationToken = default
-    ) => throw new NotSupportedException($"{GetType().Name} cannot start an instance.");
-
-    /// <summary>
-    /// Deletes the client's draft <paramref name="id"/>, cancelling a run its state invoked first and releasing
-    /// its settled effect claims with it. Idempotent: a draft already gone, or another user's id, answers
-    /// <see cref="DiscardOutcome.Discarded"/>, exactly as a missing one does. A system-owned instance is refused. An
-    /// instance in a state only the server puts it in, or one an effect is running on or still recording its result
-    /// to, is refused as <c>DISCARD_NOT_ALLOWED</c> and kept; so is one that moved into such a state while the
-    /// discard ran, because the delete is conditional on the row as it was checked. A service that does not implement
-    /// it throws <see cref="NotSupportedException"/>.
-    /// </summary>
-    /// <param name="actor">Who discards it: a <see cref="Actor.Client"/> naming a user; anything else is refused.</param>
-    /// <param name="id">The instance id.</param>
-    /// <param name="requestId">The client's idempotency key for this discard.</param>
-    /// <param name="cancellationToken">Cancels the store calls.</param>
-    Task<DiscardOutcome> Discard(
-        Actor actor,
-        Guid id,
-        string requestId,
-        CancellationToken cancellationToken = default
-    ) => throw new NotSupportedException($"{GetType().Name} cannot discard an instance.");
-}
-
-/// <summary>
-/// A draft service the registry hands its machine's effect runner, which <see cref="ISnapshotDraftService.Send"/>
-/// runs the effect through.
-/// </summary>
-internal interface IEffectRunnerSlot
-{
-    /// <summary>Resolves the machine's effect runner when a send needs it.</summary>
-    Func<ISnapshotEffectRunner?>? EffectRunner { get; set; }
-}
-
-/// <summary>
-/// A draft service of a machine another machine's state may spawn, which the registry hands what delivers the end of
-/// an instance to the parent waiting on it.
-/// </summary>
-internal interface IEndNotifierSlot
-{
-    /// <summary>The states the machine ends in; an advance into one of them calls <see cref="EndNotifier"/>.</summary>
-    IReadOnlySet<string>? EndStates { get; set; }
-
-    /// <summary>Delivers the end of the user's instance to its parent, when one waits on it. Never throws.</summary>
-    Func<string, Guid, CancellationToken, Task>? EndNotifier { get; set; }
-}
-
-/// <summary>
-/// A draft service that can tell a the push (<c>&lt;machine&gt;Changed</c>) subscription which row it may follow. Every service
-/// <see cref="ISnapshotMachineRegistry"/> builds implements it; a subscription to any other is refused.
-/// </summary>
-internal interface ISnapshotWatchAccess
-{
-    /// <summary>
-    /// The row id of the caller's instance <paramref name="id"/> when the machine's watch rule admits the caller, or
-    /// null for every other case, alike.
-    /// </summary>
-    Task<long?> AuthorizeWatch(Actor actor, Guid id, CancellationToken cancellationToken = default);
-}
-
 /// <summary>
 /// Infrastructure behind <see cref="ISnapshotDraftService"/>, built by <see cref="IMachine.CreateService"/>;
 /// not intended to be constructed directly. The FE-drives / BE-validates operations over a persisted, user-scoped snapshot, built on the total
@@ -533,10 +50,10 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
     private HashSet<string> ReservedNames =>
         _reservedCache ??= ReservedStates is { } reserved
-            ? reserved.Select(s => s.ToString()!).ToHashSet()
+            ? reserved.Select(s => s.ToString()!).ToHashSet(StringComparer.Ordinal)
             : BuildStateSet(committedStates)
                 .Concat(effects?.Select(e => e.To.ToString()!) ?? [])
-                .ToHashSet();
+                .ToHashSet(StringComparer.Ordinal);
 
     // The states the soft path may not take a draft out of or rewrite: committed states and effect targets (a
     // reset the machine declares excepted), invoking states, which only a declared transition or an outcome
@@ -549,12 +66,13 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             .Concat(effects?.Select(e => e.To.ToString()!) ?? [])
             .Concat(InvokingNames)
             .Concat(TimedStates?.Select(s => s.ToString()!) ?? [])
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
 
     private HashSet<string>? _invokingCache;
 
     private HashSet<string> InvokingNames =>
-        _invokingCache ??= InvokingStates?.Select(s => s.ToString()!).ToHashSet() ?? [];
+        _invokingCache ??=
+            InvokingStates?.Select(s => s.ToString()!).ToHashSet(StringComparer.Ordinal) ?? [];
 
     /// <summary>
     /// Every state the soft path may not move a draft into (see <c>BuiltMachine.ReservedStates</c>). Null keeps the
@@ -606,7 +124,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     );
 
     /// <summary>
-    /// Why <paramref name="actor"/> may not fire <paramref name="trigger"/>, or <c>null</c> when it may. Only a client
+    /// Why <paramref name="actor"/> may not fire <paramref name="trigger"/>, or <see langword="null"/> when it may. Only a client
     /// is checked against a rule; any other actor reaches no user's draft. An unknown trigger is left to the engine,
     /// which answers <c>NO_TRANSITION</c>.
     /// </summary>
@@ -621,7 +139,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         if (!TriggerNames.Contains(trigger))
             return null;
         if (Rules.Events.TryGetValue(trigger, out var rule))
-            return await CallerRules.Admits(client, rule, cancellationToken)
+            return await CallerRules.Admits(client, rule, cancellationToken).ConfigureAwait(false)
                 ? null
                 : CallerRules.Forbidden();
         // A machine that declares no rule anywhere keeps the authenticated owner's reach it had before rules; one
@@ -667,7 +185,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         return effects is { } bound && bound.Count == keys.Count
             ? keys.Select((key, i) => new DraftClaimHold.EffectKey(key, bound[i].From.ToString()))
                 .ToList()
-            : keys.Select(key => new DraftClaimHold.EffectKey(key, null)).ToList();
+            : keys.Select(key => new DraftClaimHold.EffectKey(key, From: null)).ToList();
     }
 
     private static AdvanceOutcome.Rejected EffectInProgress() =>
@@ -678,7 +196,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
     private static HashSet<string> BuildStateSet(IReadOnlyCollection<TState>? states)
     {
-        var set = new HashSet<string>();
+        var set = new HashSet<string>(StringComparer.Ordinal);
         if (states is not null)
             foreach (var s in states)
                 set.Add(s.ToString()!);
@@ -699,7 +217,9 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             return;
         var recorded = DraftClaimHold.RecordedIn(replacedJson);
         foreach (var key in effectKeysOnReset(userKey, id))
-            await effectClaims.ReleaseForReset(key, recorded, CancellationToken.None);
+            await effectClaims
+                .ReleaseForReset(key, recorded, CancellationToken.None)
+                .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -718,7 +238,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         return effects is { } bound && bound.Count == keys.Count
             ? keys.Select((key, i) => new DraftClaimHold.EffectKey(key, bound[i].From.ToString()))
                 .ToList()
-            : keys.Select(key => new DraftClaimHold.EffectKey(key, null)).ToList();
+            : keys.Select(key => new DraftClaimHold.EffectKey(key, From: null)).ToList();
     }
 
     // How a discard's delete ended: the draft went, an effect on it is live, or the row changed since it was read.
@@ -745,21 +265,17 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         var keyList = keys.Select(k => k.Key).ToList();
         if (
             DraftClaimHold.LedgerHolds(
-                await marks.LedgerClaims(keyList, CancellationToken.None),
+                await marks.LedgerClaims(keyList, CancellationToken.None).ConfigureAwait(false),
                 keys,
                 StoredState(read.Json)
             )
         )
             return DeleteResult.EffectLive;
         if (read.InvokeToken is { } token && RunCancellation is not null)
-            await RunCancellation.Cancel(token, CancellationToken.None);
-        return await ((IConditionalDraftDelete)marks).DeleteAsRead(
-            userKey,
-            _machineId,
-            id,
-            read,
-            () => marks.ReleaseLedger(keyList)
-        )
+            await RunCancellation.Cancel(token, CancellationToken.None).ConfigureAwait(false);
+        return await ((IConditionalDraftDelete)marks)
+            .DeleteAsRead(userKey, _machineId, id, read, () => marks.ReleaseLedger(keyList))
+            .ConfigureAwait(false)
             ? DeleteResult.Deleted
             : DeleteResult.Changed;
     }
@@ -776,60 +292,65 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     private async Task<DeleteResult> DeleteAsRead(string userKey, Guid id, StoredSnapshot read)
     {
         if (Marks is { } marks && read.RowId is not null && read.Revision is not null)
-            return await DeleteMarkedStore(marks, userKey, id, read);
+            return await DeleteMarkedStore(marks, userKey, id, read).ConfigureAwait(false);
         if (
-            await DraftClaimHold.Take(
-                effectClaims,
-                EffectKeysOf(userKey, id),
-                StoredState(read.Json),
-                DraftClaimHold.RecordedIn(read.Json)
-            )
+            await DraftClaimHold
+                .Take(
+                    effectClaims,
+                    EffectKeysOf(userKey, id),
+                    StoredState(read.Json),
+                    DraftClaimHold.RecordedIn(read.Json)
+                )
+                .ConfigureAwait(false)
             is not { } hold
         )
             return DeleteResult.EffectLive;
         try
         {
             if (read.InvokeToken is { } token && RunCancellation is not null)
-                await RunCancellation.Cancel(token, CancellationToken.None);
+                await RunCancellation.Cancel(token, CancellationToken.None).ConfigureAwait(false);
 
             bool deleted;
             var conditional =
                 store as IConditionalDraftDelete ?? Invokes?.Store as IConditionalDraftDelete;
             if (conditional is not null && read.RowId is not null && read.Revision is not null)
-                deleted = await conditional.DeleteAsRead(
-                    userKey,
-                    _machineId,
-                    id,
-                    read,
-                    hold.Release
-                );
+                deleted = await conditional
+                    .DeleteAsRead(userKey, _machineId, id, read, hold.Release)
+                    .ConfigureAwait(false);
             else
             {
                 // A store that cannot delete on the row as read deletes by id, once one more read finds the row
                 // unchanged; the claims go after it, outside any transaction.
                 deleted =
-                    await store.Get(userKey, _machineId, id, CancellationToken.None) is { } now
+                    await store
+                        .Get(userKey, _machineId, id, CancellationToken.None)
+                        .ConfigureAwait(false)
+                        is { } now
                     && now.Token == read.Token;
                 if (deleted && Invokes is { } invokes)
-                    deleted = await invokes.Store.DeleteHolding(
-                        DraftOwner.User(userKey),
-                        _machineId,
-                        id,
-                        read.InvokeToken,
-                        CancellationToken.None
-                    );
+                    deleted = await invokes
+                        .Store.DeleteHolding(
+                            DraftOwner.User(userKey),
+                            _machineId,
+                            id,
+                            read.InvokeToken,
+                            CancellationToken.None
+                        )
+                        .ConfigureAwait(false);
                 else if (deleted)
-                    await store.Delete(userKey, _machineId, id, CancellationToken.None);
+                    await store
+                        .Delete(userKey, _machineId, id, CancellationToken.None)
+                        .ConfigureAwait(false);
                 if (deleted)
-                    await hold.Release();
+                    await hold.Release().ConfigureAwait(false);
             }
             if (!deleted)
-                await hold.Drop();
+                await hold.Drop().ConfigureAwait(false);
             return deleted ? DeleteResult.Deleted : DeleteResult.Changed;
         }
         catch
         {
-            await hold.Drop();
+            await hold.Drop().ConfigureAwait(false);
             throw;
         }
     }
@@ -844,8 +365,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     {
         if (!written.Ok)
             return new AutosaveResult.Conflict();
-        if (snapshot.State == _initialState)
-            await ReleaseSettledClaims(userKey, id, replacedJson);
+        if (string.Equals(snapshot.State, _initialState, StringComparison.Ordinal))
+            await ReleaseSettledClaims(userKey, id, replacedJson).ConfigureAwait(false);
         return new AutosaveResult.Saved(snapshot)
         {
             Revision = written.Revision,
@@ -862,23 +383,31 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         Snapshot snapshot,
         CancellationToken cancellationToken
     ) =>
-        await Creates!.Create(
-            DraftOwner.User(userKey),
-            id,
-            snapshot,
-            start: null,
-            entering: null,
-            Cap,
-            cancellationToken
-        ) switch
-        {
-            CreateWrite.Created created => await Persisted(
-                new Written(true, created.Row.Revision, created.Row.RowId, created.Row.DueAt),
-                userKey,
+        await Creates!
+            .Create(
+                DraftOwner.User(userKey),
                 id,
                 snapshot,
-                replacedJson: null
-            ),
+                start: null,
+                entering: null,
+                Cap,
+                cancellationToken
+            )
+            .ConfigureAwait(false) switch
+        {
+            CreateWrite.Created created => await Persisted(
+                    new Written(
+                        Ok: true,
+                        created.Row.Revision,
+                        created.Row.RowId,
+                        created.Row.DueAt
+                    ),
+                    userKey,
+                    id,
+                    snapshot,
+                    replacedJson: null
+                )
+                .ConfigureAwait(false),
             CreateWrite.Refused refused => new AutosaveResult.Rejected(
                 refused.Code,
                 refused.Message
@@ -909,16 +438,20 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         if (store is IRowReportingSnapshotStore reporting)
         {
             var row = insertOnly
-                ? await reporting.Insert(userKey, id, snapshot, cancellationToken)
-                : await reporting.Upsert(userKey, id, snapshot, cancellationToken);
+                ? await reporting
+                    .Insert(userKey, id, snapshot, cancellationToken)
+                    .ConfigureAwait(false)
+                : await reporting
+                    .Upsert(userKey, id, snapshot, cancellationToken)
+                    .ConfigureAwait(false);
             return row is { } written
-                ? new Written(true, written.Revision, written.RowId, written.DueAt)
+                ? new Written(Ok: true, written.Revision, written.RowId, written.DueAt)
                 : default;
         }
         var ok = insertOnly
-            ? await store.Insert(userKey, id, snapshot, cancellationToken)
-            : await store.Upsert(userKey, id, snapshot, cancellationToken);
-        return new Written(ok, null, null);
+            ? await store.Insert(userKey, id, snapshot, cancellationToken).ConfigureAwait(false)
+            : await store.Upsert(userKey, id, snapshot, cancellationToken).ConfigureAwait(false);
+        return new Written(ok, Revision: null, RowId: null);
     }
 
     // A write guarded by the token read with stored: it lands on the revision read, so it leaves the next one, and a
@@ -935,26 +468,23 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     {
         if (store is IRowReportingSnapshotStore reporting)
             return
-                await reporting.UpdateWithRequest(
-                    userKey,
-                    id,
-                    snapshot,
-                    stored,
-                    request,
-                    cancellationToken,
-                    note
-                )
+                await reporting
+                    .UpdateWithRequest(
+                        userKey,
+                        id,
+                        snapshot,
+                        stored,
+                        request,
+                        cancellationToken,
+                        note
+                    )
+                    .ConfigureAwait(false)
                     is { } row
-                ? new Written(true, stored.Revision + 1, stored.RowId, row.DueAt)
+                ? new Written(Ok: true, stored.Revision + 1, stored.RowId, row.DueAt)
                 : default;
-        var ok = await store.UpdateWithRequest(
-            userKey,
-            id,
-            snapshot,
-            stored.Token,
-            request,
-            cancellationToken
-        );
+        var ok = await store
+            .UpdateWithRequest(userKey, id, snapshot, stored.Token, request, cancellationToken)
+            .ConfigureAwait(false);
         return new Written(ok, stored.Revision + 1, stored.RowId);
     }
 
@@ -969,7 +499,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     // Whether the machine itself resets a draft in this state: a transition from it to the initial state.
     private bool MachineResets(string state) =>
         machine.Definition.Transitions.Any(t =>
-            t.From.ToString() == state && t.To.ToString() == _initialState
+            string.Equals(t.From.ToString(), state, StringComparison.Ordinal)
+            && string.Equals(t.To.ToString(), _initialState, StringComparison.Ordinal)
         );
 
     // Whether the store keys its drafts by machine. One that implements only the machine-less members keys them
@@ -1037,7 +568,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // A start with no rule admits nobody, as an undeclared event does.
         if (
             Rules.Start is not { } rule
-            || !await CallerRules.Admits(client, rule, cancellationToken)
+            || !await CallerRules.Admits(client, rule, cancellationToken).ConfigureAwait(false)
         )
             return new StartOutcome.Rejected(RefusalCode.Forbidden, "You may not start this.");
         if (!RequestIdRing.IsUsable(requestId))
@@ -1123,28 +654,16 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             }
             : null;
 
-        var write = await creates.Create(
-            owner,
-            Guid.NewGuid(),
-            initial,
-            request,
-            entering,
-            Cap,
-            cancellationToken
-        );
+        var write = await creates
+            .Create(owner, Guid.NewGuid(), initial, request, entering, Cap, cancellationToken)
+            .ConfigureAwait(false);
 
         // Two starts with one request id that no lock ordered (a store or provider without one) race on the unique
         // index; the loser answers with the winner's instance.
         if (write is CreateWrite.Conflict)
-            write = await creates.Create(
-                owner,
-                Guid.NewGuid(),
-                initial,
-                request,
-                entering,
-                Cap,
-                cancellationToken
-            );
+            write = await creates
+                .Create(owner, Guid.NewGuid(), initial, request, entering, Cap, cancellationToken)
+                .ConfigureAwait(false);
 
         switch (write)
         {
@@ -1216,7 +735,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // admits nobody; on a machine that declares none, the owner may discard.
         if (
             Rules.Discard is { } rule
-                ? !await CallerRules.Admits(client, rule, cancellationToken)
+                ? !await CallerRules.Admits(client, rule, cancellationToken).ConfigureAwait(false)
                 : Rules.Any
         )
             return new DiscardOutcome.Rejected(
@@ -1231,7 +750,9 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // deleted, and is read and checked again.
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            var stored = await store.Get(client.UserKey, _machineId, id, cancellationToken);
+            var stored = await store
+                .Get(client.UserKey, _machineId, id, cancellationToken)
+                .ConfigureAwait(false);
             if (stored is null)
                 return new DiscardOutcome.Discarded();
             if (stored.Effect is not null)
@@ -1251,7 +772,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     RefusalCode.DiscardNotAllowed,
                     $"An instance in {state} is the record of what the server did, and cannot be discarded."
                 );
-            switch (await DeleteAsRead(client.UserKey, id, stored))
+            switch (await DeleteAsRead(client.UserKey, id, stored).ConfigureAwait(false))
             {
                 case DeleteResult.Deleted:
                     return new DiscardOutcome.Discarded();
@@ -1263,7 +784,9 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     );
             }
         }
-        return await store.Get(client.UserKey, _machineId, id, cancellationToken) is null
+        return
+            await store.Get(client.UserKey, _machineId, id, cancellationToken).ConfigureAwait(false)
+                is null
             ? new DiscardOutcome.Discarded()
             : new DiscardOutcome.Rejected(
                 RefusalCode.Conflict,
@@ -1310,9 +833,9 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // than an unknown id would tell it.
         if (SystemOwned || Owner(actor) is not { } client)
             return new LoadResult.NotFound();
-        if (!await CallerRules.MayRead(client, Rules, cancellationToken))
+        if (!await CallerRules.MayRead(client, Rules, cancellationToken).ConfigureAwait(false))
             return new LoadResult.NotFound();
-        return await Load(client.UserKey, id, cancellationToken);
+        return await Load(client.UserKey, id, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1332,10 +855,12 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             return null;
         if (
             Rules.Watch is not { } rule
-            || !await CallerRules.Admits(client, rule, cancellationToken)
+            || !await CallerRules.Admits(client, rule, cancellationToken).ConfigureAwait(false)
         )
             return null;
-        var stored = await store.Get(client.UserKey, _machineId, id, cancellationToken);
+        var stored = await store
+            .Get(client.UserKey, _machineId, id, cancellationToken)
+            .ConfigureAwait(false);
         return stored?.RowId;
     }
 
@@ -1347,7 +872,9 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     )
     {
         SnapshotOwner.Require(userKey);
-        var stored = await store.Get(userKey, _machineId, id, cancellationToken);
+        var stored = await store
+            .Get(userKey, _machineId, id, cancellationToken)
+            .ConfigureAwait(false);
         if (stored is null)
             return new LoadResult.NotFound();
 
@@ -1425,19 +952,28 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     if (
                         Cap is not null
                         && Creates is not null
-                        && await store.Get(userKey, _machineId, id, cancellationToken) is null
+                        && await store
+                            .Get(userKey, _machineId, id, cancellationToken)
+                            .ConfigureAwait(false)
+                            is null
                     )
-                        return await CreateCapped(userKey, id, ok.Snapshot, cancellationToken);
+                        return await CreateCapped(userKey, id, ok.Snapshot, cancellationToken)
+                            .ConfigureAwait(false);
 
                     var upserted = await Blind(
-                        userKey,
-                        id,
-                        ok.Snapshot,
-                        insertOnly: !KeysByMachine(store)
-                            && await store.Get(userKey, _machineId, id, cancellationToken) is null,
-                        cancellationToken
-                    );
-                    return await Persisted(upserted, userKey, id, ok.Snapshot, replacedJson: null);
+                            userKey,
+                            id,
+                            ok.Snapshot,
+                            insertOnly: !KeysByMachine(store)
+                                && await store
+                                    .Get(userKey, _machineId, id, cancellationToken)
+                                    .ConfigureAwait(false)
+                                    is null,
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false);
+                    return await Persisted(upserted, userKey, id, ok.Snapshot, replacedJson: null)
+                        .ConfigureAwait(false);
                 }
 
                 // Guarded path. A soft save never creates a committed state: it may not create a draft in, or
@@ -1445,24 +981,29 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 // draft there. Nor may it rewrite a draft already there: the receipt such a draft holds is the one
                 // the effect produced for exactly that content, so the only write allowed is a reset the machine
                 // itself declares, and a save identical to what is stored is answered without writing.
-                var stored = await store.Get(userKey, _machineId, id, cancellationToken);
+                var stored = await store
+                    .Get(userKey, _machineId, id, cancellationToken)
+                    .ConfigureAwait(false);
                 var entering = ReservedNames.Contains(ok.Snapshot.State);
                 if (stored is null)
                 {
                     if (entering)
                         return Reserved();
                     if (Cap is not null && Creates is not null)
-                        return await CreateCapped(userKey, id, ok.Snapshot, cancellationToken);
+                        return await CreateCapped(userKey, id, ok.Snapshot, cancellationToken)
+                            .ConfigureAwait(false);
                     // Insert, never Upsert: a draft created since the read above (and sent, perhaps) must make
                     // this save lose rather than be overwritten by it.
                     var inserted = await Blind(
-                        userKey,
-                        id,
-                        ok.Snapshot,
-                        insertOnly: true,
-                        cancellationToken
-                    );
-                    return await Persisted(inserted, userKey, id, ok.Snapshot, replacedJson: null);
+                            userKey,
+                            id,
+                            ok.Snapshot,
+                            insertOnly: true,
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false);
+                    return await Persisted(inserted, userKey, id, ok.Snapshot, replacedJson: null)
+                        .ConfigureAwait(false);
                 }
 
                 var readable = machine.Rehydrate(stored.Json) as RehydrationResult.Ok;
@@ -1487,7 +1028,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 // A stored draft that cannot be read may be committed, so nothing but a reset overwrites it.
                 if (readable is not { } current)
                 {
-                    if (ok.Snapshot.State != _initialState)
+                    if (!string.Equals(ok.Snapshot.State, _initialState, StringComparison.Ordinal))
                         return new AutosaveResult.Rejected(
                             RefusalCode.DraftUnreadable,
                             "The saved draft can't be read, so it can only be started over."
@@ -1498,7 +1039,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     if (unchanged)
                         return Unwritten(current.Snapshot, stored);
                     if (
-                        ok.Snapshot.State != _initialState
+                        !string.Equals(ok.Snapshot.State, _initialState, StringComparison.Ordinal)
                         || !MachineResets(current.Snapshot.State)
                     )
                         return new AutosaveResult.Rejected(
@@ -1512,15 +1053,17 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 // Atomic overwrite guarded by the token we just read: a commit that lands between this read
                 // and this write makes the soft save LOSE (Conflict) instead of resurrecting the draft.
                 var wrote = await Swap(
-                    userKey,
-                    id,
-                    ok.Snapshot,
-                    stored,
-                    stored.LastRequest,
-                    TransitionNote.Save(DraftOwner.User(userKey)),
-                    cancellationToken
-                );
-                return await Persisted(wrote, userKey, id, ok.Snapshot, stored.Json);
+                        userKey,
+                        id,
+                        ok.Snapshot,
+                        stored,
+                        stored.LastRequest,
+                        TransitionNote.Save(DraftOwner.User(userKey)),
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                return await Persisted(wrote, userKey, id, ok.Snapshot, stored.Json)
+                    .ConfigureAwait(false);
 
             case RehydrationResult.Error error:
                 return new AutosaveResult.Rejected(error.Code, error.Message)
@@ -1600,17 +1143,18 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         if (CallerRules.UserOf(actor) is not { } userKey)
             return CallerRules.Forbidden();
         return await AdvanceCore(
-            userKey,
-            id,
-            trigger,
-            input,
-            requestId,
-            clientResult,
-            actor,
-            effectRan: false,
-            expectedToken: null,
-            cancellationToken
-        );
+                userKey,
+                id,
+                trigger,
+                input,
+                requestId,
+                clientResult,
+                actor,
+                effectRan: false,
+                expectedToken: null,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -1635,7 +1179,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 $"The machine '{_machineId}' runs its effect through the runner its registry builds, and this draft "
                     + "service was built on its own. Get the service from ISnapshotMachineRegistry."
             );
-        return await runner.Run(actor, id, requestId, cancellationToken);
+        return await runner.Run(actor, id, requestId, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1715,25 +1259,26 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     )
     {
         var outcome = await AdvanceAndAnswer(
-            userKey,
-            id,
-            trigger,
-            input,
-            requestId,
-            clientResult,
-            actor,
-            effectRan,
-            expectedToken,
-            cancellationToken,
-            effectOwner
-        );
+                userKey,
+                id,
+                trigger,
+                input,
+                requestId,
+                clientResult,
+                actor,
+                effectRan,
+                expectedToken,
+                cancellationToken,
+                effectOwner
+            )
+            .ConfigureAwait(false);
         if (
             outcome is AdvanceOutcome.Advanced advanced
             && EndStates is { } ends
             && ends.Contains(advanced.Snapshot.State)
             && EndNotifier is { } notify
         )
-            await notify(userKey, id, cancellationToken);
+            await notify(userKey, id, cancellationToken).ConfigureAwait(false);
         return outcome;
     }
 
@@ -1752,47 +1297,6 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     )
     {
         var outcome = await AdvanceOnce(
-            userKey,
-            id,
-            trigger,
-            input,
-            requestId,
-            clientResult,
-            actor,
-            effectRan,
-            expectedToken,
-            replayOnly: false,
-            cancellationToken,
-            effectOwner: effectOwner
-        );
-        if (effectOwner is not null)
-            return outcome;
-
-        // Two copies of one request racing each other: the one that lost the write finds the row the winner wrote,
-        // with this request id in its ring, and answers with the result recorded there rather than a conflict. A row
-        // another request wrote is still a conflict: this request is never fired on a state its client did not see.
-        if (outcome is AdvanceOutcome.Conflict && requestId is not null && expectedToken is null)
-            outcome = await AdvanceOnce(
-                userKey,
-                id,
-                trigger,
-                input,
-                requestId,
-                clientResult,
-                actor,
-                effectRan,
-                expectedToken,
-                replayOnly: true,
-                cancellationToken
-            );
-
-        // Another write landed between this request's read and its write: a timer that fired, an outcome, another
-        // client. The request is read once more against what is stored now, and answered only if it is refused there
-        // (an event the new state has no edge for is a no-transition, as the server's snapshot says); one that would
-        // still move the instance stays a conflict, because a request is never fired on a state its client did not
-        // see.
-        if (outcome is AdvanceOutcome.Conflict && expectedToken is null)
-            outcome = await AdvanceOnce(
                 userKey,
                 id,
                 trigger,
@@ -1804,8 +1308,52 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 expectedToken,
                 replayOnly: false,
                 cancellationToken,
-                refusalOnly: true
-            );
+                effectOwner: effectOwner
+            )
+            .ConfigureAwait(false);
+        if (effectOwner is not null)
+            return outcome;
+
+        // Two copies of one request racing each other: the one that lost the write finds the row the winner wrote,
+        // with this request id in its ring, and answers with the result recorded there rather than a conflict. A row
+        // another request wrote is still a conflict: this request is never fired on a state its client did not see.
+        if (outcome is AdvanceOutcome.Conflict && requestId is not null && expectedToken is null)
+            outcome = await AdvanceOnce(
+                    userKey,
+                    id,
+                    trigger,
+                    input,
+                    requestId,
+                    clientResult,
+                    actor,
+                    effectRan,
+                    expectedToken,
+                    replayOnly: true,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+
+        // Another write landed between this request's read and its write: a timer that fired, an outcome, another
+        // client. The request is read once more against what is stored now, and answered only if it is refused there
+        // (an event the new state has no edge for is a no-transition, as the server's snapshot says); one that would
+        // still move the instance stays a conflict, because a request is never fired on a state its client did not
+        // see.
+        if (outcome is AdvanceOutcome.Conflict && expectedToken is null)
+            outcome = await AdvanceOnce(
+                    userKey,
+                    id,
+                    trigger,
+                    input,
+                    requestId,
+                    clientResult,
+                    actor,
+                    effectRan,
+                    expectedToken,
+                    replayOnly: false,
+                    cancellationToken,
+                    refusalOnly: true
+                )
+                .ConfigureAwait(false);
         return outcome;
     }
 
@@ -1852,7 +1400,9 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 $"The input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
 
-        var stored = await store.Get(userKey, _machineId, id, cancellationToken);
+        var stored = await store
+            .Get(userKey, _machineId, id, cancellationToken)
+            .ConfigureAwait(false);
         if (stored is null)
             return new AdvanceOutcome.NotFound();
 
@@ -1903,7 +1453,10 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
         // The caller is told whether they may send the event before anything about the request: a retry is checked
         // against the rule as it is now, so a caller who lost the role is refused rather than replayed.
-        if (actor is not null && await Refusal(actor, trigger, cancellationToken) is { } refused)
+        if (
+            actor is not null
+            && await Refusal(actor, trigger, cancellationToken).ConfigureAwait(false) is { } refused
+        )
             return refused;
 
         // The request as the client sent it: the effect runner's receipt is the server's input, not the client's.
@@ -1944,7 +1497,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 next = transitioned.Snapshot;
                 break;
             default:
-                return new AdvanceOutcome.Rejected(RefusalCode.InternalError, null);
+                return new AdvanceOutcome.Rejected(RefusalCode.InternalError, Detail: null);
         }
 
         if (StorableJson.Problem(next.Context) is { } unstorable)
@@ -1971,15 +1524,17 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
         if (effectOwner is { } owner)
         {
-            var recorded = await Marks!.CompleteEffect(
-                DraftOwner.User(userKey),
-                id,
-                next,
-                stored,
-                Recorded(stored, requestId, fingerprint, trigger, current.State, wire),
-                owner,
-                CancellationToken.None
-            );
+            var recorded = await Marks!
+                .CompleteEffect(
+                    DraftOwner.User(userKey),
+                    id,
+                    next,
+                    stored,
+                    Recorded(stored, requestId, fingerprint, trigger, current.State, wire),
+                    owner,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
             return recorded is { } row
                 ? Advanced(next, stored, row.DueAt)
                 : new AdvanceOutcome.Conflict();
@@ -1987,35 +1542,41 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
         // Entering or leaving an invoking state writes the snapshot together with the run it queues or cancels.
         // A self-loop neither leaves nor enters: the state keeps its run.
-        var leaving = InvokingNames.Contains(current.State) && next.State != current.State;
-        var enteringInvoke = InvokingNames.Contains(next.State) && next.State != current.State;
+        var leaving =
+            InvokingNames.Contains(current.State)
+            && !string.Equals(next.State, current.State, StringComparison.Ordinal);
+        var enteringInvoke =
+            InvokingNames.Contains(next.State)
+            && !string.Equals(next.State, current.State, StringComparison.Ordinal);
         if (leaving || enteringInvoke)
             return await AdvanceInvoking(
+                    userKey,
+                    id,
+                    current,
+                    next,
+                    stored,
+                    Recorded(stored, requestId, fingerprint, trigger, current.State, wire),
+                    leaving,
+                    enteringInvoke,
+                    trigger,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+
+        var updated = await Swap(
                 userKey,
                 id,
-                current,
                 next,
                 stored,
                 Recorded(stored, requestId, fingerprint, trigger, current.State, wire),
-                leaving,
-                enteringInvoke,
-                trigger,
+                TransitionNote.Command(DraftOwner.User(userKey), trigger),
                 cancellationToken
-            );
-
-        var updated = await Swap(
-            userKey,
-            id,
-            next,
-            stored,
-            Recorded(stored, requestId, fingerprint, trigger, current.State, wire),
-            TransitionNote.Command(DraftOwner.User(userKey), trigger),
-            cancellationToken
-        );
+            )
+            .ConfigureAwait(false);
         if (!updated.Ok)
             return new AdvanceOutcome.Conflict();
-        if (next.State == _initialState && Marks is null)
-            await ReleaseSettledClaims(userKey, id, stored.Json);
+        if (string.Equals(next.State, _initialState, StringComparison.Ordinal) && Marks is null)
+            await ReleaseSettledClaims(userKey, id, stored.Json).ConfigureAwait(false);
         return Advanced(next, stored, updated.DueAt);
     }
 
@@ -2056,32 +1617,37 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     + "Get the service from ISnapshotMachineRegistry."
             );
 
-        var write = await invokes.Outbox.Advance(
-            DraftOwner.User(userKey),
-            id,
-            next,
-            stored.Token,
-            request,
-            leaving ? stored.InvokeToken : null,
-            entering
-                ? new EnteringInvoke(
-                    InvokeTrain(next.State),
-                    InvokeInput(next.State),
-                    InvokedRunLimit
-                )
-                {
-                    Spawn = Invoke(next.State).Spawn,
-                }
-                : null,
-            cancellationToken,
-            trigger
-        );
+        var write = await invokes
+            .Outbox.Advance(
+                DraftOwner.User(userKey),
+                id,
+                next,
+                stored.Token,
+                request,
+                leaving ? stored.InvokeToken : null,
+                entering
+                    ? new EnteringInvoke(
+                        InvokeTrain(next.State),
+                        InvokeInput(next.State),
+                        InvokedRunLimit
+                    )
+                    {
+                        Spawn = Invoke(next.State).Spawn,
+                    }
+                    : null,
+                cancellationToken,
+                trigger
+            )
+            .ConfigureAwait(false);
 
         switch (write)
         {
             case InvokeWrite.Written written:
-                if (next.State == _initialState && Marks is null)
-                    await ReleaseSettledClaims(userKey, id, stored.Json);
+                if (
+                    string.Equals(next.State, _initialState, StringComparison.Ordinal)
+                    && Marks is null
+                )
+                    await ReleaseSettledClaims(userKey, id, stored.Json).ConfigureAwait(false);
                 return Advanced(next, stored, written.DueAt);
             case InvokeWrite.Refused refused:
                 return new AdvanceOutcome.Rejected(refused.Code, refused.Message)
@@ -2094,7 +1660,9 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     }
 
     private InvokeDefinition<TState> Invoke(string state) =>
-        machine.Definition.Invokes.Values.First(i => i.State.ToString() == state);
+        machine.Definition.Invokes.Values.First(i =>
+            string.Equals(i.State.ToString(), state, StringComparison.Ordinal)
+        );
 
     private Type InvokeTrain(string state) => Invoke(state).TrainType;
 
@@ -2115,8 +1683,9 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     )
     {
         if (store is EfSnapshotStore ef && loaded is { RowId: { } rowId, Revision: { } revision })
-            return await ef.StillAt(rowId, revision, cancellationToken);
-        return await store.Get(userKey, _machineId, id, cancellationToken) is { } stored
+            return await ef.StillAt(rowId, revision, cancellationToken).ConfigureAwait(false);
+        return await store.Get(userKey, _machineId, id, cancellationToken).ConfigureAwait(false)
+                is { } stored
             && stored.Token == loaded.Token;
     }
 
@@ -2136,9 +1705,17 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         CancellationToken cancellationToken
     )
     {
-        if (await store.Get(userKey, _machineId, id, cancellationToken) is not { } stored)
+        if (
+            await store.Get(userKey, _machineId, id, cancellationToken).ConfigureAwait(false)
+            is not { } stored
+        )
             return null;
-        var retry = Retry(stored, requestId, RequestIdRing.Fingerprint(trigger, null), trigger);
+        var retry = Retry(
+            stored,
+            requestId,
+            RequestIdRing.Fingerprint(trigger, input: null),
+            trigger
+        );
         return retry.Kind switch
         {
             RetryKind.Replay => Replayed(retry.Recorded, current, stored, clientResult: null),
@@ -2205,9 +1782,12 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     // current snapshot.
     private static RetryKind LegacyRetry(AppliedRequest? last, string requestId, string trigger)
     {
-        if (last is null || requestId != last.RequestId)
+        if (last is null || !string.Equals(requestId, last.RequestId, StringComparison.Ordinal))
             return RetryKind.Fire;
-        if (last.Trigger != trigger || last.FromState is null)
+        if (
+            !string.Equals(last.Trigger, trigger, StringComparison.Ordinal)
+            || last.FromState is null
+        )
             return RetryKind.Reused;
         return RetryKind.Replay;
     }

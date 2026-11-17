@@ -3,9 +3,6 @@ using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
-/// <summary>A marker for the checkout's one irreversible effect (resolved from DI in a real host).</summary>
-public interface ICheckoutCharge { }
-
 /// <summary>
 /// The checkout machine authored with the FLUENT builder instead of a hand-written
 /// <see cref="MachineDefinition{TState,TTrigger}"/>. Behavior is identical, so it drives the same shared

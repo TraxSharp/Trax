@@ -34,8 +34,8 @@ internal sealed class RecordingLauncher : IInvokedTrainLauncher
             }
         );
         entry.ExternalId = launch.ExternalId;
-        await context.Track(entry);
-        await context.SaveChanges(cancellationToken);
+        await context.Track(entry).ConfigureAwait(false);
+        await context.SaveChanges(cancellationToken).ConfigureAwait(false);
         Launches.Add(launch);
     }
 }

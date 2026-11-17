@@ -16,7 +16,7 @@ namespace Trax.StateMachine;
 public static class StorableJson
 {
     /// <summary>
-    /// Returns a message naming the first value that cannot be stored, or <c>null</c> when every value
+    /// Returns a message naming the first value that cannot be stored, or <see langword="null"/> when every value
     /// in <paramref name="node"/> can. Never throws.
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
@@ -41,7 +41,7 @@ public static class StorableJson
             case JsonObject obj:
                 foreach (var kv in obj)
                 {
-                    if (kv.Key.Contains('\0'))
+                    if (kv.Key.Contains('\0', StringComparison.Ordinal))
                         return "A key holds a NUL character, which cannot be stored.";
                     if (Walk(kv.Value) is { } problem)
                         return problem;
@@ -62,7 +62,7 @@ public static class StorableJson
         switch (value.GetValueKind())
         {
             case JsonValueKind.String:
-                return value.GetValue<string>().Contains('\0')
+                return value.GetValue<string>().Contains('\0', StringComparison.Ordinal)
                     ? "A string holds a NUL character, which cannot be stored."
                     : null;
             case JsonValueKind.Number:
