@@ -1,0 +1,14 @@
+<Project>
+  <!-- Copies the Amazon RDS CA bundle to trax/rds-global-bundle.pem in the app's build and publish
+       output, so a connection string can name it with Root Certificate=. -->
+  <ItemGroup>
+    <None
+      Include="$(MSBuildThisFileDirectory)rds-global-bundle.pem"
+      Link="trax/rds-global-bundle.pem"
+      CopyToOutputDirectory="PreserveNewest"
+      CopyToPublishDirectory="PreserveNewest"
+      Visible="false"
+      Pack="false"
+    />
+  </ItemGroup>
+</Project>

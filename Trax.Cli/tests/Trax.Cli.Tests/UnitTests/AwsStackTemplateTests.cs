@@ -144,6 +144,23 @@ public class AwsStackTemplateTests
     }
 
     [Test]
+    public void The_connection_string_verifies_the_server()
+    {
+        var template = Build();
+        var env = Properties(template, "HubTaskDefinition")["ContainerDefinitions"]![0]![
+            "Environment"
+        ]!.AsArray();
+
+        var connection = env.Single(e => (string)e!["Name"]! == "ConnectionStrings__Trax")![
+            "Value"
+        ]!["Fn::Sub"]!.GetValue<string>();
+
+        connection.Should().Contain("SSL Mode=VerifyFull;");
+        connection.Should().Contain($"Root Certificate={AwsStack.RdsCaBundle};");
+        AwsStack.RdsCaBundle.Should().Be("/app/trax/rds-global-bundle.pem");
+    }
+
+    [Test]
     public void No_IAM_statement_grants_every_action()
     {
         var text = AwsStack.Compact(Build());

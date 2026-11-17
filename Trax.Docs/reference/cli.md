@@ -757,7 +757,7 @@ needed: the stack is CloudFormation that trax generates, and the images are buil
 | `profile` | `production`: a VPC with private subnets behind one NAT gateway, HTTPS on `domain` with an ACM certificate (HTTP redirects), Postgres 17 `db.t4g.small` Multi-AZ with deletion protection and a final snapshot. `try`: public subnets locked by security groups, no NAT, a `db.t4g.micro` deleted with the stack, served on a CloudFront address with no domain. |
 | `domain`, `hostedZoneId` | Production's host name. With the Route 53 zone, the certificate is validated and the name pointed at the load balancer by the stack; without it, CloudFormation waits for the validation record you add. |
 | `network` | `vpcId`, `cidr`, two or more `publicSubnets` and `privateSubnets`: deploy into an existing VPC instead of creating one. |
-| `databaseSecretArn` | A Secrets Manager secret holding a whole Postgres connection string: use an existing database instead of creating one. |
+| `databaseSecretArn` | A Secrets Manager secret holding a whole Postgres connection string: use an existing database instead of creating one. On RDS, it can verify the server with `SSL Mode=VerifyFull;Root Certificate=/app/trax/rds-global-bundle.pem`, the bundle every image carries. |
 | `auth` | `{ "kind": "cognito" }` creates a user pool, an app client and an `Operator` group, and sets `Auth__Authority` and `Auth__Audience` (`authorityKey`, `audienceKey` rename them). Leave it out to give an existing issuer in `settings`. |
 | `settings` | A value for each name the file lists under `settings`. |
 | `counts` | Copies per service here, over the file's `count`. |
@@ -776,7 +776,9 @@ A deploy:
 
 Every security group replaces the default allow-all egress: the services reach HTTPS and the database, the
 database reaches nothing, and only the load balancer takes traffic from outside, on 443 and 80 in production and
-from CloudFront alone in `try`. Secrets reach a task by reference: the database password from the secret the stack
+from CloudFront alone in `try`. The services connect to the database with `SSL Mode=VerifyFull`, checking its
+certificate against the Amazon RDS CA bundle that `Trax.Effect.Data.Postgres` puts in every image at
+`/app/trax/rds-global-bundle.pem`. Secrets reach a task by reference: the database password from the secret the stack
 generates (never rotated, so a running task does not lose it), each app secret from `<stack>/app/<NAME>`.
 
 In `try`, CloudFront talks to the load balancer over plain HTTP, since the load balancer has no certificate

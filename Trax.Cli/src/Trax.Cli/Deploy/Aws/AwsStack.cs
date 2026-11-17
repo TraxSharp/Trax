@@ -33,6 +33,12 @@ internal static class AwsStack
 
     public const string DatabaseUser = "trax";
 
+    /// <summary>
+    /// Where the image carries the CAs that sign every RDS server certificate. Trax.Effect.Data.Postgres copies the
+    /// bundle to <c>trax/</c> in the app's publish output, which <c>-t:PublishContainer</c> puts in <c>/app</c>.
+    /// </summary>
+    public const string RdsCaBundle = "/app/trax/rds-global-bundle.pem";
+
     // AWS managed policies and CloudFront managed policies, by their fixed ids.
     private const string TaskExecutionPolicy =
         "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy";
@@ -217,7 +223,8 @@ internal static class AwsStack
             AddDatabase(resources, stack, production, serviceSubnets);
             connection = Sub(
                 $"Host=${{Database.Endpoint.Address}};Port=${{Database.Endpoint.Port}};Database={DatabaseName};"
-                    + $"Username={DatabaseUser};SSL Mode=Require;GSS Encryption Mode=Disable"
+                    + $"Username={DatabaseUser};SSL Mode=VerifyFull;Root Certificate={RdsCaBundle};"
+                    + "GSS Encryption Mode=Disable"
             );
         }
 
