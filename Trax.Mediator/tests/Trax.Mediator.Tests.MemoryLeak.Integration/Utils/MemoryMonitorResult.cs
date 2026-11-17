@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.Utils;
 
@@ -40,7 +41,9 @@ public record MemoryMonitorResult(
     /// </summary>
     public string GetSummary()
     {
-        return $"""
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"""
             Memory Monitor Results: {Description}
             Duration: {Duration.TotalMilliseconds:F2}ms
             Memory Allocated: {MemoryAllocated:N0} bytes
@@ -49,6 +52,7 @@ public record MemoryMonitorResult(
             GC Collections: Gen0={After.Gen0Collections
                 - Before.Gen0Collections}, Gen1={After.Gen1Collections
                 - Before.Gen1Collections}, Gen2={After.Gen2Collections - Before.Gen2Collections}
-            """;
+            """
+        );
     }
 }

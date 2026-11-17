@@ -56,7 +56,8 @@ public class PrepareTrainTests
     [Test]
     public async Task It_returns_the_registration_and_the_input_read_as_a_queue_reads_it()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         var prepared = await Execution(scope)
             .PrepareAsync(typeof(IPrepareTrain).FullName!, """{"Label":"x","Count":3}""");
@@ -72,7 +73,8 @@ public class PrepareTrainTests
     [TestCase("  ")]
     public async Task A_blank_input_is_read_as_an_empty_object(string? json)
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         var prepared = await Execution(scope).PrepareAsync(typeof(IPrepareTrain).FullName!, json);
 
@@ -82,7 +84,8 @@ public class PrepareTrainTests
     [Test]
     public async Task A_json_null_a_duplicate_and_an_oversized_input_are_refused()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = Execution(scope);
         var name = typeof(IPrepareTrain).FullName!;
 
@@ -106,7 +109,8 @@ public class PrepareTrainTests
     [Test]
     public async Task An_unknown_train_is_refused_as_QueueAsync_refuses_it()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         await ((Func<Task>)(() => Execution(scope).PrepareAsync("No.Such.Train", "{}")))
             .Should()
@@ -116,7 +120,8 @@ public class PrepareTrainTests
     [Test]
     public async Task Authorization_runs_before_the_input_is_read()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         // Invalid JSON for a gated train on a host with no enforcer: the refusal is the
         // authorization one, so a caller who may not use the train learns nothing about its input.
@@ -134,7 +139,8 @@ public class PrepareTrainTests
     [Test]
     public async Task A_trusted_scope_passes_authorization_as_it_does_for_a_queue()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trusted = scope.ServiceProvider.GetRequiredService<ITrustedExecutionScope>();
 
         using (trusted.BeginTrusted("test.prepare"))

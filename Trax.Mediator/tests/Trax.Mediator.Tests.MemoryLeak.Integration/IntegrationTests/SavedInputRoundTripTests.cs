@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -197,7 +198,8 @@ public class SavedInputRoundTripTests
         var saved = await SaveAsync(Shapes());
         var registration = RegistrationOf<IShapesTrain>();
 
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         var queued = await execution.QueueAsync(
             typeof(IShapesTrain).FullName!,
@@ -205,7 +207,8 @@ public class SavedInputRoundTripTests
         );
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == queued.WorkQueueId);
@@ -322,7 +325,12 @@ public class SavedInputRoundTripTests
     {
         // Saved at exactly the cap, then handed back the way a jsonb column prints it: a space
         // after every colon and comma, which alone puts it over the cap.
-        var tags = string.Join(',', Enumerable.Range(0, 200).Select(i => $"\"t{i}\""));
+        var tags = string.Join(
+            ',',
+            Enumerable
+                .Range(0, 200)
+                .Select(i => string.Create(CultureInfo.InvariantCulture, $"\"t{i}\""))
+        );
         var compact =
             "{\"counts\":[1,2,3],\"tags\":[" + tags + "],\"home\":{\"city\":\"Lyon\",\"zip\":1}}";
         var spaced =

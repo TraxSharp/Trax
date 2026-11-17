@@ -57,17 +57,19 @@ public class SavedInputJsonbTests : TestSetup
         row.Input = JsonSerializer.Serialize(original, legacy);
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using (var context = (IDataContext)factory.Create())
+        var context = (IDataContext)factory.Create();
+        await using (context.ConfigureAwait(false))
         {
             await context.Track(row);
             await context.SaveChanges(CancellationToken.None);
         }
 
         string saved;
-        using (var context = (IDataContext)factory.Create())
+        var readContext = (IDataContext)factory.Create();
+        await using (readContext.ConfigureAwait(false))
         {
             saved = (
-                await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == row.Id)
+                await readContext.Metadatas.AsNoTracking().SingleAsync(m => m.Id == row.Id)
             ).Input!;
         }
 

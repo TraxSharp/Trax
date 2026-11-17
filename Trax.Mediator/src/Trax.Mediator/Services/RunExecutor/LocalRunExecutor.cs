@@ -121,9 +121,10 @@ public class LocalRunExecutor : IRunExecutor
                 }
             );
 
-            using var dataContext = await dataContextFactory
+            var dataContext = await dataContextFactory
                 .CreateDbContextAsync(token)
                 .ConfigureAwait(false);
+            await using var dataContextDisposal = dataContext.ConfigureAwait(false);
             await dataContext.Track(metadata).ConfigureAwait(false);
             await dataContext.SaveChanges(token).ConfigureAwait(false);
 
@@ -241,9 +242,10 @@ public class LocalRunExecutor : IRunExecutor
         TrainState closed;
         try
         {
-            using var dataContext = await dataContextFactory
+            var dataContext = await dataContextFactory
                 .CreateDbContextAsync(CancellationToken.None)
                 .ConfigureAwait(false);
+            await using var dataContextDisposal = dataContext.ConfigureAwait(false);
 
             var metadata = await dataContext
                 .Metadatas.FirstOrDefaultAsync(m => m.Id == metadataId, CancellationToken.None)

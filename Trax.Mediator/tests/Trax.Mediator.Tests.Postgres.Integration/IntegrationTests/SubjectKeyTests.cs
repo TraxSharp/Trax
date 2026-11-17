@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,9 +32,10 @@ public class SubjectKeyTests : TestSetup
     private async Task<WorkQueue?> EntryAsync(long id)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .WorkQueues.AsNoTracking()
             .FirstOrDefaultAsync(w => w.Id == id)
@@ -44,7 +46,8 @@ public class SubjectKeyTests : TestSetup
     public async Task ResetAsync()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context
             .WorkQueues.Where(w => w.TrainName!.Contains("SubjectKeyTests"))
             .ExecuteDeleteAsync();
@@ -104,7 +107,8 @@ public class SubjectKeyTests : TestSetup
         );
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("ThrowingKeyTrain")))
             .Should()
             .Be(0, "an aborted enqueue leaves no entry");
@@ -158,7 +162,8 @@ public class SubjectKeyTests : TestSetup
         );
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("SubjectKeyTests")))
             .Should()
             .Be(0, "a refused key writes no entry");
@@ -302,7 +307,8 @@ public class SubjectKeyTests : TestSetup
     /// </summary>
     private async Task<bool> ClaimAndDispatchAsync(long workQueueId)
     {
-        using var scope = Scope.ServiceProvider.CreateScope();
+        var scope = Scope.ServiceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var dialect = scope.ServiceProvider.GetRequiredService<ISqlDialect>();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var database = (DbContext)dataContext;
@@ -396,7 +402,10 @@ public class SubjectKeyTests : TestSetup
     public class KeyedTrain : ServiceTrain<KeyedInput, Unit>, IKeyedTrain
     {
         protected override string? QueueSubjectKey(Metadata metadata) =>
-            $"customer-{metadata.GetInput<KeyedInput>()!.CustomerId}";
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"customer-{metadata.GetInput<KeyedInput>()!.CustomerId}"
+            );
 
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);

@@ -79,7 +79,8 @@ public class QueueHookTimeLimitTests : TestSetup
         HangingProbe.Reset();
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context
             .WorkQueues.Where(w =>
                 w.TrainName!.Contains("QueueHookTimeLimitTests")
@@ -95,9 +96,10 @@ public class QueueHookTimeLimitTests : TestSetup
     private async Task<int> RowsAsync(string trainNameFragment)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .WorkQueues.CountAsync(w => w.TrainName!.Contains(trainNameFragment))
             .ConfigureAwait(false);
@@ -106,7 +108,8 @@ public class QueueHookTimeLimitTests : TestSetup
     [Test]
     public async Task Hooks_that_never_return_fail_their_enqueues_and_free_the_pool()
     {
-        using var scope = _limited.CreateScope();
+        var scope = _limited.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var hung = Task.WhenAll(
@@ -135,7 +138,8 @@ public class QueueHookTimeLimitTests : TestSetup
     [Test]
     public async Task A_write_the_hook_flushed_before_the_limit_is_rolled_back()
     {
-        using var scope = _limited.CreateScope();
+        var scope = _limited.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = async () =>
@@ -159,7 +163,8 @@ public class QueueHookTimeLimitTests : TestSetup
     [Test]
     public async Task The_hook_token_is_cancelled_at_the_limit()
     {
-        using var scope = _limited.CreateScope();
+        var scope = _limited.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = async () =>
@@ -177,7 +182,8 @@ public class QueueHookTimeLimitTests : TestSetup
     [Test]
     public async Task An_enqueue_a_hook_starts_after_the_limit_is_refused()
     {
-        using var scope = _limited.CreateScope();
+        var scope = _limited.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         LateEnqueueTrain.Execution = execution;
 
@@ -204,7 +210,8 @@ public class QueueHookTimeLimitTests : TestSetup
     [Test]
     public async Task A_hook_within_the_limit_is_unaffected()
     {
-        using var scope = _limited.CreateScope();
+        var scope = _limited.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var result = await execution.QueueAsync(typeof(IQuickTrain).FullName!, "{}");
@@ -334,7 +341,7 @@ public class QueueHookTimeLimitTests : TestSetup
             {
                 Nested.TrySetResult(
                     await Execution!
-                        .QueueAsync(typeof(IQuickTrain).FullName!, "{}")
+                        .QueueAsync(typeof(IQuickTrain).FullName!, "{}", ct: CancellationToken.None)
                         .ConfigureAwait(false)
                 );
             }

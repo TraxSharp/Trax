@@ -23,7 +23,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
@@ -59,7 +60,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var config = new TestManifestProperties
         {
@@ -110,7 +112,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
@@ -148,7 +151,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var initialConfig = new TestManifestProperties
         {
@@ -210,7 +214,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var config = new TestManifestProperties
         {
@@ -254,7 +259,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
@@ -319,7 +325,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
@@ -395,7 +402,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
@@ -436,7 +444,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
@@ -478,7 +487,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
@@ -521,7 +531,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
@@ -570,7 +581,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
@@ -613,7 +625,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
@@ -656,7 +669,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
@@ -701,7 +715,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
@@ -758,7 +773,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var scheduledTime = DateTime.UtcNow.AddMinutes(-5);
         var metadata = Metadata.Create(
@@ -817,7 +833,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var config = new TestManifestPropertiesWithEnum
         {
@@ -864,7 +881,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var config = new TestManifestPropertiesWithEnum
         {
@@ -912,7 +930,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var config = new TestManifestPropertiesWithEnum
         {

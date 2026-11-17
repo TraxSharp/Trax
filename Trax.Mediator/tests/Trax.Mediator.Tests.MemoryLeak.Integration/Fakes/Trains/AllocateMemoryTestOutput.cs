@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Services.ServiceTrain;
@@ -22,8 +23,10 @@ internal sealed class AllocateMemoryTestOutput : Junction<MemoryTestInput, Memor
             ProcessedAt = DateTime.UtcNow,
             ProcessedData = new string('X', input.DataSizeBytes),
             Success = true,
-            Message =
-                $"Successfully processed train {input.Id} with {input.DataSizeBytes} bytes of data",
+            Message = string.Create(
+                CultureInfo.InvariantCulture,
+                $"Successfully processed train {input.Id} with {input.DataSizeBytes} bytes of data"
+            ),
         };
     }
 }

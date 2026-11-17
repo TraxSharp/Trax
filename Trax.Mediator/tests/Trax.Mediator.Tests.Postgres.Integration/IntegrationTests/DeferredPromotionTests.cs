@@ -44,9 +44,10 @@ public class DeferredPromotionTests : TestSetup
     private async Task<WorkQueue?> EntryAsync(long id)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .WorkQueues.AsNoTracking()
             .FirstOrDefaultAsync(w => w.Id == id)
@@ -56,9 +57,10 @@ public class DeferredPromotionTests : TestSetup
     private async Task<long> InsertUnconfirmedAsync(DateTime createdAt)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
@@ -79,7 +81,8 @@ public class DeferredPromotionTests : TestSetup
     {
         Observed.Clear();
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context
             .WorkQueues.Where(w =>
                 w.TrainName!.Contains("DeferTx") || w.TrainName!.Contains("DeferredPromotionTests")
@@ -167,7 +170,8 @@ public class DeferredPromotionTests : TestSetup
         (await act.Should().ThrowAsync<Exception>()).WithMessage("*hook rejected*");
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("DeferringThrowTrain")))
             .Should()
             .Be(0, "a rejected mutation leaves no trace — the staged entry is removed");
@@ -252,7 +256,8 @@ public class DeferredPromotionTests : TestSetup
         var id = await InsertUnconfirmedAsync(DateTime.UtcNow);
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using (var context = await factory.CreateDbContextAsync(CancellationToken.None))
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using (context.ConfigureAwait(false))
             await context
                 .WorkQueues.Where(w => w.Id == id)
                 .ExecuteUpdateAsync(u => u.SetProperty(w => w.Status, WorkQueueStatus.Cancelled));
@@ -301,8 +306,14 @@ public class DeferredPromotionTests : TestSetup
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("CancelDuringTrain")))
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        (
+            await context.WorkQueues.CountAsync(
+                w => w.TrainName!.Contains("CancelDuringTrain"),
+                cancellationToken: CancellationToken.None
+            )
+        )
             .Should()
             .Be(
                 0,
@@ -371,7 +382,8 @@ public class DeferredPromotionTests : TestSetup
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*after promotion*");
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("PromotedThenThrowsTrain")))
             .Should()
             .Be(
@@ -470,7 +482,8 @@ public class DeferredPromotionTests : TestSetup
 
             // Read the entry back on a fresh connection: the staging commit has landed, so the
             // row exists and must still be unconfirmed at this point.
-            using var context = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var context = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             var row = await context
                 .WorkQueues.AsNoTracking()
                 .FirstOrDefaultAsync(w => w.ExternalId == metadata.ExternalId, ct)
@@ -514,11 +527,11 @@ public class DeferredPromotionTests : TestSetup
     {
         protected override bool DeferQueuePromotion => true;
 
-        protected override Task OnQueue(Metadata metadata, CancellationToken ct)
+        protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
             // The hook succeeds, and the caller gives up before promotion runs.
-            Observed.CancelCallerAfterHook?.Cancel();
-            return Task.CompletedTask;
+            if (Observed.CancelCallerAfterHook is { } caller)
+                await caller.CancelAsync().ConfigureAwait(false);
         }
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
@@ -532,11 +545,11 @@ public class DeferredPromotionTests : TestSetup
     {
         protected override bool DeferQueuePromotion => true;
 
-        protected override Task OnQueue(Metadata metadata, CancellationToken ct)
+        protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            Observed.CancelCallerDuringHook?.Cancel();
+            if (Observed.CancelCallerDuringHook is { } caller)
+                await caller.CancelAsync().ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
-            return Task.CompletedTask;
         }
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
@@ -563,7 +576,8 @@ public class DeferredPromotionTests : TestSetup
         // What an operator, or the stale-entry sweep, does while a slow hook is still running.
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            using var context = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var context = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             await context
                 .WorkQueues.Where(w => w.ExternalId == metadata.ExternalId)
                 .ExecuteUpdateAsync(
@@ -588,7 +602,8 @@ public class DeferredPromotionTests : TestSetup
         // What an opted-in promoting sweep does to a slow hook's entry, before the hook fails.
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            using var context = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var context = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             await context
                 .WorkQueues.Where(w => w.ExternalId == metadata.ExternalId)
                 .ExecuteUpdateAsync(u => u.SetProperty(w => w.ConfirmedAt, DateTime.UtcNow), ct)
@@ -616,7 +631,8 @@ public class DeferredPromotionTests : TestSetup
         // What an opted-in promoting sweep does to a slow hook's entry; the hook then succeeds.
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            using var context = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var context = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             await context
                 .WorkQueues.Where(w => w.ExternalId == metadata.ExternalId)
                 .ExecuteUpdateAsync(u => u.SetProperty(w => w.ConfirmedAt, DateTime.UtcNow), ct)

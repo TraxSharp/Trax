@@ -61,7 +61,8 @@ public class DataContextLoggingProviderTests : TestSetup
 
         while (DateTime.UtcNow < deadline)
         {
-            using var context = (IDataContext)factory.Create();
+            var context = (IDataContext)factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             count = await context
                 .Logs.Where(l => l.Category == category)
                 .CountAsync(cts.Token)
@@ -94,7 +95,8 @@ public class DataContextLoggingProviderTests : TestSetup
 
             count.Should().Be(logCount);
 
-            using var context = (IDataContext)factory.Create();
+            var context = (IDataContext)factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             var sample = await context.Logs.FirstAsync(l => l.Category == "Test.BulkPersistence");
             sample.Message.Should().Contain("Bulk log");
             sample.Level.Should().Be(LogLevel.Information);
@@ -124,7 +126,8 @@ public class DataContextLoggingProviderTests : TestSetup
             var truncatedCategory = new string('C', 500);
             await WaitForLogCount(factory, truncatedCategory, 1);
 
-            using var context = (IDataContext)factory.Create();
+            var context = (IDataContext)factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             var log = await context.Logs.FirstAsync(l => l.Category == truncatedCategory);
 
             log.Message.Should().HaveLength(4000);
@@ -215,7 +218,8 @@ public class DataContextLoggingProviderTests : TestSetup
             // Wait for the allowed logs to flush
             await WaitForLogCount(factory, "Test.Allowed", 5);
 
-            using var context = (IDataContext)factory.Create();
+            var context = (IDataContext)factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             var logs = await context
                 .Logs.Where(l =>
                     l.Category == "Test.Blacklisted"

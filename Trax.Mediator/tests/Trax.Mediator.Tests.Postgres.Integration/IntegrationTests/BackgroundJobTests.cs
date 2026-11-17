@@ -71,7 +71,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 1 });
 
@@ -96,7 +97,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var job = BackgroundJob.Create(
             new CreateBackgroundJob
@@ -126,7 +128,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var job1 = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 10 });
         var job2 = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 20 });
@@ -152,7 +155,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var job = BackgroundJob.Create(
             new CreateBackgroundJob
@@ -184,7 +188,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var complexJson =
             """{"name":"test","nested":{"key":"value","numbers":[1,2,3]},"enabled":true}""";
@@ -221,7 +226,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 5 });
 
@@ -247,7 +253,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 6 });
 
@@ -268,7 +275,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 7 });
         await context.Track(job);
@@ -293,7 +301,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 8 });
         await context.Track(job);
@@ -325,7 +334,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 9 });
         await context.Track(job);
@@ -354,7 +364,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var availableJob = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 10 });
         var claimedJob = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 11 });
@@ -381,7 +392,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var job1 = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 12 });
         await context.Track(job1);
@@ -411,7 +423,8 @@ public class BackgroundJobTests : TestSetup
     {
         // Arrange
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var job1 = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 100 });
         var job2 = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 200 });

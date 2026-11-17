@@ -66,7 +66,8 @@ public class HookConnectionPoolTests : TestSetup
     {
         GatedProbe.Reset(expected: 2);
 
-        using var scope = _smallPool.CreateScope();
+        var scope = _smallPool.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var outers = Task.WhenAll(
@@ -97,7 +98,8 @@ public class HookConnectionPoolTests : TestSetup
             );
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         (await context.WorkQueues.CountAsync(w => w.TrainName == typeof(IPoolLeafTrain).FullName))
             .Should()
             .Be(3, "two nested entries and the unrelated one");

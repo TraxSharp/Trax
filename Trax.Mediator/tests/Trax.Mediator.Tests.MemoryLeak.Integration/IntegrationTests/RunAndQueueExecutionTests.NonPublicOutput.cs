@@ -11,7 +11,8 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task RunAsync_TrainWhoseOutputTypeIsNotPublic_ReturnsItsOutput()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = () =>

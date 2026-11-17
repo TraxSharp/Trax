@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
@@ -14,6 +15,10 @@ public class LargeDataJunction : Junction<LargeDataModel, SimpleOutput>
     {
         // Simulate some processing
         var processedSize = input.Data.Length;
-        return Task.FromResult(new SimpleOutput($"Processed {processedSize} bytes"));
+        return Task.FromResult(
+            new SimpleOutput(
+                string.Create(CultureInfo.InvariantCulture, $"Processed {processedSize} bytes")
+            )
+        );
     }
 }

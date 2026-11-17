@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Models.Metadata;
@@ -104,7 +105,7 @@ public class MetadataDisposalTests
             {
                 for (int i = 0; i < 20; i++)
                 {
-                    var serviceProviderScope = _serviceProvider.CreateScope();
+                    var serviceProviderScope = _serviceProvider.CreateAsyncScope();
 
                     try
                     {
@@ -112,7 +113,7 @@ public class MetadataDisposalTests
                             serviceProviderScope.ServiceProvider.GetRequiredService<IMemoryTestTrain>();
 
                         var testInput = MemoryTestModelFactory.CreateInput(
-                            $"success_test_{i}",
+                            string.Create(CultureInfo.InvariantCulture, $"success_test_{i}"),
                             dataSizeBytes: 100_000,
                             processingDelayMs: 0
                         ); // 100KB each
@@ -122,7 +123,7 @@ public class MetadataDisposalTests
                     finally
                     {
                         // Scope disposal triggers EffectTrain.Dispose() which should clear Memory
-                        serviceProviderScope.Dispose();
+                        await serviceProviderScope.DisposeAsync().ConfigureAwait(false);
                     }
                 }
             },
@@ -159,7 +160,7 @@ public class MetadataDisposalTests
 
         for (int i = 0; i < 30; i++)
         {
-            var serviceProviderScope = _serviceProvider.CreateScope();
+            var serviceProviderScope = _serviceProvider.CreateAsyncScope();
 
             try
             {
@@ -169,7 +170,7 @@ public class MetadataDisposalTests
                 weakReferences.Add(new WeakReference(train));
 
                 var testInput = MemoryTestModelFactory.CreateInput(
-                    $"gc_test_{i}",
+                    string.Create(CultureInfo.InvariantCulture, $"gc_test_{i}"),
                     dataSizeBytes: 50_000,
                     processingDelayMs: 0
                 ); // 50KB each
@@ -178,7 +179,7 @@ public class MetadataDisposalTests
             }
             finally
             {
-                serviceProviderScope.Dispose();
+                await serviceProviderScope.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -191,7 +192,10 @@ public class MetadataDisposalTests
 
         var aliveCount = weakReferences.Count(wr => wr.IsAlive);
         Console.WriteLine(
-            $"EffectTrains still alive after scope disposal + GC: {aliveCount}/{weakReferences.Count}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"EffectTrains still alive after scope disposal + GC: {aliveCount}/{weakReferences.Count}"
+            )
         );
 
         aliveCount
@@ -213,7 +217,7 @@ public class MetadataDisposalTests
             {
                 for (int i = 0; i < 15; i++)
                 {
-                    var serviceProviderScope = _serviceProvider.CreateScope();
+                    var serviceProviderScope = _serviceProvider.CreateAsyncScope();
 
                     try
                     {
@@ -221,7 +225,7 @@ public class MetadataDisposalTests
                             serviceProviderScope.ServiceProvider.GetRequiredService<IFailingTestTrain>();
 
                         var testInput = MemoryTestModelFactory.CreateFailingInput(
-                            $"failing_test_{i}",
+                            string.Create(CultureInfo.InvariantCulture, $"failing_test_{i}"),
                             dataSizeBytes: 100000
                         ); // 100KB each
 
@@ -234,7 +238,7 @@ public class MetadataDisposalTests
                     finally
                     {
                         // Always dispose the scope, even when train fails
-                        serviceProviderScope.Dispose();
+                        await serviceProviderScope.DisposeAsync().ConfigureAwait(false);
                     }
                 }
             },

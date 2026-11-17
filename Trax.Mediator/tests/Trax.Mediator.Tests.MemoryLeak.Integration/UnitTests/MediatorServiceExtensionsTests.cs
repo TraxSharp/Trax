@@ -284,9 +284,10 @@ public class MediatorServiceExtensionsTests
         services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
         services.AddServiceTrainBus(ServiceLifetime.Transient, typeof(ITrainBus).Assembly);
 
-        await using var provider = services.BuildServiceProvider(
+        var provider = services.BuildServiceProvider(
             new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }
         );
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var config = provider.GetRequiredService<MediatorConfiguration>();
         config.TrainLifetime.Should().Be(ServiceLifetime.Transient);
@@ -299,7 +300,8 @@ public class MediatorServiceExtensionsTests
         foreach (var hosted in provider.GetServices<IHostedService>())
             await hosted.StartAsync(CancellationToken.None);
 
-        await using var scope = provider.CreateAsyncScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         scope
             .ServiceProvider.GetRequiredService<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
             .Should()
@@ -484,7 +486,8 @@ public class MediatorServiceExtensionsTests
         var provider = services.BuildServiceProvider();
 
         // Resolve the interfaceless train so DI tracks it
-        using (var scope = provider.CreateScope())
+        var scope = provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             scope.ServiceProvider.GetRequiredService<
                 IServiceTrain<InterfacelessTestInput, InterfacelessTestOutput>

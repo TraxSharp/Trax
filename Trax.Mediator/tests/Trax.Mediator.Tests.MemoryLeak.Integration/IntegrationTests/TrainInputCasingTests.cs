@@ -53,16 +53,18 @@ public class TrainInputCasingTests
 
     private async Task<PaymentInput> QueuedInputAsync(string json)
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         var result = await execution
             .QueueAsync(typeof(IPaymentTrain).FullName!, json)
             .ConfigureAwait(false);
 
         var factory = _serviceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == result.WorkQueueId)
@@ -96,7 +98,8 @@ public class TrainInputCasingTests
     [TestCase("""{"amount":1,"amount":999}""")]
     public async Task A_property_given_twice_is_refused_at_enqueue(string json)
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var queue = async () =>
@@ -113,7 +116,8 @@ public class TrainInputCasingTests
         await run.Should().ThrowAsync<JsonException>("RunAsync reads input the same way");
 
         var factory = _serviceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         (await context.WorkQueues.CountAsync()).Should().Be(0, "a refused input writes nothing");
     }
 

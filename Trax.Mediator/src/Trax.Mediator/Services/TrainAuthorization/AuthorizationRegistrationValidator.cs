@@ -62,12 +62,6 @@ internal sealed class AuthorizationRegistrationValidator(
         // an implementation may be disposable only asynchronously, and disposing that scope
         // synchronously throws.
         var scope = serviceProvider.CreateAsyncScope();
-
-        // ITrainAuthorizationService is registered Scoped, so we must resolve it
-        // inside a scope. Startup runs against the root provider, which trips
-        // ServiceProvider's scope validation in dev / test hosts. Disposed asynchronously, because
-        // an implementation may be disposable only asynchronously, and disposing that scope
-        // synchronously throws.
         await using (scope.ConfigureAwait(false))
         {
             var authService = scope.ServiceProvider.GetService<ITrainAuthorizationService>();

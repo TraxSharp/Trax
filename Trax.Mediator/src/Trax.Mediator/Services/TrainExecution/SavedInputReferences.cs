@@ -86,7 +86,11 @@ internal static class SavedInputReferences
     /// <exception cref="TrainInputValidationException">
     /// The plain form is larger than <paramref name="maxBytes"/>.
     /// </exception>
-    public static string Resolve(string json, TrainRegistration registration, int maxBytes)
+    public static async Task<string> ResolveAsync(
+        string json,
+        TrainRegistration registration,
+        int maxBytes
+    )
     {
         using var document = JsonDocument.Parse(json, DocumentOptions);
 
@@ -94,11 +98,12 @@ internal static class SavedInputReferences
         Collect(document.RootElement, ids);
 
         var buffer = new ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer, WriterOptions))
+        var writer = new Utf8JsonWriter(buffer, WriterOptions);
+        await using (writer.ConfigureAwait(false))
         {
             var resolver = new Resolver(writer, ids, registration, maxBytes);
             resolver.Write(document.RootElement, depth: 0);
-            writer.Flush();
+            await writer.FlushAsync().ConfigureAwait(false);
             resolver.CheckSize();
         }
 
@@ -118,15 +123,20 @@ internal static class SavedInputReferences
     /// <exception cref="TrainInputValidationException">
     /// The compact form is larger than <paramref name="maxBytes"/>.
     /// </exception>
-    public static string Compact(string json, TrainRegistration registration, int maxBytes)
+    public static async Task<string> CompactAsync(
+        string json,
+        TrainRegistration registration,
+        int maxBytes
+    )
     {
         using var document = JsonDocument.Parse(json, DocumentOptions);
 
         var buffer = new ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer, WriterOptions))
+        var writer = new Utf8JsonWriter(buffer, WriterOptions);
+        await using (writer.ConfigureAwait(false))
         {
             document.RootElement.WriteTo(writer);
-            writer.Flush();
+            await writer.FlushAsync().ConfigureAwait(false);
         }
 
         if (buffer.WrittenCount > maxBytes)

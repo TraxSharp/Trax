@@ -109,11 +109,9 @@ public class TrainExecutionService(
 
         // Measured before the entry exists: the stored form is written indented and with every
         // member present, so it is capped too, not only the caller's text.
-        var serializedInput = TrainInputReader.WriteForStorage(
-            input,
-            registration,
-            mediatorConfiguration.MaxInputJsonBytes
-        );
+        var serializedInput = await TrainInputReader
+            .WriteForStorageAsync(input, registration, mediatorConfiguration.MaxInputJsonBytes)
+            .ConfigureAwait(false);
 
         // The train is resolved at most once per enqueue, in a scope of its own that is disposed
         // when the enqueue returns. The caller's scope can live as long as a Blazor circuit, so
@@ -121,12 +119,6 @@ public class TrainExecutionService(
         // the tab, and a scoped DbContext a hook left a failed write in failed every later
         // enqueue of the train from that tab.
         var train = new EnqueueTrain(serviceProvider, registration);
-
-        // The train is resolved at most once per enqueue, in a scope of its own that is disposed
-        // when the enqueue returns. The caller's scope can live as long as a Blazor circuit, so
-        // resolving from it kept every train and its scoped dependencies alive for the life of
-        // the tab, and a scoped DbContext a hook left a failed write in failed every later
-        // enqueue of the train from that tab.
         await using (train.ConfigureAwait(false))
         {
             // An enqueue started from inside another train's OnQueue hook joins that enqueue's
@@ -184,9 +176,10 @@ public class TrainExecutionService(
                 return await QueueWithDeferredPromotionAsync(registration, train, input, entry, ct)
                     .ConfigureAwait(false);
 
-            using var dataContext = await dataContextFactory
+            var dataContext = await dataContextFactory
                 .CreateDbContextAsync(ct)
                 .ConfigureAwait(false);
+            await using var dataContextDisposal = dataContext.ConfigureAwait(false);
 
             // Queue-time hook: fire OnQueue before the work queue row is inserted, so a consumer
             // can perform a side-effect (e.g. an optimistic shadow write) the moment the mutation
@@ -359,11 +352,13 @@ public class TrainExecutionService(
 
         registration.ServiceType.FullName.AssertLoaded();
 
-        var serializedInput = TrainInputReader.WriteForStorage(
-            launch.Input,
-            registration,
-            mediatorConfiguration.MaxInputJsonBytes
-        );
+        var serializedInput = await TrainInputReader
+            .WriteForStorageAsync(
+                launch.Input,
+                registration,
+                mediatorConfiguration.MaxInputJsonBytes
+            )
+            .ConfigureAwait(false);
 
         var train = new EnqueueTrain(serviceProvider, registration);
         await using (train.ConfigureAwait(false))
@@ -683,11 +678,10 @@ public class TrainExecutionService(
         CancellationToken ct
     )
     {
-        using (
-            var stagingContext = await dataContextFactory
-                .CreateDbContextAsync(ct)
-                .ConfigureAwait(false)
-        )
+        var stagingContext = await dataContextFactory
+            .CreateDbContextAsync(ct)
+            .ConfigureAwait(false);
+        await using (stagingContext.ConfigureAwait(false))
         {
             await stagingContext.Track(entry).ConfigureAwait(false);
             await stagingContext.SaveChanges(ct).ConfigureAwait(false);
@@ -751,9 +745,10 @@ public class TrainExecutionService(
     /// </summary>
     private async Task<bool> WasConfirmedElsewhereAsync(long workQueueId)
     {
-        using var context = await dataContextFactory
+        var context = await dataContextFactory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         return await context
             .WorkQueues.AsNoTracking()
@@ -772,9 +767,10 @@ public class TrainExecutionService(
     /// </summary>
     private async Task RemoveStagedEntryAsync(long workQueueId)
     {
-        using var context = await dataContextFactory
+        var context = await dataContextFactory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         // Only an entry that is still staged. One the sweep promoted may already be dispatched
         // and running, and deleting it would orphan the run and free its subject.

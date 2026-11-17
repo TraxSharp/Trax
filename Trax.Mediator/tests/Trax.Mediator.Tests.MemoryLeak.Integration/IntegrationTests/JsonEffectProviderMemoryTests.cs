@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -41,19 +42,31 @@ public class JsonEffectProviderMemoryTests
                     // Track multiple models
                     for (int j = 0; j < 20; j++)
                     {
-                        var metadata = new Metadata { Name = $"TestMetadata_{i}_{j}" };
+                        var metadata = new Metadata
+                        {
+                            Name = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"TestMetadata_{i}_{j}"
+                            ),
+                        };
                         metadata.SetInputObject(
                             MemoryTestModelFactory.CreateInput(
-                                id: $"Input_{i}_{j}",
+                                id: string.Create(CultureInfo.InvariantCulture, $"Input_{i}_{j}"),
                                 dataSizeBytes: 1000,
-                                description: $"Test input {i}_{j}"
+                                description: string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Test input {i}_{j}"
+                                )
                             )
                         );
                         metadata.SetOutputObject(
                             new MemoryTestOutput
                             {
-                                Id = $"Output_{i}_{j}",
-                                Message = $"Test output {i}_{j}",
+                                Id = string.Create(CultureInfo.InvariantCulture, $"Output_{i}_{j}"),
+                                Message = string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Test output {i}_{j}"
+                                ),
                                 ProcessedData = new string('X', 500), // 500 characters
                                 Success = true,
                                 ProcessedAt = DateTime.UtcNow,
@@ -106,19 +119,28 @@ public class JsonEffectProviderMemoryTests
                 // Track many models with large JSON serialization
                 for (int i = 0; i < 100; i++)
                 {
-                    var metadata = new Metadata { Name = $"AccumulationTest_{i}" };
+                    var metadata = new Metadata
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"AccumulationTest_{i}"),
+                    };
                     metadata.SetInputObject(
                         MemoryTestModelFactory.CreateInput(
-                            id: $"LargeInput_{i}",
+                            id: string.Create(CultureInfo.InvariantCulture, $"LargeInput_{i}"),
                             dataSizeBytes: 5000,
-                            description: $"Large input {i}"
+                            description: string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Large input {i}"
+                            )
                         )
                     );
                     metadata.SetOutputObject(
                         new MemoryTestOutput
                         {
-                            Id = $"LargeOutput_{i}",
-                            Message = $"Large output {i}",
+                            Id = string.Create(CultureInfo.InvariantCulture, $"LargeOutput_{i}"),
+                            Message = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Large output {i}"
+                            ),
                             ProcessedData = new string('Y', 2000), // 2KB string
                             Success = true,
                             ProcessedAt = DateTime.UtcNow,
@@ -153,7 +175,12 @@ public class JsonEffectProviderMemoryTests
         await Task.Delay(100); // Give GC time to work
 
         var aliveModels = modelReferences.Count(wr => wr.IsAlive);
-        Console.WriteLine($"Models still alive after GC: {aliveModels}/{modelReferences.Count}");
+        Console.WriteLine(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Models still alive after GC: {aliveModels}/{modelReferences.Count}"
+            )
+        );
 
         aliveModels
             .Should()
@@ -183,12 +210,24 @@ public class JsonEffectProviderMemoryTests
                     {
                         for (int i = 0; i < 25; i++)
                         {
-                            var metadata = new Metadata { Name = $"ConcurrentTest_{taskId}_{i}" };
+                            var metadata = new Metadata
+                            {
+                                Name = string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"ConcurrentTest_{taskId}_{i}"
+                                ),
+                            };
                             metadata.SetInputObject(
                                 MemoryTestModelFactory.CreateInput(
-                                    id: $"ConcurrentInput_{taskId}_{i}",
+                                    id: string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"ConcurrentInput_{taskId}_{i}"
+                                    ),
                                     dataSizeBytes: 2000,
-                                    description: $"Concurrent input {taskId}_{i}"
+                                    description: string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"Concurrent input {taskId}_{i}"
+                                    )
                                 )
                             );
 
@@ -200,8 +239,14 @@ public class JsonEffectProviderMemoryTests
                             metadata.SetOutputObject(
                                 new MemoryTestOutput
                                 {
-                                    Id = $"ConcurrentOutput_{taskId}_{i}",
-                                    Message = $"Concurrent output {taskId}_{i}",
+                                    Id = string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"ConcurrentOutput_{taskId}_{i}"
+                                    ),
+                                    Message = string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"Concurrent output {taskId}_{i}"
+                                    ),
                                     ProcessedData = new string('Z', 1000), // 1KB string
                                     Success = true,
                                     ProcessedAt = DateTime.UtcNow,
@@ -249,12 +294,18 @@ public class JsonEffectProviderMemoryTests
                 var metadataList = new List<Metadata>();
                 for (int i = 0; i < 10; i++)
                 {
-                    var metadata = new Metadata { Name = $"RepeatedTest_{i}" };
+                    var metadata = new Metadata
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"RepeatedTest_{i}"),
+                    };
                     metadata.SetInputObject(
                         MemoryTestModelFactory.CreateInput(
-                            id: $"Input_{i}",
+                            id: string.Create(CultureInfo.InvariantCulture, $"Input_{i}"),
                             dataSizeBytes: 3000,
-                            description: $"Repeated input {i}"
+                            description: string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Repeated input {i}"
+                            )
                         )
                     );
 
@@ -272,8 +323,14 @@ public class JsonEffectProviderMemoryTests
                         metadata.SetOutputObject(
                             new MemoryTestOutput
                             {
-                                Id = $"Iteration_{iteration}_Output",
-                                Message = $"Iteration {iteration} output",
+                                Id = string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Iteration_{iteration}_Output"
+                                ),
+                                Message = string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Iteration {iteration} output"
+                                ),
                                 ProcessedData = new string(iterationChar, 1500), // 1.5KB string
                                 Success = true,
                                 ProcessedAt = DateTime.UtcNow,
@@ -340,19 +397,28 @@ public class JsonEffectProviderMemoryTests
                 // Track models with very large serializable data
                 for (int i = 0; i < 20; i++)
                 {
-                    var metadata = new Metadata { Name = $"LargeObjectTest_{i}" };
+                    var metadata = new Metadata
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"LargeObjectTest_{i}"),
+                    };
                     metadata.SetInputObject(
                         MemoryTestModelFactory.CreateInput(
-                            id: $"LargeInput_{i}",
+                            id: string.Create(CultureInfo.InvariantCulture, $"LargeInput_{i}"),
                             dataSizeBytes: 50_000,
-                            description: $"Large input {i}"
+                            description: string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Large input {i}"
+                            )
                         )
                     );
                     metadata.SetOutputObject(
                         new MemoryTestOutput
                         {
-                            Id = $"LargeOutput_{i}",
-                            Message = $"Large output {i}",
+                            Id = string.Create(CultureInfo.InvariantCulture, $"LargeOutput_{i}"),
+                            Message = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Large output {i}"
+                            ),
                             ProcessedData = new string('L', 25_000), // 25KB string
                             Success = true,
                             ProcessedAt = DateTime.UtcNow,
@@ -412,8 +478,14 @@ public class JsonEffectProviderMemoryTests
                     metadata.SetOutputObject(
                         new MemoryTestOutput
                         {
-                            Id = $"DuplicateOutput_{i}",
-                            Message = $"Duplicate output {i}",
+                            Id = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"DuplicateOutput_{i}"
+                            ),
+                            Message = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Duplicate output {i}"
+                            ),
                             ProcessedData = new string('D', 5000), // 5KB string
                             Success = true,
                             ProcessedAt = DateTime.UtcNow,

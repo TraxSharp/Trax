@@ -55,9 +55,10 @@ public class QueueHookTests
     private async Task<long> CountWorkQueueAsync()
     {
         var factory = _serviceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context.WorkQueues.LongCountAsync().ConfigureAwait(false);
     }
 
@@ -67,7 +68,8 @@ public class QueueHookTests
     [Test]
     public async Task QueueAsync_OverridingTrain_FiresOnQueueBeforeInsert_WithInputAndExternalId()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var svc = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         (await CountWorkQueueAsync()).Should().Be(0);
@@ -94,7 +96,8 @@ public class QueueHookTests
     [Test]
     public async Task QueueAsync_NonOverridingTrain_InsertsRow_AndNeverResolvesTrain()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var svc = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var result = await svc.QueueAsync(
@@ -114,7 +117,8 @@ public class QueueHookTests
     [Test]
     public async Task QueueAsync_ThrowingOnQueue_AbortsEnqueue_NoRowInserted()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var svc = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = async () =>
@@ -138,7 +142,8 @@ public class QueueHookTests
     [Test]
     public async Task RunAsync_DoesNotFireOnQueue()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var svc = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var result = await svc.RunAsync(
@@ -153,7 +158,8 @@ public class QueueHookTests
     [Test]
     public async Task QueueAsync_OverridingTrain_CalledTwice_UsesCachedGate()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var svc = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         await svc.QueueAsync(typeof(IShadowQueueTrain).FullName!, Serialize(new ShadowInput("a")));
@@ -177,8 +183,10 @@ public class QueueHookTests
             trax.AddEffects(effects => effects.UseInMemory())
                 .AddMediator(assemblies: [typeof(QueueHookTests).Assembly])
         );
-        await using var provider = services.BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var svc = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         LateFaultQueueTrain.Reset();
 
@@ -188,17 +196,25 @@ public class QueueHookTests
             Serialize(new LateFaultInput("x")),
             ct: cancel.Token
         );
-        await LateFaultQueueTrain.Started.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        await LateFaultQueueTrain.Started.Task.WaitAsync(
+            TimeSpan.FromSeconds(15),
+            CancellationToken.None
+        );
         await cancel.CancelAsync();
 
         var act = async () =>
-            await enqueue.WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+            await enqueue
+                .WaitAsync(TimeSpan.FromSeconds(15), CancellationToken.None)
+                .ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         // The caller has its answer. Now the hook, still running, fails.
         LateFaultQueueTrain.Gate.TrySetResult();
 
-        var logged = await warnings.Logged.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        var logged = await warnings.Logged.Task.WaitAsync(
+            TimeSpan.FromSeconds(15),
+            CancellationToken.None
+        );
         logged
             .Message.Should()
             .Be(
@@ -219,9 +235,10 @@ public class QueueHookTests
     private static async Task<long> CountAsync(IServiceProvider provider)
     {
         var factory = provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context.WorkQueues.LongCountAsync().ConfigureAwait(false);
     }
 
@@ -239,9 +256,10 @@ public class QueueHookTests
 
         public async Task CaptureOnQueueAsync(string externalId, string? input)
         {
-            using var context = await factory
+            var context = await factory
                 .CreateDbContextAsync(CancellationToken.None)
                 .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             RowsAtHookTime = await context.WorkQueues.LongCountAsync().ConfigureAwait(false);
             OnQueueCallCount++;
             LastExternalId = externalId;

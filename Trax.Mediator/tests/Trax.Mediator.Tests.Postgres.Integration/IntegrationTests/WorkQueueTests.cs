@@ -24,7 +24,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -63,7 +64,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -94,7 +96,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -125,7 +128,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -156,7 +160,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var manifestGroup = new ManifestGroup
         {
@@ -215,7 +220,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -246,7 +252,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -299,7 +306,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -335,7 +343,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var queuedEntry = WorkQueue.Create(
             new CreateWorkQueue
@@ -385,7 +394,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var complexJson =
             """{"name":"test","nested":{"key":"value","numbers":[1,2,3]},"enabled":true}""";

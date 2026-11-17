@@ -12,13 +12,12 @@ namespace Trax.Mediator.Tests.Meta.Tests;
 public partial class SubjectKeyGoesThroughCreateTests
 {
     [Test]
-    public void No_source_assigns_SubjectKey_to_an_entry_after_it_was_created()
+    public async Task No_source_assigns_SubjectKey_to_an_entry_after_it_was_created()
     {
-        var offenders = SourceFiles
-            .CSharp("src")
-            .Where(file => Assignment.IsMatch(File.ReadAllText(file)))
-            .Select(RepoRoot.Relative)
-            .ToList();
+        var offenders = new List<string>();
+        foreach (var file in SourceFiles.CSharp("src"))
+            if (Assignment.IsMatch(await File.ReadAllTextAsync(file).ConfigureAwait(false)))
+                offenders.Add(RepoRoot.Relative(file));
 
         offenders
             .Should()

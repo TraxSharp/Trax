@@ -26,7 +26,8 @@ public class PostgresContextTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var metadata = Metadata.Create(
             new CreateMetadata
@@ -111,7 +112,8 @@ public class PostgresContextTests : TestSetup
         innerTrainMetadata.FailureJunction.Should().BeNullOrEmpty();
         innerTrainMetadata.TrainState.Should().Be(TrainState.Completed);
 
-        using var dataContext = (IDataContext)dataContextProvider.Create();
+        var dataContext = (IDataContext)dataContextProvider.Create();
+        await using var dataContextDisposal = dataContext.ConfigureAwait(false);
 
         var parentTrainResult = await dataContext.Metadatas.FirstOrDefaultAsync(x =>
             x.Id == trainMetadata.Id
@@ -187,7 +189,7 @@ public class PostgresContextTests : TestSetup
         public override async Task<ITestTrain> Run(Unit input)
         {
             var testTrain = await trainBus
-                .RunAsync<ITestTrain>(new TestTrainInput())
+                .RunAsync<ITestTrain>(new TestTrainInput(), CancellationToken.None)
                 .ConfigureAwait(false);
 
             logger.LogCritical("Ran {TrainName}", "TestTrain");

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Monad;
@@ -242,7 +243,10 @@ internal sealed class InvokedTrainLauncher(
                             && !DerivesFrom(junction, typeof(EffectJunction<,>)):
                         into.Add(
                             $"{at}, whose chain{where} runs the plain junction {junction.Name} at step "
-                                + $"{i + 1}. Only an EffectJunction reads the run's cancel flag, so leaving the "
+                                + string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"{i + 1}. Only an EffectJunction reads the run's cancel flag, so leaving the "
+                                )
                                 + $"state could not stop the run on another host. Derive {junction.Name} from "
                                 + "EffectJunction."
                         );
@@ -250,7 +254,10 @@ internal sealed class InvokedTrainLauncher(
                     case ChainStepKind.IChain when step.Junction is { } contract:
                         if (EffectImplementation(collection, contract) is { } why)
                             into.Add(
-                                $"{at}, whose chain{where} runs IChain<{contract.Name}> at step {i + 1}, {why} "
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"{at}, whose chain{where} runs IChain<{contract.Name}> at step {i + 1}, {why} "
+                                )
                                     + "Only an EffectJunction reads the run's cancel flag, so leaving the state "
                                     + "could not stop the run on another host."
                             );
@@ -258,7 +265,14 @@ internal sealed class InvokedTrainLauncher(
                 }
 
                 foreach (var track in recorder.TracksAt(i))
-                    Walk(track.Steps, $"{where} ({step.Kind} step {i + 1}, '{track.Name}')", into);
+                    Walk(
+                        track.Steps,
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{where} ({step.Kind} step {i + 1}, '{track.Name}')"
+                        ),
+                        into
+                    );
             }
         }
     }

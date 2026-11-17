@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Mediator.Services.TrainBus;
@@ -98,7 +99,10 @@ public class TrainBusTypedOutputTests
         // Act — run several trains with non-Unit output via non-generic RunAsync
         for (var i = 0; i < 10; i++)
         {
-            var input = MemoryTestModelFactory.CreateInput(id: $"batch-{i}", processingDelayMs: 0);
+            var input = MemoryTestModelFactory.CreateInput(
+                id: string.Create(CultureInfo.InvariantCulture, $"batch-{i}"),
+                processingDelayMs: 0
+            );
             await trainBus.RunAsync(input);
         }
     }
@@ -113,7 +117,7 @@ public class TrainBusTypedOutputTests
             .Select(i =>
             {
                 var input = MemoryTestModelFactory.CreateInput(
-                    id: $"concurrent-{i}",
+                    id: string.Create(CultureInfo.InvariantCulture, $"concurrent-{i}"),
                     processingDelayMs: 0
                 );
                 return trainBus.RunAsync(input);

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Effect.Models.Metadata;
@@ -47,21 +48,39 @@ public class ParameterEffectMemoryTests
                     // Track multiple metadata objects
                     for (int j = 0; j < 20; j++)
                     {
-                        var metadata = new Metadata { Name = $"ParameterTest_{i}_{j}" };
+                        var metadata = new Metadata
+                        {
+                            Name = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"ParameterTest_{i}_{j}"
+                            ),
+                        };
 
                         metadata.SetInputObject(
                             MemoryTestModelFactory.CreateInput(
-                                id: $"ParamInput_{i}_{j}",
+                                id: string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"ParamInput_{i}_{j}"
+                                ),
                                 dataSizeBytes: 2000,
-                                description: $"Parameter test input {i}_{j}"
+                                description: string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Parameter test input {i}_{j}"
+                                )
                             )
                         );
 
                         metadata.SetOutputObject(
                             new MemoryTestOutput
                             {
-                                Id = $"ParamOutput_{i}_{j}",
-                                Message = $"Parameter test output {i}_{j}",
+                                Id = string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"ParamOutput_{i}_{j}"
+                                ),
+                                Message = string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Parameter test output {i}_{j}"
+                                ),
                                 ProcessedData = new string('P', 1000), // 1KB string
                                 Success = true,
                                 ProcessedAt = DateTime.UtcNow,
@@ -117,21 +136,30 @@ public class ParameterEffectMemoryTests
                 // Track many metadata objects with large parameter serialization
                 for (int i = 0; i < 100; i++)
                 {
-                    var metadata = new Metadata { Name = $"AccumulationTest_{i}" };
+                    var metadata = new Metadata
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"AccumulationTest_{i}"),
+                    };
 
                     metadata.SetInputObject(
                         MemoryTestModelFactory.CreateInput(
-                            id: $"AccumInput_{i}",
+                            id: string.Create(CultureInfo.InvariantCulture, $"AccumInput_{i}"),
                             dataSizeBytes: 5000,
-                            description: $"Accumulation test input {i}"
+                            description: string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Accumulation test input {i}"
+                            )
                         )
                     );
 
                     metadata.SetOutputObject(
                         new MemoryTestOutput
                         {
-                            Id = $"AccumOutput_{i}",
-                            Message = $"Accumulation test output {i}",
+                            Id = string.Create(CultureInfo.InvariantCulture, $"AccumOutput_{i}"),
+                            Message = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Accumulation test output {i}"
+                            ),
                             ProcessedData = new string('A', 3000), // 3KB string
                             Success = true,
                             ProcessedAt = DateTime.UtcNow,
@@ -169,7 +197,10 @@ public class ParameterEffectMemoryTests
 
         var aliveMetadata = metadataReferences.Count(wr => wr.IsAlive);
         Console.WriteLine(
-            $"Metadata objects still alive after GC: {aliveMetadata}/{metadataReferences.Count}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Metadata objects still alive after GC: {aliveMetadata}/{metadataReferences.Count}"
+            )
         );
 
         aliveMetadata
@@ -220,8 +251,11 @@ public class ParameterEffectMemoryTests
                     metadata.SetOutputObject(
                         new MemoryTestOutput
                         {
-                            Id = $"JsonDocOutput_{i}",
-                            Message = $"JsonDocument test output {i}",
+                            Id = string.Create(CultureInfo.InvariantCulture, $"JsonDocOutput_{i}"),
+                            Message = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"JsonDocument test output {i}"
+                            ),
                             ProcessedData = new string('J', 5000), // 5KB string
                             Success = true,
                             ProcessedAt = DateTime.UtcNow,
@@ -264,13 +298,25 @@ public class ParameterEffectMemoryTests
                     {
                         for (int i = 0; i < 25; i++)
                         {
-                            var metadata = new Metadata { Name = $"ConcurrentTest_{taskId}_{i}" };
+                            var metadata = new Metadata
+                            {
+                                Name = string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"ConcurrentTest_{taskId}_{i}"
+                                ),
+                            };
 
                             metadata.SetInputObject(
                                 MemoryTestModelFactory.CreateInput(
-                                    id: $"ConcurrentInput_{taskId}_{i}",
+                                    id: string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"ConcurrentInput_{taskId}_{i}"
+                                    ),
                                     dataSizeBytes: 3000,
-                                    description: $"Concurrent input {taskId}_{i}"
+                                    description: string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"Concurrent input {taskId}_{i}"
+                                    )
                                 )
                             );
 
@@ -282,8 +328,14 @@ public class ParameterEffectMemoryTests
                             metadata.SetOutputObject(
                                 new MemoryTestOutput
                                 {
-                                    Id = $"ConcurrentOutput_{taskId}_{i}",
-                                    Message = $"Concurrent output {taskId}_{i}",
+                                    Id = string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"ConcurrentOutput_{taskId}_{i}"
+                                    ),
+                                    Message = string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"Concurrent output {taskId}_{i}"
+                                    ),
                                     ProcessedData = new string('C', 2000), // 2KB string
                                     Success = true,
                                     ProcessedAt = DateTime.UtcNow,
@@ -334,13 +386,19 @@ public class ParameterEffectMemoryTests
                 var metadataList = new List<Metadata>();
                 for (int i = 0; i < 10; i++)
                 {
-                    var metadata = new Metadata { Name = $"RepeatedTest_{i}" };
+                    var metadata = new Metadata
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"RepeatedTest_{i}"),
+                    };
 
                     metadata.SetInputObject(
                         MemoryTestModelFactory.CreateInput(
-                            id: $"RepeatedInput_{i}",
+                            id: string.Create(CultureInfo.InvariantCulture, $"RepeatedInput_{i}"),
                             dataSizeBytes: 4000,
-                            description: $"Repeated serialization input {i}"
+                            description: string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Repeated serialization input {i}"
+                            )
                         )
                     );
 
@@ -358,8 +416,14 @@ public class ParameterEffectMemoryTests
                         metadata.SetOutputObject(
                             new MemoryTestOutput
                             {
-                                Id = $"RepeatedOutput_{iteration}",
-                                Message = $"Repeated output iteration {iteration}",
+                                Id = string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"RepeatedOutput_{iteration}"
+                                ),
+                                Message = string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Repeated output iteration {iteration}"
+                                ),
                                 ProcessedData = new string(iterationChar, 2500), // 2.5KB string
                                 Success = true,
                                 ProcessedAt = DateTime.UtcNow,
@@ -431,21 +495,33 @@ public class ParameterEffectMemoryTests
                 // Track metadata with very large parameter data
                 for (int i = 0; i < 20; i++)
                 {
-                    var metadata = new Metadata { Name = $"LargeParameterTest_{i}" };
+                    var metadata = new Metadata
+                    {
+                        Name = string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"LargeParameterTest_{i}"
+                        ),
+                    };
 
                     metadata.SetInputObject(
                         MemoryTestModelFactory.CreateInput(
-                            id: $"LargeInput_{i}",
+                            id: string.Create(CultureInfo.InvariantCulture, $"LargeInput_{i}"),
                             dataSizeBytes: 50_000, // 50KB input
-                            description: $"Large parameter input {i}"
+                            description: string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Large parameter input {i}"
+                            )
                         )
                     );
 
                     metadata.SetOutputObject(
                         new MemoryTestOutput
                         {
-                            Id = $"LargeOutput_{i}",
-                            Message = $"Large parameter output {i}",
+                            Id = string.Create(CultureInfo.InvariantCulture, $"LargeOutput_{i}"),
+                            Message = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Large parameter output {i}"
+                            ),
                             ProcessedData = new string('L', 30_000), // 30KB string
                             Success = true,
                             ProcessedAt = DateTime.UtcNow,
@@ -538,11 +614,14 @@ public class ParameterEffectMemoryTests
                     );
 
                     // Track some metadata before disposal
-                    var metadata = new Metadata { Name = $"PreDisposalTest_{i}" };
+                    var metadata = new Metadata
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"PreDisposalTest_{i}"),
+                    };
 
                     metadata.SetInputObject(
                         MemoryTestModelFactory.CreateInput(
-                            id: $"PreDisposal_{i}",
+                            id: string.Create(CultureInfo.InvariantCulture, $"PreDisposal_{i}"),
                             dataSizeBytes: 1000
                         )
                     );

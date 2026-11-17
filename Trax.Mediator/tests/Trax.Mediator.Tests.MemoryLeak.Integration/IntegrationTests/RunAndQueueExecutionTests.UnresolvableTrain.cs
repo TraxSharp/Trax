@@ -14,7 +14,8 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task RunAsync_TrainThatCannotBeResolved_LeavesNoPendingMetadata()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = () =>
@@ -22,7 +23,8 @@ public partial class RunAndQueueExecutionTests
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var rows = await context
             .Metadatas.AsNoTracking()
             .Where(m => m.Name == typeof(IUnresolvableTrain).FullName)

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Services.ConcurrencyLimiter;
@@ -86,7 +87,7 @@ public class PerPrincipalConcurrencyTests
 
         for (var i = 0; i < 100; i++)
         {
-            principal.CurrentId = $"principal-{i}";
+            principal.CurrentId = string.Create(CultureInfo.InvariantCulture, $"principal-{i}");
             using var permit = await limiter.AcquireAsync(train, CancellationToken.None);
             limiter.PerPrincipalEntryCount.Should().Be(1);
         }
@@ -128,7 +129,7 @@ public class PerPrincipalConcurrencyTests
         // A fresh semaphore starts with the full limit.
         using var next = await limiter
             .AcquireAsync(train, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
     }
 
     [Test]
@@ -158,7 +159,10 @@ public class PerPrincipalConcurrencyTests
 
         bob.Dispose();
 
-        using var secondPermit = await second.WaitAsync(TimeSpan.FromSeconds(5));
+        using var secondPermit = await second.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            CancellationToken.None
+        );
         limiter
             .PerPrincipalEntryCount.Should()
             .Be(1, "alice's second run holds her slot, which the cancelled run gave back");

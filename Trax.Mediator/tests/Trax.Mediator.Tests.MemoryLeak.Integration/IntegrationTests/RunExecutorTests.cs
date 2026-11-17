@@ -77,7 +77,8 @@ public class RunExecutorTests
     [Test]
     public async Task LocalRunExecutor_TypedTrain_ReturnsOutputAndMetadataId()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
 
         var input = new RunExecInput { Name = "test-player" };
@@ -99,7 +100,8 @@ public class RunExecutorTests
     [Test]
     public async Task LocalRunExecutor_UnitTrain_ReturnsNullOutput()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
 
         var input = new RunUnitInput { Id = "abc" };
@@ -117,7 +119,8 @@ public class RunExecutorTests
     [Test]
     public async Task LocalRunExecutor_MultipleExecutions_HaveUniqueMetadataIds()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
 
         var result1 = await executor.ExecuteAsync(
@@ -142,7 +145,8 @@ public class RunExecutorTests
     [Test]
     public async Task RunAsync_DelegatesToRunExecutor_TypedOutput()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executionService = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         var inputJson = JsonSerializer.Serialize(
             new RunExecInput { Name = "delegate-test" },
@@ -160,7 +164,8 @@ public class RunExecutorTests
     [Test]
     public async Task RunAsync_DelegatesToRunExecutor_UnitOutput()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executionService = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         var inputJson = JsonSerializer.Serialize(
             new RunUnitInput { Id = "unit-delegate" },
@@ -176,7 +181,8 @@ public class RunExecutorTests
     [Test]
     public async Task RunAsync_UnknownTrain_ThrowsInvalidOperationException()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executionService = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = async () =>
@@ -190,7 +196,8 @@ public class RunExecutorTests
     [Test]
     public async Task RunAsync_InvalidJson_ThrowsJsonException()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executionService = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = async () =>
@@ -219,8 +226,10 @@ public class RunExecutorTests
         // Override with a fake executor (last registration wins)
         services.AddScoped<IRunExecutor, FakeRunExecutor>();
 
-        using var sp = services.BuildServiceProvider();
-        using var scope = sp.CreateScope();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
+        var scope = sp.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
         executor.Should().BeOfType<FakeRunExecutor>();
@@ -245,12 +254,13 @@ public class RunExecutorTests
     [Test]
     public async Task LocalRunExecutor_CancellationToken_PropagatedToTrain()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
         using var cts = new CancellationTokenSource();
 
         // Cancel immediately
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
         var act = async () =>
             await executor
@@ -262,7 +272,7 @@ public class RunExecutorTests
                 )
                 .ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     #endregion
@@ -285,9 +295,10 @@ public class RunExecutorTests
     private static async Task<List<Metadata>> RecordsNamed(IServiceProvider provider, string name)
     {
         var factory = provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         return await context
             .Metadatas.AsNoTracking()
@@ -311,8 +322,10 @@ public class RunExecutorTests
             );
         var trainName = typeof(IRunExecTrain).FullName!;
 
-        await using var provider = (ServiceProvider)BuildWithBus(bus);
-        using var scope = provider.CreateScope();
+        var provider = (ServiceProvider)BuildWithBus(bus);
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
 
         var act = () => executor.ExecuteAsync(trainName, new RunExecInput(), typeof(RunExecOutput));
@@ -345,8 +358,10 @@ public class RunExecutorTests
             .Returns<Task<RunExecOutput>>(_ => throw new OperationCanceledException());
         var trainName = typeof(IRunExecTrain).FullName!;
 
-        await using var provider = (ServiceProvider)BuildWithBus(bus);
-        using var scope = provider.CreateScope();
+        var provider = (ServiceProvider)BuildWithBus(bus);
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
 
         var act = () => executor.ExecuteAsync(trainName, new RunExecInput(), typeof(RunExecOutput));
@@ -365,8 +380,10 @@ public class RunExecutorTests
     {
         var trainName = typeof(IRunExecTrain).FullName!;
 
-        await using var provider = (ServiceProvider)BuildWithBus(new InputOnlyBus());
-        using var scope = provider.CreateScope();
+        var provider = (ServiceProvider)BuildWithBus(new InputOnlyBus());
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
 
         var act = () => executor.ExecuteAsync(trainName, new RunExecInput(), typeof(RunExecOutput));
@@ -383,7 +400,8 @@ public class RunExecutorTests
     public async Task LocalRunExecutor_WhenTheTrainItselfFails_KeepsTheTrainsOwnRecord()
     {
         var trainName = typeof(IFailingRunTrain).FullName!;
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
 
         var act = () => executor.ExecuteAsync(trainName, new FailingRunInput(), typeof(Unit));
@@ -416,8 +434,10 @@ public class RunExecutorTests
         var trainName = typeof(IRunExecTrain).FullName!;
         var hook = new LifecycleEventRecorder();
 
-        await using var provider = (ServiceProvider)BuildWithBusAndHook(bus, hook);
-        using var scope = provider.CreateScope();
+        var provider = (ServiceProvider)BuildWithBusAndHook(bus, hook);
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
 
         var act = () => executor.ExecuteAsync(trainName, new RunExecInput(), typeof(RunExecOutput));
@@ -446,8 +466,10 @@ public class RunExecutorTests
         var trainName = typeof(IRunExecTrain).FullName!;
         var hook = new LifecycleEventRecorder();
 
-        await using var provider = (ServiceProvider)BuildWithBusAndHook(bus, hook);
-        using var scope = provider.CreateScope();
+        var provider = (ServiceProvider)BuildWithBusAndHook(bus, hook);
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
 
         var act = () => executor.ExecuteAsync(trainName, new RunExecInput(), typeof(RunExecOutput));

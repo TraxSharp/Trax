@@ -162,14 +162,22 @@ public static class TrainInputReader
         ArgumentNullException.ThrowIfNull(savedInputJson);
         ArgumentNullException.ThrowIfNull(registration);
 
+        // The public call is synchronous. The rewrite writes to memory only, so its tasks have
+        // completed by the time they are returned and the wait never blocks.
         if (SavedInputReferences.Present(savedInputJson))
-            return SavedInputReferences.Resolve(savedInputJson, registration, maxInputJsonBytes);
+            return SavedInputReferences
+                .ResolveAsync(savedInputJson, registration, maxInputJsonBytes)
+                .GetAwaiter()
+                .GetResult();
 
         try
         {
             // Rewritten even without metadata: read back from jsonb, the saved input carries
             // whitespace it was not saved with, which can put an input saved at the cap over it.
-            return SavedInputReferences.Compact(savedInputJson, registration, maxInputJsonBytes);
+            return SavedInputReferences
+                .CompactAsync(savedInputJson, registration, maxInputJsonBytes)
+                .GetAwaiter()
+                .GetResult();
         }
         catch (JsonException)
         {
@@ -194,7 +202,7 @@ public static class TrainInputReader
     /// deeper than storage writes (a host whose train parameter options read deeper than
     /// <c>TraxJsonSerializationOptions.StoredDepth</c>); both counts are then 0.
     /// </exception>
-    internal static string WriteForStorage(
+    internal static async Task<string> WriteForStorageAsync(
         object input,
         TrainRegistration registration,
         int maxInputJsonBytes
@@ -208,12 +216,15 @@ public static class TrainInputReader
         try
         {
             using var ceiling = new ByteCeilingStream(buffer, storedCap);
-            JsonSerializer.Serialize(
-                ceiling,
-                input,
-                registration.InputType,
-                TraxJsonSerializationOptions.ManifestProperties
-            );
+            await JsonSerializer
+                .SerializeAsync(
+                    ceiling,
+                    input,
+                    registration.InputType,
+                    TraxJsonSerializationOptions.ManifestProperties,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
         }
         catch (StoredInputTooLargeException tooLarge)
         {

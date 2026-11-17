@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -85,12 +86,6 @@ internal sealed class TrainChainStartupValidator(
         // would refuse the host over a disposal problem, reported as a chain problem, with
         // SkipChainVerification() the only way past it.
         var scope = scopeFactory.CreateAsyncScope();
-
-        // An async scope, because a train's scoped dependency may implement only
-        // IAsyncDisposable, which a synchronous Dispose refuses outright. Request scopes are
-        // disposed asynchronously, so such a train runs fine — disposing this one synchronously
-        // would refuse the host over a disposal problem, reported as a chain problem, with
-        // SkipChainVerification() the only way past it.
         await using (scope.ConfigureAwait(false))
         {
             var problems = new List<string>();
@@ -132,7 +127,10 @@ internal sealed class TrainChainStartupValidator(
 
             if (failedTrains > 0)
                 throw new TrainException(
-                    $"{failedTrains} of {checkedTrains} registered trains cannot run:"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{failedTrains} of {checkedTrains} registered trains cannot run:"
+                    )
                         + Environment.NewLine
                         + string.Join(Environment.NewLine, problems.Select(p => "  - " + p))
                         + Environment.NewLine
@@ -380,14 +378,20 @@ internal sealed class TrainChainStartupValidator(
 
             // A refusal's reason already names the step's junction.
             if (fault.IsRefusal)
-                return $"step {fault.StepIndex + 1}: {fault.Reason}";
+                return string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"step {fault.StepIndex + 1}: {fault.Reason}"
+                );
 
             // The one fault Verify reports about the train's input rather than a step. A recorded
             // Seed step never faults except by refusal, so every other Seed fault is this one.
             if (fault.Kind == ChainStepKind.Seed)
                 return fault.Reason;
 
-            return $"step {fault.StepIndex + 1} ({StepName(fault)}) {fault.Reason}";
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"step {fault.StepIndex + 1} ({StepName(fault)}) {fault.Reason}"
+            );
         }
 
         return faults

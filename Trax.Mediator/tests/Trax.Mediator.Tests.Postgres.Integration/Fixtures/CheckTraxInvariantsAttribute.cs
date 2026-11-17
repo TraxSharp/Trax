@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using NUnit.Framework.Interfaces;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 
 [assembly: Trax.Mediator.Tests.Postgres.Integration.Fixtures.CheckTraxInvariants]
@@ -29,7 +30,8 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
                 .SetBasePath(AppContext.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: false)
                 .Build()
-                .GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+                .GetRequiredSection("Configuration")["DatabaseConnectionString"]
+                .NotNull()
         )
     );
 
@@ -37,7 +39,9 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
 
     public ActionTargets Targets => ActionTargets.Test;
 
-    public void BeforeTest(ITest test) => _before = Find();
+    // ITestAction is synchronous, and the check runs between tests, never inside one, so it
+    // waits here. Every await below is ConfigureAwait(false).
+    public void BeforeTest(ITest test) => _before = FindAsync().GetAwaiter().GetResult();
 
     public void AfterTest(ITest test)
     {
@@ -47,25 +51,26 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
         )
             return;
 
-        var added = Find().Except(_before).ToList();
+        var added = FindAsync().GetAwaiter().GetResult().Except(_before).ToList();
         if (added.Count > 0)
             Assert.Fail(TraxInvariants.Describe(added));
     }
 
-    // ITestAction is synchronous, and the check runs between tests, never inside one.
-    private static IReadOnlyList<TraxInvariantViolation> Find() =>
-        IsMigrated()
-            ? TraxInvariants.FindViolationsAsync(ConnectionString.Value).GetAwaiter().GetResult()
+    private static async Task<IReadOnlyList<TraxInvariantViolation>> FindAsync() =>
+        await IsMigratedAsync().ConfigureAwait(false)
+            ? await TraxInvariants.FindViolationsAsync(ConnectionString.Value).ConfigureAwait(false)
             : [];
 
     // The first host to start migrates the shared database, so before it nothing can be stuck.
-    private static bool IsMigrated()
+    private static async Task<bool> IsMigratedAsync()
     {
-        using var connection = new NpgsqlConnection(ConnectionString.Value);
-        connection.Open();
-        using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(ConnectionString.Value);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText =
             "SELECT to_regclass('trax.work_queue') IS NOT NULL AND to_regclass('trax.effect_claim') IS NOT NULL";
-        return (bool)command.ExecuteScalar()!;
+        return (bool)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 }

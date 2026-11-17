@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Mediator.Tests.Meta.Tests;
 
 /// <summary>
@@ -88,7 +90,12 @@ public partial class NoFixedTaskDelayTests
 
                 count++;
                 if (!BaselineOffenders.ContainsKey(rel))
-                    newOffenders.Add($"{rel}:{i + 1}  -> {lines[i].Trim()}");
+                    newOffenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{rel}:{i + 1}  -> {lines[i].Trim()}"
+                        )
+                    );
             }
 
             if (count > 0)
@@ -112,7 +119,10 @@ public partial class NoFixedTaskDelayTests
             var actual = fileOffenderCounts.TryGetValue(path, out var c) ? c : 0;
             if (actual != baselineCount)
                 regressions.Add(
-                    $"{path}: baseline={baselineCount}, actual={actual} ({actual - baselineCount:+#;-#})"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{path}: baseline={baselineCount}, actual={actual} ({actual - baselineCount:+#;-#})"
+                    )
                 );
         }
 

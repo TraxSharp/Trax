@@ -45,8 +45,9 @@ public class CancellationContractTests : TestSetup
 
         CancelProbe.Started.Task.IsCompleted.Should().BeFalse();
 
-        using var context = NewContext();
-        var rows = await context.Metadatas.AsNoTracking().ToListAsync();
+        var context = NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
+        var rows = await context.Metadatas.AsNoTracking().ToListAsync(CancellationToken.None);
         rows.Should().BeEmpty("nothing ran, so there is no execution to account for");
     }
 
@@ -63,7 +64,10 @@ public class CancellationContractTests : TestSetup
 
             await cts.CancelAsync();
 
-            var awaiting = async () => await runTask.WaitAsync(SignalTimeout).ConfigureAwait(false);
+            var awaiting = async () =>
+                await runTask
+                    .WaitAsync(SignalTimeout, CancellationToken.None)
+                    .ConfigureAwait(false);
             await awaiting.Should().ThrowAsync<OperationCanceledException>();
 
             CancelProbe
@@ -107,7 +111,7 @@ public class CancellationContractTests : TestSetup
             // up.
             try
             {
-                await runTask.WaitAsync(SignalTimeout);
+                await runTask.WaitAsync(SignalTimeout, CancellationToken.None);
             }
             catch (OperationCanceledException) { }
 
@@ -157,7 +161,9 @@ public class CancellationContractTests : TestSetup
             var parked = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            var registration = CancellationToken.Register(() => parked.TrySetCanceled());
+            var registration = CancellationToken.Register(() =>
+                parked.TrySetCanceled(CancellationToken.None)
+            );
             await using (registration.ConfigureAwait(false))
             {
                 CancelProbe.Started.TrySetResult();

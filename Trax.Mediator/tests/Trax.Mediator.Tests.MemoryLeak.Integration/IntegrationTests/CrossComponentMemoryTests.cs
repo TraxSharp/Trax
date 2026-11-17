@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -77,9 +78,15 @@ public class CrossComponentMemoryTests
                     for (int metadataIndex = 0; metadataIndex < 6; metadataIndex++)
                     {
                         var input = MemoryTestModelFactory.CreateInput(
-                            id: $"CrossComponent_{iteration}_{metadataIndex}",
+                            id: string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"CrossComponent_{iteration}_{metadataIndex}"
+                            ),
                             dataSizeBytes: 4000,
-                            description: $"Cross-component test {iteration}_{metadataIndex}"
+                            description: string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Cross-component test {iteration}_{metadataIndex}"
+                            )
                         );
 
                         var output = new MemoryTestOutput
@@ -88,12 +95,18 @@ public class CrossComponentMemoryTests
                             ProcessedAt = DateTime.UtcNow,
                             ProcessedData = new string('X', 3000), // 3KB
                             Success = true,
-                            Message = $"Cross-component test output {iteration}_{metadataIndex}",
+                            Message = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Cross-component test output {iteration}_{metadataIndex}"
+                            ),
                         };
 
                         var metadata = new Metadata
                         {
-                            Name = $"CrossComponentMetadata_{iteration}_{metadataIndex}",
+                            Name = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"CrossComponentMetadata_{iteration}_{metadataIndex}"
+                            ),
                         };
                         metadata.SetInputObject(input);
                         metadata.SetOutputObject(output);
@@ -176,9 +189,15 @@ public class CrossComponentMemoryTests
                     for (int metadataIndex = 0; metadataIndex < 8; metadataIndex++)
                     {
                         var input = MemoryTestModelFactory.CreateInput(
-                            id: $"EffectRunner_{iteration}_{metadataIndex}",
+                            id: string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"EffectRunner_{iteration}_{metadataIndex}"
+                            ),
                             dataSizeBytes: 3500,
-                            description: $"Effect runner test {iteration}_{metadataIndex}"
+                            description: string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Effect runner test {iteration}_{metadataIndex}"
+                            )
                         );
 
                         var output = new MemoryTestOutput
@@ -187,12 +206,18 @@ public class CrossComponentMemoryTests
                             ProcessedAt = DateTime.UtcNow,
                             ProcessedData = new string('R', 2500), // 2.5KB
                             Success = true,
-                            Message = $"Effect runner output {iteration}_{metadataIndex}",
+                            Message = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Effect runner output {iteration}_{metadataIndex}"
+                            ),
                         };
 
                         var metadata = new Metadata
                         {
-                            Name = $"EffectRunnerMetadata_{iteration}_{metadataIndex}",
+                            Name = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"EffectRunnerMetadata_{iteration}_{metadataIndex}"
+                            ),
                         };
                         metadata.SetInputObject(input);
                         metadata.SetOutputObject(output);
@@ -258,9 +283,15 @@ public class CrossComponentMemoryTests
                         );
 
                         var input = MemoryTestModelFactory.CreateFailingInput(
-                            id: $"ExceptionTest_{iteration}",
+                            id: string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"ExceptionTest_{iteration}"
+                            ),
                             dataSizeBytes: 3000,
-                            description: $"Exception test {iteration}"
+                            description: string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Exception test {iteration}"
+                            )
                         );
 
                         var output = new MemoryTestOutput
@@ -269,10 +300,19 @@ public class CrossComponentMemoryTests
                             ProcessedAt = DateTime.UtcNow,
                             ProcessedData = new string('E', 2000), // 2KB
                             Success = iteration % 3 != 0, // Fail every 3rd iteration
-                            Message = $"Exception test output {iteration}",
+                            Message = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Exception test output {iteration}"
+                            ),
                         };
 
-                        var metadata = new Metadata { Name = $"ExceptionMetadata_{iteration}" };
+                        var metadata = new Metadata
+                        {
+                            Name = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"ExceptionMetadata_{iteration}"
+                            ),
+                        };
                         metadata.SetInputObject(input);
                         metadata.SetOutputObject(output);
 
@@ -283,7 +323,10 @@ public class CrossComponentMemoryTests
                         if (iteration % 3 == 0)
                         {
                             throw new InvalidOperationException(
-                                $"Simulated failure for iteration {iteration}"
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Simulated failure for iteration {iteration}"
+                                )
                             );
                         }
 
@@ -306,7 +349,12 @@ public class CrossComponentMemoryTests
                     }
                 }
 
-                Console.WriteLine($"Handled {exceptionCount} exceptions during memory test");
+                Console.WriteLine(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Handled {exceptionCount} exceptions during memory test"
+                    )
+                );
 
                 // Final cleanup
                 GC.Collect();
@@ -352,9 +400,15 @@ public class CrossComponentMemoryTests
                             );
 
                             var input = MemoryTestModelFactory.CreateInput(
-                                id: $"Concurrent_{taskId}_{iteration}",
+                                id: string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Concurrent_{taskId}_{iteration}"
+                                ),
                                 dataSizeBytes: 3000,
-                                description: $"Concurrent test task {taskId} iteration {iteration}"
+                                description: string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Concurrent test task {taskId} iteration {iteration}"
+                                )
                             );
 
                             var output = new MemoryTestOutput
@@ -363,12 +417,18 @@ public class CrossComponentMemoryTests
                                 ProcessedAt = DateTime.UtcNow,
                                 ProcessedData = new string('C', 2000), // 2KB
                                 Success = true,
-                                Message = $"Concurrent output {taskId}_{iteration}",
+                                Message = string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Concurrent output {taskId}_{iteration}"
+                                ),
                             };
 
                             var metadata = new Metadata
                             {
-                                Name = $"ConcurrentMetadata_{taskId}_{iteration}",
+                                Name = string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"ConcurrentMetadata_{taskId}_{iteration}"
+                                ),
                             };
                             metadata.SetInputObject(input);
                             metadata.SetOutputObject(output);

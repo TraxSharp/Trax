@@ -89,7 +89,8 @@ public class ExecutionModeContractTests : TestSetup
             );
 
             var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-            using (var context = (IDataContext)factory.Create())
+            var context = (IDataContext)factory.Create();
+            await using (context.ConfigureAwait(false))
             {
                 var inFlight = await context
                     .Metadatas.AsNoTracking()
@@ -128,7 +129,8 @@ public class ExecutionModeContractTests : TestSetup
         );
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var metadata = await context
             .Metadatas.AsNoTracking()
@@ -163,7 +165,8 @@ public class ExecutionModeContractTests : TestSetup
         result.ExternalId.Should().NotBeNullOrEmpty();
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = await context
             .WorkQueues.AsNoTracking()

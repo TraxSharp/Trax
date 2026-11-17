@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Mediator.Exceptions;
 
 /// <summary>
@@ -30,7 +32,10 @@ public class QueuedWorkCancelledException : InvalidOperationException
     /// <param name="trainName">The fully qualified service type name of the train.</param>
     public QueuedWorkCancelledException(long workQueueId, string trainName)
         : base(
-            $"Work queue entry {workQueueId} for {trainName} was cancelled before its OnQueue "
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Work queue entry {workQueueId} for {trainName} was cancelled before its OnQueue "
+            )
                 + "hook returned, so it will not run. The hook's side-effect may already have "
                 + "been applied."
         )

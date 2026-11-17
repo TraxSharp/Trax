@@ -26,9 +26,10 @@ public class CancelledEnqueueHookTests : TestSetup
     private async Task<int> RowsAsync(string trainNameFragment)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .WorkQueues.CountAsync(w => w.TrainName!.Contains(trainNameFragment))
             .ConfigureAwait(false);
@@ -48,10 +49,11 @@ public class CancelledEnqueueHookTests : TestSetup
             ct: cancel.Token
         );
 
-        await OrphanedHookTrain.Started.Task.WaitAsync(SignalTimeout);
+        await OrphanedHookTrain.Started.Task.WaitAsync(SignalTimeout, CancellationToken.None);
         await cancel.CancelAsync();
 
-        var act = async () => await outer.WaitAsync(SignalTimeout).ConfigureAwait(false);
+        var act = async () =>
+            await outer.WaitAsync(SignalTimeout, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         // The caller has been told the enqueue failed. The hook, which ignores its token, is still
@@ -59,7 +61,9 @@ public class CancelledEnqueueHookTests : TestSetup
         OrphanedHookTrain.Gate.TrySetResult();
 
         var nested = async () =>
-            await OrphanedHookTrain.Nested.Task.WaitAsync(SignalTimeout).ConfigureAwait(false);
+            await OrphanedHookTrain
+                .Nested.Task.WaitAsync(SignalTimeout, CancellationToken.None)
+                .ConfigureAwait(false);
         await nested
             .Should()
             .ThrowAsync<InvalidOperationException>(
@@ -106,7 +110,11 @@ public class CancelledEnqueueHookTests : TestSetup
             {
                 Nested.TrySetResult(
                     await Execution!
-                        .QueueAsync(typeof(IOrphanNestedTrain).FullName!, "{}")
+                        .QueueAsync(
+                            typeof(IOrphanNestedTrain).FullName!,
+                            "{}",
+                            ct: CancellationToken.None
+                        )
                         .ConfigureAwait(false)
                 );
             }

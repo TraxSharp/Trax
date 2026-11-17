@@ -241,7 +241,8 @@ public class TrainExecutionServiceTests
         var result = await executionService.RunAsync(nameof(ITypedExecTrain), inputJson);
 
         // Resolve the train directly to check its metadata
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ITypedExecTrain>() as TypedExecTrain;
 
         train.Should().NotBeNull();
@@ -415,13 +416,17 @@ public class TrainExecutionServiceTests
 
         // Assert
         var waiting = async () =>
-            await task2.WaitAsync(HoldUntilReleased.Timeout).ConfigureAwait(false);
+            await task2
+                .WaitAsync(HoldUntilReleased.Timeout, CancellationToken.None)
+                .ConfigureAwait(false);
         await waiting.Should().ThrowAsync<OperationCanceledException>();
         gate.Entries.Should().Be(0, "the cancelled run never got a permit, so never ran");
 
         // The first run still holds its permit and finishes normally once released
         gate.Release();
-        (await task1.WaitAsync(HoldUntilReleased.Timeout)).MetadataId.Should().BeGreaterThan(0);
+        (await task1.WaitAsync(HoldUntilReleased.Timeout, CancellationToken.None))
+            .MetadataId.Should()
+            .BeGreaterThan(0);
     }
 
     #endregion

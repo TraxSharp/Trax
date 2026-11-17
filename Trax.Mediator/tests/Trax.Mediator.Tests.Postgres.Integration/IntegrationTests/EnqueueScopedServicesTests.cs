@@ -31,7 +31,8 @@ public class EnqueueScopedServicesTests : TestSetup
     public async Task ClearAsync()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context
             .WorkQueues.Where(w => w.TrainName!.StartsWith("EnqueueScope."))
             .ExecuteDeleteAsync();
@@ -69,7 +70,8 @@ public class EnqueueScopedServicesTests : TestSetup
             );
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         (await context.WorkQueues.CountAsync(w => w.TrainName == "EnqueueScope.Marker.second"))
             .Should()
             .Be(1, "the second hook's own write landed");

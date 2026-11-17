@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;
 
 /// <summary>
@@ -65,7 +67,10 @@ public static class MemoryTestModelFactory
             id: id,
             dataSizeBytes: dataSizeMB * 1024 * 1024,
             processingDelayMs: 50,
-            description: $"Large test input with {dataSizeMB}MB of data"
+            description: string.Create(
+                CultureInfo.InvariantCulture,
+                $"Large test input with {dataSizeMB}MB of data"
+            )
         );
     }
 
@@ -86,9 +91,9 @@ public static class MemoryTestModelFactory
             .Range(0, childCount)
             .Select(i =>
                 CreateInput(
-                    id: $"child_{i}",
+                    id: string.Create(CultureInfo.InvariantCulture, $"child_{i}"),
                     dataSizeBytes: childDataSizeBytes,
-                    description: $"Child train {i}"
+                    description: string.Create(CultureInfo.InvariantCulture, $"Child train {i}")
                 )
             )
             .ToList();
@@ -97,7 +102,10 @@ public static class MemoryTestModelFactory
         {
             Id = id ?? Guid.NewGuid().ToString("N")[..8],
             ChildInputs = childInputs,
-            Description = $"Nested test with {childCount} children",
+            Description = string.Create(
+                CultureInfo.InvariantCulture,
+                $"Nested test with {childCount} children"
+            ),
         };
     }
 
@@ -113,9 +121,9 @@ public static class MemoryTestModelFactory
             .Range(0, count)
             .Select(i =>
                 CreateInput(
-                    id: $"batch_{i:D4}",
+                    id: string.Create(CultureInfo.InvariantCulture, $"batch_{i:D4}"),
                     dataSizeBytes: dataSizeBytes,
-                    description: $"Batch item {i}"
+                    description: string.Create(CultureInfo.InvariantCulture, $"Batch item {i}")
                 )
             )
             .ToList();

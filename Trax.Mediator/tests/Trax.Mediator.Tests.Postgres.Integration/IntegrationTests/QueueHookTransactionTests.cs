@@ -41,9 +41,10 @@ public class QueueHookTransactionTests : TestSetup
     private async Task<long> CountMarkersAsync()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .WorkQueues.LongCountAsync(w => w.TrainName!.StartsWith("QueueTx.Marker"))
             .ConfigureAwait(false);
@@ -53,9 +54,10 @@ public class QueueHookTransactionTests : TestSetup
     private async Task<long> CountEnqueuedAsync()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .WorkQueues.LongCountAsync(w => w.TrainName!.Contains("QueueHookTransactionTests"))
             .ConfigureAwait(false);
@@ -65,7 +67,8 @@ public class QueueHookTransactionTests : TestSetup
     public async Task ClearAsync()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context
             .WorkQueues.Where(w =>
                 w.TrainName!.StartsWith("QueueTx.Marker")
@@ -319,7 +322,8 @@ public class QueueHookTransactionTests : TestSetup
     {
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            using var own = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var own = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var ownDisposal = own.ConfigureAwait(false);
             await own.Track(Marker("own-context")).ConfigureAwait(false);
             await own.SaveChanges(ct).ConfigureAwait(false);
             throw new InvalidOperationException("hook rejected the mutation after writing");

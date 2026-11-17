@@ -53,7 +53,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_TwoCalls_GetDifferentScopes()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var result1 = await trainBus.RunAsync<ScopeTrackOutput>(new ScopeTrackInput());
@@ -65,7 +66,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_WithCancellationToken_CreatesChildScope()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var result1 = await trainBus.RunAsync<ScopeTrackOutput>(
@@ -83,7 +85,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_NonGeneric_CreatesChildScope()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         // Void overload — verifies it doesn't throw (scope creation works)
@@ -94,7 +97,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_NonGeneric_WithCancellationToken_CreatesChildScope()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         await trainBus.RunAsync(new ScopeTrackInput(), CancellationToken.None);
@@ -104,7 +108,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_TrainScope_DiffersFromCallerScope()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
         var callerMarker = scope.ServiceProvider.GetRequiredService<ScopeMarker>();
 
@@ -120,7 +125,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_ScopeDisposed_AfterCompletion()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var result = await trainBus.RunAsync<ScopeTrackOutput>(new ScopeTrackInput());
@@ -131,7 +137,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_FailingTrain_ScopeStillDisposed()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var act = async () =>
@@ -153,7 +160,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_NestedDispatch_EachTrainGetsOwnScope()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var result = await trainBus.RunAsync<NestedScopeTrackOutput>(new NestedScopeTrackInput());
@@ -168,7 +176,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_Concurrent_AllGetUniqueScopeIds()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var tasks = Enumerable

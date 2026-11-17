@@ -53,7 +53,8 @@ public class EnqueueScopeTests
     public async Task A_long_lived_scope_retains_no_train_an_enqueue_resolved()
     {
         const int enqueues = 5;
-        using var circuit = _serviceProvider.CreateScope();
+        var circuit = _serviceProvider.CreateAsyncScope();
+        await using var circuitDisposal = circuit.ConfigureAwait(false);
         var execution = circuit.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         for (var i = 0; i < enqueues; i++)

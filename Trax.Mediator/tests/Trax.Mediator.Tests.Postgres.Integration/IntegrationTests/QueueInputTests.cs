@@ -28,9 +28,10 @@ public class QueueInputTests : TestSetup
     private async Task<WorkQueue> EntryAsync(long id)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == id)
@@ -199,9 +200,10 @@ public class QueueInputTests : TestSetup
     private async Task<int> WorkQueueCountAsync()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context.WorkQueues.CountAsync().ConfigureAwait(false);
     }
 
@@ -353,7 +355,8 @@ public class QueueInputTests : TestSetup
             .Be(enqueues, "each enqueue commits on its own context");
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("ConcurrentHookTrain")))
             .Should()
             .Be(enqueues, "every enqueue committed its own row");
@@ -365,7 +368,8 @@ public class QueueInputTests : TestSetup
         var result = await Execution.QueueAsync(typeof(IChainingHookTrain).FullName!, "{}");
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("OptionalInputTrain")))
             .Should()
             .Be(1, "the hook's enqueue joins the outer one rather than refusing to nest");

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -55,9 +56,10 @@ public class QueueHookTrainInputTests
     private async Task<string?> SubjectKeyOfAsync(long workQueueId)
     {
         var factory = _serviceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var entry = await context
             .WorkQueues.AsNoTracking()
             .FirstAsync(w => w.Id == workQueueId)
@@ -68,7 +70,8 @@ public class QueueHookTrainInputTests
     [Test]
     public async Task A_key_built_from_TrainInput_differs_per_input()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var first = await execution.QueueAsync(typeof(IKeyedOrderTrain).FullName!, "{\"id\":1}");
@@ -87,7 +90,8 @@ public class QueueHookTrainInputTests
     [Test]
     public async Task OnQueue_reads_TrainInput()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var result = await execution.QueueAsync(typeof(IKeyedOrderTrain).FullName!, "{\"id\":7}");
@@ -98,7 +102,8 @@ public class QueueHookTrainInputTests
     [Test]
     public async Task A_deferring_train_reads_TrainInput_in_OnQueue()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var result = await execution.QueueAsync(
@@ -112,7 +117,8 @@ public class QueueHookTrainInputTests
     [Test]
     public async Task A_train_enqueued_from_another_hook_reads_its_own_TrainInput()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         NestingOrderTrain.Execution = execution;
 
@@ -153,7 +159,7 @@ public class QueueHookTrainInputTests
     public class KeyedOrderTrain : ServiceTrain<OrderInput, Unit>, IKeyedOrderTrain
     {
         protected override string? QueueSubjectKey(Metadata metadata) =>
-            $"order:{TrainInput.NotNull().Id}";
+            string.Create(CultureInfo.InvariantCulture, $"order:{TrainInput.NotNull().Id}");
 
         protected override Task OnQueue(Metadata metadata, CancellationToken ct)
         {
@@ -197,7 +203,10 @@ public class QueueHookTrainInputTests
             await Execution!
                 .QueueAsync(
                     typeof(IKeyedOrderTrain).FullName!,
-                    $"{{\"id\":{1000 + TrainInput.NotNull().Id}}}",
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{{\"id\":{1000 + TrainInput.NotNull().Id}}}"
+                    ),
                     ct: ct
                 )
                 .ConfigureAwait(false);

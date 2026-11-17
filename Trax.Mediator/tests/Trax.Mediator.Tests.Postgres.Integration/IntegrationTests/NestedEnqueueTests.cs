@@ -37,9 +37,10 @@ public class NestedEnqueueTests : TestSetup
     private async Task<List<WorkQueue>> RowsAsync<TTrain>()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .WorkQueues.AsNoTracking()
             .Where(w => w.TrainName == typeof(TTrain).FullName)

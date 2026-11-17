@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
@@ -31,9 +32,14 @@ public class CoreTrainMemoryTests
                     var train = trainFactory();
 
                     trainReferences.Add(new WeakReference(train));
-                    var largeInput = new LargeDataModel($"test_{i}", new byte[100_000]); // 100KB each
+                    var largeInput = new LargeDataModel(
+                        string.Create(CultureInfo.InvariantCulture, $"test_{i}"),
+                        new byte[100_000]
+                    ); // 100KB each
 
-                    var output = await train.Run(largeInput).ConfigureAwait(false);
+                    var output = await train
+                        .Run(largeInput, CancellationToken.None)
+                        .ConfigureAwait(false);
                     output.Should().NotBeNull();
 
                     // Train goes out of scope here, but Memory dictionary might retain objects
@@ -92,8 +98,18 @@ public class CoreTrainMemoryTests
             iterations
         );
 
-        Console.WriteLine($"SmallChainTrain: {smallAllocated:N0} bytes over {iterations} runs");
-        Console.WriteLine($"LargeChainTrain: {largeAllocated:N0} bytes over {iterations} runs");
+        Console.WriteLine(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"SmallChainTrain: {smallAllocated:N0} bytes over {iterations} runs"
+            )
+        );
+        Console.WriteLine(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"LargeChainTrain: {largeAllocated:N0} bytes over {iterations} runs"
+            )
+        );
 
         largeAllocated
             .Should()
@@ -124,8 +140,12 @@ public class CoreTrainMemoryTests
                 for (int i = 0; i < 20; i++)
                 {
                     var train = new TupleTrain();
-                    var input = new SimpleInput($"tuple_test_{i}");
-                    var output = await train.Run(input).ConfigureAwait(false);
+                    var input = new SimpleInput(
+                        string.Create(CultureInfo.InvariantCulture, $"tuple_test_{i}")
+                    );
+                    var output = await train
+                        .Run(input, CancellationToken.None)
+                        .ConfigureAwait(false);
                     output.Should().NotBeNull();
                 }
             },
@@ -157,8 +177,13 @@ public class CoreTrainMemoryTests
                     var train = new VeryLargeDataTrain();
                     largeObjectTrains.Add(new WeakReference(train));
 
-                    var largeInput = new VeryLargeDataModel($"large_{i}", new byte[1_000_000]); // 1MB each
-                    var output = await train.Run(largeInput).ConfigureAwait(false);
+                    var largeInput = new VeryLargeDataModel(
+                        string.Create(CultureInfo.InvariantCulture, $"large_{i}"),
+                        new byte[1_000_000]
+                    ); // 1MB each
+                    var output = await train
+                        .Run(largeInput, CancellationToken.None)
+                        .ConfigureAwait(false);
                     output.Should().NotBeNull();
                 }
             },
@@ -175,7 +200,12 @@ public class CoreTrainMemoryTests
         await Task.Delay(100); // Give GC time to work
 
         var aliveTrains = largeObjectTrains.Count(wr => wr.IsAlive);
-        Console.WriteLine($"Trains still alive after GC: {aliveTrains}/{largeObjectTrains.Count}");
+        Console.WriteLine(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Trains still alive after GC: {aliveTrains}/{largeObjectTrains.Count}"
+            )
+        );
 
         aliveTrains
             .Should()
@@ -206,10 +236,15 @@ public class CoreTrainMemoryTests
                         {
                             var train = new LargeDataTrain();
                             var input = new LargeDataModel(
-                                $"concurrent_{trainId}_{i}",
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"concurrent_{trainId}_{i}"
+                                ),
                                 new byte[50_000]
                             ); // 50KB each
-                            var output = await train.Run(input).ConfigureAwait(false);
+                            var output = await train
+                                .Run(input, CancellationToken.None)
+                                .ConfigureAwait(false);
                             output.Should().NotBeNull();
                         }
                     });
@@ -238,7 +273,7 @@ public class CoreTrainMemoryTests
         var input = new SimpleInput("clear_test");
 
         // Run train to populate Memory
-        var result = train.Run(input).Result;
+        var result = train.Run(input, CancellationToken.None).Result;
         result.Should().NotBeNull();
 
         // Memory dictionary should contain objects
@@ -270,12 +305,17 @@ public class CoreTrainMemoryTests
                     for (int i = 0; i < 15; i++)
                     {
                         var train = new LargeDataTrain();
-                        var input = new LargeDataModel($"batch_{batch}_item_{i}", new byte[75_000]); // 75KB each
-                        var output = await train.Run(input).ConfigureAwait(false);
+                        var input = new LargeDataModel(
+                            string.Create(CultureInfo.InvariantCulture, $"batch_{batch}_item_{i}"),
+                            new byte[75_000]
+                        ); // 75KB each
+                        var output = await train
+                            .Run(input, CancellationToken.None)
+                            .ConfigureAwait(false);
                         output.Should().NotBeNull();
                     }
                 },
-                $"RepeatedExecution_Batch_{batch}"
+                string.Create(CultureInfo.InvariantCulture, $"RepeatedExecution_Batch_{batch}")
             );
 
             batchResults.Add(result);

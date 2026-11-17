@@ -41,7 +41,8 @@ public class DeadLetterTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var manifestGroup = await CreateTestManifestGroup(context);
 
@@ -94,7 +95,8 @@ public class DeadLetterTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var manifestGroup = await CreateTestManifestGroup(context);
 
@@ -146,7 +148,8 @@ public class DeadLetterTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var manifestGroup = await CreateTestManifestGroup(context);
 
@@ -206,7 +209,8 @@ public class DeadLetterTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var manifestGroup = await CreateTestManifestGroup(context);
 
@@ -283,7 +287,8 @@ public class DeadLetterTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var manifestGroup = await CreateTestManifestGroup(context);
 
@@ -335,7 +340,8 @@ public class DeadLetterTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var manifestGroup = await CreateTestManifestGroup(context);
 
@@ -406,7 +412,8 @@ public class DeadLetterTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var manifestGroup = await CreateTestManifestGroup(context);
 
@@ -463,7 +470,8 @@ public class DeadLetterTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var manifestGroup = await CreateTestManifestGroup(context);
 

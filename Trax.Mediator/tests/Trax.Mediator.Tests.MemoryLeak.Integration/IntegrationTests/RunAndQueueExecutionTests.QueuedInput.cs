@@ -27,7 +27,8 @@ public partial class RunAndQueueExecutionTests
 
         Encoding.UTF8.GetByteCount(inputJson).Should().BeLessThan(64 * 1024);
 
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         QueueTrainResult? queued = null;
@@ -43,7 +44,8 @@ public partial class RunAndQueueExecutionTests
         }
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == queued.WorkQueueId);
@@ -60,7 +62,8 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task QueueAsync_ListWrittenWithReferenceMetadata_IsRefusedAsAJsonError()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = () =>
@@ -75,7 +78,8 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task QueueAsync_ReferenceToAnotherElement_IsNotFollowed()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var queued = await execution.QueueAsync(
@@ -84,7 +88,8 @@ public partial class RunAndQueueExecutionTests
         );
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == queued.WorkQueueId);
@@ -109,7 +114,8 @@ public partial class RunAndQueueExecutionTests
         var inputJson = """{"items":[""" + elements + "]}";
         Encoding.UTF8.GetByteCount(inputJson).Should().BeLessThan(262_144);
 
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = () => execution.QueueAsync(typeof(IWideTrain).FullName!, inputJson);
@@ -128,7 +134,8 @@ public partial class RunAndQueueExecutionTests
         var inputJson = """{"items":[""" + elements + "]}";
         Encoding.UTF8.GetByteCount(inputJson).Should().BeLessThan(262_144);
 
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var before = GC.GetTotalAllocatedBytes(precise: true);
@@ -148,7 +155,8 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task QueueAsync_OrdinaryInput_IsStoredAsBefore()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var queued = await execution.QueueAsync(
@@ -157,7 +165,8 @@ public partial class RunAndQueueExecutionTests
         );
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == queued.WorkQueueId);
@@ -168,7 +177,8 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task A_queued_input_keeps_its_dictionary_keys()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var queued = await execution.QueueAsync(
@@ -177,7 +187,8 @@ public partial class RunAndQueueExecutionTests
         );
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == queued.WorkQueueId);

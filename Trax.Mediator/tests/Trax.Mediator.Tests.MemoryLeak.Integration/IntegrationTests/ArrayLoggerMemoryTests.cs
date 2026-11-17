@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Trax.Mediator.Tests.ArrayLogger.Services.ArrayLoggingProvider;
@@ -29,7 +30,9 @@ public class ArrayLoggerMemoryTests
                     // Create multiple loggers
                     for (int j = 0; j < 10; j++)
                     {
-                        var logger = provider.CreateLogger($"TestLogger_{i}_{j}");
+                        var logger = provider.CreateLogger(
+                            string.Create(CultureInfo.InvariantCulture, $"TestLogger_{i}_{j}")
+                        );
 
                         loggerReferences.Add(new WeakReference(logger));
 
@@ -176,7 +179,12 @@ public class ArrayLoggerMemoryTests
                     {
                         for (int i = 0; i < 50; i++)
                         {
-                            var logger = provider.CreateLogger($"ConcurrentLogger_{taskId}_{i}");
+                            var logger = provider.CreateLogger(
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"ConcurrentLogger_{taskId}_{i}"
+                                )
+                            );
 
                             // Generate logs concurrently
                             await Task.Run(() =>
@@ -226,7 +234,9 @@ public class ArrayLoggerMemoryTests
                 for (int i = 0; i < 50; i++)
                 {
                     using var provider = new ArrayLoggingProvider();
-                    var logger = provider.CreateLogger($"DisposalTest_{i}");
+                    var logger = provider.CreateLogger(
+                        string.Create(CultureInfo.InvariantCulture, $"DisposalTest_{i}")
+                    );
 
                     loggerReferences.Add(new WeakReference(logger));
 
@@ -253,7 +263,10 @@ public class ArrayLoggerMemoryTests
 
         var aliveLoggers = loggerReferences.Count(wr => wr.IsAlive);
         Console.WriteLine(
-            $"Logger effects still alive after GC: {aliveLoggers}/{loggerReferences.Count}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Logger effects still alive after GC: {aliveLoggers}/{loggerReferences.Count}"
+            )
         );
 
         aliveLoggers
