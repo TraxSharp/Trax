@@ -6,8 +6,7 @@ namespace Trax.Core.Tests.Meta.Tests;
 
 /// <summary>
 /// The published surface of <c>Trax.Core</c> and <c>Trax.Core.Testing</c> is a committed file,
-/// so a change to it lands in the diff. <c>Trax.Core.Analyzers</c> ships as a development
-/// dependency that loads into the compiler, so it has no baseline.
+/// so a change to it lands in the diff.
 ///
 /// <para>Enforces <c>Trax.Docs/adr/0010-the-public-api-surface-is-a-committed-baseline.md</c>.</para>
 /// </summary>
@@ -68,10 +67,6 @@ public class PublicApiSurfaceTests
                 File.ReadAllText(csproj)
                     .Contains("<IsPackable>false</IsPackable>", StringComparison.OrdinalIgnoreCase)
             )
-                continue;
-
-            // An analyzer loads into the compiler; it has no API a consumer calls.
-            if (string.Equals(name, "Trax.Core.Analyzers", StringComparison.Ordinal))
                 continue;
 
             if (!File.Exists(Path.Combine(BaselineSourceDir, $"{name}.received.txt")))

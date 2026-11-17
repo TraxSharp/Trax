@@ -1,15 +1,16 @@
-using Trax.Core.Extensions;
-
 namespace Trax.Core.Tests.Meta.Tests;
 
 /// <summary>
-/// The analyzer profile is the vendor's default rule set with every reported rule an error, and
-/// nothing in this folder opts out of it.
+/// Every Trax folder builds under the Trax.Analyzers profile, and a rule is switched off in two
+/// places only, each with its reason written beside it: for the whole repository in the root
+/// <c>.globalconfig</c>, or a ban group for one folder in that folder's
+/// <c>Directory.Build.props</c>.
 ///
 /// <para>
-/// The root <c>.globalconfig</c> is generated from the configuration Meziantou.Analyzer ships.
-/// A hand edit, a <c>#pragma</c>, a <c>NoWarn</c> or a nearer configuration file each turn a rule
-/// off for one place, which is how a rule set stops being the same everywhere.
+/// Any other way of turning a rule off (a <c>#pragma</c>, a <c>[SuppressMessage]</c>, a
+/// <c>NoWarn</c>, <c>RunAnalyzers</c>, a nearer configuration or ban file) works for one place
+/// and leaves no reason behind, which is how a rule set stops being the same everywhere. This
+/// scans the whole repository, not only Trax.Core.
 /// </para>
 ///
 /// <para>Enforces <c>Trax.Docs/adr/0061-analyzer-rules-are-a-vendors-default-set-every-one-an-error.md</c>.</para>
@@ -24,51 +25,71 @@ public partial class AnalyzerProfileTests
     private const string Adr =
         "Trax.Docs/adr/0061-analyzer-rules-are-a-vendors-default-set-every-one-an-error.md";
 
-    private const string Regenerate = ".github/scripts/generate-analyzer-profile.sh";
+    // The .NET folders, each of which must build under the profile.
+    private static readonly string[] Folders =
+    [
+        "Trax.Core",
+        "Trax.Effect",
+        "Trax.StateMachine/dotnet",
+        "Trax.Mediator",
+        "Trax.Scheduler",
+        "Trax.Api",
+        "Trax.Cli",
+        "Trax.Samples",
+        "Trax.Docs",
+    ];
+
+    [TestCaseSource(nameof(Folders))]
+    public void EveryFolder_BuildsUnderTheProfile(string folder)
+    {
+        var props = File.ReadAllText(MonorepoRoot.Combine(folder, "Directory.Build.props"));
+
+        props
+            .Should()
+            .Contain(
+                "Trax.Analyzers/Trax.Analyzers.InRepo.props",
+                $"{folder} must import the profile from its Directory.Build.props. See {Adr}."
+            );
+    }
 
     [Test]
-    public void Profile_IsTheVendorDefault_WithEveryReportedRuleAnError()
+    public void RepositoryExemptions_EachCarryAReason_AndNameARule()
     {
-        var vendor = Severities(File.ReadAllLines(VendorDefaults()));
-        var profileLines = File.ReadAllLines(MonorepoRoot.Combine(".globalconfig"));
-        var profile = Severities(profileLines);
-        var labelled = LabelledRules(profileLines);
+        var rules = File.ReadAllLines(MonorepoRoot.Combine("Trax.Analyzers", "rules.txt"))
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0 && !line.StartsWith('#'))
+            .Select(line => line.Split(' ', 2)[0])
+            .ToHashSet(StringComparer.Ordinal);
 
+        var lines = File.ReadAllLines(MonorepoRoot.Combine(".globalconfig"));
         var problems = new List<string>();
 
-        foreach (var (rule, vendorSeverity) in vendor.OrderBy(v => v.Key, StringComparer.Ordinal))
+        for (var i = 0; i < lines.Length; i++)
         {
-            if (!profile.TryGetValue(rule, out var severity))
+            var line = lines[i].Trim();
+            if (line.Length == 0 || line.StartsWith('#') || line is "is_global = true")
+                continue;
+
+            var match = RuleSeverity.Match(line);
+            if (!match.Success)
             {
-                problems.Add($"{rule}: missing from the profile");
+                problems.Add($"line {i + 1}: '{line}' is not a rule severity");
                 continue;
             }
 
-            var expected =
-                labelled.TryGetValue(rule, out var label)
-                    ? (string.Equals(label, "Added", StringComparison.Ordinal) ? "error" : "none")
-                : vendorSeverity is "none" or "silent" ? vendorSeverity
-                : "error";
+            var rule = match.Groups["rule"].Value;
+            if (!rules.Contains(rule))
+                problems.Add($"line {i + 1}: {rule} is not a rule in Trax.Analyzers/rules.txt");
 
-            if (!string.Equals(severity, expected, StringComparison.Ordinal))
-                problems.Add(
-                    $"{rule}: {severity}, expected {expected} (the package ships it as {vendorSeverity})"
-                );
+            if (!ReasonAbove(lines, i))
+                problems.Add($"line {i + 1}: {rule} has no '# Exempt:' or '# Deferred:' reason above it");
         }
-
-        problems.AddRange(
-            profile
-                .Keys.Where(rule => !vendor.ContainsKey(rule))
-                .Order(StringComparer.Ordinal)
-                .Select(rule => $"{rule}: not a rule of the pinned package")
-        );
 
         problems
             .Should()
             .BeEmpty(
-                "the profile is generated, not edited: every rule Meziantou.Analyzer reports by "
-                    + "default is an error, and a rule departs from that only where the generator names it "
-                    + $"with its reason. Run {Regenerate}. See {Adr}. Problems:\n  "
+                "the root .globalconfig holds only the rules this repository turns off, each with "
+                    + $"its reason on the line above. See {Adr}. Problems:\n  "
                     + string.Join("\n  ", problems)
             );
     }
@@ -76,157 +97,233 @@ public partial class AnalyzerProfileTests
     [Test]
     public void Sources_DoNotSuppressAProfileRule()
     {
-        var offenders = new List<string>();
-
-        foreach (var file in SourceFiles.CSharp("src", "tests"))
-        {
-            // self-skip; this file spells the suppressions out in its own test cases
-            if (file.EndsWith("AnalyzerProfileTests.cs", StringComparison.Ordinal))
-                continue;
-
-            if (Suppression.IsMatch(File.ReadAllText(file)))
-                offenders.Add(RepoRoot.Relative(file));
-        }
-
-        foreach (var file in BuildFiles())
-        {
-            if (NoWarn.IsMatch(File.ReadAllText(file)))
-                offenders.Add(RepoRoot.Relative(file));
-        }
-
-        offenders.AddRange(
-            NearerConfigurations()
-                .Where(file => RuleSeverity.IsMatch(File.ReadAllText(file)))
-                .Select(RepoRoot.Relative)
-        );
+        var offenders = Files("*.cs")
+            .Where(file => !IsSelf(file))
+            .Where(file => Suppression.IsMatch(File.ReadAllText(file)))
+            .Select(MonorepoRelative)
+            .ToList();
 
         offenders
             .Should()
             .BeEmpty(
-                "a rule of the analyzer profile is fixed where it fires, not switched off for "
-                    + "one place: no #pragma, [SuppressMessage], NoWarn or nearer configuration "
-                    + $"file may name one. See {Adr}. Offenders:\n  "
+                "a rule of the profile is fixed where it fires, not switched off for one place: no "
+                    + "#pragma warning disable (with or without ids) or [SuppressMessage] may name one. "
+                    + $"See {Adr}. Offenders:\n  "
                     + string.Join("\n  ", offenders)
             );
     }
 
-    [TestCase("#pragma warning disable MA0004")]
-    [TestCase("#pragma warning disable CS1591, MA0048")]
-    [TestCase("[SuppressMessage(\"Design\", \"MA0051:Method is too long\")]")]
-    [TestCase("[System.Diagnostics.CodeAnalysis.SuppressMessage(\"Usage\", \"MA0004\")]")]
+    [Test]
+    public void BuildFiles_DoNotOptOut()
+    {
+        var offenders = new List<string>();
+
+        foreach (var file in BuildFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (OptOut.IsMatch(lines[i]))
+                    offenders.Add($"{MonorepoRelative(file)}:{i + 1}: {lines[i].Trim()}");
+                else if (BanSwitch.IsMatch(lines[i]) && !CommentAbove(lines, i))
+                    offenders.Add(
+                        $"{MonorepoRelative(file)}:{i + 1}: a ban switched off with no reason above it"
+                    );
+            }
+        }
+
+        offenders
+            .Should()
+            .BeEmpty(
+                "a project does not opt out of the profile: no NoWarn naming one of its rules, no "
+                    + "RunAnalyzers=false, no TraxAnalyzers=false. A folder may switch a ban group "
+                    + $"off (TraxBan*=false) with its reason in a comment above. See {Adr}. "
+                    + "Offenders:\n  "
+                    + string.Join("\n  ", offenders)
+            );
+    }
+
+    [Test]
+    public void NoNearerConfiguration_ChangesTheProfile()
+    {
+        var offenders = Files(".editorconfig")
+            .Concat(Files(".globalconfig"))
+            .Where(file =>
+                !string.Equals(file, MonorepoRoot.Combine(".globalconfig"), StringComparison.Ordinal)
+            )
+            .Where(file => NearerSetting.IsMatch(File.ReadAllText(file)))
+            .Concat(
+                Files("BannedSymbols*.txt")
+                    .Concat(Files("BannedSyntaxes*.txt"))
+                    .Where(file => !IsUnder(file, "Trax.Analyzers"))
+            )
+            .Select(MonorepoRelative)
+            .ToList();
+
+        offenders
+            .Should()
+            .BeEmpty(
+                "the profile and its bans come from Trax.Analyzers and the root .globalconfig only; a "
+                    + "nearer .editorconfig, .globalconfig or ban file changes them for one place. "
+                    + $"See {Adr}. Offenders:\n  "
+                    + string.Join("\n  ", offenders)
+            );
+    }
+
+    [TestCase("#pragma warning disable TRX0004")]
+    [TestCase("#pragma warning disable CS1591, TRX0048")]
+    [TestCase("#pragma warning disable RS0030 // the clock")]
+    [TestCase("#pragma warning disable")]
+    [TestCase("  #pragma warning disable // everything")]
+    [TestCase("[SuppressMessage(\"Design\", \"TRX0051:Method is too long\")]")]
+    [TestCase(
+        "[System.Diagnostics.CodeAnalysis.SuppressMessage(\"Usage\", \"TRX0004\", Justification = \"(a) reason\")]"
+    )]
+    [TestCase("[SuppressMessage(\"Usage\", \"RS0031\")]")]
     public void Suppression_FlagsEveryFormASourceFileCanTake(string source) =>
         Suppression.IsMatch(source).Should().BeTrue();
 
     [TestCase("#pragma warning disable CS1591")]
-    [TestCase("// MA0004 is why this awaits with ConfigureAwait(false)")]
+    [TestCase("// TRX0004 is why this awaits with ConfigureAwait(false)")]
+    [TestCase("#pragma warning restore TRX0004")]
     public void Suppression_LeavesOtherTextAlone(string source) =>
         Suppression.IsMatch(source).Should().BeFalse();
 
-    private static string VendorDefaults()
+    [TestCase("<NoWarn>$(NoWarn);TRX0004</NoWarn>")]
+    [TestCase("<NoWarn Condition=\"true\">TRX0048</NoWarn>")]
+    [TestCase("<WarningsNotAsErrors>RS0030</WarningsNotAsErrors>")]
+    [TestCase("<RunAnalyzers>false</RunAnalyzers>")]
+    [TestCase("<RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>")]
+    [TestCase("<TraxAnalyzers>false</TraxAnalyzers>")]
+    [TestCase("<TraxAnalyzersTests>false</TraxAnalyzersTests>")]
+    [TestCase("<TraxAnalysisLevel>0</TraxAnalysisLevel>")]
+    public void OptOut_FlagsEveryFormABuildFileCanTake(string line) =>
+        OptOut.IsMatch(line).Should().BeTrue();
+
+    [TestCase("<NoWarn>$(NoWarn);CS1591</NoWarn>")]
+    [TestCase("<TraxBanConsole>false</TraxBanConsole>")]
+    public void OptOut_LeavesOtherLinesAlone(string line) =>
+        OptOut.IsMatch(line).Should().BeFalse();
+
+    [TestCase("dotnet_diagnostic.TRX0004.severity = none")]
+    [TestCase("dotnet_diagnostic.trx0004.severity = none")]
+    [TestCase("dotnet_diagnostic.RS0030.severity = none")]
+    [TestCase("dotnet_analyzer_diagnostic.severity = none")]
+    [TestCase("generated_code = true")]
+    public void NearerSetting_FlagsEveryFormAConfigurationCanTake(string line) =>
+        NearerSetting.IsMatch(line).Should().BeTrue();
+
+    private static bool ReasonAbove(string[] lines, int index)
     {
-        var pin = XDocument
-            .Load(MonorepoRoot.Combine("Directory.Packages.props"))
-            .Descendants("PackageVersion")
-            .Single(e =>
-                string.Equals(
-                    (string?)e.Attribute("Include"),
-                    "Meziantou.Analyzer",
-                    StringComparison.Ordinal
-                )
-            );
-
-        var packages =
-            Environment.GetEnvironmentVariable("NUGET_PACKAGES")
-            ?? Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".nuget",
-                "packages"
-            );
-
-        return Path.Combine(
-            packages,
-            "meziantou.analyzer",
-            (string)pin.Attribute("Version").NotNull(),
-            "configuration",
-            "default.editorconfig"
-        );
-    }
-
-    private static Dictionary<string, string> Severities(IEnumerable<string> lines) =>
-        lines
-            .Select(line => RuleSeverity.Match(line))
-            .Where(match => match.Success)
-            .ToDictionary(
-                match => match.Groups["rule"].Value,
-                match => match.Groups["severity"].Value,
-                StringComparer.Ordinal
-            );
-
-    // A rule the generator set on purpose carries its label and reason on the line above:
-    // Exempt and Deferred turn a rule off, Added turns on one the package leaves off.
-    private static Dictionary<string, string> LabelledRules(string[] lines)
-    {
-        var labelled = new Dictionary<string, string>(StringComparer.Ordinal);
-
-        for (var i = 1; i < lines.Length; i++)
+        // The reason may run over several comment lines; its first line carries the label.
+        for (var i = index - 1; i >= 0 && lines[i].TrimStart().StartsWith('#'); i--)
         {
-            var match = RuleSeverity.Match(lines[i]);
-            var label = Label.Match(lines[i - 1]);
-            if (match.Success && label.Success)
-                labelled[match.Groups["rule"].Value] = label.Groups["label"].Value;
+            if (Reason.IsMatch(lines[i]))
+                return true;
         }
 
-        return labelled;
+        return false;
+    }
+
+    private static bool CommentAbove(string[] lines, int index)
+    {
+        for (var i = index - 1; i >= 0; i--)
+        {
+            var line = lines[i].Trim();
+            if (line.EndsWith("-->", StringComparison.Ordinal))
+                return true;
+            if (line.Length > 0 && !line.StartsWith('<'))
+                continue;
+            if (line.StartsWith("<Trax", StringComparison.Ordinal))
+                continue;
+
+            return false;
+        }
+
+        return false;
     }
 
     private static IEnumerable<string> BuildFiles() =>
-        SourceFiles
-            .Projects()
-            .Concat(
-                Directory
-                    .EnumerateFiles(RepoRoot.Path, "Directory.Build.*", SearchOption.AllDirectories)
-                    .Where(IsNotBuildOutput)
-            );
+        Files("*.csproj")
+            .Concat(Files("*.props"))
+            .Concat(Files("*.targets"))
+            .Where(file => !IsUnder(file, "Trax.Analyzers"));
 
-    private static IEnumerable<string> NearerConfigurations() =>
-        new[] { ".editorconfig", ".globalconfig" }
-            .SelectMany(name =>
-                Directory.EnumerateFiles(RepoRoot.Path, name, SearchOption.AllDirectories)
+    // Every file of that name in the repository, but build output, dependencies and the code
+    // Trax.Analyzers copies from upstream (which is not under the profile, so it keeps upstream's
+    // style and a sync stays a readable diff).
+    private static IEnumerable<string> Files(string pattern) =>
+        Directory
+            .EnumerateFiles(MonorepoRoot.Path, pattern, SearchOption.AllDirectories)
+            .Where(path =>
+                !Skipped.Any(part =>
+                    path.Contains(
+                        $"{Path.DirectorySeparatorChar}{part}{Path.DirectorySeparatorChar}",
+                        StringComparison.Ordinal
+                    )
+                )
             )
-            .Where(IsNotBuildOutput);
+            .Where(path => !IsUnder(path, "Trax.Analyzers"));
 
-    private static bool IsNotBuildOutput(string path)
-    {
-        var s = Path.DirectorySeparatorChar;
-        return !path.Contains($"{s}bin{s}", StringComparison.Ordinal)
-            && !path.Contains($"{s}obj{s}", StringComparison.Ordinal);
-    }
+    private static readonly string[] Skipped = ["bin", "obj", "node_modules", ".git"];
+
+    private static bool IsUnder(string path, string folder) =>
+        path.StartsWith(
+            MonorepoRoot.Combine(folder) + Path.DirectorySeparatorChar,
+            StringComparison.Ordinal
+        );
+
+    private static bool IsSelf(string path) =>
+        string.Equals(
+            MonorepoRelative(path),
+            "Trax.Core/tests/Trax.Core.Tests.Meta/Tests/AnalyzerProfileTests.cs",
+            StringComparison.Ordinal
+        );
+
+    private static string MonorepoRelative(string path) =>
+        Path.GetRelativePath(MonorepoRoot.Path, path).Replace('\\', '/');
 
     [GeneratedRegex(
-        @"^dotnet_diagnostic\.(?<rule>MA\d+)\.severity\s*=\s*(?<severity>\w+)\s*$",
-        RegexOptions.Multiline | RegexOptions.ExplicitCapture,
+        @"^dotnet_diagnostic\.(?<rule>[A-Z]+\d+)\.severity\s*=\s*(?<severity>\w+)$",
+        RegexOptions.ExplicitCapture,
         matchTimeoutMilliseconds: 5_000
     )]
     private static partial Regex RuleSeverity { get; }
 
     [GeneratedRegex(
-        @"^# (?<label>Exempt|Deferred|Added): \S",
-        RegexOptions.ExplicitCapture,
+        @"^\s*# (Exempt|Deferred): \S",
+        RegexOptions.None,
         matchTimeoutMilliseconds: 5_000
     )]
-    private static partial Regex Label { get; }
+    private static partial Regex Reason { get; }
 
+    // A pragma that names a profile rule, or names nothing (and so disables every warning), and a
+    // SuppressMessage attribute naming a profile rule anywhere in its arguments.
     [GeneratedRegex(
-        @"#pragma\s+warning\s+disable[^\r\n]*\bMA\d{4}\b|SuppressMessage\s*\([^)]*\bMA\d{4}\b",
-        RegexOptions.None,
+        @"#pragma\s+warning\s+disable(?:[^\r\n]*\b(?:TRX\d{4}|RS003[01])\b|\s*(?://[^\r\n]*)?$)|SuppressMessage\s*\((?:[^()]|\([^()]*\))*\b(?:TRX\d{4}|RS003[01])\b",
+        RegexOptions.Multiline | RegexOptions.IgnoreCase,
         matchTimeoutMilliseconds: 5_000
     )]
     private static partial Regex Suppression { get; }
 
     [GeneratedRegex(
-        @"<(?:NoWarn|WarningsNotAsErrors)>[^<]*\bMA\d{4}\b",
-        RegexOptions.None,
+        @"<(?:NoWarn|WarningsNotAsErrors)\b[^>]*>[^<]*\b(?:TRX\d{4}|RS003[01])\b|<(?:RunAnalyzers|RunAnalyzersDuringBuild|TraxAnalyzers|TraxAnalyzersTests)\b[^>]*>\s*false\s*<|<TraxAnalysisLevel\b",
+        RegexOptions.IgnoreCase,
         matchTimeoutMilliseconds: 5_000
     )]
-    private static partial Regex NoWarn { get; }
+    private static partial Regex OptOut { get; }
+
+    [GeneratedRegex(
+        @"<TraxBan\w+\b[^>]*>\s*false\s*<",
+        RegexOptions.IgnoreCase,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex BanSwitch { get; }
+
+    [GeneratedRegex(
+        @"^\s*(?:dotnet_diagnostic\.(?:TRX\d{4}|RS003[01])\.|dotnet_analyzer_diagnostic\.|generated_code\s*=)",
+        RegexOptions.Multiline | RegexOptions.IgnoreCase,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex NearerSetting { get; }
 }

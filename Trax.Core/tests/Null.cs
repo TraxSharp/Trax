@@ -2,8 +2,8 @@ namespace Trax.Testing;
 
 /// <summary>
 /// A null where a signature says there cannot be one, for a test of what the code does when a
-/// caller ignores the annotation. The null-forgiving operator is banned (BannedSyntaxes.txt at
-/// the repository root), and a test that passes null on purpose should say so by name.
+/// caller ignores the annotation. The null-forgiving operator is banned (the TraxBanNullForgiving
+/// group of the Trax.Analyzers profile), and a test that passes null on purpose says so by name.
 /// </summary>
 internal static class Null
 {

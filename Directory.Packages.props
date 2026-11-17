@@ -52,10 +52,6 @@
     <PackageVersion Include="HotChocolate.Data" Version="16.7.5" />
     <PackageVersion Include="HotChocolate.Data.EntityFramework" Version="16.7.5" />
     <PackageVersion Include="HotChocolate.Execution.Projections" Version="16.7.5" />
-    <!-- The analyzer profile: every rule this package enables by default is an error. The
-         severities live in the generated .globalconfig; rerun
-         .github/scripts/generate-analyzer-profile.sh when this version moves. -->
-    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.341" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.13" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
@@ -117,9 +113,9 @@
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
     <PackageVersion Include="System.Diagnostics.PerformanceCounter" Version="10.0.12" />
-    <!-- Referenced directly by Trax.Core.Tests.Analyzers and Trax.Analyzers.Tests, the projects
-         that pull it in (Analyzer.Testing -> NuGet.Packaging, at 9.0.6), for the same reason as
-         the SQLite floor above. Floor for CVE-2026-70162 and CVE-2026-84008. -->
+    <!-- Referenced directly by Trax.Analyzers.Tests, the project that pulls it in
+         (Analyzer.Testing -> NuGet.Packaging, at 9.0.6), for the same reason as the SQLite floor
+         above. Floor for CVE-2026-70162 and CVE-2026-84008. -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <!-- trax-console. Its minors still break its API (v2 "still accepts planned API breaks"), so Dependabot proposes them
          on their own (.github/dependabot.yml, terminal-gui). -->

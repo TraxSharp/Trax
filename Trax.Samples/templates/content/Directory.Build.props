@@ -6,4 +6,8 @@
          here does. See the root Directory.Build.props. -->
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
+
+  <!-- A scaffolded project gets the profile only when asked (the templates' strict option), but
+       the templates' own code is held to it here, as every sample is. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../Trax.Analyzers/Trax.Analyzers.InRepo.props" />
 </Project>

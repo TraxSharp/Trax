@@ -58,32 +58,13 @@
     <PackageValidationBaselineVersion>1.69.0</PackageValidationBaselineVersion>
   </PropertyGroup>
 
-  <!-- Propagate the Trax.Core analyzer to all projects in the solution -->
-  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Trax.Core.Analyzers'">
-    <ProjectReference
-      Include="$(MSBuildThisFileDirectory)src/Trax.Core.Analyzers/Trax.Core.Analyzers.csproj"
-      ReferenceOutputAssembly="false"
-      OutputItemType="Analyzer"
-    />
-  </ItemGroup>
-
   <!-- Deterministic/reproducible builds. CI source-path normalization
        (ContinuousIntegrationBuild) is turned on by the package only when CI is detected. -->
   <ItemGroup>
     <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
   </ItemGroup>
 
-  <!-- The analyzer profile (.globalconfig at the repository root): Meziantou.Analyzer's default
-       rules, every one an error, in src and tests alike. No project and no file opts out. -->
-  <ItemGroup>
-    <PackageReference Include="Meziantou.Analyzer" PrivateAssets="All" />
-  </ItemGroup>
-
-  <!-- The team's layer on the profile: the APIs named in BannedSymbols.txt at the repository
-       root are errors (RS0030). The syntax named in BannedSyntaxes.txt beside it needs no
-       wiring here; Meziantou.Analyzer reads the nearest one above the project (MA0240). -->
-  <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="All" />
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)../BannedSymbols.txt" Visible="false" />
-  </ItemGroup>
+  <!-- The Trax.Analyzers profile: every rule rules.txt turns on is an error here, in src and
+       tests alike (Trax.Docs/adr/0061). -->
+  <Import Project="$(MSBuildThisFileDirectory)../Trax.Analyzers/Trax.Analyzers.InRepo.props" />
 </Project>

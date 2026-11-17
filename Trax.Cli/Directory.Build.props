@@ -46,4 +46,8 @@
   <ItemGroup>
     <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
   </ItemGroup>
+
+  <!-- The Trax.Analyzers profile: every rule Trax.Analyzers/rules.txt turns on is an error here,
+       in src and tests alike (Trax.Docs/adr/0061). -->
+  <Import Project="$(MSBuildThisFileDirectory)../Trax.Analyzers/Trax.Analyzers.InRepo.props" />
 </Project>

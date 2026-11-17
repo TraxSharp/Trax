@@ -1,0 +1,20 @@
+# Rules of the Trax.Analyzers profile that this repository turns off, everywhere. Written by hand:
+# each line carries its reason on the line above, as "# Exempt:" (keeping the rule would break a
+# published promise) or "# Deferred:" (the work is owed and tracked). AnalyzerProfileTests in
+# Trax.Core.Tests.Meta refuses a line without one, a rule rules.txt does not list, and any other
+# file that switches a rule off. The profile itself is Trax.Analyzers/rules.txt.
+is_global = true
+
+# Exempt: Either<TLeft, TRight>.Left and .Right are public static factories on a generic type.
+dotnet_diagnostic.TRX0018.severity = none
+
+# Exempt: Train.Junctions() is documented to throw NotImplementedException until it is overridden.
+dotnet_diagnostic.TRX0025.severity = none
+
+# Exempt: renaming a public type named like its namespace (Trax.Core.Monad.Monad and others) is a
+# binary break.
+dotnet_diagnostic.TRX0049.severity = none
+
+# Deferred: methods past 60 lines, the longest ChainVerification.Replay (516) and
+# Monad.DecideAsync (414). Splitting them is a change to the chain runtime of its own.
+dotnet_diagnostic.TRX0051.severity = none
