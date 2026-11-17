@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Trax.Core.Extensions;
 using Trax.Core.Testing;
 
 namespace Trax.Effect.Data.Testing.Tests;
@@ -41,7 +42,7 @@ public class OwnerScopeFilterBypassTests
             .UseNpgsql("Host=localhost;Database=offline_model_only")
             .Options;
         using var context = (TContext)
-            Activator.CreateInstance(typeof(TContext), options, new NoPrincipal())!;
+            Activator.CreateInstance(typeof(TContext), options, new NoPrincipal()).NotNull();
         return [context.Model];
     }
 

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Utils;
 
@@ -25,7 +26,11 @@ public class TraxRedactionTests
     {
         yield return TraxJsonSerializationOptions.Default;
         yield return TraxJsonSerializationOptions.JunctionLogging;
-        yield return new JsonSerializerOptions();
+        yield return new JsonSerializerOptions()
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+        };
     }
 
     private static string Serialize(object value, JsonSerializerOptions options) =>
@@ -136,7 +141,7 @@ public class TraxRedactionTests
         var json = Serialize(new Renamed { Token = Secret }, options);
 
         json.Should().NotContain(Secret);
-        JsonNode.Parse(json)!["access_token"].Should().NotBeNull("the JSON name is kept");
+        JsonNode.Parse(json).NotNull()["access_token"].Should().NotBeNull("the JSON name is kept");
     }
 
     [TestCaseSource(nameof(Options))]
@@ -193,6 +198,10 @@ public class TraxRedactionTests
         var json = Serialize(
             new Unmarked { Password = "visible", ApiKey = "visible-too" },
             new JsonSerializerOptions()
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            }
         );
 
         json.Should()
@@ -210,7 +219,14 @@ public class TraxRedactionTests
     {
         var login = new Login { User = "ada", Password = Secret };
 
-        Serialize(login, new JsonSerializerOptions());
+        Serialize(
+            login,
+            new JsonSerializerOptions()
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            }
+        );
 
         login.Password.Should().Be(Secret, "the train still runs with the real value");
     }
@@ -218,7 +234,11 @@ public class TraxRedactionTests
     [Test]
     public void The_same_options_give_the_same_redacting_options()
     {
-        var options = new JsonSerializerOptions();
+        var options = new JsonSerializerOptions()
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+        };
 
         TraxRedaction
             .WithRedaction(options)
@@ -232,7 +252,11 @@ public class TraxRedactionTests
     [Test]
     public void The_given_options_are_not_changed()
     {
-        var options = new JsonSerializerOptions();
+        var options = new JsonSerializerOptions()
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+        };
         TraxRedaction.WithRedaction(options);
 
         JsonSerializer
@@ -244,7 +268,14 @@ public class TraxRedactionTests
     [Test]
     public void A_redacted_value_cannot_be_read_back_as_the_real_one()
     {
-        var json = Serialize(new Login { User = "ada", Password = Secret }, new());
+        var json = Serialize(
+            new Login { User = "ada", Password = Secret },
+            new()
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            }
+        );
 
         var read = () => JsonSerializer.Deserialize<Login>(json);
 
@@ -308,7 +339,7 @@ public class TraxRedactionTests
 
     public class Batch
     {
-        public List<Card> Cards { get; set; } = [];
+        public IList<Card> Cards { get; set; } = [];
     }
 
     public class Keyring
@@ -316,7 +347,7 @@ public class TraxRedactionTests
         public string Owner { get; set; } = "";
 
         [TraxSensitive]
-        public List<string> Keys { get; set; } = [];
+        public IList<string> Keys { get; set; } = [];
     }
 
     public class Wallet
@@ -378,7 +409,7 @@ public class TraxRedactionTests
     [Test]
     public void A_null_question_key_is_refused()
     {
-        var act = () => TraxRedaction.IsSensitiveQuestion(null!);
+        var act = () => TraxRedaction.IsSensitiveQuestion(Null.Of<string>());
 
         act.Should().Throw<ArgumentNullException>();
     }

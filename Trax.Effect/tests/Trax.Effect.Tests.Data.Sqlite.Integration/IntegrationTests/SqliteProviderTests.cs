@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Services.DataContext;
@@ -61,7 +62,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.Id.Should().Be(metadata.Id);
+        found.NotNull().Id.Should().Be(metadata.Id);
         found.Name.Should().Be("TestMetadata");
     }
 
@@ -120,9 +121,9 @@ public class SqliteProviderTests : TestSetup
         var found1 = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata1.Id);
         var found2 = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata2.Id);
         found1.Should().NotBeNull();
-        found1!.Name.Should().Be("Multi1");
+        found1.NotNull().Name.Should().Be("Multi1");
         found2.Should().NotBeNull();
-        found2!.Name.Should().Be("Multi2");
+        found2.NotNull().Name.Should().Be("Multi2");
     }
 
     [Test]
@@ -148,7 +149,7 @@ public class SqliteProviderTests : TestSetup
         context.Reset();
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.TrainState.Should().Be(TrainState.InProgress);
+        found.NotNull().TrainState.Should().Be(TrainState.InProgress);
     }
 
     [Test]
@@ -179,7 +180,7 @@ public class SqliteProviderTests : TestSetup
         context.Reset();
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == idAfterInsert);
         found.Should().NotBeNull();
-        found!.TrainState.Should().Be(TrainState.Completed);
+        found.NotNull().TrainState.Should().Be(TrainState.Completed);
         found.EndTime.Should().NotBeNull();
     }
 
@@ -243,7 +244,7 @@ public class SqliteProviderTests : TestSetup
         context.Reset();
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.TrainState.Should().Be(TrainState.Failed);
+        found.NotNull().TrainState.Should().Be(TrainState.Failed);
     }
 
     #endregion
@@ -289,7 +290,7 @@ public class SqliteProviderTests : TestSetup
         context.Reset();
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.Name.Should().Be("TransactionCommitTest");
+        found.NotNull().Name.Should().Be("TransactionCommitTest");
     }
 
     [Test]
@@ -455,7 +456,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.Logs.FirstOrDefaultAsync(x => x.Id == log.Id);
         found.Should().NotBeNull();
-        found!.Level.Should().Be(LogLevel.Information);
+        found.NotNull().Level.Should().Be(LogLevel.Information);
         found.Message.Should().Be("Test log message");
         found.Category.Should().Be("TestCategory");
         found.EventId.Should().Be(42);
@@ -508,7 +509,7 @@ public class SqliteProviderTests : TestSetup
         );
 
         found.Should().NotBeNull();
-        found!.ManifestManagerEnabled.Should().BeFalse();
+        found.NotNull().ManifestManagerEnabled.Should().BeFalse();
         found.JobDispatcherEnabled.Should().BeFalse();
         found.ManifestManagerPollingInterval.Should().Be(TimeSpan.FromSeconds(15));
         found.JobDispatcherPollingInterval.Should().Be(TimeSpan.FromSeconds(20));
@@ -552,7 +553,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.SchedulerConfigs.FirstOrDefaultAsync();
         found.Should().NotBeNull();
-        found!.MaxActiveJobs.Should().BeNull();
+        found.NotNull().MaxActiveJobs.Should().BeNull();
         found.LocalWorkerCount.Should().BeNull();
         found.MetadataCleanupInterval.Should().BeNull();
         found.MetadataCleanupRetention.Should().BeNull();
@@ -625,7 +626,7 @@ public class SqliteProviderTests : TestSetup
         );
 
         found.Should().NotBeNull();
-        found!.OperationName.Should().Be("UserProfile");
+        found.NotNull().OperationName.Should().Be("UserProfile");
         found.Version.Should().Be(3);
         found.Document.Should().Contain("$id: Int!");
         found.ShapeFingerprint.Should().Be(new string('a', 64));
@@ -665,7 +666,7 @@ public class SqliteProviderTests : TestSetup
         var found = await context.PersistedOperations.FirstOrDefaultAsync(p => p.Id == "nulls_v1");
         found.Should().NotBeNull();
         // tenant_key is on the composite PK; "" is the sentinel for "no tenant".
-        found!.TenantKey.Should().Be(string.Empty);
+        found.NotNull().TenantKey.Should().Be(string.Empty);
         found.DeprecationReason.Should().BeNull();
         found.Description.Should().BeNull();
     }
@@ -744,7 +745,7 @@ public class SqliteProviderTests : TestSetup
             h.Id == "history_v1"
         );
         found.Should().NotBeNull();
-        found!.TenantKey.Should().Be("tenant-h");
+        found.NotNull().TenantKey.Should().Be("tenant-h");
         found.Document.Should().Be("query H { z }");
         found.ShapeFingerprint.Should().Be(new string('b', 64));
         found.ChangeType.Should().Be("Upsert");
@@ -852,7 +853,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.ManifestGroups.FirstOrDefaultAsync(x => x.Id == group.Id);
         found.Should().NotBeNull();
-        found!.Name.Should().Be(group.Name);
+        found.NotNull().Name.Should().Be(group.Name);
         found.Priority.Should().Be(5);
         found.IsEnabled.Should().BeTrue();
     }
@@ -897,7 +898,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.Manifests.FirstOrDefaultAsync(x => x.Id == manifest.Id);
         found.Should().NotBeNull();
-        found!.Name.Should().Be(typeof(ITestTrain).FullName);
+        found.NotNull().Name.Should().Be(typeof(ITestTrain).FullName);
         found.ScheduleType.Should().Be(ScheduleType.Cron);
         found.CronExpression.Should().Be("0 3 * * *");
         found.MaxRetries.Should().Be(5);
@@ -917,7 +918,7 @@ public class SqliteProviderTests : TestSetup
         var workQueue = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(ITestTrain).FullName!,
+                TrainName = typeof(ITestTrain).FullName.NotNull(),
                 Input = """{"key":"value"}""",
                 InputTypeName = "System.String",
                 Priority = 10,
@@ -930,7 +931,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.WorkQueues.FirstOrDefaultAsync(x => x.Id == workQueue.Id);
         found.Should().NotBeNull();
-        found!.TrainName.Should().Be(typeof(ITestTrain).FullName);
+        found.NotNull().TrainName.Should().Be(typeof(ITestTrain).FullName);
         found.Input.Should().Be("""{"key":"value"}""");
         found.Status.Should().Be(WorkQueueStatus.Queued);
         found.Priority.Should().Be(10);
@@ -975,7 +976,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.BackgroundJobs.FirstOrDefaultAsync(x => x.Id == job.Id);
         found.Should().NotBeNull();
-        found!.MetadataId.Should().Be(metadata.Id);
+        found.NotNull().MetadataId.Should().Be(metadata.Id);
         found.Input.Should().Be("""{"task":"process"}""");
         found.InputType.Should().Be("System.String");
         found.Priority.Should().Be(3);
@@ -1027,7 +1028,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.DeadLetters.FirstOrDefaultAsync(x => x.Id == deadLetter.Id);
         found.Should().NotBeNull();
-        found!.Reason.Should().Be("Max retries exceeded");
+        found.NotNull().Reason.Should().Be("Max retries exceeded");
         found.RetryCountAtDeadLetter.Should().Be(3);
         found.Status.Should().Be(DeadLetterStatus.AwaitingIntervention);
         found.ManifestId.Should().Be(manifest.Id);
@@ -1062,7 +1063,7 @@ public class SqliteProviderTests : TestSetup
         );
 
         found.Should().NotBeNull("factory and scoped contexts must share the same SQLite database");
-        found!.Name.Should().Be("SharedDatabaseTest");
+        found.NotNull().Name.Should().Be("SharedDatabaseTest");
     }
 
     [Test]
@@ -1142,7 +1143,7 @@ public class SqliteProviderTests : TestSetup
         // Querying after reset should return the entity from the database, not the tracker
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.Name.Should().Be("ResetQueryTest");
+        found.NotNull().Name.Should().Be("ResetQueryTest");
     }
 
     #endregion
@@ -1173,7 +1174,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.Input.Should().Be("""{"testKey":"testValue","number":42}""");
+        found.NotNull().Input.Should().Be("""{"testKey":"testValue","number":42}""");
     }
 
     [Test]
@@ -1199,7 +1200,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.Output.Should().Be("""{"result":"success","count":7}""");
+        found.NotNull().Output.Should().Be("""{"result":"success","count":7}""");
     }
 
     [Test]
@@ -1225,7 +1226,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.HostLabels.Should().Be("""{"region":"us-east-1","team":"platform"}""");
+        found.NotNull().HostLabels.Should().Be("""{"region":"us-east-1","team":"platform"}""");
     }
 
     [Test]
@@ -1237,7 +1238,7 @@ public class SqliteProviderTests : TestSetup
         var workQueue = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(ITestTrain).FullName!,
+                TrainName = typeof(ITestTrain).FullName.NotNull(),
                 Input = """{"items":[1,2,3],"nested":{"a":"b"}}""",
                 InputTypeName = "TestInput",
             }
@@ -1249,7 +1250,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.WorkQueues.FirstOrDefaultAsync(x => x.Id == workQueue.Id);
         found.Should().NotBeNull();
-        found!.Input.Should().Be("""{"items":[1,2,3],"nested":{"a":"b"}}""");
+        found.NotNull().Input.Should().Be("""{"items":[1,2,3],"nested":{"a":"b"}}""");
     }
 
     [Test]
@@ -1282,7 +1283,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.Manifests.FirstOrDefaultAsync(x => x.Id == manifest.Id);
         found.Should().NotBeNull();
-        found!.Properties.Should().Be("""{"$type":"TestProps","value":123}""");
+        found.NotNull().Properties.Should().Be("""{"$type":"TestProps","value":123}""");
     }
 
     [Test]
@@ -1321,7 +1322,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.Manifests.FirstOrDefaultAsync(x => x.Id == manifest.Id);
         found.Should().NotBeNull();
-        found!.Exclusions.Should().Be(exclusionsJson);
+        found.NotNull().Exclusions.Should().Be(exclusionsJson);
     }
 
     [Test]
@@ -1357,7 +1358,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.BackgroundJobs.FirstOrDefaultAsync(x => x.Id == job.Id);
         found.Should().NotBeNull();
-        found!.Input.Should().Be("""{"command":"run","args":["--verbose"]}""");
+        found.NotNull().Input.Should().Be("""{"command":"run","args":["--verbose"]}""");
     }
 
     [Test]
@@ -1386,7 +1387,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.Input.Should().BeNull();
+        found.NotNull().Input.Should().BeNull();
         found.Output.Should().BeNull();
         found.HostLabels.Should().BeNull();
     }
@@ -1419,9 +1420,9 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.StartTime.Kind.Should().Be(DateTimeKind.Utc);
+        found.NotNull().StartTime.Kind.Should().Be(DateTimeKind.Utc);
         found.EndTime.Should().NotBeNull();
-        found.EndTime!.Value.Kind.Should().Be(DateTimeKind.Utc);
+        found.EndTime.NotNull().Value.Kind.Should().Be(DateTimeKind.Utc);
     }
 
     [Test]
@@ -1449,8 +1450,8 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.ScheduledTime.Should().NotBeNull();
-        found.ScheduledTime!.Value.Kind.Should().Be(DateTimeKind.Utc);
+        found.NotNull().ScheduledTime.Should().NotBeNull();
+        found.ScheduledTime.NotNull().Value.Kind.Should().Be(DateTimeKind.Utc);
         found.ScheduledTime.Value.Should().BeCloseTo(scheduledTime, TimeSpan.FromSeconds(1));
         found.EndTime.Should().BeNull();
     }
@@ -1479,7 +1480,7 @@ public class SqliteProviderTests : TestSetup
 
         var found = await context.ManifestGroups.FirstOrDefaultAsync(x => x.Id == group.Id);
         found.Should().NotBeNull();
-        found!.CreatedAt.Kind.Should().Be(DateTimeKind.Utc);
+        found.NotNull().CreatedAt.Kind.Should().Be(DateTimeKind.Utc);
         found.UpdatedAt.Kind.Should().Be(DateTimeKind.Utc);
         found.CreatedAt.Should().BeCloseTo(createdAt, TimeSpan.FromSeconds(1));
         found.UpdatedAt.Should().BeCloseTo(updatedAt, TimeSpan.FromSeconds(1));
@@ -1514,7 +1515,7 @@ public class SqliteProviderTests : TestSetup
 
             var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
             found.Should().NotBeNull($"metadata with TrainState.{state} should be persisted");
-            found!.TrainState.Should().Be(state);
+            found.NotNull().TrainState.Should().Be(state);
             context.Reset();
         }
     }
@@ -1569,7 +1570,7 @@ public class SqliteProviderTests : TestSetup
 
             var found = await context.Logs.FirstOrDefaultAsync(x => x.Id == log.Id);
             found.Should().NotBeNull($"log with LogLevel.{level} should be persisted");
-            found!.Level.Should().Be(level);
+            found.NotNull().Level.Should().Be(level);
             context.Reset();
         }
     }
@@ -1611,7 +1612,7 @@ public class SqliteProviderTests : TestSetup
 
             var found = await context.Manifests.FirstOrDefaultAsync(x => x.Id == manifest.Id);
             found.Should().NotBeNull($"manifest with ScheduleType.{scheduleType} should persist");
-            found!.ScheduleType.Should().Be(scheduleType);
+            found.NotNull().ScheduleType.Should().Be(scheduleType);
             context.Reset();
         }
     }
@@ -1665,7 +1666,7 @@ public class SqliteProviderTests : TestSetup
 
             var found = await context.DeadLetters.FirstOrDefaultAsync(x => x.Id == deadLetter.Id);
             found.Should().NotBeNull($"dead letter with status {status} should persist");
-            found!.Status.Should().Be(status);
+            found.NotNull().Status.Should().Be(status);
             context.Reset();
         }
     }
@@ -1679,7 +1680,7 @@ public class SqliteProviderTests : TestSetup
         foreach (var status in Enum.GetValues<WorkQueueStatus>())
         {
             var workQueue = WorkQueue.Create(
-                new CreateWorkQueue { TrainName = typeof(ITestTrain).FullName! }
+                new CreateWorkQueue { TrainName = typeof(ITestTrain).FullName.NotNull() }
             );
             workQueue.Status = status;
 
@@ -1689,7 +1690,7 @@ public class SqliteProviderTests : TestSetup
 
             var found = await context.WorkQueues.FirstOrDefaultAsync(x => x.Id == workQueue.Id);
             found.Should().NotBeNull($"work queue with status {status} should persist");
-            found!.Status.Should().Be(status);
+            found.NotNull().Status.Should().Be(status);
             context.Reset();
         }
     }
@@ -1731,7 +1732,7 @@ public class SqliteProviderTests : TestSetup
 
             var found = await context.Manifests.FirstOrDefaultAsync(x => x.Id == manifest.Id);
             found.Should().NotBeNull($"manifest with MisfirePolicy.{policy} should persist");
-            found!.MisfirePolicy.Should().Be(policy);
+            found.NotNull().MisfirePolicy.Should().Be(policy);
             context.Reset();
         }
     }
@@ -1870,7 +1871,7 @@ public class SqliteProviderTests : TestSetup
         await train.Run(Unit.Default);
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.Name.Should().Be(typeof(ITestTrain).FullName);
+        train.Metadata.NotNull().Name.Should().Be(typeof(ITestTrain).FullName);
         train.Metadata.TrainState.Should().Be(TrainState.Completed);
         train.Metadata.FailureException.Should().BeNullOrEmpty();
         train.Metadata.FailureReason.Should().BeNullOrEmpty();
@@ -1889,7 +1890,7 @@ public class SqliteProviderTests : TestSetup
         await act.Should().ThrowAsync<TrainException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.TrainState.Should().Be(TrainState.Failed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Failed);
         train.Metadata.FailureException.Should().NotBeNullOrEmpty();
         train.Metadata.FailureReason.Should().NotBeNullOrEmpty();
         train.Metadata.EndTime.Should().NotBeNull();
@@ -1906,7 +1907,10 @@ public class SqliteProviderTests : TestSetup
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.TrainState.Should().BeOneOf([TrainState.Cancelled, TrainState.InProgress]);
+        train
+            .Metadata.NotNull()
+            .TrainState.Should()
+            .BeOneOf([TrainState.Cancelled, TrainState.InProgress]);
     }
 
     [Test]
@@ -1917,7 +1921,7 @@ public class SqliteProviderTests : TestSetup
         await train.Run(Unit.Default);
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.ExternalId.Should().NotBeNullOrEmpty();
+        train.Metadata.NotNull().ExternalId.Should().NotBeNullOrEmpty();
     }
 
     [Test]
@@ -1930,9 +1934,11 @@ public class SqliteProviderTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var context = (IDataContext)factory.Create();
 
-        var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == train.Metadata!.Id);
+        var found = await context.Metadatas.FirstOrDefaultAsync(x =>
+            x.Id == train.Metadata.NotNull().Id
+        );
         found.Should().NotBeNull();
-        found!.TrainState.Should().Be(TrainState.Completed);
+        found.NotNull().TrainState.Should().Be(TrainState.Completed);
         found.Name.Should().Be(typeof(ITestTrain).FullName);
     }
 

@@ -17,6 +17,8 @@ public sealed class DeployManifest
 
     private static readonly JsonSerializerOptions Json = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         WriteIndented = true,
@@ -29,19 +31,19 @@ public sealed class DeployManifest
     /// What the host runs, sorted: <c>api</c> (it maps the Trax GraphQL endpoint), <c>scheduler</c>, <c>worker</c>,
     /// <c>job-runner</c>.
     /// </summary>
-    public List<string> Roles { get; set; } = [];
+    public IList<string> Roles { get; set; } = [];
 
     /// <summary>The database the host keeps its runs in, or null when it has no data provider.</summary>
     public DeployDatabase? Database { get; set; }
 
     /// <summary>The message transports the host connects to, sorted (<c>rabbitmq</c>).</summary>
-    public List<string> Transports { get; set; } = [];
+    public IList<string> Transports { get; set; } = [];
 
     /// <summary>The paths of the endpoints a deployment routes to or probes.</summary>
     public DeployEndpoints Endpoints { get; set; } = new();
 
     /// <summary>The authentication schemes the host registers, sorted by name.</summary>
-    public List<DeployAuthenticationScheme> Authentication { get; set; } = [];
+    public IList<DeployAuthenticationScheme> Authentication { get; set; } = [];
 
     /// <summary>Writes the manifest as indented JSON.</summary>
     public string Write() => JsonSerializer.Serialize(this, Json) + "\n";

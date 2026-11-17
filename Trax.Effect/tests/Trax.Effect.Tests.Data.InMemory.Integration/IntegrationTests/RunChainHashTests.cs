@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -37,7 +38,7 @@ public class RunChainHashTests : TestSetup
 
         await Scope.ServiceProvider.GetRequiredService<IKnownChainTrain>().Run(Unit.Default);
 
-        (await ChainHashOf(typeof(IKnownChainTrain).FullName!))
+        (await ChainHashOf(typeof(IKnownChainTrain).FullName.NotNull()))
             .Should()
             .Be(expected, "the run records the chain the host read for its train");
     }
@@ -47,7 +48,7 @@ public class RunChainHashTests : TestSetup
     {
         await Scope.ServiceProvider.GetRequiredService<IUnreadChainTrain>().Run(Unit.Default);
 
-        (await ChainHashOf(typeof(IUnreadChainTrain).FullName!)).Should().BeNull();
+        (await ChainHashOf(typeof(IUnreadChainTrain).FullName.NotNull())).Should().BeNull();
         DeclaredChains
             .Known(typeof(UnreadChainTrain))
             .Should()

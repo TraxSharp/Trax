@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Extensions;
@@ -258,7 +259,7 @@ public class FailureClassificationTests : TestSetup
                 "a carried value outside FailureClass is recorded as Unclassified, matching "
                     + "RemoteRunJson.TolerantFailureClassConverter"
             );
-        Enum.IsDefined(train.SeenClass!.Value).Should().BeTrue();
+        Enum.IsDefined(train.SeenClass.NotNull().Value).Should().BeTrue();
     }
 
     [Test]

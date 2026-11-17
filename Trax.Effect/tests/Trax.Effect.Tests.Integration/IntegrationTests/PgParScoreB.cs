@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -28,7 +29,9 @@ public class PgParScoreB : EffectJunction<PgParOrder, PgParB>
 {
     public override async Task<PgParB> Run(PgParOrder input)
     {
-        await PgParSignals.Arrive(Metadata!.TrainMetadataId, isA: false).ConfigureAwait(false);
+        await PgParSignals
+            .Arrive(Metadata.NotNull().TrainMetadataId, isA: false)
+            .ConfigureAwait(false);
         return new PgParB(10);
     }
 }

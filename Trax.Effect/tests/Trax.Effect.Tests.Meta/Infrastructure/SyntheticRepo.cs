@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Effect.Tests.Meta.Infrastructure;
 
 /// <summary>
@@ -20,7 +22,7 @@ internal sealed class SyntheticRepo : IDisposable
             Root,
             relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar)
         );
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full)!);
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full).NotNull());
         await File.WriteAllTextAsync(full, content).ConfigureAwait(false);
         return this;
     }

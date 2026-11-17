@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -31,7 +32,7 @@ namespace Trax.Effect.Tests.Data.InMemory.Integration.IntegrationTests;
 [NonParallelizable]
 public class ParallelRunTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     private static readonly ParDecider Decider = new();
 
@@ -54,7 +55,7 @@ public class ParallelRunTests
             .BuildServiceProvider();
 
     [OneTimeTearDown]
-    public async Task Dispose() => await _provider.DisposeAsync();
+    public async Task Dispose() => await _provider.NotNull().DisposeAsync();
 
     [SetUp]
     public void Reset()
@@ -72,7 +73,7 @@ public class ParallelRunTests
 
         output.Should().Be("a=2, b=20");
         ParMeeting.Met.Should().BeTrue("the two branches' first junctions waited for each other");
-        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
 
         var rows = await Rows(train.Metadata.Id);
         rows.Should().OnlyContain(r => r.State == JunctionRunState.Completed);
@@ -96,7 +97,7 @@ public class ParallelRunTests
 
         var (train, _) = await Run<IParSiblingTrackTrain>();
 
-        var rows = await Rows(train.Metadata!.Id);
+        var rows = await Rows(train.Metadata.NotNull().Id);
         var route = rows.Should().ContainSingle(r => r.Kind == JunctionRunKind.Route).Subject;
         route.BranchPath.Should().Be("Parallel#0/routes");
 
@@ -124,7 +125,7 @@ public class ParallelRunTests
 
         var (train, _) = await Run<IParSiblingCustomsTrain>();
 
-        var rows = await Rows(train.Metadata!.Id);
+        var rows = await Rows(train.Metadata.NotNull().Id);
         var route = rows.Single(r => r.Kind == JunctionRunKind.Route);
         route.AnswerWithheld.Should().BeTrue();
 
@@ -141,7 +142,8 @@ public class ParallelRunTests
             .HaveCount(2)
             .And.OnlyContain(r => !r.NameWithheld && r.BranchPath == "Parallel#0/plain");
 
-        rows.MaxBy(r => r.Position)!
+        rows.MaxBy(r => r.Position)
+            .NotNull()
             .NameWithheld.Should()
             .BeTrue("the step after the join follows every branch, the withheld one too");
     }
@@ -161,7 +163,7 @@ public class ParallelRunTests
 
         var (original, _) = await Run<IParAskEverywhereTrain>();
 
-        var recorded = await Recorded(original.Metadata!.Id);
+        var recorded = await Recorded(original.Metadata.NotNull().Id);
         recorded
             .Select(r => (r.BranchPath, r.QuestionKey, r.Occurrence, r.Tracks().Single()))
             .Should()
@@ -183,7 +185,7 @@ public class ParallelRunTests
         );
 
         Decider.Asked.Should().Be(0);
-        ParTook.Of(requeued.Metadata!.Id).Should().BeEquivalentTo(taken);
+        ParTook.Of(requeued.Metadata.NotNull().Id).Should().BeEquivalentTo(taken);
         (await Recorded(requeued.Metadata.Id))
             .Should()
             .HaveCount(4)
@@ -194,7 +196,7 @@ public class ParallelRunTests
     public async Task A_run_cancelled_by_its_caller_while_branches_run_is_recorded_cancelled()
     {
         using var cancel = new CancellationTokenSource();
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         var train =
             (ServiceTrain<ParOrder, string>)
                 (object)scope.ServiceProvider.GetRequiredService<IParWaitTrain>();
@@ -207,9 +209,12 @@ public class ParallelRunTests
             .Awaiting(() => running)
             .Should()
             .ThrowAsync<OperationCanceledException>();
-        train.Metadata!.TrainState.Should().Be(TrainState.Cancelled);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Cancelled);
 
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync(CancellationToken.None);
+        await _provider
+            .NotNull()
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None);
         (await Rows(train.Metadata.Id))
             .Where(r => r.Name is nameof(ParWaitA) or nameof(ParWaitB))
             .Should()
@@ -226,7 +231,7 @@ public class ParallelRunTests
 
         var train = await Fail<IParFailTrain>();
 
-        train.Metadata!.TrainState.Should().Be(TrainState.Failed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Failed);
         train
             .Metadata.FailureClass.Should()
             .Be(FailureClass.Transient, "the classifier calls each branch's failure transient");
@@ -242,7 +247,7 @@ public class ParallelRunTests
 
         var train = await Fail<IParFailTrain>();
 
-        train.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
+        train.Metadata.NotNull().FailureClass.Should().Be(FailureClass.Permanent);
     }
 
     private async Task<(ServiceTrain<ParOrder, string> Train, string Output)> Run<TTrain>(
@@ -250,7 +255,7 @@ public class ParallelRunTests
     )
         where TTrain : class, IServiceTrain<ParOrder, string>
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<ParOrder, string>)
@@ -259,7 +264,7 @@ public class ParallelRunTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(TTrain).FullName!,
+                Name = typeof(TTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ReplayDecisionsOf = replayDecisionsOf,
@@ -268,6 +273,7 @@ public class ParallelRunTests
 
         var output = await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
         await _provider
+            .NotNull()
             .GetRequiredService<JunctionRunWriter>()
             .FlushAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -277,7 +283,7 @@ public class ParallelRunTests
     private async Task<ServiceTrain<ParOrder, string>> Fail<TTrain>()
         where TTrain : class, IServiceTrain<ParOrder, string>
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<ParOrder, string>)
@@ -293,7 +299,7 @@ public class ParallelRunTests
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await context
@@ -305,7 +311,7 @@ public class ParallelRunTests
 
     private async Task<List<RecordedDecision>> Recorded(long metadataId)
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await context

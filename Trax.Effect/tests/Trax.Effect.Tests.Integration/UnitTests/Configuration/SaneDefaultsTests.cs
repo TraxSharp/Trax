@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Extensions;
@@ -301,7 +302,7 @@ public class SaneDefaultsTests
         });
 
         captured.Should().NotBeNull();
-        captured!.HasDatabaseProvider.Should().BeTrue();
+        captured.NotNull().HasDatabaseProvider.Should().BeTrue();
     }
 
     [Test]
@@ -317,7 +318,7 @@ public class SaneDefaultsTests
         });
 
         captured.Should().NotBeNull();
-        captured!.HasDatabaseProvider.Should().BeFalse();
+        captured.NotNull().HasDatabaseProvider.Should().BeFalse();
     }
 
     [Test]
@@ -338,7 +339,7 @@ public class SaneDefaultsTests
         });
 
         captured.Should().NotBeNull();
-        captured!.HasDataProvider.Should().BeTrue();
+        captured.NotNull().HasDataProvider.Should().BeTrue();
     }
 
     [Test]
@@ -354,7 +355,7 @@ public class SaneDefaultsTests
         });
 
         captured.Should().NotBeNull();
-        captured!.HasDataProvider.Should().BeTrue();
+        captured.NotNull().HasDataProvider.Should().BeTrue();
     }
 
     #endregion

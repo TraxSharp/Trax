@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Host;
 
@@ -25,7 +26,7 @@ public class TraxBuilderHostTests
         services.AddTrax(trax => trax.SetHostEnvironment("custom-env"));
 
         TraxHostInfo.Current.Should().NotBeNull();
-        TraxHostInfo.Current!.HostEnvironment.Should().Be("custom-env");
+        TraxHostInfo.Current.NotNull().HostEnvironment.Should().Be("custom-env");
     }
 
     [Test]
@@ -33,7 +34,7 @@ public class TraxBuilderHostTests
     {
         var services = new ServiceCollection();
 
-        var act = () => services.AddTrax(trax => trax.SetHostEnvironment(null!));
+        var act = () => services.AddTrax(trax => trax.SetHostEnvironment(Null.Of<string>()));
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -50,7 +51,7 @@ public class TraxBuilderHostTests
         services.AddTrax(trax => trax.SetHostInstanceId("instance-42"));
 
         TraxHostInfo.Current.Should().NotBeNull();
-        TraxHostInfo.Current!.HostInstanceId.Should().Be("instance-42");
+        TraxHostInfo.Current.NotNull().HostInstanceId.Should().Be("instance-42");
     }
 
     #endregion
@@ -64,7 +65,7 @@ public class TraxBuilderHostTests
 
         services.AddTrax(trax => trax.AddHostLabel("region", "us-east-1"));
 
-        TraxHostInfo.Current!.Labels.Should().ContainKey("region");
+        TraxHostInfo.Current.NotNull().Labels.Should().ContainKey("region");
         TraxHostInfo.Current.Labels["region"].Should().Be("us-east-1");
     }
 
@@ -77,7 +78,7 @@ public class TraxBuilderHostTests
             trax.AddHostLabel("region", "us-east-1").AddHostLabel("service", "content-shield")
         );
 
-        TraxHostInfo.Current!.Labels.Should().HaveCount(2);
+        TraxHostInfo.Current.NotNull().Labels.Should().HaveCount(2);
         TraxHostInfo.Current.Labels["region"].Should().Be("us-east-1");
         TraxHostInfo.Current.Labels["service"].Should().Be("content-shield");
     }
@@ -91,7 +92,7 @@ public class TraxBuilderHostTests
             trax.AddHostLabel("region", "us-east-1").AddHostLabel("region", "eu-west-1")
         );
 
-        TraxHostInfo.Current!.Labels["region"].Should().Be("eu-west-1");
+        TraxHostInfo.Current.NotNull().Labels["region"].Should().Be("eu-west-1");
     }
 
     [Test]
@@ -110,7 +111,7 @@ public class TraxBuilderHostTests
                 )
         );
 
-        TraxHostInfo.Current!.Labels.Should().HaveCount(3);
+        TraxHostInfo.Current.NotNull().Labels.Should().HaveCount(3);
         TraxHostInfo.Current.Labels["existing"].Should().Be("value");
         TraxHostInfo.Current.Labels["region"].Should().Be("us-east-1");
         TraxHostInfo.Current.Labels["team"].Should().Be("platform");
@@ -128,7 +129,7 @@ public class TraxBuilderHostTests
         services.AddTrax(_ => { });
 
         TraxHostInfo.Current.Should().NotBeNull();
-        TraxHostInfo.Current!.HostName.Should().NotBeNullOrEmpty();
+        TraxHostInfo.Current.NotNull().HostName.Should().NotBeNullOrEmpty();
         TraxHostInfo.Current.HostEnvironment.Should().NotBeNullOrEmpty();
         TraxHostInfo.Current.HostInstanceId.Should().NotBeNullOrEmpty();
     }

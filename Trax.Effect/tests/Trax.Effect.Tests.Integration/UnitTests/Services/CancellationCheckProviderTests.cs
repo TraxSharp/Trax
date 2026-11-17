@@ -2,6 +2,7 @@ using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -95,7 +96,8 @@ public class CancellationCheckProviderTests
 
     private static void SetTrainMetadata(TestTrain train, Metadata metadata) =>
         typeof(ServiceTrain<string, string>)
-            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)!
+            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)
+            .NotNull()
             .SetValue(train, metadata);
 
     private sealed class TestTrain : ServiceTrain<string, string>

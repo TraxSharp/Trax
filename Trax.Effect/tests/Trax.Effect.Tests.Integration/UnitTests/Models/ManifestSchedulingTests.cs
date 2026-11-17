@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -230,7 +231,7 @@ public class ManifestSchedulingTests
         // Assert - JSON should contain $type and NOT contain $id/$values
         manifest.Properties.Should().NotBeNull();
         manifest.Properties.Should().Contain("\"$type\"");
-        manifest.Properties.Should().Contain(typeof(TestManifestProperties).FullName!);
+        manifest.Properties.Should().Contain(typeof(TestManifestProperties).FullName.NotNull());
         manifest.Properties.Should().NotContain("\"$id\"");
         manifest.Properties.Should().NotContain("\"$values\"");
     }
@@ -252,7 +253,7 @@ public class ManifestSchedulingTests
         );
 
         // Assert - $type should be the first key in the JSON
-        var jsonObj = JsonNode.Parse(manifest.Properties!)!.AsObject();
+        var jsonObj = JsonNode.Parse(manifest.Properties.NotNull()).NotNull().AsObject();
         jsonObj.GetAt(0).Key.Should().Be("$type");
     }
 
@@ -435,7 +436,7 @@ public class ManifestSchedulingTests
 
         // Assert
         manifest.Properties.Should().Contain("\"$type\"");
-        manifest.Properties.Should().Contain(typeof(ExtractRequest).FullName!);
+        manifest.Properties.Should().Contain(typeof(ExtractRequest).FullName.NotNull());
     }
 
     [Test]
@@ -526,10 +527,10 @@ public class ManifestSchedulingTests
         );
 
         // Assert - JSON should be parseable and well-formed
-        var parseAction = () => JsonNode.Parse(manifest.Properties!);
+        var parseAction = () => JsonNode.Parse(manifest.Properties.NotNull());
         parseAction.Should().NotThrow();
 
-        var json = JsonNode.Parse(manifest.Properties!)!.AsObject();
+        var json = JsonNode.Parse(manifest.Properties.NotNull()).NotNull().AsObject();
 
         // Should have $type as first property
         json.GetAt(0).Key.Should().Be("$type");

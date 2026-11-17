@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Models;
 using Trax.Effect.Broadcaster.SignalR.Services;
@@ -176,7 +177,8 @@ public class SignalRHubEndpointTests
         return ((IEndpointRouteBuilder)app)
             .DataSources.SelectMany(ds => ds.Endpoints)
             .Select(e => e.Metadata.GetMetadata<HttpConnectionDispatcherOptions>())
-            .First(o => o is not null)!;
+            .First(o => o is not null)
+            .NotNull();
     }
 
     [Test]

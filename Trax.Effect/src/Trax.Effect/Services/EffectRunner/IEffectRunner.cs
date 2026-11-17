@@ -76,7 +76,7 @@ public interface IEffectRunner : IDisposable
     /// member returns <see langword="false"/>. A train run from a pre-created row
     /// (<c>Run(input, metadata)</c>) then throws <see cref="Exceptions.TrainAlreadyStartedException"/>
     /// before its body runs. Configure the double to return <see langword="true"/>, for example
-    /// <c>runner.TryClaimPendingRun(default!, default).ReturnsForAnyArgs(true)</c> in NSubstitute.
+    /// <c>runner.TryClaimPendingRun(Arg.Any&lt;Metadata&gt;(), Arg.Any&lt;CancellationToken&gt;()).Returns(true)</c> in NSubstitute.
     /// </remarks>
     Task<bool> TryClaimPendingRun(Metadata metadata, CancellationToken cancellationToken) =>
         Task.FromResult(true);

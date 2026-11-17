@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Services.DataContext;
@@ -53,7 +54,7 @@ public class JunctionsApiTests : TestSetup
 
         var serviceTrain = (ServiceTrain<string, int>)train;
         serviceTrain.Metadata.Should().NotBeNull();
-        serviceTrain.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        serviceTrain.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
     }
 
     #endregion
@@ -71,7 +72,7 @@ public class JunctionsApiTests : TestSetup
 
         var serviceTrain = (ServiceTrain<string, int>)train;
         serviceTrain.Metadata.Should().NotBeNull();
-        serviceTrain.Metadata!.TrainState.Should().Be(TrainState.Failed);
+        serviceTrain.Metadata.NotNull().TrainState.Should().Be(TrainState.Failed);
     }
 
     #endregion

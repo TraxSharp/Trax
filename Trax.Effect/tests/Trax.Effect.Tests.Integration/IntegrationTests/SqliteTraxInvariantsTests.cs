@@ -1,6 +1,7 @@
 using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Sqlite.Utils;
 using Trax.Effect.Data.Testing;
 
@@ -17,25 +18,25 @@ public class SqliteTraxInvariantsTests
 {
     private const string Machine = "Invariants.Machine";
 
-    private string _file = null!;
-    private SqliteConnection _connection = null!;
+    private string? _file;
+    private SqliteConnection? _connection;
 
     [SetUp]
     public async Task CreateDatabase()
     {
         _file = Path.Combine(Path.GetTempPath(), $"trax_invariants_{Guid.NewGuid():N}.db");
-        await DatabaseMigrator.Migrate($"Data Source={_file}");
-        _connection = new SqliteConnection($"Data Source={_file}");
-        await _connection.OpenAsync();
+        await DatabaseMigrator.Migrate($"Data Source={_file.NotNull()}");
+        _connection = new SqliteConnection($"Data Source={_file.NotNull()}");
+        await _connection.NotNull().OpenAsync();
     }
 
     [TearDown]
     public async Task DeleteDatabase()
     {
-        await _connection.DisposeAsync();
+        await _connection.NotNull().DisposeAsync();
         SqliteConnection.ClearAllPools();
         foreach (var suffix in new[] { "", "-wal", "-shm" })
-            File.Delete(_file + suffix);
+            File.Delete(_file.NotNull() + suffix);
     }
 
     [Test]
@@ -59,7 +60,7 @@ public class SqliteTraxInvariantsTests
 
         (
             await TraxInvariants.FindViolationsAsync(
-                _connection,
+                _connection.NotNull(),
                 [new InvokingState(Machine, "Building")]
             )
         )
@@ -87,7 +88,7 @@ public class SqliteTraxInvariantsTests
         var resumingRun = await SeedRunAsync(TrainStateNumber.Pending, resumeFrom: gone);
         var forged = await SeedSnapshotAsync(Guid.NewGuid(), "Building", "no-such-run");
 
-        var violations = await TraxInvariants.FindViolationsAsync(_connection, []);
+        var violations = await TraxInvariants.FindViolationsAsync(_connection.NotNull(), []);
 
         violations
             .Select(v => (v.Invariant, v.Table, v.Id))
@@ -156,12 +157,12 @@ public class SqliteTraxInvariantsTests
         await SeedSnapshotAsync(Guid.NewGuid(), "Building", token: null, machine: "Other");
         await SeedSnapshotAsync(Guid.NewGuid(), "Building", token: null, stranded: "Building");
 
-        (await TraxInvariants.FindViolationsAsync(_connection, []))
+        (await TraxInvariants.FindViolationsAsync(_connection.NotNull(), []))
             .Should()
             .BeEmpty("without the machine's invoking states, neither can be told");
 
         var violations = await TraxInvariants.FindViolationsAsync(
-            _connection,
+            _connection.NotNull(),
             [new InvokingState(Machine, "Building")]
         );
 
@@ -262,7 +263,7 @@ public class SqliteTraxInvariantsTests
 
         var violations = (
             await TraxInvariants.FindViolationsAsync(
-                _connection,
+                _connection.NotNull(),
                 [],
                 [],
                 maxDraftLifetime: TimeSpan.FromDays(1),
@@ -370,7 +371,7 @@ public class SqliteTraxInvariantsTests
 
     private async Task ExecAsync(string sql)
     {
-        var command = _connection.CreateCommand();
+        var command = _connection.NotNull().CreateCommand();
         await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
         await command.ExecuteNonQueryAsync().ConfigureAwait(false);
@@ -378,11 +379,11 @@ public class SqliteTraxInvariantsTests
 
     private async Task<long> ScalarAsync(string sql, params (string Name, object? Value)[] values)
     {
-        var command = _connection.CreateCommand();
+        var command = _connection.NotNull().CreateCommand();
         await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
         foreach (var (name, value) in values)
             command.Parameters.AddWithValue(name, value ?? DBNull.Value);
-        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 }

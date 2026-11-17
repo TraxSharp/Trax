@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Core.Utils;
 using Trax.Effect.Services.JunctionEvents;
@@ -64,7 +65,7 @@ internal static class ResumePlanner
         );
 
         if (!outcome.CanResume)
-            return (Refused(outcome.RefusalCode!, outcome.Refusal!), null);
+            return (Refused(outcome.RefusalCode.NotNull(), outcome.Refusal.NotNull()), null);
 
         foreach (var (_, node) in Targets(outcome))
         {
@@ -80,7 +81,7 @@ internal static class ResumePlanner
                 ) is
                 { } changed
             )
-                return (Refused(changed.RefusalCode!, changed.Refusal!), null);
+                return (Refused(changed.RefusalCode.NotNull(), changed.Refusal.NotNull()), null);
         }
 
         return (
@@ -282,7 +283,8 @@ internal static class ResumePlanner
         foreach (var taken in Tracks(chosen[main].Tracks, outcome.TrackTypes[main]))
         {
             var key = taken.GetType().GetGenericArguments()[0].ReadableName();
-            var name = (string)taken.GetType().GetProperty("Track")!.GetValue(taken)!;
+            var name = (string)
+                taken.GetType().GetProperty("Track").NotNull().GetValue(taken).NotNull();
 
             foreach (var id in restored)
             {
@@ -324,11 +326,13 @@ internal static class ResumePlanner
                 continue;
 
             tracks.Add(
-                Activator.CreateInstance(
-                    type,
-                    node!["track"]?.GetValue<string>(),
-                    node["fallbackReason"]?.GetValue<string>()
-                )!
+                Activator
+                    .CreateInstance(
+                        type,
+                        node.NotNull()["track"]?.GetValue<string>(),
+                        node["fallbackReason"]?.GetValue<string>()
+                    )
+                    .NotNull()
             );
         }
 

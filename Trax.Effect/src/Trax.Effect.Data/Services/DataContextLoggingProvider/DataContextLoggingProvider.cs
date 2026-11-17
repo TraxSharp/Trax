@@ -62,7 +62,9 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
                     "^"
                     + Regex.Escape(pattern).Replace(@"\*", ".*", StringComparison.Ordinal)
                     + "$";
-                _wildcardBlacklist.Add(new Regex(regexPattern, RegexOptions.Compiled));
+                _wildcardBlacklist.Add(
+                    new Regex(regexPattern, RegexOptions.Compiled, TimeSpan.FromSeconds(1))
+                );
             }
             else
                 _exactBlacklist.Add(pattern);

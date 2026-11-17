@@ -311,7 +311,8 @@ public static partial class DatabaseMigrator
 
     [GeneratedRegex(
         @"\bcreate\s+(?:unique\s+)?index\s+(?:concurrently\s+)?(?:if\s+not\s+exists\s+)?(?:\w+\.)?(?<name>""[^""]+""|\w+)\s+on\b",
-        RegexOptions.IgnoreCase
+        RegexOptions.IgnoreCase,
+        matchTimeoutMilliseconds: 1000
     )]
     private static partial Regex CreateIndexName { get; }
 
@@ -333,7 +334,7 @@ public static partial class DatabaseMigrator
             var command = connection.CreateCommand();
             await using var commandDisposal = command.ConfigureAwait(false);
             command.CommandText = $"SELECT pg_try_advisory_lock({MigrationLockKey});";
-            if ((bool)(await command.ExecuteScalarAsync().ConfigureAwait(false))!)
+            if ((bool)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull())
                 return;
 
             await Task.Delay(MigrationLockPollInterval).ConfigureAwait(false);

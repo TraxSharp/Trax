@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -75,14 +76,14 @@ public class StateHashKeyTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(TTrain).FullName!,
+                Name = typeof(TTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
-                Input = input!,
+                Input = input.NotNull(),
                 ReplayDecisionsOf = replayDecisionsOf,
             }
         );
         await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
-        return train.Metadata!.Id;
+        return train.Metadata.NotNull().Id;
     }
 
     private static async Task<string?> StateHash(IServiceProvider provider, long metadataId)
@@ -124,7 +125,7 @@ public class StateHashKeyTests
         var hashed = await StateHash(keyed, await Run<IRouteVisit, Visit>(keyed, new Visit("v2")));
 
         hashed.Should().MatchRegex("^k1:[0-9a-f]{64}$", $"the host gave a key. See {Adr}.");
-        hashed![3..].Should().NotBe(plain![3..]);
+        hashed.NotNull()[3..].Should().NotBe(plain.NotNull()[3..]);
     }
 
     [Test]
@@ -146,7 +147,7 @@ public class StateHashKeyTests
     public void A_key_shorter_than_32_bytes_is_refused()
     {
         var options = (DecisionRecordingOptions)
-            Activator.CreateInstance(typeof(DecisionRecordingOptions), nonPublic: true)!;
+            Activator.CreateInstance(typeof(DecisionRecordingOptions), nonPublic: true).NotNull();
 
         var act = () => options.HashStatesWith(new byte[16]);
 

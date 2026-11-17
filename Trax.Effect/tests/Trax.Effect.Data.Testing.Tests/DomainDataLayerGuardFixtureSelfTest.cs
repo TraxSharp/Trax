@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using NUnit.Framework.Internal;
+using Trax.Core.Extensions;
 using Trax.Core.Testing;
 
 namespace Trax.Effect.Data.Testing.Tests;
@@ -19,10 +20,10 @@ public sealed class DomainDataLayerGuardFixtureSelfTest : DomainDataLayerGuardFi
         + "    : DomainDataContext<CatalogDbContext>(o), ICatalogDbContext\n"
         + "{ protected override string Schema => \"catalog\"; }";
 
-    private TempRepo _repo = null!;
+    private TempRepo? _repo;
 
     protected override ArchitectureGuardOptions Options =>
-        new() { RepoRootOverride = _repo.Root, SourceScanRoots = ["src"] };
+        new() { RepoRootOverride = _repo.NotNull().Root, SourceScanRoots = ["src"] };
 
     protected override IReadOnlyList<Type> DomainContexts =>
         [typeof(AlphaContext), typeof(BetaContext)];
@@ -70,5 +71,5 @@ public sealed class DomainDataLayerGuardFixtureSelfTest : DomainDataLayerGuardFi
             );
 
     [OneTimeTearDown]
-    public void Cleanup() => _repo.Dispose();
+    public void Cleanup() => _repo.NotNull().Dispose();
 }

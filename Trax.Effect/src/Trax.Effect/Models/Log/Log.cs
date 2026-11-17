@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Models.Log.DTOs;
 using Trax.Effect.Utils;
@@ -69,7 +70,11 @@ public class Log : ILog
     /// </summary>
     [Column("message")]
     [JsonPropertyName("message")]
-    public string Message { get; set; } = null!;
+    public string Message
+    {
+        get => field.NotNull(nameof(Message));
+        set;
+    }
 
     /// <summary>
     /// The logger category, normally the FullName of the implementation type the logger was created
@@ -77,7 +82,11 @@ public class Log : ILog
     /// </summary>
     [Column("category")]
     [JsonPropertyName("category")]
-    public string Category { get; set; } = null!;
+    public string Category
+    {
+        get => field.NotNull(nameof(Category));
+        set;
+    }
 
     /// <summary>
     /// The logged exception's <c>Message</c>, truncated to 2000 UTF-16 units; null when the call
@@ -104,7 +113,7 @@ public class Log : ILog
     /// annotation, on a row whose <see cref="MetadataId"/> is 0, and on one whose run was deleted:
     /// the column has no foreign key.
     /// </summary>
-    public Metadata.Metadata Metadata { get; set; } = null!;
+    public Metadata.Metadata? Metadata { get; set; }
 
     #endregion
 
@@ -121,8 +130,8 @@ public class Log : ILog
         var newLog = new Log()
         {
             Level = createLog.Level,
-            Message = Truncate(createLog.Message, 4000)!,
-            Category = Truncate(createLog.CategoryName, 500)!,
+            Message = Truncate(createLog.Message, 4000).NotNull(),
+            Category = Truncate(createLog.CategoryName, 500).NotNull(),
             EventId = createLog.EventId,
             Exception = Truncate(createLog.Exception?.Message, 2000),
             StackTrace = Truncate(createLog.Exception?.StackTrace, 4000),

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DomainContext;
@@ -22,7 +23,7 @@ public class MigrateOnDeployTests
 {
     private const string Schema = "migrate_on_deploy_tests";
 
-    private string _connectionString = null!;
+    private string? _connectionString;
 
     [SetUp]
     public async Task DropTheSchema()
@@ -32,7 +33,7 @@ public class MigrateOnDeployTests
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
         _connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
         await Exec($"DROP SCHEMA IF EXISTS {Schema} CASCADE;");
     }
@@ -71,10 +72,10 @@ public class MigrateOnDeployTests
     private ServiceProvider Services()
     {
         var services = new ServiceCollection();
-        services.AddDbContextFactory<GadgetContext>(o => o.UseNpgsql(_connectionString));
+        services.AddDbContextFactory<GadgetContext>(o => o.UseNpgsql(_connectionString.NotNull()));
         services.AddTrax(trax =>
             trax.AddEffects(effects =>
-                effects.UsePostgres(_connectionString).MigrateOnDeploy<GadgetContext>()
+                effects.UsePostgres(_connectionString.NotNull()).MigrateOnDeploy<GadgetContext>()
             )
         );
         return services.BuildServiceProvider();
@@ -82,7 +83,7 @@ public class MigrateOnDeployTests
 
     private async Task Exec(string sql)
     {
-        var connection = new NpgsqlConnection(_connectionString);
+        var connection = new NpgsqlConnection(_connectionString.NotNull());
         await using var connectionDisposal = connection.ConfigureAwait(false);
         await connection.OpenAsync().ConfigureAwait(false);
         var command = new NpgsqlCommand(sql, connection);
@@ -92,7 +93,7 @@ public class MigrateOnDeployTests
 
     private async Task<bool> TableExists(string table)
     {
-        var connection = new NpgsqlConnection(_connectionString);
+        var connection = new NpgsqlConnection(_connectionString.NotNull());
         await using var connectionDisposal = connection.ConfigureAwait(false);
         await connection.OpenAsync().ConfigureAwait(false);
         var command = new NpgsqlCommand(
@@ -102,17 +103,17 @@ public class MigrateOnDeployTests
         await using var commandDisposal = command.ConfigureAwait(false);
         command.Parameters.AddWithValue("s", Schema);
         command.Parameters.AddWithValue("t", table);
-        return (bool)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+        return (bool)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 
     private async Task<long> Count(string table)
     {
-        var connection = new NpgsqlConnection(_connectionString);
+        var connection = new NpgsqlConnection(_connectionString.NotNull());
         await using var connectionDisposal = connection.ConfigureAwait(false);
         await connection.OpenAsync().ConfigureAwait(false);
         var command = new NpgsqlCommand($"SELECT count(*) FROM {Schema}.{table}", connection);
         await using var commandDisposal = command.ConfigureAwait(false);
-        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 
     /// <summary>A host that records whether anything started it.</summary>
@@ -136,7 +137,7 @@ public class MigrateOnDeployTests
     public sealed class Gadget
     {
         public int Id { get; set; }
-        public string Name { get; set; } = null!;
+        public required string Name { get; set; }
     }
 
     public sealed class GadgetContext(DbContextOptions<GadgetContext> options)

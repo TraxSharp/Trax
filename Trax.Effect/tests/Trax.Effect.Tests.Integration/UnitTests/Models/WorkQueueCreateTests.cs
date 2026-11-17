@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 
@@ -170,7 +171,7 @@ public class WorkQueueCreateTests
         var read = JsonSerializer.Deserialize<WorkQueue>(JsonSerializer.Serialize(entry));
 
         read.Should().NotBeNull();
-        read!.TrainName.Should().Be("Some.Train");
+        read.NotNull().TrainName.Should().Be("Some.Train");
         read.SubjectKey.Should().Be("customer-7");
         read.ConfirmedAt.Should().Be(entry.ConfirmedAt);
     }
@@ -179,7 +180,8 @@ public class WorkQueueCreateTests
     public void TheSubjectKey_HasNoPublicSetter()
     {
         typeof(WorkQueue)
-            .GetProperty(nameof(WorkQueue.SubjectKey))!
+            .GetProperty(nameof(WorkQueue.SubjectKey))
+            .NotNull()
             .GetSetMethod(nonPublic: false)
             .Should()
             .BeNull(

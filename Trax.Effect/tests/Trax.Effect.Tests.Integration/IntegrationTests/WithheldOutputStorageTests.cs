@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
@@ -16,7 +17,7 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 /// </summary>
 public class WithheldOutputStorageTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -33,32 +34,35 @@ public class WithheldOutputStorageTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
 
     [Test]
     public async Task A_withheld_output_is_not_stored_and_the_input_still_is()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (WithheldTrain)scope.ServiceProvider.GetRequiredService<IWithheldTrain>();
 
         var output = await train.Run("given", CancellationToken.None);
 
         output.Should().Be("context-of-given", "the caller still gets the output");
-        train.Metadata!.Output.Should().BeNull("the train withholds its output from every copy");
+        train
+            .Metadata.NotNull()
+            .Output.Should()
+            .BeNull("the train withholds its output from every copy");
         train.Metadata.Input.Should().Contain("given", "the run's row keeps its input for audit");
     }
 
     [Test]
     public async Task A_plain_output_is_still_stored()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (PlainTrain)scope.ServiceProvider.GetRequiredService<IPlainTrain>();
 
         await train.Run("given", CancellationToken.None);
 
-        train.Metadata!.Output.Should().Contain("context-of-given");
+        train.Metadata.NotNull().Output.Should().Contain("context-of-given");
     }
 
     public interface IWithheldTrain : IServiceTrain<string, string>;

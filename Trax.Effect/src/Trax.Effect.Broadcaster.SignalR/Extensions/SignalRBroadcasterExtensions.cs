@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Services;
 using Trax.Effect.Configuration.BroadcasterBuilder;
 using Trax.Effect.Services.TrainEventBroadcaster;
@@ -44,10 +45,12 @@ public static class SignalRBroadcasterExtensions
     )
     {
         var options = (Configuration.SignalRSinkOptions.SignalRSinkOptions)
-            Activator.CreateInstance(
-                typeof(Configuration.SignalRSinkOptions.SignalRSinkOptions),
-                nonPublic: true
-            )!;
+            Activator
+                .CreateInstance(
+                    typeof(Configuration.SignalRSinkOptions.SignalRSinkOptions),
+                    nonPublic: true
+                )
+                .NotNull();
         configure?.Invoke(options);
         var config = options.Build();
 

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Models.Manifest;
@@ -123,7 +124,7 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
         await using var heldDisposal = held.ConfigureAwait(false);
         await holderDb.ExecuteSqlRawAsync(
             "SELECT id FROM trax.manifest WHERE id = {0} FOR UPDATE",
-            entry.ManifestId!.Value
+            entry.ManifestId.NotNull().Value
         );
 
         var claimer = await NewContext();

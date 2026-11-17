@@ -57,7 +57,7 @@ public partial class TraxBuilder
     /// Adds multiple custom labels to the host identity.
     /// </summary>
     /// <param name="labels">Dictionary of label key-value pairs to add.</param>
-    public TraxBuilder AddHostLabels(Dictionary<string, string> labels)
+    public TraxBuilder AddHostLabels(IReadOnlyDictionary<string, string> labels)
     {
         ArgumentNullException.ThrowIfNull(labels);
         foreach (var (key, value) in labels)

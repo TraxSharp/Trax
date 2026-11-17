@@ -37,4 +37,11 @@
     <ProjectReference Include="../../src/Trax.Effect.Broadcaster.SignalR/Trax.Effect.Broadcaster.SignalR.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Broadcaster.RabbitMQ/Trax.Effect.Broadcaster.RabbitMQ.csproj" />
   </ItemGroup>
+
+  <!-- Null.Of<T>() for a test that passes null on purpose. Linked only where a test uses it, since
+       an internal type nothing uses is itself an error under the analyzer profile. -->
+  <ItemGroup>
+    <Compile Include="../Null.cs" Link="Null.cs" Visible="false" />
+    <Using Include="Trax.Testing" />
+  </ItemGroup>
 </Project>

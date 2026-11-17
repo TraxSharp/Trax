@@ -7,7 +7,7 @@ public class ArrayLoggingProvider : IArrayLoggingProvider
     private readonly Lock _lock = new();
     private bool _disposed = false;
 
-    public List<ArrayLoggerEffect> Loggers { get; } = [];
+    public IList<ArrayLoggerEffect> Loggers { get; } = [];
 
     public void Dispose()
     {

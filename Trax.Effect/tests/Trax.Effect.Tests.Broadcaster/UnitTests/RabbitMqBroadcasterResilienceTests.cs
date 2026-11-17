@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using RabbitMQ.Client;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.RabbitMQ;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
@@ -287,6 +288,7 @@ public class RabbitMqBroadcasterResilienceTests
 
     private static void Set(object target, string field, object value) =>
         typeof(RabbitMqTrainEventBroadcaster)
-            .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)
+            .NotNull()
             .SetValue(target, value);
 }

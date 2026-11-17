@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Models.BackgroundJob.DTOs;
@@ -84,7 +85,10 @@ public class TraxLogSerializationTests
                 Properties = new Charge { ApiKey = Secret },
             }
         );
-        typeof(Metadata).GetProperty(nameof(Metadata.Manifest))!.SetValue(metadata, manifest);
+        typeof(Metadata)
+            .GetProperty(nameof(Metadata.Manifest))
+            .NotNull()
+            .SetValue(metadata, manifest);
 
         var text = metadata.ToString();
 
@@ -105,7 +109,11 @@ public class TraxLogSerializationTests
     [Test]
     public void ForLogging_masks_sensitive_members_and_leaves_the_given_options_alone()
     {
-        var options = new JsonSerializerOptions();
+        var options = new JsonSerializerOptions()
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+        };
         var logging = TraxLogSerialization.ForLogging(options);
 
         JsonSerializer

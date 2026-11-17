@@ -85,7 +85,8 @@ public partial class BuilderPartialSplitTests
 
     [GeneratedRegex(
         @"^\s*(public|internal|protected|private)\s+(?:[\w<>\.]+\s+)?Build\s*\(",
-        RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.ExplicitCapture
+        RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
     private static partial Regex BuildMethod { get; }
 }

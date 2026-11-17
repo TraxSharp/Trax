@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -81,7 +82,7 @@ public class TraxDeployExportTests
             CancellationToken.None
         );
 
-        manifest.Database!.Provider.Should().Be("postgres");
+        manifest.Database.NotNull().Provider.Should().Be("postgres");
         manifest.Database.MigratesOnStart.Should().BeFalse();
         manifest.Roles.Should().BeEmpty();
     }
@@ -100,7 +101,7 @@ public class TraxDeployExportTests
             CancellationToken.None
         );
 
-        manifest.Database!.Provider.Should().Be("in-memory");
+        manifest.Database.NotNull().Provider.Should().Be("in-memory");
     }
 
     [Test]

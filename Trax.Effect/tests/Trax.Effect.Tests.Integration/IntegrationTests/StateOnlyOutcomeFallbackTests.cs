@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -49,7 +50,7 @@ public class StateOnlyOutcomeFallbackTests
         var output = await train.Run(Unit.Default, CancellationToken.None);
 
         output.Should().Be(Unwritable, "the work happened, and its caller gets its output");
-        var row = store.Saved[train.Metadata!];
+        var row = store.Saved[train.Metadata.NotNull()];
         row.TrainState.Should()
             .Be(
                 TrainState.Completed,
@@ -78,7 +79,7 @@ public class StateOnlyOutcomeFallbackTests
             "the train's own failure still reaches its caller"
         );
 
-        var row = store.Saved[train.Metadata!];
+        var row = store.Saved[train.Metadata.NotNull()];
         row.TrainState.Should().Be(TrainState.Failed);
         row.EndTime.Should().NotBeNull();
         row.FailureException.Should().Be(nameof(InvalidOperationException));
@@ -98,7 +99,7 @@ public class StateOnlyOutcomeFallbackTests
         var output = await train.Run(Unwritable, CancellationToken.None);
 
         output.Should().Be(Unwritable);
-        var row = store.Saved[train.Metadata!];
+        var row = store.Saved[train.Metadata.NotNull()];
         row.TrainState.Should().Be(TrainState.Completed);
         row.EndTime.Should().NotBeNull();
         row.Input.Should().NotBeNull().And.NotContain(Unwritable);
@@ -121,7 +122,7 @@ public class StateOnlyOutcomeFallbackTests
                 "a provider that failed for any reason but the store's content refusal propagates"
             );
 
-        var row = await PersistedRow(scope, train.Metadata!.Id);
+        var row = await PersistedRow(scope, train.Metadata.NotNull().Id);
         row.TrainState.Should().Be(TrainState.Completed);
         row.Output.Should()
             .Contain(
@@ -144,7 +145,7 @@ public class StateOnlyOutcomeFallbackTests
             await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
-        var row = await PersistedRow(scope, train.Metadata!.Id);
+        var row = await PersistedRow(scope, train.Metadata.NotNull().Id);
         row.TrainState.Should().Be(TrainState.Failed);
         row.FailureReason.Should().Contain(Unwritable);
         row.StackTrace.Should().NotBeNull();
@@ -167,7 +168,7 @@ public class StateOnlyOutcomeFallbackTests
 
         await train.Run(Unit.Default, CancellationToken.None);
 
-        store.Saved[train.Metadata!].Output.Should().NotContain(Unwritable);
+        store.Saved[train.Metadata.NotNull()].Output.Should().NotContain(Unwritable);
         hook.Output.Should()
             .Contain(Unwritable, "the store's refusal limits what is stored, not what happened");
     }
@@ -191,7 +192,7 @@ public class StateOnlyOutcomeFallbackTests
             await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
-        store.Saved[train.Metadata!].FailureReason.Should().NotContain(Unwritable);
+        store.Saved[train.Metadata.NotNull()].FailureReason.Should().NotContain(Unwritable);
         hook.FailureReason.Should().Contain(Unwritable);
     }
 
@@ -383,6 +384,6 @@ public class StateOnlyOutcomeFallbackTests
     public class EchoTrain : ServiceTrain<string, string>, IEchoTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
-            Task.FromResult<Either<Exception, string>>(TrainInput);
+            Task.FromResult<Either<Exception, string>>(TrainInput.NotNull());
     }
 }

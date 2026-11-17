@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.LifecycleHookRunner;
@@ -226,7 +227,7 @@ public class AddLifecycleHookTests
         var hook = factory.Create() as HookWithDependency;
 
         hook.Should().NotBeNull();
-        hook!.Dependency.Should().BeOfType<FakeDependency>();
+        hook.NotNull().Dependency.Should().BeOfType<FakeDependency>();
     }
 
     [Test]

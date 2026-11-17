@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.RabbitMQ;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.TrainEventBroadcaster;
@@ -114,7 +115,9 @@ public class RabbitMqJunctionExchangeTests
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += (_, ea) =>
         {
-            var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(ea.Body.Span)!;
+            var message = JsonSerializer
+                .Deserialize<TrainLifecycleEventMessage>(ea.Body.Span)
+                .NotNull();
             legacy.Enqueue(message);
             if (string.Equals(message.EventType, "Completed", StringComparison.Ordinal))
                 legacyGotTrainEvent.TrySetResult();
@@ -426,7 +429,8 @@ public class RabbitMqJunctionExchangeTests
                 .Should()
                 .ThrowAsync<RabbitMQ.Client.Exceptions.OperationInterruptedException>()
         )
-            .Which.ShutdownReason!.ReplyCode.Should()
+            .Which.ShutdownReason.NotNull()
+            .ReplyCode.Should()
             .Be(
                 (ushort)404,
                 $"no host without junction events declares their exchange. See {Adr}."

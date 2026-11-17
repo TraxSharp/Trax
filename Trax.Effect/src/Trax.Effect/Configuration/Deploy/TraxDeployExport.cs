@@ -68,6 +68,7 @@ public static class TraxDeployExport
     private static ArgumentException NoPath(string paramName) =>
         new(
             $"The process was started with {Argument} and no path after it. Give the file to write the deploy "
-                + $"manifest to, as in '{Argument} deploy.json', or start it without {Argument} to serve."
+                + $"manifest to, as in '{Argument} deploy.json', or start it without {Argument} to serve.",
+            paramName
         );
 }

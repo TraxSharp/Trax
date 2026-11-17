@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Tests.Integration.Fixtures;
 
@@ -76,7 +77,9 @@ public class PostgresLeaderLockTests : TestSetup
             .Build();
         var connection = new NpgsqlConnection(
             TestPostgres.WithPort(
-                configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+                configuration
+                    .GetRequiredSection("Configuration")["DatabaseConnectionString"]
+                    .NotNull()
             )
         );
         await using var connectionDisposal = connection.ConfigureAwait(false);
@@ -90,6 +93,6 @@ public class PostgresLeaderLockTests : TestSetup
               AND classid::bigint = ((hashtext(@name)::bigint >> 32) & 4294967295)
             """;
         command.Parameters.AddWithValue("name", name);
-        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 }

@@ -17,5 +17,5 @@ public interface IDataContextLoggingProviderConfiguration
     /// matched against the whole category (for example <c>Microsoft.EntityFrameworkCore.*</c>); any
     /// other entry must match exactly and case-sensitively. Read once, when the provider is built.
     /// </summary>
-    public List<string> Blacklist { get; }
+    public IReadOnlyList<string> Blacklist { get; }
 }

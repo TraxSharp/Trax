@@ -5,6 +5,9 @@ namespace Trax.Effect.Data.Models.WorkQueue;
 /// <summary>
 /// Provides Entity Framework Core configuration for the WorkQueue model.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed class PersistentWorkQueue : Effect.Models.WorkQueue.WorkQueue
 {
     // Holds the EF configuration and is never instantiated. Private so it is not a way around

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
@@ -111,7 +112,7 @@ public class ServiceExtensionsRouteTests
         provider.InjectProperties(target);
 
         target.Deps.Should().NotBeNull();
-        target.Deps!.Should().HaveCount(2);
+        target.Deps.NotNull().Should().HaveCount(2);
     }
 
     public class HasEnumerableInject

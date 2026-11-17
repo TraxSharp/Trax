@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -35,7 +36,7 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 [NonParallelizable]
 public class PostgresParallelRunTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     private static readonly PgParDecider Decider = new();
 
@@ -47,7 +48,7 @@ public class PostgresParallelRunTests
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
         var connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
 
         var services = new ServiceCollection();
@@ -73,7 +74,7 @@ public class PostgresParallelRunTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
 
     [SetUp]
     public void Reset()
@@ -93,7 +94,7 @@ public class PostgresParallelRunTests
         foreach (var (train, output) in trains)
         {
             output.Should().Be("a=4, b=40");
-            runs.Add(train.Metadata!.Id);
+            runs.Add(train.Metadata.NotNull().Id);
 
             var row = await RunRow(train.Metadata.Id);
             row.TrainState.Should().Be(TrainState.Completed);
@@ -151,7 +152,7 @@ public class PostgresParallelRunTests
 
         var (original, _) = await Run<IPgParAskEverywhereTrain>();
 
-        var recorded = await Recorded(original.Metadata!.Id);
+        var recorded = await Recorded(original.Metadata.NotNull().Id);
         recorded
             .Select(r => (r.BranchPath, r.Occurrence, r.Tracks().Single()))
             .Should()
@@ -172,7 +173,7 @@ public class PostgresParallelRunTests
         );
 
         Decider.Asked.Should().Be(0);
-        PgParTook.Of(requeued.Metadata!.Id).Should().BeEquivalentTo(taken);
+        PgParTook.Of(requeued.Metadata.NotNull().Id).Should().BeEquivalentTo(taken);
         (await Recorded(requeued.Metadata.Id))
             .Should()
             .HaveCount(4)
@@ -185,7 +186,7 @@ public class PostgresParallelRunTests
     public async Task A_run_cancelled_by_its_caller_while_branches_run_is_recorded_cancelled()
     {
         using var cancel = new CancellationTokenSource();
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = Train<IPgParWaitTrain>(scope);
 
@@ -197,7 +198,7 @@ public class PostgresParallelRunTests
             .Awaiting(() => running)
             .Should()
             .ThrowAsync<OperationCanceledException>();
-        (await RunRow(train.Metadata!.Id)).TrainState.Should().Be(TrainState.Cancelled);
+        (await RunRow(train.Metadata.NotNull().Id)).TrainState.Should().Be(TrainState.Cancelled);
 
         await Delete(train.Metadata.Id);
     }
@@ -205,7 +206,7 @@ public class PostgresParallelRunTests
     [Test]
     public async Task A_run_cancelled_through_its_cancel_flag_in_one_branch_is_recorded_cancelled()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = Train<IPgParFlagTrain>(scope);
 
@@ -214,11 +215,11 @@ public class PostgresParallelRunTests
 
         // What the dashboard's cancel and the scheduler's job timeout write for a run on another
         // host. Branch a's next junction reads it before it runs.
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory.CreateDbContextAsync(CancellationToken.None);
         await using (context.ConfigureAwait(false))
             await context
-                .Metadatas.Where(m => m.Id == train.Metadata!.Id)
+                .Metadatas.Where(m => m.Id == train.Metadata.NotNull().Id)
                 .ExecuteUpdateAsync(
                     s => s.SetProperty(m => m.CancellationRequested, valueExpression: true),
                     cancellationToken: CancellationToken.None
@@ -230,7 +231,7 @@ public class PostgresParallelRunTests
             .Should()
             .ThrowAsync<OperationCanceledException>();
 
-        var row = await RunRow(train.Metadata!.Id);
+        var row = await RunRow(train.Metadata.NotNull().Id);
         row.TrainState.Should().Be(TrainState.Cancelled);
         row.FailureClass.Should().Be(FailureClass.Unclassified, "a cancellation is not a failure");
 
@@ -240,7 +241,7 @@ public class PostgresParallelRunTests
     [Test]
     public async Task A_failed_branch_fails_the_run_with_the_combined_class_of_its_branches()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = Train<IPgParFailTrain>(scope);
 
@@ -249,7 +250,7 @@ public class PostgresParallelRunTests
             .Should()
             .ThrowAsync<BranchesFailedException>();
 
-        var row = await RunRow(train.Metadata!.Id);
+        var row = await RunRow(train.Metadata.NotNull().Id);
         row.TrainState.Should().Be(TrainState.Failed);
         row.FailureClass.Should()
             .Be(FailureClass.Permanent, "one branch's failure is permanent, the other transient");
@@ -269,14 +270,14 @@ public class PostgresParallelRunTests
     )
         where TTrain : class, IServiceTrain<PgParOrder, string>
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = Train<TTrain>(scope);
         var input = new PgParOrder("o");
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(TTrain).FullName!,
+                Name = typeof(TTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ReplayDecisionsOf = replayDecisionsOf,
@@ -285,6 +286,7 @@ public class PostgresParallelRunTests
 
         var output = await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
         await _provider
+            .NotNull()
             .GetRequiredService<JunctionRunWriter>()
             .FlushAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -293,7 +295,7 @@ public class PostgresParallelRunTests
 
     private async Task<Metadata> RunRow(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -306,7 +308,7 @@ public class PostgresParallelRunTests
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -320,7 +322,7 @@ public class PostgresParallelRunTests
 
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -335,9 +337,13 @@ public class PostgresParallelRunTests
     private async Task Delete(params long[] metadataIds)
     {
         // A step still queued for the writer would insert under the delete's cascade.
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync().ConfigureAwait(false);
+        await _provider
+            .NotNull()
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync()
+            .ConfigureAwait(false);
 
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);

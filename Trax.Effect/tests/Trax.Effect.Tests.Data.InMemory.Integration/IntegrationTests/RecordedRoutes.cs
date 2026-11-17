@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Decisions;
@@ -31,8 +32,9 @@ internal static class RecordedRoutes
         decision.Routes is null
             ? []
             : System
-                .Text.Json.Nodes.JsonNode.Parse(decision.Routes)!
+                .Text.Json.Nodes.JsonNode.Parse(decision.Routes)
+                .NotNull()
                 .AsArray()
-                .Select(route => (string)route!["track"]!)
+                .Select(route => route.NotNull()["track"].NotNull().GetValue<string>())
                 .ToList();
 }

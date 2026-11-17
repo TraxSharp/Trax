@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Services.JunctionEvents;
 using Trax.Effect.Services.ServiceTrain;
@@ -138,7 +139,7 @@ internal sealed partial class CheckpointStore(
         while (reader.Read())
             if (
                 reader.TokenType is JsonTokenType.String or JsonTokenType.PropertyName
-                && reader.GetString()!.Contains('\0', StringComparison.Ordinal)
+                && reader.GetString().NotNull().Contains('\0', StringComparison.Ordinal)
             )
                 return true;
 
@@ -165,9 +166,9 @@ internal sealed partial class CheckpointStore(
                 new JsonObject
                 {
                     ["key"] = key.FullName,
-                    ["track"] = (string?)type.GetProperty("Track")!.GetValue(track),
+                    ["track"] = (string?)type.GetProperty("Track").NotNull().GetValue(track),
                     ["fallbackReason"] = (string?)
-                        type.GetProperty("FallbackReason")!.GetValue(track),
+                        type.GetProperty("FallbackReason").NotNull().GetValue(track),
                 }
             );
         }
@@ -211,7 +212,8 @@ internal sealed partial class CheckpointStore(
 
     [System.Text.RegularExpressions.GeneratedRegex(
         @"^(Switch|Gate|Scale)<(?<key>.+)>#\d+$",
-        System.Text.RegularExpressions.RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
     private static partial System.Text.RegularExpressions.Regex RoutingSegment { get; }
 }

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 
 namespace Trax.Effect.Models.JunctionRun;
@@ -50,7 +51,11 @@ public class JunctionRun
     /// question's key (<c>QuestionKey.For</c> of the type it is about).
     /// </summary>
     [Column("name")]
-    public string Name { get; set; } = null!;
+    public string Name
+    {
+        get => field.NotNull(nameof(Name));
+        set;
+    }
 
     /// <summary>Where the step stands.</summary>
     [Column("state")]

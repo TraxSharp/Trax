@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -105,7 +106,8 @@ public sealed class CheckpointHost : IAsyncDisposable
                 .SetBasePath(AppContext.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: false)
                 .Build()
-                .GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+                .GetRequiredSection("Configuration")["DatabaseConnectionString"]
+                .NotNull()
         );
 
     /// <summary>
@@ -131,7 +133,7 @@ public sealed class CheckpointHost : IAsyncDisposable
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(TTrain).FullName!,
+                Name = typeof(TTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ResumeFrom = resumeFrom,
@@ -153,7 +155,7 @@ public sealed class CheckpointHost : IAsyncDisposable
             failure = e;
         }
 
-        return (await Row(train.Metadata!.Id).ConfigureAwait(false), failure);
+        return (await Row(train.Metadata.NotNull().Id).ConfigureAwait(false), failure);
     }
 
     public async Task<Metadata> Row(long id)
@@ -168,7 +170,7 @@ public sealed class CheckpointHost : IAsyncDisposable
             .ConfigureAwait(false);
     }
 
-    public async Task<List<Models.Checkpoint.Checkpoint>> Checkpoints(long runId)
+    public async Task<IReadOnlyList<Models.Checkpoint.Checkpoint>> Checkpoints(long runId)
     {
         var context = await Factory
             .CreateDbContextAsync(CancellationToken.None)

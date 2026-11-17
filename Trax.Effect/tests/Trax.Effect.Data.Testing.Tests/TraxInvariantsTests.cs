@@ -1,5 +1,6 @@
 using System.Globalization;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Utils;
 
 namespace Trax.Effect.Data.Testing.Tests;
@@ -663,7 +664,7 @@ public class TraxInvariantsTests
         );
         command.Parameters.AddWithValue("updated", updatedAt ?? DateTimeOffset.UtcNow);
         command.Parameters.AddWithValue("token", (object?)token ?? DBNull.Value);
-        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 
     [Test]
@@ -755,7 +756,7 @@ public class TraxInvariantsTests
             NpgsqlTypes.NpgsqlDbType.Bigint,
             (object?)resumeFrom ?? DBNull.Value
         );
-        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 
     // A checkpoint row of run <paramref name="runId"/>; returns its id.
@@ -773,7 +774,7 @@ public class TraxInvariantsTests
             RETURNING id
             """;
         command.Parameters.AddWithValue("run", runId);
-        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 
     private const string Machine = "Invariants.Machine";
@@ -809,7 +810,7 @@ public class TraxInvariantsTests
         command.Parameters.AddWithValue("state", state);
         command.Parameters.AddWithValue("token", (object?)token ?? DBNull.Value);
         command.Parameters.AddWithValue("stranded", (object?)stranded ?? DBNull.Value);
-        var row = (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+        var row = (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
         Snapshots[row] = (id, token);
         return row;
     }
@@ -905,7 +906,7 @@ public class TraxInvariantsTests
             NpgsqlTypes.NpgsqlDbType.Bigint,
             (object?)resumeFrom ?? DBNull.Value
         );
-        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 
     private static async Task SqlAsync(string sql)

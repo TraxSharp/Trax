@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
@@ -230,7 +231,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
                 .Ended(
                     events,
                     position,
-                    Metadata!.Name,
+                    Metadata.NotNull().Name,
                     Metadata.StartTimeUtc ?? DateTime.UtcNow,
                     Metadata.EndTimeUtc ?? DateTime.UtcNow,
                     failure,

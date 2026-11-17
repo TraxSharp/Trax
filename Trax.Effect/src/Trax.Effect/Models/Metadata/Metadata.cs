@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
@@ -73,7 +74,11 @@ public class Metadata : IModel, IDisposable
     /// to be shared across system boundaries.
     /// </remarks>
     [Column("external_id")]
-    public string ExternalId { get; set; } = null!;
+    public string ExternalId
+    {
+        get => field.NotNull(nameof(ExternalId));
+        set;
+    }
 
     /// <summary>
     /// Gets or sets the name of the train.
@@ -84,7 +89,11 @@ public class Metadata : IModel, IDisposable
     /// train by the interface FullName, not the class name.
     /// </remarks>
     [Column("name")]
-    public string Name { get; set; } = null!;
+    public string Name
+    {
+        get => field.NotNull(nameof(Name));
+        set;
+    }
 
     /// <summary>
     /// Gets the name of the assembly that executed the train.
@@ -496,7 +505,7 @@ public class Metadata : IModel, IDisposable
     /// from child to parent. It is populated by the ORM when the metadata is
     /// loaded from the database.
     /// </remarks>
-    public Metadata Parent { get; private set; } = null!;
+    public Metadata? Parent { get; private set; }
 
     /// <summary>
     /// Gets the collection of child train metadata records, if this train
@@ -507,7 +516,7 @@ public class Metadata : IModel, IDisposable
     /// from parent to children. It is populated by the ORM when the metadata is
     /// loaded from the database.
     /// </remarks>
-    public ICollection<Metadata> Children { get; private set; } = null!;
+    public ICollection<Metadata>? Children { get; private set; }
 
     /// <summary>
     /// Gets the collection of log entries associated with this train.
@@ -517,7 +526,7 @@ public class Metadata : IModel, IDisposable
     /// that were recorded during the train execution. It is populated by
     /// the ORM when the metadata is loaded from the database.
     /// </remarks>
-    public ICollection<Log.Log> Logs { get; private set; } = null!;
+    public ICollection<Log.Log>? Logs { get; private set; }
 
     #endregion
 

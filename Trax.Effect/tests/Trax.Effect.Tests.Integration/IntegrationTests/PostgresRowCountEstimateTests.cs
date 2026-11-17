@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Tests.Integration.Fixtures;
 
@@ -88,7 +89,9 @@ public class PostgresRowCountEstimateTests : TestSetup
     }
 
     private Task<List<long>> Estimate(DbContext context, string table) =>
-        context.Database.SqlQueryRaw<long>(Dialect.EstimateRowCount()!, table).ToListAsync();
+        context
+            .Database.SqlQueryRaw<long>(Dialect.EstimateRowCount().NotNull(), table)
+            .ToListAsync();
 
     private static async Task<string> CreateTable(DbContext context, int rows)
     {

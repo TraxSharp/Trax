@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Data.Testing.Tests;
 
@@ -46,7 +47,7 @@ public class OwnerScopeCompletenessTests
             .Options;
 
         using var context = (TContext)
-            Activator.CreateInstance(typeof(TContext), options, new NoPrincipal())!;
+            Activator.CreateInstance(typeof(TContext), options, new NoPrincipal()).NotNull();
         return context.Model;
     }
 
@@ -111,7 +112,12 @@ public class OwnerScopeCompletenessTests
     {
         // EF declares a query filter on the hierarchy root only; PinnedNote has none of its own.
         var model = ModelOf<ScopedContext>();
-        model.FindEntityType(typeof(PinnedNote))!.GetDeclaredQueryFilters().Should().BeEmpty();
+        model
+            .FindEntityType(typeof(PinnedNote))
+            .NotNull()
+            .GetDeclaredQueryFilters()
+            .Should()
+            .BeEmpty();
 
         var result = DataLayerGuards.OwnerScopeCompleteness(
             model,
@@ -259,7 +265,7 @@ public class OwnerScopeCompletenessTests
                 ModelOf<ScopedContext>(),
                 Options() with
                 {
-                    PrincipalAccessorType = null!,
+                    PrincipalAccessorType = Null.Of<Type>(),
                 }
             );
 

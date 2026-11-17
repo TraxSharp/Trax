@@ -43,7 +43,7 @@ public class JsonEffectProviderTests : TestSetup
         // 3. One LifecycleHookRunner logger (ILogger<LifecycleHookRunner>) - may have empty logs
         var jsonProviderLoggers = arrayProvider
             .Loggers.Where(logger =>
-                logger.Logs.Exists(log =>
+                logger.Logs.Any(log =>
                     string.Equals(
                         log.Category,
                         "Trax.Effect.Provider.Json.Services.JsonEffect.JsonEffectProvider",

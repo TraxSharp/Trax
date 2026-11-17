@@ -32,6 +32,9 @@ namespace Trax.Effect.Data.Services.RunOutcomes;
 /// dispatcher, a runner) must carry on.
 /// </para>
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal static class OutOfTrainOutcomes
 {
     /// <summary>

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.JunctionMetadata;
 using Trax.Effect.Models.JunctionMetadata.DTOs;
 using Trax.Effect.Models.Manifest;
@@ -35,7 +36,7 @@ public class ModelCoverageGapTests
     {
         // Type.GetType only finds types in mscorlib + executing assembly. Forcing
         // resolution via FullName routes through the loaded-assembly fallback path.
-        var m = new Manifest { Name = typeof(Manifest).FullName! };
+        var m = new Manifest { Name = typeof(Manifest).FullName.NotNull() };
 
         m.NameType.Should().Be(typeof(Manifest));
     }

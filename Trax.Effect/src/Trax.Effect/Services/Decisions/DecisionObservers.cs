@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Services.Decisions;
 
@@ -8,6 +9,9 @@ namespace Trax.Effect.Services.Decisions;
 /// Registers decision observers so that every one of them is told, through
 /// <see cref="CompositeDecisionObserver"/>.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal static class DecisionObservers
 {
     /// <summary>
@@ -97,8 +101,9 @@ internal static class DecisionObservers
     private static bool ImplementsRequired(Type type)
     {
         var getter = typeof(IDecisionObserver)
-            .GetProperty(nameof(IDecisionObserver.Required))!
-            .GetMethod!;
+            .GetProperty(nameof(IDecisionObserver.Required))
+            .NotNull()
+            .GetMethod.NotNull();
         var map = type.GetInterfaceMap(typeof(IDecisionObserver));
         var index = Array.IndexOf(map.InterfaceMethods, getter);
         return index < 0 || map.TargetMethods[index].DeclaringType != typeof(IDecisionObserver);
@@ -121,7 +126,7 @@ internal static class DecisionObservers
             _ => new ServiceDescriptor(
                 typeof(IDecisionObserver),
                 key,
-                descriptor.ImplementationType!,
+                descriptor.ImplementationType.NotNull(),
                 descriptor.Lifetime
             ),
         };

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Services;
 using Trax.Effect.Configuration.TraxBuilder;
@@ -60,7 +61,8 @@ public class SignalRSlowClientTests
 
         var address = app
             .Services.GetRequiredService<IServer>()
-            .Features.Get<IServerAddressesFeature>()!
+            .Features.Get<IServerAddressesFeature>()
+            .NotNull()
             .Addresses.First();
         var hubUri = new Uri(
             address.Replace("http://", "ws://", StringComparison.Ordinal) + "/hubs/trax-events"

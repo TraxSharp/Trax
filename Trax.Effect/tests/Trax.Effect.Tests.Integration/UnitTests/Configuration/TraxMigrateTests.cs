@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -103,6 +104,6 @@ public class TraxMigrateTests
                 return captured;
             })
         );
-        return captured!;
+        return captured.NotNull();
     }
 }

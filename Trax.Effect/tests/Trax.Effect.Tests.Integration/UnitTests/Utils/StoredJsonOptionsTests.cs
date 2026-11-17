@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.Checkpoints;
 using Trax.Effect.Utils;
 
@@ -16,7 +17,7 @@ public class StoredJsonOptionsTests
     public record Order
     {
         public string Name { get; init; } = "";
-        public List<Line> Lines { get; init; } = [];
+        public IList<Line> Lines { get; init; } = [];
     }
 
     public record Line
@@ -88,7 +89,7 @@ public class StoredJsonOptionsTests
         };
 
         var json = JsonSerializer.Serialize(totals, options);
-        var read = JsonSerializer.Deserialize<Dictionary<string, int>>(json, options)!;
+        var read = JsonSerializer.Deserialize<Dictionary<string, int>>(json, options).NotNull();
 
         read.Keys.Should()
             .BeEquivalentTo(["Ada", "bo"], "a dictionary's keys are data, not member names");

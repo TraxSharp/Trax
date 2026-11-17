@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -32,9 +33,9 @@ public class SqliteJunctionRunTests
 {
     private const string Adr = "docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md";
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
-    private string _dbPath = null!;
+    private string? _dbPath;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -47,7 +48,7 @@ public class SqliteJunctionRunTests
         services.AddSingleton<IFailureClassifier, LiteStepClassifier>();
         services.AddTrax(trax =>
             trax.AddEffects(effects =>
-                effects.UseSqlite($"Data Source={_dbPath}").AddJunctionEvents()
+                effects.UseSqlite($"Data Source={_dbPath.NotNull()}").AddJunctionEvents()
             )
         );
         services.AddScopedTraxRoute<ILiteStepsTrain, LiteStepsTrain>();
@@ -57,9 +58,16 @@ public class SqliteJunctionRunTests
     [OneTimeTearDown]
     public async Task DisposeProvider()
     {
-        await _provider.DisposeAsync();
+        await _provider.NotNull().DisposeAsync();
 
-        foreach (var path in new[] { _dbPath, _dbPath + "-wal", _dbPath + "-shm" })
+        foreach (
+            var path in new[]
+            {
+                _dbPath.NotNull(),
+                _dbPath.NotNull() + "-wal",
+                _dbPath.NotNull() + "-shm",
+            }
+        )
             if (File.Exists(path))
                 File.Delete(path);
     }
@@ -102,7 +110,7 @@ public class SqliteJunctionRunTests
     public async Task Each_row_stores_the_id_the_trains_graph_draws_for_its_step()
     {
         ChainGraph graph;
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
         {
             var fresh = (LiteStepsTrain)scope.ServiceProvider.GetRequiredService<ILiteStepsTrain>();
@@ -138,7 +146,7 @@ public class SqliteJunctionRunTests
 
     private async Task<long> Run()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (LiteStepsTrain)scope.ServiceProvider.GetRequiredService<ILiteStepsTrain>();
         var run = async () =>
@@ -146,15 +154,16 @@ public class SqliteJunctionRunTests
         await run.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 
         await _provider
+            .NotNull()
             .GetRequiredService<JunctionRunWriter>()
             .FlushAsync(CancellationToken.None)
             .ConfigureAwait(false);
-        return train.Metadata!.Id;
+        return train.Metadata.NotNull().Id;
     }
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -168,7 +177,7 @@ public class SqliteJunctionRunTests
 
     private async Task Delete(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);

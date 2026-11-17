@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -32,7 +33,7 @@ public class LifecycleHookOutputCopyTests
         output
             .Should()
             .NotContain("$id", "a hook forwards the output; it carries no serializer metadata");
-        JsonDocument.Parse(output!).RootElement.GetArrayLength().Should().Be(3);
+        JsonDocument.Parse(output.NotNull()).RootElement.GetArrayLength().Should().Be(3);
     }
 
     [Test]

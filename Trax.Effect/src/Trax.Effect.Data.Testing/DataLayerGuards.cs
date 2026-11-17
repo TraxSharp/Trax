@@ -7,6 +7,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Trax.Core.Extensions;
 using Trax.Core.Testing;
 using Trax.Core.Testing.Infrastructure;
 using Trax.Effect.Attributes;
@@ -104,7 +105,7 @@ public static partial class DataLayerGuards
                 continue;
 
             inspected++;
-            var directory = Path.GetDirectoryName(Path.Combine(root, context.File))!;
+            var directory = Path.GetDirectoryName(Path.Combine(root, context.File)).NotNull();
             if (!File.Exists(Path.Combine(directory, $"I{context.Name}.cs")))
                 offenders.Add($"{context.File} (expected I{context.Name}.cs alongside it)");
         }
@@ -497,7 +498,7 @@ public static partial class DataLayerGuards
                 && f.Expression is not null
                 && References(f.Expression, options.PrincipalAccessorType)
             )
-            .Select(f => f.Key!)
+            .Select(f => f.Key.NotNull())
             .ToHashSet(StringComparer.Ordinal);
 
         var root = scan.RepoRootOverride ?? RepoRoot.Path;
@@ -633,26 +634,7 @@ public static partial class DataLayerGuards
         return new GuardResult(offenders, inspected, message);
     }
 
-    private static readonly Regex SetDeclaration = new(
-        @"\b(?:DbSet|IQueryable)\s*<\s*(?:[\w.]+\.)?(?<type>\w+)\s*>\s+(?<name>\w+)\s*(?:\{|=>|=|;)",
-        RegexOptions.Compiled
-    );
-
     // Set<Note>() names its type; any other identifier might be a set property, and is looked up.
-    private static readonly Regex SetReference = new(
-        @"\bSet\s*<\s*(?:[\w.]+\.)?(?<type>\w+)\s*>|\b\w+\b",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex StringLiteral = new(
-        @"""(?<content>(?:[^""\\]|\\.)*)""",
-        RegexOptions.Compiled | RegexOptions.ExplicitCapture
-    );
-
-    private static readonly Regex LiteralCollection = new(
-        @"^(?:new\s*(?:string)?\s*\[\s*\]\s*\{|\[)?\s*(?:""(?:[^""\\]|\\.)*""\s*,?\s*)*(?:\}|\])?$",
-        RegexOptions.Compiled
-    );
 
     /// <summary>
     /// The filter names in a named-filter disable, or <see langword="null"/> when they are not all string
@@ -860,7 +842,7 @@ public static partial class DataLayerGuards
     private static DbContext BuildOffline(Type contextType)
     {
         var builderType = typeof(DbContextOptionsBuilder<>).MakeGenericType(contextType);
-        var builder = (DbContextOptionsBuilder)Activator.CreateInstance(builderType)!;
+        var builder = (DbContextOptionsBuilder)Activator.CreateInstance(builderType).NotNull();
         builder.UseNpgsql("Host=localhost;Database=offline_model_only");
 
         // DbContextOptionsBuilder<T> shadows the base Options property (DbContextOptions<T> vs the
@@ -871,9 +853,10 @@ public static partial class DataLayerGuards
                 System.Reflection.BindingFlags.Public
                     | System.Reflection.BindingFlags.Instance
                     | System.Reflection.BindingFlags.DeclaredOnly
-            )!
+            )
+            .NotNull()
             .GetValue(builder);
-        return (DbContext)Activator.CreateInstance(contextType, options)!;
+        return (DbContext)Activator.CreateInstance(contextType, options).NotNull();
     }
 
     /// <summary>
@@ -984,6 +967,38 @@ public static partial class DataLayerGuards
     private static string Rel(string root, string file) =>
         Path.GetRelativePath(root, file).Replace('\\', '/');
 
-    [GeneratedRegex(@"\.\s*IgnoreQueryFilters\s*\(", RegexOptions.Compiled)]
+    [GeneratedRegex(
+        @"\.\s*IgnoreQueryFilters\s*\(",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 1000
+    )]
     private static partial Regex IgnoreQueryFiltersCall { get; }
+
+    [GeneratedRegex(
+        @"\b(?:DbSet|IQueryable)\s*<\s*(?:[\w.]+\.)?(?<type>\w+)\s*>\s+(?<name>\w+)\s*(?:\{|=>|=|;)",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex SetDeclaration { get; }
+
+    [GeneratedRegex(
+        @"\bSet\s*<\s*(?:[\w.]+\.)?(?<type>\w+)\s*>|\b\w+\b",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex SetReference { get; }
+
+    [GeneratedRegex(
+        @"""(?<content>(?:[^""\\]|\\.)*)""",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex StringLiteral { get; }
+
+    [GeneratedRegex(
+        @"^(?:new\s*(?:string)?\s*\[\s*\]\s*\{|\[)?\s*(?:""(?:[^""\\]|\\.)*""\s*,?\s*)*(?:\}|\])?$",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LiteralCollection { get; }
 }

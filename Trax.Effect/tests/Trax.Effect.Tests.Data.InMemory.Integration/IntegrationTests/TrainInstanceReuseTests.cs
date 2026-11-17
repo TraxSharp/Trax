@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -36,7 +37,7 @@ public class TrainInstanceReuseTests : TestSetup
         await failing.Should().ThrowAsync<InvalidOperationException>();
         await train.Run(input: false);
 
-        var rows = await Rows(typeof(IToggleTrain).FullName!);
+        var rows = await Rows(typeof(IToggleTrain).FullName.NotNull());
 
         rows.Should()
             .BeEquivalentTo(
@@ -52,18 +53,19 @@ public class TrainInstanceReuseTests : TestSetup
         var train = (ExternalIdTrain)Scope.ServiceProvider.GetRequiredService<IExternalIdTrain>();
 
         await train.Run(input: false, CancellationToken.None);
-        var first = train.Metadata!.ExternalId;
+        var first = train.Metadata.NotNull().ExternalId;
         train.ExternalId = "chosen-for-the-second-run".PadRight(32, '0');
         await train.Run(input: false, CancellationToken.None);
 
         train
-            .Metadata!.ExternalId.Should()
+            .Metadata.NotNull()
+            .ExternalId.Should()
             .Be(
                 train.ExternalId,
                 "0011-a-service-train-instance-is-one-run.md: an ExternalId set for a run is that run's"
             );
         first.Should().NotBe(train.ExternalId);
-        (await Rows(typeof(IExternalIdTrain).FullName!)).Should().HaveCount(2);
+        (await Rows(typeof(IExternalIdTrain).FullName.NotNull())).Should().HaveCount(2);
     }
 
     [Test]

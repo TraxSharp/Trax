@@ -71,7 +71,7 @@ public class ChainDeclarationTests
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<PassThrough>().Resolve();
 
-        internal string ReadInput() => TrainInput;
+        internal string? ReadInput() => TrainInput;
     }
 
     private sealed class ReadsItsInputTrain : ServiceTrain<string, string>
@@ -79,7 +79,7 @@ public class ChainDeclarationTests
         protected override Task<Either<Exception, string>> Junctions()
         {
             // Reading the input while the chain is declared is what the test is about.
-            _ = TrainInput.Length;
+            _ = TrainInput;
             return Chain<PassThrough>().Resolve();
         }
     }

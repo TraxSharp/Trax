@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
@@ -23,7 +24,8 @@ public class PostgresDataSourceLifetimeTests
             .SetBasePath(AppContext.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: false)
             .Build()
-            .GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            .GetRequiredSection("Configuration")["DatabaseConnectionString"]
+            .NotNull()
     );
 
     [Test]
@@ -48,7 +50,7 @@ public class PostgresDataSourceLifetimeTests
     public async Task Two_providers_from_one_collection_do_not_share_a_data_source()
     {
         var services = new ServiceCollection();
-        BuildProvider(services, build: false);
+        Register(services);
         var first = services.BuildServiceProvider();
         var second = services.BuildServiceProvider();
 
@@ -77,10 +79,15 @@ public class PostgresDataSourceLifetimeTests
         }
     }
 
-    private static ServiceProvider BuildProvider(IServiceCollection services, bool build = true)
+    private static ServiceProvider BuildProvider(IServiceCollection services)
+    {
+        Register(services);
+        return services.BuildServiceProvider();
+    }
+
+    private static void Register(IServiceCollection services)
     {
         services.AddLogging();
         services.AddTrax(trax => trax.AddEffects(effects => effects.UsePostgres(ConnectionString)));
-        return build ? services.BuildServiceProvider() : null!;
     }
 }

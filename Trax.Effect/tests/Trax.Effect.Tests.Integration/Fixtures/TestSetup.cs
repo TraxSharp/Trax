@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -16,11 +17,19 @@ namespace Trax.Effect.Tests.Integration.Fixtures;
 [TestFixture]
 public abstract class TestSetup
 {
-    private ServiceProvider ServiceProvider { get; set; } = null!;
+    private ServiceProvider ServiceProvider
+    {
+        get => field.NotNull(nameof(ServiceProvider));
+        set;
+    }
 
     public AsyncServiceScope Scope { get; private set; }
 
-    public IDataContextProviderFactory DataContextFactory { get; private set; } = null!;
+    public IDataContextProviderFactory DataContextFactory
+    {
+        get => field.NotNull(nameof(DataContextFactory));
+        private set;
+    }
 
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()
@@ -30,7 +39,7 @@ public abstract class TestSetup
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
             .Build();
         var connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
 
         ServiceProvider = new ServiceCollection()

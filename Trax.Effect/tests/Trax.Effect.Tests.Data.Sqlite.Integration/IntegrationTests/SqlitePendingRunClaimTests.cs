@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -89,7 +90,7 @@ public class SqlitePendingRunClaimTests : TestSetup
         var unsaved = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ICountingTrain).FullName!,
+                Name = typeof(ICountingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -122,7 +123,7 @@ public class SqlitePendingRunClaimTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ICountingTrain).FullName!,
+                Name = typeof(ICountingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = Unit.Default,
             }

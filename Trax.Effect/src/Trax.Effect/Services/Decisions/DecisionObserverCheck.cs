@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.ClientExport;
 
 namespace Trax.Effect.Services.Decisions;
@@ -52,7 +53,7 @@ internal sealed class DecisionObserverCheck(IServiceProvider services)
         var parts = provider
             .GetServices<DecisionObserverPart>()
             .Where(part => part.Tag is not null)
-            .Select(part => part.Tag!.Name)
+            .Select(part => part.Tag.NotNull().Name)
             .Distinct(StringComparer.Ordinal)
             .ToList();
 

@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Extensions;
@@ -41,7 +42,7 @@ public class TrainLifecycleOverrideTests : TestSetup
 
         train.StartedCalled.Should().BeTrue();
         train.StartedMetadata.Should().NotBeNull();
-        train.StartedMetadata!.Name.Should().Be(typeof(IRecordingTrain).FullName);
+        train.StartedMetadata.NotNull().Name.Should().Be(typeof(IRecordingTrain).FullName);
     }
 
     [Test]
@@ -66,7 +67,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var result = await train.Run(Unit.Default, CancellationToken.None);
 
         result.Should().Be(Unit.Default);
-        train.Metadata!.TrainState.Should().Be(Enums.TrainState.Completed);
+        train.Metadata.NotNull().TrainState.Should().Be(Enums.TrainState.Completed);
     }
 
     #endregion
@@ -271,7 +272,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IRecordingTrain).FullName!,
+                Name = typeof(IRecordingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -293,7 +294,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IRecordingTrain).FullName!,
+                Name = typeof(IRecordingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -317,7 +318,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IRecordingTrain).FullName!,
+                Name = typeof(IRecordingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -338,7 +339,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ICancellingRecordingTrain).FullName!,
+                Name = typeof(ICancellingRecordingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -377,9 +378,11 @@ public class TrainLifecycleOverrideTests : TestSetup
 
         await train.Run("test-input", CancellationToken.None);
 
-        var deserialized = JsonSerializer.Deserialize<TestOutputDto>(train.CapturedOutput!);
+        var deserialized = JsonSerializer.Deserialize<TestOutputDto>(
+            train.CapturedOutput.NotNull()
+        );
         deserialized.Should().NotBeNull();
-        deserialized!.Value.Should().Be("processed:test-input");
+        deserialized.NotNull().Value.Should().Be("processed:test-input");
         deserialized.Count.Should().Be(42);
     }
 
@@ -395,7 +398,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         outputObj.Should().NotBeNull();
         var outputDto = outputObj as TestOutputDto;
         outputDto.Should().NotBeNull();
-        outputDto!.Value.Should().Be("processed:test-input");
+        outputDto.NotNull().Value.Should().Be("processed:test-input");
     }
 
     #endregion
@@ -434,8 +437,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         await train.Run("hello", CancellationToken.None);
 
         train.CapturedOutput.Should().NotBeNull();
-        train.CapturedOutput!.Value.Should().Be("processed:hello");
-        train.CapturedOutput!.Count.Should().Be(42);
+        train.CapturedOutput.NotNull().Value.Should().Be("processed:hello");
+        train.CapturedOutput.NotNull().Count.Should().Be(42);
     }
 
     [Test]
@@ -482,7 +485,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         await train.Run("hello", CancellationToken.None);
 
         train.CapturedMetadataOutput.Should().NotBeNull();
-        train.CapturedMetadataOutput!.Value.Should().Be("processed:hello");
+        train.CapturedMetadataOutput.NotNull().Value.Should().Be("processed:hello");
     }
 
     [Test]
@@ -507,7 +510,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IQueueRecordingTrain).FullName!,
+                Name = typeof(IQueueRecordingTrain).FullName.NotNull(),
                 ExternalId = "ext-queue-1",
                 Input = "hello",
             }
@@ -529,7 +532,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var queued = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ITypedAccessTrain).FullName!,
+                Name = typeof(ITypedAccessTrain).FullName.NotNull(),
                 ExternalId = "ext-queue-2",
                 Input = "queued",
             }
@@ -540,7 +543,7 @@ public class TrainLifecycleOverrideTests : TestSetup
 
         train.CapturedStartedInput.Should().Be("run");
         train.CapturedInput.Should().Be("run");
-        train.Metadata!.ExternalId.Should().NotBe("ext-queue-2");
+        train.Metadata.NotNull().ExternalId.Should().NotBe("ext-queue-2");
     }
 
     [Test]
@@ -551,7 +554,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IQueueRecordingTrain).FullName!,
+                Name = typeof(IQueueRecordingTrain).FullName.NotNull(),
                 ExternalId = "boom",
                 Input = "throw",
             }

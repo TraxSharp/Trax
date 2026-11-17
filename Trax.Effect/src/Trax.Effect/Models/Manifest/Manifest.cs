@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
@@ -41,14 +42,22 @@ public class Manifest : IModel
     /// GUID when nothing else sets it.
     /// </summary>
     [Column("external_id")]
-    public string ExternalId { get; set; } = null!;
+    public string ExternalId
+    {
+        get => field.NotNull(nameof(ExternalId));
+        set;
+    }
 
     /// <summary>
     /// FullName of the train type the manifest runs, as passed when it was scheduled. Resolved back
     /// to a type by <see cref="NameType"/>.
     /// </summary>
     [Column("name")]
-    public string Name { get; set; } = null!;
+    public string Name
+    {
+        get => field.NotNull(nameof(Name));
+        set;
+    }
 
     /// <summary>
     /// FullName of the <see cref="IManifestProperties"/> type serialized in <see cref="Properties"/>,
@@ -328,7 +337,11 @@ public class Manifest : IModel
     /// <summary>
     /// Gets or sets the ManifestGroup this manifest belongs to.
     /// </summary>
-    public ManifestGroup.ManifestGroup ManifestGroup { get; set; } = null!;
+    public ManifestGroup.ManifestGroup ManifestGroup
+    {
+        get => field.NotNull(nameof(ManifestGroup));
+        set;
+    }
 
     /// <summary>
     /// Gets or sets the parent manifest that this manifest depends on.
@@ -368,7 +381,7 @@ public class Manifest : IModel
     /// <summary>
     /// Deserializes the exclusions JSON into a list of <see cref="Exclusion"/> objects.
     /// </summary>
-    public List<Exclusion> GetExclusions()
+    public IList<Exclusion> GetExclusions()
     {
         if (string.IsNullOrEmpty(Exclusions))
             return [];
@@ -382,7 +395,7 @@ public class Manifest : IModel
     /// <summary>
     /// Serializes the given exclusions and stores them as JSON.
     /// </summary>
-    public void SetExclusions(List<Exclusion> exclusions)
+    public void SetExclusions(IList<Exclusion> exclusions)
     {
         Exclusions =
             exclusions.Count == 0

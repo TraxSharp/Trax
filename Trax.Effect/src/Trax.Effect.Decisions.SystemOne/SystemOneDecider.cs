@@ -8,6 +8,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Decisions.SystemOne;
 
@@ -40,7 +41,11 @@ namespace Trax.Effect.Decisions.SystemOne;
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-system-one-decider">SDK reference</seealso>
 public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 {
-    private static readonly JsonSerializerOptions StateJson = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions StateJson = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     private readonly SystemOneOptions _options;
 
@@ -583,7 +588,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
                 ScoreQuestion score when string.Equals(type, "score", StringComparison.Ordinal) =>
                     Score(node, score.Levels.Count),
                 YesNoQuestion when string.Equals(type, "noul", StringComparison.Ordinal) =>
-                    new YesNoAnswer(node["noul"]!.GetValue<double>()),
+                    new YesNoAnswer(node["noul"].NotNull().GetValue<double>()),
                 _ => null,
             };
         }
@@ -604,10 +609,14 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     /// </summary>
     private static ChoiceAnswer? Choice(JsonObject node)
     {
-        var choice = node["choice"]!.GetValue<string>();
+        var choice = node["choice"].NotNull().GetValue<string>();
         var probabilities = node["probabilities"]
             ?.AsObject()
-            .ToDictionary(p => p.Key, p => p.Value!.GetValue<double>(), StringComparer.Ordinal);
+            .ToDictionary(
+                p => p.Key,
+                p => p.Value.NotNull().GetValue<double>(),
+                StringComparer.Ordinal
+            );
 
         double? confidence =
             node["confidence"] is { } given ? given.GetValue<double>()
@@ -624,7 +633,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     /// </summary>
     private static ScoreAnswer? Score(JsonObject node, int levels)
     {
-        var score = node["score"]!.GetValue<double>();
+        var score = node["score"].NotNull().GetValue<double>();
         List<double>? probabilities = null;
 
         if (node["probabilities"] is { } given)

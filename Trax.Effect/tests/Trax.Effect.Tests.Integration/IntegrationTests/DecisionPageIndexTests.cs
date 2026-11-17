@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Tests.Integration.Fixtures;
 
@@ -111,6 +112,6 @@ public class DecisionPageIndexTests : TestSetup
     {
         var command = new NpgsqlCommand(sql, connection, transaction);
         await using var commandDisposal = command.ConfigureAwait(false);
-        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 }

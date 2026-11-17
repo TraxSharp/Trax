@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions;
 using Trax.Effect.Broadcaster.SignalR.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Models;
@@ -67,7 +68,7 @@ public class SignalRLifecycleHookForwarderTests
 
         var sent = client
             .ReceivedCalls()
-            .Select(call => ((TraxClientEvent)call.GetArguments()[0]!).EventType)
+            .Select(call => ((TraxClientEvent)call.GetArguments()[0].NotNull()).EventType)
             .ToList();
         sent.Should()
             .BeEquivalentTo(["Started", "Completed", "Failed", "Cancelled", "StateChanged"]);
@@ -142,7 +143,7 @@ public class SignalRLifecycleHookForwarderTests
         hub.Clients.Returns(clients);
 
         var options = (SignalRSinkOptions)
-            Activator.CreateInstance(typeof(SignalRSinkOptions), nonPublic: true)!;
+            Activator.CreateInstance(typeof(SignalRSinkOptions), nonPublic: true).NotNull();
         return new SignalRTrainEventDispatcher(hub, options.Build());
     }
 

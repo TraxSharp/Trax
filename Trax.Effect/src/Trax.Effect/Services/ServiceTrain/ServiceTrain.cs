@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.ExceptionServices;
 using System.Text.Json.Serialization;
@@ -110,11 +111,12 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// carries the input on every version. Anywhere else a train with no metadata carrying an
     /// input returns <see langword="default"/>.
     /// </remarks>
+    [MaybeNull]
     protected TIn TrainInput =>
         IsDeclaringChain ? throw new ChainDeclarationException(TrainName, nameof(TrainInput))
-        : Metadata is not null ? (Metadata.GetInputObject() is TIn typed ? typed : default!)
+        : Metadata is not null ? (Metadata.GetInputObject() is TIn typed ? typed : default)
         : QueueHookFrame.Find(_queueHookFrame.Value, this) is { } frame ? frame.Input
-        : default!;
+        : default;
 
     // Static so that it costs nothing on a train that is never enqueued, and an AsyncLocal because
     // one scoped instance can run the hooks of two concurrent enqueues on a shared scope. Each
@@ -197,10 +199,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// <see langword="default"/> in <see cref="QueueSubjectKey"/> and <see cref="OnQueue"/>, which are
     /// called on an instance that has not run and has no metadata.
     /// </remarks>
+    [MaybeNull]
     protected TOut TrainOutput =>
         IsDeclaringChain ? throw new ChainDeclarationException(TrainName, nameof(TrainOutput))
         : Metadata is not null && Metadata.GetOutputObject() is TOut typed ? typed
-        : default!;
+        : default;
 
     /// <summary>
     /// Gets the canonical train name. Prefers the interface name set at registration time
@@ -821,7 +824,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             )
             .ConfigureAwait(false);
 
-        return plan ?? Refuse(verdict.Code!, verdict.Reason!);
+        return plan ?? Refuse(verdict.Code.NotNull(), verdict.Reason.NotNull());
     }
 
     /// <summary>
@@ -1079,7 +1082,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// </summary>
     private void ForgetPreviousRun()
     {
-        if (string.Equals(ExternalId, Metadata!.ExternalId, StringComparison.Ordinal))
+        if (string.Equals(ExternalId, Metadata.NotNull().ExternalId, StringComparison.Ordinal))
             ExternalId = Guid.NewGuid().ToString("N");
 
         Metadata = null;
@@ -1124,7 +1127,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// <c>Run</c>: the monad is what the chain runs on, so a service train does not replace it.
     /// </summary>
     protected sealed override Monad<TIn, TOut> NewMonad() =>
-        new(this, ServiceProvider!, CancellationToken);
+        new(this, ServiceProvider.NotNull(), CancellationToken);
 
     /// <summary>
     /// Releases the run: clears the in-memory input and output objects, disposes the effect, junction effect and

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Extensions;
@@ -27,11 +28,11 @@ namespace Trax.Effect.Tests.Data.Sqlite.Integration.IntegrationTests;
 [NonParallelizable]
 public class SqliteDecisionRecordingTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     private static readonly LiteDecider Decider = new();
 
-    private string _dbPath = null!;
+    private string? _dbPath;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -43,7 +44,7 @@ public class SqliteDecisionRecordingTests
         services.AddSingleton<IDecider>(Decider);
         services.AddTrax(trax =>
             trax.AddEffects(effects =>
-                effects.UseSqlite($"Data Source={_dbPath}").AddDecisionRecording()
+                effects.UseSqlite($"Data Source={_dbPath.NotNull()}").AddDecisionRecording()
             )
         );
         services
@@ -56,9 +57,16 @@ public class SqliteDecisionRecordingTests
     [OneTimeTearDown]
     public async Task DisposeProvider()
     {
-        await _provider.DisposeAsync();
+        await _provider.NotNull().DisposeAsync();
 
-        foreach (var path in new[] { _dbPath, _dbPath + "-wal", _dbPath + "-shm" })
+        foreach (
+            var path in new[]
+            {
+                _dbPath.NotNull(),
+                _dbPath.NotNull() + "-wal",
+                _dbPath.NotNull() + "-shm",
+            }
+        )
             if (File.Exists(path))
                 File.Delete(path);
     }
@@ -71,7 +79,9 @@ public class SqliteDecisionRecordingTests
         var (train, output) = await Run<ILiteRouteThenPeek>();
 
         output.Should().Be("held");
-        LitePeek.Seen.Should().Equal((train.Metadata!.Id, TrainState.InProgress, "ManualCheck"));
+        LitePeek
+            .Seen.Should()
+            .Equal((train.Metadata.NotNull().Id, TrainState.InProgress, "ManualCheck"));
 
         var row = (await Recorded(train.Metadata.Id)).Should().ContainSingle().Subject;
         row.QuestionKey.Should().Be(QuestionKey.For<LiteFulfilment>());
@@ -93,7 +103,7 @@ public class SqliteDecisionRecordingTests
     {
         Decider.Choice = LiteFulfilment.Standard;
         var (train, _) = await Run<ILiteRouteOrder>();
-        (await Recorded(train.Metadata!.Id)).Should().ContainSingle();
+        (await Recorded(train.Metadata.NotNull().Id)).Should().ContainSingle();
 
         await Delete(train.Metadata.Id);
 
@@ -110,12 +120,15 @@ public class SqliteDecisionRecordingTests
         Decider.Choice = LiteFulfilment.Standard;
         Decider.Asked = 0;
         var (requeued, output) = await Run<ILiteRouteOrder>(
-            replayDecisionsOf: original.Metadata!.Id
+            replayDecisionsOf: original.Metadata.NotNull().Id
         );
 
         output.Should().Be("held");
         Decider.Asked.Should().Be(0);
-        var replayed = (await Recorded(requeued.Metadata!.Id)).Should().ContainSingle().Subject;
+        var replayed = (await Recorded(requeued.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         replayed.Replayed.Should().BeTrue();
         replayed.Tracks().Should().Equal("ManualCheck");
 
@@ -127,7 +140,7 @@ public class SqliteDecisionRecordingTests
     {
         Decider.Choice = LiteFulfilment.ManualCheck;
         var (original, _) = await Run<ILiteRouteOrder>();
-        await Delete(original.Metadata!.Id);
+        await Delete(original.Metadata.NotNull().Id);
         Decider.Asked = 0;
 
         var run = async () =>
@@ -140,9 +153,9 @@ public class SqliteDecisionRecordingTests
                 string.Create(CultureInfo.InvariantCulture, $"no run {original.Metadata.Id} exists")
             );
         Decider.Asked.Should().Be(0);
-        _lastTrain!.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
+        _lastTrain.NotNull().Metadata.NotNull().FailureClass.Should().Be(FailureClass.Permanent);
 
-        await Delete(_lastTrain.Metadata.Id);
+        await Delete(_lastTrain.NotNull().Metadata.NotNull().Id);
     }
 
     [Test]
@@ -154,8 +167,8 @@ public class SqliteDecisionRecordingTests
         (await refuse.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()
             .Contain("'Banana', which is not one of its options");
-        var original = _lastTrain!;
-        original.Metadata!.FailureClass.Should().Be(FailureClass.Transient);
+        var original = _lastTrain.NotNull();
+        original.Metadata.NotNull().FailureClass.Should().Be(FailureClass.Transient);
 
         var refused = (await Recorded(original.Metadata.Id)).Should().ContainSingle().Subject;
         refused.QuestionKey.Should().Be(QuestionKey.For<LiteFulfilment>());
@@ -172,7 +185,10 @@ public class SqliteDecisionRecordingTests
 
         output.Should().Be("held");
         Decider.Asked.Should().Be(1, "a refused answer is never replayed");
-        var asked = (await Recorded(requeued.Metadata!.Id)).Should().ContainSingle().Subject;
+        var asked = (await Recorded(requeued.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         asked.Replayed.Should().BeFalse();
         asked.Refused.Should().BeNull();
         asked.Answer.Should().NotContain("replay_refused");
@@ -187,11 +203,14 @@ public class SqliteDecisionRecordingTests
         var refuse = async () => await Run<ILiteUnanswered>().ConfigureAwait(false);
 
         await refuse.Should().ThrowAsync<TrainException>();
-        var row = (await Recorded(_lastTrain!.Metadata!.Id)).Should().ContainSingle().Subject;
+        var row = (await Recorded(_lastTrain.NotNull().Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         row.Answer.Should().BeNull();
         row.Refused.Should().Contain("gave no answer");
 
-        await Delete(_lastTrain.Metadata.Id);
+        await Delete(_lastTrain.NotNull().Metadata.NotNull().Id);
     }
 
     private IServiceTrain<LiteOrder, string>? _lastTrain;
@@ -201,7 +220,7 @@ public class SqliteDecisionRecordingTests
     )
         where TTrain : class, IServiceTrain<LiteOrder, string>
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<LiteOrder, string>)
@@ -212,7 +231,7 @@ public class SqliteDecisionRecordingTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(TTrain).FullName!,
+                Name = typeof(TTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = order,
                 ReplayDecisionsOf = replayDecisionsOf,
@@ -227,7 +246,7 @@ public class SqliteDecisionRecordingTests
 
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -242,7 +261,7 @@ public class SqliteDecisionRecordingTests
 
     private async Task<Metadata> RunRow(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -256,7 +275,7 @@ public class SqliteDecisionRecordingTests
 
     private async Task Delete(params long[] metadataIds)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -364,12 +383,12 @@ public class SqliteDecisionRecordingTests
     /// <summary>Reads the run's decisions on a connection of its own, as another process would.</summary>
     public class LitePeek(IDataContextProviderFactory factory) : EffectJunction<string, string>
     {
-        public static List<(long, TrainState, string?)> Seen { get; } = [];
+        public static IList<(long, TrainState, string?)> Seen { get; } = [];
 
         public override async Task<string> Run(string input)
         {
             Seen.Clear();
-            var id = Metadata!.TrainMetadataId;
+            var id = Metadata.NotNull().TrainMetadataId;
             var context = await factory
                 .CreateDbContextAsync(CancellationToken.None)
                 .ConfigureAwait(false);

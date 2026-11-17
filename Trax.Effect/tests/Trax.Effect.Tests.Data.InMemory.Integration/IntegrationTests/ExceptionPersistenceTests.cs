@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Services.DataContext;
@@ -40,7 +41,7 @@ public class ExceptionPersistenceTests : TestSetup
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.TrainState.Should().Be(TrainState.Failed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Failed);
         train.Metadata.FailureException.Should().Be("InvalidOperationException");
         train.Metadata.FailureReason.Should().Be("junction failure");
         train.Metadata.FailureJunction.Should().Be(nameof(AlwaysFailsJunction));
@@ -55,7 +56,7 @@ public class ExceptionPersistenceTests : TestSetup
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.StackTrace.Should().NotBeNullOrEmpty();
+        train.Metadata.NotNull().StackTrace.Should().NotBeNullOrEmpty();
         train.Metadata.StackTrace.Should().Contain(nameof(AlwaysFailsJunction));
     }
 
@@ -85,7 +86,7 @@ public class ExceptionPersistenceTests : TestSetup
         await act.Should().ThrowAsync<HttpRequestException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.FailureException.Should().Be("HttpRequestException");
+        train.Metadata.NotNull().FailureException.Should().Be("HttpRequestException");
         train
             .Metadata.FailureReason.Should()
             .Be("Response status code does not indicate success: 500 (Internal Server Error).");
@@ -121,7 +122,7 @@ public class ExceptionPersistenceTests : TestSetup
         train.Metadata.Should().NotBeNull();
 
         // The FailureReason must be the original JSON string, not double-encoded
-        train.Metadata!.FailureReason.Should().Contain("\"success\":false");
+        train.Metadata.NotNull().FailureReason.Should().Contain("\"success\":false");
         train.Metadata.FailureReason.Should().Contain("\"referenceId\":\"ref-123\"");
         train.Metadata.FailureJunction.Should().Be(nameof(JsonExceptionJunction));
     }
@@ -151,7 +152,7 @@ public class ExceptionPersistenceTests : TestSetup
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.FailureReason.Should().Contain("newlines");
+        train.Metadata.NotNull().FailureReason.Should().Contain("newlines");
         train.Metadata.FailureReason.Should().Contain("tabs");
         train.Metadata.FailureReason.Should().Contain("quotes");
         train.Metadata.FailureReason.Should().Contain("backslashes");
@@ -170,7 +171,7 @@ public class ExceptionPersistenceTests : TestSetup
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.FailureJunction.Should().Be(nameof(SecondJunctionFails));
+        train.Metadata.NotNull().FailureJunction.Should().Be(nameof(SecondJunctionFails));
         train.Metadata.FailureReason.Should().Be("second junction failed");
         train.Metadata.StackTrace.Should().Contain(nameof(SecondJunctionFails));
     }
@@ -188,7 +189,7 @@ public class ExceptionPersistenceTests : TestSetup
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.TrainState.Should().Be(TrainState.Failed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Failed);
         train.Metadata.FailureException.Should().Be("InvalidOperationException");
         train.Metadata.FailureReason.Should().Be("plain failure");
         // No junction context — falls back to "TrainException" sentinel
@@ -210,11 +211,11 @@ public class ExceptionPersistenceTests : TestSetup
         // Read back from the database (not from the in-memory train object)
         var dataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
         var persisted = await dataContext.Metadatas.FirstOrDefaultAsync(m =>
-            m.Id == train.Metadata!.Id
+            m.Id == train.Metadata.NotNull().Id
         );
 
         persisted.Should().NotBeNull();
-        persisted!.TrainState.Should().Be(TrainState.Failed);
+        persisted.NotNull().TrainState.Should().Be(TrainState.Failed);
         persisted.FailureException.Should().Be("InvalidOperationException");
         persisted.FailureReason.Should().Be("junction failure");
         persisted.FailureJunction.Should().Be(nameof(AlwaysFailsJunction));
@@ -231,11 +232,11 @@ public class ExceptionPersistenceTests : TestSetup
 
         var dataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
         var persisted = await dataContext.Metadatas.FirstOrDefaultAsync(m =>
-            m.Id == train.Metadata!.Id
+            m.Id == train.Metadata.NotNull().Id
         );
 
         persisted.Should().NotBeNull();
-        persisted!.FailureException.Should().Be("HttpRequestException");
+        persisted.NotNull().FailureException.Should().Be("HttpRequestException");
         persisted
             .FailureReason.Should()
             .Be("Response status code does not indicate success: 500 (Internal Server Error).");
@@ -253,11 +254,11 @@ public class ExceptionPersistenceTests : TestSetup
 
         var dataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
         var persisted = await dataContext.Metadatas.FirstOrDefaultAsync(m =>
-            m.Id == train.Metadata!.Id
+            m.Id == train.Metadata.NotNull().Id
         );
 
         persisted.Should().NotBeNull();
-        persisted!.FailureReason.Should().Contain("\"success\":false");
+        persisted.NotNull().FailureReason.Should().Contain("\"success\":false");
         persisted.FailureReason.Should().Contain("\"referenceId\":\"ref-123\"");
     }
 
@@ -278,7 +279,7 @@ public class ExceptionPersistenceTests : TestSetup
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         // FailureException should be a simple type name, not a full namespace or JSON
-        train.Metadata!.FailureException.Should().NotContain("{");
+        train.Metadata.NotNull().FailureException.Should().NotContain("{");
         train.Metadata.FailureException.Should().NotContain("\"");
 
         // FailureJunction should be a simple class name
@@ -305,7 +306,7 @@ public class ExceptionPersistenceTests : TestSetup
         await act.Should().ThrowAsync<HttpRequestException>();
 
         // The failure reason must NOT start with { — that would indicate a JSON blob
-        train.Metadata!.FailureReason.Should().NotStartWith("{");
+        train.Metadata.NotNull().FailureReason.Should().NotStartWith("{");
         train.Metadata.FailureReason.Should().StartWith("Response status code");
     }
 

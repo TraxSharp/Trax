@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -58,7 +59,8 @@ public class OutcomeSaveFailureTests : TestSetup
 
         await run.Should().ThrowExactlyAsync<OutcomeSaveException>();
         train
-            .Metadata!.TrainState.Should()
+            .Metadata.NotNull()
+            .TrainState.Should()
             .NotBe(
                 TrainState.Failed,
                 "0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md says the work "
@@ -67,7 +69,7 @@ public class OutcomeSaveFailureTests : TestSetup
         Probe.OnFailedCalls.Should().Be(0);
         Probe.OnCompletedCalls.Should().Be(0, "the outcome was never recorded");
 
-        var row = await PersistedRow(typeof(ICompletingTrain).FullName!);
+        var row = await PersistedRow(typeof(ICompletingTrain).FullName.NotNull());
         row.TrainState.Should()
             .Be(
                 TrainState.Completed,

@@ -9,6 +9,7 @@ using NSubstitute.ExceptionExtensions;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using RabbitMQ.Client.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.RabbitMQ;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
@@ -95,9 +96,11 @@ public class RabbitMqBroadcasterSenderTests
             )
             .Returns(call =>
             {
-                var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(
-                    call.ArgAt<ReadOnlyMemory<byte>>(4).Span
-                )!;
+                var message = JsonSerializer
+                    .Deserialize<TrainLifecycleEventMessage>(
+                        call.ArgAt<ReadOnlyMemory<byte>>(4).Span
+                    )
+                    .NotNull();
                 var refusal = refuse?.Invoke(message);
                 published.Attempt(message);
                 if (refusal is not null)
@@ -642,7 +645,8 @@ public class RabbitMqBroadcasterSenderTests
 
     private static void Set(object target, string field, object value) =>
         typeof(RabbitMqTrainEventBroadcaster)
-            .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)
+            .NotNull()
             .SetValue(target, value);
 
     /// <summary>What the broker was handed, and how often each event was tried.</summary>

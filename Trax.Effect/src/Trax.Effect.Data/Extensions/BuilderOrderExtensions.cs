@@ -28,7 +28,7 @@ public static class BuilderOrderExtensions
     public static TraxEffectBuilderWithData AddDataContextLogging(
         this TraxEffectBuilder configurationBuilder,
         LogLevel? minimumLogLevel = null,
-        List<string>? blacklist = null
+        IReadOnlyList<string>? blacklist = null
     ) => throw new InvalidOperationException(DataProviderFirst);
 
     internal const string DataProviderBeforeDecisions =

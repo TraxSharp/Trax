@@ -170,7 +170,7 @@ public partial class SqliteMigrationTests
                     typeof(DatabaseMigrator).Assembly,
                     name =>
                         int.Parse(
-                            ScriptNumber.Match(name).Groups[1].Value,
+                            ScriptNumber.Match(name).Groups["number"].Value,
                             System.Globalization.CultureInfo.InvariantCulture
                         ) <= 13
                 )
@@ -238,7 +238,7 @@ public partial class SqliteMigrationTests
                     typeof(DatabaseMigrator).Assembly,
                     name =>
                         int.Parse(
-                            ScriptNumber.Match(name).Groups[1].Value,
+                            ScriptNumber.Match(name).Groups["number"].Value,
                             System.Globalization.CultureInfo.InvariantCulture
                         ) <= 28
                 )
@@ -289,7 +289,11 @@ public partial class SqliteMigrationTests
         }
     }
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"\.(\d{3})_")]
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"\.(?<number>\d{3})_",
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
     private static partial System.Text.RegularExpressions.Regex ScriptNumber { get; }
 
     #endregion

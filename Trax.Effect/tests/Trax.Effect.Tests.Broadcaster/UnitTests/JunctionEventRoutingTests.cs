@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
@@ -169,7 +170,7 @@ public class JunctionEventRoutingTests
         json.Should().Contain("\"state\":\"Failed\"");
         json.Should().Contain("\"failureClass\":\"Transient\"");
 
-        var back = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json)!;
+        var back = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json).NotNull();
         back.Junction.Should().BeEquivalentTo(Step);
     }
 
@@ -182,6 +183,10 @@ public class JunctionEventRoutingTests
              "eventType":"Completed","executor":"W","output":null}
             """;
 
-        JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json)!.Junction.Should().BeNull();
+        JsonSerializer
+            .Deserialize<TrainLifecycleEventMessage>(json)
+            .NotNull()
+            .Junction.Should()
+            .BeNull();
     }
 }

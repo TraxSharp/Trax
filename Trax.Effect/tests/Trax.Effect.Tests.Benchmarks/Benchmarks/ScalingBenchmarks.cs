@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Tests.Benchmarks.Serial;
 using Trax.Effect.Tests.Benchmarks.Trains;
@@ -14,7 +15,7 @@ namespace Trax.Effect.Tests.Benchmarks.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 10)]
 public class ScalingBenchmarks
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [Params(1, 3, 5, 10)]
     public int JunctionCount { get; set; }
@@ -32,7 +33,7 @@ public class ScalingBenchmarks
     }
 
     [GlobalCleanup]
-    public void Cleanup() => _provider.Dispose();
+    public void Cleanup() => _provider.NotNull().Dispose();
 
     [Benchmark(Baseline = true, Description = "Serial")]
     public Task<int> Serial() => SerialOperations.AddNSerial(0, JunctionCount);
@@ -51,7 +52,7 @@ public class ScalingBenchmarks
     [Benchmark(Description = "EffectTrain_NoEffects")]
     public async Task<int> EffectTrain_NoEffects()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         return JunctionCount switch
         {

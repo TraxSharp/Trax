@@ -1,5 +1,6 @@
 using System.Reflection;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Effect.Tests.Meta.Tests;
@@ -41,7 +42,7 @@ public class ServiceTrainRunIsSealedTests
             .Where(m => m.IsVirtual && !m.IsFinal)
             .Select(m =>
                 $"Run({string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name))}) "
-                + $"declared on {m.DeclaringType!.Name}"
+                + $"declared on {m.DeclaringType.NotNull().Name}"
             )
             .ToList();
 
@@ -79,7 +80,8 @@ public class ServiceTrainRunIsSealedTests
         );
 
         newMonad.Should().NotBeNull();
-        newMonad!
+        newMonad
+            .NotNull()
             .IsFamily.Should()
             .BeTrue("Core declares it protected, and an override keeps that");
         newMonad

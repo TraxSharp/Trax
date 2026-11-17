@@ -14,5 +14,5 @@ public class DataContextLoggingProviderConfiguration : IDataContextLoggingProvid
 
     /// <inheritdoc/>
     /// <remarks>Defaults to empty.</remarks>
-    public List<string> Blacklist { get; set; } = [];
+    public IReadOnlyList<string> Blacklist { get; set; } = [];
 }

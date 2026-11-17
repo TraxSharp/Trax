@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue.DTOs;
@@ -58,13 +59,21 @@ public class WorkQueue : IModel
     /// retry can leave several metadata rows with this id, the older ones failed.
     /// </summary>
     [Column("external_id")]
-    public string ExternalId { get; set; } = null!;
+    public string ExternalId
+    {
+        get => field.NotNull(nameof(ExternalId));
+        set;
+    }
 
     /// <summary>
     /// The fully qualified train type name to execute.
     /// </summary>
     [Column("train_name")]
-    public string TrainName { get; set; } = null!;
+    public string TrainName
+    {
+        get => field.NotNull(nameof(TrainName));
+        set;
+    }
 
     /// <summary>
     /// Serialized train input (JSON). Same format as Manifest.Properties.

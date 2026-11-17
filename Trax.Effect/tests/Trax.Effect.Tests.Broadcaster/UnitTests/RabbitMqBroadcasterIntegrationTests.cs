@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using RabbitMQ.Client;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.RabbitMQ;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
@@ -315,12 +316,16 @@ public class RabbitMqBroadcasterIntegrationTests
             // push all 10 into the process and report 0.
             var channel = (IChannel)
                 typeof(RabbitMqTrainEventReceiver)
-                    .GetField("_channel", BindingFlags.NonPublic | BindingFlags.Instance)!
-                    .GetValue(receiver)!;
+                    .GetField("_channel", BindingFlags.NonPublic | BindingFlags.Instance)
+                    .NotNull()
+                    .GetValue(receiver)
+                    .NotNull();
             var queue = (string)
                 typeof(RabbitMqTrainEventReceiver)
-                    .GetField("_queueName", BindingFlags.NonPublic | BindingFlags.Instance)!
-                    .GetValue(receiver)!;
+                    .GetField("_queueName", BindingFlags.NonPublic | BindingFlags.Instance)
+                    .NotNull()
+                    .GetValue(receiver)
+                    .NotNull();
 
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
             uint ready;

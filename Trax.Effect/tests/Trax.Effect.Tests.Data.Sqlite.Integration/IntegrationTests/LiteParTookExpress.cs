@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -22,7 +23,7 @@ public class LiteParTookExpress : EffectJunction<LiteParOrder, Unit>
 {
     public override Task<Unit> Run(LiteParOrder input)
     {
-        LiteParTook.Note(Metadata!.TrainMetadataId, nameof(LiteParLane.Express));
+        LiteParTook.Note(Metadata.NotNull().TrainMetadataId, nameof(LiteParLane.Express));
         return Task.FromResult(Unit.Default);
     }
 }

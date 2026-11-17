@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -27,7 +28,7 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 [NonParallelizable]
 public class PendingRunClaimTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -37,7 +38,7 @@ public class PendingRunClaimTests
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
         var connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
 
         var services = new ServiceCollection();
@@ -48,7 +49,7 @@ public class PendingRunClaimTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
 
     [SetUp]
     public void ResetCount() => CountingTrain.BodyRuns = 0;
@@ -61,9 +62,9 @@ public class PendingRunClaimTests
         // Both deliveries read the row before either starts, so each holds a copy that says Pending.
         var copyA = await ReadRow(id);
         var copyB = await ReadRow(id);
-        var scopeA = _provider.CreateAsyncScope();
+        var scopeA = _provider.NotNull().CreateAsyncScope();
         await using var scopeADisposal = scopeA.ConfigureAwait(false);
-        var scopeB = _provider.CreateAsyncScope();
+        var scopeB = _provider.NotNull().CreateAsyncScope();
         await using var scopeBDisposal = scopeB.ConfigureAwait(false);
         var trainA = (CountingTrain)scopeA.ServiceProvider.GetRequiredService<ICountingTrain>();
         var trainB = (CountingTrain)scopeB.ServiceProvider.GetRequiredService<ICountingTrain>();
@@ -89,9 +90,9 @@ public class PendingRunClaimTests
     {
         var id = await CreatePendingRow();
 
-        var first = _provider.CreateAsyncScope();
+        var first = _provider.NotNull().CreateAsyncScope();
         await using var firstDisposal = first.ConfigureAwait(false);
-        var second = _provider.CreateAsyncScope();
+        var second = _provider.NotNull().CreateAsyncScope();
         await using var secondDisposal = second.ConfigureAwait(false);
         var staleCopy = await ReadRow(id);
 
@@ -108,13 +109,13 @@ public class PendingRunClaimTests
     [Test]
     public async Task A_supplied_row_that_was_never_saved_is_the_runs_own()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (CountingTrain)scope.ServiceProvider.GetRequiredService<ICountingTrain>();
         var unsaved = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ICountingTrain).FullName!,
+                Name = typeof(ICountingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -149,12 +150,12 @@ public class PendingRunClaimTests
     private async Task<long> CreatePendingRow()
     {
         var context = (IDataContext)
-            _provider.GetRequiredService<IDataContextProviderFactory>().Create();
+            _provider.NotNull().GetRequiredService<IDataContextProviderFactory>().Create();
         await using var contextDisposal = context.ConfigureAwait(false);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ICountingTrain).FullName!,
+                Name = typeof(ICountingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = Unit.Default,
             }
@@ -168,7 +169,7 @@ public class PendingRunClaimTests
     private async Task<Metadata> ReadRow(long id)
     {
         var context = (IDataContext)
-            _provider.GetRequiredService<IDataContextProviderFactory>().Create();
+            _provider.NotNull().GetRequiredService<IDataContextProviderFactory>().Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
         return await context

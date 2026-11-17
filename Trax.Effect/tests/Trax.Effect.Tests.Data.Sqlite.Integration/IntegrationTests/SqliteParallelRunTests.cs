@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -27,11 +28,11 @@ namespace Trax.Effect.Tests.Data.Sqlite.Integration.IntegrationTests;
 [NonParallelizable]
 public class SqliteParallelRunTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     private static readonly LiteParDecider Decider = new();
 
-    private string _dbPath = null!;
+    private string? _dbPath;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -44,7 +45,7 @@ public class SqliteParallelRunTests
         services.AddTrax(trax =>
             trax.AddEffects(effects =>
                 effects
-                    .UseSqlite($"Data Source={_dbPath}")
+                    .UseSqlite($"Data Source={_dbPath.NotNull()}")
                     .AddJunctionEvents()
                     .AddDecisionRecording()
             )
@@ -56,9 +57,16 @@ public class SqliteParallelRunTests
     [OneTimeTearDown]
     public async Task DisposeProvider()
     {
-        await _provider.DisposeAsync();
+        await _provider.NotNull().DisposeAsync();
 
-        foreach (var path in new[] { _dbPath, _dbPath + "-wal", _dbPath + "-shm" })
+        foreach (
+            var path in new[]
+            {
+                _dbPath.NotNull(),
+                _dbPath.NotNull() + "-wal",
+                _dbPath.NotNull() + "-shm",
+            }
+        )
             if (File.Exists(path))
                 File.Delete(path);
     }
@@ -117,7 +125,7 @@ public class SqliteParallelRunTests
 
     private async Task<long> Run(long? replayDecisionsOf = null)
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<LiteParOrder, string>)
@@ -126,7 +134,7 @@ public class SqliteParallelRunTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ILiteParAskEverywhereTrain).FullName!,
+                Name = typeof(ILiteParAskEverywhereTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ReplayDecisionsOf = replayDecisionsOf,
@@ -135,15 +143,16 @@ public class SqliteParallelRunTests
 
         await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
         await _provider
+            .NotNull()
             .GetRequiredService<JunctionRunWriter>()
             .FlushAsync(CancellationToken.None)
             .ConfigureAwait(false);
-        return train.Metadata!.Id;
+        return train.Metadata.NotNull().Id;
     }
 
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -157,7 +166,7 @@ public class SqliteParallelRunTests
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);

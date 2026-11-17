@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Configuration;
 using Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions;
 using Trax.Effect.Broadcaster.SignalR.Extensions;
@@ -30,8 +31,8 @@ public class SignalRJunctionEventTests
 {
     private const string Adr = "docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md";
 
-    private IHubContext<TraxTrainEventHub, ITraxTrainEventClient> _hub = null!;
-    private ITraxTrainEventClient _client = null!;
+    private IHubContext<TraxTrainEventHub, ITraxTrainEventClient>? _hub;
+    private ITraxTrainEventClient? _client;
     private readonly List<SignalRTrainEventDispatcher> _created = [];
 
     [SetUp]
@@ -40,8 +41,8 @@ public class SignalRJunctionEventTests
         _hub = Substitute.For<IHubContext<TraxTrainEventHub, ITraxTrainEventClient>>();
         _client = Substitute.For<ITraxTrainEventClient>();
         var clients = Substitute.For<IHubClients<ITraxTrainEventClient>>();
-        clients.All.Returns(_client);
-        _hub.Clients.Returns(clients);
+        clients.All.Returns(_client.NotNull());
+        _hub.NotNull().Clients.Returns(clients);
     }
 
     [TearDown]
@@ -53,11 +54,12 @@ public class SignalRJunctionEventTests
     }
 
     private static SignalRSinkOptions NewOptions() =>
-        (SignalRSinkOptions)Activator.CreateInstance(typeof(SignalRSinkOptions), nonPublic: true)!;
+        (SignalRSinkOptions)
+            Activator.CreateInstance(typeof(SignalRSinkOptions), nonPublic: true).NotNull();
 
     private SignalRTrainEventDispatcher Create(SignalRSinkConfiguration config)
     {
-        var dispatcher = new SignalRTrainEventDispatcher(_hub, config);
+        var dispatcher = new SignalRTrainEventDispatcher(_hub.NotNull(), config);
         _created.Add(dispatcher);
         return dispatcher;
     }
@@ -101,6 +103,7 @@ public class SignalRJunctionEventTests
         await d.StopAsync(CancellationToken.None);
 
         _client
+            .NotNull()
             .ReceivedCalls()
             .Should()
             .BeEmpty($"the SignalR sink sends junction events only when asked. See {Adr}.");
@@ -111,12 +114,12 @@ public class SignalRJunctionEventTests
     {
         var d = Create(NewOptions().WithJunctionEvents().Build());
         object? sent = null;
-        await _client.JunctionEvent(Arg.Do<object>(p => sent = p));
+        await _client.NotNull().JunctionEvent(Arg.Do<object>(p => sent = p));
 
         await d.HandleAsync(Step(), CancellationToken.None);
         await d.StopAsync(CancellationToken.None);
 
-        await _client.DidNotReceive().TrainEvent(Arg.Any<object>());
+        await _client.NotNull().DidNotReceive().TrainEvent(Arg.Any<object>());
         var step = sent.Should().BeOfType<TraxJunctionClientEvent>().Subject;
         step.Name.Should().Be("Ship");
         step.State.Should().Be("Failed");
@@ -134,12 +137,13 @@ public class SignalRJunctionEventTests
 
         await d.HandleAsync(Step(), CancellationToken.None);
         await d.HandleAsync(
-            Step(typeof(ICheckGeocodeDriftTrain).FullName!),
+            Step(typeof(ICheckGeocodeDriftTrain).FullName.NotNull()),
             CancellationToken.None
         );
         await d.StopAsync(CancellationToken.None);
 
         await _client
+            .NotNull()
             .Received(1)
             .JunctionEvent(
                 Arg.Is<object>(p =>
@@ -157,7 +161,7 @@ public class SignalRJunctionEventTests
         await d.HandleAsync(Step(), CancellationToken.None);
         await d.StopAsync(CancellationToken.None);
 
-        _client.ReceivedCalls().Should().BeEmpty();
+        _client.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
@@ -165,11 +169,11 @@ public class SignalRJunctionEventTests
     {
         var d = Create(NewOptions().WithJunctionAnswers().Build());
         object? sent = null;
-        await _client.JunctionEvent(Arg.Do<object>(p => sent = p));
+        await _client.NotNull().JunctionEvent(Arg.Do<object>(p => sent = p));
         var message = Step(eventType: "Decided");
         message = message with
         {
-            Junction = message.Junction! with
+            Junction = message.Junction.NotNull() with
             {
                 Kind = JunctionRunKind.Choice,
                 State = JunctionRunState.Completed,
@@ -193,7 +197,7 @@ public class SignalRJunctionEventTests
         var message = Step(trainName, eventType: "Decided");
         return message with
         {
-            Junction = message.Junction! with
+            Junction = message.Junction.NotNull() with
             {
                 Kind = JunctionRunKind.Choice,
                 State = JunctionRunState.Completed,
@@ -210,7 +214,7 @@ public class SignalRJunctionEventTests
     {
         var d = Create(NewOptions().WithJunctionEvents().Build());
         object? sent = null;
-        await _client.JunctionEvent(Arg.Do<object>(p => sent = p));
+        await _client.NotNull().JunctionEvent(Arg.Do<object>(p => sent = p));
 
         await d.HandleAsync(Decided(), CancellationToken.None);
         await d.StopAsync(CancellationToken.None);
@@ -230,7 +234,7 @@ public class SignalRJunctionEventTests
     {
         var d = Create(NewOptions().WithJunctionAnswers().Build());
         object? sent = null;
-        await _client.JunctionEvent(Arg.Do<object>(p => sent = p));
+        await _client.NotNull().JunctionEvent(Arg.Do<object>(p => sent = p));
 
         await d.HandleAsync(Decided(), CancellationToken.None);
         await d.StopAsync(CancellationToken.None);
@@ -245,11 +249,14 @@ public class SignalRJunctionEventTests
     {
         var d = Create(
             NewOptions()
-                .WithJunctionProjection(m => new RedactedStep(m.MetadataId, m.Junction!.Name))
+                .WithJunctionProjection(m => new RedactedStep(
+                    m.MetadataId,
+                    m.Junction.NotNull().Name
+                ))
                 .Build()
         );
         object? sent = null;
-        await _client.JunctionEvent(Arg.Do<object>(p => sent = p));
+        await _client.NotNull().JunctionEvent(Arg.Do<object>(p => sent = p));
 
         await d.HandleAsync(Decided(), CancellationToken.None);
         await d.StopAsync(CancellationToken.None);
@@ -265,6 +272,7 @@ public class SignalRJunctionEventTests
         var entered = new TaskCompletionSource();
         var release = new TaskCompletionSource();
         _client
+            .NotNull()
             .JunctionEvent(Arg.Any<object>())
             .Returns(_ =>
             {
@@ -285,6 +293,7 @@ public class SignalRJunctionEventTests
         await d.StopAsync(CancellationToken.None);
 
         await _client
+            .NotNull()
             .Received(1)
             .TrainEvent(Arg.Is<object>(p => ((TraxClientEvent)p).ExternalId == "other"));
         d.DroppedEvents.Should()
@@ -298,7 +307,7 @@ public class SignalRJunctionEventTests
         var message = Step(eventType: "JunctionStarted");
         return message with
         {
-            Junction = message.Junction! with
+            Junction = message.Junction.NotNull() with
             {
                 TrackPosition = 1,
                 NameWithheld = nameWithheld,
@@ -321,7 +330,7 @@ public class SignalRJunctionEventTests
             : NewOptions().WithJunctionEvents();
         var d = Create(options.Build());
         object? sent = null;
-        await _client.JunctionEvent(Arg.Do<object>(p => sent = p));
+        await _client.NotNull().JunctionEvent(Arg.Do<object>(p => sent = p));
 
         await d.HandleAsync(OnTrack(nameWithheld), CancellationToken.None);
         await d.StopAsync(CancellationToken.None);
@@ -350,13 +359,13 @@ public class SignalRJunctionEventTests
             : NewOptions().WithJunctionEvents();
         var d = Create(options.Build());
         object? sent = null;
-        await _client.JunctionEvent(Arg.Do<object>(p => sent = p));
+        await _client.NotNull().JunctionEvent(Arg.Do<object>(p => sent = p));
 
         var decided = Decided();
         await d.HandleAsync(
             decided with
             {
-                Junction = decided.Junction! with { TrackPosition = 1, Name = "Lane" },
+                Junction = decided.Junction.NotNull() with { TrackPosition = 1, Name = "Lane" },
             },
             CancellationToken.None
         );
@@ -386,7 +395,7 @@ public class SignalRJunctionEventTests
         {
             var d = Create(options.Build());
             object? sent = null;
-            await _client.JunctionEvent(Arg.Do<object>(p => sent = p));
+            await _client.NotNull().JunctionEvent(Arg.Do<object>(p => sent = p));
 
             await d.HandleAsync(Decided(), CancellationToken.None);
             await d.StopAsync(CancellationToken.None);

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
@@ -75,7 +76,7 @@ public class EffectCoverageGapTests
         result.IsRight.Should().BeTrue();
         result.IfRight(v => v.Should().Be("hello-out"));
         junction.Metadata.Should().NotBeNull();
-        junction.Metadata!.Name.Should().Be(nameof(TestEffectJunction));
+        junction.Metadata.NotNull().Name.Should().Be(nameof(TestEffectJunction));
         junction.Metadata.HasRan.Should().BeTrue();
         junction.Metadata.StartTimeUtc.Should().NotBeNull();
         junction.Metadata.EndTimeUtc.Should().NotBeNull();
@@ -94,7 +95,8 @@ public class EffectCoverageGapTests
 
         result.IsLeft.Should().BeTrue();
         junction
-            .Metadata!.HasRan.Should()
+            .Metadata.NotNull()
+            .HasRan.Should()
             .BeFalse("an earlier junction failed, so this junction's Run was never called");
     }
 
@@ -172,7 +174,7 @@ public class EffectCoverageGapTests
         );
 
         result.Swap().ValueUnsafe().Message.Should().Be("earlier junction");
-        junction.Metadata!.HasRan.Should().BeFalse();
+        junction.Metadata.NotNull().HasRan.Should().BeFalse();
     }
 
     [Test]
@@ -469,7 +471,7 @@ public class EffectCoverageGapTests
             "Metadata",
             BindingFlags.Public | BindingFlags.Instance
         );
-        metadataProp!.SetValue(train, CreateMetadata());
+        metadataProp.NotNull().SetValue(train, CreateMetadata());
 
         return train;
     }

@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Logging.Extensions;
@@ -22,7 +23,7 @@ public class EffectProviderFactoryRetentionTests
 {
     private const int Runs = 1000;
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [SetUp]
     public void SetUp()
@@ -43,12 +44,12 @@ public class EffectProviderFactoryRetentionTests
     }
 
     [TearDown]
-    public void TearDown() => _provider.Dispose();
+    public void TearDown() => _provider.NotNull().Dispose();
 
     [Test]
     public void EffectProviderFactories_DisposedProviders_AreNotRetained()
     {
-        var factories = _provider.GetServices<IEffectProviderFactory>().ToList();
+        var factories = _provider.NotNull().GetServices<IEffectProviderFactory>().ToList();
         factories.Should().HaveCountGreaterThanOrEqualTo(2);
 
         var retained = factories.ToDictionary(
@@ -65,7 +66,7 @@ public class EffectProviderFactoryRetentionTests
     [Test]
     public void JunctionEffectProviderFactories_DisposedProviders_AreNotRetained()
     {
-        var factories = _provider.GetServices<IJunctionEffectProviderFactory>().ToList();
+        var factories = _provider.NotNull().GetServices<IJunctionEffectProviderFactory>().ToList();
         factories.Should().HaveCount(3);
 
         var retained = factories.ToDictionary(

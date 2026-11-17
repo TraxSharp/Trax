@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -88,7 +89,7 @@ public class SessionTimeZoneTests : TestSetup
             await context.SaveChanges(CancellationToken.None);
 
             var entry = WorkQueue.Create(
-                new CreateWorkQueue { TrainName = typeof(ITimeZoneTrain).FullName! }
+                new CreateWorkQueue { TrainName = typeof(ITimeZoneTrain).FullName.NotNull() }
             );
             entry.CreatedAt = Created;
             entry.DispatchedAt = Dispatched;

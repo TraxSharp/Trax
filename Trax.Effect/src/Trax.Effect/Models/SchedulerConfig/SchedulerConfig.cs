@@ -244,7 +244,11 @@ public class SchedulerConfig : IModel
 
     private static readonly JsonSerializerOptions OverrideSerialization = new(
         JsonSerializerDefaults.General
-    );
+    )
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     private JsonObject? ReadOverrides() =>
         string.IsNullOrEmpty(Overrides)

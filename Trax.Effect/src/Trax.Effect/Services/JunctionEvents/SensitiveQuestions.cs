@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Effect.Services.JunctionEvents;
@@ -28,7 +29,7 @@ internal static class SensitiveQuestions
 {
     private static readonly string EffectAssembly = typeof(TraxSensitiveAttribute)
         .Assembly.GetName()
-        .Name!;
+        .Name.NotNull();
 
     private static readonly char[] KeySeparators = ['<', '>', ',', '[', ']'];
 

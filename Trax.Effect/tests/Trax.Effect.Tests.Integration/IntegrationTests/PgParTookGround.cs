@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -28,7 +29,7 @@ public class PgParTookGround : EffectJunction<PgParOrder, Unit>
 {
     public override Task<Unit> Run(PgParOrder input)
     {
-        PgParTook.Note(Metadata!.TrainMetadataId, nameof(PgParLane.Ground));
+        PgParTook.Note(Metadata.NotNull().TrainMetadataId, nameof(PgParLane.Ground));
         return Task.FromResult(Unit.Default);
     }
 }

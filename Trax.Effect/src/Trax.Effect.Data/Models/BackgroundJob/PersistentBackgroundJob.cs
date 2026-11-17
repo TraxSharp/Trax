@@ -5,6 +5,9 @@ namespace Trax.Effect.Data.Models.BackgroundJob;
 /// <summary>
 /// Provides Entity Framework Core configuration for the BackgroundJob model.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed class PersistentBackgroundJob : Effect.Models.BackgroundJob.BackgroundJob
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)

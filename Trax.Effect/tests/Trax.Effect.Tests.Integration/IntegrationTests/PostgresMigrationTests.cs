@@ -48,7 +48,7 @@ public class PostgresMigrationTests
             .Build();
 
         return TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
     }
 
@@ -1153,7 +1153,7 @@ public class PostgresMigrationTests
             Database = $"trax_migration_{Guid.NewGuid():N}",
             Pooling = false,
         };
-        var database = builder.Database!;
+        var database = builder.Database.NotNull();
         var maintenance = new NpgsqlConnectionStringBuilder(builder.ConnectionString)
         {
             Database = "postgres",
@@ -1188,7 +1188,7 @@ public class PostgresMigrationTests
             .Single(name =>
                 name.EndsWith("041_work_queue_confirmed_at.sql", StringComparison.Ordinal)
             );
-        var stream = assembly.GetManifestResourceStream(resource)!;
+        var stream = assembly.GetManifestResourceStream(resource).NotNull();
         await using var streamDisposal = stream.ConfigureAwait(false);
         using var reader = new StreamReader(stream);
         return await reader.ReadToEndAsync().ConfigureAwait(false);

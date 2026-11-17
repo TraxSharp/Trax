@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
@@ -70,7 +71,7 @@ public class JsonEffectToggleTests
         await train.Run(Unit.Default);
 
         // Assert
-        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
 
         var jsonLogCountAfter = GetJsonEffectLogCount(arrayProvider);
         (jsonLogCountAfter - jsonLogCountBefore)
@@ -95,7 +96,7 @@ public class JsonEffectToggleTests
         await train.Run(Unit.Default);
 
         // Assert - train still completes successfully
-        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
 
         // But no new JSON logs should have been written
         var jsonLogCountAfter = GetJsonEffectLogCount(arrayProvider);
@@ -122,7 +123,7 @@ public class JsonEffectToggleTests
         await train.Run(Unit.Default);
 
         // Assert
-        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
 
         var jsonLogCountAfter = GetJsonEffectLogCount(arrayProvider);
         (jsonLogCountAfter - jsonLogCountBefore)
@@ -133,7 +134,7 @@ public class JsonEffectToggleTests
     private static int GetJsonEffectLogCount(IArrayLoggingProvider arrayProvider) =>
         arrayProvider
             .Loggers.Where(logger =>
-                logger.Logs.Exists(log =>
+                logger.Logs.Any(log =>
                     string.Equals(log.Category, JsonEffectCategory, StringComparison.Ordinal)
                 )
             )

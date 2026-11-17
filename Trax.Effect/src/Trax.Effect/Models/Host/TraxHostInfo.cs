@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Models.Host;
 
@@ -14,25 +15,38 @@ public record TraxHostInfo
     /// <summary>
     /// Machine hostname (e.g., <c>ip-10-0-1-42</c>, <c>devbox</c>).
     /// </summary>
-    public string HostName { get; init; } = null!;
+    public string HostName
+    {
+        get => field.NotNull(nameof(HostName));
+        init;
+    }
 
     /// <summary>
     /// Environment type: <c>"lambda"</c>, <c>"ecs"</c>, <c>"kubernetes"</c>,
     /// <c>"azure-app-service"</c>, or <c>"server"</c> (default).
     /// </summary>
-    public string HostEnvironment { get; init; } = null!;
+    public string HostEnvironment
+    {
+        get => field.NotNull(nameof(HostEnvironment));
+        init;
+    }
 
     /// <summary>
     /// Instance-level identifier (Lambda log stream, ECS task/container ID,
     /// Kubernetes pod name, or <c>{MachineName}-{PID}</c>).
     /// </summary>
-    public string HostInstanceId { get; init; } = null!;
+    public string HostInstanceId
+    {
+        get => field.NotNull(nameof(HostInstanceId));
+        init;
+    }
 
     /// <summary>
     /// User-provided key-value labels (e.g., region, service, team).
     /// Serialized as JSONB in the database.
     /// </summary>
-    public Dictionary<string, string> Labels { get; init; } = new(StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, string> Labels { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
 
     /// <summary>
     /// Process-wide singleton set once at startup by the builder.

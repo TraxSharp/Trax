@@ -68,7 +68,7 @@ public partial class TraxBuilder(IServiceCollection services, IEffectRegistry re
     /// <c>AddMediator</c> runs (the fluent chain enforces the order).
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public List<Assembly> ContributedMediatorAssemblies { get; } = [];
+    public IList<Assembly> ContributedMediatorAssemblies { get; } = [];
 
     /// <summary>
     /// Set once <c>AddMediator</c> has built the train registry. A subsystem that contributes mediator

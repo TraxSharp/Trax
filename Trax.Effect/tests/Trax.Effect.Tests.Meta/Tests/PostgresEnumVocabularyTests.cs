@@ -34,7 +34,11 @@ public partial class PostgresEnumVocabularyTests
                 await File.ReadAllTextAsync(Path.Combine(Extensions, "ModelBuilderExtensions.cs"))
                     .ConfigureAwait(false)
             )
-            .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value, StringComparer.Ordinal);
+            .ToDictionary(
+                m => m.Groups["enum"].Value,
+                m => m.Groups["type"].Value,
+                StringComparer.Ordinal
+            );
 
     [Test]
     public async Task Every_mapping_list_names_the_same_enums()
@@ -43,22 +47,20 @@ public partial class PostgresEnumVocabularyTests
             StringComparer.Ordinal
         );
 
-        var model = Regex
+        var model = PostgresEnumDeclaration
             .Matches(
                 await File.ReadAllTextAsync(Path.Combine(Extensions, "ModelBuilderExtensions.cs"))
-                    .ConfigureAwait(false),
-                @"HasPostgresEnum<(\w+)>"
+                    .ConfigureAwait(false)
             )
-            .Select(m => m.Groups[1].Value)
+            .Select(m => m.Groups["enum"].Value)
             .ToHashSet(StringComparer.Ordinal);
 
-        var options = Regex
+        var options = MapEnumOption
             .Matches(
                 await File.ReadAllTextAsync(Path.Combine(Extensions, "ServiceExtensions.cs"))
-                    .ConfigureAwait(false),
-                @"o\.MapEnum<(\w+)>\(""(\w+)"",\s*""trax""\)"
+                    .ConfigureAwait(false)
             )
-            .Select(m => m.Groups[1].Value)
+            .Select(m => m.Groups["enum"].Value)
             .ToHashSet(StringComparer.Ordinal);
 
         dataSource.Should().NotBeEmpty();
@@ -97,17 +99,19 @@ public partial class PostgresEnumVocabularyTests
                 Match create in Regex.Matches(
                     sql,
                     $@"create\s+type\s+trax\.{pgName}\s+as\s+enum\s*\((.*?)\)",
-                    RegexOptions.IgnoreCase | RegexOptions.Singleline
+                    RegexOptions.IgnoreCase | RegexOptions.Singleline,
+                    TimeSpan.FromSeconds(1)
                 )
             )
-            foreach (Match label in Regex.Matches(create.Groups[1].Value, "'([^']+)'"))
-                labels.Add(label.Groups[1].Value);
+            foreach (Match label in EnumLabel.Matches(create.Groups[1].Value))
+                labels.Add(label.Groups["label"].Value);
 
             foreach (
                 Match added in Regex.Matches(
                     sql,
                     $@"alter\s+type\s+trax\.{pgName}\s+add\s+value\s+(?:if\s+not\s+exists\s+)?'([^']+)'",
-                    RegexOptions.IgnoreCase
+                    RegexOptions.IgnoreCase,
+                    TimeSpan.FromSeconds(1)
                 )
             )
                 labels.Add(added.Groups[1].Value);
@@ -148,6 +152,27 @@ public partial class PostgresEnumVocabularyTests
         return candidates[0];
     }
 
-    [GeneratedRegex(@"npgsqlDataSourceBuilder\.MapEnum<(\w+)>\(""trax\.(\w+)""\)")]
+    [GeneratedRegex(
+        @"npgsqlDataSourceBuilder\.MapEnum<(?<enum>\w+)>\(""trax\.(?<type>\w+)""\)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
     private static partial Regex DataSourceMapEnum { get; }
+
+    [GeneratedRegex(
+        @"HasPostgresEnum<(?<enum>\w+)>",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PostgresEnumDeclaration { get; }
+
+    [GeneratedRegex("'(?<label>[^']+)'", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex EnumLabel { get; }
+
+    [GeneratedRegex(
+        @"o\.MapEnum<(?<enum>\w+)>\(""\w+"",\s*""trax""\)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex MapEnumOption { get; }
 }

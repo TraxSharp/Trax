@@ -30,7 +30,7 @@ public static class CheckpointProbe
     private static DirtyMode _dirty;
     private static string _padding = "";
 
-    public static List<string> Ran { get; } = [];
+    public static IList<string> Ran { get; } = [];
 
     /// <summary>The junction that throws when it runs, or null.</summary>
     public static string? FailIn
@@ -89,7 +89,8 @@ public static class CheckpointProbe
     }
 
     /// <summary>The save count each junction saw when it ran.</summary>
-    public static Dictionary<string, int> SavesAt { get; } = [];
+    public static IDictionary<string, int> SavesAt { get; } =
+        new Dictionary<string, int>(StringComparer.Ordinal);
 
     public static void Note(string junction)
     {

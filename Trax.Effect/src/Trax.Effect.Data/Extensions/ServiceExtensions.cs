@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Decisions;
 using Trax.Effect.Data.JunctionEvents;
@@ -80,7 +81,7 @@ public static class ServiceExtensions
     public static TraxEffectBuilderWithData AddDataContextLogging(
         this TraxEffectBuilderWithData configurationBuilder,
         LogLevel? minimumLogLevel = null,
-        List<string>? blacklist = null
+        IReadOnlyList<string>? blacklist = null
     )
     {
         // Create and register the logging configuration
@@ -168,7 +169,7 @@ public static class ServiceExtensions
         // none, and the hash is unkeyed.
         services.TryAddSingleton<StateHashKey>(sp =>
             sp.GetRequiredService<DecisionRecordingOptions>().StateHashKey
-            ?? ConfiguredStateHashKey(sp)!
+            ?? ConfiguredStateHashKey(sp).NotNull()
         );
         // Beside any other observer (a host's own, junction events), never in place of one.
         DecisionObservers.Add(

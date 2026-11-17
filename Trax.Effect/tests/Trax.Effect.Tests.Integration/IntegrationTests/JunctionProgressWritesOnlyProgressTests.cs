@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -96,7 +97,7 @@ public class JunctionProgressWritesOnlyProgressTests
         var row = await context
             .Metadatas.AsNoTracking()
             .SingleAsync(
-                m => m.Id == train.Metadata!.Id,
+                m => m.Id == train.Metadata.NotNull().Id,
                 cancellationToken: CancellationToken.None
             );
         row.CurrentlyRunningJunction.Should().BeNull("the run's final write clears it");
@@ -148,7 +149,7 @@ public class JunctionProgressWritesOnlyProgressTests
             .Should()
             .ThrowAsync<BranchesFailedException>();
 
-        var row = await host.Row(train.Metadata!.Id);
+        var row = await host.Row(train.Metadata.NotNull().Id);
         await host.Delete(train.Metadata.Id);
 
         row.TrainState.Should().Be(TrainState.Failed);
@@ -183,7 +184,7 @@ public class JunctionProgressWritesOnlyProgressTests
             .Should()
             .ThrowAsync<InvalidOperationException>();
 
-        var row = await host.Row(train.Metadata!.Id);
+        var row = await host.Row(train.Metadata.NotNull().Id);
         var committed = await host.GroupExists(group);
         await host.DeleteGroup(group);
         await host.Delete(train.Metadata.Id);
@@ -231,7 +232,7 @@ public class JunctionProgressWritesOnlyProgressTests
 
         // The column is set while the junction runs, so the test proves the clear rather than
         // a column that was never written.
-        var during = await host.Row(train.Metadata!.Id).ConfigureAwait(false);
+        var during = await host.Row(train.Metadata.NotNull().Id).ConfigureAwait(false);
         during.CurrentlyRunningJunction.Should().NotBeNull("the junction is running");
 
         await cancel.CancelAsync().ConfigureAwait(false);
@@ -319,7 +320,8 @@ public class JunctionProgressWritesOnlyProgressTests
                     .SetBasePath(AppContext.BaseDirectory)
                     .AddJsonFile("appsettings.json", optional: false)
                     .Build()
-                    .GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+                    .GetRequiredSection("Configuration")["DatabaseConnectionString"]
+                    .NotNull()
             );
 
         public async Task<Models.Metadata.Metadata> Row(long id)
@@ -532,7 +534,7 @@ public class JunctionProgressWritesOnlyProgressTests
         public static TracksThenFailsTrain? Instance { get; set; }
         public static IDataContextProviderFactory? Factory { get; set; }
         public static string Group { get; set; } = "";
-        public static readonly List<string?> Seen = [];
+        public static IList<string?> Seen { get; } = [];
         public static bool? GroupSeenMidRun { get; set; }
 
         protected override Task<Either<Exception, Unit>> Junctions() =>
@@ -541,13 +543,14 @@ public class JunctionProgressWritesOnlyProgressTests
         public static async Task ReadProgress()
         {
             var context = await Factory
+                .NotNull()
                 .CreateDbContextAsync(CancellationToken.None)
                 .ConfigureAwait(false);
             await using var contextDisposal = context.ConfigureAwait(false);
             Seen.Add(
                 await context
                     .Metadatas.AsNoTracking()
-                    .Where(m => m.Id == Instance.Metadata!.Id)
+                    .Where(m => m.Id == Instance.NotNull().Metadata.NotNull().Id)
                     .Select(m => m.CurrentlyRunningJunction)
                     .SingleAsync(cancellationToken: CancellationToken.None)
                     .ConfigureAwait(false)
@@ -561,7 +564,9 @@ public class JunctionProgressWritesOnlyProgressTests
         {
             await TracksThenFailsTrain.ReadProgress().ConfigureAwait(false);
             await TracksThenFailsTrain
-                .Instance.EffectRunner!.Track(
+                .Instance.NotNull()
+                .EffectRunner.NotNull()
+                .Track(
                     new ManifestGroup
                     {
                         Name = TracksThenFailsTrain.Group,
@@ -580,7 +585,8 @@ public class JunctionProgressWritesOnlyProgressTests
         {
             await TracksThenFailsTrain.ReadProgress().ConfigureAwait(false);
             var context = await TracksThenFailsTrain
-                .Factory.CreateDbContextAsync(CancellationToken.None)
+                .Factory.NotNull()
+                .CreateDbContextAsync(CancellationToken.None)
                 .ConfigureAwait(false);
             await using var contextDisposal = context.ConfigureAwait(false);
             TracksThenFailsTrain.GroupSeenMidRun = await context
@@ -645,7 +651,7 @@ public class JunctionProgressWritesOnlyProgressTests
         {
             public override async Task<Unit> Run(Unit input)
             {
-                var context = (IDataContext)Factory.Create();
+                var context = (IDataContext)Factory.NotNull().Create();
                 await using var contextDisposal = context.ConfigureAwait(false);
                 Seen = await context
                     .Metadatas.AsNoTracking()

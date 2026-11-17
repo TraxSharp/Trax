@@ -19,4 +19,4 @@ using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Effect.Tests.Data.InMemory.Integration.IntegrationTests;
 
-public sealed record HoldsListOfObject(List<object> Items);
+public sealed record HoldsListOfObject(IList<object> Items);

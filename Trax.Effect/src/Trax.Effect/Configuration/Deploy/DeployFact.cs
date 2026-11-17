@@ -9,6 +9,9 @@ namespace Trax.Effect.Configuration.Deploy;
 /// role (<c>scheduler</c>, <c>worker</c>, <c>job-runner</c>), a transport. Collected into the
 /// <see cref="DeployManifest"/> a deploy export writes.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed record DeployFact(string Kind, string Value)
 {
     public const string Database = "database";

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Tests.Integration.Fixtures;
 
@@ -17,7 +18,7 @@ public class MetadataModelIndexTests : TestSetup
     public void The_model_declares_the_external_id_index_migration_050_builds()
     {
         using var context = (DbContext)DataContextFactory.Create();
-        var metadata = context.Model.FindEntityType(typeof(Metadata))!;
+        var metadata = context.Model.FindEntityType(typeof(Metadata)).NotNull();
 
         var index = metadata
             .GetIndexes()
@@ -27,7 +28,7 @@ public class MetadataModelIndexTests : TestSetup
             );
 
         index.Should().NotBeNull("050 indexes metadata.external_id for lookups by external id");
-        index!.GetDatabaseName().Should().Be("ix_metadata_external_id");
+        index.NotNull().GetDatabaseName().Should().Be("ix_metadata_external_id");
         index.IsUnique.Should().BeFalse("one external id can name several runs");
     }
 }

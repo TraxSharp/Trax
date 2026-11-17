@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Reflection;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Attributes;
 
@@ -116,7 +117,7 @@ public static class TraxAuthorization
                 name is not null
                 && ForeignAuthorizationAttributes.Contains(name, StringComparer.Ordinal)
             )
-            .Select(name => name!)
+            .Select(name => name.NotNull())
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToArray();

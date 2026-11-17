@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -26,7 +27,7 @@ public class ParTookExpress : EffectJunction<ParOrder, Unit>
 {
     public override Task<Unit> Run(ParOrder input)
     {
-        ParTook.Note(Metadata!.TrainMetadataId, nameof(ParLane.Express));
+        ParTook.Note(Metadata.NotNull().TrainMetadataId, nameof(ParLane.Express));
         return Task.FromResult(Unit.Default);
     }
 }

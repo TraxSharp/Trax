@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -80,7 +81,7 @@ public class SqliteEnumPartialIndexTests : TestSetup
         WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(IQueuedTrain).FullName!,
+                TrainName = typeof(IQueuedTrain).FullName.NotNull(),
                 ReplayDecisionsOf = source,
             }
         );
@@ -179,7 +180,7 @@ public class SqliteEnumPartialIndexTests : TestSetup
         WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(IQueuedTrain).FullName!,
+                TrainName = typeof(IQueuedTrain).FullName.NotNull(),
                 ManifestId = manifestId,
             }
         );

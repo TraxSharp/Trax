@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Models.EffectClaim;
 
@@ -16,7 +17,11 @@ public class EffectClaim
 {
     /// <summary>The intent key (e.g. <c>checkout:charge:{userKey}:{draftId}</c>). Unique = the lock.</summary>
     [Column("effect_key")]
-    public string EffectKey { get; set; } = null!;
+    public string EffectKey
+    {
+        get => field.NotNull(nameof(EffectKey));
+        set;
+    }
 
     /// <summary>The effect's result, recorded once it has run. Null = claimed but the effect is in flight.</summary>
     [Column("receipt")]

@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -39,7 +40,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
 
     private readonly ScriptedResearchDecider _decider = new();
     private readonly SaveCounter _saves = new();
-    private CheckpointHost _host = null!;
+    private CheckpointHost? _host;
     private readonly List<long> _runs = [];
 
     [OneTimeSetUp]
@@ -62,7 +63,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
         );
 
     [OneTimeTearDown]
-    public async Task DisposeHost() => await _host.DisposeAsync();
+    public async Task DisposeHost() => await _host.NotNull().DisposeAsync();
 
     [SetUp]
     public void Reset()
@@ -77,9 +78,10 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
     public async Task DeleteRuns()
     {
         CheckpointProbe.Reset();
-        await _host.Delete([.. _runs]);
+        await _host.NotNull().Delete([.. _runs]);
 
         var context = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None);
         await using var contextDisposal = context.ConfigureAwait(false);
@@ -98,7 +100,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
         var run = await Run<IResearchTrain>();
 
         run.TrainState.Should().Be(TrainState.Failed);
-        var rows = await _host.Checkpoints(run.Id);
+        var rows = await _host.NotNull().Checkpoints(run.Id);
         rows.Select(r => r.NodeId)
             .Should()
             .Equal(
@@ -115,7 +117,10 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
             .Be(new CheckedFindings("graphs", "papers", 12, ""));
         Routes(first.Tracks)
             .Should()
-            .Equal([(typeof(ResearchSource).FullName!, "Papers")], "the route taken before it");
+            .Equal(
+                [(typeof(ResearchSource).FullName.NotNull(), "Papers")],
+                "the route taken before it"
+            );
         first
             .ChainHash.Should()
             .Be(
@@ -140,7 +145,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
     [Test]
     public async Task A_checkpoint_over_the_cap_fails_the_step_as_permanent_and_stores_nothing()
     {
-        var options = _host.Services.GetRequiredService<CheckpointOptions>();
+        var options = _host.NotNull().Services.GetRequiredService<CheckpointOptions>();
         var cap = options.MaxStateBytes;
         options.MaxStateBytes = 1024;
 
@@ -153,7 +158,9 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
             run.TrainState.Should().Be(TrainState.Failed);
             run.FailureClass.Should().Be(FailureClass.Permanent, $"a retry fails the same ({Adr})");
             run.FailureReason.Should().Contain("the cap is 1024");
-            (await _host.Checkpoints(run.Id)).Should().BeEmpty("a placeholder is never stored");
+            (await _host.NotNull().Checkpoints(run.Id))
+                .Should()
+                .BeEmpty("a placeholder is never stored");
             CheckpointProbe.Ran.Should().NotContain(nameof(ScoreFindings));
         }
         finally
@@ -174,7 +181,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
         run.TrainState.Should().Be(TrainState.Failed);
         run.FailureClass.Should().Be(FailureClass.Permanent, $"a retry fails the same ({Adr})");
         run.FailureReason.Should().Contain("NUL character");
-        (await _host.Checkpoints(run.Id)).Should().BeEmpty();
+        (await _host.NotNull().Checkpoints(run.Id)).Should().BeEmpty();
         CheckpointProbe.Ran.Should().NotContain(nameof(ScoreFindings));
     }
 
@@ -194,7 +201,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
         run.TrainState.Should().Be(TrainState.Failed);
         run.FailureClass.Should().Be(FailureClass.Permanent);
         run.FailureReason.Should().Contain("uncommitted");
-        (await _host.Checkpoints(run.Id))
+        (await _host.NotNull().Checkpoints(run.Id))
             .Should()
             .BeEmpty($"a resume after it would skip work that never committed ({Adr})");
         CheckpointProbe.Ran.Should().NotContain(nameof(ScoreFindings));
@@ -208,7 +215,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
         var run = await Run<IDirtyResearchTrain>();
 
         run.FailureReason.Should().Contain("Summarize timed out");
-        (await _host.Checkpoints(run.Id)).Should().ContainSingle();
+        (await _host.NotNull().Checkpoints(run.Id)).Should().ContainSingle();
     }
 
     [Test]
@@ -219,7 +226,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
 
         var run = await Run<IResearchTrain>();
 
-        (await _host.Checkpoints(run.Id)).Should().HaveCount(2);
+        (await _host.NotNull().Checkpoints(run.Id)).Should().HaveCount(2);
         _saves.Saves.Should().BeGreaterThan(0, "the counter is one of the run's providers");
         CheckpointProbe
             .SavesAt[nameof(Summarize)]
@@ -241,7 +248,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
         run.TrainState.Should().Be(TrainState.Failed);
         run.FailureClass.Should().Be(FailureClass.Permanent);
         run.FailureReason.Should().Contain("[TraxSensitive]");
-        (await _host.Checkpoints(run.Id)).Should().BeEmpty($"it is never stored ({Adr})");
+        (await _host.NotNull().Checkpoints(run.Id)).Should().BeEmpty($"it is never stored ({Adr})");
         CheckpointProbe.Ran.Should().NotContain(nameof(Reveal));
     }
 
@@ -252,11 +259,11 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
 
         var after = await Run<IVaultThenCheckpointTrain>();
 
-        var row = (await _host.Checkpoints(after.Id)).Should().ContainSingle().Subject;
+        var row = (await _host.NotNull().Checkpoints(after.Id)).Should().ContainSingle().Subject;
         Routes(row.Tracks)
             .Should()
             .Equal(
-                [(typeof(ResearchSource).FullName!, "Papers")],
+                [(typeof(ResearchSource).FullName.NotNull(), "Papers")],
                 $"the vault's track is withheld, as from junction events ({Adr})"
             );
         row.Tracks.Should().NotContain("Left");
@@ -268,7 +275,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
         inside.FailureClass.Should().Be(FailureClass.Permanent);
         inside.FailureReason.Should().Contain("[TraxSensitive]").And.NotContain("Left");
         inside.FailureJunction.Should().NotContain("Left", "the failure names no withheld track");
-        (await _host.Checkpoints(inside.Id))
+        (await _host.NotNull().Checkpoints(inside.Id))
             .Should()
             .BeEmpty("its node id names the withheld track, and a resume could not find it");
     }
@@ -280,7 +287,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
 
         run.TrainState.Should().Be(TrainState.Completed);
         CheckpointProbe.Ran.Should().Contain(nameof(Summarize));
-        (await _host.Checkpoints(run.Id))
+        (await _host.NotNull().Checkpoints(run.Id))
             .Should()
             .BeEmpty($"nothing may resume a completed run ({Adr})");
     }
@@ -315,7 +322,7 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
         var run = await Run<ITwoBranchTrain>();
 
         run.FailureReason.Should().Contain("Join timed out");
-        var rows = await _host.Checkpoints(run.Id);
+        var rows = await _host.NotNull().Checkpoints(run.Id);
         rows.Select(r => (r.NodeId, r.BranchPath))
             .Should()
             .BeEquivalentTo([
@@ -327,25 +334,34 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
     private async Task<Models.Metadata.Metadata> Run<TTrain>()
         where TTrain : class, Effect.Services.ServiceTrain.IServiceTrain<string, string>
     {
-        var (run, _) = await _host.Run<TTrain>("graphs").ConfigureAwait(false);
+        var (run, _) = await _host.NotNull().Run<TTrain>("graphs").ConfigureAwait(false);
         _runs.Add(run.Id);
         return run;
     }
 
     private static List<(string Key, string Track)> Routes(string tracks) =>
         JsonNode
-            .Parse(tracks)!
+            .Parse(tracks)
+            .NotNull()
             .AsArray()
-            .Select(t => ((string)t!["key"]!, (string)t["track"]!))
+            .Select(t =>
+                (
+                    t.NotNull()["key"].NotNull().GetValue<string>(),
+                    t["track"].NotNull().GetValue<string>()
+                )
+            )
             .ToList();
 
     // CheckpointState is internal to Trax.Core; the fingerprint it computes is the stored one.
     private static string Fingerprint(Type state) =>
         (string)
             typeof(ChainRecorder)
-                .Assembly.GetType("Trax.Core.Monad.CheckpointState")!
-                .GetMethod("Fingerprint")!
-                .Invoke(null, [state])!;
+                .Assembly.GetType("Trax.Core.Monad.CheckpointState")
+                .NotNull()
+                .GetMethod("Fingerprint")
+                .NotNull()
+                .Invoke(null, [state])
+                .NotNull();
 
     /// <summary>An effect provider that counts every save the effect runner asks of it.</summary>
     private sealed class SaveCounter : IEffectProviderFactory, IEffectProvider

@@ -19,6 +19,9 @@ namespace Trax.Effect.Data.Utils;
 /// characters, so a caller that needs an exact match keeps its plain comparison beside this one: the cast finds the
 /// runs through the index, the plain comparison decides.
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal static class RunExternalId
 {
     /// <summary>

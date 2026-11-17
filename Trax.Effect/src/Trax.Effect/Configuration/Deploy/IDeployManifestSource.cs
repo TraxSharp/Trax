@@ -8,6 +8,9 @@ namespace Trax.Effect.Configuration.Deploy;
 /// Adds what only the built host knows (its endpoints, its authentication schemes) to the deploy manifest. Registered
 /// by the packages that map endpoints.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal interface IDeployManifestSource
 {
     /// <param name="manifest">The manifest being built.</param>

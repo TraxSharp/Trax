@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Models.PersistedOperation;
 
@@ -31,13 +32,21 @@ public class PersistedOperation
     /// Build-time-stable id (e.g. <c>userProfile_v1</c>).
     /// </summary>
     [Column("id")]
-    public string Id { get; set; } = null!;
+    public string Id
+    {
+        get => field.NotNull(nameof(Id));
+        set;
+    }
 
     /// <summary>
     /// Original GraphQL operation name (e.g. <c>UserProfile</c>).
     /// </summary>
     [Column("operation_name")]
-    public string OperationName { get; set; } = null!;
+    public string OperationName
+    {
+        get => field.NotNull(nameof(OperationName));
+        set;
+    }
 
     /// <summary>
     /// Numeric version extracted from the id suffix.
@@ -49,13 +58,21 @@ public class PersistedOperation
     /// The GraphQL document text the id resolves to.
     /// </summary>
     [Column("document")]
-    public string Document { get; set; } = null!;
+    public string Document
+    {
+        get => field.NotNull(nameof(Document));
+        set;
+    }
 
     /// <summary>
     /// Canonicalized structural hash of the response shape (sha-256 hex).
     /// </summary>
     [Column("shape_fingerprint")]
-    public string ShapeFingerprint { get; set; } = null!;
+    public string ShapeFingerprint
+    {
+        get => field.NotNull(nameof(ShapeFingerprint));
+        set;
+    }
 
     /// <summary>
     /// True when the row is being served. False indicates a soft-delete.

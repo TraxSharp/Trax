@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Decisions;
@@ -55,7 +56,7 @@ public class DecisionRecordingFailureTests
             .Be("the database is down");
         decider.Requests.Should().ContainSingle();
         Ship.Ran.Should().Be(0, "a decision that was not recorded is not acted on");
-        train.Metadata!.FailureClass.Should().Be(FailureClass.Transient);
+        train.Metadata.NotNull().FailureClass.Should().Be(FailureClass.Transient);
     }
 
     [Test]
@@ -74,7 +75,7 @@ public class DecisionRecordingFailureTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IRouteOrder).FullName!,
+                Name = typeof(IRouteOrder).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new Order("unconfigured", 20m),
                 ReplayDecisionsOf = 42,
@@ -86,9 +87,9 @@ public class DecisionRecordingFailureTests
         (await run.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()
             .Contain("does not record decisions (AddDecisionRecording)");
-        train.Metadata!.DecisionsRecorded.Should().BeFalse();
+        train.Metadata.NotNull().DecisionsRecorded.Should().BeFalse();
         decider.Requests.Should().BeEmpty();
-        train.Metadata!.TrainState.Should().Be(TrainState.Failed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Failed);
         train.Metadata.FailureClass.Should().Be(FailureClass.Permanent);
     }
 

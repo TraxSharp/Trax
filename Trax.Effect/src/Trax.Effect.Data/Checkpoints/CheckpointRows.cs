@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.Checkpoints;
@@ -11,6 +12,9 @@ namespace Trax.Effect.Data.Checkpoints;
 /// provider, InMemory included.
 /// </summary>
 /// <remarks>See Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md.</remarks>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed class CheckpointRows(IDataContextProviderFactory contexts) : ICheckpointRows
 {
     /// <summary>
@@ -69,7 +73,6 @@ internal sealed class CheckpointRows(IDataContextProviderFactory contexts) : ICh
                     NodeId = c.NodeId,
                     BranchPath = c.BranchPath,
                     StateType = c.StateType,
-                    State = null!,
                     Tracks = c.Tracks,
                     ChainHash = c.ChainHash,
                     StateFingerprint = c.StateFingerprint,

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.JunctionEffectProvider;
@@ -228,7 +229,7 @@ internal sealed class JunctionProgressProvider(IDataContextProviderFactory dataC
                 carried = _next;
                 _next = null;
                 (junction, startedAt) = Current();
-                metadataId = _metadata!.Id;
+                metadataId = _metadata.NotNull().Id;
             }
 
             try

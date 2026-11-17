@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 
 namespace Trax.Effect.Models.SnapshotTransition;
@@ -56,7 +57,11 @@ public class SnapshotTransition
 
     /// <summary>The state it entered, which is <see cref="FromState"/> again when it stayed.</summary>
     [Column("to_state")]
-    public string ToState { get; set; } = null!;
+    public string ToState
+    {
+        get => field.NotNull(nameof(ToState));
+        set;
+    }
 
     /// <summary>When it was written: the instance's <c>updated_at</c> from the same write.</summary>
     [Column("occurred_at")]

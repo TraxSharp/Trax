@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions;
 using Trax.Effect.Broadcaster.SignalR.Services;
 
@@ -150,7 +151,7 @@ public static class SignalRHubEndpointExtensions
             hub.AllowAnonymous();
             endpoints
                 .ServiceProvider.GetService<ILoggerFactory>()
-                ?.CreateLogger(typeof(SignalRHubEndpointExtensions).FullName!)
+                ?.CreateLogger(typeof(SignalRHubEndpointExtensions).FullName.NotNull())
                 .LogWarning(
                     "The Trax train-event hub at {Path} is mapped with AllowAnonymous(): any client that "
                         + "can reach it receives every train's lifecycle events.",

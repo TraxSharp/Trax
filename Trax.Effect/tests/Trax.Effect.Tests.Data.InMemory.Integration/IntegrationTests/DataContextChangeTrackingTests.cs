@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Services.InMemoryContext;
 using Trax.Effect.Data.Services.DataContext;
@@ -100,7 +101,7 @@ public class DataContextChangeTrackingTests
         context.Reset();
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.Name.Should().Be("SaveAndQuery");
+        found.NotNull().Name.Should().Be("SaveAndQuery");
     }
 
     #endregion
@@ -332,7 +333,7 @@ public class DataContextChangeTrackingTests
 
         // Manifest should NOT be tracked — this is the bug fix
         contextC
-            .Entry(loaded.Manifest!)
+            .Entry(loaded.Manifest.NotNull())
             .State.Should()
             .Be(
                 EntityState.Detached,
@@ -377,7 +378,7 @@ public class DataContextChangeTrackingTests
 
         // Manifest should NOT be tracked
         contextC
-            .Entry(loaded.Manifest!)
+            .Entry(loaded.Manifest.NotNull())
             .State.Should()
             .Be(
                 EntityState.Detached,

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Enums;
@@ -39,7 +40,10 @@ public class ServiceTrainCoverageTests : TestSetup
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         train.OnCancelledCalled.Should().BeTrue();
-        ((ServiceTrain<string, int>)train).Metadata!.TrainState.Should().Be(TrainState.Cancelled);
+        ((ServiceTrain<string, int>)train)
+            .Metadata.NotNull()
+            .TrainState.Should()
+            .Be(TrainState.Cancelled);
     }
 
     [Test]
@@ -66,7 +70,7 @@ public class ServiceTrainCoverageTests : TestSetup
         var metadata = Trax.Effect.Models.Metadata.Metadata.Create(
             new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
             {
-                Name = typeof(ICancellingJunctionTrain).FullName!,
+                Name = typeof(ICancellingJunctionTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -89,7 +93,10 @@ public class ServiceTrainCoverageTests : TestSetup
         // The train completed successfully even though the post-success
         // output-serialization fallback could not serialize the cyclic graph.
         result.Should().NotBeNull();
-        ((ServiceTrain<Unit, Cyclic>)train).Metadata!.TrainState.Should().Be(TrainState.Completed);
+        ((ServiceTrain<Unit, Cyclic>)train)
+            .Metadata.NotNull()
+            .TrainState.Should()
+            .Be(TrainState.Completed);
     }
 
     #region Fakes

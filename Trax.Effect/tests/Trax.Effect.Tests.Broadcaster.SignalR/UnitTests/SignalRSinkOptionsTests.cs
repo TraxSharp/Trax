@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Configuration;
 using Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions;
 using Trax.Effect.Broadcaster.SignalR.Models;
@@ -11,7 +12,8 @@ namespace Trax.Effect.Tests.Broadcaster.SignalR.UnitTests;
 public class SignalRSinkOptionsTests
 {
     private static SignalRSinkOptions NewOptions() =>
-        (SignalRSinkOptions)Activator.CreateInstance(typeof(SignalRSinkOptions), nonPublic: true)!;
+        (SignalRSinkOptions)
+            Activator.CreateInstance(typeof(SignalRSinkOptions), nonPublic: true).NotNull();
 
     private static TrainLifecycleEventMessage Sample(
         string trainName = "Some.Other.IFoo",
@@ -76,14 +78,15 @@ public class SignalRSinkOptionsTests
     [Test]
     public void OnlyForEvents_NullArray_Throws()
     {
-        var act = () => NewOptions().OnlyForEvents((string[])null!);
+        var act = () => NewOptions().OnlyForEvents(Null.Of<string[]>());
         act.Should().Throw<ArgumentException>().WithMessage("*OnlyForEvents*at least one*");
     }
 
     [Test]
     public void OnlyForTrains_NullTypeEntry_Throws()
     {
-        var act = () => NewOptions().OnlyForTrains(typeof(ICheckGeocodeDriftTrain), null!);
+        var act = () =>
+            NewOptions().OnlyForTrains(typeof(ICheckGeocodeDriftTrain), Null.Of<Type>());
         act.Should().Throw<ArgumentException>().WithMessage("*does not accept null*");
     }
 
@@ -91,7 +94,7 @@ public class SignalRSinkOptionsTests
     public void OnlyForEvents_NullOrWhitespace_Throws()
     {
         var act1 = () => NewOptions().OnlyForEvents("Completed", "");
-        var act2 = () => NewOptions().OnlyForEvents("Completed", null!);
+        var act2 = () => NewOptions().OnlyForEvents("Completed", Null.Of<string>());
         act1.Should().Throw<ArgumentException>();
         act2.Should().Throw<ArgumentException>();
     }
@@ -103,7 +106,7 @@ public class SignalRSinkOptionsTests
 
         config
             .TrainNameFilter.Should()
-            .BeEquivalentTo(new[] { typeof(ICheckGeocodeDriftTrain).FullName! });
+            .BeEquivalentTo(new[] { typeof(ICheckGeocodeDriftTrain).FullName.NotNull() });
 
         config.TrainNameFilter.Should().NotContain(typeof(ICheckGeocodeDriftTrain).Name);
     }
@@ -116,8 +119,8 @@ public class SignalRSinkOptionsTests
             .BeEquivalentTo(
                 new[]
                 {
-                    typeof(ICheckGeocodeDriftTrain).FullName!,
-                    typeof(IRunAuditTrain).FullName!,
+                    typeof(ICheckGeocodeDriftTrain).FullName.NotNull(),
+                    typeof(IRunAuditTrain).FullName.NotNull(),
                 }
             );
 
@@ -129,9 +132,9 @@ public class SignalRSinkOptionsTests
             .BeEquivalentTo(
                 new[]
                 {
-                    typeof(ICheckGeocodeDriftTrain).FullName!,
-                    typeof(IRunAuditTrain).FullName!,
-                    typeof(IRefreshTilesTrain).FullName!,
+                    typeof(ICheckGeocodeDriftTrain).FullName.NotNull(),
+                    typeof(IRunAuditTrain).FullName.NotNull(),
+                    typeof(IRefreshTilesTrain).FullName.NotNull(),
                 }
             );
     }
@@ -146,7 +149,7 @@ public class SignalRSinkOptionsTests
     [Test]
     public void OnlyForTrains_NullArray_Throws()
     {
-        var act = () => NewOptions().OnlyForTrains((Type[])null!);
+        var act = () => NewOptions().OnlyForTrains(Null.Of<Type[]>());
         act.Should().Throw<ArgumentException>();
     }
 
@@ -160,7 +163,9 @@ public class SignalRSinkOptionsTests
     [Test]
     public void WithProjection_NullProjection_Throws()
     {
-        var act = () => NewOptions().WithProjection<TraxClientEvent>(null!);
+        var act = () =>
+            NewOptions()
+                .WithProjection(Null.Of<Func<TrainLifecycleEventMessage, TraxClientEvent>>());
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -190,7 +195,7 @@ public class SignalRSinkOptionsTests
     {
         var config = NewOptions().OnlyForTrains<ICheckGeocodeDriftTrain>().Build();
         config
-            .Matches(Sample(trainName: typeof(ICheckGeocodeDriftTrain).FullName!))
+            .Matches(Sample(trainName: typeof(ICheckGeocodeDriftTrain).FullName.NotNull()))
             .Should()
             .BeTrue();
         config.Matches(Sample(trainName: "Other.IFoo")).Should().BeFalse();
@@ -205,12 +210,12 @@ public class SignalRSinkOptionsTests
             .Build();
 
         var match = Sample(
-            trainName: typeof(ICheckGeocodeDriftTrain).FullName!,
+            trainName: typeof(ICheckGeocodeDriftTrain).FullName.NotNull(),
             eventType: "Completed"
         );
         var wrongTrain = Sample(trainName: "Other.IFoo", eventType: "Completed");
         var wrongEvent = Sample(
-            trainName: typeof(ICheckGeocodeDriftTrain).FullName!,
+            trainName: typeof(ICheckGeocodeDriftTrain).FullName.NotNull(),
             eventType: "Failed"
         );
 

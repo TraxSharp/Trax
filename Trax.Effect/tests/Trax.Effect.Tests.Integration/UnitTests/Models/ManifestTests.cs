@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 
@@ -183,7 +184,10 @@ public class ManifestTests
     [Test]
     public void NameType_AGenericFullNameOfLoadedTypes_Resolves()
     {
-        var m = new Manifest { Name = typeof(Dictionary<string, SomeFakeTrain>).FullName! };
+        var m = new Manifest
+        {
+            Name = typeof(Dictionary<string, SomeFakeTrain>).FullName.NotNull(),
+        };
 
         m.NameType.Should().Be(typeof(Dictionary<string, SomeFakeTrain>));
     }
@@ -225,7 +229,7 @@ public class ManifestTests
     [Test]
     public void NameType_NullName_ReturnsUnit()
     {
-        var m = new Manifest { Name = null! };
+        var m = new Manifest { Name = Null.Of<string>() };
 
         m.NameType.Should().Be(typeof(Trax.Core.Functional.Unit));
     }
@@ -233,7 +237,11 @@ public class ManifestTests
     [Test]
     public void PropertyType_NoStoredName_ReturnsUnit()
     {
-        var m = new Manifest { Name = typeof(SomeFakeTrain).FullName!, PropertyTypeName = null };
+        var m = new Manifest
+        {
+            Name = typeof(SomeFakeTrain).FullName.NotNull(),
+            PropertyTypeName = null,
+        };
 
         m.PropertyType.Should().Be(typeof(Trax.Core.Functional.Unit));
     }

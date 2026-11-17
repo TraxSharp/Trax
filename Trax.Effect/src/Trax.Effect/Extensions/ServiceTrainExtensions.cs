@@ -149,7 +149,7 @@ internal static class ServiceTrainExtensions
 
         var resultState =
             result.IsRight ? TrainState.Completed
-            : serviceTrain.IsRequestedCancellation(failureReason!) ? TrainState.Cancelled
+            : serviceTrain.IsRequestedCancellation(failureReason.NotNull()) ? TrainState.Cancelled
             : TrainState.Failed;
         serviceTrain.Logger?.LogTrace(
             "Setting ({TrainName}) to ({ResultState}).",

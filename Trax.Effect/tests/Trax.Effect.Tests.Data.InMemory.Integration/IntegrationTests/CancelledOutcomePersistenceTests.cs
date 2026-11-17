@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -56,7 +57,7 @@ public class CancelledOutcomePersistenceTests : TestSetup
             await cts.CancelAsync();
         }
 
-        var row = await PersistedRow(typeof(IParkedTrain).FullName!);
+        var row = await PersistedRow(typeof(IParkedTrain).FullName.NotNull());
 
         row.TrainState.Should()
             .Be(
@@ -91,7 +92,7 @@ public class CancelledOutcomePersistenceTests : TestSetup
             Probe.Downstream.TrySetResult();
         }
 
-        var row = await PersistedRow(typeof(IUninterruptibleTrain).FullName!);
+        var row = await PersistedRow(typeof(IUninterruptibleTrain).FullName.NotNull());
 
         row.TrainState.Should()
             .Be(
@@ -116,7 +117,7 @@ public class CancelledOutcomePersistenceTests : TestSetup
         var awaiting = async () => await train.Run(Unit.Default, cts.Token).ConfigureAwait(false);
         await awaiting.Should().ThrowAsync<OperationCanceledException>();
 
-        var row = await PersistedRow(typeof(IPreStartCancelledTrain).FullName!);
+        var row = await PersistedRow(typeof(IPreStartCancelledTrain).FullName.NotNull());
 
         row.TrainState.Should()
             .Be(

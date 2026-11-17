@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Utils;
 
@@ -45,7 +46,9 @@ internal sealed class ValueTupleConverter : JsonConverterFactory
     /// </remarks>
     public override bool CanConvert(Type typeToConvert) =>
         typeToConvert is { IsValueType: true, IsGenericType: true }
-        && typeToConvert.FullName!.StartsWith("System.ValueTuple", StringComparison.Ordinal);
+        && typeToConvert
+            .FullName.NotNull()
+            .StartsWith("System.ValueTuple", StringComparison.Ordinal);
 
     /// <summary>
     /// Creates a converter for the specified type.
@@ -140,7 +143,7 @@ internal sealed class ValueTupleConverter : JsonConverterFactory
                 .EnumerateArray()
                 .Zip(Fields, (element, field) => element.Deserialize(field.FieldType, options))
                 .ToArray();
-            return (T)Activator.CreateInstance(typeof(T), args)!;
+            return (T)Activator.CreateInstance(typeof(T), args).NotNull();
         }
 
         /// <summary>

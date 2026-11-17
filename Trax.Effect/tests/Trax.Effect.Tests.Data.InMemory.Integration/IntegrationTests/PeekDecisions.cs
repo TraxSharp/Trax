@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Decisions;
@@ -25,12 +26,12 @@ namespace Trax.Effect.Tests.Data.InMemory.Integration.IntegrationTests;
 /// <summary>Reads the run's decisions through a context of its own, as another process would.</summary>
 public class PeekDecisions(IDataContextProviderFactory factory) : EffectJunction<string, string>
 {
-    public static List<(long MetadataId, TrainState State, string? Track)> Seen { get; } = [];
+    public static IList<(long MetadataId, TrainState State, string? Track)> Seen { get; } = [];
 
     public override async Task<string> Run(string input)
     {
         Seen.Clear();
-        var id = Metadata!.TrainMetadataId;
+        var id = Metadata.NotNull().TrainMetadataId;
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);

@@ -1,6 +1,7 @@
 using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Extensions;
 
@@ -28,7 +29,7 @@ public class InjectAttributeTests
 
         // Assert
         attributeUsage.Should().NotBeNull();
-        attributeUsage!.ValidOn.Should().Be(AttributeTargets.Property);
+        attributeUsage.NotNull().ValidOn.Should().Be(AttributeTargets.Property);
     }
 
     [Test]

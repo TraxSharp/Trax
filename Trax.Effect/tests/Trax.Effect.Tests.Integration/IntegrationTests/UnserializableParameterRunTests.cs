@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Enums;
@@ -18,7 +19,7 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 /// </summary>
 public class UnserializableParameterRunTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -38,18 +39,18 @@ public class UnserializableParameterRunTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
 
     [Test]
     public async Task An_output_with_a_throwing_getter_completes_with_the_placeholder()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IThrowingGetterOutputTrain>();
 
         await train.Run(Unit.Default);
 
-        var metadata = ((ServiceTrain<Unit, ThrowingGetter>)train).Metadata!;
+        var metadata = ((ServiceTrain<Unit, ThrowingGetter>)train).Metadata.NotNull();
         metadata.TrainState.Should().Be(TrainState.Completed);
         metadata.Output.Should().Contain("_unserializable");
     }
@@ -57,13 +58,13 @@ public class UnserializableParameterRunTests
     [Test]
     public async Task An_output_with_colliding_property_names_completes_with_the_placeholder()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ICollidingNamesOutputTrain>();
 
         await train.Run(Unit.Default);
 
-        var metadata = ((ServiceTrain<Unit, CollidingNames>)train).Metadata!;
+        var metadata = ((ServiceTrain<Unit, CollidingNames>)train).Metadata.NotNull();
         metadata.TrainState.Should().Be(TrainState.Completed);
         metadata.Output.Should().Contain("_unserializable");
     }
@@ -71,13 +72,13 @@ public class UnserializableParameterRunTests
     [Test]
     public async Task An_input_with_a_throwing_getter_completes_with_the_placeholder()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IThrowingGetterInputTrain>();
 
         await train.Run(new ThrowingGetter());
 
-        var metadata = ((ServiceTrain<ThrowingGetter, Unit>)train).Metadata!;
+        var metadata = ((ServiceTrain<ThrowingGetter, Unit>)train).Metadata.NotNull();
         metadata.TrainState.Should().Be(TrainState.Completed);
         metadata.Input.Should().Contain("_unserializable");
     }

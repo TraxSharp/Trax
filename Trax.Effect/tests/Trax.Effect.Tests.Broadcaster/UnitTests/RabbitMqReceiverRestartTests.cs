@@ -2,6 +2,7 @@ using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.RabbitMQ;
 
 namespace Trax.Effect.Tests.Broadcaster.UnitTests;
@@ -32,7 +33,8 @@ public class RabbitMqReceiverRestartTests
     private static IConnection? ConnectionOf(RabbitMqTrainEventReceiver receiver) =>
         (IConnection?)
             typeof(RabbitMqTrainEventReceiver)
-                .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)
+                .NotNull()
                 .GetValue(receiver);
 
     [Test]
@@ -44,14 +46,14 @@ public class RabbitMqReceiverRestartTests
         );
         await using var receiverDisposal = receiver.ConfigureAwait(false);
         await receiver.StartAsync((_, _) => Task.CompletedTask, CancellationToken.None);
-        var first = ConnectionOf(receiver)!;
+        var first = ConnectionOf(receiver).NotNull();
 
         await receiver.StartAsync((_, _) => Task.CompletedTask, CancellationToken.None);
 
         first
             .IsOpen.Should()
             .BeFalse("a restart replaces the receiver's connection rather than adding one");
-        ConnectionOf(receiver)!.IsOpen.Should().BeTrue();
+        ConnectionOf(receiver).NotNull().IsOpen.Should().BeTrue();
     }
 
     [Test]

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.Host;
 using Trax.Effect.Models.Metadata;
@@ -101,7 +102,9 @@ public class HostTrackingIntegrationTests : TestSetup
         var reloaded = await context.Metadatas.AsNoTracking().FirstAsync(m => m.Id == metadata.Id);
 
         reloaded.HostLabels.Should().NotBeNull();
-        var labels = JsonSerializer.Deserialize<Dictionary<string, string>>(reloaded.HostLabels!);
+        var labels = JsonSerializer.Deserialize<Dictionary<string, string>>(
+            reloaded.HostLabels.NotNull()
+        );
         labels.Should().ContainKey("region").WhoseValue.Should().Be("us-east-1");
         labels.Should().ContainKey("service").WhoseValue.Should().Be("content-shield");
     }

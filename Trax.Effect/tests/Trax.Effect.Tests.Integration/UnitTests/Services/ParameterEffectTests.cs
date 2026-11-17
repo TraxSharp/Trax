@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -46,11 +47,25 @@ public class ParameterEffectTests
         };
         if (maxParameterBytes is not null)
             config.MaxParameterBytes = maxParameterBytes;
-        return new ParameterEffect(new JsonSerializerOptions(), config);
+        return new ParameterEffect(
+            new JsonSerializerOptions()
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            },
+            config
+        );
     }
 
     private static ParameterEffect NewEffect(ParameterEffectConfiguration config) =>
-        new(new JsonSerializerOptions(), config);
+        new(
+            new JsonSerializerOptions()
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            },
+            config
+        );
 
     // A train whose FullName we can match against for type-based exclusion tests.
     private sealed class FakeQuery;
@@ -93,7 +108,7 @@ public class ParameterEffectTests
         await effect.SaveChanges(CancellationToken.None);
 
         meta.Input.Should().Contain("ada").And.NotContain("hunter2");
-        TraxRedaction.ContainsRedaction(meta.Input!).Should().BeTrue();
+        TraxRedaction.ContainsRedaction(meta.Input.NotNull()).Should().BeTrue();
         input.Password.Should().Be("hunter2", "the train runs with the real value");
     }
 
@@ -442,7 +457,7 @@ public class ParameterEffectTests
     private static void ShouldBeUnserializablePlaceholder(string? json, string errorType)
     {
         json.Should().NotBeNull();
-        using var document = JsonDocument.Parse(json!);
+        using var document = JsonDocument.Parse(json.NotNull());
         document.RootElement.GetProperty("_unserializable").GetBoolean().Should().BeTrue();
         document.RootElement.GetProperty("_error").GetString().Should().Be(errorType);
     }
@@ -586,7 +601,10 @@ public class ParameterEffectTests
     {
         var config = new ParameterEffectConfiguration();
 
-        config.Invoking(c => c.ExcludeOutput((string)null!)).Should().Throw<ArgumentException>();
+        config
+            .Invoking(c => c.ExcludeOutput(Null.Of<string>()))
+            .Should()
+            .Throw<ArgumentException>();
         config.Invoking(c => c.ExcludeOutput("")).Should().Throw<ArgumentException>();
     }
 
@@ -619,7 +637,7 @@ public class ParameterEffectTests
         };
         var effect = NewEffect(config);
         var meta = NewMetadata(output: new { X = 1 });
-        meta.Name = null!;
+        meta.Name = Null.Of<string>();
 
         await effect.Track(meta);
 
@@ -676,7 +694,10 @@ public class ParameterEffectTests
         };
         var effect = NewEffect(config);
 
-        var wanted = NewMetadata(input: new { Keep = 1 }, name: typeof(FakeQuery).FullName!);
+        var wanted = NewMetadata(
+            input: new { Keep = 1 },
+            name: typeof(FakeQuery).FullName.NotNull()
+        );
         var everythingElse = NewMetadata(input: new { Drop = 1 }, name: "Trax.Some.Other.Train");
 
         await effect.Track(wanted);
@@ -692,7 +713,7 @@ public class ParameterEffectTests
         var meta = NewMetadata(
             input: new { Drop = 1 },
             output: new { Keep = 2 },
-            name: typeof(FakeQuery).FullName!
+            name: typeof(FakeQuery).FullName.NotNull()
         );
         var config = new ParameterEffectConfiguration().ExcludeInput<FakeQuery>();
         var effect = NewEffect(config);
@@ -706,7 +727,7 @@ public class ParameterEffectTests
     [Test]
     public async Task Track_ExcludeInputByTypeInstance_SkipsMatchingInput()
     {
-        var meta = NewMetadata(input: new { Drop = 1 }, name: typeof(FakeQuery).FullName!);
+        var meta = NewMetadata(input: new { Drop = 1 }, name: typeof(FakeQuery).FullName.NotNull());
         var config = new ParameterEffectConfiguration().ExcludeInput(typeof(FakeQuery));
         var effect = NewEffect(config);
 
@@ -808,7 +829,7 @@ public class ParameterEffectTests
     {
         var config = new ParameterEffectConfiguration();
 
-        config.Invoking(c => c.ExcludeInput((string)null!)).Should().Throw<ArgumentException>();
+        config.Invoking(c => c.ExcludeInput(Null.Of<string>())).Should().Throw<ArgumentException>();
         config.Invoking(c => c.ExcludeInput("")).Should().Throw<ArgumentException>();
     }
 
@@ -836,7 +857,7 @@ public class ParameterEffectTests
         };
         var effect = NewEffect(config);
         var meta = NewMetadata(input: new { X = 1 });
-        meta.Name = null!;
+        meta.Name = Null.Of<string>();
 
         await effect.Track(meta);
 
@@ -876,9 +897,9 @@ public class ParameterEffectTests
     [Test]
     public void MaxParameterBytes_DeclaresItsRange_ForEditorsThatValidateBeforeSetting()
     {
-        var property = typeof(ParameterEffectConfiguration).GetProperty(
-            nameof(ParameterEffectConfiguration.MaxParameterBytes)
-        )!;
+        var property = typeof(ParameterEffectConfiguration)
+            .GetProperty(nameof(ParameterEffectConfiguration.MaxParameterBytes))
+            .NotNull();
         var context = new System.ComponentModel.DataAnnotations.ValidationContext(
             new ParameterEffectConfiguration()
         )
@@ -957,7 +978,7 @@ public class ParameterEffectTests
 
         meta.Output.Should().Contain("_truncated").And.Contain("\"_maxBytes\": 1024");
         // The stored value is the small placeholder, not the multi-KB payload.
-        meta.Output!.Length.Should().BeLessThan(cap);
+        meta.Output.NotNull().Length.Should().BeLessThan(cap);
     }
 
     [Test]
@@ -976,7 +997,11 @@ public class ParameterEffectTests
     [Test]
     public async Task Track_NullCap_ByteIdenticalToStringOverload()
     {
-        var options = new JsonSerializerOptions();
+        var options = new JsonSerializerOptions()
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+        };
         var payload = new
         {
             A = 1,
@@ -1001,7 +1026,7 @@ public class ParameterEffectTests
         await effect.Track(meta);
 
         // The placeholder must be valid JSON so it can land in a jsonb column.
-        using var doc = JsonDocument.Parse(meta.Output!);
+        using var doc = JsonDocument.Parse(meta.Output.NotNull());
         doc.RootElement.GetProperty("_truncated").GetBoolean().Should().BeTrue();
         doc.RootElement.GetProperty("_maxBytes").GetInt32().Should().Be(512);
     }
@@ -1058,7 +1083,7 @@ public class ParameterEffectTests
 
         var results = await Task.WhenAll(work).WaitAsync(TimeSpan.FromSeconds(45));
 
-        results.Should().OnlyContain(m => m.Output!.Contains("_truncated"));
+        results.Should().OnlyContain(m => m.Output.NotNull().Contains("_truncated"));
     }
 
     #endregion

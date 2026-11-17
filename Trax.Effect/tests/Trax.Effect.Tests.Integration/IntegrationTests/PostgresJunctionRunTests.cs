@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -40,7 +41,7 @@ public class PostgresJunctionRunTests
 {
     private const string Adr = "docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md";
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -50,7 +51,7 @@ public class PostgresJunctionRunTests
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
         var connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
 
         var services = new ServiceCollection();
@@ -65,7 +66,7 @@ public class PostgresJunctionRunTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
 
     [Test]
     public async Task A_runs_steps_are_rows_read_back_in_order()
@@ -104,7 +105,7 @@ public class PostgresJunctionRunTests
     [Test]
     public async Task A_manifests_run_stores_its_attempt()
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         long manifestId;
         var context = await factory.CreateDbContextAsync(CancellationToken.None);
         await using (context.ConfigureAwait(false))
@@ -144,7 +145,7 @@ public class PostgresJunctionRunTests
     public async Task A_burst_of_steps_is_written_in_batches_and_every_end_lands()
     {
         var metadataId = await Run();
-        var writer = _provider.GetRequiredService<JunctionRunWriter>();
+        var writer = _provider.NotNull().GetRequiredService<JunctionRunWriter>();
         var dropped = writer.DroppedSteps;
         var start = DateTime.UtcNow;
         const int Junctions = 1500;
@@ -196,7 +197,7 @@ public class PostgresJunctionRunTests
     public async Task Each_row_stores_the_id_the_trains_graph_draws_for_its_step()
     {
         ChainGraph graph;
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
         {
             var fresh = (PgStepsTrain)scope.ServiceProvider.GetRequiredService<IPgStepsTrain>();
@@ -232,14 +233,14 @@ public class PostgresJunctionRunTests
 
     private async Task<long> Run(long? manifestId = null)
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (PgStepsTrain)scope.ServiceProvider.GetRequiredService<IPgStepsTrain>();
         var input = new PgItem(3);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IPgStepsTrain).FullName!,
+                Name = typeof(IPgStepsTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ManifestId = manifestId,
@@ -250,15 +251,16 @@ public class PostgresJunctionRunTests
         await run.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 
         await _provider
+            .NotNull()
             .GetRequiredService<JunctionRunWriter>()
             .FlushAsync(CancellationToken.None)
             .ConfigureAwait(false);
-        return train.Metadata!.Id;
+        return train.Metadata.NotNull().Id;
     }
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -272,7 +274,7 @@ public class PostgresJunctionRunTests
 
     private async Task Delete(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);

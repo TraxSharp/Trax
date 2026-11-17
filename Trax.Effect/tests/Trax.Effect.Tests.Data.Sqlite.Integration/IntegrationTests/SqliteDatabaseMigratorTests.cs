@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using DbUp;
 using Microsoft.Data.Sqlite;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Sqlite.Utils;
 
 namespace Trax.Effect.Tests.Data.Sqlite.Integration.IntegrationTests;
@@ -158,6 +159,6 @@ public class SqliteDatabaseMigratorTests
         await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = $"SELECT count(*) FROM pragma_table_info('{table}') WHERE name = $c;";
         command.Parameters.AddWithValue("$c", column);
-        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))! > 0;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull() > 0;
     }
 }

@@ -13,6 +13,9 @@ namespace Trax.Effect.Data.Services.SnapshotNotices;
 /// <para>Infrastructure for <c>Trax.StateMachine.Persistence</c>, whose change listener holds the host's one
 /// subscription; a host does not implement or call it.</para>
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal interface ISnapshotNoticeSource
 {
     /// <summary>

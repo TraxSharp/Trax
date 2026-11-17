@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.LifecycleHookRunner;
@@ -151,7 +152,7 @@ public class LifecycleHookRunnerTests
         await runner.OnStarted(metadata, CancellationToken.None);
 
         hook.LastMetadata.Should().BeSameAs(metadata);
-        hook.LastMetadata!.Name.Should().Be("TestTrain");
+        hook.LastMetadata.NotNull().Name.Should().Be("TestTrain");
     }
 
     [Test]

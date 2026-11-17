@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Effect.Tests.Meta.Tests;
 
 /// <summary>
@@ -89,7 +91,7 @@ public class NoOrphanPackageVersionTests
             .Descendants("PackageVersion")
             .Select(e => e.Attribute("Include")?.Value)
             .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Select(v => v!)
+            .Select(v => v.NotNull())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -137,7 +139,7 @@ public class NoOrphanPackageVersionTests
                     .Where(v => !string.IsNullOrWhiteSpace(v))
             )
             {
-                referenced.Add(name!);
+                referenced.Add(name.NotNull());
             }
         }
 

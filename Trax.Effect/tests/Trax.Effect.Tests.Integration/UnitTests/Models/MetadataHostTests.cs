@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Host;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -92,7 +93,9 @@ public class MetadataHostTests
         );
 
         metadata.HostLabels.Should().NotBeNull();
-        var labels = JsonSerializer.Deserialize<Dictionary<string, string>>(metadata.HostLabels!);
+        var labels = JsonSerializer.Deserialize<Dictionary<string, string>>(
+            metadata.HostLabels.NotNull()
+        );
         labels.Should().ContainKey("region").WhoseValue.Should().Be("us-east-1");
         labels.Should().ContainKey("service").WhoseValue.Should().Be("api");
     }

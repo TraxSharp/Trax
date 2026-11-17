@@ -1,5 +1,6 @@
 using System.Reflection;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 
@@ -31,7 +32,9 @@ public class TraxBuilderProviderFlagTests
     [TestCaseSource(nameof(Flags))]
     public void AValidationFlag_CanBeReadButNotSetByAConsumer(Type builder, string flag)
     {
-        var property = builder.GetProperty(flag, BindingFlags.Public | BindingFlags.Instance)!;
+        var property = builder
+            .GetProperty(flag, BindingFlags.Public | BindingFlags.Instance)
+            .NotNull();
 
         property.GetGetMethod().Should().NotBeNull("consumers still read the flag");
         property

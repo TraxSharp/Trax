@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Attributes;
@@ -17,7 +18,7 @@ public class TraxAuthorizationTests
     private const string Adr = "docs/adr/0004-trax-owns-the-authorization-vocabulary.md";
 
     private static System.Reflection.MethodInfo Method(string name) =>
-        typeof(Subject).GetMethod(name)!;
+        typeof(Subject).GetMethod(name).NotNull();
 
     // ── Methods are a valid target ───────────────────────────────────────
 
@@ -50,10 +51,9 @@ public class TraxAuthorizationTests
     public void ClassAndInterfaceTargets_AreStillValid()
     {
         var usage = (AttributeUsageAttribute)
-            Attribute.GetCustomAttribute(
-                typeof(TraxAuthorizeAttribute),
-                typeof(AttributeUsageAttribute)
-            )!;
+            Attribute
+                .GetCustomAttribute(typeof(TraxAuthorizeAttribute), typeof(AttributeUsageAttribute))
+                .NotNull();
 
         usage.ValidOn.Should().HaveFlag(AttributeTargets.Class);
         usage.ValidOn.Should().HaveFlag(AttributeTargets.Interface);
@@ -116,7 +116,7 @@ public class TraxAuthorizationTests
     public void Method_Override_InheritsTheBaseDeclaration()
     {
         var declaration = TraxAuthorization.Read(
-            typeof(DerivedSubject).GetMethod(nameof(DerivedSubject.Inherited))!
+            typeof(DerivedSubject).GetMethod(nameof(DerivedSubject.Inherited)).NotNull()
         );
 
         declaration.HasAuthorize.Should().BeTrue("the attribute is Inherited = true");
@@ -270,8 +270,8 @@ public class TraxAuthorizationTests
     [Test]
     public void Read_NullArguments_Throw()
     {
-        var method = () => TraxAuthorization.Read((System.Reflection.MethodInfo)null!);
-        var type = () => TraxAuthorization.Read((Type)null!);
+        var method = () => TraxAuthorization.Read(Null.Of<System.Reflection.MethodInfo>());
+        var type = () => TraxAuthorization.Read(Null.Of<Type>());
 
         method.Should().Throw<ArgumentNullException>();
         type.Should().Throw<ArgumentNullException>();

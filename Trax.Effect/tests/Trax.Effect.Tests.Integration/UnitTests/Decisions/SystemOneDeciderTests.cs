@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Train;
 using Trax.Effect.Decisions.SystemOne;
 
@@ -78,23 +79,49 @@ public class SystemOneDeciderTests
 
         var sent = model.Requests.Should().ContainSingle().Subject;
         sent.Authorization.Should().Be("Bearer sk-test");
-        sent.Body["model"]!.GetValue<string>().Should().Be("jev-1.13.0");
-        sent.Body["state"]!["customerId"]!.GetValue<string>().Should().Be("cus_1");
+        sent.Body["model"].NotNull().GetValue<string>().Should().Be("jev-1.13.0");
+        sent.Body["state"]
+            .NotNull()["customerId"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("cus_1");
 
-        var questions = sent.Body["questions"]!;
-        questions["TicketTrack"]!["type"]!.GetValue<string>().Should().Be("choice");
-        questions["TicketTrack"]!["instructions"]!
+        var questions = sent.Body["questions"].NotNull();
+        questions["TicketTrack"]
+            .NotNull()["type"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("choice");
+        questions["TicketTrack"]
+            .NotNull()["instructions"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("Which team should handle this ticket?");
-        questions["TicketTrack"]!["criteria"]!
+        questions["TicketTrack"]
+            .NotNull()["criteria"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"Refund":"Money back for an order.","Escalate":"Escalate"}""");
-        questions["Urgency"]!["type"]!.GetValue<string>().Should().Be("score");
-        questions["Urgency"]!["criteria"]!.ToJsonString().Should().Be("""["Whenever.","Now."]""");
-        questions["ContainsThreat"]!["type"]!.GetValue<string>().Should().Be("noul");
-        questions["ContainsThreat"]!["criteria"]!
+        questions["Urgency"].NotNull()["type"].NotNull().GetValue<string>().Should().Be("score");
+        questions["Urgency"]
+            .NotNull()["criteria"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Be("""["Whenever.","Now."]""");
+        questions["ContainsThreat"]
+            .NotNull()["type"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("noul");
+        questions["ContainsThreat"]
+            .NotNull()["criteria"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"true":"It threatens harm.","false":"No"}""");
@@ -188,7 +215,7 @@ public class SystemOneDeciderTests
 
         var failure = (await decide.Should().ThrowAsync<DecisionServiceException>()).Which;
         failure.Message.Should().Contain("502").And.Contain("after 2 attempts");
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Transient);
         model.Requests.Should().HaveCount(2);
@@ -208,7 +235,7 @@ public class SystemOneDeciderTests
         failure
             .Message.Should()
             .Contain(((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture));
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Permanent);
         model.Requests.Should().ContainSingle();
@@ -305,7 +332,7 @@ public class SystemOneDeciderTests
 
         var failure = (await decide.Should().ThrowAsync<DecisionServiceException>()).Which;
         failure.Message.Should().Contain("offers 3 options");
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Permanent);
     }
@@ -380,7 +407,11 @@ public class SystemOneDeciderTests
 
         await decider.Decide(Ticket with { State = state }, CancellationToken.None);
 
-        model.Requests.Should().ContainSingle().Which.Body["state"]!
+        model
+            .Requests.Should()
+            .ContainSingle()
+            .Which.Body["state"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be(state);
@@ -399,7 +430,7 @@ public class SystemOneDeciderTests
 
         var failure = (await decide.Should().ThrowAsync<DecisionServiceException>()).Which;
         failure.Message.Should().Contain("asks 3 questions").And.Contain("at most 2");
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Permanent);
         model.Requests.Should().BeEmpty("it is refused before it is sent");
@@ -506,7 +537,7 @@ public class SystemOneDeciderTests
         var failure = (await decide.Should().ThrowAsync<DecisionServiceException>()).Which;
         failure.Message.Should().Contain("422").And.Contain("refused as invalid");
         failure.Message.Should().NotContain("cus_secret_7").And.NotContain("detail");
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .Message.Should()
             .NotContain("cus_secret_7");
         ClassOf(failure).Should().Be(FailureClass.Permanent);
@@ -887,7 +918,11 @@ public class SystemOneDeciderTests
         var result = await new RefundTrain(decider).RunEither("order 42");
 
         result.IsRight.Should().BeTrue();
-        model.Requests.Should().ContainSingle().Which.Body["questions"]!
+        model
+            .Requests.Should()
+            .ContainSingle()
+            .Which.Body["questions"]
+            .NotNull()
             .AsObject()
             .Select(q => q.Key)
             .Should()
@@ -1043,7 +1078,7 @@ public class SystemOneDeciderTests
     }
 
     private static FailureClass? ClassOf(Exception failure) =>
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!).FailureClass;
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull()).FailureClass;
 
     /// <summary>Records each wait before a retry instead of waiting, with the jitter fixed.</summary>
     private static List<TimeSpan> Record(SystemOneDecider decider, double jitter)
@@ -1159,7 +1194,7 @@ public class SystemOneDeciderTests
 
                 if (
                     string.Equals(
-                        context.Request.Url!.AbsolutePath,
+                        context.Request.Url.NotNull().AbsolutePath,
                         "/v1/systemone",
                         StringComparison.Ordinal
                     )
@@ -1224,11 +1259,14 @@ public class SystemOneDeciderTests
         {
             var sent = new SentRequest(
                 request.Headers.Authorization?.ToString(),
-                JsonNode.Parse(
-                    await request
-                        .Content!.ReadAsStringAsync(cancellationToken)
-                        .ConfigureAwait(false)
-                )!
+                JsonNode
+                    .Parse(
+                        await request
+                            .Content.NotNull()
+                            .ReadAsStringAsync(cancellationToken)
+                            .ConfigureAwait(false)
+                    )
+                    .NotNull()
             );
 
             int attempt;

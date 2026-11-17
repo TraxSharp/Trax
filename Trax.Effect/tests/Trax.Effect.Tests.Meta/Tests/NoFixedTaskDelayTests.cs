@@ -11,11 +11,6 @@ namespace Trax.Effect.Tests.Meta.Tests;
 [TestFixture]
 public partial class NoFixedTaskDelayTests
 {
-    private static readonly Regex Justification = new(
-        @"(?i)(determinism:|allowed-delay:|measuring-interval:|negative-wait:)",
-        RegexOptions.Compiled | RegexOptions.ExplicitCapture
-    );
-
     /// <summary>
     /// Pre-existing offenders that pre-date the determinism convention. Each entry is a
     /// repo-relative path. New code MUST NOT add fixed-duration Task.Delay / Thread.Sleep
@@ -131,7 +126,15 @@ public partial class NoFixedTaskDelayTests
 
     [GeneratedRegex(
         @"\b(Task\.Delay|Thread\.Sleep)\s*\(",
-        RegexOptions.Compiled | RegexOptions.ExplicitCapture
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
     private static partial Regex DelayCall { get; }
+
+    [GeneratedRegex(
+        @"(?i)(determinism:|allowed-delay:|measuring-interval:|negative-wait:)",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Justification { get; }
 }

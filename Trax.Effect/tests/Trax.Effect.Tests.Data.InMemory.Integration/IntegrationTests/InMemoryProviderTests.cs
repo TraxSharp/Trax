@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Services.DataContext;
@@ -50,7 +51,7 @@ public class InMemoryProviderTests : TestSetup
         // Assert
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.Id.Should().Be(metadata.Id);
+        found.NotNull().Id.Should().Be(metadata.Id);
         found.Name.Should().Be("TestMetadata");
     }
 
@@ -87,7 +88,7 @@ public class InMemoryProviderTests : TestSetup
         context.Reset();
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.TrainState.Should().Be(TrainState.InProgress);
+        found.NotNull().TrainState.Should().Be(TrainState.InProgress);
     }
 
     [Test]
@@ -125,7 +126,7 @@ public class InMemoryProviderTests : TestSetup
         context.Reset();
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == idAfterInsert);
         found.Should().NotBeNull();
-        found!.TrainState.Should().Be(TrainState.Completed);
+        found.NotNull().TrainState.Should().Be(TrainState.Completed);
         found.EndTime.Should().NotBeNull();
     }
 
@@ -184,7 +185,7 @@ public class InMemoryProviderTests : TestSetup
         context.Reset();
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.TrainState.Should().Be(TrainState.Failed);
+        found.NotNull().TrainState.Should().Be(TrainState.Failed);
     }
 
     [Test]
@@ -219,9 +220,9 @@ public class InMemoryProviderTests : TestSetup
         var found1 = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata1.Id);
         var found2 = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata2.Id);
         found1.Should().NotBeNull();
-        found1!.Name.Should().Be("Multi1");
+        found1.NotNull().Name.Should().Be("Multi1");
         found2.Should().NotBeNull();
-        found2!.Name.Should().Be("Multi2");
+        found2.NotNull().Name.Should().Be("Multi2");
     }
 
     #endregion
@@ -272,7 +273,7 @@ public class InMemoryProviderTests : TestSetup
         );
 
         found.Should().NotBeNull();
-        found!.ManifestManagerEnabled.Should().BeFalse();
+        found.NotNull().ManifestManagerEnabled.Should().BeFalse();
         found.MaxActiveJobs.Should().Be(50);
         found.RetryBackoffMultiplier.Should().Be(3.5);
         found.DeadLetterRetentionPeriod.Should().Be(TimeSpan.FromDays(60));
@@ -321,7 +322,7 @@ public class InMemoryProviderTests : TestSetup
         );
 
         found.Should().NotBeNull();
-        found!.OperationName.Should().Be("UserProfile");
+        found.NotNull().OperationName.Should().Be("UserProfile");
         found.Version.Should().Be(3);
         found.Document.Should().Contain("$id: Int!");
         found.ShapeFingerprint.Should().Be(new string('a', 64));
@@ -361,7 +362,7 @@ public class InMemoryProviderTests : TestSetup
         // tenant_key is part of the composite PK; the schema stores ''
         // for "no tenant". The C#-facing IPersistedOperationStore normalizes
         // null<->"" at the boundary, but at the EF layer the value is "".
-        found!.TenantKey.Should().Be(string.Empty);
+        found.NotNull().TenantKey.Should().Be(string.Empty);
         found.DeprecationReason.Should().BeNull();
         found.Description.Should().BeNull();
     }
@@ -398,7 +399,7 @@ public class InMemoryProviderTests : TestSetup
             h.Id == "history_v1"
         );
         found.Should().NotBeNull();
-        found!.TenantKey.Should().Be("tenant-h");
+        found.NotNull().TenantKey.Should().Be("tenant-h");
         found.Document.Should().Be("query H { z }");
         found.ShapeFingerprint.Should().Be(new string('b', 64));
         found.ChangeType.Should().Be("Upsert");
@@ -512,7 +513,7 @@ public class InMemoryProviderTests : TestSetup
 
         var found = await context.SchedulerConfigs.FirstOrDefaultAsync();
         found.Should().NotBeNull();
-        found!.MaxActiveJobs.Should().BeNull();
+        found.NotNull().MaxActiveJobs.Should().BeNull();
         found.LocalWorkerCount.Should().BeNull();
         found.MetadataCleanupInterval.Should().BeNull();
         found.MetadataCleanupRetention.Should().BeNull();
@@ -610,7 +611,7 @@ public class InMemoryProviderTests : TestSetup
         context.Reset();
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.Name.Should().Be("TransactionCommitTest");
+        found.NotNull().Name.Should().Be("TransactionCommitTest");
     }
 
     [Test]
@@ -662,9 +663,9 @@ public class InMemoryProviderTests : TestSetup
         var found1 = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata1.Id);
         var found2 = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata2.Id);
         found1.Should().NotBeNull();
-        found1!.Name.Should().Be("ScheduleMany1");
+        found1.NotNull().Name.Should().Be("ScheduleMany1");
         found2.Should().NotBeNull();
-        found2!.Name.Should().Be("ScheduleMany2");
+        found2.NotNull().Name.Should().Be("ScheduleMany2");
     }
 
     [Test]
@@ -697,7 +698,7 @@ public class InMemoryProviderTests : TestSetup
         );
 
         found.Should().NotBeNull("factory and scoped contexts must share the same database root");
-        found!.Name.Should().Be("SharedRootTest");
+        found.NotNull().Name.Should().Be("SharedRootTest");
     }
 
     #endregion
@@ -712,7 +713,7 @@ public class InMemoryProviderTests : TestSetup
         await train.Run(Unit.Default);
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.Name.Should().Be(typeof(ITestTrain).FullName);
+        train.Metadata.NotNull().Name.Should().Be(typeof(ITestTrain).FullName);
         train.Metadata.TrainState.Should().Be(TrainState.Completed);
         train.Metadata.FailureException.Should().BeNullOrEmpty();
         train.Metadata.FailureReason.Should().BeNullOrEmpty();
@@ -731,7 +732,7 @@ public class InMemoryProviderTests : TestSetup
         await act.Should().ThrowAsync<TrainException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.TrainState.Should().Be(TrainState.Failed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Failed);
         train.Metadata.FailureException.Should().NotBeNullOrEmpty();
         train.Metadata.FailureReason.Should().NotBeNullOrEmpty();
         train.Metadata.EndTime.Should().NotBeNull();
@@ -752,7 +753,10 @@ public class InMemoryProviderTests : TestSetup
         // either Cancelled or InProgress depending on whether SaveChanges also got
         // cancelled — either way, the train should NOT be Completed or Pending.
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.TrainState.Should().BeOneOf([TrainState.Cancelled, TrainState.InProgress]);
+        train
+            .Metadata.NotNull()
+            .TrainState.Should()
+            .BeOneOf([TrainState.Cancelled, TrainState.InProgress]);
     }
 
     [Test]
@@ -765,7 +769,7 @@ public class InMemoryProviderTests : TestSetup
         await train.Run(Unit.Default);
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
         train.Metadata.Id.Should().BeGreaterThan(0);
 
         // Use a different train type in the same scope
@@ -774,7 +778,7 @@ public class InMemoryProviderTests : TestSetup
 
         result.Should().Be(4);
         typedTrain.Metadata.Should().NotBeNull();
-        typedTrain.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        typedTrain.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
     }
 
     [Test]
@@ -786,7 +790,7 @@ public class InMemoryProviderTests : TestSetup
 
         result.Should().Be(5);
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
         train.Metadata.Name.Should().Be(typeof(ITypedTrain).FullName);
     }
 
@@ -798,7 +802,7 @@ public class InMemoryProviderTests : TestSetup
         await train.Run(Unit.Default);
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.ExternalId.Should().NotBeNullOrEmpty();
+        train.Metadata.NotNull().ExternalId.Should().NotBeNullOrEmpty();
     }
 
     #endregion

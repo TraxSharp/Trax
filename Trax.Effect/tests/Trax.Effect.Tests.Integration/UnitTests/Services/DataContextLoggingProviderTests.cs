@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.DataContextLoggingProvider;
@@ -52,7 +53,7 @@ public partial class DataContextLoggingProviderTests
         );
 
         channel.Reader.TryRead(out var written).Should().BeTrue();
-        written!.Level.Should().Be(LogLevel.Warning);
+        written.NotNull().Level.Should().Be(LogLevel.Warning);
         written.Message.Should().Be("rendered");
         written.Category.Should().Be("MyApp.Foo");
         written.EventId.Should().Be(7);
@@ -137,7 +138,7 @@ public partial class DataContextLoggingProviderTests
     private sealed class FakeConfig : IDataContextLoggingProviderConfiguration
     {
         public LogLevel MinimumLogLevel { get; init; } = LogLevel.Information;
-        public List<string> Blacklist { get; init; } = [];
+        public IReadOnlyList<string> Blacklist { get; init; } = [];
     }
 
     private static (DataContextLoggingProvider provider, IDataContext context) BuildProvider(
@@ -353,7 +354,7 @@ public partial class DataContextLoggingProviderTests
         clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(8));
     }
 
-    [GeneratedRegex(@"^Microsoft\..*$", RegexOptions.Compiled)]
+    [GeneratedRegex(@"^Microsoft\..*$", RegexOptions.Compiled, matchTimeoutMilliseconds: 1000)]
     private static partial Regex Pattern { get; }
 
     #endregion

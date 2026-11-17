@@ -20,6 +20,9 @@ namespace Trax.Effect.Services.JunctionEvents;
 /// withheld its name, key, answer, confidence and decider are withheld too
 /// (<see cref="JunctionEventRun.OnTrack"/>).
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed class JunctionEventDecisionObserver : IDecisionObserver
 {
     /// <inheritdoc />

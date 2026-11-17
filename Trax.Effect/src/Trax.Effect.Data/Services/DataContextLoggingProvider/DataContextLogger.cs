@@ -22,8 +22,8 @@ public class DataContextLogger(
     ChannelWriter<Effect.Models.Log.Log> logChannel,
     string categoryName,
     LogLevel minimumLogLevel,
-    HashSet<string> exactBlacklist,
-    List<Regex> wildcardBlacklist
+    IReadOnlySet<string> exactBlacklist,
+    IReadOnlyList<Regex> wildcardBlacklist
 ) : ILogger
 {
     /// <summary>
@@ -92,5 +92,5 @@ public class DataContextLogger(
 
     private bool IsBlacklisted(string category) =>
         exactBlacklist.Contains(category)
-        || wildcardBlacklist.Exists(regex => regex.IsMatch(category));
+        || wildcardBlacklist.Any(regex => regex.IsMatch(category));
 }

@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Utils;
 
@@ -100,9 +101,11 @@ public static class TraxLogSerialization
                 typeInfo.Properties.RemoveAt(i);
             else if (IsRunFromCopy(member))
                 property.CustomConverter = (JsonConverter)
-                    Activator.CreateInstance(
-                        typeof(OmittingConverter<>).MakeGenericType(property.PropertyType)
-                    )!;
+                    Activator
+                        .CreateInstance(
+                            typeof(OmittingConverter<>).MakeGenericType(property.PropertyType)
+                        )
+                        .NotNull();
         }
     }
 

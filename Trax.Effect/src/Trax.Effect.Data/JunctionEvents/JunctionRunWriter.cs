@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -196,7 +197,7 @@ internal sealed class JunctionRunWriter
                         "Could not write step {Position} ({Name}) of run {MetadataId} to "
                             + "trax.junction_run; it is dropped, and so is each step that fails "
                             + "until a write succeeds again. Runs are not affected.",
-                        step.Step!.Position,
+                        step.Step.NotNull().Position,
                         step.Step.Name,
                         step.MetadataId
                     );
@@ -204,7 +205,7 @@ internal sealed class JunctionRunWriter
                     _logger?.LogDebug(
                         e,
                         "Could not write step {Position} of run {MetadataId}.",
-                        step.Step!.Position,
+                        step.Step.NotNull().Position,
                         step.MetadataId
                     );
             }
@@ -228,8 +229,8 @@ internal sealed class JunctionRunWriter
         // batch's ends update are read in one query, so a batch costs two round trips whatever its
         // size, rather than one read per end.
         var ends = steps
-            .Where(i => Ends(i.Step!))
-            .Select(i => (i.MetadataId, i.Step!.Position))
+            .Where(i => Ends(i.Step.NotNull()))
+            .Select(i => (i.MetadataId, i.Step.NotNull().Position))
             .ToList();
         var rows = new Dictionary<(long, int), JunctionRun>();
 
@@ -253,7 +254,7 @@ internal sealed class JunctionRunWriter
 
         foreach (var (metadataId, maybeStep, _) in steps)
         {
-            var step = maybeStep!;
+            var step = maybeStep.NotNull();
             var key = (metadataId, step.Position);
 
             if (!rows.TryGetValue(key, out var row))

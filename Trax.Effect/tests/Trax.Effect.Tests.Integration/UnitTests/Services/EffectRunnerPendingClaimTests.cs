@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Effect.Models;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -50,7 +51,9 @@ public class EffectRunnerPendingClaimTests
 
         (await runner.TryClaimPendingRun(metadata, CancellationToken.None)).Should().BeFalse();
 
-        runner.TryClaimPendingRun(default!, default).ReturnsForAnyArgs(returnThis: true);
+        runner
+            .TryClaimPendingRun(Arg.Any<Metadata>(), Arg.Any<CancellationToken>())
+            .Returns(returnThis: true);
 
         (await runner.TryClaimPendingRun(metadata, CancellationToken.None)).Should().BeTrue();
     }

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Effect.Decisions.SystemOne;
 using Trax.Effect.Decisions.SystemOne.Extensions;
 using Trax.Effect.Extensions;
@@ -44,7 +45,7 @@ public class NimbleDeciderTests
             MaxOptions = 255,
         }.ToSystemOne();
 
-        options.Endpoint!.Host.Should().Be("nimble.internal.example");
+        options.Endpoint.NotNull().Host.Should().Be("nimble.internal.example");
         options.ApiKey.Should().Be("nimble-key");
         options.Model.Should().Be("bespokelabs/Bespoke-Nimble-9B-v2");
         options.MaxConcurrentRequests.Should().Be(12);

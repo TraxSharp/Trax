@@ -99,7 +99,7 @@ public class PostgresLogBatchTests : TestSetup
     private sealed class Config : IDataContextLoggingProviderConfiguration
     {
         public LogLevel MinimumLogLevel { get; init; } = LogLevel.Information;
-        public List<string> Blacklist { get; init; } = [];
+        public IReadOnlyList<string> Blacklist { get; init; } = [];
     }
 
     private sealed class GatedFactory(IDataContextProviderFactory inner, Task gate)

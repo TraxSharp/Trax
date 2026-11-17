@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;
@@ -7,7 +8,7 @@ namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 [TestFixture]
 public class JunctionLoggerProviderSerializationTests
 {
-    private JsonSerializerOptions _options = null!;
+    private JsonSerializerOptions? _options;
 
     // What the junction logger writes with: the real options, wrapped for logging as the logger wraps them.
     [SetUp]
@@ -26,7 +27,7 @@ public class JunctionLoggerProviderSerializationTests
             Active = true,
         };
 
-        var json = JsonSerializer.Serialize<object>(obj, _options);
+        var json = JsonSerializer.Serialize<object>(obj, _options.NotNull());
 
         json.Should().Contain("\"name\":\"test\"");
         json.Should().Contain("\"count\":42");
@@ -44,7 +45,7 @@ public class JunctionLoggerProviderSerializationTests
         var child = new CircularChild { Name = "child", Parent = parent };
         parent.Child = child;
 
-        var act = () => JsonSerializer.Serialize<object>(parent, _options);
+        var act = () => JsonSerializer.Serialize<object>(parent, _options.NotNull());
 
         act.Should().NotThrow();
     }
@@ -56,7 +57,7 @@ public class JunctionLoggerProviderSerializationTests
         var child = new CircularChild { Name = "child", Parent = parent };
         parent.Child = child;
 
-        var json = JsonSerializer.Serialize<object>(parent, _options);
+        var json = JsonSerializer.Serialize<object>(parent, _options.NotNull());
 
         json.Should().Contain("\"name\":\"parent\"");
         json.Should().Contain("\"name\":\"child\"");
@@ -74,10 +75,10 @@ public class JunctionLoggerProviderSerializationTests
         var self = new SelfReferencing { Name = "loop" };
         self.Self = self;
 
-        var act = () => JsonSerializer.Serialize<object>(self, _options);
+        var act = () => JsonSerializer.Serialize<object>(self, _options.NotNull());
 
         act.Should().NotThrow();
-        var json = JsonSerializer.Serialize<object>(self, _options);
+        var json = JsonSerializer.Serialize<object>(self, _options.NotNull());
         var doc = JsonDocument.Parse(json);
         // IgnoreCycles writes null, WhenWritingNull omits it entirely
         doc.RootElement.TryGetProperty("self", out _).Should().BeFalse();
@@ -99,7 +100,7 @@ public class JunctionLoggerProviderSerializationTests
             },
         };
 
-        var json = JsonSerializer.Serialize<object>(obj, _options);
+        var json = JsonSerializer.Serialize<object>(obj, _options.NotNull());
 
         json.Should().Be("{\"totals\":{\"Ada\":1,\"bo\":2}}");
     }
@@ -114,7 +115,7 @@ public class JunctionLoggerProviderSerializationTests
         using var stream = new MemoryStream();
         var obj = new ObjectWithDisposable { Name = "test", Resource = stream };
 
-        var json = JsonSerializer.Serialize<object>(obj, _options);
+        var json = JsonSerializer.Serialize<object>(obj, _options.NotNull());
 
         json.Should().Contain("\"name\":\"test\"");
         json.Should().Contain("\"resource\":\"[ IDisposable ]\"");
@@ -129,7 +130,7 @@ public class JunctionLoggerProviderSerializationTests
     {
         var obj = new ObjectWithEnum { Status = TestStatus.Active };
 
-        var json = JsonSerializer.Serialize<object>(obj, _options);
+        var json = JsonSerializer.Serialize<object>(obj, _options.NotNull());
 
         json.Should().Contain("\"status\":\"Active\"");
         json.Should().NotContain("1");
@@ -148,7 +149,7 @@ public class JunctionLoggerProviderSerializationTests
             Inner = new InnerObject { Value = 99 },
         };
 
-        var json = JsonSerializer.Serialize<object>(obj, _options);
+        var json = JsonSerializer.Serialize<object>(obj, _options.NotNull());
 
         var doc = JsonDocument.Parse(json);
         doc.RootElement.GetProperty("id").GetString().Should().Be("outer");
@@ -164,7 +165,7 @@ public class JunctionLoggerProviderSerializationTests
     {
         var obj = new SimplePoco { Name = "test", NullableField = null };
 
-        var json = JsonSerializer.Serialize<object>(obj, _options);
+        var json = JsonSerializer.Serialize<object>(obj, _options.NotNull());
 
         json.Should().Contain("\"name\":\"test\"");
         json.Should().NotContain("nullableField");
@@ -173,7 +174,7 @@ public class JunctionLoggerProviderSerializationTests
     [Test]
     public void Serialize_NullObject_ReturnsNullLiteral()
     {
-        var json = JsonSerializer.Serialize<object?>(value: null, _options);
+        var json = JsonSerializer.Serialize<object?>(value: null, _options.NotNull());
 
         json.Should().Be("null");
     }

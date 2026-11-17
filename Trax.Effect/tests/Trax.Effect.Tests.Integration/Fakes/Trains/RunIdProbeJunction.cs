@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
@@ -17,8 +18,8 @@ public class RunIdProbeJunction : EffectJunction<RunIdProbeInput, Unit>
 
     public override Task<Unit> Run(RunIdProbeInput input)
     {
-        ObservedTrainMetadataId = Metadata!.TrainMetadataId;
-        ObservedTrainExternalId = Metadata!.TrainExternalId;
+        ObservedTrainMetadataId = Metadata.NotNull().TrainMetadataId;
+        ObservedTrainExternalId = Metadata.NotNull().TrainExternalId;
         return Task.FromResult(Unit.Default);
     }
 }

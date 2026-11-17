@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Extensions;
@@ -29,7 +30,7 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 [NonParallelizable]
 public class PostgresDecisionRecordingTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     private static readonly PgDecider Decider = new();
 
@@ -41,7 +42,7 @@ public class PostgresDecisionRecordingTests
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
         var connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
 
         var services = new ServiceCollection();
@@ -59,7 +60,7 @@ public class PostgresDecisionRecordingTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
 
     [Test]
     public async Task A_decision_is_a_row_written_while_the_run_is_in_progress()
@@ -69,7 +70,9 @@ public class PostgresDecisionRecordingTests
         var (train, output) = await Run<IPgRouteThenPeek>();
 
         output.Should().Be("held");
-        PgPeek.Seen.Should().Equal((train.Metadata!.Id, TrainState.InProgress, "ManualCheck"));
+        PgPeek
+            .Seen.Should()
+            .Equal((train.Metadata.NotNull().Id, TrainState.InProgress, "ManualCheck"));
 
         var row = (await Recorded(train.Metadata.Id)).Should().ContainSingle().Subject;
         row.QuestionKey.Should().Be(QuestionKey.For<PgFulfilment>());
@@ -91,7 +94,7 @@ public class PostgresDecisionRecordingTests
     {
         Decider.Choice = PgFulfilment.Standard;
         var (train, _) = await Run<IPgRouteOrder>();
-        (await Recorded(train.Metadata!.Id)).Should().ContainSingle();
+        (await Recorded(train.Metadata.NotNull().Id)).Should().ContainSingle();
 
         await Delete(train.Metadata.Id);
 
@@ -107,11 +110,16 @@ public class PostgresDecisionRecordingTests
 
         Decider.Choice = PgFulfilment.Standard;
         Decider.Asked = 0;
-        var (requeued, output) = await Run<IPgRouteOrder>(replayDecisionsOf: original.Metadata!.Id);
+        var (requeued, output) = await Run<IPgRouteOrder>(
+            replayDecisionsOf: original.Metadata.NotNull().Id
+        );
 
         output.Should().Be("held");
         Decider.Asked.Should().Be(0);
-        var replayed = (await Recorded(requeued.Metadata!.Id)).Should().ContainSingle().Subject;
+        var replayed = (await Recorded(requeued.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         replayed.Replayed.Should().BeTrue();
         replayed.Tracks().Should().Equal("ManualCheck");
 
@@ -123,7 +131,7 @@ public class PostgresDecisionRecordingTests
     {
         Decider.Choice = PgFulfilment.ManualCheck;
         var (original, _) = await Run<IPgRouteOrder>();
-        await Delete(original.Metadata!.Id);
+        await Delete(original.Metadata.NotNull().Id);
         Decider.Asked = 0;
 
         var run = async () =>
@@ -135,9 +143,9 @@ public class PostgresDecisionRecordingTests
                 string.Create(CultureInfo.InvariantCulture, $"no run {original.Metadata.Id} exists")
             );
         Decider.Asked.Should().Be(0);
-        _lastTrain!.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
+        _lastTrain.NotNull().Metadata.NotNull().FailureClass.Should().Be(FailureClass.Permanent);
 
-        await Delete(_lastTrain.Metadata.Id);
+        await Delete(_lastTrain.NotNull().Metadata.NotNull().Id);
     }
 
     [Test]
@@ -149,8 +157,8 @@ public class PostgresDecisionRecordingTests
         (await refuse.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()
             .Contain("'Banana', which is not one of its options");
-        var original = _lastTrain!;
-        original.Metadata!.FailureClass.Should().Be(FailureClass.Transient);
+        var original = _lastTrain.NotNull();
+        original.Metadata.NotNull().FailureClass.Should().Be(FailureClass.Transient);
 
         var refused = (await Recorded(original.Metadata.Id)).Should().ContainSingle().Subject;
         refused.QuestionKey.Should().Be(QuestionKey.For<PgFulfilment>());
@@ -165,7 +173,10 @@ public class PostgresDecisionRecordingTests
 
         output.Should().Be("held");
         Decider.Asked.Should().Be(1, "a refused answer is never replayed");
-        var asked = (await Recorded(requeued.Metadata!.Id)).Should().ContainSingle().Subject;
+        var asked = (await Recorded(requeued.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         asked.Replayed.Should().BeFalse();
         asked.Refused.Should().BeNull();
         asked.Answer.Should().NotContain("replay_refused");
@@ -180,11 +191,14 @@ public class PostgresDecisionRecordingTests
         var refuse = async () => await Run<IPgUnanswered>().ConfigureAwait(false);
 
         await refuse.Should().ThrowAsync<TrainException>();
-        var row = (await Recorded(_lastTrain!.Metadata!.Id)).Should().ContainSingle().Subject;
+        var row = (await Recorded(_lastTrain.NotNull().Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         row.Answer.Should().BeNull();
         row.Refused.Should().Contain("gave no answer");
 
-        await Delete(_lastTrain.Metadata.Id);
+        await Delete(_lastTrain.NotNull().Metadata.NotNull().Id);
     }
 
     private IServiceTrain<PgOrder, string>? _lastTrain;
@@ -196,7 +210,7 @@ public class PostgresDecisionRecordingTests
         var (original, first) = await Run<IPgLoseFlowThenRoute>();
         first.Should().Be("held");
 
-        var row = (await Recorded(original.Metadata!.Id)).Should().ContainSingle().Subject;
+        var row = (await Recorded(original.Metadata.NotNull().Id)).Should().ContainSingle().Subject;
         row.Tracks().Should().Equal("ManualCheck");
 
         Decider.Choice = PgFulfilment.Standard;
@@ -207,7 +221,7 @@ public class PostgresDecisionRecordingTests
 
         output.Should().Be("held");
         Decider.Asked.Should().Be(0);
-        (await Recorded(requeued.Metadata!.Id))
+        (await Recorded(requeued.Metadata.NotNull().Id))
             .Should()
             .ContainSingle()
             .Which.Replayed.Should()
@@ -221,7 +235,7 @@ public class PostgresDecisionRecordingTests
     )
         where TTrain : class, IServiceTrain<PgOrder, string>
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<PgOrder, string>)
@@ -232,7 +246,7 @@ public class PostgresDecisionRecordingTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(TTrain).FullName!,
+                Name = typeof(TTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = order,
                 ReplayDecisionsOf = replayDecisionsOf,
@@ -247,7 +261,7 @@ public class PostgresDecisionRecordingTests
 
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -262,7 +276,7 @@ public class PostgresDecisionRecordingTests
 
     private async Task<Metadata> RunRow(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -276,7 +290,7 @@ public class PostgresDecisionRecordingTests
 
     private async Task Delete(params long[] metadataIds)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -424,12 +438,12 @@ public class PostgresDecisionRecordingTests
     /// <summary>Reads the run's decisions on a connection of its own, as another process would.</summary>
     public class PgPeek(IDataContextProviderFactory factory) : EffectJunction<string, string>
     {
-        public static List<(long, TrainState, string?)> Seen { get; } = [];
+        public static IList<(long, TrainState, string?)> Seen { get; } = [];
 
         public override async Task<string> Run(string input)
         {
             Seen.Clear();
-            var id = Metadata!.TrainMetadataId;
+            var id = Metadata.NotNull().TrainMetadataId;
             var context = await factory
                 .CreateDbContextAsync(CancellationToken.None)
                 .ConfigureAwait(false);

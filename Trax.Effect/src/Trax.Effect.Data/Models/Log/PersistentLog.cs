@@ -7,6 +7,9 @@ namespace Trax.Effect.Data.Models.Log;
 /// indexed on the metadata id. Infrastructure applied by the data context; not intended for direct use. Query the rows
 /// through <c>IDataContext</c>.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed class PersistentLog : Effect.Models.Log.Log
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)

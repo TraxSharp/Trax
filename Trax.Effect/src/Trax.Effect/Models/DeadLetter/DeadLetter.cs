@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter.DTOs;
@@ -57,7 +58,11 @@ public class DeadLetter : IModel
     /// Gets the reason why this job was moved to the dead letter queue.
     /// </summary>
     [Column("reason")]
-    public string Reason { get; private set; } = null!;
+    public string Reason
+    {
+        get => field.NotNull(nameof(Reason));
+        private set;
+    }
 
     /// <summary>
     /// Gets the number of retry attempts made before this job was dead-lettered.

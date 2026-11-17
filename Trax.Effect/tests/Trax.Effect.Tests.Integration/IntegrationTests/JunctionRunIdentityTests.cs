@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Models.JunctionMetadata;
 using Trax.Effect.Models.JunctionMetadata.DTOs;
@@ -44,7 +45,7 @@ public class JunctionRunIdentityTests : TestSetup
 
         await train.Run(new RunIdProbeInput("run-identity"), CancellationToken.None);
 
-        train.Metadata!.Id.Should().BeGreaterThan(0, "the run was persisted to Postgres");
+        train.Metadata.NotNull().Id.Should().BeGreaterThan(0, "the run was persisted to Postgres");
         junction
             .ObservedTrainMetadataId.Should()
             .Be(

@@ -12,6 +12,9 @@ namespace Trax.Effect.Data.Services.HostHeartbeats;
 /// heartbeat never stops a host, and a host that cannot write its row shows as offline, which is
 /// what an operator needs to see.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed class HostHeartbeatService(
     HostHeartbeatWriter writer,
     TimeProvider clock,

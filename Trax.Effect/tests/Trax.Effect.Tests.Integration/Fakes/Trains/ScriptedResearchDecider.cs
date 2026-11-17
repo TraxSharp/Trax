@@ -13,7 +13,8 @@ namespace Trax.Effect.Tests.Integration.Fakes.Trains;
 /// <summary>Answers every question with the choice set for it.</summary>
 public sealed class ScriptedResearchDecider : IDecider
 {
-    public Dictionary<string, string> Choices { get; } = [];
+    public IDictionary<string, string> Choices { get; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
 
     public int Asked { get; set; }
 

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Attributes;
@@ -45,7 +46,7 @@ public class JunctionEventsTests
 {
     private const string Adr = "docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md";
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     private static readonly CapturingHandler Handler = new();
     private static readonly CapturingBroadcaster Broadcaster = new();
@@ -66,7 +67,7 @@ public class JunctionEventsTests
             .BuildServiceProvider();
 
     [OneTimeTearDown]
-    public async Task Dispose() => await _provider.DisposeAsync();
+    public async Task Dispose() => await _provider.NotNull().DisposeAsync();
 
     [Test]
     public async Task A_run_publishes_each_junction_and_decision_in_order()
@@ -81,11 +82,11 @@ public class JunctionEventsTests
             .Should()
             .HaveCount(8)
             .And.OnlyContain(
-                e => e.Junction!.Attempt == null,
+                e => e.Junction.NotNull().Attempt == null,
                 $"a run with no manifest is no attempt of anything. See {Adr}."
             );
         events
-            .Select(e => (e.EventType, e.Junction!.Position, e.Junction.Name))
+            .Select(e => (e.EventType, e.Junction.NotNull().Position, e.Junction.Name))
             .Should()
             .Equal(
                 ("JunctionStarted", 0, nameof(Weigh)),
@@ -109,7 +110,7 @@ public class JunctionEventsTests
 
         var decided = events
             .Single(e => string.Equals(e.EventType, "Decided", StringComparison.Ordinal))
-            .Junction!;
+            .Junction.NotNull();
         decided.Kind.Should().Be(JunctionRunKind.Choice);
         decided.State.Should().Be(JunctionRunState.Completed);
         decided.QuestionKey.Should().Be("Lane");
@@ -120,19 +121,21 @@ public class JunctionEventsTests
 
         var routed = events
             .Single(e => string.Equals(e.EventType, "Routed", StringComparison.Ordinal))
-            .Junction!;
+            .Junction.NotNull();
         routed.Kind.Should().Be(JunctionRunKind.Route);
         routed.Answer.Should().Be("Express");
 
         var load = events
-            .Where(e => string.Equals(e.Junction!.Name, nameof(Load), StringComparison.Ordinal))
+            .Where(e =>
+                string.Equals(e.Junction.NotNull().Name, nameof(Load), StringComparison.Ordinal)
+            )
             .ToList();
-        load[0].Junction!.State.Should().Be(JunctionRunState.InProgress);
-        load[0].Junction!.EndedAt.Should().BeNull();
-        load[1].Junction!.State.Should().Be(JunctionRunState.Completed);
-        load[1].Junction!.EndedAt.Should().NotBeNull();
-        load[1].Junction!.DurationMs.Should().BeGreaterThanOrEqualTo(0);
-        load[1].Junction!.StartedAt.Should().Be(load[0].Junction!.StartedAt);
+        load[0].Junction.NotNull().State.Should().Be(JunctionRunState.InProgress);
+        load[0].Junction.NotNull().EndedAt.Should().BeNull();
+        load[1].Junction.NotNull().State.Should().Be(JunctionRunState.Completed);
+        load[1].Junction.NotNull().EndedAt.Should().NotBeNull();
+        load[1].Junction.NotNull().DurationMs.Should().BeGreaterThanOrEqualTo(0);
+        load[1].Junction.NotNull().StartedAt.Should().Be(load[0].Junction.NotNull().StartedAt);
 
         Broadcaster
             .For(metadataId)
@@ -150,12 +153,12 @@ public class JunctionEventsTests
 
         var events = Handler.For(metadataId);
         var failed = events.Should().ContainSingle(e => e.EventType == "JunctionFailed").Subject;
-        failed.Junction!.Name.Should().Be(nameof(Explode));
+        failed.Junction.NotNull().Name.Should().Be(nameof(Explode));
         failed.Junction.State.Should().Be(JunctionRunState.Failed);
         failed.Junction.FailureClass.Should().Be(FailureClass.Permanent);
         failed.Junction.FailureException.Should().Be(nameof(InvalidOperationException));
         failed.Junction.EndedAt.Should().NotBeNull();
-        events.Should().NotContain(e => e.Junction!.Name == nameof(NeverReached));
+        events.Should().NotContain(e => e.Junction.NotNull().Name == nameof(NeverReached));
         events[^1].Should().BeSameAs(failed);
     }
 
@@ -238,7 +241,7 @@ public class JunctionEventsTests
         var events = Handler.For(metadataId);
         var decided = events
             .Single(e => string.Equals(e.EventType, "Decided", StringComparison.Ordinal))
-            .Junction!;
+            .Junction.NotNull();
         decided.QuestionKey.Should().Be("CustomsTier");
         decided.AnswerWithheld.Should().BeTrue();
         decided.Answer.Should().BeNull();
@@ -246,7 +249,7 @@ public class JunctionEventsTests
 
         var routed = events
             .Single(e => string.Equals(e.EventType, "Routed", StringComparison.Ordinal))
-            .Junction!;
+            .Junction.NotNull();
         routed.AnswerWithheld.Should().BeTrue();
         routed.Answer.Should().BeNull($"the track taken would give the answer away. See {Adr}.");
 
@@ -292,7 +295,7 @@ public class JunctionEventsTests
         var steps = Handler
             .For(metadataId)
             .Where(e => e.EventType is "Decided" or "Routed")
-            .Select(e => e.Junction!)
+            .Select(e => e.Junction.NotNull())
             .ToList();
 
         steps.Should().HaveCount(2);
@@ -311,11 +314,11 @@ public class JunctionEventsTests
     [Test]
     public async Task A_run_that_was_never_persisted_has_no_junction_events()
     {
-        var publisher = _provider.GetRequiredService<JunctionEventPublisher>();
+        var publisher = _provider.NotNull().GetRequiredService<JunctionEventPublisher>();
         var unsaved = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ILaneTrain).FullName!,
+                Name = typeof(ILaneTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = JunctionEventTrains.Parcel(),
             }
@@ -324,7 +327,7 @@ public class JunctionEventsTests
         var run = await publisher.BeginAsync(
             unsaved,
             typeof(LaneTrain),
-            _provider,
+            _provider.NotNull(),
             CancellationToken.None
         );
 
@@ -373,7 +376,7 @@ public class JunctionEventsTests
         );
         JunctionEventRun.Current = null;
 
-        var decided = Handler.For(metadataId).Should().ContainSingle().Subject.Junction!;
+        var decided = Handler.For(metadataId).Should().ContainSingle().Subject.Junction.NotNull();
         decided
             .AnswerWithheld.Should()
             .BeTrue($"the question's type inherits the mark. See {Adr}.");
@@ -385,13 +388,13 @@ public class JunctionEventsTests
     /// <summary>The junction events of a persisted run of the lane train.</summary>
     private async Task<JunctionEventRun> PersistedRun()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ILaneTrain).FullName!,
+                Name = typeof(ILaneTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = JunctionEventTrains.Parcel(),
             }
@@ -402,10 +405,16 @@ public class JunctionEventsTests
 
         return (
             await _provider
+                .NotNull()
                 .GetRequiredService<JunctionEventPublisher>()
-                .BeginAsync(metadata, typeof(LaneTrain), _provider, CancellationToken.None)
+                .BeginAsync(
+                    metadata,
+                    typeof(LaneTrain),
+                    _provider.NotNull(),
+                    CancellationToken.None
+                )
                 .ConfigureAwait(false)
-        )!;
+        ).NotNull();
     }
 
     [Test]
@@ -534,13 +543,14 @@ public class JunctionEventsTests
 
         var junctions = Handler
             .For(metadataId)
-            .Select(e => e.Junction!)
+            .Select(e => e.Junction.NotNull())
             .Where(j => j.Kind == JunctionRunKind.Junction)
             .ToList();
         var route = Handler
             .For(metadataId)
             .Single(e => string.Equals(e.EventType, "Routed", StringComparison.Ordinal))
-            .Junction!.Position;
+            .Junction.NotNull()
+            .Position;
 
         junctions
             .Where(j => j.Position < route)
@@ -576,7 +586,7 @@ public class JunctionEventsTests
 
         var (metadataId, _) = await Run<IInspectionTrain>();
 
-        var steps = Handler.For(metadataId).Select(e => e.Junction!).ToList();
+        var steps = Handler.For(metadataId).Select(e => e.Junction.NotNull()).ToList();
         var customs = steps.Single(s => s.Kind == JunctionRunKind.Route && !s.NameWithheld);
         customs.Name.Should().Be(nameof(CustomsTier));
 
@@ -634,7 +644,7 @@ public class JunctionEventsTests
 
         var (metadataId, _) = await Run<IGroundInspectionTrain>();
 
-        var steps = Handler.For(metadataId).Select(e => e.Junction!).ToList();
+        var steps = Handler.For(metadataId).Select(e => e.Junction.NotNull()).ToList();
         var lane = steps.Single(s =>
             s.Kind == JunctionRunKind.Route
             && string.Equals(s.Name, nameof(Lane), StringComparison.Ordinal)
@@ -663,7 +673,7 @@ public class JunctionEventsTests
 
         var (metadataId, _) = await Run<ILaneTrain>();
 
-        var steps = Handler.For(metadataId).Select(e => e.Junction!).ToList();
+        var steps = Handler.For(metadataId).Select(e => e.Junction.NotNull()).ToList();
         steps
             .Where(j => string.Equals(j.Name, nameof(Weigh), StringComparison.Ordinal))
             .Should()
@@ -694,13 +704,13 @@ public class JunctionEventsTests
                 (3, "Switch<Lane>#0/Express/Load#0"),
                 (4, "Stamp#0")
             );
-        rows.Select(r => r.NodeId!)
+        rows.Select(r => r.NodeId.NotNull())
             .Should()
             .BeSubsetOf(Ids(graph.Nodes), "a step's id is the one the graph drew for it");
 
         Handler
             .For(metadataId)
-            .Select(e => (e.Junction!.Position, e.Junction.NodeId))
+            .Select(e => (e.Junction.NotNull().Position, e.Junction.NodeId))
             .Should()
             .OnlyContain(
                 e => rows.Single(r => r.Position == e.Position).NodeId == e.NodeId,
@@ -719,7 +729,7 @@ public class JunctionEventsTests
             .For(metadataId)
             .Should()
             .ContainSingle(e => e.EventType == "DecisionRefused")
-            .Subject.Junction!;
+            .Subject.Junction.NotNull();
         refused.NodeId.Should().Be("Decide<ChoiceDecision<Lane>>#0");
         (await Rows(metadataId))
             .Single(r => r.Position == refused.Position)
@@ -749,7 +759,7 @@ public class JunctionEventsTests
             );
         Handler
             .For(metadataId)
-            .Select(e => e.Junction!)
+            .Select(e => e.Junction.NotNull())
             .Where(j => j.Position > route.Position)
             .Should()
             .NotBeEmpty()
@@ -830,7 +840,7 @@ public class JunctionEventsTests
         var output = await train.Run(JunctionEventTrains.Parcel());
 
         output.Should().Be("loaded|stamped");
-        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
 
         await provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
@@ -867,7 +877,7 @@ public class JunctionEventsTests
 
         observer.Decided.Should().Be(1);
         observer.Routed.Should().Be(1);
-        handler.For(train.Metadata!.Id).Should().Contain(e => e.EventType == "Decided");
+        handler.For(train.Metadata.NotNull().Id).Should().Contain(e => e.EventType == "Decided");
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         (await context.RecordedDecisions.CountAsync(d => d.MetadataId == train.Metadata.Id))
             .Should()
@@ -942,9 +952,9 @@ public class JunctionEventsTests
         await run.Should().ThrowAsync<InvalidOperationException>().WithMessage("*before AddTrax*");
         observer.Decided.Should().Be(0, "the run refused before it asked anything");
         handler
-            .For(((ServiceTrain<Parcel, string>)(object)train).Metadata!.Id)
+            .For(((ServiceTrain<Parcel, string>)(object)train).Metadata.NotNull().Id)
             .Should()
-            .NotContain(e => e.Junction!.Name == nameof(Load));
+            .NotContain(e => e.Junction.NotNull().Name == nameof(Load));
     }
 
     [Test]
@@ -972,8 +982,8 @@ public class JunctionEventsTests
 
         observer.Routed.Should().Be(1);
         var steps = handler
-            .For(((ServiceTrain<Parcel, string>)(object)train).Metadata!.Id)
-            .Select(e => e.Junction!)
+            .For(((ServiceTrain<Parcel, string>)(object)train).Metadata.NotNull().Id)
+            .Select(e => e.Junction.NotNull())
             .ToList();
         steps.Should().Contain(j => j.Kind == JunctionRunKind.Route);
         steps
@@ -1008,7 +1018,11 @@ public class JunctionEventsTests
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         (await train.Run(JunctionEventTrains.Parcel())).Should().Be("loaded|stamped");
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        (await context.RecordedDecisions.CountAsync(d => d.MetadataId == train.Metadata!.Id))
+        (
+            await context.RecordedDecisions.CountAsync(d =>
+                d.MetadataId == train.Metadata.NotNull().Id
+            )
+        )
             .Should()
             .Be(1);
     }
@@ -1051,10 +1065,10 @@ public class JunctionEventsTests
 
         await run.Should().ThrowAsync<Exception>();
         handler
-            .For(train.Metadata!.Id)
+            .For(train.Metadata.NotNull().Id)
             .Should()
             .Contain(
-                e => e.Junction!.Name == nameof(Weigh),
+                e => e.Junction.NotNull().Name == nameof(Weigh),
                 "the junction before the question ran and was published"
             )
             .And.NotContain(e => e.EventType == "Decided" || e.EventType == "Routed");
@@ -1072,14 +1086,14 @@ public class JunctionEventsTests
             TrainState.Pending
         );
 
-        var metadataId = await RunForManifest(_provider, manifestId);
+        var metadataId = await RunForManifest(_provider.NotNull(), manifestId);
 
         Handler
             .For(metadataId)
             .Should()
             .NotBeEmpty()
             .And.OnlyContain(
-                e => e.Junction!.Attempt == 3,
+                e => e.Junction.NotNull().Attempt == 3,
                 $"two failed runs since the last success make this the third attempt. See {Adr}."
             );
         (await Rows(metadataId)).Should().NotBeEmpty().And.OnlyContain(r => r.Attempt == 3);
@@ -1104,7 +1118,7 @@ public class JunctionEventsTests
             .For(metadataId)
             .Should()
             .HaveCount(8, "the run went through every step")
-            .And.OnlyContain(e => e.Junction!.Attempt == null);
+            .And.OnlyContain(e => e.Junction.NotNull().Attempt == null);
     }
 
     [Test]
@@ -1118,14 +1132,14 @@ public class JunctionEventsTests
             .. Enumerable.Repeat(TrainState.Failed, RunAttempts.MaxRunsRead + 500),
         ]);
 
-        var metadataId = await RunForManifest(_provider, manifestId);
+        var metadataId = await RunForManifest(_provider.NotNull(), manifestId);
 
         Handler
             .For(metadataId)
             .Should()
             .HaveCount(8, "the run went through every step")
             .And.OnlyContain(
-                e => e.Junction!.Attempt == RunAttempts.MaxRunsRead + 1,
+                e => e.Junction.NotNull().Attempt == RunAttempts.MaxRunsRead + 1,
                 $"the attempt reads at most {RunAttempts.MaxRunsRead} runs. See {Adr}."
             );
     }
@@ -1153,7 +1167,7 @@ public class JunctionEventsTests
             .Should()
             .HaveCount(8)
             .And.OnlyContain(
-                e => e.Junction!.Attempt == null,
+                e => e.Junction.NotNull().Attempt == null,
                 $"an attempt that is not read in time is left out. See {Adr}."
             );
     }
@@ -1164,7 +1178,7 @@ public class JunctionEventsTests
     /// </summary>
     private async Task<long> SeedManifestRuns(params TrainState[] runs)
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var manifest = Manifest.Create(new CreateManifest { Name = typeof(ILaneTrain) });
@@ -1176,7 +1190,7 @@ public class JunctionEventsTests
             var run = Metadata.Create(
                 new CreateMetadata
                 {
-                    Name = typeof(ILaneTrain).FullName!,
+                    Name = typeof(ILaneTrain).FullName.NotNull(),
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = JunctionEventTrains.Parcel(),
                     ManifestId = manifest.Id,
@@ -1220,7 +1234,7 @@ public class JunctionEventsTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ILaneTrain).FullName!,
+                Name = typeof(ILaneTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ManifestId = manifestId,
@@ -1234,13 +1248,13 @@ public class JunctionEventsTests
             .GetRequiredService<JunctionRunWriter>()
             .FlushAsync(CancellationToken.None)
             .ConfigureAwait(false);
-        return train.Metadata!.Id;
+        return train.Metadata.NotNull().Id;
     }
 
     private async Task<(long MetadataId, string? Output)> Run<TTrain>(bool expectFailure = false)
         where TTrain : class, IServiceTrain<Parcel, string>
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<TTrain>();
         string? output = null;
@@ -1254,15 +1268,16 @@ public class JunctionEventsTests
 
         var serviceTrain = (ServiceTrain<Parcel, string>)(object)train;
         await _provider
+            .NotNull()
             .GetRequiredService<JunctionRunWriter>()
             .FlushAsync(CancellationToken.None)
             .ConfigureAwait(false);
-        return (serviceTrain.Metadata!.Id, output);
+        return (serviceTrain.Metadata.NotNull().Id, output);
     }
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await context
@@ -1276,7 +1291,7 @@ public class JunctionEventsTests
     private async Task<ChainGraph> GraphOf<TTrain>()
         where TTrain : class, IServiceTrain<Parcel, string>
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<Parcel, string>)

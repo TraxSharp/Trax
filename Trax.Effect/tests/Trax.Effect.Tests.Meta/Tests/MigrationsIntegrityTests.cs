@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Effect.Tests.Meta.Tests;
 
 /// <summary>
@@ -47,10 +49,10 @@ public partial class MigrationsIntegrityTests
 
         foreach (var file in sqlFiles)
         {
-            var match = NumberPattern.Match(file!);
+            var match = NumberPattern.Match(file.NotNull());
             if (!match.Success)
             {
-                malformed.Add(file!);
+                malformed.Add(file.NotNull());
                 continue;
             }
             seenNumbers.Add(
@@ -99,11 +101,11 @@ public partial class MigrationsIntegrityTests
 
         csproj.Should().NotBeNull($"no .csproj found at {projectDir}.");
 
-        var doc = XDocument.Load(csproj!);
+        var doc = XDocument.Load(csproj.NotNull());
         var embeddedResources = doc.Descendants("EmbeddedResource")
             .Select(e => e.Attribute("Include")?.Value)
             .Where(v => v is not null)
-            .Select(v => v!.Replace('\\', '/'))
+            .Select(v => v.NotNull().Replace('\\', '/'))
             .ToList();
 
         var hasWildcard = embeddedResources.Exists(v =>
@@ -138,6 +140,10 @@ public partial class MigrationsIntegrityTests
             );
     }
 
-    [GeneratedRegex(@"^(?<num>\d{3})_[^/]+\.sql$", RegexOptions.Compiled)]
+    [GeneratedRegex(
+        @"^(?<num>\d{3})_[^/]+\.sql$",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 1000
+    )]
     private static partial Regex NumberPattern { get; }
 }

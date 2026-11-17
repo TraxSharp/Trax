@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.JunctionEvents;
 
@@ -134,9 +135,11 @@ public static class TraxRedaction
         foreach (var property in typeInfo.Properties)
             if (IsSensitive(typeInfo.Type, property))
                 property.CustomConverter = (JsonConverter)
-                    Activator.CreateInstance(
-                        typeof(RedactingConverter<>).MakeGenericType(property.PropertyType)
-                    )!;
+                    Activator
+                        .CreateInstance(
+                            typeof(RedactingConverter<>).MakeGenericType(property.PropertyType)
+                        )
+                        .NotNull();
     }
 
     /// <summary>
@@ -185,7 +188,7 @@ public static class TraxRedaction
 
     private static readonly string EffectAssembly = typeof(TraxSensitiveAttribute)
         .Assembly.GetName()
-        .Name!;
+        .Name.NotNull();
 
     private const BindingFlags InstanceMembers =
         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;

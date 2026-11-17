@@ -53,7 +53,12 @@ public class ParameterEffectProviderFactoryTests
 
     private sealed class StubConfig : ITraxEffectConfiguration
     {
-        public JsonSerializerOptions SystemJsonSerializerOptions { get; } = new();
+        public JsonSerializerOptions SystemJsonSerializerOptions { get; } =
+            new()
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            };
         public bool SerializeJunctionData => false;
         public LogLevel LogLevel => LogLevel.Information;
     }

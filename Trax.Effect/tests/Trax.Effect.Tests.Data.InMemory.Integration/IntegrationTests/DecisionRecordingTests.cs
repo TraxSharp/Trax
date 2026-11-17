@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Decisions;
@@ -35,7 +36,7 @@ public class DecisionRecordingTests
 {
     private const string Adr = "docs/adr/0020-a-recorded-answer-replays-only-while-it-is-fresh.md";
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     private static readonly DeciderSlot Decider = new();
 
@@ -53,7 +54,7 @@ public class DecisionRecordingTests
             .BuildServiceProvider();
 
     [OneTimeTearDown]
-    public async Task Dispose() => await _provider.DisposeAsync();
+    public async Task Dispose() => await _provider.NotNull().DisposeAsync();
 
     [Test]
     public async Task A_run_records_each_decision_and_the_track_it_took()
@@ -65,7 +66,7 @@ public class DecisionRecordingTests
         var (train, output) = await Run<IRouteOrder>(new Order("o1", 20m));
 
         output.Should().Be("shipped");
-        var recorded = await Recorded(train.Metadata!.Id);
+        var recorded = await Recorded(train.Metadata.NotNull().Id);
         var decision = recorded.Should().ContainSingle().Subject;
         decision.QuestionKey.Should().Be(QuestionKey.For<Fulfilment>());
         decision.QuestionKey.Should().Be("Fulfilment", "the key leaves the namespace out");
@@ -89,7 +90,10 @@ public class DecisionRecordingTests
         var (train, output) = await Run<IRouteOrder>(new Order("o2", 20m));
 
         output.Should().Be("held for review");
-        var decision = (await Recorded(train.Metadata!.Id)).Should().ContainSingle().Subject;
+        var decision = (await Recorded(train.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         decision.Tracks().Should().Equal("Otherwise");
         decision.Routes.Should().Contain("confidence of 0.4");
     }
@@ -102,7 +106,10 @@ public class DecisionRecordingTests
         var (train, output) = await Run<IDecideThenSwitchTwice>(new Order("o-two-routes", 20m));
 
         output.Should().Be("held for review", "the second switch wants more confidence");
-        var decision = (await Recorded(train.Metadata!.Id)).Should().ContainSingle().Subject;
+        var decision = (await Recorded(train.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         decision.Tracks().Should().Equal("Standard", "Otherwise");
         decision.Routes.Should().Contain("confidence of 0.9");
     }
@@ -118,7 +125,7 @@ public class DecisionRecordingTests
         var (train, _) = await Run<IRouteThenPeek>(new Order("o-durable", 20m));
 
         var seen = PeekDecisions.Seen.Should().ContainSingle().Subject;
-        seen.MetadataId.Should().Be(train.Metadata!.Id);
+        seen.MetadataId.Should().Be(train.Metadata.NotNull().Id);
         seen.State.Should().Be(TrainState.InProgress);
         seen.Track.Should().Be("ManualCheck");
     }
@@ -128,14 +135,14 @@ public class DecisionRecordingTests
     {
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
 
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (RouteThenFail)scope.ServiceProvider.GetRequiredService<IRouteThenFail>();
 
         var run = () => train.Run(new Order("o3", 9000m), CancellationToken.None);
 
         await run.Should().ThrowAsync<InvalidOperationException>();
-        (await Recorded(train.Metadata!.Id))
+        (await Recorded(train.Metadata.NotNull().Id))
             .Should()
             .ContainSingle()
             .Which.Tracks()
@@ -155,12 +162,15 @@ public class DecisionRecordingTests
 
         var (requeued, output) = await Run<IRouteOrder>(
             new Order("o4", 20m),
-            replayDecisionsOf: original.Metadata!.Id
+            replayDecisionsOf: original.Metadata.NotNull().Id
         );
 
         output.Should().Be("held for review", "the requeue takes the track the original took");
         decider.Requests.Should().BeEmpty();
-        var replayed = (await Recorded(requeued.Metadata!.Id)).Should().ContainSingle().Subject;
+        var replayed = (await Recorded(requeued.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         replayed.Replayed.Should().BeTrue();
         replayed.Decider.Should().BeNull();
         replayed.Tracks().Should().Equal("ManualCheck");
@@ -174,8 +184,8 @@ public class DecisionRecordingTests
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
         var (other, _) = await Run<IRouteOrder>(new Order("o-hash", 2000m));
 
-        var one = (await Recorded(first.Metadata!.Id)).Should().ContainSingle().Subject;
-        var two = (await Recorded(other.Metadata!.Id)).Should().ContainSingle().Subject;
+        var one = (await Recorded(first.Metadata.NotNull().Id)).Should().ContainSingle().Subject;
+        var two = (await Recorded(other.Metadata.NotNull().Id)).Should().ContainSingle().Subject;
 
         one.StateHash.Should().MatchRegex("^s1:[0-9a-f]{64}$");
         two.StateHash.Should().NotBe(one.StateHash, $"the states differ. See {Adr}.");
@@ -195,7 +205,7 @@ public class DecisionRecordingTests
 
         var (requeued, output) = await Run<IReadThenRoute>(
             new Order("o-moved", 0m),
-            replayDecisionsOf: original.Metadata!.Id
+            replayDecisionsOf: original.Metadata.NotNull().Id
         );
 
         output
@@ -205,7 +215,10 @@ public class DecisionRecordingTests
                 $"the decider was asked about the state as it is now. See {Adr}."
             );
         decider.Requests.Should().ContainSingle();
-        var asked = (await Recorded(requeued.Metadata!.Id)).Should().ContainSingle().Subject;
+        var asked = (await Recorded(requeued.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         asked.Replayed.Should().BeFalse();
         asked.Answer.Should().Contain("replay_refused");
     }
@@ -220,12 +233,12 @@ public class DecisionRecordingTests
 
         var (requeued, output) = await Run<IReadThenRoute>(
             new Order("o-same", 0m),
-            replayDecisionsOf: original.Metadata!.Id
+            replayDecisionsOf: original.Metadata.NotNull().Id
         );
 
         output.Should().Be("held for review");
         decider.Requests.Should().BeEmpty();
-        (await Recorded(requeued.Metadata!.Id))
+        (await Recorded(requeued.Metadata.NotNull().Id))
             .Should()
             .ContainSingle()
             .Which.Replayed.Should()
@@ -239,7 +252,7 @@ public class DecisionRecordingTests
         var (original, _) = await Run<IRouteOrder>(new Order("o-old-row", 20m));
 
         // A row written before the column existed.
-        await Rewrite(original.Metadata!.Id, d => d.StateHash = null);
+        await Rewrite(original.Metadata.NotNull().Id, d => d.StateHash = null);
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
 
         var (requeued, output) = await Run<IRouteOrder>(
@@ -249,7 +262,7 @@ public class DecisionRecordingTests
 
         output.Should().Be("shipped");
         decider.Requests.Should().ContainSingle();
-        (await Recorded(requeued.Metadata!.Id)).Single().Replayed.Should().BeFalse();
+        (await Recorded(requeued.Metadata.NotNull().Id)).Single().Replayed.Should().BeFalse();
     }
 
     [Test]
@@ -258,7 +271,7 @@ public class DecisionRecordingTests
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
         var (original, _) = await Run<IRouteOrder>(new Order("o-aged", 20m));
         await Rewrite(
-            original.Metadata!.Id,
+            original.Metadata.NotNull().Id,
             d =>
                 d.DecidedAt =
                     DateTime.UtcNow
@@ -276,7 +289,7 @@ public class DecisionRecordingTests
             .Should()
             .Be("shipped", $"an answer older than the bound is not replayed. See {Adr}.");
         decider.Requests.Should().ContainSingle();
-        (await Recorded(requeued.Metadata!.Id)).Single().Replayed.Should().BeFalse();
+        (await Recorded(requeued.Metadata.NotNull().Id)).Single().Replayed.Should().BeFalse();
     }
 
     [Test]
@@ -286,9 +299,9 @@ public class DecisionRecordingTests
         var (original, _) = await Run<IRouteOrder>(new Order("o-chain", 20m));
         var (middle, _) = await Run<IRouteOrder>(
             new Order("o-chain", 20m),
-            replayDecisionsOf: original.Metadata!.Id
+            replayDecisionsOf: original.Metadata.NotNull().Id
         );
-        (await Recorded(middle.Metadata!.Id)).Single().Replayed.Should().BeTrue();
+        (await Recorded(middle.Metadata.NotNull().Id)).Single().Replayed.Should().BeTrue();
 
         // The original answer is now old; the middle run's replay of it is recent.
         await Rewrite(
@@ -308,7 +321,7 @@ public class DecisionRecordingTests
 
         output.Should().Be("shipped", $"replaying an answer does not make it younger. See {Adr}.");
         decider.Requests.Should().ContainSingle();
-        (await Recorded(last.Metadata!.Id)).Single().Replayed.Should().BeFalse();
+        (await Recorded(last.Metadata.NotNull().Id)).Single().Replayed.Should().BeFalse();
     }
 
     [Test]
@@ -316,7 +329,7 @@ public class DecisionRecordingTests
     {
         DecisionRecordingOptions.DefaultMaxReplayAge.Should().Be(TimeSpan.FromHours(24));
         var options = (DecisionRecordingOptions)
-            Activator.CreateInstance(typeof(DecisionRecordingOptions), nonPublic: true)!;
+            Activator.CreateInstance(typeof(DecisionRecordingOptions), nonPublic: true).NotNull();
 
         options.MaxReplayAge.Should().Be(TimeSpan.FromHours(24));
         options
@@ -415,7 +428,7 @@ public class DecisionRecordingTests
         await run.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*could not be built*");
-        train.Metadata!.FailureClass.Should().Be(FailureClass.Permanent, $"See {Adr}.");
+        train.Metadata.NotNull().FailureClass.Should().Be(FailureClass.Permanent, $"See {Adr}.");
     }
 
     [Test]
@@ -424,7 +437,7 @@ public class DecisionRecordingTests
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
 
         await RunOn(
-            _provider,
+            _provider.NotNull(),
             new Order("o-retry-gone", 20m),
             replayDecisionsOf: 987_654_321,
             manifestId: 1
@@ -468,7 +481,7 @@ public class DecisionRecordingTests
     {
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
         var retry = await RunOn(
-            _provider,
+            _provider.NotNull(),
             new Order("o-retry-abandoned", 20m),
             replayDecisionsOf: 987_654_323,
             manifestId: 1
@@ -483,7 +496,7 @@ public class DecisionRecordingTests
 
         output.Should().Be("shipped", $"the retry's own answer is the one to repeat. See {Adr}.");
         later.Requests.Should().BeEmpty();
-        (await Recorded(requeued.Metadata!.Id)).Single().Replayed.Should().BeTrue();
+        (await Recorded(requeued.Metadata.NotNull().Id)).Single().Replayed.Should().BeTrue();
     }
 
     [Test]
@@ -494,7 +507,7 @@ public class DecisionRecordingTests
 
         // A manifest's retry whose row was written but which never ran: it abandoned nothing.
         var retry = await Seed<IRouteOrder>(
-            replayDecisionsOf: original.Metadata!.Id,
+            replayDecisionsOf: original.Metadata.NotNull().Id,
             manifestId: 1
         );
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
@@ -516,7 +529,7 @@ public class DecisionRecordingTests
 
         // A retry of the original that asked afresh and died before it reached the question.
         var retry = await Seed<IRouteOrder>(
-            replayDecisionsOf: original.Metadata!.Id,
+            replayDecisionsOf: original.Metadata.NotNull().Id,
             decisionsRecorded: true,
             replayAbandoned: true
         );
@@ -544,7 +557,7 @@ public class DecisionRecordingTests
 
         // A manifest's retry on a host that records nothing, which asked afresh.
         var retry = await Seed<IRouteOrder>(
-            replayDecisionsOf: original.Metadata!.Id,
+            replayDecisionsOf: original.Metadata.NotNull().Id,
             replayAbandoned: true,
             manifestId: 1
         );
@@ -571,7 +584,7 @@ public class DecisionRecordingTests
     {
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
         var original = await RunOn(
-            _provider,
+            _provider.NotNull(),
             new Order("o-replay-input", 20m),
             replayDecisionsOf: null,
             storeInput: true
@@ -580,7 +593,7 @@ public class DecisionRecordingTests
 
         var run = () =>
             RunOn(
-                _provider,
+                _provider.NotNull(),
                 new Order("o-replay-input", 99m),
                 replayDecisionsOf: original,
                 storeInput: true
@@ -602,7 +615,7 @@ public class DecisionRecordingTests
     {
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
         var original = await RunOn(
-            _provider,
+            _provider.NotNull(),
             new Order("o-replay-same", 20m),
             replayDecisionsOf: null,
             storeInput: true
@@ -610,7 +623,7 @@ public class DecisionRecordingTests
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
 
         await RunOn(
-            _provider,
+            _provider.NotNull(),
             new Order("o-replay-same", 20m),
             replayDecisionsOf: original,
             storeInput: true
@@ -624,7 +637,7 @@ public class DecisionRecordingTests
     {
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
         var original = await RunOn(
-            _provider,
+            _provider.NotNull(),
             new Order("o-retry-input", 20m),
             replayDecisionsOf: null,
             storeInput: true
@@ -632,7 +645,7 @@ public class DecisionRecordingTests
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
 
         await RunOn(
-            _provider,
+            _provider.NotNull(),
             new Order("o-retry-input", 99m),
             replayDecisionsOf: original,
             manifestId: 1,
@@ -647,7 +660,7 @@ public class DecisionRecordingTests
     {
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
         var original = await RunOn(
-            _provider,
+            _provider.NotNull(),
             new Order("o-retry-damaged", 20m),
             replayDecisionsOf: null
         );
@@ -658,7 +671,7 @@ public class DecisionRecordingTests
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
 
         await RunOn(
-            _provider,
+            _provider.NotNull(),
             new Order("o-retry-damaged", 20m),
             replayDecisionsOf: original,
             manifestId: 1
@@ -671,7 +684,11 @@ public class DecisionRecordingTests
     public async Task A_manual_requeue_whose_source_run_is_gone_still_fails()
     {
         var run = () =>
-            RunOn(_provider, new Order("o-requeue-gone", 20m), replayDecisionsOf: 987_654_322);
+            RunOn(
+                _provider.NotNull(),
+                new Order("o-requeue-gone", 20m),
+                replayDecisionsOf: 987_654_322
+            );
 
         await run.Should().ThrowAsync<Exception>().WithMessage("*no run 987654322 exists*");
     }
@@ -692,7 +709,7 @@ public class DecisionRecordingTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IRouteOrder).FullName!,
+                Name = typeof(IRouteOrder).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = order,
                 ReplayDecisionsOf = replayDecisionsOf,
@@ -705,7 +722,7 @@ public class DecisionRecordingTests
             metadata.Input = System.Text.Json.JsonSerializer.Serialize(order);
 
         await train.Run(order, metadata, CancellationToken.None).ConfigureAwait(false);
-        return train.Metadata!.Id;
+        return train.Metadata.NotNull().Id;
     }
 
     [Test]
@@ -737,8 +754,11 @@ public class DecisionRecordingTests
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
         var (again, _) = await Run<IRouteOrder>(new Order("o-print-again", 99m));
 
-        var first = (await Recorded(original.Metadata!.Id)).Should().ContainSingle().Subject;
-        var second = (await Recorded(again.Metadata!.Id)).Should().ContainSingle().Subject;
+        var first = (await Recorded(original.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
+        var second = (await Recorded(again.Metadata.NotNull().Id)).Should().ContainSingle().Subject;
 
         first.Fingerprint.Should().MatchRegex("^[0-9a-f]{64}$");
         second
@@ -753,7 +773,7 @@ public class DecisionRecordingTests
         var (original, _) = await Run<IRouteOrder>(new Order("o-stale", 20m));
 
         // As if the question had been reworded since: the stored fingerprint is what comes back.
-        await Rewrite(original.Metadata!.Id, d => d.Fingerprint = new string('0', 64));
+        await Rewrite(original.Metadata.NotNull().Id, d => d.Fingerprint = new string('0', 64));
 
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
 
@@ -764,7 +784,10 @@ public class DecisionRecordingTests
 
         output.Should().Be("shipped", "the decider was asked afresh");
         decider.Requests.Should().ContainSingle();
-        var asked = (await Recorded(requeued.Metadata!.Id)).Should().ContainSingle().Subject;
+        var asked = (await Recorded(requeued.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         asked.Replayed.Should().BeFalse();
         asked.Answer.Should().Contain("replay_refused");
     }
@@ -776,7 +799,9 @@ public class DecisionRecordingTests
         var (original, firstOutput) = await Run<IRouteTwice>(new Order("o-twice", 20m));
         firstOutput.Should().Be("shipped");
 
-        var recorded = (await Recorded(original.Metadata!.Id)).OrderBy(d => d.Occurrence).ToList();
+        var recorded = (await Recorded(original.Metadata.NotNull().Id))
+            .OrderBy(d => d.Occurrence)
+            .ToList();
         recorded.Select(d => d.Occurrence).Should().Equal(0, 1);
         recorded.Select(d => d.Tracks().Single()).Should().Equal("ManualCheck", "Standard");
 
@@ -790,7 +815,7 @@ public class DecisionRecordingTests
 
         output.Should().Be("shipped");
         decider.Asked.Should().Be(0);
-        (await Recorded(requeued.Metadata!.Id))
+        (await Recorded(requeued.Metadata.NotNull().Id))
             .OrderBy(d => d.Occurrence)
             .Select(d => (d.Occurrence, d.Tracks().Single(), d.Replayed))
             .Should()
@@ -808,7 +833,7 @@ public class DecisionRecordingTests
             .Which.Message.Should()
             .Contain("no run 987654321 exists");
         decider.Requests.Should().BeEmpty("the run fails before it asks anything");
-        train.Metadata!.TrainState.Should().Be(TrainState.Failed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Failed);
         train.Metadata.FailureClass.Should().Be(FailureClass.Permanent);
     }
 
@@ -821,7 +846,7 @@ public class DecisionRecordingTests
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
         var (train, run) = Start<IRouteOrder>(
             new Order("o-other", 20m),
-            replayDecisionsOf: other.Metadata!.Id
+            replayDecisionsOf: other.Metadata.NotNull().Id
         );
 
         (await run.Should().ThrowAsync<TrainException>())
@@ -833,7 +858,7 @@ public class DecisionRecordingTests
                 )
             );
         decider.Requests.Should().BeEmpty("the run fails before it asks anything");
-        train.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
+        train.Metadata.NotNull().FailureClass.Should().Be(FailureClass.Permanent);
     }
 
     [Test]
@@ -843,7 +868,9 @@ public class DecisionRecordingTests
         var (original, _) = await Run<IRouteOrder>(new Order("o-chain", 20m));
 
         // A requeue of the original that failed before it reached the question.
-        var failedRequeue = await Seed<IRouteOrder>(replayDecisionsOf: original.Metadata!.Id);
+        var failedRequeue = await Seed<IRouteOrder>(
+            replayDecisionsOf: original.Metadata.NotNull().Id
+        );
 
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
 
@@ -854,7 +881,7 @@ public class DecisionRecordingTests
 
         output.Should().Be("held for review", "the original's answer is still the one to repeat");
         decider.Requests.Should().BeEmpty();
-        (await Recorded(requeued.Metadata!.Id))
+        (await Recorded(requeued.Metadata.NotNull().Id))
             .Should()
             .ContainSingle()
             .Which.Replayed.Should()
@@ -872,10 +899,10 @@ public class DecisionRecordingTests
         Decider.Use(new SequenceDecider());
         var (firstRequeue, _) = await Run<IRouteTwice>(
             new Order("o-layers", 20m),
-            replayDecisionsOf: original.Metadata!.Id
+            replayDecisionsOf: original.Metadata.NotNull().Id
         );
         await Rewrite(
-            firstRequeue.Metadata!.Id,
+            firstRequeue.Metadata.NotNull().Id,
             d => d.Answer = d.Answer?.Replace("ManualCheck", "Standard", StringComparison.Ordinal)
         );
         await Forget(firstRequeue.Metadata.Id, occurrence: 1);
@@ -889,7 +916,7 @@ public class DecisionRecordingTests
 
         output.Should().Be("held for review", "the second asking repeats the original's answer");
         decider.Asked.Should().Be(0);
-        (await Recorded(requeued.Metadata!.Id))
+        (await Recorded(requeued.Metadata.NotNull().Id))
             .OrderBy(d => d.Occurrence)
             .Select(d => (d.Occurrence, d.Tracks().Single(), d.Replayed))
             .Should()
@@ -910,7 +937,7 @@ public class DecisionRecordingTests
             .Which.Message.Should()
             .Contain(string.Create(CultureInfo.InvariantCulture, $"lead back to run {second}"));
         decider.Requests.Should().BeEmpty();
-        train.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
+        train.Metadata.NotNull().FailureClass.Should().Be(FailureClass.Permanent);
     }
 
     [Test]
@@ -931,7 +958,7 @@ public class DecisionRecordingTests
             .Which.Message.Should()
             .Contain($"more than {DecisionJournal.MaxReplayChain} runs");
         decider.Requests.Should().BeEmpty();
-        train.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
+        train.Metadata.NotNull().FailureClass.Should().Be(FailureClass.Permanent);
     }
 
     [Test]
@@ -941,10 +968,14 @@ public class DecisionRecordingTests
 
         var (train, _) = await Run<IRouteOrder>(new Order("o-marked", 20m));
 
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        (await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == train.Metadata!.Id))
+        (
+            await context
+                .Metadatas.AsNoTracking()
+                .SingleAsync(m => m.Id == train.Metadata.NotNull().Id)
+        )
             .DecisionsRecorded.Should()
             .BeTrue();
     }
@@ -971,7 +1002,7 @@ public class DecisionRecordingTests
                 )
             );
         decider.Requests.Should().BeEmpty("the run fails before it asks anything");
-        train.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
+        train.Metadata.NotNull().FailureClass.Should().Be(FailureClass.Permanent);
     }
 
     [Test]
@@ -1006,7 +1037,7 @@ public class DecisionRecordingTests
             .Contain("external id was changed");
         decider.Requests.Should().BeEmpty("the replay lookup that comes first already fails");
         Ship.Ran.Should().Be(0);
-        train.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
+        train.Metadata.NotNull().FailureClass.Should().Be(FailureClass.Permanent);
         (await Recorded(train.Metadata.Id)).Should().BeEmpty();
     }
 
@@ -1017,18 +1048,18 @@ public class DecisionRecordingTests
         var (original, _) = await Run<IRouteTwice>(new Order("o-fewer", 20m));
 
         // As if it had died before its second asking.
-        await Forget(original.Metadata!.Id, occurrence: 1);
+        await Forget(original.Metadata.NotNull().Id, occurrence: 1);
 
         var decider = Decider.Use(new SequenceDecider(Fulfilment.ManualCheck, Fulfilment.Standard));
 
         var (requeued, output) = await Run<IRouteTwice>(
             new Order("o-fewer", 20m),
-            replayDecisionsOf: original.Metadata!.Id
+            replayDecisionsOf: original.Metadata.NotNull().Id
         );
 
         output.Should().Be("held for review");
         decider.Asked.Should().Be(1, "only the second asking was never answered");
-        (await Recorded(requeued.Metadata!.Id))
+        (await Recorded(requeued.Metadata.NotNull().Id))
             .OrderBy(d => d.Occurrence)
             .Select(d => d.Replayed)
             .Should()
@@ -1047,7 +1078,7 @@ public class DecisionRecordingTests
 
         ((ServiceTrain<Order, string>)(object)train)
             .ExternalId.Should()
-            .Be(train.Metadata!.ExternalId);
+            .Be(train.Metadata.NotNull().ExternalId);
         (await Recorded(train.Metadata.Id)).Should().ContainSingle();
     }
 
@@ -1059,7 +1090,10 @@ public class DecisionRecordingTests
         var (train, output) = await Run<IRouteWithShadow>(new Order("o-nan", 20m));
 
         output.Should().Be("shipped");
-        var decision = (await Recorded(train.Metadata!.Id)).Should().ContainSingle().Subject;
+        var decision = (await Recorded(train.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         decision.Tracks().Should().Equal("Standard");
         decision.Shadows.Should().Contain(typeof(NonFiniteShadow).FullName);
         decision.Shadows.Should().Contain("\"confidence\":\"NaN\"");
@@ -1074,7 +1108,10 @@ public class DecisionRecordingTests
         var (train, output) = await Run<IRouteWithOddShadow>(new Order("o-odd", 20m));
 
         output.Should().Be("shipped");
-        var decision = (await Recorded(train.Metadata!.Id)).Should().ContainSingle().Subject;
+        var decision = (await Recorded(train.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         decision.Shadows.Should().Contain(typeof(OddShadow).FullName);
         decision.Shadows.Should().Contain("its answer could not be recorded");
         decision.Shadows.Should().NotContain("\"type\":\"OddAnswer\"");
@@ -1087,7 +1124,7 @@ public class DecisionRecordingTests
         var (original, _) = await Run<IRouteOrder>(new Order("o-damaged", 20m));
 
         await Rewrite(
-            original.Metadata!.Id,
+            original.Metadata.NotNull().Id,
             d => d.Answer = """{"type":"choice","choice":"ManualCheck","confidence":"lots"}"""
         );
 
@@ -1102,7 +1139,7 @@ public class DecisionRecordingTests
             .Contain("cannot be read")
             .And.Contain("'lots'");
         decider.Requests.Should().BeEmpty();
-        train.Metadata!.FailureClass.Should().Be(FailureClass.Permanent);
+        train.Metadata.NotNull().FailureClass.Should().Be(FailureClass.Permanent);
     }
 
     [Test]
@@ -1120,7 +1157,7 @@ public class DecisionRecordingTests
         var (replaying, replayRun) = Start<IMeetThenRoute>(
             new Order("o-shared", 20m),
             externalId: shared,
-            replayDecisionsOf: source.Metadata!.Id
+            replayDecisionsOf: source.Metadata.NotNull().Id
         );
         var (asking, askRun) = Start<IMeetThenRoute>(
             new Order("o-shared", 20m),
@@ -1132,7 +1169,7 @@ public class DecisionRecordingTests
 
         outputs.Should().Equal("held for review", "shipped");
         decider.Requests.Should().ContainSingle("only the run that replays nothing asks");
-        replaying.Metadata!.Id.Should().NotBe(asking.Metadata!.Id);
+        replaying.Metadata.NotNull().Id.Should().NotBe(asking.Metadata.NotNull().Id);
 
         var replayed = (await Recorded(replaying.Metadata.Id)).Should().ContainSingle().Subject;
         replayed.Replayed.Should().BeTrue();
@@ -1154,7 +1191,7 @@ public class DecisionRecordingTests
         var (_, failing) = Start<IRouteThenFail>(
             new Order("o-later", 20m),
             externalId: shared,
-            replayDecisionsOf: source.Metadata!.Id
+            replayDecisionsOf: source.Metadata.NotNull().Id
         );
         await failing.Should().ThrowAsync<InvalidOperationException>();
 
@@ -1163,7 +1200,7 @@ public class DecisionRecordingTests
 
         await run.Should().ThrowAsync<InvalidOperationException>();
         decider.Requests.Should().ContainSingle();
-        (await Recorded(later.Metadata!.Id))
+        (await Recorded(later.Metadata.NotNull().Id))
             .Should()
             .ContainSingle()
             .Which.Replayed.Should()
@@ -1175,10 +1212,12 @@ public class DecisionRecordingTests
     {
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
         var (decided, _) = await Run<IRouteOrder>(new Order("o-has", 20m));
-        var failedRequeue = await Seed<IRouteOrder>(replayDecisionsOf: decided.Metadata!.Id);
+        var failedRequeue = await Seed<IRouteOrder>(
+            replayDecisionsOf: decided.Metadata.NotNull().Id
+        );
         var undecided = await Seed<IRouteOrder>(replayDecisionsOf: null, decisionsRecorded: true);
 
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -1210,7 +1249,7 @@ public class DecisionRecordingTests
         (await run.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()
             .Contain("'Banana', which is not one of its options");
-        train.Metadata!.FailureClass.Should().Be(FailureClass.Transient);
+        train.Metadata.NotNull().FailureClass.Should().Be(FailureClass.Transient);
         Ship.Ran.Should().Be(0);
         decider.Requests.Should().ContainSingle();
 
@@ -1238,7 +1277,7 @@ public class DecisionRecordingTests
         var (train, run) = Start<IRouteOrder>(new Order("o-unanswered", 20m));
 
         await run.Should().ThrowAsync<TrainException>();
-        var row = (await Recorded(train.Metadata!.Id)).Should().ContainSingle().Subject;
+        var row = (await Recorded(train.Metadata.NotNull().Id)).Should().ContainSingle().Subject;
         row.Answer.Should().BeNull();
         row.Refused.Should().Be($"the decider gave no answer to '{QuestionKey.For<Fulfilment>()}'");
     }
@@ -1258,12 +1297,12 @@ public class DecisionRecordingTests
         var (original, failing) = Start<IRouteOrder>(new Order("o-refused-requeue", 20m));
         await failing.Should().ThrowAsync<TrainException>();
 
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
             (
                 await scope
                     .ServiceProvider.GetRequiredService<IDataContext>()
-                    .HasDecisionsToReplay(original.Metadata!.Id, CancellationToken.None)
+                    .HasDecisionsToReplay(original.Metadata.NotNull().Id, CancellationToken.None)
             )
                 .Should()
                 .BeFalse("a refused answer is nothing to replay");
@@ -1272,12 +1311,12 @@ public class DecisionRecordingTests
 
         var (requeued, output) = await Run<IRouteOrder>(
             new Order("o-refused-requeue", 20m),
-            replayDecisionsOf: original.Metadata!.Id
+            replayDecisionsOf: original.Metadata.NotNull().Id
         );
 
         output.Should().Be("shipped");
         decider.Requests.Should().ContainSingle("the refused answer is not replayed");
-        var row = (await Recorded(requeued.Metadata!.Id)).Should().ContainSingle().Subject;
+        var row = (await Recorded(requeued.Metadata.NotNull().Id)).Should().ContainSingle().Subject;
         row.Replayed.Should().BeFalse();
         row.Refused.Should().BeNull();
         row.Answer.Should()
@@ -1297,7 +1336,10 @@ public class DecisionRecordingTests
         var (train, output) = await Run<ILoseFlowThenRoute>(new Order("o-lost", 20m));
 
         output.Should().Be("held for review");
-        var decision = (await Recorded(train.Metadata!.Id)).Should().ContainSingle().Subject;
+        var decision = (await Recorded(train.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         decision.Replayed.Should().BeFalse();
         decision.Tracks().Should().Equal(["ManualCheck"], "the routing is added to the same row");
     }
@@ -1310,7 +1352,10 @@ public class DecisionRecordingTests
         var (train, output) = await Run<ILoseFlowThenForkAndRoute>(new Order("o-lost-fork", 20m));
 
         output.Should().Be("held for review|packed");
-        var decision = (await Recorded(train.Metadata!.Id)).Should().ContainSingle().Subject;
+        var decision = (await Recorded(train.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         decision.BranchPath.Should().BeEmpty("the question was asked before the fork");
         decision
             .Tracks()
@@ -1331,12 +1376,15 @@ public class DecisionRecordingTests
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
         var (requeue, output) = await Run<ILoseFlowThenRoute>(
             new Order("o-lost-replay", 20m),
-            replayDecisionsOf: source.Metadata!.Id
+            replayDecisionsOf: source.Metadata.NotNull().Id
         );
 
         output.Should().Be("held for review");
         decider.Requests.Should().BeEmpty("the answer is replayed, not asked again");
-        var replayed = (await Recorded(requeue.Metadata!.Id)).Should().ContainSingle().Subject;
+        var replayed = (await Recorded(requeue.Metadata.NotNull().Id))
+            .Should()
+            .ContainSingle()
+            .Subject;
         replayed.Replayed.Should().BeTrue();
         replayed.Tracks().Should().Equal("ManualCheck");
     }
@@ -1363,8 +1411,10 @@ public class DecisionRecordingTests
 
         outputs.Should().Equal("shipped", "shipped");
         decider.Requests.Should().HaveCount(2);
-        (await Recorded(first.Metadata!.Id)).Should().BeEmpty("either row could be the one");
-        (await Recorded(second.Metadata!.Id)).Should().BeEmpty();
+        (await Recorded(first.Metadata.NotNull().Id))
+            .Should()
+            .BeEmpty("either row could be the one");
+        (await Recorded(second.Metadata.NotNull().Id)).Should().BeEmpty();
     }
 
     [Test]
@@ -1378,7 +1428,7 @@ public class DecisionRecordingTests
 
         (await run().WaitAsync(Wait)).Should().Be("shipped");
         DecideInAPlainTrainOffFlow.Decided.Should().BeTrue("the plain train did decide");
-        (await Recorded(train.Metadata!.Id))
+        (await Recorded(train.Metadata.NotNull().Id))
             .Select(d => d.QuestionKey)
             .Should()
             .Equal(["Fulfilment"], "only the run's own decision is its");
@@ -1387,9 +1437,9 @@ public class DecisionRecordingTests
     [Test]
     public void Adding_decision_recording_twice_registers_it_once()
     {
-        _provider.GetServices<IDecisionObserver>().Should().ContainSingle();
-        _provider.GetServices<IDecisionReplay>().Should().ContainSingle();
-        _provider.GetServices<DecisionJournal>().Should().ContainSingle();
+        _provider.NotNull().GetServices<IDecisionObserver>().Should().ContainSingle();
+        _provider.NotNull().GetServices<IDecisionReplay>().Should().ContainSingle();
+        _provider.NotNull().GetServices<DecisionJournal>().Should().ContainSingle();
     }
 
     private async Task<(TTrain Train, string Output)> Run<TTrain>(
@@ -1400,7 +1450,7 @@ public class DecisionRecordingTests
     {
         if (replayDecisionsOf is null)
         {
-            var scope = _provider.CreateAsyncScope();
+            var scope = _provider.NotNull().CreateAsyncScope();
             await using var scopeDisposal = scope.ConfigureAwait(false);
             var train = scope.ServiceProvider.GetRequiredService<TTrain>();
             return (train, await train.Run(order).ConfigureAwait(false));
@@ -1417,14 +1467,14 @@ public class DecisionRecordingTests
     )
         where TTrain : class, IServiceTrain<Order, string>
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         var train =
             (ServiceTrain<Order, string>)(object)scope.ServiceProvider.GetRequiredService<TTrain>();
 
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(TTrain).FullName!,
+                Name = typeof(TTrain).FullName.NotNull(),
                 ExternalId = externalId ?? Id(),
                 Input = order,
                 ReplayDecisionsOf = replayDecisionsOf,
@@ -1453,14 +1503,14 @@ public class DecisionRecordingTests
         long? manifestId = null
     )
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(TTrain).FullName!,
+                Name = typeof(TTrain).FullName.NotNull(),
                 ExternalId = Id(),
                 Input = new Order("seeded", 1m),
                 ReplayDecisionsOf = replayDecisionsOf,
@@ -1477,7 +1527,7 @@ public class DecisionRecordingTests
 
     private async Task Relink(long metadataId, long replayDecisionsOf)
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -1490,7 +1540,7 @@ public class DecisionRecordingTests
 
     private async Task Forget(long metadataId, int occurrence)
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -1508,7 +1558,7 @@ public class DecisionRecordingTests
         Action<Models.RecordedDecision.RecordedDecision> change
     )
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -1520,7 +1570,7 @@ public class DecisionRecordingTests
 
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 

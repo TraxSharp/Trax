@@ -14,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions;
 using Trax.Effect.Broadcaster.SignalR.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Services;
@@ -174,7 +175,7 @@ public class SignalRHubAuthorizationTests
     [Test]
     public async Task RequireAuthorization_WithANullPolicyList_AdmitsAnyAuthenticatedUser()
     {
-        using var host = await StartHostAsync(hub => hub.RequireAuthorization(null!));
+        using var host = await StartHostAsync(hub => hub.RequireAuthorization(Null.Of<string[]>()));
 
         var anonymous = Client(host, user: null);
         await using (anonymous.ConfigureAwait(false))
@@ -198,7 +199,7 @@ public class SignalRHubAuthorizationTests
     public async Task RequireAuthorization_WithABlankPolicyName_FailsAtStartup(string? policy)
     {
         var start = async () =>
-            await StartHostAsync(hub => hub.RequireAuthorization("TraxEvents", policy!))
+            await StartHostAsync(hub => hub.RequireAuthorization("TraxEvents", policy.NotNull()))
                 .ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<ArgumentException>())
@@ -221,7 +222,8 @@ public class SignalRHubAuthorizationTests
     public async Task RequireRoles_WithANullRoleList_FailsAtStartup()
     {
         var start = async () =>
-            await StartHostAsync(hub => hub.RequireRoles(null!)).ConfigureAwait(false);
+            await StartHostAsync(hub => hub.RequireRoles(Null.Of<string[]>()))
+                .ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<ArgumentException>()).Which.ParamName.Should().Be("roles");
     }
@@ -232,7 +234,8 @@ public class SignalRHubAuthorizationTests
     public async Task RequireRoles_WithABlankRoleName_FailsAtStartup(string? role)
     {
         var start = async () =>
-            await StartHostAsync(hub => hub.RequireRoles("Operator", role!)).ConfigureAwait(false);
+            await StartHostAsync(hub => hub.RequireRoles("Operator", role.NotNull()))
+                .ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<ArgumentException>())
             .Which.Message.Should()

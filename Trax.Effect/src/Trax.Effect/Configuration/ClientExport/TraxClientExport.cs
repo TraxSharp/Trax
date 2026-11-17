@@ -70,6 +70,7 @@ public static class TraxClientExport
     private static ArgumentException NoPath(string paramName) =>
         new(
             $"The process was started with {Argument} and no path after it. Give the file to write the client "
-                + $"manifest to, as in '{Argument} client.json', or start it without {Argument} to serve."
+                + $"manifest to, as in '{Argument} client.json', or start it without {Argument} to serve.",
+            paramName
         );
 }

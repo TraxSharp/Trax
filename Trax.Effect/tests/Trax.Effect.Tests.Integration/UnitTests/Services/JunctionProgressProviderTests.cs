@@ -3,6 +3,7 @@ using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -73,7 +74,7 @@ public class JunctionProgressProviderTests
             .ConfigureAwait(false);
 
         // Assert
-        train.Metadata!.CurrentlyRunningJunction.Should().Be("ProcessDataJunction");
+        train.Metadata.NotNull().CurrentlyRunningJunction.Should().Be("ProcessDataJunction");
     }
 
     [Test]
@@ -90,9 +91,9 @@ public class JunctionProgressProviderTests
             .ConfigureAwait(false);
 
         // Assert
-        train.Metadata!.JunctionStartedAt.Should().NotBeNull();
-        train.Metadata!.JunctionStartedAt.Should().BeOnOrAfter(before);
-        train.Metadata!.JunctionStartedAt.Should().BeOnOrBefore(DateTime.UtcNow);
+        train.Metadata.NotNull().JunctionStartedAt.Should().NotBeNull();
+        train.Metadata.NotNull().JunctionStartedAt.Should().BeOnOrAfter(before);
+        train.Metadata.NotNull().JunctionStartedAt.Should().BeOnOrBefore(DateTime.UtcNow);
     }
 
     [Test]
@@ -239,7 +240,7 @@ public class JunctionProgressProviderTests
             .ConfigureAwait(false);
 
         _factory.Writes.Should().Be(0);
-        train.Metadata!.CurrentlyRunningJunction.Should().Be("SomeJunction");
+        train.Metadata.NotNull().CurrentlyRunningJunction.Should().Be("SomeJunction");
     }
 
     #endregion
@@ -252,8 +253,8 @@ public class JunctionProgressProviderTests
         // Arrange
         var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
             .ConfigureAwait(false);
-        train.Metadata!.CurrentlyRunningJunction = "ProcessDataJunction";
-        train.Metadata!.JunctionStartedAt = DateTime.UtcNow;
+        train.Metadata.NotNull().CurrentlyRunningJunction = "ProcessDataJunction";
+        train.Metadata.NotNull().JunctionStartedAt = DateTime.UtcNow;
 
         // Act
         await _provider
@@ -261,7 +262,7 @@ public class JunctionProgressProviderTests
             .ConfigureAwait(false);
 
         // Assert
-        train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
+        train.Metadata.NotNull().CurrentlyRunningJunction.Should().BeNull();
     }
 
     [Test]
@@ -270,8 +271,8 @@ public class JunctionProgressProviderTests
         // Arrange
         var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
             .ConfigureAwait(false);
-        train.Metadata!.CurrentlyRunningJunction = "ProcessDataJunction";
-        train.Metadata!.JunctionStartedAt = DateTime.UtcNow;
+        train.Metadata.NotNull().CurrentlyRunningJunction = "ProcessDataJunction";
+        train.Metadata.NotNull().JunctionStartedAt = DateTime.UtcNow;
 
         // Act
         await _provider
@@ -279,7 +280,7 @@ public class JunctionProgressProviderTests
             .ConfigureAwait(false);
 
         // Assert
-        train.Metadata!.JunctionStartedAt.Should().BeNull();
+        train.Metadata.NotNull().JunctionStartedAt.Should().BeNull();
     }
 
     [Test]
@@ -336,7 +337,7 @@ public class JunctionProgressProviderTests
             .Should()
             .NotThrowAsync("the run's terminal write follows whatever the writer did")
             .ConfigureAwait(false);
-        train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
+        train.Metadata.NotNull().CurrentlyRunningJunction.Should().BeNull();
     }
 
     [Test]
@@ -371,8 +372,8 @@ public class JunctionProgressProviderTests
             .ConfigureAwait(false);
 
         // Assert — progress is set
-        train.Metadata!.CurrentlyRunningJunction.Should().Be("FetchDataJunction");
-        train.Metadata!.JunctionStartedAt.Should().NotBeNull();
+        train.Metadata.NotNull().CurrentlyRunningJunction.Should().Be("FetchDataJunction");
+        train.Metadata.NotNull().JunctionStartedAt.Should().NotBeNull();
 
         // Act — After
         await _provider
@@ -381,8 +382,8 @@ public class JunctionProgressProviderTests
         await _provider.Settle().ConfigureAwait(false);
 
         // Assert — progress is cleared
-        train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
-        train.Metadata!.JunctionStartedAt.Should().BeNull();
+        train.Metadata.NotNull().CurrentlyRunningJunction.Should().BeNull();
+        train.Metadata.NotNull().JunctionStartedAt.Should().BeNull();
     }
 
     [Test]
@@ -397,25 +398,25 @@ public class JunctionProgressProviderTests
         await _provider
             .BeforeJunctionExecution(junction1, train, CancellationToken.None)
             .ConfigureAwait(false);
-        train.Metadata!.CurrentlyRunningJunction.Should().Be("Junction1");
+        train.Metadata.NotNull().CurrentlyRunningJunction.Should().Be("Junction1");
 
         await _provider
             .AfterJunctionExecution(junction1, train, CancellationToken.None)
             .ConfigureAwait(false);
         await _provider.Settle().ConfigureAwait(false);
-        train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
+        train.Metadata.NotNull().CurrentlyRunningJunction.Should().BeNull();
 
         // Step 2 lifecycle
         await _provider
             .BeforeJunctionExecution(junction2, train, CancellationToken.None)
             .ConfigureAwait(false);
-        train.Metadata!.CurrentlyRunningJunction.Should().Be("Junction2");
+        train.Metadata.NotNull().CurrentlyRunningJunction.Should().Be("Junction2");
 
         await _provider
             .AfterJunctionExecution(junction2, train, CancellationToken.None)
             .ConfigureAwait(false);
         await _provider.Settle().ConfigureAwait(false);
-        train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
+        train.Metadata.NotNull().CurrentlyRunningJunction.Should().BeNull();
 
         // Four writes of the two columns (before and after each junction, each settled before the
         // next), none through the runner.
@@ -486,7 +487,10 @@ public class JunctionProgressProviderTests
         await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .Metadatas.AsNoTracking()
-            .SingleAsync(m => m.Id == train.Metadata!.Id, cancellationToken: CancellationToken.None)
+            .SingleAsync(
+                m => m.Id == train.Metadata.NotNull().Id,
+                cancellationToken: CancellationToken.None
+            )
             .ConfigureAwait(false);
     }
 
