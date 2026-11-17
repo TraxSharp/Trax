@@ -21,16 +21,22 @@ public partial class RunAndQueueExecutionTests
         result.Output.Should().BeOfType<NonPublicOutput>();
     }
 
-    internal record NonPublicInput
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed record NonPublicInput
     {
         public string Name { get; init; } = "";
     }
 
-    internal record NonPublicOutput(string Value);
+    internal sealed record NonPublicOutput(string Value);
 
     internal interface INonPublicOutputTrain : IServiceTrain<NonPublicInput, NonPublicOutput>;
 
-    internal class NonPublicOutputTrain
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class NonPublicOutputTrain
         : ServiceTrain<NonPublicInput, NonPublicOutput>,
             INonPublicOutputTrain
     {

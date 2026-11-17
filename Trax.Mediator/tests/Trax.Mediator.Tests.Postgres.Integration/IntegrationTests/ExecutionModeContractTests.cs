@@ -24,7 +24,7 @@ public class ExecutionModeContractTests : TestSetup
 {
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         DownstreamProbe.Reset();
     }
 
@@ -205,21 +205,24 @@ public class ExecutionModeContractTests : TestSetup
             new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    internal class GatedDownstreamTrain
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class GatedDownstreamTrain
         : ServiceTrain<GatedDownstreamInput, Unit>,
             IGatedDownstreamTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
             DownstreamProbe.ReachedDownstream.TrySetResult();
-            await DownstreamProbe.Downstream.Task;
+            await DownstreamProbe.Downstream.Task.ConfigureAwait(false);
             DownstreamProbe.CompletedAt = DateTime.UtcNow;
 
             return Resolve();
         }
     }
 
-    internal record GatedDownstreamInput;
+    internal sealed record GatedDownstreamInput;
 
-    internal interface IGatedDownstreamTrain : IServiceTrain<GatedDownstreamInput, Unit> { }
+    internal interface IGatedDownstreamTrain : IServiceTrain<GatedDownstreamInput, Unit>;
 }

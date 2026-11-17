@@ -94,7 +94,7 @@ public class TestTrainsAreDeployableTests
             ChainRecorder chain;
             try
             {
-                chain = (ChainRecorder)declaredChain.Invoke(train, null)!;
+                chain = (ChainRecorder)declaredChain.Invoke(train, parameters: null)!;
             }
             catch (Exception ex)
             {

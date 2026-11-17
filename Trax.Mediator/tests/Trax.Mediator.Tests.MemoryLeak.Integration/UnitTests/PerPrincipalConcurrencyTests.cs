@@ -177,7 +177,8 @@ public class PerPrincipalConcurrencyTests
 
         // Third acquire must block.
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(150));
-        Func<Task> act = async () => await limiter.AcquireAsync(train, cts.Token);
+        Func<Task> act = async () =>
+            await limiter.AcquireAsync(train, cts.Token).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         // After releasing one, a new acquire succeeds immediately.

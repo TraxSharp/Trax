@@ -87,7 +87,8 @@ public class HookConnectionPoolTests : TestSetup
 
         GatedProbe.Open();
 
-        var act = async () => await Task.WhenAll(outers, unrelated).WaitAsync(SignalTimeout);
+        var act = async () =>
+            await Task.WhenAll(outers, unrelated).WaitAsync(SignalTimeout).ConfigureAwait(false);
         await act.Should()
             .NotThrowAsync(
                 "each outer enqueue holds one connection and its nested enqueue writes on that "
@@ -146,8 +147,10 @@ public class HookConnectionPoolTests : TestSetup
     {
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            await execution.QueueAsync(typeof(IPoolLeafTrain).FullName!, "{}", ct: ct);
-            await GatedProbe.ArriveAndWaitAsync(ct);
+            await execution
+                .QueueAsync(typeof(IPoolLeafTrain).FullName!, "{}", ct: ct)
+                .ConfigureAwait(false);
+            await GatedProbe.ArriveAndWaitAsync(ct).ConfigureAwait(false);
         }
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());

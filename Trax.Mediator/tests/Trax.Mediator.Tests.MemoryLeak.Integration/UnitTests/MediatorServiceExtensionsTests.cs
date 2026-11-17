@@ -118,7 +118,11 @@ public class MediatorServiceExtensionsTests
 
         var marker = hosted.Single(e => e.descriptor.ImplementationType == typeof(MarkerWorker));
         var chainCheck = hosted.Single(e =>
-            e.descriptor.ImplementationType?.Name == "TrainChainStartupValidator"
+            string.Equals(
+                e.descriptor.ImplementationType?.Name,
+                "TrainChainStartupValidator",
+                StringComparison.Ordinal
+            )
         );
 
         chainCheck

@@ -33,7 +33,7 @@ public class CoreTrainMemoryTests
                     trainReferences.Add(new WeakReference(train));
                     var largeInput = new LargeDataModel($"test_{i}", new byte[100_000]); // 100KB each
 
-                    var output = await train.Run(largeInput);
+                    var output = await train.Run(largeInput).ConfigureAwait(false);
                     output.Should().NotBeNull();
 
                     // Train goes out of scope here, but Memory dictionary might retain objects
@@ -110,7 +110,7 @@ public class CoreTrainMemoryTests
     {
         var start = GC.GetTotalAllocatedBytes(precise: true);
         for (var i = 0; i < iterations; i++)
-            await body();
+            await body().ConfigureAwait(false);
         return GC.GetTotalAllocatedBytes(precise: true) - start;
     }
 
@@ -125,7 +125,7 @@ public class CoreTrainMemoryTests
                 {
                     var train = new TupleTrain();
                     var input = new SimpleInput($"tuple_test_{i}");
-                    var output = await train.Run(input);
+                    var output = await train.Run(input).ConfigureAwait(false);
                     output.Should().NotBeNull();
                 }
             },
@@ -158,7 +158,7 @@ public class CoreTrainMemoryTests
                     largeObjectTrains.Add(new WeakReference(train));
 
                     var largeInput = new VeryLargeDataModel($"large_{i}", new byte[1_000_000]); // 1MB each
-                    var output = await train.Run(largeInput);
+                    var output = await train.Run(largeInput).ConfigureAwait(false);
                     output.Should().NotBeNull();
                 }
             },
@@ -209,12 +209,12 @@ public class CoreTrainMemoryTests
                                 $"concurrent_{trainId}_{i}",
                                 new byte[50_000]
                             ); // 50KB each
-                            var output = await train.Run(input);
+                            var output = await train.Run(input).ConfigureAwait(false);
                             output.Should().NotBeNull();
                         }
                     });
 
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
             },
             "ConcurrentTrains_MemoryUsage"
         );
@@ -271,7 +271,7 @@ public class CoreTrainMemoryTests
                     {
                         var train = new LargeDataTrain();
                         var input = new LargeDataModel($"batch_{batch}_item_{i}", new byte[75_000]); // 75KB each
-                        var output = await train.Run(input);
+                        var output = await train.Run(input).ConfigureAwait(false);
                         output.Should().NotBeNull();
                     }
                 },
@@ -377,7 +377,7 @@ public class TupleJunction : Junction<SimpleInput, (string Result, int Count, Da
 public class SmallChainTrain : Train<SimpleInput, SimpleOutput>
 {
     protected override async Task<Either<Exception, SimpleOutput>> Junctions() =>
-        await Chain<ProcessJunction>().Resolve();
+        await Chain<ProcessJunction>().Resolve().ConfigureAwait(false);
 }
 
 public class LargeChainTrain : Train<SimpleInput, SimpleOutput>
@@ -388,13 +388,14 @@ public class LargeChainTrain : Train<SimpleInput, SimpleOutput>
             .Chain<ProcessOutputJunction>()
             .Chain<ProcessOutputJunction>()
             .Chain<ProcessOutputJunction>()
-            .Resolve();
+            .Resolve()
+            .ConfigureAwait(false);
 }
 
 public class LargeDataTrain : Train<LargeDataModel, SimpleOutput>
 {
     protected override async Task<Either<Exception, SimpleOutput>> Junctions() =>
-        await Chain<LargeDataJunction>().Resolve();
+        await Chain<LargeDataJunction>().Resolve().ConfigureAwait(false);
 }
 
 public class VeryLargeDataTrain : Train<VeryLargeDataModel, SimpleOutput>

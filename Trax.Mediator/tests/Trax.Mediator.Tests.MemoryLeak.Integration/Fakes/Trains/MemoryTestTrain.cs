@@ -51,7 +51,7 @@ internal sealed class AllocateMemoryTestOutput : Junction<MemoryTestInput, Memor
     public override async Task<MemoryTestOutput> Run(MemoryTestInput input)
     {
         // allowed-delay: the delay is the allocation pattern under test, not a wait for a signal.
-        await Task.Delay(input.ProcessingDelayMs, CancellationToken);
+        await Task.Delay(input.ProcessingDelayMs, CancellationToken).ConfigureAwait(false);
 
         return new MemoryTestOutput
         {
@@ -71,7 +71,7 @@ internal sealed class FailAfterDelay : Junction<FailingTestInput, MemoryTestOutp
     public override async Task<MemoryTestOutput> Run(FailingTestInput input)
     {
         // allowed-delay: the delay is the allocation pattern under test, not a wait for a signal.
-        await Task.Delay(input.ProcessingDelayMs, CancellationToken);
+        await Task.Delay(input.ProcessingDelayMs, CancellationToken).ConfigureAwait(false);
 
         throw new InvalidOperationException($"Intentional failure in train {input.Id}");
     }

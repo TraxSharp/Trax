@@ -109,7 +109,7 @@ public class SavedInputJsonbTests : TestSetup
         public int Id { get; set; }
         public Spot? Home { get; set; }
         public Spot? Work { get; set; }
-        public List<Spot> Stops { get; set; } = [];
+        public IList<Spot> Stops { get; set; } = [];
     }
 
     public interface ISpotsTrain : IServiceTrain<SpotsInput, Unit>;

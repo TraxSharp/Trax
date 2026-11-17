@@ -96,7 +96,7 @@ public class ArrayLoggerMemoryTests
                 }
 
                 // Verify logs are accumulated
-                var arrayLogger = provider.Loggers.First();
+                var arrayLogger = provider.Loggers[0];
                 arrayLogger.Logs.Count.Should().Be(5000);
 
                 // Clear logs to prevent memory leak
@@ -142,7 +142,7 @@ public class ArrayLoggerMemoryTests
                 }
 
                 // Verify logs are trimmed (allow for some logs added after last trim)
-                var arrayLogger = provider.Loggers.First();
+                var arrayLogger = provider.Loggers[0];
                 arrayLogger
                     .Logs.Count.Should()
                     .BeLessThanOrEqualTo(
@@ -180,21 +180,22 @@ public class ArrayLoggerMemoryTests
 
                             // Generate logs concurrently
                             await Task.Run(() =>
-                            {
-                                for (int j = 0; j < 30; j++)
                                 {
-                                    logger.LogInformation(
-                                        "Concurrent log {TaskId}-{Index}-{LogIndex}",
-                                        taskId,
-                                        i,
-                                        j
-                                    );
-                                }
-                            });
+                                    for (int j = 0; j < 30; j++)
+                                    {
+                                        logger.LogInformation(
+                                            "Concurrent log {TaskId}-{Index}-{LogIndex}",
+                                            taskId,
+                                            i,
+                                            j
+                                        );
+                                    }
+                                })
+                                .ConfigureAwait(false);
                         }
                     });
 
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
 
                 // Periodically trim logs during concurrent access
                 provider.TrimLoggers(1000);
@@ -293,7 +294,7 @@ public class ArrayLoggerMemoryTests
         // Log before disposal
         logger.LogInformation("Before {Action}", "disposal");
 
-        var arrayLogger = provider.Loggers.First();
+        var arrayLogger = provider.Loggers[0];
         arrayLogger.Logs.Count.Should().Be(1);
 
         // Dispose the logger

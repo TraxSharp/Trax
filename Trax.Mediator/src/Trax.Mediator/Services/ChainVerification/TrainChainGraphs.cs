@@ -8,7 +8,10 @@ using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Mediator.Services.ChainVerification;
 
-/// <inheritdoc />
+/// <summary>
+/// The <see cref="ITrainChainGraphs"/> the mediator registers: reads each registered train's
+/// declared chain on first request and keeps it.
+/// </summary>
 /// <remarks>
 /// <para>A chain that was read is kept for the life of the host. A chain that could not be read is
 /// not: the failure is remembered for <see cref="RetryAfter"/>, so a page that polls does not
@@ -93,29 +96,35 @@ internal sealed class TrainChainGraphs(
             // An async scope, because a train's scoped dependency may implement only
             // IAsyncDisposable, which a synchronous Dispose refuses outright, as the startup check
             // does.
-            await using var scope = scopeFactory.CreateAsyncScope();
-            var train = Build(scope.ServiceProvider, registration);
+            var scope = scopeFactory.CreateAsyncScope();
+            // An async scope, because a train's scoped dependency may implement only
+            // IAsyncDisposable, which a synchronous Dispose refuses outright, as the startup check
+            // does.
+            await using (scope.ConfigureAwait(false))
+            {
+                var train = Build(scope.ServiceProvider, registration);
 
-            var chain = (ChainRecorder)
-                train
-                    .GetType()
-                    .GetMethod(nameof(Core.Train.Train<,>.DeclaredChain), Type.EmptyTypes)!
-                    .Invoke(train, null)!;
+                var chain = (ChainRecorder)
+                    train
+                        .GetType()
+                        .GetMethod(nameof(Core.Train.Train<,>.DeclaredChain), Type.EmptyTypes)!
+                        .Invoke(train, parameters: null)!;
 
-            return new Declared(
-                ChainGraph.From(
-                    chain,
-                    train.GetType(),
-                    registration.InputType,
-                    registration.OutputType
-                ),
-                new DeclaredTrainChain(
-                    train.GetType(),
-                    chain,
-                    registration.InputType,
-                    registration.OutputType
-                )
-            );
+                return new Declared(
+                    ChainGraph.From(
+                        chain,
+                        train.GetType(),
+                        registration.InputType,
+                        registration.OutputType
+                    ),
+                    new DeclaredTrainChain(
+                        train.GetType(),
+                        chain,
+                        registration.InputType,
+                        registration.OutputType
+                    )
+                );
+            }
         }
         catch (Exception e)
         {

@@ -45,7 +45,7 @@ internal sealed class InvokedTrainLauncher(
                     + "registered here replaces it. Remove the replacement, or invoke no trains from machines."
             );
 
-        await execution.QueueInvokedAsync(launch, context, cancellationToken);
+        await execution.QueueInvokedAsync(launch, context, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -209,7 +209,7 @@ internal sealed class InvokedTrainLauncher(
                 ?? throw new InvalidOperationException(
                     $"{train.GetType().Name} does not derive from Train<TIn, TOut>"
                 );
-            chain = (ChainRecorder)declared.Invoke(train, null)!;
+            chain = (ChainRecorder)declared.Invoke(train, parameters: null)!;
         }
         catch (Exception ex)
         {

@@ -26,8 +26,12 @@ public class CancelledEnqueueHookTests : TestSetup
     private async Task<int> RowsAsync(string trainNameFragment)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.CountAsync(w => w.TrainName!.Contains(trainNameFragment));
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return await context
+            .WorkQueues.CountAsync(w => w.TrainName!.Contains(trainNameFragment))
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -47,14 +51,15 @@ public class CancelledEnqueueHookTests : TestSetup
         await OrphanedHookTrain.Started.Task.WaitAsync(SignalTimeout);
         await cancel.CancelAsync();
 
-        var act = async () => await outer.WaitAsync(SignalTimeout);
+        var act = async () => await outer.WaitAsync(SignalTimeout).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         // The caller has been told the enqueue failed. The hook, which ignores its token, is still
         // running; let it go on to enqueue.
         OrphanedHookTrain.Gate.TrySetResult();
 
-        var nested = async () => await OrphanedHookTrain.Nested.Task.WaitAsync(SignalTimeout);
+        var nested = async () =>
+            await OrphanedHookTrain.Nested.Task.WaitAsync(SignalTimeout).ConfigureAwait(false);
         await nested
             .Should()
             .ThrowAsync<InvalidOperationException>(
@@ -95,12 +100,14 @@ public class CancelledEnqueueHookTests : TestSetup
             Started.TrySetResult();
 
             // Deliberately ignores the token.
-            await Gate.Task;
+            await Gate.Task.ConfigureAwait(false);
 
             try
             {
                 Nested.TrySetResult(
-                    await Execution!.QueueAsync(typeof(IOrphanNestedTrain).FullName!, "{}")
+                    await Execution!
+                        .QueueAsync(typeof(IOrphanNestedTrain).FullName!, "{}")
+                        .ConfigureAwait(false)
                 );
             }
             catch (Exception ex)

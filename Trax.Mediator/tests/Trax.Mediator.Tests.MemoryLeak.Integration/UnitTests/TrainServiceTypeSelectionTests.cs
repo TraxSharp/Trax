@@ -258,7 +258,7 @@ public class TrainServiceTypeSelectionTests
     }
 
     /// <summary>A class that implements no train interface.</summary>
-    public class NotATrain;
+    public static class NotATrain;
 
     public record TwoFacedInput;
 

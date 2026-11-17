@@ -66,10 +66,10 @@ public static class ServiceExtensions
         {
             var trainTypes = assembly
                 .GetTypes()
-                .Where(x => x.IsClass)
-                .Where(x => x.IsAbstract == false)
                 .Where(x =>
-                    x.GetInterfaces()
+                    x.IsClass
+                    && !x.IsAbstract
+                    && x.GetInterfaces()
                         .Where(y => y.IsGenericType)
                         .Select(y => y.GetGenericTypeDefinition())
                         .Contains(trainType)
@@ -93,7 +93,7 @@ public static class ServiceExtensions
                     throw new ArgumentOutOfRangeException(
                         nameof(serviceLifetime),
                         serviceLifetime,
-                        null
+                        message: null
                     );
             }
         }
@@ -224,7 +224,7 @@ public static class ServiceExtensions
                     throw new ArgumentOutOfRangeException(
                         nameof(serviceLifetime),
                         serviceLifetime,
-                        null
+                        message: null
                     );
             }
         }

@@ -35,7 +35,7 @@ public class DataContextLoggerMemoryTests
                     logger.LogInformation("Log message {Index}", i);
 
                 // Give the flush loop time to drain
-                await Task.Delay(500);
+                await Task.Delay(500).ConfigureAwait(false);
             },
             "DataContextLogger_ChannelBatching"
         );

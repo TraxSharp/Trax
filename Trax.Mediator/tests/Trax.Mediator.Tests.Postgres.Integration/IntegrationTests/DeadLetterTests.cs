@@ -30,7 +30,7 @@ public class DeadLetterTests : TestSetup
             UpdatedAt = DateTime.UtcNow,
         };
         context.ManifestGroups.Add(group);
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return group;
     }
 

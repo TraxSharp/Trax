@@ -30,7 +30,7 @@ public abstract record BaseMemoryTestInput
     /// <summary>
     /// Test categories for organizing test scenarios.
     /// </summary>
-    public List<string> Categories { get; init; } = [];
+    public IList<string> Categories { get; init; } = [];
 }
 
 /// <summary>
@@ -78,7 +78,8 @@ public record MemoryTestOutput
     /// <summary>
     /// Additional result metadata.
     /// </summary>
-    public Dictionary<string, object> ResultMetadata { get; init; } = [];
+    public IDictionary<string, object> ResultMetadata { get; init; } =
+        new Dictionary<string, object>(StringComparer.Ordinal);
 }
 
 /// <summary>
@@ -95,7 +96,7 @@ public record NestedTestInput
     /// <summary>
     /// Collection of child train inputs.
     /// </summary>
-    public required List<MemoryTestInput> ChildInputs { get; init; }
+    public required IList<MemoryTestInput> ChildInputs { get; init; }
 
     /// <summary>
     /// Description of the nested test scenario.
@@ -121,7 +122,7 @@ public record NestedTestOutput
     /// <summary>
     /// Results from all child trains.
     /// </summary>
-    public required List<MemoryTestOutput> ChildResults { get; init; }
+    public required IList<MemoryTestOutput> ChildResults { get; init; }
 
     /// <summary>
     /// Indicates if the train completed successfully.
@@ -241,7 +242,7 @@ public static class MemoryTestModelFactory
     /// <param name="count">Number of inputs to create</param>
     /// <param name="dataSizeBytes">Size of data for each input</param>
     /// <returns>List of MemoryTestInput instances</returns>
-    public static List<MemoryTestInput> CreateBatch(int count = 100, int dataSizeBytes = 1024 * 10)
+    public static IList<MemoryTestInput> CreateBatch(int count = 100, int dataSizeBytes = 1024 * 10)
     {
         return Enumerable
             .Range(0, count)

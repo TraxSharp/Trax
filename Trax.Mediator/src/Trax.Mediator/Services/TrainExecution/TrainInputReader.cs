@@ -51,12 +51,12 @@ public static class TrainInputReader
     /// (Trax.Docs/adr/0023); JSON reference metadata (<c>$id</c>, <c>$ref</c>, <c>$values</c>)
     /// is not honoured, so an input is exactly the tree the caller wrote (a saved input, which
     /// carries it, goes through <see cref="ResolveSavedInput"/> first); and a JSON
-    /// <c>null</c> is refused. Call it after authorization, so a caller who may not use the
+    /// <see langword="null"/> is refused. Call it after authorization, so a caller who may not use the
     /// train learns nothing about its input from a parse error.
     /// </remarks>
     /// <exception cref="TrainInputValidationException">The JSON is larger than the cap.</exception>
     /// <exception cref="JsonException">
-    /// The JSON cannot be read as the input type, is <c>null</c>, or is missing and the input
+    /// The JSON cannot be read as the input type, is <see langword="null"/>, or is missing and the input
     /// type cannot be built from <c>{}</c>.
     /// </exception>
     public static object Read(

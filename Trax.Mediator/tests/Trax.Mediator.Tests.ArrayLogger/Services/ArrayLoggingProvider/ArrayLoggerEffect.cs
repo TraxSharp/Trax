@@ -12,7 +12,7 @@ namespace Trax.Mediator.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 /// <param name="categoryName">The logger category, copied onto every <see cref="Log"/> it records (as its <c>Category</c>, truncated to 500 characters).</param>
 public class ArrayLoggerEffect(string categoryName) : ILogger, IDisposable
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private bool _disposed = false;
 
     /// <summary>
@@ -21,7 +21,9 @@ public class ArrayLoggerEffect(string categoryName) : ILogger, IDisposable
     /// code under test has finished logging. Emptied by <see cref="ClearLogs"/> and
     /// <see cref="Dispose"/>.
     /// </summary>
-    public List<Log> Logs { get; } = [];
+    public IList<Log> Logs => _logs;
+
+    private readonly List<Log> _logs = [];
 
     /// <summary>
     /// Formats the entry with <paramref name="formatter"/> and appends it to <see cref="Logs"/> as a
@@ -110,7 +112,7 @@ public class ArrayLoggerEffect(string categoryName) : ILogger, IDisposable
                 // Keep only the most recent logs
                 var logsToKeep = Logs.Skip(Logs.Count - maxLogs).ToList();
                 Logs.Clear();
-                Logs.AddRange(logsToKeep);
+                _logs.AddRange(logsToKeep);
             }
         }
     }

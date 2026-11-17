@@ -67,7 +67,7 @@ public class TrainBusErrorTests
         var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
 
         // Act & Assert
-        var act = async () => await trainBus.RunAsync(null!);
+        var act = async () => await trainBus.RunAsync(null!).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
     }
 
@@ -78,7 +78,8 @@ public class TrainBusErrorTests
         var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
 
         // Act & Assert
-        var act = async () => await trainBus.RunAsync(null!, CancellationToken.None);
+        var act = async () =>
+            await trainBus.RunAsync(null!, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -75,28 +76,30 @@ public class TrainChainStartupValidatorTests
 
         configure?.Invoke(services);
 
-        await using var provider = services.BuildServiceProvider();
-
-        var discovery = Substitute.For<ITrainDiscoveryService>();
-        discovery.DiscoverTrains().Returns(trains.Select(t => t.Registration).ToList());
-
-        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
-
-        var validator = new TrainChainStartupValidator(
-            discovery,
-            wrapScopes?.Invoke(scopes) ?? scopes,
-            new MediatorConfiguration { SkipChainVerification = skip },
-            logger
-        );
-
-        try
+        var provider = services.BuildServiceProvider();
+        await using (provider.ConfigureAwait(false))
         {
-            await validator.StartingAsync(token);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            return ex;
+            var discovery = Substitute.For<ITrainDiscoveryService>();
+            discovery.DiscoverTrains().Returns(trains.Select(t => t.Registration).ToList());
+
+            var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+
+            var validator = new TrainChainStartupValidator(
+                discovery,
+                wrapScopes?.Invoke(scopes) ?? scopes,
+                new MediatorConfiguration { SkipChainVerification = skip },
+                logger
+            );
+
+            try
+            {
+                await validator.StartingAsync(token).ConfigureAwait(false);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                return ex;
+            }
         }
     }
 
@@ -122,7 +125,7 @@ public class TrainChainStartupValidatorTests
             IsMutation = false,
             IsRemote = false,
             IsBroadcastEnabled = false,
-            GraphQLOperations = 0,
+            GraphQLOperations = (Trax.Effect.Attributes.GraphQLOperation)0,
         };
 
     [Test]
@@ -334,7 +337,7 @@ public class TrainChainStartupValidatorTests
             .BeOfType<TrainException>("with the metadata on, Unknown means no annotations");
 
         var logger = new RecordingLogger();
-        AppContext.SetSwitch(Switch, false);
+        AppContext.SetSwitch(Switch, isEnabled: false);
         try
         {
             (await Start<IObliviousInjectTrain, ObliviousInjectTrain>(logger: logger))
@@ -343,7 +346,7 @@ public class TrainChainStartupValidatorTests
         }
         finally
         {
-            AppContext.SetSwitch(Switch, true);
+            AppContext.SetSwitch(Switch, isEnabled: true);
         }
 
         logger.Warnings.Should().ContainSingle().Which.Should().Contain("declared nullable");
@@ -681,7 +684,7 @@ public class TrainChainStartupValidatorTests
 
         var lines = failure!
             .Message.Split(Environment.NewLine)
-            .Where(line => line.Contains(nameof(INotAJunctionTrain)))
+            .Where(line => line.Contains(nameof(INotAJunctionTrain), StringComparison.Ordinal))
             .ToList();
 
         lines
@@ -703,7 +706,7 @@ public class TrainChainStartupValidatorTests
 
         var lines = failure!
             .Message.Split(Environment.NewLine)
-            .Where(line => line.Contains(nameof(ISeveralFaultsTrain)))
+            .Where(line => line.Contains(nameof(ISeveralFaultsTrain), StringComparison.Ordinal))
             .ToList();
 
         lines.Should().HaveCount(2);
@@ -813,7 +816,7 @@ public class TrainChainStartupValidatorTests
 
         var failure = await Start<INeedsUnregisteredTrain, NeedsUnregisteredTrain>(
             logger: logger,
-            wrapScopes: scopes => new ReplacedIsServiceScopeFactory(scopes, null)
+            wrapScopes: scopes => new ReplacedIsServiceScopeFactory(scopes, isService: null)
         );
 
         failure
@@ -893,7 +896,9 @@ public class TrainChainStartupValidatorTests
 
         var lines = failure!
             .Message.Split(Environment.NewLine)
-            .Where(line => line.Contains(nameof(IRefusalAndNoResultTrain)))
+            .Where(line =>
+                line.Contains(nameof(IRefusalAndNoResultTrain), StringComparison.Ordinal)
+            )
             .ToList();
 
         lines.Should().Contain(line => line.Contains("step 1: IChain<TextToNumber> names a class"));
@@ -1039,7 +1044,7 @@ public class TrainChainStartupValidatorTests
     /// <summary>Keeps the warnings the validator logs, so a skip can be told from a pass.</summary>
     public sealed class RecordingLogger : ILogger<TrainChainStartupValidator>
     {
-        public List<string> Warnings { get; } = [];
+        public IList<string> Warnings { get; } = [];
 
         public IDisposable? BeginScope<TState>(TState state)
             where TState : notnull => null;
@@ -1103,12 +1108,12 @@ public class TrainChainStartupValidatorTests
     /// </summary>
     public record ChainProbeInput(string Value);
 
-    private class TextToNumber : Junction<ChainProbeInput, int>
+    private sealed class TextToNumber : Junction<ChainProbeInput, int>
     {
         public override Task<int> Run(ChainProbeInput input) => Task.FromResult(input.Value.Length);
     }
 
-    private class NumberToFlag : Junction<int, bool>
+    private sealed class NumberToFlag : Junction<int, bool>
     {
         public override Task<bool> Run(int input) => Task.FromResult(input > 0);
     }
@@ -1134,17 +1139,19 @@ public class TrainChainStartupValidatorTests
 
     public class ReadsInputTrain : ServiceTrain<ChainProbeInput, bool>, IReadsInputTrain
     {
-        protected override Task<Either<Exception, bool>> Junctions() =>
-            TrainInput.Value.Length > 0
-                ? Chain<TextToNumber>().Chain<NumberToFlag>().Resolve()
-                : Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+        protected override Task<Either<Exception, bool>> Junctions()
+        {
+            // Reads the input before declaring anything, which a chain read cannot supply.
+            _ = TrainInput.NotNull().Value.Length;
+            return Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+        }
     }
 
     public interface IChainProbeService;
 
     public class ChainProbeService : IChainProbeService;
 
-    private class ServiceToFlag : Junction<IChainProbeService, bool>
+    private sealed class ServiceToFlag : Junction<IChainProbeService, bool>
     {
         public override Task<bool> Run(IChainProbeService input) => Task.FromResult(true);
     }
@@ -1171,10 +1178,15 @@ public class TrainChainStartupValidatorTests
 
     public class AsyncReadsInputTrain : ServiceTrain<ChainProbeInput, bool>, IAsyncReadsInputTrain
     {
-        protected override async Task<Either<Exception, bool>> Junctions() =>
-            TrainInput.Value.Length > 0
-                ? await Chain<TextToNumber>().Chain<NumberToFlag>().Resolve()
-                : await Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+        protected override async Task<Either<Exception, bool>> Junctions()
+        {
+            // Reads the input before declaring anything, which a chain read cannot supply.
+            _ = TrainInput.NotNull().Value.Length;
+            return await Chain<TextToNumber>()
+                .Chain<NumberToFlag>()
+                .Resolve()
+                .ConfigureAwait(false);
+        }
     }
 
     public interface IAwaitingTrain : IServiceTrain<ChainProbeInput, bool>;
@@ -1187,8 +1199,11 @@ public class TrainChainStartupValidatorTests
 
         protected override async Task<Either<Exception, bool>> Junctions()
         {
-            await Pending.Task;
-            return await Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+            await Pending.Task.ConfigureAwait(false);
+            return await Chain<TextToNumber>()
+                .Chain<NumberToFlag>()
+                .Resolve()
+                .ConfigureAwait(false);
         }
     }
 
@@ -1365,7 +1380,7 @@ public class TrainChainStartupValidatorTests
             Chain<WideToFlag>().Resolve();
     }
 
-    private class WideToFlag : Junction<(int, int, int, int, int, int, int, int), bool>
+    private sealed class WideToFlag : Junction<(int, int, int, int, int, int, int, int), bool>
     {
         public override Task<bool> Run((int, int, int, int, int, int, int, int) input) =>
             Task.FromResult(input.Item8 > 0);
@@ -1423,7 +1438,7 @@ public class TrainChainStartupValidatorTests
 
     public interface INoPublicConstructorTrain : IServiceTrain<ChainProbeInput, bool>;
 
-    public class NoPublicConstructorTrain
+    public sealed class NoPublicConstructorTrain
         : ServiceTrain<ChainProbeInput, bool>,
             INoPublicConstructorTrain
     {
@@ -1504,7 +1519,7 @@ public class TrainChainStartupValidatorTests
             IInitializedInjectTrain
     {
         [Inject]
-        public IProbeClock Clock { get; set; } = new ProbeClock();
+        public new IProbeClock Clock { get; set; } = new ProbeClock();
 
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
@@ -1522,7 +1537,7 @@ public class TrainChainStartupValidatorTests
         }
 
         [Inject]
-        public IProbeClock Clock { get; set; }
+        public new IProbeClock Clock { get; set; }
 
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
@@ -1548,7 +1563,7 @@ public class TrainChainStartupValidatorTests
     public class FillFailsTrain : ServiceTrain<ChainProbeInput, bool>, IFillFailsTrain
     {
         [Inject]
-        public IProbeClock Clock { get; set; } = new ProbeClock();
+        public new IProbeClock Clock { get; set; } = new ProbeClock();
 
         [Inject]
         public IProbeRepository? Repository { get; set; }

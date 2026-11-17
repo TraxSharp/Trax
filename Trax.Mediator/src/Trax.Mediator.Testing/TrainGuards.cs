@@ -43,7 +43,7 @@ public static class TrainGuards
                 .ToList();
 
             var mostDerived = candidates
-                .Where(c => !candidates.Any(other => other != c && c.IsAssignableFrom(other)))
+                .Where(c => !candidates.Exists(other => other != c && c.IsAssignableFrom(other)))
                 .ToList();
 
             if (mostDerived.Count == 0)
@@ -75,7 +75,10 @@ public static class TrainGuards
 
         for (var t = type.BaseType; t is not null; t = t.BaseType)
         {
-            if (t.IsGenericType && t.Name == ServiceTrainBaseName)
+            if (
+                t.IsGenericType
+                && string.Equals(t.Name, ServiceTrainBaseName, StringComparison.Ordinal)
+            )
                 return true;
         }
 
@@ -83,7 +86,8 @@ public static class TrainGuards
     }
 
     private static bool IsServiceTrainInterface(Type type) =>
-        type.IsGenericType && type.Name == ServiceTrainInterfaceName;
+        type.IsGenericType
+        && string.Equals(type.Name, ServiceTrainInterfaceName, StringComparison.Ordinal);
 
     private static IEnumerable<Type> GetLoadableTypes(Assembly assembly)
     {

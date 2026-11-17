@@ -240,7 +240,7 @@ public class TrainChainGraphsTests
             IsMutation = false,
             IsRemote = false,
             IsBroadcastEnabled = false,
-            GraphQLOperations = 0,
+            GraphQLOperations = (Trax.Effect.Attributes.GraphQLOperation)0,
         };
 
     public sealed record GraphInput(string Text);
@@ -259,11 +259,17 @@ public class TrainChainGraphsTests
 
     public class GraphedTrain : ServiceTrain<GraphInput, bool>, IGraphedTrain
     {
-        public static int Declared;
+        private static int _declared;
+
+        public static int Declared
+        {
+            get => Volatile.Read(ref _declared);
+            set => Volatile.Write(ref _declared, value);
+        }
 
         protected override Task<Either<Exception, bool>> Junctions()
         {
-            Interlocked.Increment(ref Declared);
+            Interlocked.Increment(ref _declared);
             return Chain<TextToCount>().Chain<CountToFlag>().Resolve();
         }
     }
@@ -323,12 +329,18 @@ public class TrainChainGraphsTests
     /// <summary>Fails to build while <see cref="Fails"/> is set, and counts its builds.</summary>
     public class FlakyTrain : ServiceTrain<GraphInput, bool>, IFlakyTrain
     {
-        public static bool Fails;
-        public static int Built;
+        public static bool Fails { get; set; }
+        private static int _built;
+
+        public static int Built
+        {
+            get => Volatile.Read(ref _built);
+            set => Volatile.Write(ref _built, value);
+        }
 
         public FlakyTrain()
         {
-            Interlocked.Increment(ref Built);
+            Interlocked.Increment(ref _built);
             if (Fails)
                 throw new InvalidOperationException("the database is down");
         }

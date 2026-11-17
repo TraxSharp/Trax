@@ -31,8 +31,13 @@ public class SubjectKeyTests : TestSetup
     private async Task<WorkQueue?> EntryAsync(long id)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.AsNoTracking().FirstOrDefaultAsync(w => w.Id == id);
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return await context
+            .WorkQueues.AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == id)
+            .ConfigureAwait(false);
     }
 
     [SetUp]
@@ -88,7 +93,9 @@ public class SubjectKeyTests : TestSetup
     public async Task A_key_that_cannot_be_computed_aborts_the_enqueue()
     {
         var act = async () =>
-            await Execution.QueueAsync(typeof(IThrowingKeyTrain).FullName!, "{\"customerId\":42}");
+            await Execution
+                .QueueAsync(typeof(IThrowingKeyTrain).FullName!, "{\"customerId\":42}")
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<Exception>()).WithMessage(
             "*cannot key this mutation*",
@@ -122,7 +129,9 @@ public class SubjectKeyTests : TestSetup
         ConfigurableKeyTrain.Key = "";
 
         var act = async () =>
-            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+            await Execution
+                .QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}")
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*empty or whitespace*",
@@ -138,7 +147,9 @@ public class SubjectKeyTests : TestSetup
         ConfigurableKeyTrain.Key = key;
 
         var act = async () =>
-            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+            await Execution
+                .QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}")
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*empty or whitespace*",
@@ -170,7 +181,9 @@ public class SubjectKeyTests : TestSetup
         ConfigurableKeyTrain.Key = key;
 
         var act = async () =>
-            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+            await Execution
+                .QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}")
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*unpaired surrogate*",
@@ -196,7 +209,9 @@ public class SubjectKeyTests : TestSetup
         ConfigurableKeyTrain.Key = new string('k', 513);
 
         var act = async () =>
-            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+            await Execution
+                .QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}")
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*limit of 512*",
@@ -240,7 +255,9 @@ public class SubjectKeyTests : TestSetup
         ConfigurableKeyTrain.Key = Emoji(513);
 
         var act = async () =>
-            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+            await Execution
+                .QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}")
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*513 characters*",
@@ -290,18 +307,24 @@ public class SubjectKeyTests : TestSetup
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var database = (DbContext)dataContext;
 
-        using var transaction = await dataContext.BeginTransaction(CancellationToken.None);
+        using var transaction = await dataContext
+            .BeginTransaction(CancellationToken.None)
+            .ConfigureAwait(false);
         var entry = await dataContext
             .WorkQueues.AsNoTracking()
-            .FirstAsync(w => w.Id == workQueueId);
-        await database.Database.ExecuteSqlRawAsync(dialect.LockSubject(), [entry.SubjectKey!]);
+            .FirstAsync(w => w.Id == workQueueId)
+            .ConfigureAwait(false);
+        await database
+            .Database.ExecuteSqlRawAsync(dialect.LockSubject(), [entry.SubjectKey!])
+            .ConfigureAwait(false);
 
         var claimed = await dataContext
             .WorkQueues.FromSqlRaw(dialect.ClaimWorkQueueEntry(), workQueueId)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync()
+            .ConfigureAwait(false);
         if (claimed is null)
         {
-            await dataContext.RollbackTransaction();
+            await dataContext.RollbackTransaction().ConfigureAwait(false);
             return false;
         }
 
@@ -313,21 +336,21 @@ public class SubjectKeyTests : TestSetup
                 Input = null,
             }
         );
-        await dataContext.Track(metadata);
-        await dataContext.SaveChanges(CancellationToken.None);
+        await dataContext.Track(metadata).ConfigureAwait(false);
+        await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         claimed.Status = Trax.Effect.Enums.WorkQueueStatus.Dispatched;
         claimed.MetadataId = metadata.Id;
         claimed.DispatchedAt = DateTime.UtcNow;
-        await dataContext.SaveChanges(CancellationToken.None);
-        await dataContext.CommitTransaction();
+        await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        await dataContext.CommitTransaction().ConfigureAwait(false);
         return true;
     }
 
     [Test]
     public async Task An_enqueue_with_no_input_is_still_keyed()
     {
-        var result = await Execution.QueueAsync(typeof(IKeyedTrain).FullName!, null);
+        var result = await Execution.QueueAsync(typeof(IKeyedTrain).FullName!, inputJson: null);
 
         (await EntryAsync(result.WorkQueueId))!
             .SubjectKey.Should()

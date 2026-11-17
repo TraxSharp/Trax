@@ -238,7 +238,11 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
         var railway = typeof(EffectJunction<,>)
             .GetMethods(BindingFlags.Instance | BindingFlags.Public)
             .Single(m =>
-                m.Name == nameof(EffectJunction<object, object>.RailwayJunction)
+                string.Equals(
+                    m.Name,
+                    nameof(EffectJunction<object, object>.RailwayJunction),
+                    StringComparison.Ordinal
+                )
                 && m.GetParameters()[1].ParameterType.IsGenericType
                 && m.GetParameters()[1].ParameterType.GetGenericTypeDefinition() == typeof(Train<,>)
             );
@@ -371,7 +375,9 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
         var validator = _host
             .Services.GetServices<IHostedService>()
             .OfType<IHostedLifecycleService>()
-            .Single(s => s.GetType().Name == "InvokesStartupValidator");
+            .Single(s =>
+                string.Equals(s.GetType().Name, "InvokesStartupValidator", StringComparison.Ordinal)
+            );
 
         var start = () => validator.StartingAsync(CancellationToken.None);
 

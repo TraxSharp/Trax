@@ -94,7 +94,7 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
     /// Wraps the registered <see cref="IMachineInstanceStore"/>, and while <see cref="Hide"/> is set answers every
     /// read of a system instance with nothing, as though the row had just been deleted.
     /// </summary>
-    internal class HidingStore : DispatchProxy
+    internal sealed class HidingStore : DispatchProxy
     {
         public static bool Hide { get; set; }
 
@@ -117,7 +117,11 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
         {
             if (
                 Hide
-                && method!.Name == nameof(IMachineInstanceStore.Get)
+                && string.Equals(
+                    method!.Name,
+                    nameof(IMachineInstanceStore.Get),
+                    StringComparison.Ordinal
+                )
                 && args is [DraftOwner { Kind: Trax.Effect.Enums.SnapshotOwnerKind.System }, ..]
             )
                 return Task.FromResult<StoredSnapshot?>(null);

@@ -178,5 +178,5 @@ public class TrainBusMetadataTests
         await act.Should().ThrowAsync<NoTrainForInputException>();
     }
 
-    private class UnregisteredInput { }
+    private sealed class UnregisteredInput;
 }

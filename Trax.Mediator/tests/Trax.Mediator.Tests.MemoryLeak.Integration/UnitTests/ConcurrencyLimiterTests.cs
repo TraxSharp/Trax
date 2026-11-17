@@ -31,7 +31,7 @@ public class ConcurrencyLimiterTests
     [Test]
     public async Task AcquireAsync_PerTrainLimit_BlocksAtLimit()
     {
-        var limiter = CreateLimiter(overrides: new() { [TrainA] = 2 });
+        var limiter = CreateLimiter(overrides: new(StringComparer.Ordinal) { [TrainA] = 2 });
 
         var permit1 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
         var permit2 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
@@ -54,7 +54,7 @@ public class ConcurrencyLimiterTests
     [Test]
     public async Task AcquireAsync_PerTrainLimit_ReleasesOnDispose()
     {
-        var limiter = CreateLimiter(overrides: new() { [TrainA] = 1 });
+        var limiter = CreateLimiter(overrides: new(StringComparer.Ordinal) { [TrainA] = 1 });
 
         var permit1 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
 
@@ -75,7 +75,9 @@ public class ConcurrencyLimiterTests
     [Test]
     public async Task AcquireAsync_DifferentTrains_IndependentLimits()
     {
-        var limiter = CreateLimiter(overrides: new() { [TrainA] = 1, [TrainB] = 1 });
+        var limiter = CreateLimiter(
+            overrides: new(StringComparer.Ordinal) { [TrainA] = 1, [TrainB] = 1 }
+        );
 
         var permitA = await limiter.AcquireAsync(TrainA, CancellationToken.None);
         var permitB = await limiter.AcquireAsync(TrainB, CancellationToken.None);
@@ -140,7 +142,10 @@ public class ConcurrencyLimiterTests
     public async Task AcquireAsync_PerTrainAndGlobal_BothEnforced()
     {
         // Per-train limit of 5 but global limit of 2 — global is the bottleneck
-        var limiter = CreateLimiter(globalLimit: 2, overrides: new() { [TrainA] = 5 });
+        var limiter = CreateLimiter(
+            globalLimit: 2,
+            overrides: new(StringComparer.Ordinal) { [TrainA] = 5 }
+        );
 
         var permit1 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
         var permit2 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
@@ -165,7 +170,7 @@ public class ConcurrencyLimiterTests
     [Test]
     public async Task AcquireAsync_CancellationToken_ThrowsWhenCancelled()
     {
-        var limiter = CreateLimiter(overrides: new() { [TrainA] = 1 });
+        var limiter = CreateLimiter(overrides: new(StringComparer.Ordinal) { [TrainA] = 1 });
 
         var permit = await limiter.AcquireAsync(TrainA, CancellationToken.None);
 
@@ -181,7 +186,10 @@ public class ConcurrencyLimiterTests
     public async Task AcquireAsync_CancelledWhileWaitingForGlobal_ReleasesPerTrainPermit()
     {
         // Per-train limit 10, global limit 1 — acquire fills global, next blocks on global
-        var limiter = CreateLimiter(globalLimit: 1, overrides: new() { [TrainA] = 10 });
+        var limiter = CreateLimiter(
+            globalLimit: 1,
+            overrides: new(StringComparer.Ordinal) { [TrainA] = 10 }
+        );
 
         var permit = await limiter.AcquireAsync(TrainA, CancellationToken.None);
 
@@ -265,7 +273,7 @@ public class ConcurrencyLimiterTests
     [Test]
     public async Task Permit_Dispose_Idempotent()
     {
-        var limiter = CreateLimiter(overrides: new() { [TrainA] = 1 });
+        var limiter = CreateLimiter(overrides: new(StringComparer.Ordinal) { [TrainA] = 1 });
 
         var permit = await limiter.AcquireAsync(TrainA, CancellationToken.None);
 
@@ -315,9 +323,9 @@ public class ConcurrencyLimiterTests
 
     private interface IFakeConcurrencyTrain;
 
-    private class FakeConcurrencyTrain : IFakeConcurrencyTrain;
+    private sealed class FakeConcurrencyTrain : IFakeConcurrencyTrain;
 
-    private class StubDiscoveryService(IReadOnlyList<TrainRegistration> registrations)
+    private sealed class StubDiscoveryService(IReadOnlyList<TrainRegistration> registrations)
         : ITrainDiscoveryService
     {
         public IReadOnlyList<TrainRegistration> DiscoverTrains() => registrations;

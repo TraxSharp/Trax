@@ -14,9 +14,9 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;
 [TestFixture]
 public class TrainExecutionServiceLookupTests
 {
-    private record EmptyIn;
+    private sealed record EmptyIn;
 
-    private record EmptyOut;
+    private sealed record EmptyOut;
 
     private static TrainRegistration FakeRegistration(
         string fullName,
@@ -70,7 +70,7 @@ public class TrainExecutionServiceLookupTests
     }
 
     private static TrainExecutionService BuildService(params TrainRegistration[] trains) =>
-        BuildService(null, trains);
+        BuildService(config: null, trains);
 
     // Use reflection to exercise the private FindTrain method directly so these
     // tests don't need a full run harness.
@@ -162,7 +162,8 @@ public class TrainExecutionServiceLookupTests
         var svc = BuildService(config, reg);
         var oversized = "{\"pad\":\"" + new string('x', 128) + "\"}";
 
-        var act = async () => await svc.RunAsync(typeof(IFakeTrain).FullName!, oversized);
+        var act = async () =>
+            await svc.RunAsync(typeof(IFakeTrain).FullName!, oversized).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<TrainInputValidationException>())
             .Which.MaxBytes.Should()
@@ -181,7 +182,8 @@ public class TrainExecutionServiceLookupTests
         var svc = BuildService(config, reg);
         var oversized = "{\"pad\":\"" + new string('x', 64) + "\"}";
 
-        var act = async () => await svc.QueueAsync(typeof(IFakeTrain).FullName!, oversized);
+        var act = async () =>
+            await svc.QueueAsync(typeof(IFakeTrain).FullName!, oversized).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainInputValidationException>();
     }
@@ -201,7 +203,8 @@ public class TrainExecutionServiceLookupTests
         var config = new MediatorConfiguration { MaxInputJsonBytes = 12 };
         var svc = BuildService(config, reg);
 
-        var act = async () => await svc.RunAsync(typeof(IFakeTrain).FullName!, json);
+        var act = async () =>
+            await svc.RunAsync(typeof(IFakeTrain).FullName!, json).ConfigureAwait(false);
 
         // Any thrown exception must not be the size-check one.
         try
@@ -257,7 +260,8 @@ public class TrainExecutionServiceLookupTests
         );
 
         var oversized = "{\"big\":\"" + new string('x', 256) + "\"}";
-        var act = async () => await svc.RunAsync(typeof(IFakeTrain).FullName!, oversized);
+        var act = async () =>
+            await svc.RunAsync(typeof(IFakeTrain).FullName!, oversized).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()

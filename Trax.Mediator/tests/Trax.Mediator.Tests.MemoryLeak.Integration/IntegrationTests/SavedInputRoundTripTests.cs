@@ -82,8 +82,8 @@ public class SavedInputRoundTripTests
 
         var metadata = new Metadata { Name = "saved-input" };
         metadata.SetInputObject(input);
-        await effect.Track(metadata);
-        await effect.SaveChanges(CancellationToken.None);
+        await effect.Track(metadata).ConfigureAwait(false);
+        await effect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         return metadata.Input!;
     }
@@ -322,12 +322,12 @@ public class SavedInputRoundTripTests
     {
         // Saved at exactly the cap, then handed back the way a jsonb column prints it: a space
         // after every colon and comma, which alone puts it over the cap.
-        var tags = string.Join(",", Enumerable.Range(0, 200).Select(i => $"\"t{i}\""));
+        var tags = string.Join(',', Enumerable.Range(0, 200).Select(i => $"\"t{i}\""));
         var compact =
             "{\"counts\":[1,2,3],\"tags\":[" + tags + "],\"home\":{\"city\":\"Lyon\",\"zip\":1}}";
         var spaced =
             "{\"counts\": [1, 2, 3], \"tags\": ["
-            + tags.Replace(",", ", ")
+            + tags.Replace(",", ", ", StringComparison.Ordinal)
             + "], \"home\": {\"city\": \"Lyon\", \"zip\": 1}}";
         var cap = Encoding.UTF8.GetByteCount(compact);
         Encoding.UTF8.GetByteCount(spaced).Should().BeGreaterThan(cap);
@@ -355,8 +355,8 @@ public class SavedInputRoundTripTests
     [Test]
     public void SavedInput_WhoseReferencesCopyOneValueManyTimes_IsRefusedAtTheCap()
     {
-        var row = string.Join(",", Enumerable.Repeat("1", 500));
-        var refs = string.Join(",", Enumerable.Repeat("""{"$ref":"3"}""", 2_000));
+        var row = string.Join(',', Enumerable.Repeat("1", 500));
+        var refs = string.Join(',', Enumerable.Repeat("""{"$ref":"3"}""", 2_000));
         var saved =
             """{"$id":"1","matrix":{"$id":"2","$values":[{"$id":"3","$values":["""
             + row
@@ -429,18 +429,18 @@ public class SavedInputRoundTripTests
     public class Nested
     {
         public string? Label { get; set; }
-        public List<Place> Places { get; set; } = [];
-        public List<List<int>> Matrix { get; set; } = [];
+        public IList<Place> Places { get; set; } = [];
+        public IList<List<int>> Matrix { get; set; } = [];
     }
 
     public class ShapesInput
     {
-        public List<int> Counts { get; set; } = [];
+        public IList<int> Counts { get; set; } = [];
         public string[] Tags { get; set; } = [];
         public Nested? Nested { get; set; }
         public Place? Home { get; set; }
         public Place? Billing { get; set; }
-        public List<List<int>> Matrix { get; set; } = [];
+        public IList<List<int>> Matrix { get; set; } = [];
     }
 
     public interface IShapesTrain : IServiceTrain<ShapesInput, Unit>;
@@ -476,7 +476,7 @@ public class SavedInputRoundTripTests
         public int Id { get; set; }
         public Spot? Home { get; set; }
         public Spot? Work { get; set; }
-        public List<Spot> Stops { get; set; } = [];
+        public IList<Spot> Stops { get; set; } = [];
     }
 
     public interface ISpotsTrain : IServiceTrain<SpotsInput, Unit>;
@@ -489,7 +489,7 @@ public class SavedInputRoundTripTests
 
     public record RecordInput(
         string Id,
-        List<int> Values,
+        IList<int> Values,
         string[] Labels,
         Place Primary,
         Place Secondary

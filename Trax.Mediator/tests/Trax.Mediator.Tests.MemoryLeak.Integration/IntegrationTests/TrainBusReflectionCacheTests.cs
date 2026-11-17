@@ -98,7 +98,9 @@ public class TrainBusReflectionCacheTests
                 for (int i = 0; i < 200; i++)
                 {
                     var testInput = MemoryTestModelFactory.CreateInput($"reflection_test_{i}");
-                    var output = await trainBus.RunAsync<MemoryTestOutput>(testInput);
+                    var output = await trainBus
+                        .RunAsync<MemoryTestOutput>(testInput)
+                        .ConfigureAwait(false);
                     output.Should().NotBeNull();
                 }
             },
@@ -137,12 +139,14 @@ public class TrainBusReflectionCacheTests
                             var testInput = MemoryTestModelFactory.CreateInput(
                                 $"concurrent_{taskId}_{i}"
                             );
-                            var output = await trainBus.RunAsync<MemoryTestOutput>(testInput);
+                            var output = await trainBus
+                                .RunAsync<MemoryTestOutput>(testInput)
+                                .ConfigureAwait(false);
                             output.Should().NotBeNull();
                         }
                     });
 
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
             },
             "TrainBus_ConcurrentExecutions_MemoryTest"
         );

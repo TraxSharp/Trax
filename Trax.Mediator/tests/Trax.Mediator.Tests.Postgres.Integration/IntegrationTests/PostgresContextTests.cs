@@ -138,7 +138,10 @@ public class PostgresContextTests : TestSetup
         logLevel.Should().Be(1);
     }
 
-    internal class TestTrain : ServiceTrain<TestTrainInput, ITestTrain>, ITestTrain
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class TestTrain : ServiceTrain<TestTrainInput, ITestTrain>, ITestTrain
     {
         // The train is its own output so the test can read the Metadata of the run. Seeding it
         // under its interface is what makes that expressible as a declaration.
@@ -148,16 +151,23 @@ public class PostgresContextTests : TestSetup
 
     // Deliberately has no dedicated interface: the canonical name falls back to the concrete
     // type. Nothing asserts on its output, so it declares a chain of no junctions.
-    internal class TestTrainWithoutInterface : ServiceTrain<TestTrainWithoutInterfaceInput, Unit>
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class TestTrainWithoutInterface
+        : ServiceTrain<TestTrainWithoutInterfaceInput, Unit>
     {
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
     }
 
-    internal record TestTrainWithoutInterfaceInput;
+    internal sealed record TestTrainWithoutInterfaceInput;
 
-    internal record TestTrainInput;
+    internal sealed record TestTrainInput;
 
-    internal class TestTrainWithinTrain()
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class TestTrainWithinTrain()
         : ServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)>,
             ITestTrainWithinTrain
     {
@@ -167,16 +177,18 @@ public class PostgresContextTests : TestSetup
             AddServices<ITestTrainWithinTrain>(this).Chain<JunctionToRunTestTrain>().Resolve();
     }
 
-    internal record TestTrainWithinTrainInput;
+    internal sealed record TestTrainWithinTrainInput;
 
-    internal class JunctionToRunTestTrain(
+    internal sealed class JunctionToRunTestTrain(
         ITrainBus trainBus,
         ILogger<JunctionToRunTestTrain> logger
     ) : EffectJunction<Unit, ITestTrain>
     {
         public override async Task<ITestTrain> Run(Unit input)
         {
-            var testTrain = await trainBus.RunAsync<ITestTrain>(new TestTrainInput());
+            var testTrain = await trainBus
+                .RunAsync<ITestTrain>(new TestTrainInput())
+                .ConfigureAwait(false);
 
             logger.LogCritical("Ran {TrainName}", "TestTrain");
 
@@ -184,8 +196,8 @@ public class PostgresContextTests : TestSetup
         }
     }
 
-    internal interface ITestTrain : IServiceTrain<TestTrainInput, ITestTrain> { }
+    internal interface ITestTrain : IServiceTrain<TestTrainInput, ITestTrain>;
 
     internal interface ITestTrainWithinTrain
-        : IServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)> { }
+        : IServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)>;
 }

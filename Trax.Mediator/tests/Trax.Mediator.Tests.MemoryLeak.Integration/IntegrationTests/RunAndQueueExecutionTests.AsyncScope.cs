@@ -22,11 +22,12 @@ public partial class RunAndQueueExecutionTests
             .Should()
             .Be("ran");
 
-        var untyped = async () => await bus.RunAsync(new AsyncScopedInput());
+        var untyped = async () => await bus.RunAsync(new AsyncScopedInput()).ConfigureAwait(false);
         await untyped.Should().NotThrowAsync();
 
         var untypedWithToken = async () =>
-            await bus.RunAsync(new AsyncScopedInput(), CancellationToken.None);
+            await bus.RunAsync(new AsyncScopedInput(), CancellationToken.None)
+                .ConfigureAwait(false);
         await untypedWithToken.Should().NotThrowAsync();
     }
 
@@ -37,9 +38,12 @@ public partial class RunAndQueueExecutionTests
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var act = async () =>
-            await bus.RunAsync<string>(new FailingAsyncScopedInput(), CancellationToken.None);
+            await bus.RunAsync<string>(new FailingAsyncScopedInput(), CancellationToken.None)
+                .ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*the train's own failure*");
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*the train's own failure*");
     }
 
     [Test]
@@ -55,7 +59,8 @@ public partial class RunAndQueueExecutionTests
             provider
         );
 
-        var act = async () => await validator.StartingAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartingAsync(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -91,7 +96,7 @@ public partial class RunAndQueueExecutionTests
 
         protected override Task<Either<Exception, string>> Junctions() =>
             Task.FromResult<Either<Exception, string>>(
-                new ArgumentException("the train's own failure")
+                new InvalidOperationException("the train's own failure")
             );
     }
 

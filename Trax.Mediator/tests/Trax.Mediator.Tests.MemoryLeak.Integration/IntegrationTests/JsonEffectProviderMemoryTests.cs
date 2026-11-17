@@ -60,11 +60,11 @@ public class JsonEffectProviderMemoryTests
                             }
                         );
 
-                        await provider.Track(metadata);
+                        await provider.Track(metadata).ConfigureAwait(false);
                     }
 
                     // Save changes to trigger JSON serialization
-                    await provider.SaveChanges(CancellationToken.None);
+                    await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
                     // Provider gets disposed here, should clean up all tracked models
                 }
@@ -126,17 +126,17 @@ public class JsonEffectProviderMemoryTests
                     );
 
                     modelReferences.Add(new WeakReference(metadata));
-                    await provider.Track(metadata);
+                    await provider.Track(metadata).ConfigureAwait(false);
 
                     // Trigger serialization periodically
                     if (i % 10 == 0)
                     {
-                        await provider.SaveChanges(CancellationToken.None);
+                        await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                     }
                 }
 
                 // Final save
-                await provider.SaveChanges(CancellationToken.None);
+                await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
                 // Provider disposal should clean up all tracked models
             },
@@ -192,10 +192,10 @@ public class JsonEffectProviderMemoryTests
                                 )
                             );
 
-                            await provider.Track(metadata);
+                            await provider.Track(metadata).ConfigureAwait(false);
 
                             // Simulate concurrent state changes
-                            await Task.Delay(1); // Small delay to simulate work
+                            await Task.Delay(1).ConfigureAwait(false); // Small delay to simulate work
 
                             metadata.SetOutputObject(
                                 new MemoryTestOutput
@@ -210,15 +210,17 @@ public class JsonEffectProviderMemoryTests
 
                             if (i % 5 == 0)
                             {
-                                await provider.SaveChanges(CancellationToken.None);
+                                await provider
+                                    .SaveChanges(CancellationToken.None)
+                                    .ConfigureAwait(false);
                             }
                         }
                     });
 
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
 
                 // Final save changes
-                await provider.SaveChanges(CancellationToken.None);
+                await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             },
             "JsonEffectProvider_ConcurrentUsage"
         );
@@ -257,7 +259,7 @@ public class JsonEffectProviderMemoryTests
                     );
 
                     metadataList.Add(metadata);
-                    await provider.Track(metadata);
+                    await provider.Track(metadata).ConfigureAwait(false);
                 }
 
                 // Repeatedly modify and save changes
@@ -280,7 +282,7 @@ public class JsonEffectProviderMemoryTests
                     }
 
                     // This should replace old JSON strings, not accumulate them
-                    await provider.SaveChanges(CancellationToken.None);
+                    await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 }
             },
             "JsonEffectProvider_RepeatedSerialization"
@@ -357,17 +359,17 @@ public class JsonEffectProviderMemoryTests
                         }
                     );
 
-                    await provider.Track(metadata);
+                    await provider.Track(metadata).ConfigureAwait(false);
 
                     // Save periodically to trigger serialization
                     if (i % 5 == 0)
                     {
-                        await provider.SaveChanges(CancellationToken.None);
+                        await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                     }
                 }
 
                 // Final save
-                await provider.SaveChanges(CancellationToken.None);
+                await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             },
             "JsonEffectProvider_LargeObjectSerialization"
         );
@@ -404,7 +406,7 @@ public class JsonEffectProviderMemoryTests
                 // Track the same model multiple times
                 for (int i = 0; i < 100; i++)
                 {
-                    await provider.Track(metadata);
+                    await provider.Track(metadata).ConfigureAwait(false);
 
                     // Modify the model slightly
                     metadata.SetOutputObject(
@@ -420,11 +422,11 @@ public class JsonEffectProviderMemoryTests
 
                     if (i % 10 == 0)
                     {
-                        await provider.SaveChanges(CancellationToken.None);
+                        await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                     }
                 }
 
-                await provider.SaveChanges(CancellationToken.None);
+                await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             },
             "JsonEffectProvider_DuplicateTracking"
         );
@@ -440,9 +442,14 @@ public class JsonEffectProviderMemoryTests
             );
     }
 
-    private class StubEffectConfiguration : ITraxEffectConfiguration
+    private sealed class StubEffectConfiguration : ITraxEffectConfiguration
     {
-        public System.Text.Json.JsonSerializerOptions SystemJsonSerializerOptions { get; } = new();
+        public System.Text.Json.JsonSerializerOptions SystemJsonSerializerOptions { get; } =
+            new()
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            };
         public bool SerializeJunctionData { get; } = false;
         public LogLevel LogLevel { get; } = LogLevel.Information;
     }

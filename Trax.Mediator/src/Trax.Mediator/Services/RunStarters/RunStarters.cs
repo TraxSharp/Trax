@@ -6,7 +6,10 @@ using Trax.Mediator.Services.Principal;
 
 namespace Trax.Mediator.Services.RunStarters;
 
-/// <inheritdoc />
+/// <summary>
+/// The <see cref="IRunStarters"/> the mediator registers: compares the current principal's id
+/// with the starter hash a run's rows hold.
+/// </summary>
 internal sealed class RunStarters(
     IDataContextProviderFactory contexts,
     ICurrentPrincipalProvider principal

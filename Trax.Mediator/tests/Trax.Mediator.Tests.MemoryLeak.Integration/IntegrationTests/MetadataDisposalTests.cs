@@ -117,7 +117,7 @@ public class MetadataDisposalTests
                             processingDelayMs: 0
                         ); // 100KB each
 
-                        await train.Run(testInput);
+                        await train.Run(testInput).ConfigureAwait(false);
                     }
                     finally
                     {
@@ -225,7 +225,7 @@ public class MetadataDisposalTests
                             dataSizeBytes: 100000
                         ); // 100KB each
 
-                        await failingTrain.Run(testInput);
+                        await failingTrain.Run(testInput).ConfigureAwait(false);
                     }
                     catch (Exception)
                     {

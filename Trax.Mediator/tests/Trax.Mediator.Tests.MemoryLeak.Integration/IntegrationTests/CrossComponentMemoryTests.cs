@@ -32,6 +32,8 @@ public class CrossComponentMemoryTests
     {
         _jsonOptions = new JsonSerializerOptions
         {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
             WriteIndented = false,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         };
@@ -97,12 +99,14 @@ public class CrossComponentMemoryTests
                         metadata.SetOutputObject(output);
 
                         // Track with both providers
-                        await parameterEffect.Track(metadata);
-                        await jsonEffect.Track(metadata);
+                        await parameterEffect.Track(metadata).ConfigureAwait(false);
+                        await jsonEffect.Track(metadata).ConfigureAwait(false);
 
                         // Save changes on both providers
-                        await parameterEffect.SaveChanges(CancellationToken.None);
-                        await jsonEffect.SaveChanges(CancellationToken.None);
+                        await parameterEffect
+                            .SaveChanges(CancellationToken.None)
+                            .ConfigureAwait(false);
+                        await jsonEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                     }
 
                     // Force periodic GC to test cleanup
@@ -193,11 +197,11 @@ public class CrossComponentMemoryTests
                         metadata.SetInputObject(input);
                         metadata.SetOutputObject(output);
 
-                        await effectRunner.Track(metadata);
+                        await effectRunner.Track(metadata).ConfigureAwait(false);
                     }
 
                     // Save all changes through runner
-                    await effectRunner.SaveChanges(CancellationToken.None);
+                    await effectRunner.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
                     // Periodic cleanup
                     if (iteration % 8 == 0)
@@ -272,8 +276,8 @@ public class CrossComponentMemoryTests
                         metadata.SetInputObject(input);
                         metadata.SetOutputObject(output);
 
-                        await parameterEffect.Track(metadata);
-                        await jsonEffect.Track(metadata);
+                        await parameterEffect.Track(metadata).ConfigureAwait(false);
+                        await jsonEffect.Track(metadata).ConfigureAwait(false);
 
                         // Simulate failure scenario
                         if (iteration % 3 == 0)
@@ -283,8 +287,10 @@ public class CrossComponentMemoryTests
                             );
                         }
 
-                        await parameterEffect.SaveChanges(CancellationToken.None);
-                        await jsonEffect.SaveChanges(CancellationToken.None);
+                        await parameterEffect
+                            .SaveChanges(CancellationToken.None)
+                            .ConfigureAwait(false);
+                        await jsonEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                     }
                     catch (Exception)
                     {
@@ -367,18 +373,22 @@ public class CrossComponentMemoryTests
                             metadata.SetInputObject(input);
                             metadata.SetOutputObject(output);
 
-                            await parameterEffect.Track(metadata);
-                            await jsonEffect.Track(metadata);
+                            await parameterEffect.Track(metadata).ConfigureAwait(false);
+                            await jsonEffect.Track(metadata).ConfigureAwait(false);
 
-                            await parameterEffect.SaveChanges(CancellationToken.None);
-                            await jsonEffect.SaveChanges(CancellationToken.None);
+                            await parameterEffect
+                                .SaveChanges(CancellationToken.None)
+                                .ConfigureAwait(false);
+                            await jsonEffect
+                                .SaveChanges(CancellationToken.None)
+                                .ConfigureAwait(false);
 
                             // Small delay to simulate realistic concurrency
-                            await Task.Delay(1);
+                            await Task.Delay(1).ConfigureAwait(false);
                         }
                     });
 
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
 
                 // Cleanup after concurrent execution
                 GC.Collect();

@@ -521,11 +521,17 @@ public class SharedInputTypeExecutionTests
 
     public class OpenSharedTrain : ServiceTrain<SharedInput, SharedOutput>, IOpenSharedTrain
     {
-        public static int Runs;
+        private static int _runs;
+
+        public static int Runs
+        {
+            get => Volatile.Read(ref _runs);
+            set => Volatile.Write(ref _runs, value);
+        }
 
         protected override Task<Either<Exception, SharedOutput>> Junctions()
         {
-            Interlocked.Increment(ref Runs);
+            Interlocked.Increment(ref _runs);
             return Task.FromResult<Either<Exception, SharedOutput>>(new SharedOutput("open"));
         }
     }

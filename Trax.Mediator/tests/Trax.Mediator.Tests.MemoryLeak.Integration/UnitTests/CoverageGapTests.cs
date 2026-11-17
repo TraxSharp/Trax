@@ -125,7 +125,8 @@ public class CoverageGapTests
         using var provider = (ServiceProvider)BuildProviderWithGapTrains();
         var execution = provider.GetRequiredService<ITrainExecutionService>();
 
-        var act = async () => await execution.QueueAsync("Does.Not.Exist", "{}");
+        var act = async () =>
+            await execution.QueueAsync("Does.Not.Exist", "{}").ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -152,7 +153,8 @@ public class CoverageGapTests
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions
         );
 
-        var act = async () => await execution.QueueAsync(nameof(IGapTrain), inputJson);
+        var act = async () =>
+            await execution.QueueAsync(nameof(IGapTrain), inputJson).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<Mediator.Exceptions.TrainInputValidationException>();
     }
@@ -165,7 +167,8 @@ public class CoverageGapTests
 
         // The literal "null" deserializes to null for reference types — covers the
         // null-check after JsonSerializer.Deserialize in DeserializeInput.
-        var act = async () => await execution.RunAsync(nameof(IGapTrain), "null");
+        var act = async () =>
+            await execution.RunAsync(nameof(IGapTrain), "null").ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<System.Text.Json.JsonException>(
@@ -182,7 +185,8 @@ public class CoverageGapTests
 
         // Only a null or blank string is read as {}; the JSON literal null is not blank, so it
         // reaches the deserializer and is refused there, the same as on RunAsync.
-        var act = async () => await execution.QueueAsync(nameof(IGapTrain), "null");
+        var act = async () =>
+            await execution.QueueAsync(nameof(IGapTrain), "null").ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<System.Text.Json.JsonException>(
@@ -220,7 +224,8 @@ public class CoverageGapTests
                 .Be("x");
         }
 
-        var outside = async () => await execution.RunAsync(trainName, inputJson);
+        var outside = async () =>
+            await execution.RunAsync(trainName, inputJson).ConfigureAwait(false);
         await outside
             .Should()
             .ThrowAsync<InvalidOperationException>("outside the scope the check still fails closed")
@@ -258,7 +263,9 @@ public class CoverageGapTests
         }
 
         var outside = async () =>
-            await execution.QueueAsync(typeof(IAuthorizedGapTrain).FullName!, inputJson);
+            await execution
+                .QueueAsync(typeof(IAuthorizedGapTrain).FullName!, inputJson)
+                .ConfigureAwait(false);
         await outside
             .Should()
             .ThrowAsync<InvalidOperationException>("outside the scope the check still fails closed")
@@ -286,7 +293,7 @@ public class CoverageGapTests
         );
 
         var trainName = typeof(IAuthorizedGapTrain).FullName!;
-        var act = async () => await execution.RunAsync(trainName, inputJson);
+        var act = async () => await execution.RunAsync(trainName, inputJson).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -314,7 +321,9 @@ public class CoverageGapTests
         );
 
         var act = async () =>
-            await execution.QueueAsync(typeof(IAuthorizedGapTrain).FullName!, inputJson);
+            await execution
+                .QueueAsync(typeof(IAuthorizedGapTrain).FullName!, inputJson)
+                .ConfigureAwait(false);
 
         var thrown = await act.Should()
             .ThrowExactlyAsync<Trax.Mediator.Exceptions.TrainAuthorizationNotConfiguredException>();

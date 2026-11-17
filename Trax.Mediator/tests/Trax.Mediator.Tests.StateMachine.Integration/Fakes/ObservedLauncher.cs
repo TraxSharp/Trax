@@ -59,10 +59,10 @@ internal sealed class ObservedLauncher(IInvokedTrainLauncher inner) : IInvokedTr
                 "The host died between the advance and the enqueue."
             );
 
-        await inner.Launch(launch, context, cancellationToken);
+        await inner.Launch(launch, context, cancellationToken).ConfigureAwait(false);
 
         if (Observe is { } observe)
-            await observe();
+            await observe().ConfigureAwait(false);
 
         if (Fault == LaunchFault.AfterEnqueue)
             throw new InvalidOperationException("The host died before the commit.");

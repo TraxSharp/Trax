@@ -55,8 +55,10 @@ public class QueueHookTests
     private async Task<long> CountWorkQueueAsync()
     {
         var factory = _serviceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.LongCountAsync();
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return await context.WorkQueues.LongCountAsync().ConfigureAwait(false);
     }
 
     private static string Serialize(object input) =>
@@ -117,9 +119,10 @@ public class QueueHookTests
 
         var act = async () =>
             await svc.QueueAsync(
-                typeof(IRejectingQueueTrain).FullName!,
-                Serialize(new RejectInput("x"))
-            );
+                    typeof(IRejectingQueueTrain).FullName!,
+                    Serialize(new RejectInput("x"))
+                )
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -188,7 +191,8 @@ public class QueueHookTests
         await LateFaultQueueTrain.Started.Task.WaitAsync(TimeSpan.FromSeconds(15));
         await cancel.CancelAsync();
 
-        var act = async () => await enqueue.WaitAsync(TimeSpan.FromSeconds(15));
+        var act = async () =>
+            await enqueue.WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         // The caller has its answer. Now the hook, still running, fails.
@@ -215,15 +219,17 @@ public class QueueHookTests
     private static async Task<long> CountAsync(IServiceProvider provider)
     {
         var factory = provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.LongCountAsync();
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return await context.WorkQueues.LongCountAsync().ConfigureAwait(false);
     }
 
     #region Test infrastructure
 
     public class QueueHookProbe(IDataContextProviderFactory factory)
     {
-        public List<string> Constructed { get; } = [];
+        public IList<string> Constructed { get; } = [];
         public int OnQueueCallCount { get; private set; }
         public string? LastExternalId { get; private set; }
         public string? LastInput { get; private set; }
@@ -233,8 +239,10 @@ public class QueueHookTests
 
         public async Task CaptureOnQueueAsync(string externalId, string? input)
         {
-            using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-            RowsAtHookTime = await context.WorkQueues.LongCountAsync();
+            using var context = await factory
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            RowsAtHookTime = await context.WorkQueues.LongCountAsync().ConfigureAwait(false);
             OnQueueCallCount++;
             LastExternalId = externalId;
             LastInput = input;
@@ -347,7 +355,7 @@ public class QueueHookTests
             Started.TrySetResult();
 
             // Deliberately ignores the token.
-            await Gate.Task;
+            await Gate.Task.ConfigureAwait(false);
 
             throw new InvalidOperationException(Reason);
         }

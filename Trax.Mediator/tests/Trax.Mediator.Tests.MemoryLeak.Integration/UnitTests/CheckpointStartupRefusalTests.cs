@@ -90,25 +90,27 @@ public class CheckpointStartupRefusalTests
         services.AddScoped<TService, TTrain>();
         configure?.Invoke(services);
 
-        await using var provider = services.BuildServiceProvider();
-
-        var discovery = Substitute.For<ITrainDiscoveryService>();
-        discovery.DiscoverTrains().Returns([Registration<TService, TTrain>()]);
-
-        var validator = new TrainChainStartupValidator(
-            discovery,
-            provider.GetRequiredService<IServiceScopeFactory>(),
-            new MediatorConfiguration()
-        );
-
-        try
+        var provider = services.BuildServiceProvider();
+        await using (provider.ConfigureAwait(false))
         {
-            await validator.StartingAsync(CancellationToken.None);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            return ex;
+            var discovery = Substitute.For<ITrainDiscoveryService>();
+            discovery.DiscoverTrains().Returns([Registration<TService, TTrain>()]);
+
+            var validator = new TrainChainStartupValidator(
+                discovery,
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                new MediatorConfiguration()
+            );
+
+            try
+            {
+                await validator.StartingAsync(CancellationToken.None).ConfigureAwait(false);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                return ex;
+            }
         }
     }
 
@@ -131,7 +133,7 @@ public class CheckpointStartupRefusalTests
             IsMutation = false,
             IsRemote = false,
             IsBroadcastEnabled = false,
-            GraphQLOperations = 0,
+            GraphQLOperations = (Trax.Effect.Attributes.GraphQLOperation)0,
         };
 
     /// <summary>An input no other train in this assembly takes, so scanning finds these alone for it.</summary>

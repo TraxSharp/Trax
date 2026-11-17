@@ -125,7 +125,7 @@ public class TrainDiscoveryAuthorizationTests
             IsMutation = false,
             IsBroadcastEnabled = false,
             IsRemote = false,
-            GraphQLOperations = 0,
+            GraphQLOperations = (Trax.Effect.Attributes.GraphQLOperation)0,
         };
 
         handBuilt.RequiredRoleSets.Should().ContainSingle();
@@ -157,7 +157,7 @@ public class TrainDiscoveryAuthorizationTests
             IsMutation = false,
             IsBroadcastEnabled = false,
             IsRemote = false,
-            GraphQLOperations = 0,
+            GraphQLOperations = (Trax.Effect.Attributes.GraphQLOperation)0,
         };
 
         handBuilt.RequiredRoleSets.Should().ContainSingle();
@@ -264,7 +264,7 @@ public class TrainDiscoveryAuthorizationTests
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
-    public class BaseAuthorizedTrainImpl : AuthorizedBase, IBaseAuthorizedTrain { }
+    public class BaseAuthorizedTrainImpl : AuthorizedBase, IBaseAuthorizedTrain;
 
     [TraxAuthorize("FromInterface", Roles = "RoleA")]
     public interface IMultiSurfaceTrain : IServiceTrain<EmptyIn, EmptyOut>;

@@ -23,6 +23,8 @@ public class ParameterEffectMemoryTests
     {
         _jsonOptions = new JsonSerializerOptions
         {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
             WriteIndented = false,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         };
@@ -66,11 +68,11 @@ public class ParameterEffectMemoryTests
                             }
                         );
 
-                        await parameterEffect.Track(metadata);
+                        await parameterEffect.Track(metadata).ConfigureAwait(false);
                     }
 
                     // Save changes to trigger JSON serialization and JsonDocument creation
-                    await parameterEffect.SaveChanges(CancellationToken.None);
+                    await parameterEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
                     // ParameterEffect gets disposed here, should clean up all tracked metadata
                 }
@@ -137,17 +139,19 @@ public class ParameterEffectMemoryTests
                     );
 
                     metadataReferences.Add(new WeakReference(metadata));
-                    await parameterEffect.Track(metadata);
+                    await parameterEffect.Track(metadata).ConfigureAwait(false);
 
                     // Trigger serialization periodically
                     if (i % 10 == 0)
                     {
-                        await parameterEffect.SaveChanges(CancellationToken.None);
+                        await parameterEffect
+                            .SaveChanges(CancellationToken.None)
+                            .ConfigureAwait(false);
                     }
                 }
 
                 // Final save
-                await parameterEffect.SaveChanges(CancellationToken.None);
+                await parameterEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
                 // ParameterEffect disposal should clean up all tracked metadata
             },
@@ -207,7 +211,7 @@ public class ParameterEffectMemoryTests
                     )
                 );
 
-                await parameterEffect.Track(metadata);
+                await parameterEffect.Track(metadata).ConfigureAwait(false);
 
                 // Repeatedly update the metadata to create new JsonDocument instances
                 for (int i = 0; i < 100; i++)
@@ -225,7 +229,7 @@ public class ParameterEffectMemoryTests
                     );
 
                     // Each SaveChanges should dispose old JsonDocuments and create new ones
-                    await parameterEffect.SaveChanges(CancellationToken.None);
+                    await parameterEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 }
             },
             "ParameterEffect_JsonDocumentDisposal"
@@ -270,10 +274,10 @@ public class ParameterEffectMemoryTests
                                 )
                             );
 
-                            await parameterEffect.Track(metadata);
+                            await parameterEffect.Track(metadata).ConfigureAwait(false);
 
                             // Simulate concurrent parameter updates
-                            await Task.Delay(1); // Small delay to simulate work
+                            await Task.Delay(1).ConfigureAwait(false); // Small delay to simulate work
 
                             metadata.SetOutputObject(
                                 new MemoryTestOutput
@@ -288,15 +292,17 @@ public class ParameterEffectMemoryTests
 
                             if (i % 5 == 0)
                             {
-                                await parameterEffect.SaveChanges(CancellationToken.None);
+                                await parameterEffect
+                                    .SaveChanges(CancellationToken.None)
+                                    .ConfigureAwait(false);
                             }
                         }
                     });
 
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
 
                 // Final save changes
-                await parameterEffect.SaveChanges(CancellationToken.None);
+                await parameterEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             },
             "ParameterEffect_ConcurrentUsage"
         );
@@ -339,7 +345,7 @@ public class ParameterEffectMemoryTests
                     );
 
                     metadataList.Add(metadata);
-                    await parameterEffect.Track(metadata);
+                    await parameterEffect.Track(metadata).ConfigureAwait(false);
                 }
 
                 // Repeatedly modify and serialize parameters
@@ -362,7 +368,7 @@ public class ParameterEffectMemoryTests
                     }
 
                     // This should replace old JsonDocument instances, not accumulate them
-                    await parameterEffect.SaveChanges(CancellationToken.None);
+                    await parameterEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 }
             },
             "ParameterEffect_RepeatedSerialization"
@@ -446,17 +452,19 @@ public class ParameterEffectMemoryTests
                         }
                     );
 
-                    await parameterEffect.Track(metadata);
+                    await parameterEffect.Track(metadata).ConfigureAwait(false);
 
                     // Save periodically to trigger serialization
                     if (i % 5 == 0)
                     {
-                        await parameterEffect.SaveChanges(CancellationToken.None);
+                        await parameterEffect
+                            .SaveChanges(CancellationToken.None)
+                            .ConfigureAwait(false);
                     }
                 }
 
                 // Final save
-                await parameterEffect.SaveChanges(CancellationToken.None);
+                await parameterEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             },
             "ParameterEffect_LargeParameterSerialization"
         );
@@ -488,7 +496,7 @@ public class ParameterEffectMemoryTests
                     );
 
                     // Call SaveChanges without tracking anything
-                    await parameterEffect.SaveChanges(CancellationToken.None);
+                    await parameterEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
                     // ParameterEffect should dispose cleanly with minimal memory impact
                 }
@@ -539,8 +547,8 @@ public class ParameterEffectMemoryTests
                         )
                     );
 
-                    await parameterEffect.Track(metadata);
-                    await parameterEffect.SaveChanges(CancellationToken.None);
+                    await parameterEffect.Track(metadata).ConfigureAwait(false);
+                    await parameterEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
                     // Dispose the effect
                     parameterEffect.Dispose();
@@ -557,8 +565,8 @@ public class ParameterEffectMemoryTests
                     );
 
                     // These operations should be safely ignored on disposed objects
-                    await disposedEffect.Track(postDisposalMetadata);
-                    await disposedEffect.SaveChanges(CancellationToken.None);
+                    await disposedEffect.Track(postDisposalMetadata).ConfigureAwait(false);
+                    await disposedEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 }
 
                 // Cleanup

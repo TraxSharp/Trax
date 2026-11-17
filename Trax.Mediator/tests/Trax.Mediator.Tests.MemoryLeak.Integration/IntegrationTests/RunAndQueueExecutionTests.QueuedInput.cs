@@ -20,8 +20,8 @@ public partial class RunAndQueueExecutionTests
         // One shared row, referenced many times through JSON reference metadata. The caller's
         // JSON is far under the 256 KiB cap; an enqueue that honoured the references would write
         // every one of them out in full when it stores the input.
-        var row = string.Join(",", Enumerable.Repeat("\"x\"", 500));
-        var refs = string.Join(",", Enumerable.Repeat("""{"$ref":"2"}""", 2_000));
+        var row = string.Join(',', Enumerable.Repeat("\"x\"", 500));
+        var refs = string.Join(',', Enumerable.Repeat("""{"$ref":"2"}""", 2_000));
         var inputJson =
             """{"rows":{"$id":"1","$values":[{"$id":"2","$values":[""" + row + "]}," + refs + "]}}";
 
@@ -105,7 +105,7 @@ public partial class RunAndQueueExecutionTests
     {
         // Each {} is three bytes of caller JSON and is written back with every member of Wide at
         // its default, so the stored form is many times the size of what the caller sent.
-        var elements = string.Join(",", Enumerable.Repeat("{}", 20_000));
+        var elements = string.Join(',', Enumerable.Repeat("{}", 20_000));
         var inputJson = """{"items":[""" + elements + "]}";
         Encoding.UTF8.GetByteCount(inputJson).Should().BeLessThan(262_144);
 
@@ -124,7 +124,7 @@ public partial class RunAndQueueExecutionTests
     {
         // 80,000 empty objects: under the caller cap as sent, and some 20 MB once each is written
         // indented with all eight members. As a string that is twice as much again.
-        var elements = string.Join(",", Enumerable.Repeat("{}", 80_000));
+        var elements = string.Join(',', Enumerable.Repeat("{}", 80_000));
         var inputJson = """{"items":[""" + elements + "]}";
         Encoding.UTF8.GetByteCount(inputJson).Should().BeLessThan(262_144);
 
@@ -199,7 +199,8 @@ public partial class RunAndQueueExecutionTests
 
     public record TotalsInput
     {
-        public Dictionary<string, int> Totals { get; init; } = [];
+        public IDictionary<string, int> Totals { get; init; } =
+            new Dictionary<string, int>(StringComparer.Ordinal);
     }
 
     public interface ITotalsTrain : IServiceTrain<TotalsInput, Unit>;
@@ -212,7 +213,7 @@ public partial class RunAndQueueExecutionTests
 
     public record RowsInput
     {
-        public List<List<string>> Rows { get; init; } = [];
+        public IList<List<string>> Rows { get; init; } = [];
     }
 
     public interface IRowsTrain : IServiceTrain<RowsInput, Unit>;
@@ -239,7 +240,7 @@ public partial class RunAndQueueExecutionTests
 
     public record WideInput
     {
-        public List<Wide> Items { get; init; } = [];
+        public IList<Wide> Items { get; init; } = [];
     }
 
     public interface IWideTrain : IServiceTrain<WideInput, Unit>;

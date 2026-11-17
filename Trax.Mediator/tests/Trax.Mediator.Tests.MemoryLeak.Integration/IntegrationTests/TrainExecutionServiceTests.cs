@@ -67,7 +67,7 @@ public class TrainExecutionServiceTests
     [Test]
     public void RunTrainResult_WithNullOutput_ExplicitNull()
     {
-        var result = new RunTrainResult(1, "ext-1", null);
+        var result = new RunTrainResult(1, "ext-1", Output: null);
         result.Output.Should().BeNull();
     }
 
@@ -260,7 +260,8 @@ public class TrainExecutionServiceTests
         var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
 
         // Act & Assert
-        var act = async () => await executionService.RunAsync("NonExistent.Train", "{}");
+        var act = async () =>
+            await executionService.RunAsync("NonExistent.Train", "{}").ConfigureAwait(false);
         // TrainNotFoundException extends InvalidOperationException; it uses a generic
         // public message so unauthenticated probers can't distinguish "missing" from
         // "present but gated".
@@ -277,7 +278,9 @@ public class TrainExecutionServiceTests
 
         // Act & Assert
         var act = async () =>
-            await executionService.RunAsync(nameof(ITypedExecTrain), "not valid json");
+            await executionService
+                .RunAsync(nameof(ITypedExecTrain), "not valid json")
+                .ConfigureAwait(false);
         await act.Should().ThrowAsync<JsonException>();
     }
 
@@ -411,7 +414,8 @@ public class TrainExecutionServiceTests
         await cts.CancelAsync();
 
         // Assert
-        var waiting = async () => await task2.WaitAsync(HoldUntilReleased.Timeout);
+        var waiting = async () =>
+            await task2.WaitAsync(HoldUntilReleased.Timeout).ConfigureAwait(false);
         await waiting.Should().ThrowAsync<OperationCanceledException>();
         gate.Entries.Should().Be(0, "the cancelled run never got a permit, so never ran");
 
@@ -485,7 +489,7 @@ public class TrainExecutionServiceTests
         {
             var gate = _current;
             gate.Enter();
-            await gate.Released.WaitAsync(CancellationToken);
+            await gate.Released.WaitAsync(CancellationToken).ConfigureAwait(false);
 
             return Unit.Default;
         }
@@ -510,7 +514,7 @@ public class TrainExecutionServiceTests
             {
                 for (var i = 0; i < count; i++)
                 {
-                    if (!await _entered.WaitAsync(within ?? Timeout))
+                    if (!await _entered.WaitAsync(within ?? Timeout).ConfigureAwait(false))
                         return false;
                 }
 

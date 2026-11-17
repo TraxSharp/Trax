@@ -153,7 +153,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 // A factory whose class cannot be read. When a registered class implements the
                 // interface, that class is listed under its own entry already, and listing this
                 // interface could name a different train from the one whose attributes were read.
-                if (classes.Any(c => serviceType.IsAssignableFrom(c.Implementation)))
+                if (classes.Exists(c => serviceType.IsAssignableFrom(c.Implementation)))
                     continue;
 
                 implementation = serviceType;
@@ -181,7 +181,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
     {
         var shared = classes
             .GroupBy(c => c.ServiceType)
-            .Where(g => g.Select(c => c.Implementation).Distinct().Count() > 1)
+            .Where(g => g.Select(c => c.Implementation).Distinct().Skip(1).Any())
             .ToList();
 
         if (shared.Count == 0)
@@ -189,7 +189,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
 
         throw new TrainException(
             string.Join(
-                " ",
+                ' ',
                 shared.Select(g =>
                     $"{g.Count()} trains are registered under {g.Key.FullName}: "
                     + string.Join(", ", g.Select(c => c.Implementation.FullName))
@@ -277,7 +277,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         if (exposure?.Policy is { } exposurePolicy && !string.IsNullOrWhiteSpace(exposurePolicy))
         {
             hasAuthorize = true;
-            if (!policies.Contains(exposurePolicy))
+            if (!policies.Contains(exposurePolicy, StringComparer.Ordinal))
                 policies = policies.Append(exposurePolicy).ToList().AsReadOnly();
         }
 
@@ -300,8 +300,10 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             IsQuery = graphql.IsQuery,
             IsMutation = graphql.IsMutation,
             IsBroadcastEnabled = HasBroadcastAttribute(implementationType),
-            IsRunProgressEnabled =
-                implementationType.GetCustomAttribute<TraxRunProgressAttribute>() is not null,
+            IsRunProgressEnabled = Attribute.IsDefined(
+                implementationType,
+                typeof(TraxRunProgressAttribute)
+            ),
             RunProgressAnswers =
                 implementationType.GetCustomAttribute<TraxRunProgressAttribute>()?.Answers == true,
             IsRemote = HasRemoteAttribute(implementationType),
@@ -382,7 +384,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             // attribute already declared adds nothing to the requirement.
             if (
                 parsed.Count > 0
-                && !roleSets.Any(set =>
+                && !roleSets.Exists(set =>
                     set.Count == parsed.Count
                     && set.All(r => parsed.Contains(r, StringComparer.Ordinal))
                 )
@@ -441,21 +443,24 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         // attribute does not flow to the implementing type via inherit: true, so check
         // the implementation (plus its base chain) and every interface it implements.
         if (
-            implementationType.GetCustomAttribute<TraxAllowAnonymousAttribute>(inherit: true)
-            is not null
+            Attribute.IsDefined(
+                implementationType,
+                typeof(TraxAllowAnonymousAttribute),
+                inherit: true
+            )
         )
             return true;
 
         return implementationType
             .GetInterfaces()
-            .Any(i => i.GetCustomAttribute<TraxAllowAnonymousAttribute>(inherit: true) is not null);
+            .Any(i => Attribute.IsDefined(i, typeof(TraxAllowAnonymousAttribute), inherit: true));
     }
 
     private static bool HasBroadcastAttribute(Type implementationType) =>
-        implementationType.GetCustomAttribute<TraxBroadcastAttribute>() is not null;
+        Attribute.IsDefined(implementationType, typeof(TraxBroadcastAttribute));
 
     private static bool HasRemoteAttribute(Type implementationType) =>
-        implementationType.GetCustomAttribute<TraxRemoteAttribute>() is not null;
+        Attribute.IsDefined(implementationType, typeof(TraxRemoteAttribute));
 
     private static int? GetConcurrencyLimit(Type implementationType) =>
         implementationType.GetCustomAttribute<TraxConcurrencyLimitAttribute>()?.MaxConcurrent;
@@ -465,7 +470,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         if (!type.IsGenericType)
             return type.Name;
 
-        var name = type.Name[..type.Name.IndexOf('`')];
+        var name = type.Name[..type.Name.IndexOf('`', StringComparison.Ordinal)];
         var args = string.Join(", ", type.GetGenericArguments().Select(GetFriendlyTypeName));
         return $"{name}<{args}>";
     }

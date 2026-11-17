@@ -84,50 +84,63 @@ internal sealed class TrainChainStartupValidator(
         // disposed asynchronously, so such a train runs fine — disposing this one synchronously
         // would refuse the host over a disposal problem, reported as a chain problem, with
         // SkipChainVerification() the only way past it.
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var problems = new List<string>();
-        var failedTrains = 0;
-        var checkedTrains = 0;
+        var scope = scopeFactory.CreateAsyncScope();
 
-        foreach (var registration in discoveryService.DiscoverTrains())
+        // An async scope, because a train's scoped dependency may implement only
+        // IAsyncDisposable, which a synchronous Dispose refuses outright. Request scopes are
+        // disposed asynchronously, so such a train runs fine — disposing this one synchronously
+        // would refuse the host over a disposal problem, reported as a chain problem, with
+        // SkipChainVerification() the only way past it.
+        await using (scope.ConfigureAwait(false))
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            var problems = new List<string>();
+            var failedTrains = 0;
+            var checkedTrains = 0;
 
-            var warnings = new List<string>();
-            var problem = Check(scope.ServiceProvider, registration, warnings, out var skipped);
-
-            foreach (var warning in warnings)
-                logger?.LogWarning("{TrainName}: {Warning}", registration.ServiceTypeName, warning);
-
-            if (skipped is not null)
+            foreach (var registration in discoveryService.DiscoverTrains())
             {
-                logger?.LogWarning(
-                    "The chain of {TrainName} was not verified at startup: {Reason}",
-                    registration.ServiceTypeName,
-                    skipped
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var warnings = new List<string>();
+                var problem = Check(scope.ServiceProvider, registration, warnings, out var skipped);
+
+                foreach (var warning in warnings)
+                    logger?.LogWarning(
+                        "{TrainName}: {Warning}",
+                        registration.ServiceTypeName,
+                        warning
+                    );
+
+                if (skipped is not null)
+                {
+                    logger?.LogWarning(
+                        "The chain of {TrainName} was not verified at startup: {Reason}",
+                        registration.ServiceTypeName,
+                        skipped
+                    );
+                    continue;
+                }
+
+                checkedTrains++;
+
+                if (problem is not null)
+                {
+                    failedTrains++;
+                    problems.AddRange(problem);
+                }
+            }
+
+            if (failedTrains > 0)
+                throw new TrainException(
+                    $"{failedTrains} of {checkedTrains} registered trains cannot run:"
+                        + Environment.NewLine
+                        + string.Join(Environment.NewLine, problems.Select(p => "  - " + p))
+                        + Environment.NewLine
+                        + "See https://traxsharp.net/docs/cross-cutting/troubleshooting#n-of-m-registered-trains-cannot-run"
                 );
-                continue;
-            }
 
-            checkedTrains++;
-
-            if (problem is not null)
-            {
-                failedTrains++;
-                problems.AddRange(problem);
-            }
+            logger?.LogDebug("Verified the chains of {TrainCount} trains.", checkedTrains);
         }
-
-        if (failedTrains > 0)
-            throw new TrainException(
-                $"{failedTrains} of {checkedTrains} registered trains cannot run:"
-                    + Environment.NewLine
-                    + string.Join(Environment.NewLine, problems.Select(p => "  - " + p))
-                    + Environment.NewLine
-                    + "See https://traxsharp.net/docs/cross-cutting/troubleshooting#n-of-m-registered-trains-cannot-run"
-            );
-
-        logger?.LogDebug("Verified the chains of {TrainCount} trains.", checkedTrains);
     }
 
     public Task StartAsync(CancellationToken cancellationToken) =>
@@ -216,7 +229,7 @@ internal sealed class TrainChainStartupValidator(
 
         try
         {
-            chain = (ChainRecorder)declaredChain.Invoke(train, null)!;
+            chain = (ChainRecorder)declaredChain.Invoke(train, parameters: null)!;
         }
         catch (Exception ex) when (ex.InnerException is ChainDeclarationException declaration)
         {
@@ -278,7 +291,9 @@ internal sealed class TrainChainStartupValidator(
             ];
         }
 
-        var refused = Describe(chain, faults).Concat(RefusedCheckpoints(chain, false)).ToList();
+        var refused = Describe(chain, faults)
+            .Concat(RefusedCheckpoints(chain, inWithheldTrack: false))
+            .ToList();
 
         return refused.Count == 0
             ? null
@@ -379,7 +394,7 @@ internal sealed class TrainChainStartupValidator(
             .Where(f => f.IsRefusal)
             .Concat(faults.Where(f => !f.IsRefusal && !IsCascade(f)))
             .Select(Line)
-            .Distinct();
+            .Distinct(StringComparer.Ordinal);
     }
 
     private static string StepName(ChainFault fault) =>
@@ -815,7 +830,7 @@ internal sealed class TrainChainStartupValidator(
         }
 
         var name = type.Name;
-        var tick = name.IndexOf('`');
+        var tick = name.IndexOf('`', StringComparison.Ordinal);
 
         if (tick >= 0)
             name = name[..tick];

@@ -55,13 +55,18 @@ public class TrainInputCasingTests
     {
         using var scope = _serviceProvider.CreateScope();
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
-        var result = await execution.QueueAsync(typeof(IPaymentTrain).FullName!, json);
+        var result = await execution
+            .QueueAsync(typeof(IPaymentTrain).FullName!, json)
+            .ConfigureAwait(false);
 
         var factory = _serviceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
-            .SingleAsync(w => w.Id == result.WorkQueueId);
+            .SingleAsync(w => w.Id == result.WorkQueueId)
+            .ConfigureAwait(false);
 
         return JsonSerializer.Deserialize<PaymentInput>(
             stored.Input!,
@@ -94,8 +99,10 @@ public class TrainInputCasingTests
         using var scope = _serviceProvider.CreateScope();
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var queue = async () => await execution.QueueAsync(typeof(IPaymentTrain).FullName!, json);
-        var run = async () => await execution.RunAsync(typeof(IPaymentTrain).FullName!, json);
+        var queue = async () =>
+            await execution.QueueAsync(typeof(IPaymentTrain).FullName!, json).ConfigureAwait(false);
+        var run = async () =>
+            await execution.RunAsync(typeof(IPaymentTrain).FullName!, json).ConfigureAwait(false);
 
         await queue
             .Should()

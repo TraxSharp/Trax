@@ -37,21 +37,26 @@ public class NestedEnqueueTests : TestSetup
     private async Task<List<WorkQueue>> RowsAsync<TTrain>()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return await context
             .WorkQueues.AsNoTracking()
             .Where(w => w.TrainName == typeof(TTrain).FullName)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     [Test]
     public async Task An_outer_hook_that_throws_after_enqueueing_takes_the_nested_entry_with_it()
     {
         var act = async () =>
-            await Execution.QueueAsync(
-                typeof(IOuterTrain).FullName!,
-                Json(new OuterInput { Leaf = typeof(ILeafTrain).FullName!, ThrowAfter = true })
-            );
+            await Execution
+                .QueueAsync(
+                    typeof(IOuterTrain).FullName!,
+                    Json(new OuterInput { Leaf = typeof(ILeafTrain).FullName!, ThrowAfter = true })
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*outer refused*");
 
@@ -87,16 +92,18 @@ public class NestedEnqueueTests : TestSetup
     public async Task A_nested_deferring_train_joins_too_and_is_not_left_staged()
     {
         var refused = async () =>
-            await Execution.QueueAsync(
-                typeof(IOuterTrain).FullName!,
-                Json(
-                    new OuterInput
-                    {
-                        Leaf = typeof(IDeferringLeafTrain).FullName!,
-                        ThrowAfter = true,
-                    }
+            await Execution
+                .QueueAsync(
+                    typeof(IOuterTrain).FullName!,
+                    Json(
+                        new OuterInput
+                        {
+                            Leaf = typeof(IDeferringLeafTrain).FullName!,
+                            ThrowAfter = true,
+                        }
+                    )
                 )
-            );
+                .ConfigureAwait(false);
 
         await refused.Should().ThrowAsync<InvalidOperationException>();
         (await RowsAsync<IDeferringLeafTrain>())
@@ -143,10 +150,18 @@ public class NestedEnqueueTests : TestSetup
     public async Task A_nested_failure_the_hook_swallows_still_fails_the_outer_enqueue()
     {
         var act = async () =>
-            await Execution.QueueAsync(
-                typeof(IOuterTrain).FullName!,
-                Json(new OuterInput { Leaf = typeof(IThrowingLeafTrain).FullName!, Swallow = true })
-            );
+            await Execution
+                .QueueAsync(
+                    typeof(IOuterTrain).FullName!,
+                    Json(
+                        new OuterInput
+                        {
+                            Leaf = typeof(IThrowingLeafTrain).FullName!,
+                            Swallow = true,
+                        }
+                    )
+                )
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*enqueued inside*OnQueue*failed*")
@@ -165,10 +180,9 @@ public class NestedEnqueueTests : TestSetup
     public async Task An_enqueue_nested_in_a_deferring_hook_has_nothing_to_join_and_stands_alone()
     {
         var act = async () =>
-            await Execution.QueueAsync(
-                typeof(IDeferringOuterTrain).FullName!,
-                Json(new DeferringOuterInput())
-            );
+            await Execution
+                .QueueAsync(typeof(IDeferringOuterTrain).FullName!, Json(new DeferringOuterInput()))
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*outer refused*");
 
@@ -202,10 +216,9 @@ public class NestedEnqueueTests : TestSetup
         GatedLeafTrain.Reset();
 
         var act = async () =>
-            await Execution.QueueAsync(
-                typeof(IUnawaitedOuterTrain).FullName!,
-                Json(new UnawaitedOuterInput())
-            );
+            await Execution
+                .QueueAsync(typeof(IUnawaitedOuterTrain).FullName!, Json(new UnawaitedOuterInput()))
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*returned while an enqueue it started was still running*"
@@ -247,10 +260,11 @@ public class NestedEnqueueTests : TestSetup
             try
             {
                 var results = await Task.WhenAll(
-                    Enumerable
-                        .Range(0, input.Fanout)
-                        .Select(_ => execution.QueueAsync(input.Leaf, "{}", ct: ct))
-                );
+                        Enumerable
+                            .Range(0, input.Fanout)
+                            .Select(_ => execution.QueueAsync(input.Leaf, "{}", ct: ct))
+                    )
+                    .ConfigureAwait(false);
                 LastNestedId = results[^1].WorkQueueId;
             }
             catch when (input.Swallow)
@@ -280,7 +294,9 @@ public class NestedEnqueueTests : TestSetup
 
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            await execution.QueueAsync(typeof(ILeafTrain).FullName!, "{}", ct: ct);
+            await execution
+                .QueueAsync(typeof(ILeafTrain).FullName!, "{}", ct: ct)
+                .ConfigureAwait(false);
             throw new InvalidOperationException("outer refused the mutation");
         }
 
@@ -304,7 +320,7 @@ public class NestedEnqueueTests : TestSetup
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
             Started = execution.QueueAsync(typeof(IGatedLeafTrain).FullName!, "{}", ct: ct);
-            await GatedLeafTrain.Arrived.Task.WaitAsync(SignalTimeout, ct);
+            await GatedLeafTrain.Arrived.Task.WaitAsync(SignalTimeout, ct).ConfigureAwait(false);
         }
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
@@ -331,7 +347,7 @@ public class NestedEnqueueTests : TestSetup
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
             Arrived.TrySetResult();
-            await Gate.Task.WaitAsync(SignalTimeout, ct);
+            await Gate.Task.WaitAsync(SignalTimeout, ct).ConfigureAwait(false);
         }
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());

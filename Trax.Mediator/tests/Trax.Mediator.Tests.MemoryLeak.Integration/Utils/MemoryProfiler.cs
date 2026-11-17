@@ -81,7 +81,7 @@ public static class MemoryProfiler
                 return alive;
 
             // allowed-delay: waiting for the finalizer thread, not for a signal we could await.
-            await Task.Delay(50);
+            await Task.Delay(50).ConfigureAwait(false);
         }
     }
 
@@ -100,7 +100,7 @@ public static class MemoryProfiler
         }
 
         return new MemorySnapshot(
-            GC.GetTotalMemory(false),
+            GC.GetTotalMemory(forceFullCollection: false),
             GC.CollectionCount(0),
             GC.CollectionCount(1),
             GC.CollectionCount(2),
@@ -148,7 +148,7 @@ public static class MemoryProfiler
         var beforeSnapshot = TakeSnapshot(forceGC: true);
         var stopwatch = Stopwatch.StartNew();
 
-        await action();
+        await action().ConfigureAwait(false);
 
         stopwatch.Stop();
         var afterSnapshot = TakeSnapshot(forceGC: false);
@@ -208,7 +208,7 @@ public static class MemoryProfiler
             if (aliveCount == 0)
                 return true;
 
-            await Task.Delay(100);
+            await Task.Delay(100).ConfigureAwait(false);
 
             GC.Collect();
             GC.WaitForPendingFinalizers();
@@ -216,7 +216,7 @@ public static class MemoryProfiler
         }
 
         // Check final count
-        return weakReferences.All(wr => !wr.IsAlive);
+        return weakReferences.TrueForAll(wr => !wr.IsAlive);
     }
 }
 

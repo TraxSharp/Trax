@@ -119,6 +119,7 @@ public class SystemInstanceAdvanceTests(StoreProvider provider)
         using var scope = _host.Scope();
         return await scope
             .ServiceProvider.GetRequiredService<IMachineInstances>()
-            .Advance<TMachine>(key, trigger);
+            .Advance<TMachine>(key, trigger)
+            .ConfigureAwait(false);
     }
 }

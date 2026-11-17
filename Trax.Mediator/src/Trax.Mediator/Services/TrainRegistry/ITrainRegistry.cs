@@ -37,5 +37,5 @@ public interface ITrainRegistry
     /// The train bus uses this dictionary to look up the appropriate train type for a
     /// given input object, which is then instantiated and executed.
     /// </remarks>
-    public Dictionary<Type, Type> InputTypeToTrain { get; set; }
+    public IReadOnlyDictionary<Type, Type> InputTypeToTrain { get; set; }
 }

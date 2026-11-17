@@ -133,15 +133,18 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
                     .Metadatas.AsNoTracking()
                     .Where(m => m.Name == typeof(IAdvanceSnapshot).FullName)
                     .OrderByDescending(m => m.Id)
-                    .FirstAsync();
+                    .FirstAsync()
+                    .ConfigureAwait(false);
                 stateSeen = (
                     await db
                         .SnapshotDrafts.AsNoTracking()
                         .SingleAsync(x => x.Id == id && x.Machine == GoodMachine.MachineId)
+                        .ConfigureAwait(false)
                 ).State;
                 runsSeen = await db
                     .WorkQueues.AsNoTracking()
-                    .CountAsync(w => w.InvokingInstanceId == id);
+                    .CountAsync(w => w.InvokingInstanceId == id)
+                    .ConfigureAwait(false);
             };
 
             using (var scope = _host.Scope())

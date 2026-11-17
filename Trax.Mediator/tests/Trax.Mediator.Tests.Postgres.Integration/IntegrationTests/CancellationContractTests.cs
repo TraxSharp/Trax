@@ -25,7 +25,7 @@ public class CancellationContractTests : TestSetup
 {
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         CancelProbe.Reset();
     }
 
@@ -37,7 +37,9 @@ public class CancellationContractTests : TestSetup
         await cts.CancelAsync();
 
         var run = async () =>
-            await execution.RunAsync(typeof(ICooperativeTrain).FullName!, "{}", cts.Token);
+            await execution
+                .RunAsync(typeof(ICooperativeTrain).FullName!, "{}", cts.Token)
+                .ConfigureAwait(false);
 
         await run.Should().ThrowAsync<OperationCanceledException>();
 
@@ -61,7 +63,7 @@ public class CancellationContractTests : TestSetup
 
             await cts.CancelAsync();
 
-            var awaiting = async () => await runTask.WaitAsync(SignalTimeout);
+            var awaiting = async () => await runTask.WaitAsync(SignalTimeout).ConfigureAwait(false);
             await awaiting.Should().ThrowAsync<OperationCanceledException>();
 
             CancelProbe
@@ -145,43 +147,49 @@ public class CancellationContractTests : TestSetup
     }
 
     /// <summary>A train that hands the caller's token to its downstream call.</summary>
-    internal class CooperativeTrain : ServiceTrain<CooperativeInput, Unit>, ICooperativeTrain
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class CooperativeTrain : ServiceTrain<CooperativeInput, Unit>, ICooperativeTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
             var parked = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            await using var registration = CancellationToken.Register(() =>
-                parked.TrySetCanceled()
-            );
+            var registration = CancellationToken.Register(() => parked.TrySetCanceled());
+            await using (registration.ConfigureAwait(false))
+            {
+                CancelProbe.Started.TrySetResult();
+                await parked.Task.ConfigureAwait(false);
 
-            CancelProbe.Started.TrySetResult();
-            await parked.Task;
-
-            CancelProbe.RanToCompletion = true;
-            return Resolve();
+                CancelProbe.RanToCompletion = true;
+                return Resolve();
+            }
         }
     }
 
     /// <summary>A train whose downstream call takes no token, as an un-cancellable SDK would.</summary>
-    internal class IndifferentTrain : ServiceTrain<IndifferentInput, Unit>, IIndifferentTrain
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class IndifferentTrain : ServiceTrain<IndifferentInput, Unit>, IIndifferentTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
             CancelProbe.Started.TrySetResult();
-            await CancelProbe.Downstream.Task;
+            await CancelProbe.Downstream.Task.ConfigureAwait(false);
 
             CancelProbe.RanToCompletion = true;
             return Resolve();
         }
     }
 
-    internal record CooperativeInput;
+    internal sealed record CooperativeInput;
 
-    internal record IndifferentInput;
+    internal sealed record IndifferentInput;
 
-    internal interface ICooperativeTrain : IServiceTrain<CooperativeInput, Unit> { }
+    internal interface ICooperativeTrain : IServiceTrain<CooperativeInput, Unit>;
 
-    internal interface IIndifferentTrain : IServiceTrain<IndifferentInput, Unit> { }
+    internal interface IIndifferentTrain : IServiceTrain<IndifferentInput, Unit>;
 }

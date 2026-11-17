@@ -19,7 +19,8 @@ public partial class RunAndQueueExecutionTests
         await using var scope = _serviceProvider.CreateAsyncScope();
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
-        var act = async () => await bus.RunAsync<Unit>(new InputWithNoTrain());
+        var act = async () =>
+            await bus.RunAsync<Unit>(new InputWithNoTrain()).ConfigureAwait(false);
 
         var thrown = (await act.Should().ThrowAsync<NoTrainForInputException>()).Which;
         thrown.Message.Should().Contain(typeof(InputWithNoTrain).FullName!);
@@ -37,7 +38,8 @@ public partial class RunAndQueueExecutionTests
         await using var scope = _serviceProvider.CreateAsyncScope();
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
-        var act = async () => await bus.RunAsync<Unit>(new InputWithNoTrain());
+        var act = async () =>
+            await bus.RunAsync<Unit>(new InputWithNoTrain()).ConfigureAwait(false);
 
         var thrown = (await act.Should().ThrowAsync<Exception>()).Which;
         thrown
@@ -62,7 +64,8 @@ public partial class RunAndQueueExecutionTests
         await using var scope = provider.CreateAsyncScope();
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
-        var act = async () => await bus.RunAsync<Unit>(new InputWithNoTrain());
+        var act = async () =>
+            await bus.RunAsync<Unit>(new InputWithNoTrain()).ConfigureAwait(false);
 
         var thrown = (await act.Should().ThrowAsync<NoTrainForInputException>()).Which;
         thrown.Message.Should().Contain(typeof(InputWithNoTrain).FullName!);
@@ -77,7 +80,8 @@ public partial class RunAndQueueExecutionTests
 
     private sealed class EmptyRegistry : ITrainRegistry
     {
-        public Dictionary<Type, Type> InputTypeToTrain { get; set; } = [];
+        public IReadOnlyDictionary<Type, Type> InputTypeToTrain { get; set; } =
+            new Dictionary<Type, Type>();
     }
 
     /// <summary>No train in any scanned assembly takes this.</summary>

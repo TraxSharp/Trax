@@ -41,20 +41,24 @@ public class EnqueueScopedServicesTests : TestSetup
     public async Task A_hook_whose_scoped_write_failed_does_not_fail_the_next_enqueue_from_that_scope()
     {
         var poisoned = async () =>
-            await Execution.QueueAsync(
-                typeof(IScopedWriterTrain).FullName!,
-                """{"poison":true,"label":"first"}"""
-            );
+            await Execution
+                .QueueAsync(
+                    typeof(IScopedWriterTrain).FullName!,
+                    """{"poison":true,"label":"first"}"""
+                )
+                .ConfigureAwait(false);
 
         await poisoned
             .Should()
             .ThrowAsync<DbUpdateException>("the hook's write breaks a unique index");
 
         var clean = async () =>
-            await Execution.QueueAsync(
-                typeof(IScopedWriterTrain).FullName!,
-                """{"poison":false,"label":"second"}"""
-            );
+            await Execution
+                .QueueAsync(
+                    typeof(IScopedWriterTrain).FullName!,
+                    """{"poison":false,"label":"second"}"""
+                )
+                .ConfigureAwait(false);
 
         await clean
             .Should()
@@ -97,12 +101,12 @@ public class EnqueueScopedServicesTests : TestSetup
                 var first = Row("EnqueueScope.Duplicate");
                 var second = Row("EnqueueScope.Duplicate");
                 second.ExternalId = first.ExternalId;
-                await scoped.Track(first);
-                await scoped.Track(second);
+                await scoped.Track(first).ConfigureAwait(false);
+                await scoped.Track(second).ConfigureAwait(false);
             }
 
-            await scoped.Track(Row($"EnqueueScope.Marker.{input.Label}"));
-            await scoped.SaveChanges(ct);
+            await scoped.Track(Row($"EnqueueScope.Marker.{input.Label}")).ConfigureAwait(false);
+            await scoped.SaveChanges(ct).ConfigureAwait(false);
         }
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());

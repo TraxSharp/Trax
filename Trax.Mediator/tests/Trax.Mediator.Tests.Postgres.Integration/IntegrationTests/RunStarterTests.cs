@@ -42,10 +42,14 @@ public class RunStarterTests : TestSetup
     {
         var recorded = await Execution.QueueAsync(
             Train,
-            null,
+            inputJson: null,
             new QueueTrainOptions { RecordCaller = true }
         );
-        var unrecorded = await Execution.QueueAsync(Train, null, new QueueTrainOptions());
+        var unrecorded = await Execution.QueueAsync(
+            Train,
+            inputJson: null,
+            new QueueTrainOptions()
+        );
 
         (await QueuedStarterAsync(recorded.WorkQueueId))
             .Should()
@@ -75,7 +79,7 @@ public class RunStarterTests : TestSetup
         var starters = Scope.ServiceProvider.GetRequiredService<IRunStarters>();
         var queued = await Execution.QueueAsync(
             Train,
-            null,
+            inputJson: null,
             new QueueTrainOptions { RecordCaller = true }
         );
         var ran = await Execution.RunAsync(
@@ -124,28 +128,30 @@ public class RunStarterTests : TestSetup
 
     private async Task ExecuteAsync(string sql)
     {
-        using var context = await ContextAsync();
-        await ((DbContext)context).Database.ExecuteSqlRawAsync(sql);
+        using var context = await ContextAsync().ConfigureAwait(false);
+        await ((DbContext)context).Database.ExecuteSqlRawAsync(sql).ConfigureAwait(false);
     }
 
     private async Task<string?> QueuedStarterAsync(long id)
     {
-        using var context = await ContextAsync();
+        using var context = await ContextAsync().ConfigureAwait(false);
         return await ((DbContext)context)
             .Database.SqlQuery<string?>(
                 $"SELECT starter_hash AS \"Value\" FROM trax.work_queue WHERE id = {id}"
             )
-            .SingleAsync();
+            .SingleAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task<string?> RunStarterAsync(long id)
     {
-        using var context = await ContextAsync();
+        using var context = await ContextAsync().ConfigureAwait(false);
         return await ((DbContext)context)
             .Database.SqlQuery<string?>(
                 $"SELECT starter_hash AS \"Value\" FROM trax.metadata WHERE id = {id}"
             )
-            .SingleAsync();
+            .SingleAsync()
+            .ConfigureAwait(false);
     }
 
     private Task<Trax.Effect.Data.Services.DataContext.IDataContext> ContextAsync() =>

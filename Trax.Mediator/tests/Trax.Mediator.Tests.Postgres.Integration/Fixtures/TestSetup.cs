@@ -86,20 +86,21 @@ public abstract class TestSetup
     private static async Task CleanupDatabase(IDataContext dataContext)
     {
         // Delete in FK-safe order (children before parents)
-        await dataContext.BackgroundJobs.ExecuteDeleteAsync();
-        await dataContext.Logs.ExecuteDeleteAsync();
-        await dataContext.WorkQueues.ExecuteDeleteAsync();
-        await dataContext.DeadLetters.ExecuteDeleteAsync();
-        await dataContext.Metadatas.ExecuteDeleteAsync();
+        await dataContext.BackgroundJobs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.Logs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.WorkQueues.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.DeadLetters.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.Metadatas.ExecuteDeleteAsync().ConfigureAwait(false);
 
         // Clear self-referencing FK before deleting manifests
         await dataContext
             .Manifests.Where(m => m.DependsOnManifestId != null)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null));
-        await dataContext.Manifests.ExecuteDeleteAsync();
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null))
+            .ConfigureAwait(false);
+        await dataContext.Manifests.ExecuteDeleteAsync().ConfigureAwait(false);
 
         // Delete manifest groups after manifests (FK dependency)
-        await dataContext.ManifestGroups.ExecuteDeleteAsync();
+        await dataContext.ManifestGroups.ExecuteDeleteAsync().ConfigureAwait(false);
 
         dataContext.Reset();
     }
@@ -118,11 +119,11 @@ public abstract class TestSetup
     /// </summary>
     protected static async Task AwaitSignalAsync(Task signal, Task run, string what)
     {
-        var first = await Task.WhenAny(signal, run).WaitAsync(SignalTimeout);
+        var first = await Task.WhenAny(signal, run).WaitAsync(SignalTimeout).ConfigureAwait(false);
         if (first == signal)
             return;
 
-        await run;
+        await run.ConfigureAwait(false);
         Assert.Fail($"The run finished before {what}.");
     }
 
@@ -134,7 +135,7 @@ public abstract class TestSetup
     {
         try
         {
-            await run.WaitAsync(SignalTimeout);
+            await run.WaitAsync(SignalTimeout).ConfigureAwait(false);
         }
         catch
         {

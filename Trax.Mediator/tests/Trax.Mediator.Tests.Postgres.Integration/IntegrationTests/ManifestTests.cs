@@ -973,6 +973,6 @@ public class ManifestTests : TestSetup
     {
         public string Name { get; set; } = string.Empty;
         public TestCategory Category { get; set; }
-        public List<int> Values { get; set; } = [];
+        public IList<int> Values { get; set; } = [];
     }
 }

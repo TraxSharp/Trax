@@ -179,7 +179,8 @@ public class RunExecutorTests
         using var scope = _serviceProvider.CreateScope();
         var executionService = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var act = async () => await executionService.RunAsync("NonExistent.Train", "{}");
+        var act = async () =>
+            await executionService.RunAsync("NonExistent.Train", "{}").ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -193,7 +194,9 @@ public class RunExecutorTests
         var executionService = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = async () =>
-            await executionService.RunAsync(nameof(IRunExecTrain), "not valid json");
+            await executionService
+                .RunAsync(nameof(IRunExecTrain), "not valid json")
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<JsonException>();
     }
@@ -250,12 +253,14 @@ public class RunExecutorTests
         cts.Cancel();
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                typeof(ISlowRunTrain).FullName!,
-                new SlowRunInput(),
-                typeof(Unit),
-                cts.Token
-            );
+            await executor
+                .ExecuteAsync(
+                    typeof(ISlowRunTrain).FullName!,
+                    new SlowRunInput(),
+                    typeof(Unit),
+                    cts.Token
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -280,9 +285,15 @@ public class RunExecutorTests
     private static async Task<List<Metadata>> RecordsNamed(IServiceProvider provider, string name)
     {
         var factory = provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
-        return await context.Metadatas.AsNoTracking().Where(m => m.Name == name).ToListAsync();
+        return await context
+            .Metadatas.AsNoTracking()
+            .Where(m => m.Name == name)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -475,7 +486,7 @@ public class RunExecutorTests
     /// </summary>
     private sealed class LifecycleEventRecorder : ITrainLifecycleHook
     {
-        private readonly object _gate = new();
+        private readonly Lock _gate = new();
         private int _failed;
         private int _cancelled;
 
@@ -600,7 +611,7 @@ public class RunExecutorTests
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
-            await Task.Delay(TimeSpan.FromSeconds(30), CancellationToken);
+            await Task.Delay(TimeSpan.FromSeconds(30), CancellationToken).ConfigureAwait(false);
             return Unit.Default;
         }
     }

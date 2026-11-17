@@ -25,9 +25,9 @@ public sealed record AuthorizationCall(string Train, string? User, bool Trusted)
 /// </summary>
 public sealed class RecordingAuthorization(IServiceProvider services) : ITrainAuthorizationService
 {
-    public static List<AuthorizationCall> Calls { get; } = [];
+    public static IList<AuthorizationCall> Calls { get; } = [];
 
-    public static HashSet<string> Refused { get; } = [];
+    public static ISet<string> Refused { get; } = new HashSet<string>(StringComparer.Ordinal);
 
     public Task AuthorizeAsync(TrainRegistration registration, CancellationToken ct = default)
     {

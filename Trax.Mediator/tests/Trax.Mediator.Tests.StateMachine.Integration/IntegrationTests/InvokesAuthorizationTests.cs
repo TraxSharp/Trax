@@ -159,7 +159,8 @@ public class InvokesAuthorizationTests(StoreProvider provider)
                     using var scope = _host.Scope();
                     return await _host
                         .Service(scope, CappedMachine.MachineId)
-                        .Advance(user, id, "Go");
+                        .Advance(user, id, "Go")
+                        .ConfigureAwait(false);
                 })
             )
         );
@@ -242,7 +243,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
     {
         // The startup check refuses a user-owned machine whose outcome enters an invoking state, so this launch
         // never happens; if one does, the launcher refuses it rather than authorize it in the trusted scope.
-        TestPrincipal.Become(null);
+        TestPrincipal.Become(userKey: null);
         var userRun = Guid.NewGuid().ToString("N");
 
         var launch = () =>
@@ -291,7 +292,8 @@ public class InvokesAuthorizationTests(StoreProvider provider)
                         "Running"
                     ),
                     scope.ServiceProvider.GetRequiredService<IDataContext>()
-                );
+                )
+                .ConfigureAwait(false);
         };
 
         var refused = await launch.Should().ThrowAsync<UnauthorizedAccessException>();
@@ -331,7 +333,8 @@ public class InvokesAuthorizationTests(StoreProvider provider)
                         "Embedding"
                     ),
                     scope.ServiceProvider.GetRequiredService<IDataContext>()
-                );
+                )
+                .ConfigureAwait(false);
         };
 
         var refused = await launch.Should().ThrowAsync<InvalidOperationException>();
@@ -360,7 +363,8 @@ public class InvokesAuthorizationTests(StoreProvider provider)
                     FromOutcome = true,
                 },
                 scope.ServiceProvider.GetRequiredService<IDataContext>()
-            );
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task<int> Entries(string externalId)
@@ -369,6 +373,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .WorkQueues.AsNoTracking()
-            .CountAsync(w => w.ExternalId == externalId);
+            .CountAsync(w => w.ExternalId == externalId)
+            .ConfigureAwait(false);
     }
 }

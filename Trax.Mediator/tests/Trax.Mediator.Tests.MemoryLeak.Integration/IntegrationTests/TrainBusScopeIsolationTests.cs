@@ -135,7 +135,9 @@ public class TrainBusScopeIsolationTests
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var act = async () =>
-            await trainBus.RunAsync<MemoryTestOutput>(MemoryTestModelFactory.CreateFailingInput());
+            await trainBus
+                .RunAsync<MemoryTestOutput>(MemoryTestModelFactory.CreateFailingInput())
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
 

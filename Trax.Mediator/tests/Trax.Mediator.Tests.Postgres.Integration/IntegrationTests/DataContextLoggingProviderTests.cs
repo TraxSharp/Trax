@@ -62,12 +62,15 @@ public class DataContextLoggingProviderTests : TestSetup
         while (DateTime.UtcNow < deadline)
         {
             using var context = (IDataContext)factory.Create();
-            count = await context.Logs.Where(l => l.Category == category).CountAsync(cts.Token);
+            count = await context
+                .Logs.Where(l => l.Category == category)
+                .CountAsync(cts.Token)
+                .ConfigureAwait(false);
 
             if (count >= expectedCount)
                 return count;
 
-            await Task.Delay(250, cts.Token);
+            await Task.Delay(250, cts.Token).ConfigureAwait(false);
         }
 
         return count;

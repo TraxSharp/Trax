@@ -95,8 +95,12 @@ public class QueueHookTimeLimitTests : TestSetup
     private async Task<int> RowsAsync(string trainNameFragment)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.CountAsync(w => w.TrainName!.Contains(trainNameFragment));
+        using var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return await context
+            .WorkQueues.CountAsync(w => w.TrainName!.Contains(trainNameFragment))
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -110,7 +114,7 @@ public class QueueHookTimeLimitTests : TestSetup
             Task.Run(() => execution.QueueAsync(typeof(IHangingTrain).FullName!, "{}"))
         );
 
-        var act = async () => await hung.WaitAsync(SignalTimeout);
+        var act = async () => await hung.WaitAsync(SignalTimeout).ConfigureAwait(false);
         await act.Should()
             .ThrowAsync<QueueHookTimeoutException>(
                 $"a hook past the limit fails its enqueue even when it ignores its token ({Adr})"
@@ -137,7 +141,8 @@ public class QueueHookTimeLimitTests : TestSetup
         var act = async () =>
             await execution
                 .QueueAsync(typeof(IFlushThenHangTrain).FullName!, "{}")
-                .WaitAsync(SignalTimeout);
+                .WaitAsync(SignalTimeout)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<QueueHookTimeoutException>();
 
@@ -160,7 +165,8 @@ public class QueueHookTimeLimitTests : TestSetup
         var act = async () =>
             await execution
                 .QueueAsync(typeof(ICooperativeTrain).FullName!, "{}")
-                .WaitAsync(SignalTimeout);
+                .WaitAsync(SignalTimeout)
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<QueueHookTimeoutException>()).Which.Limit.Should().Be(Limit);
         (await HangingProbe.TokenCancelled.WaitAsync(SignalTimeout))
@@ -178,13 +184,15 @@ public class QueueHookTimeLimitTests : TestSetup
         var act = async () =>
             await execution
                 .QueueAsync(typeof(ILateEnqueueTrain).FullName!, "{}")
-                .WaitAsync(SignalTimeout);
+                .WaitAsync(SignalTimeout)
+                .ConfigureAwait(false);
         await act.Should().ThrowAsync<QueueHookTimeoutException>();
 
         // The hook is still running. Let it go on to enqueue.
         HangingProbe.Release();
 
-        var late = async () => await LateEnqueueTrain.Nested.Task.WaitAsync(SignalTimeout);
+        var late = async () =>
+            await LateEnqueueTrain.Nested.Task.WaitAsync(SignalTimeout).ConfigureAwait(false);
         await late.Should()
             .ThrowAsync<InvalidOperationException>(
                 "the enqueue it would have joined was rolled back, and committing on its own "
@@ -258,18 +266,20 @@ public class QueueHookTimeLimitTests : TestSetup
         // write before the enqueue commits, so only the transaction can take it back.
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            await accessor.Current!.Track(
-                WorkQueue.Create(
-                    new CreateWorkQueue
-                    {
-                        TrainName = "QueueLimit.Marker",
-                        Input = "{}",
-                        InputTypeName = "QueueLimit.Marker",
-                    }
+            await accessor
+                .Current!.Track(
+                    WorkQueue.Create(
+                        new CreateWorkQueue
+                        {
+                            TrainName = "QueueLimit.Marker",
+                            Input = "{}",
+                            InputTypeName = "QueueLimit.Marker",
+                        }
+                    )
                 )
-            );
-            await accessor.Current!.SaveChanges(ct);
-            await HangingProbe.WaitIgnoringTokenAsync();
+                .ConfigureAwait(false);
+            await accessor.Current!.SaveChanges(ct).ConfigureAwait(false);
+            await HangingProbe.WaitIgnoringTokenAsync().ConfigureAwait(false);
         }
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
@@ -288,7 +298,7 @@ public class QueueHookTimeLimitTests : TestSetup
         {
             try
             {
-                await new TaskCompletionSource().Task.WaitAsync(ct);
+                await new TaskCompletionSource().Task.WaitAsync(ct).ConfigureAwait(false);
             }
             finally
             {
@@ -318,12 +328,14 @@ public class QueueHookTimeLimitTests : TestSetup
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
 
-            await HangingProbe.WaitIgnoringTokenAsync();
+            await HangingProbe.WaitIgnoringTokenAsync().ConfigureAwait(false);
 
             try
             {
                 Nested.TrySetResult(
-                    await Execution!.QueueAsync(typeof(IQuickTrain).FullName!, "{}")
+                    await Execution!
+                        .QueueAsync(typeof(IQuickTrain).FullName!, "{}")
+                        .ConfigureAwait(false)
                 );
             }
             catch (Exception ex)
