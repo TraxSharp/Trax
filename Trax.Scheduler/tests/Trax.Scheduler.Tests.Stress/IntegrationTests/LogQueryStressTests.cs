@@ -61,106 +61,127 @@ public class LogQueryStressTests : TestSetup
             """
         );
         await db.Database.ExecuteSqlRawAsync("ANALYZE trax.log");
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"Seeded {Rows:N0} log rows in {seed.ElapsedMilliseconds} ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeded {Rows:N0} log rows in {seed.ElapsedMilliseconds} ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         var operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
 
         try
         {
-            await Measure("newest first, unfiltered", operations, new LogQuery());
-            var newest = await operations.GetLogsAsync(new LogQuery(), CancellationToken.None);
+            await Measure("newest first, unfiltered", operations, new LogQuery())
+                .ConfigureAwait(false);
+            var newest = await operations
+                .GetLogsAsync(new LogQuery(), CancellationToken.None)
+                .ConfigureAwait(false);
             await Measure(
-                "newest first, cursor",
-                operations,
-                new LogQuery(AfterId: newest.NextCursor)
-            );
+                    "newest first, cursor",
+                    operations,
+                    new LogQuery(AfterId: newest.NextCursor)
+                )
+                .ConfigureAwait(false);
             await Measure(
-                "oldest first, unfiltered",
-                operations,
-                new LogQuery { Order = LogOrder.OldestFirst }
-            );
+                    "oldest first, unfiltered",
+                    operations,
+                    new LogQuery { Order = LogOrder.OldestFirst }
+                )
+                .ConfigureAwait(false);
             await Measure(
-                "oldest first, cursor",
-                operations,
-                new LogQuery(AfterId: Rows / 2) { Order = LogOrder.OldestFirst }
-            );
+                    "oldest first, cursor",
+                    operations,
+                    new LogQuery(AfterId: Rows / 2) { Order = LogOrder.OldestFirst }
+                )
+                .ConfigureAwait(false);
             await Measure(
-                "message contains a common term",
-                operations,
-                new LogQuery { MessageContains = "ORDER" }
-            );
+                    "message contains a common term",
+                    operations,
+                    new LogQuery { MessageContains = "ORDER" }
+                )
+                .ConfigureAwait(false);
             await Measure(
-                "message contains a 1-in-100 term, oldest first",
-                operations,
-                new LogQuery { MessageContains = "customer 42", Order = LogOrder.OldestFirst }
-            );
+                    "message contains a 1-in-100 term, oldest first",
+                    operations,
+                    new LogQuery { MessageContains = "customer 42", Order = LogOrder.OldestFirst }
+                )
+                .ConfigureAwait(false);
             await Measure(
-                "category contains, newest first",
-                operations,
-                new LogQuery { CategoryContains = "category49" }
-            );
+                    "category contains, newest first",
+                    operations,
+                    new LogQuery { CategoryContains = "category49" }
+                )
+                .ConfigureAwait(false);
             await Measure(
-                "message contains a 1-in-a-million term",
-                operations,
-                new LogQuery { MessageContains = "needle-marker" }
-            );
+                    "message contains a 1-in-a-million term",
+                    operations,
+                    new LogQuery { MessageContains = "needle-marker" }
+                )
+                .ConfigureAwait(false);
             await Measure(
-                "message contains a term no row has",
-                operations,
-                new LogQuery { MessageContains = "absent-term" }
-            );
+                    "message contains a term no row has",
+                    operations,
+                    new LogQuery { MessageContains = "absent-term" }
+                )
+                .ConfigureAwait(false);
             // Order numbers starting 12 are about 111,000 rows, nearly all of them between
             // 1,200,000 and 1,299,999: common, but only far from the newest rows.
             await Measure(
-                "message contains a common term found only in old rows",
-                operations,
-                new LogQuery { MessageContains = "order 12" }
-            );
+                    "message contains a common term found only in old rows",
+                    operations,
+                    new LogQuery { MessageContains = "order 12" }
+                )
+                .ConfigureAwait(false);
             await Measure(
-                "category contains a common term, oldest first",
-                operations,
-                new LogQuery { CategoryContains = "category4", Order = LogOrder.OldestFirst }
-            );
+                    "category contains a common term, oldest first",
+                    operations,
+                    new LogQuery { CategoryContains = "category4", Order = LogOrder.OldestFirst }
+                )
+                .ConfigureAwait(false);
             await MeasureCappedCount(
-                "capped count, message contains a common term",
-                operations,
-                new LogQuery { MessageContains = "order" }
-            );
+                    "capped count, message contains a common term",
+                    operations,
+                    new LogQuery { MessageContains = "order" }
+                )
+                .ConfigureAwait(false);
             await MeasureCappedCount(
-                "capped count, message contains a 1-in-100 term",
-                operations,
-                new LogQuery { MessageContains = "customer 42" }
-            );
+                    "capped count, message contains a 1-in-100 term",
+                    operations,
+                    new LogQuery { MessageContains = "customer 42" }
+                )
+                .ConfigureAwait(false);
             await MeasureCappedCount(
-                "capped count, category contains",
-                operations,
-                new LogQuery { CategoryContains = "category49" }
-            );
+                    "capped count, category contains",
+                    operations,
+                    new LogQuery { CategoryContains = "category49" }
+                )
+                .ConfigureAwait(false);
             await MeasureCappedCount(
-                "capped count, message contains a 1-in-a-million term",
-                operations,
-                new LogQuery { MessageContains = "needle-marker" }
-            );
+                    "capped count, message contains a 1-in-a-million term",
+                    operations,
+                    new LogQuery { MessageContains = "needle-marker" }
+                )
+                .ConfigureAwait(false);
             await MeasureCount(
-                "exact count, message contains a common term",
-                operations,
-                new LogQuery { MessageContains = "order" }
-            );
+                    "exact count, message contains a common term",
+                    operations,
+                    new LogQuery { MessageContains = "order" }
+                )
+                .ConfigureAwait(false);
             await MeasureCount(
-                "exact count, category contains",
-                operations,
-                new LogQuery { CategoryContains = "category49" }
-            );
+                    "exact count, category contains",
+                    operations,
+                    new LogQuery { CategoryContains = "category49" }
+                )
+                .ConfigureAwait(false);
         }
         finally
         {
             // The other fixtures delete row by row before each test; leave them an empty table.
-            await db.Database.ExecuteSqlRawAsync("TRUNCATE trax.log");
+            await db.Database.ExecuteSqlRawAsync("TRUNCATE trax.log").ConfigureAwait(false);
         }
     }
 
@@ -173,12 +194,14 @@ public class LogQueryStressTests : TestSetup
                     .ConfigureAwait(false)
             )
             .ConfigureAwait(false);
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"{label}: {elapsed.TotalMilliseconds:F0} ms, {page.Items.Count} row(s)"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{label}: {elapsed.TotalMilliseconds:F0} ms, {page.Items.Count} row(s)"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     private static async Task MeasureCappedCount(
@@ -196,12 +219,14 @@ public class LogQueryStressTests : TestSetup
                 CountBudget
             )
             .ConfigureAwait(false);
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"{label}: {elapsed.TotalMilliseconds:F0} ms, {count.Count:N0}{(count.Capped ? "+" : "")}"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{label}: {elapsed.TotalMilliseconds:F0} ms, {count.Count:N0}{(count.Capped ? "+" : "")}"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     private static async Task MeasureCount(
@@ -217,11 +242,13 @@ public class LogQueryStressTests : TestSetup
                     .ConfigureAwait(false)
             )
             .ConfigureAwait(false);
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"{label}: {elapsed.TotalMilliseconds:F0} ms, {count:N0}"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{label}: {elapsed.TotalMilliseconds:F0} ms, {count:N0}"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 }

@@ -116,7 +116,8 @@ internal sealed class JobDispatcherPollingService(
 
         try
         {
-            using var scope = serviceProvider.CreateScope();
+            var scope = serviceProvider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
             logger.LogDebug("JobDispatcher polling cycle starting");

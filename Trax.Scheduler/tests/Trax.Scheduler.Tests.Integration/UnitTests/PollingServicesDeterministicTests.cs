@@ -59,7 +59,7 @@ public class PollingServicesDeterministicTests
 
         await trainHit.Task.WaitAsync(SyncTimeout, CancellationToken.None).ConfigureAwait(false);
 
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
         await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
@@ -148,14 +148,17 @@ public class PollingServicesDeterministicTests
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
         await WaitUntilAsync(() => liveness.LastDispatchCompletedAt is not null, SyncTimeout);
-        cts.Cancel();
-        await service.StopAsync(CancellationToken.None);
+        await cts.CancelAsync().ConfigureAwait(false);
+        await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
 
         liveness
             .LastDispatchCompletedAt.Should()
             .NotBeNull("the disabled loop still runs its cycle");
 
-        await train.DidNotReceive().Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>());
+        await train
+            .DidNotReceive()
+            .Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>())
+            .ConfigureAwait(false);
     }
 
     #endregion

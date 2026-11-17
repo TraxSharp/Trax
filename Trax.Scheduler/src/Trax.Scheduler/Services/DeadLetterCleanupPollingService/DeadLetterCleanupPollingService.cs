@@ -43,7 +43,8 @@ internal sealed class DeadLetterCleanupPollingService(
     {
         try
         {
-            using var scope = serviceProvider.CreateScope();
+            var scope = serviceProvider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var train = scope.ServiceProvider.GetRequiredService<IDeadLetterCleanupTrain>();
 
             logger.LogDebug("Dead letter cleanup cycle starting");

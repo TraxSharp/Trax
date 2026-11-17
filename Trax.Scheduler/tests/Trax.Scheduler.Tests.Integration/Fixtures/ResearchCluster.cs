@@ -78,7 +78,8 @@ public sealed class ResearchCluster : IAsyncDisposable
         int? timeoutSeconds = null
     )
     {
-        using var scope = Host.Services.CreateScope();
+        var scope = Host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var group = await TestSetup
             .CreateAndSaveManifestGroup(data, name: $"group-{Guid.NewGuid():N}")
@@ -128,7 +129,8 @@ public sealed class ResearchCluster : IAsyncDisposable
     /// <summary>Runs the dispatcher once and returns the run it made for <paramref name="entry"/>.</summary>
     public async Task<long> Dispatch(WorkQueue entry)
     {
-        using (var scope = Host.Services.CreateScope())
+        var scope = Host.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                 .Run(Unit.Default)
@@ -188,14 +190,16 @@ public sealed class ResearchCluster : IAsyncDisposable
         Func<IOperationsService, Task<OperationResult>> call
     )
     {
-        using var scope = Host.Services.CreateScope();
+        var scope = Host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await call(scope.ServiceProvider.GetRequiredService<IOperationsService>())
             .ConfigureAwait(false);
     }
 
     public async Task<T> With<T>(Func<IDataContext, Task<T>> read)
     {
-        using var scope = Host.Services.CreateScope();
+        var scope = Host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await read(scope.ServiceProvider.GetRequiredService<IDataContext>())
             .ConfigureAwait(false);
     }

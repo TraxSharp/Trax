@@ -80,7 +80,8 @@ internal sealed class SchedulerStartupService(
     {
         var serverStartTime = DateTime.UtcNow;
 
-        using var scope = serviceProvider.CreateScope();
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var totalRecovered = 0;
@@ -153,7 +154,8 @@ internal sealed class SchedulerStartupService(
 
     private async Task SeedPendingManifests(CancellationToken cancellationToken)
     {
-        using var scope = serviceProvider.CreateScope();
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         // Seed manifests from startup configuration
         if (configuration.PendingManifests.Count > 0)

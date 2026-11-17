@@ -236,11 +236,16 @@ public static class JobRunnerExtensions
     )
     {
         var runnerOptions = RequirePosture(endpoints, route);
-        _ = TraxRequestHandler.WarnIfExecutionServiceReplacedAsync(
-            endpoints.ServiceProvider,
-            endpoints.ServiceProvider.GetRequiredService<ILogger<TraxRequestHandler>>(),
-            route
-        );
+        // Mapping is synchronous and happens once, at startup, so the check is waited on here;
+        // it logs before the endpoint can serve a run.
+        TraxRequestHandler
+            .WarnIfExecutionServiceReplacedAsync(
+                endpoints.ServiceProvider,
+                endpoints.ServiceProvider.GetRequiredService<ILogger<TraxRequestHandler>>(),
+                route
+            )
+            .GetAwaiter()
+            .GetResult();
 
         var builder = endpoints
             .MapPost(

@@ -44,7 +44,8 @@ public partial class OperationsService
                 : null;
         Guid? guid = Guid.TryParse(term, out var g) ? g : null;
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         // Runs.
         if (number is { } runId)

@@ -44,7 +44,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 public class DispatchFailureHandlingTests
 {
     private ServiceProvider _serviceProvider = null!;
-    private IServiceScope _scope = null!;
+    private AsyncServiceScope _scope;
     private IDataContext _dataContext = null!;
     private readonly LifecycleRecorder _lifecycle = new();
 
@@ -98,7 +98,7 @@ public class DispatchFailureHandlingTests
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
         await TestSetup.CleanupDatabase(_dataContext);
         _lifecycle.Clear();
@@ -109,7 +109,7 @@ public class DispatchFailureHandlingTests
     {
         if (_dataContext is IDisposable disposable)
             disposable.Dispose();
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
     }
 
     [Test]
@@ -119,7 +119,8 @@ public class DispatchFailureHandlingTests
         var manifest = await CreateAndSaveManifest();
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        var trainScope = _serviceProvider.CreateAsyncScope();
+        await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act — dispatch will call FailingJobSubmitter which throws
@@ -147,7 +148,8 @@ public class DispatchFailureHandlingTests
         var manifest = await CreateAndSaveManifest();
         await CreateAndSaveWorkQueueEntry(manifest);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        var trainScope = _serviceProvider.CreateAsyncScope();
+        await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
@@ -173,7 +175,8 @@ public class DispatchFailureHandlingTests
         var manifest = await CreateAndSaveManifest();
         await CreateAndSaveWorkQueueEntry(manifest);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        var trainScope = _serviceProvider.CreateAsyncScope();
+        await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
@@ -198,7 +201,8 @@ public class DispatchFailureHandlingTests
         var manifest = await CreateAndSaveManifest();
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        var trainScope = _serviceProvider.CreateAsyncScope();
+        await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
@@ -232,7 +236,8 @@ public class DispatchFailureHandlingTests
         var manifest3 = await CreateAndSaveManifest(inputValue: "Third");
         var entry3 = await CreateAndSaveWorkQueueEntry(manifest3);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        var trainScope = _serviceProvider.CreateAsyncScope();
+        await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
@@ -278,7 +283,8 @@ public class DispatchFailureHandlingTests
         var manifest = await CreateAndSaveManifest();
         await CreateAndSaveWorkQueueEntry(manifest);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        var trainScope = _serviceProvider.CreateAsyncScope();
+        await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act & Assert — the dispatcher should not throw; errors are handled gracefully
@@ -297,7 +303,8 @@ public class DispatchFailureHandlingTests
         var manifest = await CreateAndSaveManifest();
         await CreateAndSaveWorkQueueEntry(manifest);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        var trainScope = _serviceProvider.CreateAsyncScope();
+        await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
@@ -638,14 +645,16 @@ public class DispatchFailureHandlingTests
 
     private async Task RunDispatcherCycle()
     {
-        using var trainScope = _serviceProvider.CreateScope();
+        var trainScope = _serviceProvider.CreateAsyncScope();
+        await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         await train.Run(Unit.Default).ConfigureAwait(false);
     }
 
     private async Task RunManifestManagerCycle()
     {
-        using var trainScope = _serviceProvider.CreateScope();
+        var trainScope = _serviceProvider.CreateAsyncScope();
+        await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
         await train.Run(Unit.Default).ConfigureAwait(false);
     }
@@ -664,7 +673,8 @@ public class DispatchFailureHandlingTests
         // Act — run dispatcher twice, both times will fail
         for (var i = 0; i < 2; i++)
         {
-            using var trainScope = _serviceProvider.CreateScope();
+            var trainScope = _serviceProvider.CreateAsyncScope();
+            await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
             var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
             await train.Run(Unit.Default);
             if (train is IDisposable d)
@@ -692,7 +702,8 @@ public class DispatchFailureHandlingTests
         // Act — run dispatcher twice
         for (var i = 0; i < 2; i++)
         {
-            using var trainScope = _serviceProvider.CreateScope();
+            var trainScope = _serviceProvider.CreateAsyncScope();
+            await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
             var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
             await train.Run(Unit.Default);
             if (train is IDisposable d)
@@ -727,7 +738,8 @@ public class DispatchFailureHandlingTests
             // Act — run dispatcher 3 times (exceeds max of 2)
             for (var i = 0; i < 3; i++)
             {
-                using var trainScope = _serviceProvider.CreateScope();
+                var trainScope = _serviceProvider.CreateAsyncScope();
+                await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
                 var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
                 await train.Run(Unit.Default);
                 if (train is IDisposable d)
@@ -770,7 +782,8 @@ public class DispatchFailureHandlingTests
             var manifest = await CreateAndSaveManifest();
             var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
-            using var trainScope = _serviceProvider.CreateScope();
+            var trainScope = _serviceProvider.CreateAsyncScope();
+            await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
             var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
             await train.Run(Unit.Default);
             if (train is IDisposable d)

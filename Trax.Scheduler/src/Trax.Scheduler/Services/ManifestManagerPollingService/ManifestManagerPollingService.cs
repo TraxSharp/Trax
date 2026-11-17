@@ -73,7 +73,8 @@ internal sealed class ManifestManagerPollingService(
 
         try
         {
-            using var scope = serviceProvider.CreateScope();
+            var scope = serviceProvider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
 
             // Advisory lock: single-leader election for manifest evaluation.
             // Prevents duplicate WorkQueue entries when multiple servers poll simultaneously.

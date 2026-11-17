@@ -98,7 +98,8 @@ public class InvokedRunOperationsTests(ClusterStore store)
             var dispatch = Task.Run(async () =>
             {
                 await go.Task.ConfigureAwait(false);
-                using var scope = _worker.Services.CreateScope();
+                var scope = _worker.Services.CreateAsyncScope();
+                await using var scopeDisposal = scope.ConfigureAwait(false);
                 await scope
                     .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                     .Run(Unit.Default)
@@ -107,7 +108,8 @@ public class InvokedRunOperationsTests(ClusterStore store)
             var claimFirst = i % 2 == 1;
             var cancel = Task.Run(async () =>
             {
-                using var scope = _worker.Services.CreateScope();
+                var scope = _worker.Services.CreateAsyncScope();
+                await using var scopeDisposal = scope.ConfigureAwait(false);
                 var operations = (OperationsService)
                     scope.ServiceProvider.GetRequiredService<IOperationsService>();
                 operations.BeforeMachineInstanceCancel = async _ =>
@@ -131,7 +133,9 @@ public class InvokedRunOperationsTests(ClusterStore store)
                     .BeNull(
                         $"a cancelled entry is never dispatched, so its run never starts. See {Adr}"
                     );
-                cancel.Result.Outcome.Should().Be(MachineInstanceCancelOutcome.RunCancelled);
+                (await cancel.ConfigureAwait(false))
+                    .Outcome.Should()
+                    .Be(MachineInstanceCancelOutcome.RunCancelled);
                 neverStarted++;
             }
             else
@@ -144,24 +148,26 @@ public class InvokedRunOperationsTests(ClusterStore store)
                         $"a cancel that finds the entry claimed flags the run the claim wrote: "
                             + $"never neither. See {Adr}"
                     );
-                cancel.Result.Outcome.Should().Be(MachineInstanceCancelOutcome.CancelRequested);
+                (await cancel.ConfigureAwait(false))
+                    .Outcome.Should()
+                    .Be(MachineInstanceCancelOutcome.CancelRequested);
 
-                await _worker.RunJob(run.Id);
-                (await _worker.Run(run.Id))
+                await _worker.RunJob(run.Id).ConfigureAwait(false);
+                (await _worker.Run(run.Id).ConfigureAwait(false))
                     .TrainState.Should()
                     .Be(TrainState.Cancelled, "a flagged run ends Cancelled");
                 cancelledRunning++;
             }
 
-            (await _api.Deliver(token))
+            (await _api.Deliver(token).ConfigureAwait(false))
                 .Should()
                 .BeOfType<InvokeDelivery.Moved>()
                 .Which.To.Should()
                 .Be("Cancelled", "either way the instance moves through OnCancelled");
-            (await _api.Deliver(token))
+            (await _api.Deliver(token).ConfigureAwait(false))
                 .Should()
                 .BeOfType<InvokeDelivery.NoTransition>("and only once");
-            var row = await SystemRow(instance.Id);
+            var row = await SystemRow(instance.Id).ConfigureAwait(false);
             row.State.Should().Be("Cancelled");
             row.InvokeToken.Should().BeNull();
         }
@@ -173,12 +179,14 @@ public class InvokedRunOperationsTests(ClusterStore store)
                 RaceIterations / 2,
                 "every claim that lands before the statement leaves a run to flag"
             );
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"{neverStarted} cancelled before dispatch, {cancelledRunning} cancelled after it."
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{neverStarted} cancelled before dispatch, {cancelledRunning} cancelled after it."
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -402,7 +410,8 @@ public class InvokedRunOperationsTests(ClusterStore store)
         MachineInstanceKey key
     )
     {
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IOperationsService>()
             .CancelMachineInstanceAsync(key, CancellationToken.None)
@@ -411,7 +420,8 @@ public class InvokedRunOperationsTests(ClusterStore store)
 
     private async Task<MachineInstanceRuns> Runs(MachineInstanceKey key)
     {
-        using var scope = _worker.Services.CreateScope();
+        var scope = _worker.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return (
             await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
@@ -422,7 +432,8 @@ public class InvokedRunOperationsTests(ClusterStore store)
 
     private async Task<Trax.Effect.Models.Metadata.Metadata?> RunByExternalId(string token)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.AsNoTracking()
@@ -432,7 +443,8 @@ public class InvokedRunOperationsTests(ClusterStore store)
 
     private async Task<List<SnapshotDraft>> UserRows(Guid id)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()

@@ -83,8 +83,8 @@ public class LocalWorkerHeartbeatTests : TestSetup
         finally
         {
             gate.TrySetResult();
-            stop.Cancel();
-            await first.StopAsync(CancellationToken.None);
+            await stop.CancelAsync().ConfigureAwait(false);
+            await first.StopAsync(CancellationToken.None).ConfigureAwait(false);
             DeliveryProbeTrain.Forget(key);
         }
     }
@@ -143,10 +143,10 @@ public class LocalWorkerHeartbeatTests : TestSetup
         finally
         {
             gate.TrySetResult();
-            stop.Cancel();
+            await stop.CancelAsync().ConfigureAwait(false);
             if (other is not null)
-                await other.StopAsync(CancellationToken.None);
-            await batching.StopAsync(CancellationToken.None);
+                await other.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await batching.StopAsync(CancellationToken.None).ConfigureAwait(false);
             DeliveryProbeTrain.Forget(first);
             foreach (var key in waiting)
                 DeliveryProbeTrain.Forget(key);
@@ -211,12 +211,13 @@ public class LocalWorkerHeartbeatTests : TestSetup
         finally
         {
             gate.TrySetResult();
-            stop.Cancel();
-            await worker.StopAsync(CancellationToken.None);
+            await stop.CancelAsync().ConfigureAwait(false);
+            await worker.StopAsync(CancellationToken.None).ConfigureAwait(false);
             await ExecuteSqlAsync(
-                $"DROP TRIGGER IF EXISTS {function} ON trax.background_job; "
-                    + $"DROP FUNCTION IF EXISTS trax.{function}();"
-            );
+                    $"DROP TRIGGER IF EXISTS {function} ON trax.background_job; "
+                        + $"DROP FUNCTION IF EXISTS trax.{function}();"
+                )
+                .ConfigureAwait(false);
             DeliveryProbeTrain.Forget(key);
         }
     }
@@ -256,8 +257,8 @@ public class LocalWorkerHeartbeatTests : TestSetup
         }
         finally
         {
-            stop.Cancel();
-            await worker.StopAsync(CancellationToken.None);
+            await stop.CancelAsync().ConfigureAwait(false);
+            await worker.StopAsync(CancellationToken.None).ConfigureAwait(false);
             DeliveryProbeTrain.Forget(key);
         }
     }
@@ -306,8 +307,8 @@ public class LocalWorkerHeartbeatTests : TestSetup
         }
         finally
         {
-            stop.Cancel();
-            await worker.StopAsync(CancellationToken.None);
+            await stop.CancelAsync().ConfigureAwait(false);
+            await worker.StopAsync(CancellationToken.None).ConfigureAwait(false);
             DeliveryProbeTrain.Forget(key);
         }
     }

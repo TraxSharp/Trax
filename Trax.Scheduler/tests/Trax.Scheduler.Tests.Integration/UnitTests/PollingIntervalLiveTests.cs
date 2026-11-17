@@ -80,8 +80,8 @@ public class PollingIntervalLiveTests
         }
         finally
         {
-            cts.Cancel();
-            await service.StopAsync(CancellationToken.None);
+            await cts.CancelAsync().ConfigureAwait(false);
+            await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
         }
     }
 
@@ -213,7 +213,7 @@ public class PollingIntervalLiveTests
         }
         finally
         {
-            cts.Cancel();
+            await cts.CancelAsync().ConfigureAwait(false);
             await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
         }
     }

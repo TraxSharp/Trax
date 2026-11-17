@@ -68,7 +68,8 @@ internal sealed class MetadataCleanupPollingService(
     {
         try
         {
-            using var scope = serviceProvider.CreateScope();
+            var scope = serviceProvider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var train = scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
 
             logger.LogDebug("Metadata cleanup cycle starting");

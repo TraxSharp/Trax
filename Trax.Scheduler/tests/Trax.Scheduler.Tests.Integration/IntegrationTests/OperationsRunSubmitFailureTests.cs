@@ -65,7 +65,7 @@ public class OperationsRunSubmitFailureTests
     [SetUp]
     public async Task TestSetUp()
     {
-        using var scope = _provider.CreateScope();
+        await using var scope = _provider.CreateAsyncScope();
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
 
@@ -75,7 +75,7 @@ public class OperationsRunSubmitFailureTests
     [Test]
     public async Task A_failed_submit_does_not_overwrite_a_run_the_runner_claimed_meanwhile()
     {
-        using var scope = _provider.CreateScope();
+        await using var scope = _provider.CreateAsyncScope();
         var operations = scope.ServiceProvider.GetRequiredService<IOperationsService>();
 
         var result = await operations.RunTrainAsync(
@@ -91,7 +91,7 @@ public class OperationsRunSubmitFailureTests
         runner.Should().NotBeNull("the submitter started the run");
         await runner!;
 
-        using var check = _provider.CreateScope();
+        await using var check = _provider.CreateAsyncScope();
         var db = check.ServiceProvider.GetRequiredService<IDataContext>();
         var run = await db.Metadatas.AsNoTracking().SingleAsync();
         run.TrainState.Should()

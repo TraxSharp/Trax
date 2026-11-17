@@ -186,7 +186,7 @@ public class CheckpointResumeTests(ClusterStore store)
         // Dead-lettered on the next cycle, then requeued by an operator.
         await _cluster.Host.RunManifestManager();
         long requeued;
-        using (var scope = _cluster.Host.Services.CreateScope())
+        await using (var scope = _cluster.Host.Services.CreateAsyncScope())
         {
             var deadLetter = await _cluster.With(d =>
                 d.DeadLetters.AsNoTracking().SingleAsync(x => x.ManifestId == manifest.Id)
@@ -275,7 +275,7 @@ public class CheckpointResumeTests(ClusterStore store)
         var failed = await Crash(manifest, nameof(SummarizeLong));
 
         OperationResult operatorResume;
-        using (var scope = _cluster.Host.Services.CreateScope())
+        await using (var scope = _cluster.Host.Services.CreateAsyncScope())
         {
             var operations = (OperationsService)
                 scope.ServiceProvider.GetRequiredService<IOperationsService>();
@@ -439,7 +439,7 @@ public class CheckpointResumeTests(ClusterStore store)
         var received = JsonSerializer.Deserialize<RemoteJobRequest>(
             JsonSerializer.Serialize(sent)
         )!;
-        using (var scope = remote.Services.CreateScope())
+        await using (var scope = remote.Services.CreateAsyncScope())
             await scope
                 .ServiceProvider.GetRequiredService<ITraxRequestHandler>()
                 .ExecuteJobAsync(received)
@@ -476,7 +476,7 @@ public class CheckpointResumeTests(ClusterStore store)
             .Should()
             .BeTrue($"the resumed run asks the question after the checkpoint ({Adr})");
 
-        using (var scope = other.Services.CreateScope())
+        await using (var scope = other.Services.CreateAsyncScope())
             (
                 await scope
                     .ServiceProvider.GetRequiredService<IOperationsService>()
@@ -591,7 +591,7 @@ public class CheckpointResumeTests(ClusterStore store)
                 $"a retry that resumes waits out the same backoff as one that reruns ({Adr})"
             );
 
-        using (var scope = delayed.Host.Services.CreateScope())
+        await using (var scope = delayed.Host.Services.CreateAsyncScope())
             await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
         (await delayed.Entry(retry.Id))
             .Status.Should()

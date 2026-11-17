@@ -91,7 +91,8 @@ public partial class OperationsService
 
         async Task<T> Read<T>(Func<IDataContext, Task<T>> read)
         {
-            using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
             return await read(db).ConfigureAwait(false);
         }
 

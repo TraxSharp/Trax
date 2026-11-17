@@ -194,7 +194,8 @@ public class InvokedRunFeatureTests(ClusterStore store)
         run.TrainState.Should().Be(TrainState.Completed);
         run.CurrentlyRunningJunction.Should().BeNull("every junction has ended");
         List<JunctionRun> steps;
-        using (var scope = _api.Services.CreateScope())
+        var scope = _api.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             steps = await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .JunctionRuns.AsNoTracking()
@@ -220,11 +221,12 @@ public class InvokedRunFeatureTests(ClusterStore store)
     [Test]
     public async Task An_invoked_run_sent_to_a_remote_worker_runs_there_and_its_outcome_comes_back()
     {
-        await using var remote = _cluster.Host(
+        var remote = _cluster.Host(
             machines: false,
             scheduler: false,
             configure: s => s.AddTraxJobRunner(o => o.AllowUnsignedRequests())
         );
+        await using var remoteDisposal = remote.ConfigureAwait(false);
         var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok, note: "remote"));
         var token = (await _api.Row(instance.Id, SystemStepMachine.MachineId))!.InvokeToken!;
         var runId = await _worker.Dispatch(token);
@@ -243,7 +245,8 @@ public class InvokedRunFeatureTests(ClusterStore store)
         var received = JsonSerializer.Deserialize<RemoteJobRequest>(
             JsonSerializer.Serialize(sent)
         )!;
-        using (var scope = remote.Services.CreateScope())
+        var scope = remote.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<ITraxRequestHandler>()
                 .ExecuteJobAsync(received)
@@ -269,7 +272,8 @@ public class InvokedRunFeatureTests(ClusterStore store)
         await StepMachine
             .Seed(_api.Services, user, id, InvokedFeatureMachine.MachineId, "Idle", context)
             .ConfigureAwait(false);
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         (await Drafts(scope).Advance(user, id, trigger.ToString()).ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
@@ -277,7 +281,8 @@ public class InvokedRunFeatureTests(ClusterStore store)
 
     private async Task<AdvanceOutcome> Advance(string user, Guid id, FeatureTrigger trigger)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await Drafts(scope).Advance(user, id, trigger.ToString()).ConfigureAwait(false);
     }
 
@@ -291,7 +296,8 @@ public class InvokedRunFeatureTests(ClusterStore store)
 
     private async Task<List<Effect.Models.RecordedDecision.RecordedDecision>> Decisions(long runId)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .RecordedDecisions.AsNoTracking()

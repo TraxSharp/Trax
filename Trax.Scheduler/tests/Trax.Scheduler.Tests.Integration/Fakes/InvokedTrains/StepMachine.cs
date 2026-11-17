@@ -93,7 +93,8 @@ public abstract class StepMachine : Machine<StepState, StepTrigger>
         JsonObject context
     )
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
         var snapshot = new Snapshot
         {

@@ -33,7 +33,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 public class OperationsServiceAuthorizationTests
 {
     private ServiceProvider _serviceProvider = null!;
-    private IServiceScope _scope = null!;
+    private AsyncServiceScope _scope;
 
     [OneTimeSetUp]
     public void RunBeforeAnyTests()
@@ -60,12 +60,12 @@ public class OperationsServiceAuthorizationTests
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.CreateAsyncScope();
         await TestSetup.CleanupDatabase(_scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
 
     [TearDown]
-    public void TestTearDown() => _scope.Dispose();
+    public async Task TestTearDown() => await _scope.DisposeAsync().ConfigureAwait(false);
 
     private IOperationsService Operations =>
         _scope.ServiceProvider.GetRequiredService<IOperationsService>();

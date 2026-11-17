@@ -141,7 +141,8 @@ public class RemoteParallelRunTests(ClusterStore store)
     {
         var (manifest, entry) = await Queue(new ParallelRemoteInput { Topic = "rail" });
 
-        using (var scope = _scheduler.Services.CreateScope())
+        var scope = _scheduler.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                 .Run(Unit.Default)
@@ -202,7 +203,8 @@ public class RemoteParallelRunTests(ClusterStore store)
 
     private async Task<(Manifest, WorkQueue)> Queue(ParallelRemoteInput input)
     {
-        using var scope = _scheduler.Services.CreateScope();
+        var scope = _scheduler.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var group = await TestSetup
             .CreateAndSaveManifestGroup(data, name: $"group-{Guid.NewGuid():N}")
@@ -268,7 +270,8 @@ public class RemoteParallelRunTests(ClusterStore store)
 
     private async Task<T> With<T>(Func<IDataContext, Task<T>> read)
     {
-        using var scope = _scheduler.Services.CreateScope();
+        var scope = _scheduler.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await read(scope.ServiceProvider.GetRequiredService<IDataContext>())
             .ConfigureAwait(false);
     }

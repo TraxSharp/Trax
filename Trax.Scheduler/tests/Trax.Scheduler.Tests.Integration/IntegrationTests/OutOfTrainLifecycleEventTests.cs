@@ -87,7 +87,8 @@ public class OutOfTrainLifecycleEventTests
     [SetUp]
     public async Task TestSetUp()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
         _lifecycle.Clear();
     }
@@ -170,7 +171,8 @@ public class OutOfTrainLifecycleEventTests
     {
         var pending = await SeedRunAsync(TrainState.Pending, DateTime.UtcNow);
 
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var result = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
@@ -186,8 +188,9 @@ public class OutOfTrainLifecycleEventTests
         // delivery of the same job finds it Cancelled already.
         for (var delivery = 0; delivery < 2; delivery++)
         {
-            using var scope = _provider.CreateScope();
-            await scope
+            var deliveryScope = _provider.CreateAsyncScope();
+            await using var scopeDisposal = deliveryScope.ConfigureAwait(false);
+            await deliveryScope
                 .ServiceProvider.GetRequiredService<IJobRunnerTrain>()
                 .Run(new RunJobRequest(pending, new SchedulerTestInput { Value = "x" }));
         }
@@ -214,7 +217,8 @@ public class OutOfTrainLifecycleEventTests
 
         for (var start = 0; start < 2; start++)
         {
-            using var scope = _provider.CreateScope();
+            var scope = _provider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             await new SchedulerStartupService(
                 scope.ServiceProvider,
                 configuration,
@@ -234,7 +238,8 @@ public class OutOfTrainLifecycleEventTests
     [Test]
     public async Task A_run_whose_submit_fails_publishes_Failed_once_without_the_submitters_detail()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var operations = scope.ServiceProvider.GetRequiredService<IOperationsService>();
 
         var run = () =>
@@ -263,7 +268,8 @@ public class OutOfTrainLifecycleEventTests
 
     private async Task<long> SeedRunAsync(TrainState state, DateTime startTime)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var metadata = Metadata.Create(
@@ -289,7 +295,8 @@ public class OutOfTrainLifecycleEventTests
 
     private async Task<List<Metadata>> StoredRunsAsync()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.AsNoTracking()

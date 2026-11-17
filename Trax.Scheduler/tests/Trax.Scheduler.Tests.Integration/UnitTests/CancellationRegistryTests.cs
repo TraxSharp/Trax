@@ -101,7 +101,7 @@ public class CancellationRegistryTests
     }
 
     [Test]
-    public void Unregister_DoesNotDisposeCts()
+    public async Task Unregister_DoesNotDisposeCts()
     {
         // Arrange
         var cts = new CancellationTokenSource();
@@ -111,8 +111,8 @@ public class CancellationRegistryTests
         _registry.Unregister(1);
 
         // Assert — CTS should still be usable (not disposed)
-        var act = () => cts.Cancel();
-        act.Should().NotThrow();
+        var act = () => cts.CancelAsync();
+        await act.Should().NotThrowAsync().ConfigureAwait(false);
         cts.Dispose();
     }
 

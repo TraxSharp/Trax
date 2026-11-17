@@ -132,7 +132,10 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         var deliveries = Task.WhenAll(_api.Deliver(token), _api2.Deliver(token));
         await Task.WhenAll(sweeps, deliveries).WaitAsync(Bound);
 
-        var all = sweeps.Result.SelectMany(r => r).Concat(deliveries.Result).ToList();
+        var all = (await sweeps.ConfigureAwait(false))
+            .SelectMany(r => r)
+            .Concat((await deliveries.ConfigureAwait(false)))
+            .ToList();
         all.OfType<InvokeDelivery.Moved>()
             .Should()
             .ContainSingle(
@@ -143,9 +146,9 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
                 r.Should().Match(x => x is InvokeDelivery.Moved || x is InvokeDelivery.NoTransition)
             );
 
-        var row = await SystemRow(instance.Id);
+        var row = await SystemRow(instance.Id).ConfigureAwait(false);
         row.State.Should().Be("Chained");
-        var entries = await _api.Entries(instance.Id);
+        var entries = await _api.Entries(instance.Id).ConfigureAwait(false);
         entries.Should().HaveCount(2, "the chained state queued its next run once");
         row.InvokeToken.Should().Be(entries[1].ExternalId);
     }
@@ -233,7 +236,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         var cancelledRun = await _worker.Dispatch((await SystemRow(cancelled.Id)).InvokeToken!);
         job = _worker.RunJob(cancelledRun);
         await InvokedStepGate.Entered.WaitAsync(Bound);
-        using (var scope = _worker.Services.CreateScope())
+        var scope = _worker.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             (
                 await scope
                     .ServiceProvider.GetRequiredService<IOperationsService>()
@@ -250,9 +254,10 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         // An operator's cancel of a run still only queued: there is no run, and the entry says so.
         var queued = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
         var entry = await _api.Entry((await SystemRow(queued.Id)).InvokeToken!);
-        using (var scope = _worker.Services.CreateScope())
+        var scope2 = _worker.Services.CreateAsyncScope();
+        await using (scope2.ConfigureAwait(false))
             (
-                await scope
+                await scope2
                     .ServiceProvider.GetRequiredService<IOperationsService>()
                     .CancelWorkQueueEntryAsync(entry!.Id, CancellationToken.None)
             )
@@ -380,11 +385,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
     [Test]
     public async Task An_outcome_whose_target_invokes_queues_the_next_run_in_the_same_transaction()
     {
-        await using var faulty = _cluster.Host(
-            machines: true,
-            scheduler: false,
-            FaultingLauncher.Install
-        );
+        var faulty = _cluster.Host(machines: true, scheduler: false, FaultingLauncher.Install);
+        await using var faultyDisposal = faulty.ConfigureAwait(false);
         var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Chain));
         var token = (await SystemRow(instance.Id)).InvokeToken!;
         await _worker.DispatchAndRun(token);
@@ -501,7 +503,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         // its read of the run: the entry still dispatched to the run, and the run failed with the requeue mark.
         // The entry is queued again in the same transaction, so the run that will carry the outcome is still to
         // come.
-        using (var scope = _api.Services.CreateScope())
+        var scope = _api.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .Metadatas.Where(m => m.Id == runId)
@@ -521,8 +524,9 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         row.InvokeToken.Should().Be(token);
 
         // Put back as the dispatcher leaves it, and run to its end.
-        using (var scope = _api.Services.CreateScope())
-            await scope
+        var scope3 = _api.Services.CreateAsyncScope();
+        await using (scope3.ConfigureAwait(false))
+            await scope3
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .WorkQueues.Where(w => w.ExternalId == token)
                 .ExecuteUpdateAsync(s =>
@@ -545,7 +549,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         var token = (await SystemRow(instance.Id)).InvokeToken!;
 
         // Marked dispatched, but its run was never recorded: nothing will ever end it.
-        using (var scope = _api.Services.CreateScope())
+        var scope = _api.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .WorkQueues.Where(w => w.ExternalId == token)
@@ -569,8 +574,9 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         row.InvokeToken.Should().BeNull();
 
         // The entry is settled, so the invariants see no dispatched entry without its run.
-        using (var scope = _api.Services.CreateScope())
-            await scope
+        var scope4 = _api.Services.CreateAsyncScope();
+        await using (scope4.ConfigureAwait(false))
+            await scope4
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .WorkQueues.Where(w => w.ExternalId == token)
                 .ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled));
@@ -581,7 +587,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
     {
         var key = MachineKey.Of("delivery", Guid.NewGuid().ToString("N"));
         MachineInstance instance;
-        using (var scope = _api.Services.CreateScope())
+        var scope = _api.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             instance = await scope
                 .ServiceProvider.GetRequiredService<IMachineInstances>()
                 .Start<StrandingStepMachine>(key, StepMachine.Context(InvokedStepModes.Fail));
@@ -613,9 +620,10 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         (await _api.Deliver(token)).Should().BeOfType<InvokeDelivery.NoTransition>();
 
         // Leaving through a declared transition ends the stranding.
-        using (var scope = _api.Services.CreateScope())
+        var scope5 = _api.Services.CreateAsyncScope();
+        await using (scope5.ConfigureAwait(false))
             (
-                await scope
+                await scope5
                     .ServiceProvider.GetRequiredService<IMachineInstances>()
                     .Advance<StrandingStepMachine>(key, nameof(StepTrigger.Stop))
             )
@@ -631,15 +639,17 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
     {
         // Dispatches with a submitter that cannot reach its worker, and registers the machines, so the failed
         // attempt's lifecycle event reaches a delivery on this host too.
-        await using var unreachable = _cluster.Host(
+        var unreachable = _cluster.Host(
             machines: true,
             scheduler: true,
             configure: s => s.AddScoped<IJobSubmitter, UnreachableSubmitter>()
         );
+        await using var unreachableDisposal = unreachable.ConfigureAwait(false);
         var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok, note: "again"));
         var token = (await SystemRow(instance.Id)).InvokeToken!;
 
-        using (var scope = unreachable.Services.CreateScope())
+        var scope = unreachable.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
 
         var entry = (await _api.Entry(token))!;
@@ -647,9 +657,10 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
             .Status.Should()
             .Be(WorkQueueStatus.Queued, "a dispatch with attempts left is requeued");
         entry.DispatchAttempts.Should().Be(1);
-        using (var scope = _api.Services.CreateScope())
+        var scope6 = _api.Services.CreateAsyncScope();
+        await using (scope6.ConfigureAwait(false))
             (
-                await scope
+                await scope6
                     .ServiceProvider.GetRequiredService<IDataContext>()
                     .Metadatas.AsNoTracking()
                     .SingleAsync(m => m.ExternalId == token)
@@ -668,8 +679,9 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         row.InvokeToken.Should().Be(token);
 
         // Past its back-off, the entry is dispatched again, and that run's outcome comes back.
-        using (var scope = _api.Services.CreateScope())
-            await scope
+        var scope7 = _api.Services.CreateAsyncScope();
+        await using (scope7.ConfigureAwait(false))
+            await scope7
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .WorkQueues.Where(w => w.ExternalId == token)
                 .ExecuteUpdateAsync(s =>
@@ -690,11 +702,12 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
     [Test]
     public async Task A_row_whose_concurrency_token_moves_under_every_attempt_is_contended()
     {
-        await using var stale = _cluster.Host(
+        var stale = _cluster.Host(
             machines: true,
             scheduler: false,
             configure: StaleReadStore.Install
         );
+        await using var staleDisposal = stale.ConfigureAwait(false);
         var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
         var token = (await SystemRow(instance.Id)).InvokeToken!;
         await _worker.DispatchAndRun(token);
@@ -749,7 +762,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
 
     private async Task RenameMachine(string token, string machine)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         (
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
@@ -774,12 +788,13 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
     [Test]
     public async Task Metadata_cleanup_keeps_an_invoked_run_while_its_token_is_live()
     {
-        await using var cleaner = _cluster.Host(
+        var cleaner = _cluster.Host(
             machines: false,
             scheduler: true,
             scheduling: s =>
                 s.AddMetadataCleanup(c => c.AddTrainType(typeof(IInvokedStepTrain).FullName!))
         );
+        await using var cleanerDisposal = cleaner.ConfigureAwait(false);
         var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok, note: "kept"));
         var token = (await SystemRow(instance.Id)).InvokeToken!;
         var runId = await _worker.DispatchAndRun(token);
@@ -812,7 +827,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
 
     private static async Task Cleanup(ClusterHost host)
     {
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await scope
             .ServiceProvider.GetRequiredService<IMetadataCleanupTrain>()
             .Run(new MetadataCleanupRequest())
@@ -821,7 +837,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
 
     private async Task<bool> RunExists(long runId)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.AsNoTracking()
@@ -832,7 +849,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
     // Deletes a finished run with everything it owns, as metadata retention does, whoever holds its token.
     private async Task DeleteRun(long runId)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         await context
             .WorkQueues.Where(w => w.MetadataId == runId)
@@ -854,7 +872,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
 
     private async Task DeleteEntry(string token)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         (
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
@@ -933,7 +952,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
 
     private async Task NoOperatorViewShows(string secret, Guid instance, long entry)
     {
-        using var scope = _worker.Services.CreateScope();
+        var scope = _worker.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var operations = scope.ServiceProvider.GetRequiredService<IOperationsService>();
         var views = new object?[]
         {
@@ -983,11 +1003,12 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
     [Test]
     public async Task The_hosted_reconciler_sweeps_at_its_interval()
     {
-        await using var swept = _cluster.Host(
+        var swept = _cluster.Host(
             machines: true,
             scheduler: false,
             options: o => o.InvokeOutcomeSweepInterval = TimeSpan.FromMilliseconds(100)
         );
+        await using var sweptDisposal = swept.ConfigureAwait(false);
         var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
         var token = (await SystemRow(instance.Id)).InvokeToken!;
         var delivered = new TaskCompletionSource<InvokeDelivery>(

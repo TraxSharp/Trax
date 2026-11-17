@@ -98,22 +98,27 @@ public abstract class TraxLambdaFunction
 
     private readonly Lazy<IServiceProvider> _serviceProvider;
 
+    // Started with the first invocation and awaited by every one, so the warning is logged once
+    // and before the first run, as when the provider is built.
+    private readonly Lazy<Task> _executionServiceCheck;
+
     /// <summary>
     /// Initializes the function without building its service provider; that is deferred to the
     /// first invocation (see <see cref="BuildServiceProvider"/>) to keep cold starts short.
     /// </summary>
     protected TraxLambdaFunction()
     {
-        _serviceProvider = new Lazy<IServiceProvider>(() =>
+        _serviceProvider = new Lazy<IServiceProvider>(() => BuildServiceProvider());
+        _executionServiceCheck = new Lazy<Task>(() =>
         {
-            var services = BuildServiceProvider();
-            if (services.GetService<ILogger<TraxRequestHandler>>() is { } logger)
-                _ = TraxRequestHandler.WarnIfExecutionServiceReplacedAsync(
+            var services = _serviceProvider.Value;
+            return services.GetService<ILogger<TraxRequestHandler>>() is { } logger
+                ? TraxRequestHandler.WarnIfExecutionServiceReplacedAsync(
                     services,
                     logger,
                     nameof(TraxLambdaFunction)
-                );
-            return services;
+                )
+                : Task.CompletedTask;
         });
     }
 
@@ -207,7 +212,8 @@ public abstract class TraxLambdaFunction
         var halfRemaining = remaining / 2;
         var margin = TerminalWriteMargin < halfRemaining ? TerminalWriteMargin : halfRemaining;
         using var cts = new CancellationTokenSource(remaining - margin);
-        using var scope = _serviceProvider.Value.CreateScope();
+        var scope = (await ServicesAsync().ConfigureAwait(false)).CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<TraxLambdaFunction>>();
 
@@ -381,7 +387,8 @@ public abstract class TraxLambdaFunction
             route,
             async (HttpContext ctx) =>
             {
-                using var scope = _serviceProvider.Value.CreateScope();
+                var scope = (await ServicesAsync().ConfigureAwait(false)).CreateAsyncScope();
+                await using var scopeDisposal = scope.ConfigureAwait(false);
                 var verifier = RequireVerifier(scope.ServiceProvider);
 
                 // Unsigned is a posture for the Lambda invocation entry point. Over HTTP it is
@@ -562,9 +569,10 @@ public abstract class TraxLambdaFunction
 
         try
         {
-            using var context = await factory
+            var context = await factory
                 .CreateDbContextAsync(CancellationToken.None)
                 .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             var now = DateTime.UtcNow;
             var pending = context.Metadatas.Where(m =>
                 m.Id == metadataId && m.TrainState == TrainState.Pending
@@ -645,6 +653,13 @@ public abstract class TraxLambdaFunction
             );
         verifier.EnsurePosture(nameof(TraxLambdaFunction));
         return verifier;
+    }
+
+    private async Task<IServiceProvider> ServicesAsync()
+    {
+        var services = _serviceProvider.Value;
+        await _executionServiceCheck.Value.ConfigureAwait(false);
+        return services;
     }
 
     /// <summary>

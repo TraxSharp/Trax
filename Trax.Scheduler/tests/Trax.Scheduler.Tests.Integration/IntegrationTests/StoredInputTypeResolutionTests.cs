@@ -141,16 +141,18 @@ public class StoredInputTypeResolutionTests : TestSetup
 
         await worker.StartAsync(cts.Token);
         var drained = await WaitForJobAbsent(job.Id, TimeSpan.FromSeconds(15));
-        cts.Cancel();
-        await worker.StopAsync(CancellationToken.None);
+        await cts.CancelAsync().ConfigureAwait(false);
+        await worker.StopAsync(CancellationToken.None).ConfigureAwait(false);
 
         drained.Should().BeTrue("the worker deletes a job it could not run");
         NotATrainInput.Constructed.Should().Be(0);
         DataContext.Reset();
-        var after = await DataContext.Metadatas.FirstAsync(
-            m => m.Id == metadata.Id,
-            cancellationToken: CancellationToken.None
-        );
+        var after = await DataContext
+            .Metadatas.FirstAsync(
+                m => m.Id == metadata.Id,
+                cancellationToken: CancellationToken.None
+            )
+            .ConfigureAwait(false);
         after
             .TrainState.Should()
             .Be(TrainState.Failed, "the job is gone, so the worker fails the run it never started");
@@ -175,7 +177,8 @@ public class StoredInputTypeResolutionTests : TestSetup
 
     private async Task RunDispatcher()
     {
-        using var scope = Scope.ServiceProvider.CreateScope();
+        var scope = Scope.ServiceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         await train.Run(Unit.Default).ConfigureAwait(false);
     }

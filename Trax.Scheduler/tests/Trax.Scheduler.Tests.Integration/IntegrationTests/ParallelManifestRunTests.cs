@@ -87,7 +87,8 @@ public class ParallelManifestRunTests
     {
         ParallelProbe.Reset();
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
 
@@ -133,7 +134,8 @@ public class ParallelManifestRunTests
     [Test]
     public async Task A_failed_parallel_run_is_retried_after_its_backoff()
     {
-        await using var delayed = BuildProvider(TimeSpan.FromMinutes(10));
+        var delayed = BuildProvider(TimeSpan.FromMinutes(10));
+        await using var delayedDisposal = delayed.ConfigureAwait(false);
         _override = delayed;
         try
         {
@@ -263,7 +265,8 @@ public class ParallelManifestRunTests
         int? timeoutSeconds = null
     )
     {
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var group = await TestSetup
@@ -295,7 +298,8 @@ public class ParallelManifestRunTests
 
     private async Task RunManifestManagerAsync()
     {
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await scope
             .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
             .Run(Unit.Default)
@@ -312,7 +316,8 @@ public class ParallelManifestRunTests
             )
             .ConfigureAwait(false);
 
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                 .Run(Unit.Default)
@@ -345,7 +350,8 @@ public class ParallelManifestRunTests
     {
         var deadLetter = await AwaitingDeadLetterOf(manifest).ConfigureAwait(false);
 
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ITraxScheduler>()
@@ -369,7 +375,8 @@ public class ParallelManifestRunTests
 
     private async Task<T> WithData<T>(Func<IDataContext, Task<T>> read)
     {
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await read(scope.ServiceProvider.GetRequiredService<IDataContext>())
             .ConfigureAwait(false);
     }

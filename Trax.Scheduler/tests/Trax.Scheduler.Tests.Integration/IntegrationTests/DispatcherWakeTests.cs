@@ -68,7 +68,8 @@ public class DispatcherWakeTests
     public async Task SetUp()
     {
         _apiHost = BuildApiHost();
-        using (var scope = _apiHost.CreateScope())
+        var scope = _apiHost.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await TestSetup.CleanupDatabase(
                 scope.ServiceProvider.GetRequiredService<IDataContext>()
             );
@@ -130,7 +131,8 @@ public class DispatcherWakeTests
     {
         // The test's own session on the channel: once a query on it returns, every notification
         // committed before that query began has reached it, so its count is exact.
-        await using var oracle = new NpgsqlConnection(TestPostgres.ConnectionString);
+        var oracle = new NpgsqlConnection(TestPostgres.ConnectionString);
+        await using var oracleDisposal = oracle.ConfigureAwait(false);
         await oracle.OpenAsync();
         var oracleNotices = 0;
         oracle.Notification += (_, _) => Interlocked.Increment(ref oracleNotices);
@@ -138,7 +140,8 @@ public class DispatcherWakeTests
 
         var noticesBefore = Listener.Notices;
 
-        using (var scope = _apiHost.CreateScope())
+        var scope = _apiHost.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
             using var transaction = await dataContext.BeginTransaction();
@@ -172,14 +175,16 @@ public class DispatcherWakeTests
     [Test]
     public async Task The_listener_reconnects_after_its_connection_is_terminated_and_wakes_again()
     {
-        await using (var admin = new NpgsqlConnection(TestPostgres.ConnectionString))
+        var admin = new NpgsqlConnection(TestPostgres.ConnectionString);
+        await using (admin.ConfigureAwait(false))
         {
             await admin.OpenAsync();
-            await using var terminate = new NpgsqlCommand(
+            var terminate = new NpgsqlCommand(
                 "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity "
                     + "WHERE application_name = @name AND datname = current_database()",
                 admin
             );
+            await using var terminateDisposal = terminate.ConfigureAwait(false);
             terminate.Parameters.AddWithValue("name", ListenerApplicationName);
             var terminated = (long)(await terminate.ExecuteScalarAsync())!;
             terminated.Should().Be(1, "the dispatcher host holds one listening session");
@@ -197,7 +202,8 @@ public class DispatcherWakeTests
 
     private async Task<long> QueueFromApiHostAsync()
     {
-        using var scope = _apiHost.CreateScope();
+        var scope = _apiHost.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         var result = await execution
             .QueueAsync(typeof(ISchedulerTestTrain).FullName!, "{}", ct: CancellationToken.None)
@@ -243,7 +249,8 @@ public class DispatcherWakeTests
 
     private async Task<bool> IsDispatchedAsync(long workQueueId)
     {
-        using var scope = _apiHost.CreateScope();
+        var scope = _apiHost.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var entry = await dataContext
             .WorkQueues.AsNoTracking()

@@ -85,9 +85,11 @@ public class QueryPerformanceTests : TestSetup
             )
             .ConfigureAwait(false);
 
-        TestContext.Out.WriteLine(
-            $"Seeded {ManifestCount} manifests, {ManifestCount * MetadataPerManifest} metadata rows"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                $"Seeded {ManifestCount} manifests, {ManifestCount * MetadataPerManifest} metadata rows"
+            )
+            .ConfigureAwait(false);
     }
 
     #region Stale Job Detection (ReapStalePendingMetadataJunction pattern)
@@ -116,12 +118,14 @@ public class QueryPerformanceTests : TestSetup
             stale.Should().NotBeEmpty("test data includes pending metadata older than cutoff");
         });
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"FindStalePendingMetadata: {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"FindStalePendingMetadata: {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -147,12 +151,14 @@ public class QueryPerformanceTests : TestSetup
             stuck.Should().NotBeEmpty("test data includes in-progress metadata");
         });
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"RecoverStuckJobs: {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"RecoverStuckJobs: {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -189,12 +195,14 @@ public class QueryPerformanceTests : TestSetup
             activeCounts.Should().NotBeEmpty("test data includes active metadata");
         });
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"LoadDispatchCapacity: {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"LoadDispatchCapacity: {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -247,12 +255,14 @@ public class QueryPerformanceTests : TestSetup
             activeCounts.Should().NotBeEmpty("test data includes active metadata");
         });
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"LoadDispatchCapacity (with exclusion filter): {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"LoadDispatchCapacity (with exclusion filter): {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -321,12 +331,14 @@ public class QueryPerformanceTests : TestSetup
             TimeSpan.FromSeconds(30)
         );
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"BatchedDeleteExpiredMetadata (batch={batchSize}): {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"BatchedDeleteExpiredMetadata (batch={batchSize}): {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -393,12 +405,14 @@ public class QueryPerformanceTests : TestSetup
             TimeSpan.FromSeconds(30)
         );
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"BatchedDeleteExpiredMetadata (batch={batchSize}, {batchCount} batches): {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"BatchedDeleteExpiredMetadata (batch={batchSize}, {batchCount} batches): {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -434,12 +448,14 @@ public class QueryPerformanceTests : TestSetup
             inProgress.Should().NotBeEmpty();
         });
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"FindTimedOutJobs: {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"FindTimedOutJobs: {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -465,12 +481,14 @@ public class QueryPerformanceTests : TestSetup
             counts.Should().NotBeEmpty();
         });
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"DashboardDailyCount: {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"DashboardDailyCount: {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -491,12 +509,14 @@ public class QueryPerformanceTests : TestSetup
             page.Should().HaveCount(50);
         });
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"PaginatedExecutions: {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PaginatedExecutions: {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -532,12 +552,14 @@ public class QueryPerformanceTests : TestSetup
             views.Should().HaveCount(ManifestCount);
         });
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"LoadManifestsWithAggregates: {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"LoadManifestsWithAggregates: {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -590,12 +612,14 @@ public class QueryPerformanceTests : TestSetup
             TimeSpan.FromSeconds(30)
         );
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"DeleteExpiredMetadata: {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"DeleteExpiredMetadata: {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -659,12 +683,14 @@ public class QueryPerformanceTests : TestSetup
             TimeSpan.FromSeconds(30)
         );
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"PruneStaleManifests (100 pruned, 400 kept): {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PruneStaleManifests (100 pruned, 400 kept): {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -711,16 +737,20 @@ public class QueryPerformanceTests : TestSetup
             TimeSpan.FromSeconds(30) // Larger timeout for bulk operations
         );
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"ScheduleMany 5K with prune: {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"ScheduleMany 5K with prune: {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         // Verify all manifests exist
         DataContext.Reset();
-        var count = await DataContext.Manifests.CountAsync(m => m.ExternalId.StartsWith("bulk-"));
+        var count = await DataContext
+            .Manifests.CountAsync(m => m.ExternalId.StartsWith("bulk-"))
+            .ConfigureAwait(false);
         count.Should().Be(5000);
     }
 
@@ -779,17 +809,19 @@ public class QueryPerformanceTests : TestSetup
             TimeSpan.FromSeconds(15)
         );
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"ScheduleMany re-run with prune: {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"ScheduleMany re-run with prune: {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         DataContext.Reset();
-        var remaining = await DataContext.Manifests.CountAsync(m =>
-            m.ExternalId.StartsWith("evolve-")
-        );
+        var remaining = await DataContext
+            .Manifests.CountAsync(m => m.ExternalId.StartsWith("evolve-"))
+            .ConfigureAwait(false);
         remaining.Should().Be(900);
     }
 
@@ -861,12 +893,14 @@ public class QueryPerformanceTests : TestSetup
             .OnlyHaveUniqueItems("FOR UPDATE SKIP LOCKED should prevent duplicates");
         claimedList.Count.Should().Be(100, "all 100 jobs should be claimed");
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"ConcurrentDequeue (20 workers, 100 jobs): {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"ConcurrentDequeue (20 workers, 100 jobs): {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -925,12 +959,14 @@ public class QueryPerformanceTests : TestSetup
 
         claimed.Should().HaveCount(50);
         claimed.Should().OnlyHaveUniqueItems();
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"BatchClaim (LIMIT 1, 50 rounds): {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"BatchClaim (LIMIT 1, 50 rounds): {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -986,12 +1022,14 @@ public class QueryPerformanceTests : TestSetup
 
         claimed.Should().HaveCount(50);
         claimed.Should().OnlyHaveUniqueItems();
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"BatchClaim (LIMIT 10, 5 rounds): {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"BatchClaim (LIMIT 10, 5 rounds): {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -1076,12 +1114,14 @@ public class QueryPerformanceTests : TestSetup
             TimeSpan.FromSeconds(60)
         );
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"PruneOrphanedManifests server-side filter ({ManifestCount - 50} pruned, batch size {batchSize}): {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PruneOrphanedManifests server-side filter ({ManifestCount - 50} pruned, batch size {batchSize}): {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -1158,12 +1198,14 @@ public class QueryPerformanceTests : TestSetup
             TimeSpan.FromSeconds(60)
         );
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"PruneOrphanedManifests large expected set ({ManifestCount - 50} expected, 50 pruned): {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PruneOrphanedManifests large expected set ({ManifestCount - 50} expected, 50 pruned): {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -1204,91 +1246,101 @@ public class QueryPerformanceTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        TestContext.Out.WriteLine(
-            $"Seeded {orphanCount} orphan manifests (total: {ManifestCount + orphanCount})"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                $"Seeded {orphanCount} orphan manifests (total: {ManifestCount + orphanCount})"
+            )
+            .ConfigureAwait(false);
 
         // The 500 baseline manifests (stress-0..stress-499) are the expected set
         var expectedIds = _manifests.Select(m => m.ExternalId).ToHashSet(StringComparer.Ordinal);
         var batchSize = SchedulerStartupService.PruneBatchSize;
 
         var elapsed = await AssertCompletesWithin(
-            async () =>
-            {
-                // Server compute: load all (id, external_id) pairs, filter in C#
-                var allManifests = await DataContext
-                    .Manifests.Select(m => new { m.Id, m.ExternalId })
-                    .ToListAsync()
-                    .ConfigureAwait(false);
-
-                allManifests.Should().HaveCount(ManifestCount + orphanCount);
-
-                var orphanedIds = allManifests
-                    .Where(m => !expectedIds.Contains(m.ExternalId))
-                    .Select(m => m.Id)
-                    .ToList();
-
-                orphanedIds.Should().HaveCount(orphanCount);
-
-                // Database compute: delete in batches of 500 by integer PK
-                var totalPruned = 0;
-
-                foreach (var batch in orphanedIds.Chunk(batchSize))
+                async () =>
                 {
-                    var batchIds = batch.ToList();
-
-                    await DataContext
-                        .Manifests.Where(m =>
-                            m.DependsOnManifestId.HasValue
-                            && batchIds.Contains(m.DependsOnManifestId.Value)
-                        )
-                        .ExecuteUpdateAsync(s =>
-                            s.SetProperty(m => m.DependsOnManifestId, (long?)null)
-                        )
+                    // Server compute: load all (id, external_id) pairs, filter in C#
+                    var allManifests = await DataContext
+                        .Manifests.Select(m => new { m.Id, m.ExternalId })
+                        .ToListAsync()
                         .ConfigureAwait(false);
 
-                    await DataContext
-                        .WorkQueues.Where(w =>
-                            w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
-                        )
-                        .ExecuteDeleteAsync()
+                    allManifests.Should().HaveCount(ManifestCount + orphanCount);
+
+                    var orphanedIds = allManifests
+                        .Where(m => !expectedIds.Contains(m.ExternalId))
+                        .Select(m => m.Id)
+                        .ToList();
+
+                    orphanedIds.Should().HaveCount(orphanCount);
+
+                    // Database compute: delete in batches of 500 by integer PK
+                    var totalPruned = 0;
+
+                    foreach (var batch in orphanedIds.Chunk(batchSize))
+                    {
+                        var batchIds = batch.ToList();
+
+                        await DataContext
+                            .Manifests.Where(m =>
+                                m.DependsOnManifestId.HasValue
+                                && batchIds.Contains(m.DependsOnManifestId.Value)
+                            )
+                            .ExecuteUpdateAsync(s =>
+                                s.SetProperty(m => m.DependsOnManifestId, (long?)null)
+                            )
+                            .ConfigureAwait(false);
+
+                        await DataContext
+                            .WorkQueues.Where(w =>
+                                w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
+                            )
+                            .ExecuteDeleteAsync()
+                            .ConfigureAwait(false);
+
+                        await DataContext
+                            .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
+                            .ExecuteDeleteAsync()
+                            .ConfigureAwait(false);
+
+                        await DataContext
+                            .Metadatas.Where(m =>
+                                m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
+                            )
+                            .ExecuteDeleteAsync()
+                            .ConfigureAwait(false);
+
+                        totalPruned += await DataContext
+                            .Manifests.Where(m => batchIds.Contains(m.Id))
+                            .ExecuteDeleteAsync()
+                            .ConfigureAwait(false);
+                    }
+
+                    totalPruned.Should().Be(orphanCount);
+
+                    // Verify expected manifests are untouched
+                    var remainingCount = await DataContext
+                        .Manifests.CountAsync()
                         .ConfigureAwait(false);
+                    remainingCount.Should().Be(ManifestCount);
+                },
+                TimeSpan.FromSeconds(120)
+            )
+            .ConfigureAwait(false);
 
-                    await DataContext
-                        .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-
-                    await DataContext
-                        .Metadatas.Where(m =>
-                            m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
-                        )
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-
-                    totalPruned += await DataContext
-                        .Manifests.Where(m => batchIds.Contains(m.Id))
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-                }
-
-                totalPruned.Should().Be(orphanCount);
-
-                // Verify expected manifests are untouched
-                var remainingCount = await DataContext.Manifests.CountAsync().ConfigureAwait(false);
-                remainingCount.Should().Be(ManifestCount);
-            },
-            TimeSpan.FromSeconds(120)
-        );
-
-        TestContext.Out.WriteLine(
-            $"PruneOrphanedManifests 5K orphans ({orphanCount} pruned, {ManifestCount} kept, "
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"batch size {batchSize}, {(orphanCount + batchSize - 1) / batchSize} batches): "
-                )
-                + string.Create(CultureInfo.InvariantCulture, $"{elapsed.TotalMilliseconds:F0}ms")
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                $"PruneOrphanedManifests 5K orphans ({orphanCount} pruned, {ManifestCount} kept, "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"batch size {batchSize}, {(orphanCount + batchSize - 1) / batchSize} batches): "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{elapsed.TotalMilliseconds:F0}ms"
+                    )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -1344,12 +1396,14 @@ public class QueryPerformanceTests : TestSetup
             page.Should().HaveCount(pageSize);
         });
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"Offset (page {targetPage}): {offsetElapsed.TotalMilliseconds:F0}ms, Keyset: {keysetElapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Offset (page {targetPage}): {offsetElapsed.TotalMilliseconds:F0}ms, Keyset: {keysetElapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -1379,12 +1433,14 @@ public class QueryPerformanceTests : TestSetup
             TimeSpan.FromMilliseconds(100)
         );
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"EstimatedCount (reltuples): {elapsed.TotalMilliseconds:F2}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"EstimatedCount (reltuples): {elapsed.TotalMilliseconds:F2}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -1416,12 +1472,14 @@ public class QueryPerformanceTests : TestSetup
             limited.Should().HaveCount(100);
         });
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"LoadQueuedJobs with LIMIT 100: {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"LoadQueuedJobs with LIMIT 100: {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -1448,12 +1506,14 @@ public class QueryPerformanceTests : TestSetup
             all.Should().HaveCount(ManifestCount);
         });
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"LoadQueuedJobs without LIMIT ({ManifestCount} entries): {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"LoadQueuedJobs without LIMIT ({ManifestCount} entries): {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -1487,12 +1547,14 @@ public class QueryPerformanceTests : TestSetup
                 .ConfigureAwait(false);
         });
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"BulkUpdateState ({pendingIds.Count} rows): {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"BulkUpdateState ({pendingIds.Count} rows): {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion

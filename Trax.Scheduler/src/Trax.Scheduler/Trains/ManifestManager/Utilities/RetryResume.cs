@@ -84,7 +84,8 @@ internal class RetryResume(
         var sources = new Dictionary<long, long>();
         var candidates = new List<(Manifest Manifest, long RunId)>();
 
-        using (var context = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false))
+        var context = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (context.ConfigureAwait(false))
         {
             var manifestIds = manifests.Select(m => m.Id).ToList();
 

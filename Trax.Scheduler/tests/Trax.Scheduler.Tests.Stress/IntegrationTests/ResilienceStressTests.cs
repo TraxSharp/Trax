@@ -64,9 +64,11 @@ public class ResilienceStressTests : TestSetup
         before
             .Should()
             .Be(dispatcherRows + deadLetterRefRows + (parentChildPairs * 2), "seeded row count");
-        TestContext.Out.WriteLine(
-            string.Create(CultureInfo.InvariantCulture, $"Seeded {before} metadata rows")
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(CultureInfo.InvariantCulture, $"Seeded {before} metadata rows")
+            )
+            .ConfigureAwait(false);
 
         // The stress fixture doesn't call AddMetadataCleanup, so enable it on the shared config.
         var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
@@ -78,52 +80,57 @@ public class ResilienceStressTests : TestSetup
         var train = Scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
 
         var elapsed = await AssertCompletesWithin(
-            async () => await train.Run(new MetadataCleanupRequest()).ConfigureAwait(false),
-            TimeSpan.FromSeconds(60)
-        );
+                async () => await train.Run(new MetadataCleanupRequest()).ConfigureAwait(false),
+                TimeSpan.FromSeconds(60)
+            )
+            .ConfigureAwait(false);
 
         DataContext.Reset();
 
         // Every expired JobDispatcher row is pruned, bounding the table.
-        var remainingDispatcher = await DataContext.Metadatas.CountAsync(m =>
-            m.Name == dispatcherName
-        );
+        var remainingDispatcher = await DataContext
+            .Metadatas.CountAsync(m => m.Name == dispatcherName)
+            .ConfigureAwait(false);
         remainingDispatcher.Should().Be(0, "all expired JobDispatcher metadata should be pruned");
 
         // The still-running children survive (in-progress rows are never eligible). Note the
         // cleanup train also persists its own fresh MetadataCleanupTrain row, which is not past
         // retention yet, so a raw total would be parentChildPairs + 1.
-        var survivingChildren = await DataContext.Metadatas.CountAsync(m =>
-            m.Name == "Consumer.Trains.ChildTrain"
-        );
+        var survivingChildren = await DataContext
+            .Metadatas.CountAsync(m => m.Name == "Consumer.Trains.ChildTrain")
+            .ConfigureAwait(false);
         survivingChildren.Should().Be(parentChildPairs, "the in-progress children should survive");
 
         // Dead letters are kept, with their dangling retry reference nulled.
-        var deadLetters = await DataContext.DeadLetters.CountAsync();
+        var deadLetters = await DataContext.DeadLetters.CountAsync().ConfigureAwait(false);
         deadLetters
             .Should()
             .Be(deadLetterRefRows, "dead letters are meaningful records and survive");
-        var danglingDeadLetterRefs = await DataContext.DeadLetters.CountAsync(d =>
-            d.RetryMetadataId != null
-        );
+        var danglingDeadLetterRefs = await DataContext
+            .DeadLetters.CountAsync(d => d.RetryMetadataId != null)
+            .ConfigureAwait(false);
         danglingDeadLetterRefs
             .Should()
             .Be(0, "no dead letter should reference a deleted metadata row");
 
         // Surviving children have their parent reference nulled, not left dangling.
-        var childrenWithParent = await DataContext.Metadatas.CountAsync(m => m.ParentId != null);
+        var childrenWithParent = await DataContext
+            .Metadatas.CountAsync(m => m.ParentId != null)
+            .ConfigureAwait(false);
         childrenWithParent.Should().Be(0, "child parent references should be nulled");
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"Cleanup of {before} rows ({dispatcherRows} dispatcher, {deadLetterRefRows} dead-letter-referenced, "
-            )
-                + string.Create(
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{parentChildPairs} parent/child): {elapsed.TotalMilliseconds:F0}ms"
+                    $"Cleanup of {before} rows ({dispatcherRows} dispatcher, {deadLetterRefRows} dead-letter-referenced, "
                 )
-        );
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{parentChildPairs} parent/child): {elapsed.TotalMilliseconds:F0}ms"
+                    )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -157,12 +164,14 @@ public class ResilienceStressTests : TestSetup
             TimeSpan.FromSeconds(5)
         );
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"FailedCount over a 50.5k-row manifest history: {elapsed.TotalMilliseconds:F0}ms"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"FailedCount over a 50.5k-row manifest history: {elapsed.TotalMilliseconds:F0}ms"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     #endregion

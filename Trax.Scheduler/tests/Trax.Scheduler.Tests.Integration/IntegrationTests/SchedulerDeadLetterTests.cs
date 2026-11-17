@@ -372,8 +372,10 @@ public class SchedulerDeadLetterTests
             )
             .ContinueWith(async t =>
             {
-                await t.Result.MaterializePendingManifestsAsync().ConfigureAwait(false);
-                return t.Result;
+                await (await t.ConfigureAwait(false))
+                    .MaterializePendingManifestsAsync()
+                    .ConfigureAwait(false);
+                return (await t.ConfigureAwait(false));
             })
             .Unwrap();
 

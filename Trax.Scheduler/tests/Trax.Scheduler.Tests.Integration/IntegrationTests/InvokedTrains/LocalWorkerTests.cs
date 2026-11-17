@@ -61,7 +61,8 @@ public class LocalWorkerTests(ClusterStore store)
 
         // A job the worker cannot even start: its input type is no registered train's input.
         long jobId;
-        using (var scope = _full.Services.CreateScope())
+        var scope = _full.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
             var job = BackgroundJob.Create(
@@ -110,7 +111,8 @@ public class LocalWorkerTests(ClusterStore store)
     {
         while (true)
         {
-            using (var scope = _full.Services.CreateScope())
+            var scope = _full.Services.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
             {
                 var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
                 if (

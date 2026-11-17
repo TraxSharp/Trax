@@ -42,7 +42,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
     /// <summary>Starts a system-owned instance whose initial state invokes the step, with <paramref name="context"/>.</summary>
     public async Task<MachineInstance> Start(JsonObject context)
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IMachineInstances>()
             .Start<SystemStepMachine>(
@@ -58,13 +59,15 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
         await StepMachine
             .Seed(services, user, id, UserStepMachine.MachineId, "Idle", context)
             .ConfigureAwait(false);
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await Drafts(scope).Advance(user, id, nameof(StepTrigger.Go)).ConfigureAwait(false);
     }
 
     public async Task<AdvanceOutcome> Advance(string user, Guid id, StepTrigger trigger)
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await Drafts(scope).Advance(user, id, trigger.ToString()).ConfigureAwait(false);
     }
 
@@ -82,7 +85,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
     /// <summary>Runs the dispatcher once and returns the run it created for <paramref name="token"/>'s entry.</summary>
     public async Task<long> Dispatch(string token)
     {
-        using (var scope = services.CreateScope())
+        var scope = services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                 .Run(Unit.Default)
@@ -109,7 +113,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
                 )
             );
 
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         try
         {
             await scope
@@ -159,7 +164,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
 
     public async Task<SnapshotDraft?> Row(Guid id, string machine)
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
@@ -170,7 +176,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
     /// <summary>Every owner's row of instance <paramref name="id"/> of <paramref name="machine"/>.</summary>
     public async Task<List<SnapshotDraft>> Rows(Guid id, string machine)
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
@@ -181,7 +188,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
 
     public async Task<WorkQueue?> Entry(string token)
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .WorkQueues.AsNoTracking()
@@ -192,7 +200,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
     /// <summary>Every entry an instance's invoking states queued, oldest first.</summary>
     public async Task<List<WorkQueue>> Entries(Guid instance)
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .WorkQueues.AsNoTracking()
@@ -204,7 +213,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
 
     public async Task<Metadata> Run(long metadataId)
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.AsNoTracking()
@@ -215,7 +225,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
     /// <summary>Moves a run's start back by <paramref name="age"/>, as if it had been going that long.</summary>
     public async Task Age(long metadataId, TimeSpan age)
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var start = DateTime.UtcNow - age;
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()

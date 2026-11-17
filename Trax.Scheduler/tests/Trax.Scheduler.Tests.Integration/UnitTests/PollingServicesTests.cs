@@ -69,7 +69,7 @@ public class PollingServicesTests
         await trainHit
             .Task.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None)
             .ConfigureAwait(false);
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
         await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
@@ -189,14 +189,17 @@ public class PollingServicesTests
             () => liveness.LastDispatchCompletedAt is not null,
             TimeSpan.FromSeconds(10)
         );
-        cts.Cancel();
-        await service.StopAsync(CancellationToken.None);
+        await cts.CancelAsync().ConfigureAwait(false);
+        await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
 
         liveness
             .LastDispatchCompletedAt.Should()
             .NotBeNull("the disabled loop still runs its cycle");
 
-        await train.DidNotReceive().Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>());
+        await train
+            .DidNotReceive()
+            .Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>())
+            .ConfigureAwait(false);
     }
 
     #endregion

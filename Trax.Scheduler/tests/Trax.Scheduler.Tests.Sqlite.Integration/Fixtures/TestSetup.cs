@@ -24,7 +24,7 @@ public abstract class TestSetup
     private ServiceProvider ServiceProvider { get; set; } = null!;
     private string _dbPath = null!;
 
-    public IServiceScope Scope { get; private set; } = null!;
+    public AsyncServiceScope Scope { get; private set; }
 
     public ITrainBus TrainBus { get; private set; } = null!;
 
@@ -83,7 +83,7 @@ public abstract class TestSetup
     [SetUp]
     public virtual async Task TestSetUp()
     {
-        Scope = ServiceProvider.CreateScope();
+        Scope = ServiceProvider.CreateAsyncScope();
         TrainBus = Scope.ServiceProvider.GetRequiredService<ITrainBus>();
         JobRunner = Scope.ServiceProvider.GetRequiredService<IJobRunnerTrain>();
         DataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
@@ -141,6 +141,6 @@ public abstract class TestSetup
         if (DataContext is IDisposable disposable)
             disposable.Dispose();
 
-        Scope.Dispose();
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 }

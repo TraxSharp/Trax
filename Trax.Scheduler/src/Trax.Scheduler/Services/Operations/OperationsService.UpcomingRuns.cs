@@ -38,7 +38,8 @@ public partial class OperationsService
 
         count = Math.Clamp(count, 0, MaxUpcomingRuns);
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var rows = await db
             .Manifests.AsNoTracking()

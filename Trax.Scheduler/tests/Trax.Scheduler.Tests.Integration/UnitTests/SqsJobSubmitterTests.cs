@@ -226,17 +226,17 @@ public class SqsJobSubmitterTests
     }
 
     [Test]
-    public void EnqueueAsync_WhenCancelled_ThrowsOperationCancelledException()
+    public async Task EnqueueAsync_WhenCancelled_ThrowsOperationCancelledException()
     {
         // Arrange
         var (submitter, client) = CreateSubmitter();
         client.ThrowOnSend = true;
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
         // Act & Assert
         var act = async () => await submitter.EnqueueAsync(1, cts.Token).ConfigureAwait(false);
-        act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     #endregion
@@ -244,7 +244,7 @@ public class SqsJobSubmitterTests
     #region Error Handling Tests
 
     [Test]
-    public void EnqueueAsync_WhenSqsThrows_PropagatesException()
+    public async Task EnqueueAsync_WhenSqsThrows_PropagatesException()
     {
         // Arrange
         var (submitter, client) = CreateSubmitter();
@@ -252,7 +252,7 @@ public class SqsJobSubmitterTests
 
         // Act & Assert
         var act = async () => await submitter.EnqueueAsync(42).ConfigureAwait(false);
-        act.Should().ThrowAsync<AmazonSQSException>();
+        await act.Should().ThrowAsync<AmazonSQSException>().ConfigureAwait(false);
     }
 
     #endregion

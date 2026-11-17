@@ -975,8 +975,9 @@ public class TraxLambdaFunctionTests
 
         public async Task<long> SavePendingRunAsync()
         {
-            using var context = (IDataContext)
+            var context = (IDataContext)
                 Services.GetRequiredService<IDataContextProviderFactory>().Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             var run = Metadata.Create(
                 new CreateMetadata
                 {
@@ -992,8 +993,9 @@ public class TraxLambdaFunctionTests
 
         public async Task<TrainState> RunStateAsync(long metadataId)
         {
-            using var context = (IDataContext)
+            var context = (IDataContext)
                 Services.GetRequiredService<IDataContextProviderFactory>().Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             return (
                 await context
                     .Metadatas.AsNoTracking()

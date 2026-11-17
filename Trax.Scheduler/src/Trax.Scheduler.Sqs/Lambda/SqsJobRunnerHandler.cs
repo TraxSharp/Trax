@@ -135,7 +135,8 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
 
         foreach (var record in sqsEvent.Records)
         {
-            using var scope = serviceProvider.CreateScope();
+            var scope = serviceProvider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var sp = scope.ServiceProvider;
             var logger = sp.GetRequiredService<ILogger<SqsJobRunnerHandler>>();
 

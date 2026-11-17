@@ -95,12 +95,12 @@ public class InvokeOutcomeNoticeTests
 
             // An input that no longer reads as its train's: the dispatcher inserts the run already failed, and
             // never updates its state.
-            using (var scope = api.Services.CreateScope())
+            await using (var scope = api.Services.CreateAsyncScope())
                 await scope
                     .ServiceProvider.GetRequiredService<IDataContext>()
                     .WorkQueues.Where(w => w.ExternalId == token)
                     .ExecuteUpdateAsync(s => s.SetProperty(w => w.Input, "[1]"));
-            using (var scope = _worker.Services.CreateScope())
+            await using (var scope = _worker.Services.CreateAsyncScope())
                 await scope
                     .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                     .Run(Unit.Default);

@@ -40,7 +40,7 @@ public class ManifestManagerSqliteTests : TestSetup
 
         // A write from elsewhere in the host while the cycle runs.
         var writeClock = Stopwatch.StartNew();
-        using (var other = Scope.ServiceProvider.CreateScope())
+        await using (var other = Scope.ServiceProvider.CreateAsyncScope())
         {
             var context = other.ServiceProvider.GetRequiredService<IDataContext>();
             await context.Track(NewRun(TrainState.Completed, DateTime.UtcNow));

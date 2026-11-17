@@ -38,7 +38,7 @@ public class RemoteParallelFailureTests
 
         // The worker runs the train and catches its failure, as TraxRequestHandler does.
         BranchesFailedException failure;
-        using (var scope = worker.CreateScope())
+        await using (var scope = worker.CreateAsyncScope())
             failure = (
                 await FluentActions
                     .Awaiting(() =>

@@ -74,14 +74,14 @@ public class InvokedRunTests(ClusterStore store)
     [Test]
     public async Task Resolving_it_outside_an_invoked_run_throws()
     {
-        using (var scope = _full.Services.CreateScope())
+        await using (var scope = _full.Services.CreateAsyncScope())
             scope
                 .Invoking(s => s.ServiceProvider.GetRequiredService<InvokedRun>())
                 .Should()
                 .Throw<InvalidOperationException>();
 
         // A train run directly, not by a machine, cannot read an owner either.
-        using var run = _full.Services.CreateScope();
+        await using var run = _full.Services.CreateAsyncScope();
         await run
             .ServiceProvider.GetRequiredService<ITrainBus>()
             .Awaiting(bus =>

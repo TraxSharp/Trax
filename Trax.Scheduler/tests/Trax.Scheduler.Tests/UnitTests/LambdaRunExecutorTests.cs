@@ -547,7 +547,7 @@ public class LambdaRunExecutorTests
         var client = CreateMockClient(response);
         var executor = CreateExecutor(client);
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
         // Act
         var act = async () =>
@@ -561,7 +561,7 @@ public class LambdaRunExecutorTests
                 .ConfigureAwait(false);
 
         // Assert
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     #endregion

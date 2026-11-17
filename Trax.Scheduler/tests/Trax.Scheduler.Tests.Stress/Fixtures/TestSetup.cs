@@ -51,7 +51,7 @@ public abstract class TestSetup
 {
     private ServiceProvider ServiceProvider { get; set; } = null!;
 
-    protected IServiceScope Scope { get; private set; } = null!;
+    protected AsyncServiceScope Scope { get; private set; }
 
     protected IDataContext DataContext { get; private set; } = null!;
 
@@ -100,7 +100,7 @@ public abstract class TestSetup
     [SetUp]
     public virtual async Task TestSetUp()
     {
-        Scope = ServiceProvider.CreateScope();
+        Scope = ServiceProvider.CreateAsyncScope();
         DataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
         await CleanupDatabase(DataContext);
     }
@@ -110,7 +110,7 @@ public abstract class TestSetup
     {
         if (DataContext is IDisposable disposable)
             disposable.Dispose();
-        Scope.Dispose();
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 
     protected static async Task CleanupDatabase(IDataContext dataContext)

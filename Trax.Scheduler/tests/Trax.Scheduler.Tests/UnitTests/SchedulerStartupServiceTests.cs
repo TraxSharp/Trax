@@ -291,11 +291,11 @@ public class SchedulerStartupServiceTests
 
         var act = () =>
             service.SeedWithRetryAsync(
-                _ =>
+                async _ =>
                 {
                     callCount++;
                     // Cancel after the first transient failure, so the Task.Delay throws
-                    cts.Cancel();
+                    await cts.CancelAsync().ConfigureAwait(false);
                     throw new TimeoutException("timed out");
                 },
                 "cancel-test",
@@ -312,7 +312,7 @@ public class SchedulerStartupServiceTests
     {
         var callCount = 0;
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
         var service = CreateService();
 
         var act = () =>
@@ -328,7 +328,7 @@ public class SchedulerStartupServiceTests
                 baseDelay: TimeSpan.Zero
             );
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         callCount.Should().Be(0, "action should check the token and never increment");
     }
 

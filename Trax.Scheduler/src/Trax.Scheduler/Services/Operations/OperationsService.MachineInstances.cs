@@ -61,7 +61,8 @@ public partial class OperationsService
         var take = Math.Clamp(query.Take, 1, MaxPageSize);
         var skip = Math.Max(query.Skip, 0);
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var overdueBefore = OverdueBefore();
         var items = await MachineInstancePageQuery(db, query, skip, take, overdueBefore)
             .ToListAsync(ct)
@@ -79,7 +80,8 @@ public partial class OperationsService
         CancellationToken ct
     )
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         // One match past the cap tells a capped count from an exact one, and the database stops
         // reading once it has found that many.
@@ -105,7 +107,8 @@ public partial class OperationsService
     {
         ValidateLookup(key);
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var record = await InstanceRows(db, key)
             .Select(ToMachineInstanceRecord)
             .FirstOrDefaultAsync(ct)
@@ -136,7 +139,8 @@ public partial class OperationsService
     {
         ValidateLookup(key);
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var instance = await InstanceRows(db, key)
             .Select(x => new { x.InvokeToken })
             .FirstOrDefaultAsync(ct)
@@ -224,7 +228,8 @@ public partial class OperationsService
             );
 
         string token;
-        using (var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false))
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var instance = await InstanceRows(db, key)
                 .Select(x => new { x.State, x.InvokeToken })
@@ -449,7 +454,8 @@ public partial class OperationsService
         IReadOnlyList<MachineInstanceStateCount>
     > ReadMachineInstanceStateCountsAsync(string? machine, CancellationToken ct)
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var rows = db.SnapshotDrafts.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(machine))
             rows = rows.Where(x => x.Machine == machine);

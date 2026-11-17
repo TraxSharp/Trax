@@ -169,7 +169,8 @@ internal sealed class DispatchJobsJunction(
     /// <returns>True if the entry was successfully dispatched; false if it was already claimed.</returns>
     private async Task<bool> TryClaimAndDispatchAsync(WorkQueue entry)
     {
-        using var scope = serviceProvider.CreateScope();
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         using var transaction = await dataContext
@@ -616,7 +617,8 @@ internal sealed class DispatchJobsJunction(
 
         try
         {
-            using var scope = serviceProvider.CreateScope();
+            var scope = serviceProvider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
             using var transaction = await dataContext.BeginTransaction(token).ConfigureAwait(false);

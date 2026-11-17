@@ -127,7 +127,8 @@ public class ManifestRetryReplaysDecisionsTests
         DecisionProbe.Reset();
         Answer(ProbeLane.Slow, ProbeSize.Large);
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
 
@@ -237,7 +238,8 @@ public class ManifestRetryReplaysDecisionsTests
         // An operator requeues the failed run itself. Its run replays the failed run's answers
         // and fails too. It belongs to no manifest, so the manifest never retries it directly.
         long requeueEntry;
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var result = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
@@ -267,7 +269,8 @@ public class ManifestRetryReplaysDecisionsTests
         // Dead-lettered, then acknowledged: the failure no longer counts, so the next run is an
         // ordinary occurrence, not a retry of it.
         await RunManifestManagerAsync();
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var scheduler = scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
             var deadLetterId = await WithData(data =>
@@ -322,7 +325,8 @@ public class ManifestRetryReplaysDecisionsTests
 
         // The parent succeeds again: the dependent's next run is fired by that success.
         DecisionProbe.FailAt = ProbeFailure.None;
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<ITraxScheduler>()
                 .TriggerAsync(parent.ExternalId, CancellationToken.None);
@@ -386,7 +390,8 @@ public class ManifestRetryReplaysDecisionsTests
                 .Select(d => d.Id)
                 .SingleAsync(cancellationToken: CancellationToken.None)
         );
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ITraxScheduler>()
@@ -403,13 +408,14 @@ public class ManifestRetryReplaysDecisionsTests
     [Test]
     public async Task A_retry_after_cleanup_swept_the_failed_replay_asks_afresh_on_a_host_without_cleanup()
     {
-        await using var swept = BuildProvider(
+        var swept = BuildProvider(
             _decider,
             configureScheduler: scheduler =>
                 scheduler.AddMetadataCleanup(c =>
                     c.AddTrainType<IDecisionProbeTrain>(TimeSpan.FromMinutes(5))
                 )
         );
+        await using var sweptDisposal = swept.ConfigureAwait(false);
         _override = swept;
         Manifest manifest;
         try
@@ -441,7 +447,8 @@ public class ManifestRetryReplaysDecisionsTests
                     )
                     .ConfigureAwait(false);
             });
-            using (var scope = Provider.CreateScope())
+            var scope = Provider.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
                 await scope
                     .ServiceProvider.GetRequiredService<IMetadataCleanupTrain>()
                     .Run(new MetadataCleanupRequest(), CancellationToken.None);
@@ -530,7 +537,8 @@ public class ManifestRetryReplaysDecisionsTests
         (await QueuedEntryOf(manifest)).ReplayDecisionsOf.Should().Be(failed.Id);
 
         // The retry is claimed and run by a host without AddDecisionRecording.
-        await using var unrecording = BuildProvider(_decider, recordDecisions: false);
+        var unrecording = BuildProvider(_decider, recordDecisions: false);
+        await using var unrecordingDisposal = unrecording.ConfigureAwait(false);
         _override = unrecording;
         try
         {
@@ -657,7 +665,8 @@ public class ManifestRetryReplaysDecisionsTests
 
         // The retry is queued with its link; an operator triggers the manifest before it runs.
         await RunManifestManagerAsync();
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var scheduler = scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
             if (askAfresh)
@@ -706,7 +715,8 @@ public class ManifestRetryReplaysDecisionsTests
 
         if (throughOperations)
         {
-            using var scope = Provider.CreateScope();
+            var scope = Provider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var result = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
                 .SetManifestsReplayDecisionsOnRetryAsync(
@@ -753,7 +763,7 @@ public class ManifestRetryReplaysDecisionsTests
         failed.TrainState.Should().Be(TrainState.Failed);
 
         // A host whose replay lookup cannot reach its store.
-        await using var faulty = BuildProvider(
+        var faulty = BuildProvider(
             _decider,
             services =>
                 services.AddScoped(_ => new RetryDecisionReplay(
@@ -761,6 +771,7 @@ public class ManifestRetryReplaysDecisionsTests
                     NullLogger.Instance
                 ))
         );
+        await using var faultyDisposal = faulty.ConfigureAwait(false);
         _override = faulty;
         try
         {
@@ -1093,7 +1104,8 @@ public class ManifestRetryReplaysDecisionsTests
             data.Manifests.AsNoTracking()
                 .SingleAsync(m => m.Id == dependent.Id, cancellationToken: CancellationToken.None)
         );
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var source = await scope
             .ServiceProvider.GetRequiredService<RetryDecisionReplay>()
             .SourceForRetryAsync(stored, CancellationToken.None);
@@ -1117,7 +1129,8 @@ public class ManifestRetryReplaysDecisionsTests
         var failed = await CycleAsync(manifest);
         failed.TrainState.Should().Be(TrainState.Failed);
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var result = await scope
             .ServiceProvider.GetRequiredService<IOperationsService>()
             .RequeueExecutionAsync(failed.Id, askAfresh, CancellationToken.None);
@@ -1148,7 +1161,8 @@ public class ManifestRetryReplaysDecisionsTests
         (await QueuedEntryOf(manifest)).ReplayDecisionsOf.Should().Be(failed.Id);
 
         OperationResult result;
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             result = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
                 .RequeueExecutionAsync(failed.Id, CancellationToken.None);
@@ -1188,12 +1202,15 @@ public class ManifestRetryReplaysDecisionsTests
                     sp.GetRequiredService<IDataContextProviderFactory>(),
                     gate
                 ));
-        await using var first = BuildProvider(_decider, Configure);
-        await using var second = BuildProvider(_decider, Configure);
+        var first = BuildProvider(_decider, Configure);
+        await using var firstDisposal = first.ConfigureAwait(false);
+        var second = BuildProvider(_decider, Configure);
+        await using var secondDisposal = second.ConfigureAwait(false);
 
         static async Task Cycle(IServiceProvider host)
         {
-            using var scope = host.CreateScope();
+            var scope = host.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             await scope
                 .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
                 .Run(Unit.Default)
@@ -1237,7 +1254,7 @@ public class ManifestRetryReplaysDecisionsTests
         // where the refused insert survives only because EF Core rolls back to the savepoint it
         // takes before each save, so the retry can be saved again without its link.
         await QueueCompetingReplayAsync(manifest, failed.Id);
-        await using var stale = BuildProvider(
+        var stale = BuildProvider(
             _decider,
             services =>
                 services.AddScoped<RetryDecisionReplay>(sp => new StaleLookup(
@@ -1246,6 +1263,7 @@ public class ManifestRetryReplaysDecisionsTests
                     failed.Id
                 ))
         );
+        await using var staleDisposal = stale.ConfigureAwait(false);
         var polling = new ManifestManagerPollingService(
             stale,
             stale.GetRequiredService<SchedulerConfiguration>(),
@@ -1336,7 +1354,8 @@ public class ManifestRetryReplaysDecisionsTests
         var queued = await QueuedEntryOf(manifest);
         DecisionProbe.FailAt = ProbeFailure.None;
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var scheduler = (TraxScheduler)scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
         // The dispatcher claims the entry between the trigger reading it and releasing it.
         scheduler.BeforeTriggerRelease = async (_, _) =>
@@ -1369,7 +1388,8 @@ public class ManifestRetryReplaysDecisionsTests
         await RunManifestManagerAsync();
         var queued = await QueuedEntryOf(manifest);
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var result = await scope
             .ServiceProvider.GetRequiredService<ITraxScheduler>()
             .TriggerAsync(manifest.ExternalId, askAfresh: true, CancellationToken.None);
@@ -1383,10 +1403,11 @@ public class ManifestRetryReplaysDecisionsTests
     public async Task Turning_replay_off_clears_queued_links_in_its_message_and_signals_the_queue()
     {
         var recording = new RecordingChangeSignal();
-        await using var signalled = BuildProvider(
+        var signalled = BuildProvider(
             _decider,
             services => services.AddSingleton<ITraxChangeSignal>(recording)
         );
+        await using var signalledDisposal = signalled.ConfigureAwait(false);
         _override = signalled;
         try
         {
@@ -1409,7 +1430,8 @@ public class ManifestRetryReplaysDecisionsTests
             recording.Clear();
 
             OperationResult result;
-            using (var scope = Provider.CreateScope())
+            var scope = Provider.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
                 result = await scope
                     .ServiceProvider.GetRequiredService<IOperationsService>()
                     .SetManifestsReplayDecisionsOnRetryAsync(
@@ -1459,7 +1481,8 @@ public class ManifestRetryReplaysDecisionsTests
         var failed = await CycleAsync(manifest);
         failed.TrainState.Should().Be(TrainState.Failed);
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var operations = (OperationsService)
             scope.ServiceProvider.GetRequiredService<IOperationsService>();
         // Another requeue of the same run lands between this one's check and its insert.
@@ -1494,7 +1517,8 @@ public class ManifestRetryReplaysDecisionsTests
                 .SingleAsync(cancellationToken: CancellationToken.None)
         );
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var scheduler = (TraxScheduler)scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
         scheduler.BeforeRequeueInsert = _ => QueueCompetingReplayAsync(manifest, failed.Id);
 
@@ -1518,7 +1542,7 @@ public class ManifestRetryReplaysDecisionsTests
 
         // The lookup ran before a requeue of the failed run was queued, so it still names it.
         await QueueCompetingReplayAsync(manifest, failed.Id);
-        await using var stale = BuildProvider(
+        var stale = BuildProvider(
             _decider,
             services =>
                 services.AddScoped<RetryDecisionReplay>(sp => new StaleLookup(
@@ -1527,6 +1551,7 @@ public class ManifestRetryReplaysDecisionsTests
                     failed.Id
                 ))
         );
+        await using var staleDisposal = stale.ConfigureAwait(false);
         _override = stale;
         try
         {
@@ -1581,7 +1606,8 @@ public class ManifestRetryReplaysDecisionsTests
             data.Manifests.AsNoTracking()
                 .SingleAsync(m => m.Id == manifest.Id, cancellationToken: CancellationToken.None)
         );
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         (
             await scope
                 .ServiceProvider.GetRequiredService<RetryDecisionReplay>()
@@ -1707,7 +1733,8 @@ public class ManifestRetryReplaysDecisionsTests
     private async Task<Metadata> RequeueAndDispatchAsync(long metadataId)
     {
         OperationResult result;
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             result = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
                 .RequeueExecutionAsync(metadataId, CancellationToken.None)
@@ -1798,7 +1825,8 @@ public class ManifestRetryReplaysDecisionsTests
             )
             .ConfigureAwait(false);
 
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var scheduler = scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
             switch (how)
@@ -1867,7 +1895,8 @@ public class ManifestRetryReplaysDecisionsTests
         Manifest? dependsOn = null
     )
     {
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var group = await TestSetup
@@ -1905,7 +1934,8 @@ public class ManifestRetryReplaysDecisionsTests
 
     private async Task RunManifestManagerAsync()
     {
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await scope
             .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
             .Run(Unit.Default, CancellationToken.None)
@@ -1927,7 +1957,8 @@ public class ManifestRetryReplaysDecisionsTests
 
     private async Task<Metadata> DispatchEntryAsync(long entryId)
     {
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                 .Run(Unit.Default, CancellationToken.None)
@@ -1972,7 +2003,8 @@ public class ManifestRetryReplaysDecisionsTests
 
     private async Task<T> WithData<T>(Func<IDataContext, Task<T>> read)
     {
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await read(scope.ServiceProvider.GetRequiredService<IDataContext>())
             .ConfigureAwait(false);
     }

@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -44,7 +45,9 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class OperationsServiceRunTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
+
+    private ServiceProvider Provider => _provider.NotNull();
     private IJobSubmitter _submitter = null!;
     private CapturingLogger _logger = null!;
     private OperationsService _service = null!;
@@ -63,7 +66,7 @@ public class OperationsServiceRunTests
     public interface IRoutedTrain;
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
         _submitter = Substitute.For<IJobSubmitter>();
         _submitter
@@ -71,15 +74,20 @@ public class OperationsServiceRunTests
             .Returns("job-1");
         _authorization = null;
         _logger = new CapturingLogger();
-        Build();
+        await BuildAsync().ConfigureAwait(false);
     }
 
     [TearDown]
-    public async Task TearDown() => await _provider.DisposeAsync();
-
-    private void Build(Action<IServiceCollection>? configure = null)
+    public async Task TearDown()
     {
-        _provider?.Dispose();
+        if (_provider is not null)
+            await _provider.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private async Task BuildAsync(Action<IServiceCollection>? configure = null)
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync().ConfigureAwait(false);
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -108,9 +116,9 @@ public class OperationsServiceRunTests
             discovery,
             Substitute.For<IRunExecutor>(),
             Substitute.For<IConcurrencyLimiter>(),
-            _provider.GetRequiredService<IDataContextProviderFactory>(),
+            Provider.GetRequiredService<IDataContextProviderFactory>(),
             mediatorConfiguration,
-            _provider
+            Provider
         );
         _execution = Substitute.For<ITrainExecutionService>();
         _execution
@@ -125,10 +133,10 @@ public class OperationsServiceRunTests
 
         _service = new OperationsService(
             discovery,
-            _provider.GetRequiredService<IDataContextProviderFactory>(),
+            Provider.GetRequiredService<IDataContextProviderFactory>(),
             new SchedulerConfiguration(),
             _execution,
-            _provider,
+            Provider,
             logger: _logger
         );
     }
@@ -160,8 +168,9 @@ public class OperationsServiceRunTests
 
     private async Task<List<Trax.Effect.Models.Metadata.Metadata>> Runs()
     {
-        using var context = (IDataContext)
-            _provider.GetRequiredService<IDataContextProviderFactory>().Create();
+        var context = (IDataContext)
+            Provider.GetRequiredService<IDataContextProviderFactory>().Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context.Metadatas.AsNoTracking().ToListAsync().ConfigureAwait(false);
     }
 
@@ -254,12 +263,12 @@ public class OperationsServiceRunTests
         var submitCancelled = true;
         _submitter
             .EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
+            .Returns(async call =>
             {
                 // The request is aborted while the job is being handed over.
-                cts.Cancel();
+                await cts.CancelAsync().ConfigureAwait(false);
                 submitCancelled = call.ArgAt<CancellationToken>(2).IsCancellationRequested;
-                return Task.FromResult("job-1");
+                return "job-1";
             });
 
         var result = await Run(typeof(IProbeTrain), "{}", cts.Token);
@@ -275,11 +284,11 @@ public class OperationsServiceRunTests
     public async Task A_caller_cancelled_before_the_run_is_written_submits_nothing()
     {
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
         var act = async () => await Run(typeof(IProbeTrain), "{}", cts.Token).ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         _submitter.ReceivedCalls().Should().BeEmpty();
     }
 
@@ -292,8 +301,9 @@ public class OperationsServiceRunTests
             {
                 // A remote runner claimed the run, then the call to it failed or timed out.
                 var id = call.ArgAt<long>(0);
-                using var context = (IDataContext)
-                    _provider.GetRequiredService<IDataContextProviderFactory>().Create();
+                var context = (IDataContext)
+                    Provider.GetRequiredService<IDataContextProviderFactory>().Create();
+                await using var contextDisposal = context.ConfigureAwait(false);
                 var row = await context.Metadatas.FirstAsync(m => m.Id == id).ConfigureAwait(false);
                 row.TrainState = TrainState.InProgress;
                 await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -403,7 +413,7 @@ public class OperationsServiceRunTests
         _authorization
             .AuthorizeAsync(Arg.Any<TrainRegistration>(), Arg.Any<CancellationToken>())
             .Returns(_ => throw new UnauthorizedAccessException("Not authorized."));
-        Build();
+        await BuildAsync().ConfigureAwait(false);
 
         var act = async () => await Run(typeof(IGuardedTrain), "{not json").ConfigureAwait(false);
 
@@ -411,8 +421,9 @@ public class OperationsServiceRunTests
             .ThrowAsync<UnauthorizedAccessException>(
                 "authorization comes first, so a caller who may not run the train learns "
                     + "nothing about its input from a parse error"
-            );
-        (await Runs()).Should().BeEmpty();
+            )
+            .ConfigureAwait(false);
+        (await Runs().ConfigureAwait(false)).Should().BeEmpty();
         _submitter.ReceivedCalls().Should().BeEmpty();
     }
 
@@ -460,7 +471,7 @@ public class OperationsServiceRunTests
     [Test]
     public async Task A_guarded_train_runs_inside_a_trusted_scope_with_no_enforcer()
     {
-        var trusted = _provider.GetRequiredService<ITrustedExecutionScope>();
+        var trusted = Provider.GetRequiredService<ITrustedExecutionScope>();
         OperationResult result;
 
         using (((TrustedExecutionScope)trusted).BeginTrusted("dashboard"))
@@ -474,15 +485,16 @@ public class OperationsServiceRunTests
     public async Task A_routed_train_goes_to_its_own_submitter()
     {
         var routed = new RecordingSubmitter();
-        Build(services =>
-        {
-            var routing = new JobSubmitterRoutingConfiguration();
-            routing.AddRoute(typeof(IRoutedTrain).FullName!, typeof(RecordingSubmitter));
-            services.AddSingleton(routing);
-            services.AddSingleton(routed);
-        });
+        await BuildAsync(services =>
+            {
+                var routing = new JobSubmitterRoutingConfiguration();
+                routing.AddRoute(typeof(IRoutedTrain).FullName!, typeof(RecordingSubmitter));
+                services.AddSingleton(routing);
+                services.AddSingleton(routed);
+            })
+            .ConfigureAwait(false);
 
-        var result = await Run(typeof(IRoutedTrain), "{}");
+        var result = await Run(typeof(IRoutedTrain), "{}").ConfigureAwait(false);
 
         result.Success.Should().BeTrue(result.Message);
         routed.Submitted.Should().ContainSingle().Which.Should().Be(result.Id!.Value);
@@ -497,7 +509,7 @@ public class OperationsServiceRunTests
     {
         var service = new OperationsService(
             Substitute.For<ITrainDiscoveryService>(),
-            _provider.GetRequiredService<IDataContextProviderFactory>(),
+            Provider.GetRequiredService<IDataContextProviderFactory>(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>()
         );

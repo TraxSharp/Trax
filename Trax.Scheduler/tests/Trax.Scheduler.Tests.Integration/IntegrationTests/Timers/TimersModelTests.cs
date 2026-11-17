@@ -529,7 +529,8 @@ public class TimersModelTests(ClusterStore store)
 
         private async Task<AdvanceOutcome> Advance(ClusterHost host, Draft draft, string trigger)
         {
-            using var scope = host.Services.CreateScope();
+            var scope = host.Services.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             return await scope
                 .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
                 .Service(ReminderMachine.MachineId)!

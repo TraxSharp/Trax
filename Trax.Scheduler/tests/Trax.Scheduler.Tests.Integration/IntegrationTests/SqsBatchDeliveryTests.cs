@@ -36,7 +36,7 @@ public class SqsBatchDeliveryTests
 {
     private ServiceProvider _serviceProvider = null!;
     private IDataContext _dataContext = null!;
-    private IServiceScope _scope = null!;
+    private AsyncServiceScope _scope;
     private readonly List<string> _keys = [];
 
     [OneTimeSetUp]
@@ -66,20 +66,20 @@ public class SqsBatchDeliveryTests
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
         await TestSetup.CleanupDatabase(_dataContext);
     }
 
     [TearDown]
-    public void TestTearDown()
+    public async Task TestTearDown()
     {
         foreach (var key in _keys)
             DeliveryProbeTrain.Forget(key);
         _keys.Clear();
         if (_dataContext is IDisposable disposable)
             disposable.Dispose();
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
     }
 
     [Test]

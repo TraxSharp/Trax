@@ -95,7 +95,8 @@ public sealed class DeadLetterRequeueJobs : IDeadLetterRequeueJobs
         await using (scope.ConfigureAwait(false))
         {
             var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-            using var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
             awaiting = await db
                 .DeadLetters.CountAsync(d => d.Status == DeadLetterStatus.AwaitingIntervention, ct)
                 .ConfigureAwait(false);

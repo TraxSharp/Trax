@@ -41,7 +41,7 @@ public class ParallelDispatchTests
     private static readonly string TestTrainName = typeof(SchedulerTestTrain).FullName!;
 
     private ServiceProvider _serviceProvider = null!;
-    private IServiceScope _scope = null!;
+    private AsyncServiceScope _scope;
     private IDataContext _dataContext = null!;
     private DelayingJobSubmitter _submitter = null!;
     private SchedulerConfiguration _schedulerConfiguration = null!;
@@ -100,7 +100,7 @@ public class ParallelDispatchTests
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
         await TestSetup.CleanupDatabase(_dataContext);
         _submitter.Reset();
@@ -114,7 +114,7 @@ public class ParallelDispatchTests
 
         if (_dataContext is IDisposable disposable)
             disposable.Dispose();
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
     }
 
     #region Sequential Default
@@ -125,7 +125,7 @@ public class ParallelDispatchTests
         // Arrange — default MaxConcurrentDispatch = 1
         var entries = await CreateWorkQueueEntries(3);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        await using var trainScope = _serviceProvider.CreateAsyncScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
@@ -155,7 +155,7 @@ public class ParallelDispatchTests
         _schedulerConfiguration.MaxConcurrentDispatch = 3;
         var entries = await CreateWorkQueueEntries(3);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        await using var trainScope = _serviceProvider.CreateAsyncScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
@@ -193,7 +193,7 @@ public class ParallelDispatchTests
         _schedulerConfiguration.MaxConcurrentDispatch = 2;
         var entries = await CreateWorkQueueEntries(5);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        await using var trainScope = _serviceProvider.CreateAsyncScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
@@ -229,7 +229,7 @@ public class ParallelDispatchTests
 
         var entries = await CreateWorkQueueEntries(3);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        await using var trainScope = _serviceProvider.CreateAsyncScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
@@ -267,7 +267,7 @@ public class ParallelDispatchTests
 
         var entries = await CreateWorkQueueEntries(3);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        await using var trainScope = _serviceProvider.CreateAsyncScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act — should not throw
@@ -298,7 +298,7 @@ public class ParallelDispatchTests
         _schedulerConfiguration.MaxConcurrentDispatch = 5;
         var entries = await CreateWorkQueueEntries(5);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        await using var trainScope = _serviceProvider.CreateAsyncScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act

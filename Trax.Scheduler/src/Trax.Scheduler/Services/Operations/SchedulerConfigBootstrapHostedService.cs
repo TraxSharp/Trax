@@ -189,7 +189,8 @@ internal sealed class SchedulerConfigBootstrapHostedService : IHostedService, ID
     /// </summary>
     private async Task RefreshAsync(bool startup, CancellationToken cancellationToken)
     {
-        using var scope = _services.CreateScope();
+        var scope = _services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var target = new SchedulerSettingsTarget(
             scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>(),
@@ -197,7 +198,8 @@ internal sealed class SchedulerConfigBootstrapHostedService : IHostedService, ID
         );
         _configured ??= SchedulerSettings.Capture(target);
 
-        using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var row = await db
             .SchedulerConfigs.AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == SchedulerConfigRow.SingletonId, cancellationToken)

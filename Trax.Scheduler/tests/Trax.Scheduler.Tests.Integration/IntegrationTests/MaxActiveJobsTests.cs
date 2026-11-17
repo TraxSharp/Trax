@@ -49,7 +49,7 @@ public class MaxActiveJobsTests
     private const int MaxActiveJobsLimit = 5;
 
     private ServiceProvider _serviceProvider = null!;
-    private IServiceScope _scope = null!;
+    private AsyncServiceScope _scope;
     private IJobDispatcherTrain _train = null!;
     private IDataContext _dataContext = null!;
 
@@ -93,7 +93,7 @@ public class MaxActiveJobsTests
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.CreateAsyncScope();
         _train = _scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -109,7 +109,7 @@ public class MaxActiveJobsTests
         if (_dataContext is IDisposable dataContextDisposable)
             dataContextDisposable.Dispose();
 
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
     }
 
     #region Basic MaxActiveJobs Limit Tests
@@ -747,9 +747,9 @@ public class MaxActiveJobsTests
             disposable.Dispose();
         if (_dataContext is IDisposable dataContextDisposable)
             dataContextDisposable.Dispose();
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
 
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.CreateAsyncScope();
         _train = _scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -807,7 +807,7 @@ public class MaxActiveJobsTests
             })
             .BuildServiceProvider();
 
-        using var scope = unlimitedProvider.CreateScope();
+        await using var scope = unlimitedProvider.CreateAsyncScope();
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -961,7 +961,7 @@ public class MaxActiveJobsTests
             })
             .BuildServiceProvider();
 
-        using var scope = excludeProvider.CreateScope();
+        await using var scope = excludeProvider.CreateAsyncScope();
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 

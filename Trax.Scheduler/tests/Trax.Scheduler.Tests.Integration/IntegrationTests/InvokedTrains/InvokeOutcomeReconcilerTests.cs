@@ -73,7 +73,8 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
         await _worker.Dispatch(dispatched);
 
         var pages = new List<EndedPage>();
-        using (var scope = _api.Services.CreateScope())
+        var scope = _api.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var delivery = scope.ServiceProvider.GetRequiredService<InvokeOutcomeDelivery>();
             string? after = null;
@@ -197,7 +198,8 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
 
     private async Task<SnapshotDraft?> RowHolding(string token)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
@@ -207,7 +209,8 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
 
     private async Task SetVersion(string token, int version)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         (
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()

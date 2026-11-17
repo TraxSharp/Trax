@@ -769,7 +769,8 @@ public class MetadataCleanupTrainTests : TestSetup
                 beforeMetadataDelete: async ct =>
                 {
                     // Each attempt, a requeue links another run of the batch.
-                    using var other = Scope.ServiceProvider.CreateScope();
+                    var other = Scope.ServiceProvider.CreateAsyncScope();
+                    await using var otherDisposal = other.ConfigureAwait(false);
                     var otherData =
                         other.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.DataContext.IDataContext>();
                     otherData.WorkQueues.Add(
@@ -839,7 +840,8 @@ public class MetadataCleanupTrainTests : TestSetup
                 return;
             }
 
-            using var other = Scope.ServiceProvider.CreateScope();
+            var other = Scope.ServiceProvider.CreateAsyncScope();
+            await using var otherDisposal = other.ConfigureAwait(false);
             var otherData =
                 other.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.DataContext.IDataContext>();
             otherData.WorkQueues.Add(
@@ -1014,7 +1016,8 @@ public class MetadataCleanupTrainTests : TestSetup
                     linkedOnce = true;
 
                     // Committed on another connection, as a concurrent requeue would be.
-                    using var other = Scope.ServiceProvider.CreateScope();
+                    var other = Scope.ServiceProvider.CreateAsyncScope();
+                    await using var otherDisposal = other.ConfigureAwait(false);
                     var otherData =
                         other.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.DataContext.IDataContext>();
                     otherData.WorkQueues.Add(

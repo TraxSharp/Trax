@@ -56,7 +56,7 @@ public class NonceStoreSelectionTests
     [Test]
     public async Task SigningKey_WithUseInMemoryNonceStore_RefusesARepeatWithinTheProcess()
     {
-        using var provider = Runner(o =>
+        await using var provider = Runner(o =>
         {
             o.SigningKey = Key;
             o.UseInMemoryNonceStore();
@@ -86,7 +86,7 @@ public class NonceStoreSelectionTests
         services.AddTraxJobRunner(o => o.SigningKey = Key);
         if (!before)
             services.AddSingleton<INonceStore>(store);
-        using var provider = services.BuildServiceProvider();
+        await using var provider = services.BuildServiceProvider();
         var body = "{}"u8.ToArray();
 
         await provider

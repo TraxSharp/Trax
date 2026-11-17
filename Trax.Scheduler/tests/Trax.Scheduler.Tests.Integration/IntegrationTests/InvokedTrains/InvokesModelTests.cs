@@ -578,7 +578,8 @@ public class InvokesModelTests(ClusterStore store)
         {
             var note = string.Create(CultureInfo.InvariantCulture, $"n{_step}");
             MachineInstance started;
-            using (var scope = Api.Services.CreateScope())
+            var scope = Api.Services.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
                 started = await scope
                     .ServiceProvider.GetRequiredService<IMachineInstances>()
                     .Start<SystemStepMachine>(
@@ -613,7 +614,8 @@ public class InvokesModelTests(ClusterStore store)
 
         private async Task Dispatch(ClusterHost host)
         {
-            using (var scope = host.Services.CreateScope())
+            var scope = host.Services.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
                 await scope
                     .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                     .Run(Unit.Default)
@@ -727,8 +729,11 @@ public class InvokesModelTests(ClusterStore store)
             var sweep = test._api2.Sweep();
             await Task.WhenAll(deliveries, sweep).WaitAsync(Bound).ConfigureAwait(false);
 
-            deliveries.Result.Should().NotContainNulls("no delivery fails");
-            var all = deliveries.Result.Cast<InvokeDelivery>().Concat(sweep.Result).ToList();
+            (await deliveries.ConfigureAwait(false)).Should().NotContainNulls("no delivery fails");
+            var all = (await deliveries.ConfigureAwait(false))
+                .Cast<InvokeDelivery>()
+                .Concat((await sweep.ConfigureAwait(false)))
+                .ToList();
             foreach (var delivery in all)
                 Count(delivery);
 
@@ -748,7 +753,8 @@ public class InvokesModelTests(ClusterStore store)
         private async Task OperatorCancelInstance(Instance instance, ClusterHost host)
         {
             MachineInstanceCancelResult result;
-            using (var scope = host.Services.CreateScope())
+            var scope = host.Services.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
                 result = await scope
                     .ServiceProvider.GetRequiredService<IOperationsService>()
                     .CancelMachineInstanceAsync(
@@ -807,7 +813,8 @@ public class InvokesModelTests(ClusterStore store)
             if (Pick(_runs, pick) is not { } run)
                 return;
 
-            using var scope = host.Services.CreateScope();
+            var scope = host.Services.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var operations = scope.ServiceProvider.GetRequiredService<IOperationsService>();
 
             // A user's draft is read-only to operators: a cancel of the run its step started, or of
@@ -873,10 +880,10 @@ public class InvokesModelTests(ClusterStore store)
             });
             go.SetResult();
             await Task.WhenAll(leave, delivery).WaitAsync(Bound).ConfigureAwait(false);
-            Count(delivery.Result);
+            Count((await delivery.ConfigureAwait(false)));
 
-            var left = leave.Result is AdvanceOutcome.Advanced;
-            var moved = delivery.Result is InvokeDelivery.Moved;
+            var left = (await leave.ConfigureAwait(false)) is AdvanceOutcome.Advanced;
+            var moved = (await delivery.ConfigureAwait(false)) is InvokeDelivery.Moved;
             (left && moved)
                 .Should()
                 .BeFalse("leaving the state and applying its outcome both moved the instance");
@@ -889,11 +896,13 @@ public class InvokesModelTests(ClusterStore store)
             deliverable
                 .Should()
                 .BeTrue(
-                    $"the leave failed ({leave.Result}) though nothing else could move the draft"
+                    $"the leave failed ({(await leave.ConfigureAwait(false))}) though nothing else could move the draft"
                 );
             moved
                 .Should()
-                .BeTrue($"neither the leave nor the delivery ({delivery.Result}) moved it");
+                .BeTrue(
+                    $"neither the leave nor the delivery ({(await delivery.ConfigureAwait(false))}) moved it"
+                );
             Apply(user, run);
         }
 
@@ -923,7 +932,8 @@ public class InvokesModelTests(ClusterStore store)
             var dispatch = Task.Run(async () =>
             {
                 await go.Task.ConfigureAwait(false);
-                using var scope = host.Services.CreateScope();
+                var scope = host.Services.CreateAsyncScope();
+                await using var scopeDisposal = scope.ConfigureAwait(false);
                 await scope
                     .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                     .Run(Unit.Default)
@@ -932,7 +942,7 @@ public class InvokesModelTests(ClusterStore store)
             go.SetResult();
             await Task.WhenAll(leave, dispatch).WaitAsync(Bound).ConfigureAwait(false);
 
-            leave.Result.Should().BeOfType<AdvanceOutcome.Advanced>();
+            (await leave.ConfigureAwait(false)).Should().BeOfType<AdvanceOutcome.Advanced>();
             await ObserveDispatch(host).ConfigureAwait(false);
             Move(user, "Idle");
         }
@@ -982,7 +992,7 @@ public class InvokesModelTests(ClusterStore store)
             run.Phase = Phase.Ended;
             run.End = ended;
 
-            if (leave.Result is AdvanceOutcome.Advanced)
+            if ((await leave.ConfigureAwait(false)) is AdvanceOutcome.Advanced)
             {
                 Move(user, "Idle");
                 return;
@@ -991,7 +1001,7 @@ public class InvokesModelTests(ClusterStore store)
             host.Should()
                 .Be(
                     test._full,
-                    $"the leave failed ({leave.Result}) though only a hook on the full host could move the draft"
+                    $"the leave failed ({(await leave.ConfigureAwait(false))}) though only a hook on the full host could move the draft"
                 );
             Apply(user, run);
         }
@@ -1006,7 +1016,8 @@ public class InvokesModelTests(ClusterStore store)
                     Task.Run(async () =>
                     {
                         await go.Task.ConfigureAwait(false);
-                        using var scope = host.Services.CreateScope();
+                        var scope = host.Services.CreateAsyncScope();
+                        await using var scopeDisposal = scope.ConfigureAwait(false);
                         return await scope
                             .ServiceProvider.GetRequiredService<IMachineInstances>()
                             .Start<SystemStepMachine>(
@@ -1038,7 +1049,8 @@ public class InvokesModelTests(ClusterStore store)
         // holds is cancelled first, so expiry never strands one.
         private async Task ExpireDraft(Instance user)
         {
-            using (var scope = Api.Services.CreateScope())
+            var scope = Api.Services.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
             {
                 var aged = DateTimeOffset.UtcNow - TimeSpan.FromHours(2);
                 await scope
@@ -1213,7 +1225,8 @@ public class InvokesModelTests(ClusterStore store)
 
         private async Task Check()
         {
-            using var scope = Api.Services.CreateScope();
+            var scope = Api.Services.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
             var rows = await db.SnapshotDrafts.AsNoTracking().ToListAsync().ConfigureAwait(false);
             var entries = await db
@@ -1411,7 +1424,8 @@ public class InvokesModelTests(ClusterStore store)
             Func<ISnapshotDraftService, Task<T>> call
         )
         {
-            using var scope = host.Services.CreateScope();
+            var scope = host.Services.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             return await call(
                     scope
                         .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()

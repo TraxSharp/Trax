@@ -227,7 +227,8 @@ public class UnreadableQueuedInputTests : TestSetup
 
     private async Task RunDispatcher()
     {
-        using var scope = Scope.ServiceProvider.CreateScope();
+        var scope = Scope.ServiceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         await train.Run(Unit.Default).ConfigureAwait(false);
     }

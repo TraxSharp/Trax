@@ -42,7 +42,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 public class RemoteDeliveryOutcomeTests
 {
     private ServiceProvider _serviceProvider = null!;
-    private IServiceScope _scope = null!;
+    private AsyncServiceScope _scope;
     private IDataContext _dataContext = null!;
     private static readonly StubRunner Runner = new();
 
@@ -91,17 +91,17 @@ public class RemoteDeliveryOutcomeTests
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
         await TestSetup.CleanupDatabase(_dataContext);
     }
 
     [TearDown]
-    public void TestTearDown()
+    public async Task TestTearDown()
     {
         if (_dataContext is IDisposable disposable)
             disposable.Dispose();
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
         Runner.Mode = StubRunnerMode.RunAndReport;
     }
 
@@ -215,7 +215,8 @@ public class RemoteDeliveryOutcomeTests
     {
         for (var i = 0; i < cycles; i++)
         {
-            using var cycleScope = _serviceProvider.CreateScope();
+            var cycleScope = _serviceProvider.CreateAsyncScope();
+            await using var cycleScopeDisposal = cycleScope.ConfigureAwait(false);
             var train = cycleScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
             await train.Run(Unit.Default).ConfigureAwait(false);
 
@@ -367,7 +368,8 @@ public class RemoteDeliveryOutcomeTests
         private async Task RunJob(long metadataId, DeliveryProbeInput input)
         {
             await Task.Yield();
-            using var scope = Services.CreateScope();
+            var scope = Services.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var runner = scope.ServiceProvider.GetRequiredService<IJobRunnerTrain>();
             await runner.Run(new RunJobRequest(metadataId, input)).ConfigureAwait(false);
         }

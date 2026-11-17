@@ -70,7 +70,8 @@ public class RequeueReplayEndToEndTests
         DecisionProbe.Reset();
         Answer(ProbeLane.Slow, ProbeSize.Large);
 
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
 
@@ -170,7 +171,8 @@ public class RequeueReplayEndToEndTests
     {
         long entryId;
 
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var queued = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
@@ -196,7 +198,8 @@ public class RequeueReplayEndToEndTests
     {
         long entryId;
 
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var requeued = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
@@ -211,13 +214,15 @@ public class RequeueReplayEndToEndTests
 
     private async Task<Metadata> DispatchAsync(long entryId)
     {
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                 .Run(Unit.Default, CancellationToken.None)
                 .ConfigureAwait(false);
 
-        using var read = _provider.CreateScope();
+        var read = _provider.CreateAsyncScope();
+        await using var readDisposal = read.ConfigureAwait(false);
         var data = read.ServiceProvider.GetRequiredService<IDataContext>();
         var entry = await data
             .WorkQueues.AsNoTracking()
@@ -235,7 +240,8 @@ public class RequeueReplayEndToEndTests
         long metadataId
     )
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()

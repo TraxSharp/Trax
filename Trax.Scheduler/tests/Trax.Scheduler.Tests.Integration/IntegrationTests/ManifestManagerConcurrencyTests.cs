@@ -180,37 +180,38 @@ public class ManifestManagerConcurrencyTests : TestSetup
     /// </summary>
     private async Task RunManifestManagerInScope()
     {
-        using var scope = Scope
-            .ServiceProvider.GetRequiredService<IServiceProvider>()
-            .CreateScope();
-        var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
-
-        if (dataContext is DbContext dbContext)
+        var scope = Scope.ServiceProvider.GetRequiredService<IServiceProvider>().CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
-            using var transaction = await dataContext.BeginTransaction().ConfigureAwait(false);
+            var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
-            var acquired = await dbContext
-                .Database.SqlQuery<bool>(
-                    $"""SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager')) AS "Value" """
-                )
-                .FirstAsync()
-                .ConfigureAwait(false);
-
-            if (!acquired)
+            if (dataContext is DbContext dbContext)
             {
-                await dataContext.RollbackTransaction().ConfigureAwait(false);
-                return;
+                using var transaction = await dataContext.BeginTransaction().ConfigureAwait(false);
+
+                var acquired = await dbContext
+                    .Database.SqlQuery<bool>(
+                        $"""SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager')) AS "Value" """
+                    )
+                    .FirstAsync()
+                    .ConfigureAwait(false);
+
+                if (!acquired)
+                {
+                    await dataContext.RollbackTransaction().ConfigureAwait(false);
+                    return;
+                }
+
+                var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
+                await train.Run(Unit.Default).ConfigureAwait(false);
+
+                await dataContext.CommitTransaction().ConfigureAwait(false);
             }
-
-            var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
-            await train.Run(Unit.Default).ConfigureAwait(false);
-
-            await dataContext.CommitTransaction().ConfigureAwait(false);
-        }
-        else
-        {
-            var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
-            await train.Run(Unit.Default).ConfigureAwait(false);
+            else
+            {
+                var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
+                await train.Run(Unit.Default).ConfigureAwait(false);
+            }
         }
     }
 

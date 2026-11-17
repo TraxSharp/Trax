@@ -62,10 +62,14 @@ internal static class BoundedBody
                     var room = limit - buffer.Length;
                     if (read > room)
                     {
-                        buffer.Write(chunk, 0, (int)room);
+                        await buffer
+                            .WriteAsync(chunk.AsMemory(0, (int)room), deadline.Token)
+                            .ConfigureAwait(false);
                         return (buffer.ToArray(), true);
                     }
-                    buffer.Write(chunk, 0, read);
+                    await buffer
+                        .WriteAsync(chunk.AsMemory(0, read), deadline.Token)
+                        .ConfigureAwait(false);
                 }
                 return (buffer.ToArray(), false);
             }

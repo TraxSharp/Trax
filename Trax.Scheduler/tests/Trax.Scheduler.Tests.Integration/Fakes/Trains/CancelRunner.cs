@@ -9,11 +9,11 @@ namespace Trax.Scheduler.Tests.Integration.Fakes.Trains;
 /// <summary>Cancels the registered runner token and returns without observing it.</summary>
 internal sealed class CancelRunner : Junction<CancelsItsRunnerInput, Unit>
 {
-    public override Task<Unit> Run(CancelsItsRunnerInput input)
+    public override async Task<Unit> Run(CancelsItsRunnerInput input)
     {
         if (CancelsItsRunnerTrain.Runners.TryGetValue(input.Key, out var runner))
-            runner.Cancel();
+            await runner.CancelAsync().ConfigureAwait(false);
 
-        return Task.FromResult(Unit.Default);
+        return Unit.Default;
     }
 }

@@ -27,7 +27,8 @@ public partial class OperationsService
         ValidateLookup(key);
         take = Math.Clamp(take, 1, MaxPageSize);
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var rowId = await InstanceRows(db, key)
             .Select(x => (long?)x.RowId)
             .FirstOrDefaultAsync(ct)

@@ -582,7 +582,7 @@ public class HttpRunExecutorTests
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
         var executor = CreateExecutor(client);
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
         var act = async () =>
             await executor
@@ -594,7 +594,7 @@ public class HttpRunExecutorTests
                 )
                 .ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     #endregion

@@ -36,7 +36,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 public class DispatchShutdownTests
 {
     private ServiceProvider _serviceProvider = null!;
-    private IServiceScope _scope = null!;
+    private AsyncServiceScope _scope;
     private IDataContext _dataContext = null!;
 
     [OneTimeSetUp]
@@ -70,17 +70,17 @@ public class DispatchShutdownTests
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
         await TestSetup.CleanupDatabase(_dataContext);
     }
 
     [TearDown]
-    public void TestTearDown()
+    public async Task TestTearDown()
     {
         if (_dataContext is IDisposable disposable)
             disposable.Dispose();
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
     }
 
     [Test]
@@ -91,7 +91,7 @@ public class DispatchShutdownTests
         using var stopping = new CancellationTokenSource();
         ShutdownDuringSubmit.Stopping = stopping;
 
-        using (var cycleScope = _serviceProvider.CreateScope())
+        await using (var cycleScope = _serviceProvider.CreateAsyncScope())
         {
             var train = cycleScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
             try
@@ -167,9 +167,9 @@ public class DispatchShutdownTests
         public Task<string> EnqueueAsync(long metadataId, object input) =>
             EnqueueAsync(metadataId, CancellationToken.None);
 
-        public Task<string> EnqueueAsync(long metadataId, CancellationToken cancellationToken)
+        public async Task<string> EnqueueAsync(long metadataId, CancellationToken cancellationToken)
         {
-            Stopping.Cancel();
+            await Stopping.CancelAsync().ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             throw new InvalidOperationException("The dispatcher did not pass its token.");
         }

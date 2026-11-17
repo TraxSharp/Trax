@@ -49,14 +49,14 @@ public class OperationsRunInMemoryWorkerTests
     [SetUp]
     public async Task TestSetUp()
     {
-        using var scope = _provider.CreateScope();
+        await using var scope = _provider.CreateAsyncScope();
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
 
     [Test]
     public async Task A_failing_train_is_a_successful_submit_with_a_failed_run()
     {
-        using var scope = _provider.CreateScope();
+        await using var scope = _provider.CreateAsyncScope();
         var operations = scope.ServiceProvider.GetRequiredService<IOperationsService>();
 
         var result = await operations.RunTrainAsync(
@@ -69,7 +69,7 @@ public class OperationsRunInMemoryWorkerTests
 
         result.Success.Should().BeTrue(result.Message);
 
-        using var check = _provider.CreateScope();
+        await using var check = _provider.CreateAsyncScope();
         var db = check.ServiceProvider.GetRequiredService<IDataContext>();
         var run = await db.Metadatas.AsNoTracking().SingleAsync(m => m.Id == result.Id);
         run.TrainState.Should().Be(TrainState.Failed, "the run records the train's failure");

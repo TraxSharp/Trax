@@ -44,7 +44,7 @@ public class ManifestGroupMaxActiveJobsTests
     private const int GlobalMaxActiveJobs = 10;
 
     private ServiceProvider _serviceProvider = null!;
-    private IServiceScope _scope = null!;
+    private AsyncServiceScope _scope;
     private IJobDispatcherTrain _train = null!;
     private IDataContext _dataContext = null!;
 
@@ -88,7 +88,7 @@ public class ManifestGroupMaxActiveJobsTests
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.CreateAsyncScope();
         _train = _scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -104,7 +104,7 @@ public class ManifestGroupMaxActiveJobsTests
         if (_dataContext is IDisposable dataContextDisposable)
             dataContextDisposable.Dispose();
 
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
     }
 
     #region Per-Group MaxActiveJobs Tests

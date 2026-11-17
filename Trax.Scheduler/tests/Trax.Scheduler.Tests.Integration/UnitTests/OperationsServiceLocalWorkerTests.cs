@@ -222,11 +222,8 @@ public class OperationsServiceLocalWorkerTests
             .BuildServiceProvider();
 
         var factory = services.GetRequiredService<IDataContextProviderFactory>();
-        using (
-            var db = await factory
-                .CreateDbContextAsync(CancellationToken.None)
-                .ConfigureAwait(false)
-        )
+        var db = await factory.CreateDbContextAsync(CancellationToken.None).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             db.SchedulerConfigs.Add(
                 new Trax.Effect.Models.SchedulerConfig.SchedulerConfig

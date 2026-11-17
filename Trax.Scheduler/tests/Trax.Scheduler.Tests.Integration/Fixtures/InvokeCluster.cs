@@ -174,7 +174,8 @@ public sealed class InvokeCluster : IAsyncDisposable
     public async Task Reset()
     {
         var host = _hosts.FirstOrDefault() ?? Host(machines: false, scheduler: false);
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         await context.SnapshotDrafts.ExecuteDeleteAsync().ConfigureAwait(false);
         await TestSetup.CleanupDatabase(context).ConfigureAwait(false);

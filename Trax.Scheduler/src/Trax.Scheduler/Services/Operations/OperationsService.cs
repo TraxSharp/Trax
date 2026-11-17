@@ -185,7 +185,8 @@ public partial class OperationsService : IOperationsService
         bool hasDecisionsToReplay;
         bool alreadyReplayed = false;
 
-        using (var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false))
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var source = await db
                 .Metadatas.AsNoTracking()
@@ -333,7 +334,8 @@ public partial class OperationsService : IOperationsService
         bool replays;
         bool alreadyReplayed = false;
 
-        using (var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false))
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var source = await db
                 .Metadatas.AsNoTracking()
@@ -584,7 +586,8 @@ public partial class OperationsService : IOperationsService
     /// <inheritdoc cref="NoDispatcherRefusal(IDataContext)"/>
     private async Task<string?> NoDispatcherRefusalAsync(CancellationToken ct)
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return NoDispatcherRefusal(db);
     }
 
@@ -953,7 +956,8 @@ public partial class OperationsService : IOperationsService
             }
         );
 
-        using (var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false))
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             await db.Track(metadata).ConfigureAwait(false);
 
@@ -1194,9 +1198,10 @@ public partial class OperationsService : IOperationsService
     {
         try
         {
-            using var db = await _dataContextFactory
+            var db = await _dataContextFactory
                 .CreateDbContextAsync(CancellationToken.None)
                 .ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
             var pending = db.Metadatas.Where(m =>
                 m.Id == metadataId && m.TrainState == TrainState.Pending
             );
@@ -1276,7 +1281,8 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var scoped = db.Metadatas.AsNoTracking().Where(m => m.ManifestId == manifestId);
 
         var byState = await scoped
@@ -1326,7 +1332,8 @@ public partial class OperationsService : IOperationsService
                 $"At most {MaxBatchSize} group ids can be given at once."
             );
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var manifestCounts = await db
             .Manifests.AsNoTracking()
@@ -1418,7 +1425,8 @@ public partial class OperationsService : IOperationsService
     {
         take = Math.Clamp(take, 1, MaxPageSize);
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var decisions = db.RecordedDecisions.AsNoTracking().Where(d => d.MetadataId == metadataId);
 
         var page = await (afterId is { } after ? decisions.Where(d => d.Id > after) : decisions)
@@ -1521,7 +1529,8 @@ public partial class OperationsService : IOperationsService
         var take = Math.Clamp(query.Take, 1, MaxPageSize);
         var skip = query.AfterId.HasValue ? 0 : Math.Max(query.Skip, 0);
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var filtered = FilterLogs(db.Logs.AsNoTracking(), query);
         var oldestFirst = query.Order == LogOrder.OldestFirst;
@@ -1638,14 +1647,16 @@ public partial class OperationsService : IOperationsService
     /// <inheritdoc />
     public async Task<int> CountLogsAsync(LogQuery query, CancellationToken ct)
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return await FilterLogs(db.Logs.AsNoTracking(), query).CountAsync(ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<LogCount> CountLogsCappedAsync(LogQuery query, CancellationToken ct)
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var filtered = FilterLogs(db.Logs.AsNoTracking(), query);
 
         if (
@@ -1709,7 +1720,8 @@ public partial class OperationsService : IOperationsService
 
         var distinct = ids.Distinct().ToList();
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         // A run a user's draft started is the user's to cancel, by leaving the state: skipped and
         // reported whatever its state, so the answer does not depend on whether it has ended yet.
@@ -1769,7 +1781,8 @@ public partial class OperationsService : IOperationsService
 
         var distinct = ids.Distinct().ToList();
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         // An entry a user's draft queued is the user's to cancel, by leaving the state: skipped
         // and reported whatever its status, so the answer does not depend on whether it has been
@@ -1836,7 +1849,8 @@ public partial class OperationsService : IOperationsService
 
         var distinct = ids.Distinct().ToList();
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var differing = db.Manifests.Where(m => distinct.Contains(m.Id) && m.IsEnabled != enabled);
         var changed = db.SupportsSetUpdates()
             ? await differing
@@ -1870,7 +1884,8 @@ public partial class OperationsService : IOperationsService
 
         var distinct = ids.Distinct().ToList();
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         // The flag and the queued links change together or not at all: an opt-out that wrote the
         // flag and failed to clear a link would leave a retry replaying for a manifest that says
@@ -1946,7 +1961,8 @@ public partial class OperationsService : IOperationsService
 
         var distinct = ids.Distinct().ToList();
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var changed = await SetGroupsEnabledAsync(
                 db,
                 db.ManifestGroups.Where(g => distinct.Contains(g.Id)),
@@ -1971,7 +1987,8 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var changed = await SetGroupsEnabledAsync(db, db.ManifestGroups, enabled, ct)
             .ConfigureAwait(false);
 
@@ -1993,7 +2010,8 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var manifest = await db
             .Manifests.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ExternalId == externalId, ct)
@@ -2106,7 +2124,8 @@ public partial class OperationsService : IOperationsService
 
         var distinct = manifestIds.Distinct().ToList();
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         if (NoDispatcherRefusal(db) is { } noDispatcher)
             return BatchTriggerResult.Refused(noDispatcher);
         var found = await db
@@ -2152,7 +2171,8 @@ public partial class OperationsService : IOperationsService
 
         var distinct = groupIds.Distinct().ToList();
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         if (NoDispatcherRefusal(db) is { } noDispatcher)
             return BatchTriggerResult.Refused(noDispatcher);
         var existing = (
@@ -2324,7 +2344,8 @@ public partial class OperationsService : IOperationsService
 
         var distinct = groupIds.Distinct().ToList();
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var groups = await db
             .ManifestGroups.AsNoTracking()
             .CountAsync(g => distinct.Contains(g.Id), ct)
@@ -2477,7 +2498,8 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var entry = await db
             .WorkQueues.AsNoTracking()
@@ -2544,7 +2566,8 @@ public partial class OperationsService : IOperationsService
     /// <inheritdoc />
     public async Task<OperationResult> CancelWorkQueueEntryAsync(long id, CancellationToken ct)
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var entry = await db
             .WorkQueues.FirstOrDefaultAsync(q => q.Id == id, ct)
@@ -2596,7 +2619,8 @@ public partial class OperationsService : IOperationsService
     )
     {
         ArgumentNullException.ThrowIfNull(update);
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var manifest = await db
             .Manifests.FirstOrDefaultAsync(m => m.Id == id, ct)
@@ -2709,7 +2733,8 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var group = await db
             .ManifestGroups.FirstOrDefaultAsync(g => g.Id == id, ct)
@@ -2794,7 +2819,8 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         // Confirm the focal group exists. Returning null on missing group lets GraphQL
         // surface "not found" cleanly without throwing.
@@ -2917,7 +2943,8 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         // Every group is a node; nothing is focal on the global view.
         var nodes = await db
@@ -2982,7 +3009,8 @@ public partial class OperationsService : IOperationsService
         // dashboard waits for the slowest rather than for the sum.
         async Task<T> Read<T>(Func<Effect.Data.Services.DataContext.IDataContext, Task<T>> read)
         {
-            using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
             return await read(db).ConfigureAwait(false);
         }
 
@@ -3498,7 +3526,8 @@ public partial class OperationsService : IOperationsService
         // write every field of the saving host's configuration, so a save from an API-only host
         // (whose configuration is the empty one AddTraxJobRunner registers) replaced the
         // scheduler's settings with defaults.
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var row = await db
             .SchedulerConfigs.FindAsync(new object[] { SchedulerConfig.SingletonId }, ct)
             .ConfigureAwait(false);

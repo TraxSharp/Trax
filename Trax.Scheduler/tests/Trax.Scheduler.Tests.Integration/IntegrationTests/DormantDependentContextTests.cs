@@ -388,7 +388,7 @@ public class DormantDependentContextTests : TestSetup
         _context.Initialize(parent.Id);
 
         // Act — resolve from a CHILD scope (like TrainBus.RunAsync does)
-        using var childScope = Scope.ServiceProvider.CreateScope();
+        await using var childScope = Scope.ServiceProvider.CreateAsyncScope();
         var childContext =
             childScope.ServiceProvider.GetRequiredService<IDormantDependentContext>();
 
@@ -428,7 +428,7 @@ public class DormantDependentContextTests : TestSetup
         _context.Initialize(parent.Id);
 
         // Act — activate from child scope
-        using var childScope = Scope.ServiceProvider.CreateScope();
+        await using var childScope = Scope.ServiceProvider.CreateAsyncScope();
         var childContext =
             childScope.ServiceProvider.GetRequiredService<IDormantDependentContext>();
 
@@ -462,7 +462,7 @@ public class DormantDependentContextTests : TestSetup
         _context.Reset();
 
         // Act — after Reset, activation should be a no-op (not initialized)
-        using var childScope = Scope.ServiceProvider.CreateScope();
+        await using var childScope = Scope.ServiceProvider.CreateAsyncScope();
         var childContext =
             childScope.ServiceProvider.GetRequiredService<IDormantDependentContext>();
 

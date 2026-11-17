@@ -37,9 +37,9 @@ public class DispatchConcurrencyTests : TestSetup
         await Task.WhenAll(task1, task2);
 
         // Assert - Exactly one Metadata record should exist for this manifest
-        using var assertScope = Scope
+        await using var assertScope = Scope
             .ServiceProvider.GetRequiredService<IServiceProvider>()
-            .CreateScope();
+            .CreateAsyncScope();
         var assertContext = assertScope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var metadataCount = await assertContext.Metadatas.CountAsync(m =>
@@ -73,9 +73,9 @@ public class DispatchConcurrencyTests : TestSetup
         await Task.WhenAll(task1, task2, task3);
 
         // Assert - Each entry should have exactly one Metadata record
-        using var assertScope = Scope
+        await using var assertScope = Scope
             .ServiceProvider.GetRequiredService<IServiceProvider>()
-            .CreateScope();
+            .CreateAsyncScope();
         var assertContext = assertScope.ServiceProvider.GetRequiredService<IDataContext>();
 
         foreach (var (manifest, entry) in entries)
@@ -113,9 +113,9 @@ public class DispatchConcurrencyTests : TestSetup
         await act.Should().NotThrowAsync("losing dispatchers should skip gracefully");
 
         // And exactly one dispatch occurred
-        using var assertScope = Scope
+        await using var assertScope = Scope
             .ServiceProvider.GetRequiredService<IServiceProvider>()
-            .CreateScope();
+            .CreateAsyncScope();
         var assertContext = assertScope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var metadataCount = await assertContext.Metadatas.CountAsync(m =>
@@ -214,19 +214,20 @@ public class DispatchConcurrencyTests : TestSetup
 
     private async Task RunDispatcherInScope()
     {
-        using var scope = Scope
-            .ServiceProvider.GetRequiredService<IServiceProvider>()
-            .CreateScope();
-        var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
+        var scope = Scope.ServiceProvider.GetRequiredService<IServiceProvider>().CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
-        try
-        {
-            await train.Run(Unit.Default).ConfigureAwait(false);
-        }
-        finally
-        {
-            if (train is IDisposable disposable)
-                disposable.Dispose();
+            try
+            {
+                await train.Run(Unit.Default).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (train is IDisposable disposable)
+                    disposable.Dispose();
+            }
         }
     }
 

@@ -100,7 +100,8 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
         CancellationToken ct
     )
     {
-        using var context = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var context = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var manifestIds = manifests.Select(m => m.Id).ToList();
 

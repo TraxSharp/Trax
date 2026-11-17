@@ -78,7 +78,7 @@ internal sealed class TimerDb(InvokeCluster cluster)
                     if (await reader.IsDBNullAsync(0).ConfigureAwait(false))
                         return null;
                     return Postgres
-                        ? reader.GetFieldValue<DateTimeOffset>(0)
+                        ? await reader.GetFieldValueAsync<DateTimeOffset>(0).ConfigureAwait(false)
                         : DateTimeOffset.Parse(reader.GetString(0), CultureInfo.InvariantCulture);
                 }
             }

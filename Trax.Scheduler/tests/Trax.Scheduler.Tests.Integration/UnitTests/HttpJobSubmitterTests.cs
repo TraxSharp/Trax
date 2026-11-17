@@ -194,14 +194,14 @@ public class HttpJobSubmitterTests
     }
 
     [Test]
-    public void EnqueueAsync_WhenCancelled_ThrowsOperationCancelledException()
+    public async Task EnqueueAsync_WhenCancelled_ThrowsOperationCancelledException()
     {
         var (submitter, _) = CreateSubmitter();
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
         var act = async () => await submitter.EnqueueAsync(1, cts.Token).ConfigureAwait(false);
-        act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     #endregion

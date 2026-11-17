@@ -36,7 +36,8 @@ internal static class TimerSteps
         int version = 1
     )
     {
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var created = await scope
             .ServiceProvider.GetRequiredService<ISnapshotStore>()
             .Upsert(
@@ -66,7 +67,8 @@ internal static class TimerSteps
         string? requestId = null
     )
     {
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await Reminders(scope)
             .Advance(user, id, trigger.ToString(), requestId: requestId)
             .ConfigureAwait(false);
@@ -79,13 +81,15 @@ internal static class TimerSteps
         string json
     )
     {
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await Reminders(scope).Autosave(user, id, json).ConfigureAwait(false);
     }
 
     public static async Task<LoadResult> Load(this ClusterHost host, string user, Guid id)
     {
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await Reminders(scope).Load(user, id).ConfigureAwait(false);
     }
 
@@ -97,7 +101,8 @@ internal static class TimerSteps
         string requestId
     )
     {
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
             .EffectRunner(ReminderMachine.MachineId)!
@@ -111,7 +116,8 @@ internal static class TimerSteps
     /// </summary>
     public static async Task Delete(this ClusterHost host, string user, Guid id)
     {
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var discarded = await Reminders(scope)
             .Discard(new Actor.Client(user), id, "discard-" + Guid.NewGuid().ToString("N"))
             .ConfigureAwait(false);
@@ -131,7 +137,8 @@ internal static class TimerSteps
     )
         where TMachine : IMachine
     {
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IMachineInstances>()
             .Start<TMachine>(MachineKey.Of("timer", Guid.NewGuid().ToString("N")), context)
@@ -145,7 +152,8 @@ internal static class TimerSteps
         string machine
     )
     {
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
@@ -157,7 +165,8 @@ internal static class TimerSteps
     /// <summary>Moves a row's <c>updated_at</c> back by <paramref name="by"/>, as if it had been idle that long.</summary>
     public static async Task IdleDraft(this ClusterHost host, long rowId, TimeSpan by)
     {
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var at = DateTimeOffset.UtcNow - by;
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
@@ -169,7 +178,8 @@ internal static class TimerSteps
     /// <summary>Moves a row's <c>created_at</c> back by <paramref name="by"/>, as if it had been made that long ago.</summary>
     public static async Task AgeDraft(this ClusterHost host, long rowId, TimeSpan by)
     {
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         DateTimeOffset? at = DateTimeOffset.UtcNow - by;
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()

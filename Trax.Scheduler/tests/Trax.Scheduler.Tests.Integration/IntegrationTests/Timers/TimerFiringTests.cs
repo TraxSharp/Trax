@@ -271,7 +271,7 @@ public class TimerFiringTests(ClusterStore store)
     [Test]
     public async Task The_hosted_reconciler_wakes_for_the_next_due_timer_before_its_interval()
     {
-        await using var waking = _cluster.Host(
+        var waking = _cluster.Host(
             machines: true,
             scheduler: false,
             TimerHosts.Publishing,
@@ -281,6 +281,7 @@ public class TimerFiringTests(ClusterStore store)
                 o.InvokeOutcomeSweepIntervalWhileListening = TimeSpan.FromHours(1);
             }
         );
+        await using var wakingDisposal = waking.ConfigureAwait(false);
         var (_, id, row) = await OpenReview();
         await _db.DueIn(row, TimeSpan.FromSeconds(1));
 
@@ -392,7 +393,8 @@ public class TimerFiringTests(ClusterStore store)
 
         if (store == ClusterStore.Postgres)
         {
-            await using var listener = await SnapshotNoticeSession.Open(_cluster.ConnectionString);
+            var listener = await SnapshotNoticeSession.Open(_cluster.ConnectionString);
+            await using var listenerDisposal = listener.ConfigureAwait(false);
             await listener.Drain();
 
             (await _api.FireTimers())
@@ -645,12 +647,13 @@ public class TimerFiringTests(ClusterStore store)
     [Test]
     public async Task Expiry_racing_a_fire_ends_deleted_or_expired_never_both()
     {
-        await using var expiring = _cluster.Host(
+        var expiring = _cluster.Host(
             machines: true,
             scheduler: false,
             TimerHosts.Publishing,
             options: o => o.MaxDraftLifetime = TimeSpan.FromHours(1)
         );
+        await using var expiringDisposal = expiring.ConfigureAwait(false);
         var sweeper = expiring.Services.GetRequiredService<DraftSweeper>();
 
         // The sweep deletes first: the fire read the row as due, and finds it gone when it writes.
@@ -878,7 +881,8 @@ public class TimerFiringTests(ClusterStore store)
 
     private async Task<MachineInstanceCancelResult> Cancel(Guid id)
     {
-        using var scope = _full.Services.CreateScope();
+        var scope = _full.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IOperationsService>()
             .CancelMachineInstanceAsync(

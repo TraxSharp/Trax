@@ -64,7 +64,7 @@ public class SubjectKeySerializationTests
 
     private ServiceProvider _serviceProvider = null!;
     private ArrayLoggingProvider _logs = null!;
-    private IServiceScope _scope = null!;
+    private AsyncServiceScope _scope;
     private IDataContext _dataContext = null!;
     private ParallelDispatchTests.DelayingJobSubmitter _submitter = null!;
     private SchedulerConfiguration _schedulerConfiguration = null!;
@@ -124,7 +124,7 @@ public class SubjectKeySerializationTests
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
         await TestSetup.CleanupDatabase(_dataContext);
         _submitter.Reset();
@@ -141,7 +141,7 @@ public class SubjectKeySerializationTests
 
         if (_dataContext is IDisposable disposable)
             disposable.Dispose();
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
     }
 
     // ── the guarantee ───────────────────────────────────────────────
@@ -336,8 +336,10 @@ public class SubjectKeySerializationTests
         var first = await CreateEntry("customer-1", "first");
         var second = await CreateEntry("customer-1", "second");
 
-        using var scopeA = _serviceProvider.CreateScope();
-        using var scopeB = _serviceProvider.CreateScope();
+        var scopeA = _serviceProvider.CreateAsyncScope();
+        await using var scopeADisposal = scopeA.ConfigureAwait(false);
+        var scopeB = _serviceProvider.CreateAsyncScope();
+        await using var scopeBDisposal = scopeB.ConfigureAwait(false);
         var contextA = scopeA.ServiceProvider.GetRequiredService<IDataContext>();
         var contextB = scopeB.ServiceProvider.GetRequiredService<IDataContext>();
         var dialect = _serviceProvider.GetRequiredService<ISqlDialect>();
@@ -388,7 +390,8 @@ public class SubjectKeySerializationTests
         var first = await CreateEntry("customer-1", "first");
         var second = await CreateEntry("customer-1", "second");
 
-        using var gateScope = _serviceProvider.CreateScope();
+        var gateScope = _serviceProvider.CreateAsyncScope();
+        await using var gateScopeDisposal = gateScope.ConfigureAwait(false);
         var gate = gateScope.ServiceProvider.GetRequiredService<IDataContext>();
         // The pid is read inside the transaction: outside one, a pooled context may run each
         // command on a different connection.
@@ -477,7 +480,8 @@ public class SubjectKeySerializationTests
     /// <summary>Runs one dispatch junction over a single entry, as one dispatcher would.</summary>
     private async Task DispatchAlone(WorkQueue entry)
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var junction = ActivatorUtilities.CreateInstance<DispatchJobsJunction>(
             scope.ServiceProvider
         );
@@ -494,7 +498,8 @@ public class SubjectKeySerializationTests
 
         while (DateTime.UtcNow < deadline)
         {
-            using var probe = _serviceProvider.CreateScope();
+            var probe = _serviceProvider.CreateAsyncScope();
+            await using var probeDisposal = probe.ConfigureAwait(false);
             var context = (DbContext)probe.ServiceProvider.GetRequiredService<IDataContext>();
 
             var blocked = await context
@@ -540,7 +545,8 @@ public class SubjectKeySerializationTests
 
         while (DateTime.UtcNow < deadline)
         {
-            using var probe = _serviceProvider.CreateScope();
+            var probe = _serviceProvider.CreateAsyncScope();
+            await using var probeDisposal = probe.ConfigureAwait(false);
             var context = (DbContext)probe.ServiceProvider.GetRequiredService<IDataContext>();
 
             var waiting = await context
@@ -600,7 +606,8 @@ public class SubjectKeySerializationTests
 
     private async Task RunCycle()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         await train.Run(Unit.Default).ConfigureAwait(false);
         if (train is IDisposable d)
@@ -637,7 +644,8 @@ public class SubjectKeySerializationTests
 
     private async Task<WorkQueue?> EntryAsync(long id)
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await context
             .WorkQueues.AsNoTracking()
@@ -647,7 +655,8 @@ public class SubjectKeySerializationTests
 
     private async Task<int> DispatchedCount()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await context
             .WorkQueues.CountAsync(w => w.Status == WorkQueueStatus.Dispatched)
@@ -660,7 +669,8 @@ public class SubjectKeySerializationTests
 
     private async Task SetAllRunsTo(TrainState state)
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         await context
             .Metadatas.Where(m =>

@@ -284,7 +284,9 @@ public sealed class RunnerRequestVerifier
                 if (buffer.Length + read > limit)
                     return null;
 
-                buffer.Write(chunk, 0, read);
+                await buffer
+                    .WriteAsync(chunk.AsMemory(0, read), request.HttpContext.RequestAborted)
+                    .ConfigureAwait(false);
             }
         }
         catch (BadHttpRequestException ex)

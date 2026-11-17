@@ -149,7 +149,8 @@ public class CheckpointCleanupTests(ClusterStore store)
         );
         resume.Success.Should().BeTrue(resume.Message);
 
-        using (var scope = _cluster.Host.Services.CreateScope())
+        var scope = _cluster.Host.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var (pruned, _) = await ManifestPruner.PruneAsync(
                 scope.ServiceProvider.GetRequiredService<IDataContext>(),
@@ -178,7 +179,8 @@ public class CheckpointCleanupTests(ClusterStore store)
 
     private async Task Cleanup()
     {
-        using var scope = _cluster.Host.Services.CreateScope();
+        var scope = _cluster.Host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await scope
             .ServiceProvider.GetRequiredService<IMetadataCleanupTrain>()
             .Run(new MetadataCleanupRequest())

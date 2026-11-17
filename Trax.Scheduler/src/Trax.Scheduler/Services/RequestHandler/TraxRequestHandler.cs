@@ -138,8 +138,7 @@ internal sealed class TraxRequestHandler(
     /// Logs a warning when the host's <see cref="ITrainExecutionService"/> is not the mediator's.
     /// The run path then runs a train with no trusted scope (see <see cref="RunAsync"/>), so every
     /// remote run of a train gated with <c>[TraxAuthorize]</c> is refused. Called once by each
-    /// entry point that serves runs, when it starts. The entry points start it and do not wait
-    /// for it: they are synchronous, and the check only logs.
+    /// entry point that serves runs, when it starts.
     /// </summary>
     /// <param name="services">The runner's root services.</param>
     /// <param name="logger">Where the warning goes.</param>

@@ -104,7 +104,8 @@ internal sealed class LocalWorkerService(
         // Phase 1: Claim jobs atomically
         List<ClaimedJob> claimedJobs;
 
-        using (var claimScope = serviceProvider.CreateScope())
+        var claimScope = serviceProvider.CreateAsyncScope();
+        await using (claimScope.ConfigureAwait(false))
         {
             var dataContext = claimScope.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -208,7 +209,8 @@ internal sealed class LocalWorkerService(
 
         try
         {
-            using var releaseScope = serviceProvider.CreateScope();
+            var releaseScope = serviceProvider.CreateAsyncScope();
+            await using var releaseScopeDisposal = releaseScope.ConfigureAwait(false);
             var releaseContext = releaseScope.ServiceProvider.GetRequiredService<IDataContext>();
 
             await releaseContext
@@ -248,7 +250,8 @@ internal sealed class LocalWorkerService(
         // Phase 2: Execute the train in a fresh scope
         try
         {
-            using var executeScope = serviceProvider.CreateScope();
+            var executeScope = serviceProvider.CreateAsyncScope();
+            await using var executeScopeDisposal = executeScope.ConfigureAwait(false);
 
             object? deserializedInput = null;
             if (inputJson != null && inputType != null)
@@ -332,7 +335,8 @@ internal sealed class LocalWorkerService(
         // re-claimed after VisibilityTimeout and refused as no longer Pending.
         try
         {
-            using var cleanupScope = serviceProvider.CreateScope();
+            var cleanupScope = serviceProvider.CreateAsyncScope();
+            await using var cleanupScopeDisposal = cleanupScope.ConfigureAwait(false);
             var cleanupContext = cleanupScope.ServiceProvider.GetRequiredService<IDataContext>();
 
             var entity = await cleanupContext
@@ -371,7 +375,8 @@ internal sealed class LocalWorkerService(
     {
         try
         {
-            using var failScope = serviceProvider.CreateScope();
+            var failScope = serviceProvider.CreateAsyncScope();
+            await using var failScopeDisposal = failScope.ConfigureAwait(false);
             var failContext = failScope.ServiceProvider.GetRequiredService<IDataContext>();
 
             var failed = await ReapedRuns
@@ -478,7 +483,8 @@ internal sealed class LocalWorkerService(
 
                 try
                 {
-                    using var heartbeatScope = serviceProvider.CreateScope();
+                    var heartbeatScope = serviceProvider.CreateAsyncScope();
+                    await using var heartbeatScopeDisposal = heartbeatScope.ConfigureAwait(false);
                     var heartbeatContext =
                         heartbeatScope.ServiceProvider.GetRequiredService<IDataContext>();
                     var now = DateTime.UtcNow;
