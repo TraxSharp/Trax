@@ -8,7 +8,7 @@ namespace Trax.Scheduler.Trains.MetadataCleanup;
 /// Deletes expired metadata entries for configured train types.
 /// Infrastructure the scheduler registers and runs itself; not intended to be called directly.
 /// </summary>
-internal class MetadataCleanupTrain
+internal sealed class MetadataCleanupTrain
     : ServiceTrain<MetadataCleanupRequest, Unit>,
         IMetadataCleanupTrain
 {

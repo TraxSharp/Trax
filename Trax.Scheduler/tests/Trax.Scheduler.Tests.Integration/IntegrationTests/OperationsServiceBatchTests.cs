@@ -43,7 +43,7 @@ public class OperationsServiceBatchTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _signal = new RecordingChangeSignal();
         _registry = Scope.ServiceProvider.GetRequiredService<ICancellationRegistry>();
         _operations = new OperationsService(
@@ -72,12 +72,13 @@ public class OperationsServiceBatchTests : TestSetup
         ).SetArgDisplayNames("CancelWorkQueueEntries");
         yield return new TestCaseData(
             (Func<OperationsService, IReadOnlyCollection<long>, Task<OperationResult>>)(
-                (o, ids) => o.SetManifestsEnabledAsync(ids, false, CancellationToken.None)
+                (o, ids) => o.SetManifestsEnabledAsync(ids, enabled: false, CancellationToken.None)
             )
         ).SetArgDisplayNames("SetManifestsEnabled");
         yield return new TestCaseData(
             (Func<OperationsService, IReadOnlyCollection<long>, Task<OperationResult>>)(
-                (o, ids) => o.SetManifestGroupsEnabledAsync(ids, false, CancellationToken.None)
+                (o, ids) =>
+                    o.SetManifestGroupsEnabledAsync(ids, enabled: false, CancellationToken.None)
             )
         ).SetArgDisplayNames("SetManifestGroupsEnabled");
     }
@@ -260,7 +261,7 @@ public class OperationsServiceBatchTests : TestSetup
 
         var result = await _operations.SetManifestsEnabledAsync(
             [on.Id, off.Id],
-            false,
+            enabled: false,
             CancellationToken.None
         );
 
@@ -285,7 +286,7 @@ public class OperationsServiceBatchTests : TestSetup
 
         var result = await _operations.SetManifestGroupsEnabledAsync(
             [target.Id],
-            false,
+            enabled: false,
             CancellationToken.None
         );
 
@@ -311,7 +312,7 @@ public class OperationsServiceBatchTests : TestSetup
         await CreateAndSaveManifestGroup(DataContext, $"c-{Guid.NewGuid():N}", isEnabled: false);
 
         var result = await _operations.SetAllManifestGroupsEnabledAsync(
-            false,
+            enabled: false,
             CancellationToken.None
         );
 
@@ -335,7 +336,8 @@ public class OperationsServiceBatchTests : TestSetup
             .Metadatas.AsNoTracking()
             .Where(m => m.CancellationRequested)
             .Select(m => m.Id)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task<Metadata> SeedRun(TrainState state)
@@ -349,8 +351,8 @@ public class OperationsServiceBatchTests : TestSetup
             }
         );
         metadata.TrainState = state;
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return metadata;
     }
@@ -366,8 +368,8 @@ public class OperationsServiceBatchTests : TestSetup
             }
         );
         entry.Status = status;
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return entry;
     }
@@ -385,8 +387,8 @@ public class OperationsServiceBatchTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }

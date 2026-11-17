@@ -195,7 +195,8 @@ public class OperationsServiceEnqueueTests
             .Returns<Task<QueueTrainResult>>(_ => throw new UnauthorizedAccessException("nope"));
 
         var act = async () =>
-            await Queue(new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"));
+            await Queue(new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"))
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<UnauthorizedAccessException>(
@@ -238,7 +239,9 @@ public class OperationsServiceEnqueueTests
         result
             .Message.Should()
             .NotContain(
-                mediatorConfiguration.MaxInputJsonBytes.ToString(),
+                mediatorConfiguration.MaxInputJsonBytes.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture
+                ),
                 "the cap is not echoed to the caller"
             );
     }
@@ -287,10 +290,12 @@ public class OperationsServiceEnqueueTests
 
         OperationResult? result = null;
         var act = async () =>
-            result = await service.QueueTrainAsync(
-                new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"),
-                CancellationToken.None
-            );
+            result = await service
+                .QueueTrainAsync(
+                    new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<NpgsqlException>(
@@ -316,7 +321,8 @@ public class OperationsServiceEnqueueTests
         );
 
         var act = async () =>
-            await Queue(new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"));
+            await Queue(new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"))
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<DbUpdateException>(
@@ -335,7 +341,8 @@ public class OperationsServiceEnqueueTests
         );
 
         var act = async () =>
-            await Queue(new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"));
+            await Queue(new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"))
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>(
@@ -355,8 +362,9 @@ public class OperationsServiceEnqueueTests
         OperationResult? result = null;
         var act = async () =>
             result = await Queue(
-                new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
-            );
+                    new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+                )
+                .ConfigureAwait(false);
 
         (
             await act.Should()
@@ -392,10 +400,12 @@ public class OperationsServiceEnqueueTests
         );
 
         var act = async () =>
-            await service.QueueTrainAsync(
-                new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"),
-                CancellationToken.None
-            );
+            await service
+                .QueueTrainAsync(
+                    new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<TrainAuthorizationNotConfiguredException>(

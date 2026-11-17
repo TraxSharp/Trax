@@ -46,7 +46,7 @@ public interface ITraxRequestHandler
     /// <summary>
     /// Runs a train synchronously and returns the serialized output (direct run path).
     /// Catches train failures and wraps them in <see cref="RemoteRunResponse"/> with
-    /// <see cref="RemoteRunResponse.IsError"/> set to <c>true</c>.
+    /// <see cref="RemoteRunResponse.IsError"/> set to <see langword="true"/>.
     /// </summary>
     /// <param name="request">The remote run request containing train name and serialized input</param>
     /// <param name="ct">Cancellation token</param>

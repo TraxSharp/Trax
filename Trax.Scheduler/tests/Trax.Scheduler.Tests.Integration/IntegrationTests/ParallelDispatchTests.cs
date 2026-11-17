@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -270,7 +271,7 @@ public class ParallelDispatchTests
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act — should not throw
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
 
         if (train is IDisposable d)
@@ -338,10 +339,9 @@ public class ParallelDispatchTests
 
         for (var i = 0; i < count; i++)
         {
-            var group = await TestSetup.CreateAndSaveManifestGroup(
-                _dataContext,
-                name: $"group-{Guid.NewGuid():N}"
-            );
+            var group = await TestSetup
+                .CreateAndSaveManifestGroup(_dataContext, name: $"group-{Guid.NewGuid():N}")
+                .ConfigureAwait(false);
 
             var manifest = Manifest.Create(
                 new CreateManifest
@@ -350,13 +350,16 @@ public class ParallelDispatchTests
                     IsEnabled = true,
                     ScheduleType = ScheduleType.None,
                     MaxRetries = 3,
-                    Properties = new SchedulerTestInput { Value = $"Entry-{i}" },
+                    Properties = new SchedulerTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"Entry-{i}"),
+                    },
                 }
             );
             manifest.ManifestGroupId = group.Id;
 
-            await _dataContext.Track(manifest);
-            await _dataContext.SaveChanges(CancellationToken.None);
+            await _dataContext.Track(manifest).ConfigureAwait(false);
+            await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             _dataContext.Reset();
 
             var entry = WorkQueue.Create(
@@ -369,8 +372,8 @@ public class ParallelDispatchTests
                 }
             );
 
-            await _dataContext.Track(entry);
-            await _dataContext.SaveChanges(CancellationToken.None);
+            await _dataContext.Track(entry).ConfigureAwait(false);
+            await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             _dataContext.Reset();
 
             entries.Add(entry);
@@ -387,7 +390,7 @@ public class ParallelDispatchTests
     /// A job submitter that introduces a configurable delay to simulate slow remote workers.
     /// Tracks maximum observed concurrency for assertions.
     /// </summary>
-    internal class DelayingJobSubmitter(TimeSpan delay) : IJobSubmitter
+    internal sealed class DelayingJobSubmitter(TimeSpan delay) : IJobSubmitter
     {
         private int _currentConcurrency;
         private int _maxObservedConcurrency;
@@ -438,7 +441,7 @@ public class ParallelDispatchTests
 
             try
             {
-                await Task.Delay(delay, cancellationToken);
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
 
                 if (_failAll || _failOnCallNumbers.Contains(callNumber))
                     throw new HttpRequestException(

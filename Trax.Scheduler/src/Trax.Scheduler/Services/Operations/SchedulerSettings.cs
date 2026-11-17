@@ -198,8 +198,8 @@ internal static class SchedulerSettings
         // sets it.
         new SchedulerSetting<TimeSpan>(
             nameof(UpdateSchedulerConfigInput.FailureCountWindow),
-            null,
-            null,
+            readColumn: null,
+            writeColumn: null,
             t => t.Configuration.FailureCountWindow,
             (t, v) => t.Configuration.FailureCountWindow = v,
             i => Patch(i.FailureCountWindow),
@@ -342,5 +342,6 @@ internal static class SchedulerSettings
     /// returns a setting to when the stored row stops setting it.
     /// </summary>
     public static IReadOnlyDictionary<string, object?> Capture(SchedulerSettingsTarget target) =>
-        All.Where(s => s.AppliesTo(target)).ToDictionary(s => s.Name, s => s.ReadLive(target));
+        All.Where(s => s.AppliesTo(target))
+            .ToDictionary(s => s.Name, s => s.ReadLive(target), StringComparer.Ordinal);
 }

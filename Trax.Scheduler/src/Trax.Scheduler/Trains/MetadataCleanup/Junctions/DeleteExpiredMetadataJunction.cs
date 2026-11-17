@@ -42,7 +42,7 @@ namespace Trax.Scheduler.Trains.MetadataCleanup.Junctions;
 /// A batch that fails (for example an unexpected foreign-key reference) is bisected to isolate the
 /// offending row, which is logged and skipped so one bad row can never abort the whole sweep.
 /// </remarks>
-internal class DeleteExpiredMetadataJunction(
+internal sealed class DeleteExpiredMetadataJunction(
     IDataContext dataContext,
     SchedulerConfiguration configuration,
     ILogger<DeleteExpiredMetadataJunction> logger,
@@ -151,15 +151,19 @@ internal class DeleteExpiredMetadataJunction(
                     .OrderBy(m => m.Id)
                     .Select(m => m.Id);
 
-                var selected = await query.Take(batchSize).ToListAsync(CancellationToken);
+                var selected = await query
+                    .Take(batchSize)
+                    .ToListAsync(CancellationToken)
+                    .ConfigureAwait(false);
 
                 if (selected.Count == 0)
                     break;
 
-                var batchIds = await WithReplayRelativesAsync(selected, eligible, skippedIds);
+                var batchIds = await WithReplayRelativesAsync(selected, eligible, skippedIds)
+                    .ConfigureAwait(false);
 
                 if (batchIds.Count > 0)
-                    await DeleteBatch(batchIds, totals, skippedIds);
+                    await DeleteBatch(batchIds, totals, skippedIds).ConfigureAwait(false);
 
                 if (selected.Count < batchSize)
                     break;
@@ -229,17 +233,19 @@ internal class DeleteExpiredMetadataJunction(
                     )
                 )
                 .Select(m => m.Id)
-                .ToListAsync(CancellationToken);
+                .ToListAsync(CancellationToken)
+                .ConfigureAwait(false);
 
             if (relatives.Count == 0)
                 break;
             batch.UnionWith(relatives);
         }
 
-        var kept = await KeptAsync(dataContext, batch.ToList(), CancellationToken);
+        var kept = await KeptAsync(dataContext, batch.ToList(), CancellationToken)
+            .ConfigureAwait(false);
         excluded.AddRange(kept);
         batch.ExceptWith(kept);
-        return batch.OrderBy(id => id).ToList();
+        return batch.Order().ToList();
     }
 
     /// <summary>
@@ -261,7 +267,7 @@ internal class DeleteExpiredMetadataJunction(
     {
         try
         {
-            await DeleteMetadataByIds(batchIds, totals, skippedIds);
+            await DeleteMetadataByIds(batchIds, totals, skippedIds).ConfigureAwait(false);
         }
         catch (Exception ex) when (batchIds.Count > 1)
         {
@@ -272,8 +278,10 @@ internal class DeleteExpiredMetadataJunction(
             );
 
             var mid = batchIds.Count / 2;
-            await DeleteBatch(batchIds.Take(mid).ToList(), totals, skippedIds);
-            await DeleteBatch(batchIds.Skip(mid).ToList(), totals, skippedIds);
+            await DeleteBatch(batchIds.Take(mid).ToList(), totals, skippedIds)
+                .ConfigureAwait(false);
+            await DeleteBatch(batchIds.Skip(mid).ToList(), totals, skippedIds)
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -301,13 +309,14 @@ internal class DeleteExpiredMetadataJunction(
     )
     {
         var deleted = await DeleteUnreferencedAsync(
-            dataContext,
-            batchIds,
-            CancellationToken,
-            BeforeMetadataDelete,
-            logger,
-            leftOver: skippedIds
-        );
+                dataContext,
+                batchIds,
+                CancellationToken,
+                BeforeMetadataDelete,
+                logger,
+                leftOver: skippedIds
+            )
+            .ConfigureAwait(false);
         totals.WorkQueues += deleted.WorkQueues;
         totals.Logs += deleted.Logs;
         totals.Metadata += deleted.Metadata;
@@ -344,14 +353,15 @@ internal class DeleteExpiredMetadataJunction(
 
         for (var attempt = 1; attempt <= MaxDeleteAttempts; attempt++)
         {
-            var kept = await KeptAsync(dataContext, remaining, ct);
+            var kept = await KeptAsync(dataContext, remaining, ct).ConfigureAwait(false);
             remaining.RemoveAll(kept.Contains);
 
             if (remaining.Count == 0)
                 return (0, 0, 0);
 
             if (
-                await TryDeleteAllAsync(dataContext, remaining, beforeMetadataDelete, ct) is
+                await TryDeleteAllAsync(dataContext, remaining, beforeMetadataDelete, ct)
+                    .ConfigureAwait(false) is
                 { } deleted
             )
                 return deleted;
@@ -388,7 +398,8 @@ internal class DeleteExpiredMetadataJunction(
         {
             var deletable = await Deletable(dataContext, remaining)
                 .Select(m => m.Id)
-                .ToListAsync(ct);
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
             if (deletable.Count == remaining.Count)
                 break;
 
@@ -445,21 +456,25 @@ internal class DeleteExpiredMetadataJunction(
 
         // Inside a caller's transaction the batch gets a savepoint instead of its own.
         var outer = database.CurrentTransaction;
-        var own = outer is null ? await database.BeginTransactionAsync(ct) : null;
+        var own = outer is null
+            ? await database.BeginTransactionAsync(ct).ConfigureAwait(false)
+            : null;
         const string savepoint = "trax_metadata_cleanup_batch";
         if (outer is not null)
-            await outer.CreateSavepointAsync(savepoint, ct);
+            await outer.CreateSavepointAsync(savepoint, ct).ConfigureAwait(false);
 
         try
         {
             // Work queue entries and logs are owned by the metadata and deleted outright.
             var workQueues = await dataContext
                 .WorkQueues.Where(wq => wq.MetadataId.HasValue && ids.Contains(wq.MetadataId.Value))
-                .ExecuteDeleteAsync(ct);
+                .ExecuteDeleteAsync(ct)
+                .ConfigureAwait(false);
 
             var logs = await dataContext
                 .Logs.Where(l => ids.Contains(l.MetadataId))
-                .ExecuteDeleteAsync(ct);
+                .ExecuteDeleteAsync(ct)
+                .ConfigureAwait(false);
 
             // Dead letters and child metadata reference the metadata but are not owned by it: a
             // dead letter is a meaningful record and a child train's metadata can outlive its
@@ -469,11 +484,13 @@ internal class DeleteExpiredMetadataJunction(
                 .DeadLetters.Where(d =>
                     d.RetryMetadataId.HasValue && ids.Contains(d.RetryMetadataId.Value)
                 )
-                .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, (long?)null), ct);
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, (long?)null), ct)
+                .ConfigureAwait(false);
 
             await dataContext
                 .Metadatas.Where(c => c.ParentId.HasValue && ids.Contains(c.ParentId.Value))
-                .ExecuteUpdateAsync(s => s.SetProperty(c => c.ParentId, (long?)null), ct);
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.ParentId, (long?)null), ct)
+                .ConfigureAwait(false);
 
             // An entry that is no longer queued and resumes one of these runs, a cancelled one or
             // one dispatched as a run that is not this batch's, will never read its link again: a
@@ -490,41 +507,46 @@ internal class DeleteExpiredMetadataJunction(
                         s.SetProperty(q => q.ResumeFrom, (long?)null)
                             .SetProperty(q => q.ResumeAt, (string?)null),
                     ct
-                );
+                )
+                .ConfigureAwait(false);
 
             if (beforeMetadataDelete is not null)
-                await beforeMetadataDelete(ct);
+                await beforeMetadataDelete(ct).ConfigureAwait(false);
 
-            var metadata = await Deletable(dataContext, ids).ExecuteDeleteAsync(ct);
+            var metadata = await Deletable(dataContext, ids)
+                .ExecuteDeleteAsync(ct)
+                .ConfigureAwait(false);
 
             if (metadata == ids.Count)
             {
                 if (own is not null)
-                    await own.CommitAsync(ct);
+                    await own.CommitAsync(ct).ConfigureAwait(false);
                 else
-                    await outer!.ReleaseSavepointAsync(savepoint, ct);
+                    await outer!.ReleaseSavepointAsync(savepoint, ct).ConfigureAwait(false);
                 return (metadata, workQueues, logs);
             }
 
             // A run was linked after the recheck: undo the batch so it keeps everything it owns.
             if (own is not null)
-                await own.RollbackAsync(ct);
+                await own.RollbackAsync(ct).ConfigureAwait(false);
             else
-                await outer!.RollbackToSavepointAsync(savepoint, ct);
+                await outer!.RollbackToSavepointAsync(savepoint, ct).ConfigureAwait(false);
             return null;
         }
         catch
         {
             if (own is not null)
-                await own.RollbackAsync(CancellationToken.None);
+                await own.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
             else
-                await outer!.RollbackToSavepointAsync(savepoint, CancellationToken.None);
+                await outer!
+                    .RollbackToSavepointAsync(savepoint, CancellationToken.None)
+                    .ConfigureAwait(false);
             throw;
         }
         finally
         {
             if (own is not null)
-                await own.DisposeAsync();
+                await own.DisposeAsync().ConfigureAwait(false);
         }
     }
 

@@ -186,25 +186,27 @@ public class RemoteParallelRunTests(ClusterStore store)
                 (nameof(ParallelRemoteCombine), "ParallelRemoteCombine#0", (string?)null),
             ]);
 
-        var left = rows.Where(r => r.BranchPath == "Parallel#0/left").ToList();
+        var left = rows.Where(r =>
+                string.Equals(r.BranchPath, "Parallel#0/left", StringComparison.Ordinal)
+            )
+            .ToList();
         left.Select(r => r.Name)
             .Should()
             .Equal(
                 [nameof(ParallelRemoteScoreLeft), nameof(ParallelRemoteRefineLeft)],
                 "a branch's own junctions are recorded in the order they ran"
             );
-        rows.First().Name.Should().Be(nameof(ParallelRemoteAdmit));
-        rows.Last().Name.Should().Be(nameof(ParallelRemoteCombine));
+        rows[0].Name.Should().Be(nameof(ParallelRemoteAdmit));
+        rows[^1].Name.Should().Be(nameof(ParallelRemoteCombine));
     }
 
     private async Task<(Manifest, WorkQueue)> Queue(ParallelRemoteInput input)
     {
         using var scope = _scheduler.Services.CreateScope();
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            data,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(data, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -217,8 +219,8 @@ public class RemoteParallelRunTests(ClusterStore store)
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await data.Track(manifest);
-        await data.SaveChanges(CancellationToken.None);
+        await data.Track(manifest).ConfigureAwait(false);
+        await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -232,8 +234,8 @@ public class RemoteParallelRunTests(ClusterStore store)
                 ManifestId = manifest.Id,
             }
         );
-        await data.Track(entry);
-        await data.SaveChanges(CancellationToken.None);
+        await data.Track(entry).ConfigureAwait(false);
+        await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return (manifest, entry);
     }
 
@@ -256,14 +258,18 @@ public class RemoteParallelRunTests(ClusterStore store)
                     .GetType()
                     .GetMethod("FlushAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(writer, [CancellationToken.None])!
-        ).WaitAsync(TimeSpan.FromSeconds(30));
+        )
+            .WaitAsync(TimeSpan.FromSeconds(30))
+            .ConfigureAwait(false);
 
-        return await With(data => data.JunctionRuns.AsNoTracking().ForRun(runId).ToListAsync());
+        return await With(data => data.JunctionRuns.AsNoTracking().ForRun(runId).ToListAsync())
+            .ConfigureAwait(false);
     }
 
     private async Task<T> With<T>(Func<IDataContext, Task<T>> read)
     {
         using var scope = _scheduler.Services.CreateScope();
-        return await read(scope.ServiceProvider.GetRequiredService<IDataContext>());
+        return await read(scope.ServiceProvider.GetRequiredService<IDataContext>())
+            .ConfigureAwait(false);
     }
 }

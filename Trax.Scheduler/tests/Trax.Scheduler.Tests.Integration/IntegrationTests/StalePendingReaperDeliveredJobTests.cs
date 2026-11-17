@@ -67,10 +67,8 @@ public class StalePendingReaperDeliveredJobTests : TestSetup
 
     private async Task<Manifest> CreateManifest()
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -85,8 +83,8 @@ public class StalePendingReaperDeliveredJobTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -103,12 +101,13 @@ public class StalePendingReaperDeliveredJobTests : TestSetup
             }
         );
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartTime, startTime));
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartTime, startTime))
+            .ConfigureAwait(false);
 
         DataContext.Reset();
         return metadata;

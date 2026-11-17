@@ -94,10 +94,16 @@ public class MetadataCleanupDefaultTests
     {
         while (true)
         {
-            await using (var context = Context(provider))
-                if (!await context.Metadatas.AsNoTracking().AnyAsync(m => m.Id == id))
+            var context = Context(provider);
+            await using (context.ConfigureAwait(false))
+                if (
+                    !await context
+                        .Metadatas.AsNoTracking()
+                        .AnyAsync(m => m.Id == id)
+                        .ConfigureAwait(false)
+                )
                     return;
-            await Task.Delay(100); // determinism: polling interval, bounded by the caller's WaitAsync
+            await Task.Delay(100).ConfigureAwait(false); // determinism: polling interval, bounded by the caller's WaitAsync
         }
     }
 }

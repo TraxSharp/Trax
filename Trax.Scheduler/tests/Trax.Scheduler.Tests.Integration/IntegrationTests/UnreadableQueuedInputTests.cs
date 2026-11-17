@@ -219,8 +219,8 @@ public class UnreadableQueuedInputTests : TestSetup
                 ReplayDecisionsOf = replayDecisionsOf,
             }
         );
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return entry;
     }
@@ -229,6 +229,6 @@ public class UnreadableQueuedInputTests : TestSetup
     {
         using var scope = Scope.ServiceProvider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default).ConfigureAwait(false);
     }
 }

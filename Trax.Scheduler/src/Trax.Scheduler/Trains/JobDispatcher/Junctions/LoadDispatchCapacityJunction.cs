@@ -14,7 +14,7 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 /// Loads dispatch capacity: global active count, per-group active counts, and per-group limits.
 /// Short-circuits with empty entries when there is nothing to dispatch or the global limit is reached.
 /// </summary>
-internal class LoadDispatchCapacityJunction(
+internal sealed class LoadDispatchCapacityJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     ILogger<LoadDispatchCapacityJunction> logger,
@@ -53,7 +53,8 @@ internal class LoadDispatchCapacityJunction(
             )
             .GroupBy(x => x.GroupId)
             .Select(g => new { GroupId = g.Key, Count = g.Count() })
-            .ToListAsync(CancellationToken);
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
 
         var activeMetadataCount = activeCounts.Sum(x => x.Count);
 
@@ -75,7 +76,8 @@ internal class LoadDispatchCapacityJunction(
         // Load per-group limits (only groups that have a limit set)
         var groupLimits = await dataContext
             .ManifestGroups.Where(g => g.MaxActiveJobs != null)
-            .ToDictionaryAsync(g => g.Id, g => g.MaxActiveJobs!.Value, CancellationToken);
+            .ToDictionaryAsync(g => g.Id, g => g.MaxActiveJobs!.Value, CancellationToken)
+            .ConfigureAwait(false);
 
         return new DispatchContext(entries, activeMetadataCount, groupActiveCounts, groupLimits);
     }

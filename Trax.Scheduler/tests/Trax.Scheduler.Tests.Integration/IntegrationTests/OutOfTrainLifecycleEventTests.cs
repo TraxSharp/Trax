@@ -159,7 +159,7 @@ public class OutOfTrainLifecycleEventTests
                 "a reaper's runs are published several at a time, so one slow hook does not hold up the rest"
             );
         _lifecycle
-            .Events.Where(e => e.Event == "Failed")
+            .Events.Where(e => string.Equals(e.Event, "Failed", StringComparison.Ordinal))
             .Select(e => e.Id)
             .Should()
             .BeEquivalentTo(stale, "the one statement that failed them all published each once");
@@ -274,14 +274,15 @@ public class OutOfTrainLifecycleEventTests
                 Input = null,
             }
         );
-        await context.Track(metadata);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(metadata).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         await context
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(s =>
                 s.SetProperty(m => m.TrainState, state).SetProperty(m => m.StartTime, startTime)
-            );
+            )
+            .ConfigureAwait(false);
 
         return metadata.Id;
     }
@@ -293,7 +294,8 @@ public class OutOfTrainLifecycleEventTests
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.AsNoTracking()
             .Where(m => m.Name == TrainName)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -336,7 +338,7 @@ public class OutOfTrainLifecycleEventTests
 
         public void Add(string name, Metadata metadata)
         {
-            if (metadata.Name != TrainName)
+            if (!string.Equals(metadata.Name, TrainName, StringComparison.Ordinal))
                 return;
             lock (_events)
                 _events.Add((name, metadata.Id, metadata.TrainState));
@@ -344,7 +346,7 @@ public class OutOfTrainLifecycleEventTests
 
         public void AddFailure(Metadata metadata, Exception exception)
         {
-            if (metadata.Name != TrainName)
+            if (!string.Equals(metadata.Name, TrainName, StringComparison.Ordinal))
                 return;
             var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
             lock (_failures)
@@ -370,7 +372,7 @@ public class OutOfTrainLifecycleEventTests
                 _met.TrySetResult();
             try
             {
-                await _met.Task.WaitAsync(within);
+                await _met.Task.WaitAsync(within).ConfigureAwait(false);
             }
             catch (TimeoutException)
             {
@@ -401,10 +403,10 @@ public class OutOfTrainLifecycleEventTests
 
         public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
         {
-            if (metadata.Name == TrainName)
-                await recorder.MeetAsync();
+            if (string.Equals(metadata.Name, TrainName, StringComparison.Ordinal))
+                await recorder.MeetAsync().ConfigureAwait(false);
             recorder.AddFailure(metadata, exception);
-            await Record("Failed", metadata);
+            await Record("Failed", metadata).ConfigureAwait(false);
         }
 
         public Task OnCancelled(Metadata metadata, CancellationToken ct) =>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -61,7 +62,9 @@ public class RecoverStuckJobsTests : TestSetup
         var metadataIds = new List<long>();
         for (var i = 0; i < 3; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Stuck_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Stuck_{i}")
+            );
             var metadata = await CreateAndSaveMetadata(
                 manifest,
                 TrainState.InProgress,
@@ -174,7 +177,8 @@ public class RecoverStuckJobsTests : TestSetup
         var startupService = CreateStartupService(configuration);
 
         // Act & Assert
-        var act = async () => await startupService.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await startupService.StartAsync(CancellationToken.None).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -188,7 +192,9 @@ public class RecoverStuckJobsTests : TestSetup
 
         for (var i = 0; i < count; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Stuck_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Stuck_{i}")
+            );
             var metadata = await CreateAndSaveMetadata(
                 manifest,
                 TrainState.InProgress,
@@ -238,10 +244,8 @@ public class RecoverStuckJobsTests : TestSetup
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -258,8 +262,8 @@ public class RecoverStuckJobsTests : TestSetup
         manifest.ExternalId = $"recover-{Guid.NewGuid():N}";
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -285,8 +289,8 @@ public class RecoverStuckJobsTests : TestSetup
         if (startTime.HasValue)
             metadata.StartTime = startTime.Value;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;

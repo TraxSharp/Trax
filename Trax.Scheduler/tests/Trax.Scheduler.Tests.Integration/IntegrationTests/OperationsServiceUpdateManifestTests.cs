@@ -43,15 +43,19 @@ public class OperationsServiceUpdateManifestTests : TestSetup
         );
         manifest.ManifestGroupId = (
             await CreateAndSaveManifestGroup(DataContext, $"g-{Guid.NewGuid():N}")
+                .ConfigureAwait(false)
         ).Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
 
     private async Task<Manifest> Reload(long id) =>
-        await DataContext.Manifests.AsNoTracking().SingleAsync(m => m.Id == id);
+        await DataContext
+            .Manifests.AsNoTracking()
+            .SingleAsync(m => m.Id == id)
+            .ConfigureAwait(false);
 
     [TestCase("99 * * * *", "not a valid cron expression")]
     [TestCase("0 0 30 2 *", "never fires")]

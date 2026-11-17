@@ -120,7 +120,8 @@ public class PublicApiSurfaceTests
 
         var baseline = File.ReadAllText(baselinePath);
 
-        string Normalize(string s) => s.Replace("\r\n", "\n").TrimEnd() + "\n";
+        string Normalize(string s) =>
+            s.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd() + "\n";
 
         Normalize(current)
             .Should()

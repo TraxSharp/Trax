@@ -67,7 +67,9 @@ public class SchedulerBuilderLambdaInvocationTests
             )
             .Returns(dummyManifest);
 
-        var pending = config.PendingManifests.Single(m => m.ExternalId == "ext-sched");
+        var pending = config.PendingManifests.Single(m =>
+            string.Equals(m.ExternalId, "ext-sched", StringComparison.Ordinal)
+        );
         await pending.ScheduleFunc(scheduler, CancellationToken.None);
 
         await scheduler
@@ -105,7 +107,9 @@ public class SchedulerBuilderLambdaInvocationTests
             )
             .Returns(dummyManifest);
 
-        var pending = config.PendingManifests.Single(m => m.ExternalId == "once-ext");
+        var pending = config.PendingManifests.Single(m =>
+            string.Equals(m.ExternalId, "once-ext", StringComparison.Ordinal)
+        );
         await pending.ScheduleFunc(scheduler, CancellationToken.None);
 
         await scheduler
@@ -147,7 +151,9 @@ public class SchedulerBuilderLambdaInvocationTests
             )
             .Returns(dummyManifest);
 
-        var pending = config.PendingManifests.Single(m => m.ExternalId == "branch-x");
+        var pending = config.PendingManifests.Single(m =>
+            string.Equals(m.ExternalId, "branch-x", StringComparison.Ordinal)
+        );
         await pending.ScheduleFunc(scheduler, CancellationToken.None);
 
         await scheduler

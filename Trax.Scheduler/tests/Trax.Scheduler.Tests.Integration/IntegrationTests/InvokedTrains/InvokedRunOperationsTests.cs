@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -96,11 +97,12 @@ public class InvokedRunOperationsTests(ClusterStore store)
             var go = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var dispatch = Task.Run(async () =>
             {
-                await go.Task;
+                await go.Task.ConfigureAwait(false);
                 using var scope = _worker.Services.CreateScope();
                 await scope
                     .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
-                    .Run(Unit.Default);
+                    .Run(Unit.Default)
+                    .ConfigureAwait(false);
             });
             var claimFirst = i % 2 == 1;
             var cancel = Task.Run(async () =>
@@ -112,12 +114,11 @@ public class InvokedRunOperationsTests(ClusterStore store)
                 {
                     go.SetResult();
                     if (claimFirst)
-                        await dispatch;
+                        await dispatch.ConfigureAwait(false);
                 };
-                return await operations.CancelMachineInstanceAsync(
-                    SystemKey(instance.Id),
-                    CancellationToken.None
-                );
+                return await operations
+                    .CancelMachineInstanceAsync(SystemKey(instance.Id), CancellationToken.None)
+                    .ConfigureAwait(false);
             });
             await Task.WhenAll(dispatch, cancel).WaitAsync(Bound);
 
@@ -173,7 +174,10 @@ public class InvokedRunOperationsTests(ClusterStore store)
                 "every claim that lands before the statement leaves a run to flag"
             );
         TestContext.Out.WriteLine(
-            $"{neverStarted} cancelled before dispatch, {cancelledRunning} cancelled after it."
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{neverStarted} cancelled before dispatch, {cancelledRunning} cancelled after it."
+            )
         );
     }
 
@@ -370,8 +374,8 @@ public class InvokedRunOperationsTests(ClusterStore store)
         var aliceRun = await _full.DispatchAndRun(aliceToken);
         await _api.EnterRunning(bob, id, StepMachine.Context(InvokedStepModes.Gate));
         var rows = await UserRows(id);
-        var aliceRow = rows.Single(r => r.UserKey == alice);
-        var bobRow = rows.Single(r => r.UserKey == bob);
+        var aliceRow = rows.Single(r => string.Equals(r.UserKey, alice, StringComparison.Ordinal));
+        var bobRow = rows.Single(r => string.Equals(r.UserKey, bob, StringComparison.Ordinal));
         var bobRun = await _worker.Dispatch(bobRow.InvokeToken!);
 
         var aliceRuns = await Runs(UserKey(id, aliceRow.RowId));
@@ -401,7 +405,8 @@ public class InvokedRunOperationsTests(ClusterStore store)
         using var scope = host.Services.CreateScope();
         return await scope
             .ServiceProvider.GetRequiredService<IOperationsService>()
-            .CancelMachineInstanceAsync(key, CancellationToken.None);
+            .CancelMachineInstanceAsync(key, CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private async Task<MachineInstanceRuns> Runs(MachineInstanceKey key)
@@ -411,6 +416,7 @@ public class InvokedRunOperationsTests(ClusterStore store)
             await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
                 .GetMachineInstanceRunsAsync(key, CancellationToken.None)
+                .ConfigureAwait(false)
         )!;
     }
 
@@ -420,7 +426,8 @@ public class InvokedRunOperationsTests(ClusterStore store)
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.AsNoTracking()
-            .SingleOrDefaultAsync(m => m.ExternalId == token);
+            .SingleOrDefaultAsync(m => m.ExternalId == token)
+            .ConfigureAwait(false);
     }
 
     private async Task<List<SnapshotDraft>> UserRows(Guid id)
@@ -430,9 +437,10 @@ public class InvokedRunOperationsTests(ClusterStore store)
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
             .Where(x => x.Id == id && x.Machine == UserStepMachine.MachineId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task<SnapshotDraft> SystemRow(Guid id) =>
-        (await _api.Row(id, SystemStepMachine.MachineId))!;
+        (await _api.Row(id, SystemStepMachine.MachineId).ConfigureAwait(false))!;
 }

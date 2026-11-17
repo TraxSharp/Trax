@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -90,7 +91,9 @@ public class SharedNonceStoreTests
 
         for (var i = 0; i < 4; i++)
         {
-            var body = Encoding.UTF8.GetBytes($$"""{"n":{{i}}}""");
+            var body = Encoding.UTF8.GetBytes(
+                string.Create(CultureInfo.InvariantCulture, $$"""{"n":{{i}}}""")
+            );
             var signature = RunnerRequestSignature.Create(Key, RunnerRequestPurpose.Run, body);
             (await Verify(i % 2 == 0 ? first : second, body, signature))
                 .Should()

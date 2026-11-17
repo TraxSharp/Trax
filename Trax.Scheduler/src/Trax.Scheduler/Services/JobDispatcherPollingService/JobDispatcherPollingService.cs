@@ -19,7 +19,7 @@ namespace Trax.Scheduler.Services.JobDispatcherPollingService;
 /// that work was queued (see <c>QueuedWorkListenerService</c>). The interval stays the fallback,
 /// and the only clock for work no notice covers, such as an entry whose scheduled time comes due.
 /// </remarks>
-internal class JobDispatcherPollingService(
+internal sealed class JobDispatcherPollingService(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration,
     SchedulerLivenessMonitor livenessMonitor,
@@ -43,11 +43,11 @@ internal class JobDispatcherPollingService(
             configuration.JobDispatcherPollingInterval
         );
 
-        await RunJobDispatcher(stoppingToken);
+        await RunJobDispatcher(stoppingToken).ConfigureAwait(false);
 
-        while (await WaitForNextCycleAsync(stoppingToken))
+        while (await WaitForNextCycleAsync(stoppingToken).ConfigureAwait(false))
         {
-            await RunJobDispatcher(stoppingToken);
+            await RunJobDispatcher(stoppingToken).ConfigureAwait(false);
         }
 
         logger.LogInformation("JobDispatcherPollingService stopping");
@@ -68,12 +68,12 @@ internal class JobDispatcherPollingService(
         );
         var woken = wake.WaitAsync(race.Token);
 
-        var first = await Task.WhenAny(timer, woken);
-        await race.CancelAsync();
-        await timer;
+        var first = await Task.WhenAny(timer, woken).ConfigureAwait(false);
+        await race.CancelAsync().ConfigureAwait(false);
+        await timer.ConfigureAwait(false);
         try
         {
-            await woken;
+            await woken.ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
 
@@ -87,7 +87,7 @@ internal class JobDispatcherPollingService(
             {
                 try
                 {
-                    await Task.Delay(gap, stoppingToken);
+                    await Task.Delay(gap, stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -121,7 +121,7 @@ internal class JobDispatcherPollingService(
 
             logger.LogDebug("JobDispatcher polling cycle starting");
             livenessMonitor.BeginDispatchCycle();
-            await train.Run(Unit.Default, cancellationToken);
+            await train.Run(Unit.Default, cancellationToken).ConfigureAwait(false);
 
             // Stamp completion only on a successful cycle (a no-op poll still proves the loop
             // and DB round-trip work). A failed run leaves the timestamp stale so the health

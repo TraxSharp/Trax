@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,7 +30,7 @@ public class GroupFairBatchingStressTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
     }
 
@@ -96,7 +97,9 @@ public class GroupFairBatchingStressTests : TestSetup
         var groups = new List<ManifestGroup>();
         for (var g = 0; g < 10; g++)
         {
-            var group = await SeedManifestGroup($"perf-group-{g}");
+            var group = await SeedManifestGroup(
+                string.Create(CultureInfo.InvariantCulture, $"perf-group-{g}")
+            );
             groups.Add(group);
             await SeedManifests(1000, group.Id);
         }
@@ -108,7 +111,9 @@ public class GroupFairBatchingStressTests : TestSetup
         try
         {
             // Act — must complete within 5 seconds
-            await AssertCompletesWithin(async () => await _train.Run(Unit.Default));
+            await AssertCompletesWithin(async () =>
+                await _train.Run(Unit.Default).ConfigureAwait(false)
+            );
 
             // Assert — each group gets exactly 50 entries (500 / 10)
             DataContext.Reset();
@@ -139,7 +144,9 @@ public class GroupFairBatchingStressTests : TestSetup
         var groups = new List<ManifestGroup>();
         for (var g = 0; g < 50; g++)
         {
-            var group = await SeedManifestGroup($"small-group-{g}");
+            var group = await SeedManifestGroup(
+                string.Create(CultureInfo.InvariantCulture, $"small-group-{g}")
+            );
             groups.Add(group);
             await SeedManifests(10, group.Id);
         }

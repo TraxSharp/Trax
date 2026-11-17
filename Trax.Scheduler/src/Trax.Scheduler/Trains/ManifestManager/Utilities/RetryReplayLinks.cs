@@ -132,7 +132,7 @@ internal static class RetryReplayLinks
         {
             try
             {
-                await context.SaveChanges(ct);
+                await context.SaveChanges(ct).ConfigureAwait(false);
                 return cleared;
             }
             catch (DbUpdateException ex)
@@ -156,6 +156,7 @@ internal static class RetryReplayLinks
                                 )
                                 .Select(q => q.ReplayDecisionsOf!.Value)
                                 .ToListAsync(ct)
+                                .ConfigureAwait(false)
                         ).ToHashSet()
                         : sources.ToHashSet();
 
@@ -192,6 +193,7 @@ internal static class RetryReplayLinks
                                 )
                                 .Select(q => q.ResumeFrom!.Value)
                                 .ToListAsync(ct)
+                                .ConfigureAwait(false)
                         ).ToHashSet()
                         : sources.ToHashSet();
 
@@ -224,12 +226,14 @@ internal static class RetryReplayLinks
         await context
             .Metadatas.AsNoTracking()
             .AnyAsync(m => m.ReplayDecisionsOf == metadataId && !m.ReplayAbandoned, ct)
+            .ConfigureAwait(false)
         || await context
             .WorkQueues.AsNoTracking()
             .AnyAsync(
                 q => q.ReplayDecisionsOf == metadataId && q.Status == WorkQueueStatus.Queued,
                 ct
-            );
+            )
+            .ConfigureAwait(false);
 
     /// <summary>
     /// Clears <c>replay_decisions_of</c> on every still-queued entry of the given manifests.
@@ -257,16 +261,15 @@ internal static class RetryReplayLinks
         );
 
         if (context.SupportsSetUpdates())
-            return await linked.ExecuteUpdateAsync(
-                s => s.SetProperty(q => q.ReplayDecisionsOf, (long?)null),
-                ct
-            );
+            return await linked
+                .ExecuteUpdateAsync(s => s.SetProperty(q => q.ReplayDecisionsOf, (long?)null), ct)
+                .ConfigureAwait(false);
 
-        var rows = await linked.ToListAsync(ct);
+        var rows = await linked.ToListAsync(ct).ConfigureAwait(false);
         foreach (var row in rows)
             row.ReplayDecisionsOf = null;
         if (save && rows.Count > 0)
-            await context.SaveChanges(ct);
+            await context.SaveChanges(ct).ConfigureAwait(false);
         return rows.Count;
     }
 }

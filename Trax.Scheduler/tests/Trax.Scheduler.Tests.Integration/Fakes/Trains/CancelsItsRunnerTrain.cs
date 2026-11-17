@@ -16,7 +16,8 @@ public class CancelsItsRunnerTrain
         ICancelsItsRunnerTrain
 {
     /// <summary>The token sources a test registers, keyed by <see cref="CancelsItsRunnerInput.Key"/>.</summary>
-    public static ConcurrentDictionary<string, CancellationTokenSource> Runners { get; } = new();
+    public static ConcurrentDictionary<string, CancellationTokenSource> Runners { get; } =
+        new(StringComparer.Ordinal);
 
     protected override Task<Either<Exception, Unit>> Junctions() => Chain<CancelRunner>().Resolve();
 }
@@ -28,7 +29,7 @@ public record CancelsItsRunnerInput : IManifestProperties
 }
 
 /// <summary>Interface for <see cref="CancelsItsRunnerTrain"/>.</summary>
-public interface ICancelsItsRunnerTrain : IServiceTrain<CancelsItsRunnerInput, Unit> { }
+public interface ICancelsItsRunnerTrain : IServiceTrain<CancelsItsRunnerInput, Unit>;
 
 /// <summary>Cancels the registered runner token and returns without observing it.</summary>
 internal sealed class CancelRunner : Junction<CancelsItsRunnerInput, Unit>

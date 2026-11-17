@@ -319,8 +319,8 @@ public partial class SchedulerConfigurationBuilder
     /// </summary>
     /// <remarks>
     /// The purge deletes, so it runs only when both this and a saved setting allow it: a saved
-    /// <c>true</c> does not turn on a purge this call turned off, and the scheduler logs a warning
-    /// when it ignores one. A saved <c>false</c> does turn it off. Without this call a saved
+    /// <see langword="true"/> does not turn on a purge this call turned off, and the scheduler logs a warning
+    /// when it ignores one. A saved <see langword="false"/> does turn it off. Without this call a saved
     /// setting replaces the default.
     /// </remarks>
     /// <param name="purge">True to purge resolved dead letters (default: true)</param>
@@ -386,7 +386,7 @@ public partial class SchedulerConfigurationBuilder
     /// mutation whose hook never ran, or one the hook rejected.
     /// </remarks>
     /// <param name="promote">
-    /// Whether to promote rather than cancel (default: <c>true</c>). Takes a parameter so the
+    /// Whether to promote rather than cancel (default: <see langword="true"/>). Takes a parameter so the
     /// choice can come from configuration, which is what its neighbours
     /// <see cref="RecoverStuckJobsOnStartup"/> and <see cref="PruneOrphanedManifests"/> already do;
     /// without one, a host reading this from settings had to branch around the call.

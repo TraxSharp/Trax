@@ -21,7 +21,7 @@ public class SqliteMachineInstanceQueryTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
         _machine = $"sqlite-machine-{Guid.NewGuid():N}";
     }
@@ -90,7 +90,7 @@ public class SqliteMachineInstanceQueryTests : TestSetup
         };
         var context = (DbContext)DataContext;
         context.Add(row);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync().ConfigureAwait(false);
         context.ChangeTracker.Clear();
         return row;
     }

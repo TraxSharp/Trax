@@ -84,11 +84,13 @@ public class DormantDependentReachabilityTests
 
         var manifest = await fx
             .DataContext.Manifests.AsNoTracking()
-            .FirstAsync(m => m.ExternalId == Dormant);
+            .FirstAsync(m => m.ExternalId == Dormant)
+            .ConfigureAwait(false);
 
         return await fx
             .DataContext.WorkQueues.AsNoTracking()
-            .CountAsync(w => w.ManifestId == manifest.Id);
+            .CountAsync(w => w.ManifestId == manifest.Id)
+            .ConfigureAwait(false);
     }
 
     /// <summary>A train that activates a dormant dependent from inside its own run.</summary>
@@ -104,10 +106,13 @@ public class DormantDependentReachabilityTests
     {
         public override async Task<Unit> Run(ActivatingInput input)
         {
-            await dormants.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-                Dormant,
-                new SchedulerTestInput { Value = input.Value }
-            );
+            await dormants
+                .ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                    Dormant,
+                    new SchedulerTestInput { Value = input.Value },
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
             return Unit.Default;
         }
@@ -118,5 +123,5 @@ public class DormantDependentReachabilityTests
         public string Value { get; set; } = string.Empty;
     }
 
-    public interface IActivatingTrain : IServiceTrain<ActivatingInput, Unit> { }
+    public interface IActivatingTrain : IServiceTrain<ActivatingInput, Unit>;
 }

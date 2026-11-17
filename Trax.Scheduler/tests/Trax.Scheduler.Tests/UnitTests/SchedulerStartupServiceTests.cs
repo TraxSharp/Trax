@@ -11,6 +11,10 @@ namespace Trax.Scheduler.Tests.UnitTests;
 [TestFixture]
 public class SchedulerStartupServiceTests
 {
+    // An ArgumentException as a caller's code would throw it; the parameter it names is not this test's.
+    private static ArgumentException ArgumentFailure(string message, string paramName = "input") =>
+        new(message, paramName);
+
     #region Helpers
 
     private static SchedulerStartupService CreateService(ISqlDialect? dialect = null)
@@ -72,7 +76,7 @@ public class SchedulerStartupServiceTests
     [Test]
     public void IsTransient_ANonTransientFailureTheDialectRejects_ReturnsFalse()
     {
-        CreateService().IsTransient(new ArgumentException("bad argument")).Should().BeFalse();
+        CreateService().IsTransient(ArgumentFailure("bad argument")).Should().BeFalse();
     }
 
     [Test]
@@ -238,7 +242,7 @@ public class SchedulerStartupServiceTests
                 _ =>
                 {
                     callCount++;
-                    throw new ArgumentException("bad config");
+                    throw ArgumentFailure("bad config");
                 },
                 "fatal-test",
                 CancellationToken.None,
@@ -345,7 +349,7 @@ public class SchedulerStartupServiceTests
                     callCount++;
                     if (callCount == 1)
                         throw new TimeoutException("transient");
-                    throw new ArgumentException("fatal on second attempt");
+                    throw ArgumentFailure("fatal on second attempt");
                 },
                 "mixed-test",
                 CancellationToken.None,

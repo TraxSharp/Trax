@@ -101,11 +101,11 @@ public class SchedulerCoverageGapTests
                 )
         );
 
-        var batch = config.PendingManifests.Last();
+        var batch = config.PendingManifests[^1];
         batch.ExpectedExternalIds.Should().Equal("downstream-alpha", "downstream-beta");
     }
 
     public record MismatchedInput : IManifestProperties;
 
-    public class NotATrain { }
+    public class NotATrain;
 }

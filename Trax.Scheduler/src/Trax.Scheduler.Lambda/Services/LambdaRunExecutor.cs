@@ -27,7 +27,7 @@ namespace Trax.Scheduler.Lambda.Services;
 ///
 /// No public endpoint is created — access is governed by IAM policies.
 /// </remarks>
-internal class LambdaRunExecutor(
+internal sealed class LambdaRunExecutor(
     IAmazonLambda lambdaClient,
     LambdaRunOptions options,
     ILogger<LambdaRunExecutor> logger
@@ -98,17 +98,13 @@ internal class LambdaRunExecutor(
             trainName
         );
 
-        var invokeResponse = await LambdaRetryHelper.InvokeWithRetryAsync(
-            lambdaClient,
-            invokeRequest,
-            options.Retry,
-            logger,
-            ct
-        );
+        var invokeResponse = await LambdaRetryHelper
+            .InvokeWithRetryAsync(lambdaClient, invokeRequest, options.Retry, logger, ct)
+            .ConfigureAwait(false);
 
         if (!string.IsNullOrEmpty(invokeResponse.FunctionError))
         {
-            var errorPayload = await ReadPayloadAsync(invokeResponse);
+            var errorPayload = await ReadPayloadAsync(invokeResponse).ConfigureAwait(false);
             throw new RemoteRunException(
                 $"Lambda function '{options.FunctionName}' returned error: "
                     + $"{invokeResponse.FunctionError}. {errorPayload}"
@@ -116,11 +112,14 @@ internal class LambdaRunExecutor(
         }
 
         var response =
-            await JsonSerializer.DeserializeAsync<RemoteRunResponse>(
-                invokeResponse.Payload,
-                RemoteRunJson.Read,
-                cancellationToken: ct
-            ) ?? throw new RemoteRunException("Lambda function returned null response.");
+            await JsonSerializer
+                .DeserializeAsync<RemoteRunResponse>(
+                    invokeResponse.Payload,
+                    RemoteRunJson.Read,
+                    cancellationToken: ct
+                )
+                .ConfigureAwait(false)
+            ?? throw new RemoteRunException("Lambda function returned null response.");
 
         // Shared with the HTTP executor, so a field the worker sends back, such as its failure
         // classification, is carried by both transports rather than by whichever was updated.
@@ -139,7 +138,7 @@ internal class LambdaRunExecutor(
         try
         {
             using var reader = new StreamReader(response.Payload);
-            return await reader.ReadToEndAsync();
+            return await reader.ReadToEndAsync().ConfigureAwait(false);
         }
         catch
         {

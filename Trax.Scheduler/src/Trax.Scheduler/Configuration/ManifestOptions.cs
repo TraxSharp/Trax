@@ -149,7 +149,7 @@ public class ManifestOptions
     /// Excluded periods are treated as "intentionally skipped", not as misfires.
     /// Empty list means no exclusions.
     /// </remarks>
-    public List<Exclusion> Exclusions { get; set; } = [];
+    public IList<Exclusion> Exclusions { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the maximum random delay added to each scheduled run.

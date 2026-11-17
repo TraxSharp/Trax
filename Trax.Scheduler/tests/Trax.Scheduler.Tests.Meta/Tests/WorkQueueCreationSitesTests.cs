@@ -13,13 +13,8 @@ namespace Trax.Scheduler.Tests.Meta.Tests;
 /// </summary>
 [TestFixture]
 [Property("adr", "Trax.Docs/adr/0017-a-callers-enqueue-goes-through-the-mediator.md")]
-public class WorkQueueCreationSitesTests
+public partial class WorkQueueCreationSitesTests
 {
-    private static readonly Regex DirectCreate = new(
-        @"\bWorkQueue\.Create\s*\(",
-        RegexOptions.Compiled
-    );
-
     /// <summary>
     /// The sites allowed to build a row themselves: none enqueues a train and input a caller
     /// chose at request time.
@@ -43,22 +38,33 @@ public class WorkQueueCreationSitesTests
     };
 
     [Test]
-    public void Only_manifest_enqueues_build_a_work_queue_row_directly()
+    public async Task Only_manifest_enqueues_build_a_work_queue_row_directly()
     {
         var src = RepoRoot.Combine("src");
 
-        var offenders = Directory
+        var candidates = Directory
             .EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
             .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-            )
-            .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
+                !f.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
             )
             .Select(f => RepoRoot.Relative(f).Replace('\\', '/'))
             .Where(rel => !ManifestSites.Contains(rel))
-            .Where(rel => DirectCreate.IsMatch(File.ReadAllText(RepoRoot.Combine(rel))))
             .ToList();
+
+        var offenders = new List<string>();
+        foreach (var rel in candidates)
+        {
+            var text = await File.ReadAllTextAsync(RepoRoot.Combine(rel)).ConfigureAwait(false);
+            if (DirectCreate.IsMatch(text))
+                offenders.Add(rel);
+        }
 
         offenders
             .Should()
@@ -81,4 +87,11 @@ public class WorkQueueCreationSitesTests
                     + "Trax.Docs/adr/0017-a-callers-enqueue-goes-through-the-mediator.md"
             );
     }
+
+    [GeneratedRegex(
+        @"\bWorkQueue\.Create\s*\(",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DirectCreate { get; }
 }

@@ -266,16 +266,11 @@ public class InvokedRunFeatureTests(ClusterStore store)
 
     private async Task Enter(string user, Guid id, FeatureTrigger trigger, JsonObject context)
     {
-        await StepMachine.Seed(
-            _api.Services,
-            user,
-            id,
-            InvokedFeatureMachine.MachineId,
-            "Idle",
-            context
-        );
+        await StepMachine
+            .Seed(_api.Services, user, id, InvokedFeatureMachine.MachineId, "Idle", context)
+            .ConfigureAwait(false);
         using var scope = _api.Services.CreateScope();
-        (await Drafts(scope).Advance(user, id, trigger.ToString()))
+        (await Drafts(scope).Advance(user, id, trigger.ToString()).ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
     }
@@ -283,7 +278,7 @@ public class InvokedRunFeatureTests(ClusterStore store)
     private async Task<AdvanceOutcome> Advance(string user, Guid id, FeatureTrigger trigger)
     {
         using var scope = _api.Services.CreateScope();
-        return await Drafts(scope).Advance(user, id, trigger.ToString());
+        return await Drafts(scope).Advance(user, id, trigger.ToString()).ConfigureAwait(false);
     }
 
     private static ISnapshotDraftService Drafts(IServiceScope scope) =>
@@ -292,7 +287,7 @@ public class InvokedRunFeatureTests(ClusterStore store)
             .Service(InvokedFeatureMachine.MachineId)!;
 
     private async Task<SnapshotDraft> Row(Guid id) =>
-        (await _api.Row(id, InvokedFeatureMachine.MachineId))!;
+        (await _api.Row(id, InvokedFeatureMachine.MachineId).ConfigureAwait(false))!;
 
     private async Task<List<Effect.Models.RecordedDecision.RecordedDecision>> Decisions(long runId)
     {
@@ -301,7 +296,8 @@ public class InvokedRunFeatureTests(ClusterStore store)
             .ServiceProvider.GetRequiredService<IDataContext>()
             .RecordedDecisions.AsNoTracking()
             .Where(d => d.MetadataId == runId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private static JsonObject Context(SnapshotDraft row) => JsonNode.Parse(row.Context)!.AsObject();

@@ -28,7 +28,7 @@ namespace Trax.Scheduler.Services.SchedulerStartupService;
 /// JobDispatcherPollingService begin polling.
 /// </para>
 /// </remarks>
-internal class SchedulerStartupService(
+internal sealed class SchedulerStartupService(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration,
     ILogger<SchedulerStartupService> logger
@@ -44,9 +44,9 @@ internal class SchedulerStartupService(
         // RecoverStuckJobs only makes sense with a real database — in-memory data is
         // lost on restart, so there are no stuck jobs to recover.
         if (configuration.RecoverStuckJobsOnStartup && configuration.HasDatabaseProvider)
-            await RecoverStuckJobs(cancellationToken);
+            await RecoverStuckJobs(cancellationToken).ConfigureAwait(false);
 
-        await SeedPendingManifests(cancellationToken);
+        await SeedPendingManifests(cancellationToken).ConfigureAwait(false);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -94,7 +94,8 @@ internal class SchedulerStartupService(
                 .OrderBy(m => m.Id)
                 .Select(m => m.Id)
                 .Take(PruneBatchSize)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
 
             if (stuckIds.Count == 0)
                 break;
@@ -123,14 +124,17 @@ internal class SchedulerStartupService(
                                     nameof(SchedulerStartupService)
                                 ),
                         cancellationToken
-                    );
+                    )
+                    .ConfigureAwait(false);
 
                 if (failed > 0)
                     recovered.Add(id);
             }
 
             // Committed: no transaction is open. No train is left to publish these outcomes.
-            await OutOfTrainOutcomes.PublishFailedAsync(serviceProvider, recovered, logger);
+            await OutOfTrainOutcomes
+                .PublishFailedAsync(serviceProvider, recovered, logger)
+                .ConfigureAwait(false);
 
             totalRecovered += recovered.Count;
         }
@@ -164,10 +168,11 @@ internal class SchedulerStartupService(
             foreach (var pending in configuration.PendingManifests)
             {
                 await SeedWithRetryAsync(
-                    async ct => await pending.ScheduleFunc(scheduler, ct),
-                    pending.ExternalId,
-                    cancellationToken
-                );
+                        async ct => await pending.ScheduleFunc(scheduler, ct).ConfigureAwait(false),
+                        pending.ExternalId,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
             }
 
             logger.LogInformation(
@@ -187,16 +192,17 @@ internal class SchedulerStartupService(
             {
                 var expectedExternalIds = configuration
                     .PendingManifests.SelectMany(p => p.ExpectedExternalIds)
-                    .ToHashSet();
+                    .ToHashSet(StringComparer.Ordinal);
 
                 // Pruning is housekeeping: a failure is logged and the host still starts.
                 try
                 {
                     await PruneOrphanedManifestsAsync(
-                        dataContext,
-                        expectedExternalIds,
-                        cancellationToken
-                    );
+                            dataContext,
+                            expectedExternalIds,
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -210,7 +216,8 @@ internal class SchedulerStartupService(
             // Clean up orphaned ManifestGroups (groups with no manifests remaining)
             var orphanedCount = await dataContext
                 .ManifestGroups.Where(g => !g.Manifests.Any())
-                .ExecuteDeleteAsync(cancellationToken);
+                .ExecuteDeleteAsync(cancellationToken)
+                .ConfigureAwait(false);
 
             if (orphanedCount > 0)
                 logger.LogInformation(
@@ -240,7 +247,7 @@ internal class SchedulerStartupService(
         {
             try
             {
-                await action(cancellationToken);
+                await action(cancellationToken).ConfigureAwait(false);
                 logger.LogDebug("Seeded manifest: {ExternalId}", externalId);
                 return;
             }
@@ -255,7 +262,7 @@ internal class SchedulerStartupService(
                     maxRetries,
                     retryDelay.TotalSeconds
                 );
-                await Task.Delay(retryDelay, cancellationToken);
+                await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -335,7 +342,8 @@ internal class SchedulerStartupService(
         var allManifests = await dataContext
             .Manifests.Where(m => m.Owner == owner)
             .Select(m => new { m.Id, m.ExternalId })
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         var orphanedManifestIds = allManifests
             .Where(m => !expectedExternalIds.Contains(m.ExternalId))
@@ -355,12 +363,9 @@ internal class SchedulerStartupService(
             owner
         );
 
-        var (pruned, kept) = await ManifestPruner.PruneAsync(
-            dataContext,
-            orphanedManifestIds,
-            logger,
-            cancellationToken
-        );
+        var (pruned, kept) = await ManifestPruner
+            .PruneAsync(dataContext, orphanedManifestIds, logger, cancellationToken)
+            .ConfigureAwait(false);
 
         logger.LogInformation(
             "Finished pruning {Count} orphaned manifest(s) from the database ({Kept} kept until their runs finish)",

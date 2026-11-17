@@ -25,7 +25,7 @@ public class LogLevelServiceTests
     {
         _configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
-                new Dictionary<string, string?>
+                new Dictionary<string, string?>(StringComparer.Ordinal)
                 {
                     ["Logging:LogLevel:Default"] = "Information",
                     ["Logging:LogLevel:Trax.Orders"] = "Warning",
@@ -63,8 +63,14 @@ public class LogLevelServiceTests
             .Select(l => l.Category)
             .Should()
             .Equal("Default", "Microsoft", "Pinned", "Trax.Orders");
-        levels.Single(l => l.Category == "Trax.Orders").Level.Should().Be(LogLevel.Warning);
-        levels.Single(l => l.Category == "Trax.Orders").ConfiguredLevel.Should().Be("Warning");
+        levels
+            .Single(l => string.Equals(l.Category, "Trax.Orders", StringComparison.Ordinal))
+            .Level.Should()
+            .Be(LogLevel.Warning);
+        levels
+            .Single(l => string.Equals(l.Category, "Trax.Orders", StringComparison.Ordinal))
+            .ConfiguredLevel.Should()
+            .Be("Warning");
         levels.Should().OnlyContain(l => !l.Overridden);
     }
 
@@ -80,7 +86,9 @@ public class LogLevelServiceTests
         result.Count.Should().Be(1);
         result.NotApplied.Should().BeEmpty();
         logger.IsEnabled(LogLevel.Debug).Should().BeTrue("the logger factory re-read its filters");
-        var entry = _levels.GetLogLevels().Single(l => l.Category == "Trax.Orders");
+        var entry = _levels
+            .GetLogLevels()
+            .Single(l => string.Equals(l.Category, "Trax.Orders", StringComparison.Ordinal));
         entry.Level.Should().Be(LogLevel.Debug);
         entry.Overridden.Should().BeTrue();
         entry.ConfiguredLevel.Should().Be("Warning");
@@ -95,7 +103,7 @@ public class LogLevelServiceTests
 
         _levels
             .GetLogLevels()
-            .Single(l => l.Category == "Microsoft")
+            .Single(l => string.Equals(l.Category, "Microsoft", StringComparison.Ordinal))
             .Level.Should()
             .Be(LogLevel.Trace);
     }
@@ -161,6 +169,8 @@ public class LogLevelServiceTests
         : IPostConfigureOptions<LoggerFilterOptions>
     {
         public void PostConfigure(string? name, LoggerFilterOptions options) =>
-            options.Rules.Add(new LoggerFilterRule(null, category, level, null));
+            options.Rules.Add(
+                new LoggerFilterRule(providerName: null, category, level, filter: null)
+            );
     }
 }

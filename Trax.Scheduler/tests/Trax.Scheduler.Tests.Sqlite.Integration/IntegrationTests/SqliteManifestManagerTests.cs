@@ -22,7 +22,7 @@ public class SqliteManifestManagerTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
         _config.StaleStagedEntryTimeout = TimeSpan.FromMinutes(10);
@@ -211,8 +211,8 @@ public class SqliteManifestManagerTests : TestSetup
         );
         entry.CreatedAt = DateTime.UtcNow - age;
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return entry.Id;
     }
@@ -220,7 +220,10 @@ public class SqliteManifestManagerTests : TestSetup
     private async Task<WorkQueue> Load(long id)
     {
         DataContext.Reset();
-        return await DataContext.WorkQueues.AsNoTracking().FirstAsync(w => w.Id == id);
+        return await DataContext
+            .WorkQueues.AsNoTracking()
+            .FirstAsync(w => w.Id == id)
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -234,10 +237,8 @@ public class SqliteManifestManagerTests : TestSetup
         string inputValue = "TestValue"
     )
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -253,8 +254,8 @@ public class SqliteManifestManagerTests : TestSetup
 
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;

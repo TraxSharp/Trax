@@ -360,9 +360,9 @@ public class MetadataRetentionTests : TestSetup
 
     #region Helpers
 
-    private interface IFakeRetentionTrain { }
+    private interface IFakeRetentionTrain;
 
-    private class FakeRetentionTrain : IFakeRetentionTrain { }
+    private sealed class FakeRetentionTrain : IFakeRetentionTrain;
 
     private sealed class FakeTrainDiscovery(Type serviceType, Type implementationType)
         : ITrainDiscoveryService
@@ -424,8 +424,8 @@ public class MetadataRetentionTests : TestSetup
         metadata.StartTime = startTime;
         metadata.EndTime = startTime.AddSeconds(1);
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -442,8 +442,8 @@ public class MetadataRetentionTests : TestSetup
             }
         );
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var entryId = entry.Id;
         await DataContext
@@ -453,7 +453,8 @@ public class MetadataRetentionTests : TestSetup
                     .SetProperty(wq => wq.MetadataId, metadata.Id)
                     .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
                     .SetProperty(wq => wq.DispatchedAt, DateTime.UtcNow)
-            );
+            )
+            .ConfigureAwait(false);
 
         DataContext.Reset();
 
@@ -463,7 +464,7 @@ public class MetadataRetentionTests : TestSetup
     private async Task<bool> Exists(Metadata metadata)
     {
         DataContext.Reset();
-        return await DataContext.Metadatas.AnyAsync(m => m.Id == metadata.Id);
+        return await DataContext.Metadatas.AnyAsync(m => m.Id == metadata.Id).ConfigureAwait(false);
     }
 
     #endregion

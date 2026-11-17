@@ -31,7 +31,7 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 /// manifest is enabled. Both loads decide this in the query, before the per-group limit is applied,
 /// so held entries never take a group's share of a cycle.
 /// </remarks>
-internal class LoadQueuedJobsJunction(
+internal sealed class LoadQueuedJobsJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     ISqlDialect sqlDialect
@@ -40,8 +40,8 @@ internal class LoadQueuedJobsJunction(
     public override async Task<List<WorkQueue>> Run(Unit input)
     {
         var entries = config.MaxQueuedJobsPerCycle.HasValue
-            ? await LoadGroupFair(config.MaxQueuedJobsPerCycle.Value)
-            : await LoadAllQueued();
+            ? await LoadGroupFair(config.MaxQueuedJobsPerCycle.Value).ConfigureAwait(false)
+            : await LoadAllQueued().ConfigureAwait(false);
 
         return FirstPerSubject(entries);
     }
@@ -96,7 +96,8 @@ internal class LoadQueuedJobsJunction(
             .OrderByDescending(q => q.Manifest != null ? q.Manifest.ManifestGroup!.Priority : 0)
             .ThenByDescending(q => q.Priority)
             .ThenBy(q => q.CreatedAt)
-            .ToListAsync(CancellationToken);
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -117,7 +118,8 @@ internal class LoadQueuedJobsJunction(
             .AsNoTracking()
             .Include(q => q.Manifest)
                 .ThenInclude(m => m!.ManifestGroup)
-            .ToListAsync(CancellationToken);
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
 
         // Sort in-memory: group priority (desc), entry priority (desc), created_at (asc).
         // This matches the ordering expected by ApplyCapacityLimitsJunction.

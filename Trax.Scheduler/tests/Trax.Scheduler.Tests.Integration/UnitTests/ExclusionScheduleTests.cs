@@ -69,7 +69,10 @@ public class ExclusionScheduleTests
         var maintenanceTime = new DateTime(2026, 3, 2, 3, 0, 0, DateTimeKind.Utc);
         var manifest = CreateCronManifest();
         manifest.SetExclusions([
-            Exclude.TimeWindow(TimeOnly.Parse("02:00"), TimeOnly.Parse("04:00")),
+            Exclude.TimeWindow(
+                TimeOnly.Parse("02:00", System.Globalization.CultureInfo.InvariantCulture),
+                TimeOnly.Parse("04:00", System.Globalization.CultureInfo.InvariantCulture)
+            ),
         ]);
 
         var result = SchedulingHelpers.ShouldRunNow(manifest, maintenanceTime, _config, _logger);
@@ -104,7 +107,10 @@ public class ExclusionScheduleTests
         manifest.SetExclusions([
             Exclude.Dates(new DateOnly(2026, 12, 25)),
             Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday),
-            Exclude.TimeWindow(TimeOnly.Parse("02:00"), TimeOnly.Parse("04:00")),
+            Exclude.TimeWindow(
+                TimeOnly.Parse("02:00", System.Globalization.CultureInfo.InvariantCulture),
+                TimeOnly.Parse("04:00", System.Globalization.CultureInfo.InvariantCulture)
+            ),
         ]);
 
         var result = SchedulingHelpers.ShouldRunNow(manifest, monday, _config, _logger);

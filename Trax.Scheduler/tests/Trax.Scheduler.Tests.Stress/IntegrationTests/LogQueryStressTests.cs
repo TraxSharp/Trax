@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Scheduler.Services.Operations;
@@ -29,6 +30,7 @@ public class LogQueryStressTests : TestSetup
 {
     private static readonly int Rows = int.TryParse(
         Environment.GetEnvironmentVariable("TRAX_STRESS_LOG_ROWS"),
+        System.Globalization.CultureInfo.InvariantCulture,
         out var rows
     )
         ? rows
@@ -59,7 +61,12 @@ public class LogQueryStressTests : TestSetup
             """
         );
         await db.Database.ExecuteSqlRawAsync("ANALYZE trax.log");
-        TestContext.Out.WriteLine($"Seeded {Rows:N0} log rows in {seed.ElapsedMilliseconds} ms");
+        TestContext.Out.WriteLine(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Seeded {Rows:N0} log rows in {seed.ElapsedMilliseconds} ms"
+            )
+        );
 
         var operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
 
@@ -161,10 +168,16 @@ public class LogQueryStressTests : TestSetup
     {
         LogPage page = null!;
         var elapsed = await AssertCompletesWithin(async () =>
-            page = await operations.GetLogsAsync(query, CancellationToken.None)
-        );
+                page = await operations
+                    .GetLogsAsync(query, CancellationToken.None)
+                    .ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
         TestContext.Out.WriteLine(
-            $"{label}: {elapsed.TotalMilliseconds:F0} ms, {page.Items.Count} row(s)"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{label}: {elapsed.TotalMilliseconds:F0} ms, {page.Items.Count} row(s)"
+            )
         );
     }
 
@@ -176,12 +189,18 @@ public class LogQueryStressTests : TestSetup
     {
         LogCount count = null!;
         var elapsed = await AssertCompletesWithin(
-            async () =>
-                count = await operations.CountLogsCappedAsync(query, CancellationToken.None),
-            CountBudget
-        );
+                async () =>
+                    count = await operations
+                        .CountLogsCappedAsync(query, CancellationToken.None)
+                        .ConfigureAwait(false),
+                CountBudget
+            )
+            .ConfigureAwait(false);
         TestContext.Out.WriteLine(
-            $"{label}: {elapsed.TotalMilliseconds:F0} ms, {count.Count:N0}{(count.Capped ? "+" : "")}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{label}: {elapsed.TotalMilliseconds:F0} ms, {count.Count:N0}{(count.Capped ? "+" : "")}"
+            )
         );
     }
 
@@ -193,8 +212,16 @@ public class LogQueryStressTests : TestSetup
     {
         var count = 0;
         var elapsed = await AssertCompletesWithin(async () =>
-            count = await operations.CountLogsAsync(query, CancellationToken.None)
+                count = await operations
+                    .CountLogsAsync(query, CancellationToken.None)
+                    .ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
+        TestContext.Out.WriteLine(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{label}: {elapsed.TotalMilliseconds:F0} ms, {count:N0}"
+            )
         );
-        TestContext.Out.WriteLine($"{label}: {elapsed.TotalMilliseconds:F0} ms, {count:N0}");
     }
 }

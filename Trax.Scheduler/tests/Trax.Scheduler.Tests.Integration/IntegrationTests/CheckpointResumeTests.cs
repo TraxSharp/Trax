@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -99,7 +100,13 @@ public class CheckpointResumeTests(ClusterStore store)
             .Select(j => j.NodeId)
             .Should()
             .NotIntersectWith(skipped, $"the resumed run skipped them in place ({Adr})")
-            .And.Contain(original.Single(j => j.Name == nameof(SummarizeLong)).NodeId);
+            .And.Contain(
+                original
+                    .Single(j =>
+                        string.Equals(j.Name, nameof(SummarizeLong), StringComparison.Ordinal)
+                    )
+                    .NodeId
+            );
         resumed.Should().NotContain(j => j.Name == nameof(FetchFullTexts));
     }
 
@@ -240,13 +247,16 @@ public class CheckpointResumeTests(ClusterStore store)
         await _cluster.With(async d =>
         {
             foreach (
-                var row in await d.Checkpoints.Where(c => c.MetadataId == failed.Id).ToListAsync()
+                var row in await d
+                    .Checkpoints.Where(c => c.MetadataId == failed.Id)
+                    .ToListAsync()
+                    .ConfigureAwait(false)
             )
-                if (changed == "chain")
+                if (string.Equals(changed, "chain", StringComparison.Ordinal))
                     row.ChainHash = new string('0', 64);
                 else
                     row.StateFingerprint = "an-older-shape";
-            await d.SaveChanges(CancellationToken.None);
+            await d.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             return 0;
         });
 
@@ -273,9 +283,9 @@ public class CheckpointResumeTests(ClusterStore store)
             // The retry is queued after the operator's checks and before its insert, or after it.
             if (retryFirst)
                 operations.BeforeResumeEnqueue = async _ =>
-                    await _cluster.Host.RunManifestManager();
+                    await _cluster.Host.RunManifestManager().ConfigureAwait(false);
             operatorResume = await operations
-                .ResumeExecutionAsync(failed.Id, null, CancellationToken.None)
+                .ResumeExecutionAsync(failed.Id, from: null, CancellationToken.None)
                 .WaitAsync(Bound);
         }
         if (!retryFirst)
@@ -313,7 +323,12 @@ public class CheckpointResumeTests(ClusterStore store)
         // than left to the latest checkpoint.
         var step = (await _cluster.JunctionRuns(failed.Id))
             .Single(j =>
-                j.Kind == JunctionRunKind.Choice && j.QuestionKey == QuestionKey.For<SummaryStyle>()
+                j.Kind == JunctionRunKind.Choice
+                && string.Equals(
+                    j.QuestionKey,
+                    QuestionKey.For<SummaryStyle>(),
+                    StringComparison.Ordinal
+                )
             )
             .NodeId!;
         var result = await _cluster.Operation(o =>
@@ -363,7 +378,13 @@ public class CheckpointResumeTests(ClusterStore store)
             .Contain("is Completed; only a failed or cancelled run can be resumed");
         (await Resume(late.Id))
             .Should()
-            .Contain($"a resume of run {late.Id} already completed", $"its work is done ({Adr})");
+            .Contain(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"a resume of run {late.Id} already completed"
+                ),
+                $"its work is done ({Adr})"
+            );
 
         await _cluster.With(d =>
             d.Metadatas.Where(m => m.Id == early.Id)
@@ -382,7 +403,7 @@ public class CheckpointResumeTests(ClusterStore store)
         var failed = await Crash(manifest, nameof(SummarizeLong));
 
         var first = await _cluster.Operation(o =>
-            o.ResumeExecutionAsync(failed.Id, null, CancellationToken.None)
+            o.ResumeExecutionAsync(failed.Id, from: null, CancellationToken.None)
         );
         first.Success.Should().BeTrue(first.Message);
 
@@ -600,17 +621,17 @@ public class CheckpointResumeTests(ClusterStore store)
         Metadata failed
     )
     {
-        await _cluster.Host.RunManifestManager();
-        var entry = await _cluster.QueuedEntry(manifest.Id);
+        await _cluster.Host.RunManifestManager().ConfigureAwait(false);
+        var entry = await _cluster.QueuedEntry(manifest.Id).ConfigureAwait(false);
         entry.ResumeFrom.Should().Be(failed.Id, $"the retry resumes the failed run ({Adr})");
-        return await _cluster.Dispatch(entry);
+        return await _cluster.Dispatch(entry).ConfigureAwait(false);
     }
 
     /// <summary>Runs <paramref name="manifest"/> once with a crash in <paramref name="junction"/>.</summary>
     private async Task<Metadata> Crash(Effect.Models.Manifest.Manifest manifest, string junction)
     {
         ResearchProbe.FailIn = junction;
-        var failed = await _cluster.Cycle(manifest);
+        var failed = await _cluster.Cycle(manifest).ConfigureAwait(false);
         failed.TrainState.Should().Be(TrainState.Failed);
         ResearchProbe.Reset();
         return failed;
@@ -618,9 +639,9 @@ public class CheckpointResumeTests(ClusterStore store)
 
     private async Task<string?> Resume(long runId, string? from = null) =>
         (
-            await _cluster.Operation(o =>
-                o.ResumeExecutionAsync(runId, from, CancellationToken.None)
-            )
+            await _cluster
+                .Operation(o => o.ResumeExecutionAsync(runId, from, CancellationToken.None))
+                .ConfigureAwait(false)
         ).Message;
 
     private Task<int> Notes(string topic) =>

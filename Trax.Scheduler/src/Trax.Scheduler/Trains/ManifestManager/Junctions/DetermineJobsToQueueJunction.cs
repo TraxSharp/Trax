@@ -17,7 +17,7 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// all manifests that are due, applying only per-manifest guards (dead letters, duplicate
 /// queue entries, active executions).
 /// </remarks>
-internal class DetermineJobsToQueueJunction(
+internal sealed class DetermineJobsToQueueJunction(
     ILogger<DetermineJobsToQueueJunction> logger,
     SchedulerConfiguration config
 ) : EffectJunction<(List<ManifestDispatchView>, List<DeadLetter>), List<ManifestDispatchView>>

@@ -15,7 +15,7 @@ namespace Trax.Scheduler.Services.MetadataCleanupPollingService;
 /// and delegates the actual cleanup logic to <see cref="IMetadataCleanupTrain"/>.
 /// Errors are logged and swallowed to keep the polling loop running.
 /// </remarks>
-internal class MetadataCleanupPollingService(
+internal sealed class MetadataCleanupPollingService(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration,
     ILogger<MetadataCleanupPollingService> logger
@@ -36,12 +36,16 @@ internal class MetadataCleanupPollingService(
         );
 
         // Run immediately on startup before waiting for the first interval
-        await RunCleanup(stoppingToken);
+        await RunCleanup(stoppingToken).ConfigureAwait(false);
 
         // The interval is read each cycle, so a runtime change applies to the next wait.
-        while (await PollingDelay.WaitAsync(() => cleanupConfig.CleanupInterval, stoppingToken))
+        while (
+            await PollingDelay
+                .WaitAsync(() => cleanupConfig.CleanupInterval, stoppingToken)
+                .ConfigureAwait(false)
+        )
         {
-            await RunCleanup(stoppingToken);
+            await RunCleanup(stoppingToken).ConfigureAwait(false);
         }
 
         logger.LogInformation("MetadataCleanupPollingService stopping");
@@ -68,7 +72,7 @@ internal class MetadataCleanupPollingService(
             var train = scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
 
             logger.LogDebug("Metadata cleanup cycle starting");
-            await train.Run(new MetadataCleanupRequest(), cancellationToken);
+            await train.Run(new MetadataCleanupRequest(), cancellationToken).ConfigureAwait(false);
             logger.LogDebug("Metadata cleanup cycle completed");
         }
         catch (Exception ex)

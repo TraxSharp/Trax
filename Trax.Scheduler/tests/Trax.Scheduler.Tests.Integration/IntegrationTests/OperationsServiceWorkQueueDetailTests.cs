@@ -27,7 +27,7 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
     }
 
@@ -60,8 +60,8 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
         entry.MetadataId = metadataId;
         if (createdAt is { } at)
             entry.CreatedAt = at;
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return entry.Id;
     }
@@ -77,8 +77,8 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
             }
         );
         run.TrainState = state;
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return run.Id;
     }

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -177,8 +178,8 @@ public class SubjectKeySerializationTests
     [Test]
     public async Task Entries_without_a_subject_key_are_unaffected()
     {
-        await CreateEntry(null, "a");
-        await CreateEntry(null, "b");
+        await CreateEntry(subjectKey: null, "a");
+        await CreateEntry(subjectKey: null, "b");
 
         await RunCycle();
 
@@ -270,7 +271,7 @@ public class SubjectKeySerializationTests
         for (var i = 0; i < 4; i++)
             await CreateEntry(
                 "customer-1",
-                $"c1-{i}",
+                string.Create(CultureInfo.InvariantCulture, $"c1-{i}"),
                 createdAt: DateTime.UtcNow.AddMinutes(-10 + i)
             );
         var other = await CreateEntry("customer-2", "c2");
@@ -299,18 +300,18 @@ public class SubjectKeySerializationTests
 
         // Older than the ready entry, so without the filter they sort first and take both slots.
         await CreateEntry(
-            null,
+            subjectKey: null,
             "staged-1",
             createdAt: DateTime.UtcNow.AddMinutes(-10),
             staged: true
         );
         await CreateEntry(
-            null,
+            subjectKey: null,
             "staged-2",
             createdAt: DateTime.UtcNow.AddMinutes(-9),
             staged: true
         );
-        var ready = await CreateEntry(null, "ready");
+        var ready = await CreateEntry(subjectKey: null, "ready");
 
         await RunCycle();
 
@@ -352,10 +353,12 @@ public class SubjectKeySerializationTests
 
         var b = Task.Run(async () =>
         {
-            using var txB = await contextB.BeginTransaction(CancellationToken.None);
-            await Lock(contextB, dialect, "customer-1");
-            var claimedB = await Claim(contextB, dialect, second.Id);
-            await contextB.CommitTransaction();
+            using var txB = await contextB
+                .BeginTransaction(CancellationToken.None)
+                .ConfigureAwait(false);
+            await Lock(contextB, dialect, "customer-1").ConfigureAwait(false);
+            var claimedB = await Claim(contextB, dialect, second.Id).ConfigureAwait(false);
+            await contextB.CommitTransaction().ConfigureAwait(false);
             return claimedB;
         });
 
@@ -454,7 +457,11 @@ public class SubjectKeySerializationTests
                     .Loggers.ToList()
                     .SelectMany(l => l.Logs.ToList())
                     .Where(l =>
-                        l.Category == typeof(DispatchJobsJunction).FullName
+                        string.Equals(
+                            l.Category,
+                            typeof(DispatchJobsJunction).FullName,
+                            StringComparison.Ordinal
+                        )
                         && l.Level >= LogLevel.Error
                     )
                     .Select(l => $"{l.Message} {l.Exception}")
@@ -474,7 +481,7 @@ public class SubjectKeySerializationTests
         var junction = ActivatorUtilities.CreateInstance<DispatchJobsJunction>(
             scope.ServiceProvider
         );
-        await junction.Run([entry]);
+        await junction.Run([entry]).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -506,7 +513,8 @@ public class SubjectKeySerializationTests
                     """,
                     gatePid
                 )
-                .FirstAsync();
+                .FirstAsync()
+                .ConfigureAwait(false);
 
             if (blocked >= backends)
                 return;
@@ -515,8 +523,10 @@ public class SubjectKeySerializationTests
         }
 
         Assert.Fail(
-            $"Fewer than {backends} dispatcher(s) ever blocked behind the test's gate. "
-                + $"Dispatcher errors: {DispatcherErrors()}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Fewer than {backends} dispatcher(s) ever blocked behind the test's gate. "
+            ) + $"Dispatcher errors: {DispatcherErrors()}"
         );
     }
 
@@ -541,7 +551,8 @@ public class SubjectKeySerializationTests
                       AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
                     """
                 )
-                .FirstAsync();
+                .FirstAsync()
+                .ConfigureAwait(false);
 
             if (waiting > 0)
                 return;
@@ -554,11 +565,9 @@ public class SubjectKeySerializationTests
 
     private static async Task Lock(IDataContext context, ISqlDialect dialect, string subject)
     {
-        await ((DbContext)context).Database.ExecuteSqlRawAsync(
-            dialect.LockSubject(),
-            [subject],
-            CancellationToken.None
-        );
+        await ((DbContext)context)
+            .Database.ExecuteSqlRawAsync(dialect.LockSubject(), [subject], CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private static Task<WorkQueue?> Claim(IDataContext context, ISqlDialect dialect, long id) =>
@@ -577,13 +586,13 @@ public class SubjectKeySerializationTests
                 Input = null,
             }
         );
-        await context.Track(metadata);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(metadata).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         claimed.Status = WorkQueueStatus.Dispatched;
         claimed.MetadataId = metadata.Id;
         claimed.DispatchedAt = DateTime.UtcNow;
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return metadata.Id;
     }
 
@@ -593,7 +602,7 @@ public class SubjectKeySerializationTests
     {
         using var scope = _serviceProvider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default).ConfigureAwait(false);
         if (train is IDisposable d)
             d.Dispose();
     }
@@ -621,8 +630,8 @@ public class SubjectKeySerializationTests
         if (createdAt is not null)
             entry.CreatedAt = createdAt.Value;
 
-        await _dataContext.Track(entry);
-        await _dataContext.SaveChanges(CancellationToken.None);
+        await _dataContext.Track(entry).ConfigureAwait(false);
+        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return entry;
     }
 
@@ -630,14 +639,19 @@ public class SubjectKeySerializationTests
     {
         using var scope = _serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        return await context.WorkQueues.AsNoTracking().FirstOrDefaultAsync(w => w.Id == id);
+        return await context
+            .WorkQueues.AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == id)
+            .ConfigureAwait(false);
     }
 
     private async Task<int> DispatchedCount()
     {
         using var scope = _serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        return await context.WorkQueues.CountAsync(w => w.Status == WorkQueueStatus.Dispatched);
+        return await context
+            .WorkQueues.CountAsync(w => w.Status == WorkQueueStatus.Dispatched)
+            .ConfigureAwait(false);
     }
 
     private Task CompleteAllRuns() => SetAllRunsTo(TrainState.Completed);
@@ -652,6 +666,7 @@ public class SubjectKeySerializationTests
             .Metadatas.Where(m =>
                 m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress
             )
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.TrainState, state));
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.TrainState, state))
+            .ConfigureAwait(false);
     }
 }

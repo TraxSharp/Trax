@@ -235,16 +235,18 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = itemList.Select(i => i.Id).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await ((TraxScheduler)scheduler).ScheduleManyAsyncUntyped(
-                        trainType,
-                        inputType,
-                        itemList,
-                        item => (item.Id, item.Input),
-                        schedule,
-                        options,
-                        configureEach: null,
-                        ct
-                    );
+                    var results = await ((TraxScheduler)scheduler)
+                        .ScheduleManyAsyncUntyped(
+                            trainType,
+                            inputType,
+                            itemList,
+                            item => (item.Id, item.Input),
+                            schedule,
+                            options,
+                            configureEach: null,
+                            ct
+                        )
+                        .ConfigureAwait(false);
                     return results.FirstOrDefault()!;
                 },
             }
@@ -295,7 +297,7 @@ public partial class SchedulerConfigurationBuilder
         ValidateBatchInputType(itemList, inputType, typeof(TTrain));
 
         // Only require _rootScheduledExternalId when at least one item lacks DependsOn
-        var needsRoot = itemList.Any(item => item.DependsOn is null);
+        var needsRoot = itemList.Exists(item => item.DependsOn is null);
         string? rootExternalId = null;
 
         if (needsRoot)
@@ -329,18 +331,18 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = itemList.Select(i => i.Id).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await (
-                        (TraxScheduler)scheduler
-                    ).ScheduleManyDependentAsyncUntyped(
-                        trainType,
-                        inputType,
-                        itemList,
-                        item => (item.Id, item.Input),
-                        item => item.DependsOn ?? rootExternalId!,
-                        options,
-                        configureEach: null,
-                        ct
-                    );
+                    var results = await ((TraxScheduler)scheduler)
+                        .ScheduleManyDependentAsyncUntyped(
+                            trainType,
+                            inputType,
+                            itemList,
+                            item => (item.Id, item.Input),
+                            item => item.DependsOn ?? rootExternalId!,
+                            options,
+                            configureEach: null,
+                            ct
+                        )
+                        .ConfigureAwait(false);
                     return results.FirstOrDefault()!;
                 },
             }
@@ -412,18 +414,18 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = itemList.Select(i => i.Id).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await (
-                        (TraxScheduler)scheduler
-                    ).ScheduleManyDependentAsyncUntyped(
-                        trainType,
-                        inputType,
-                        itemList,
-                        item => (item.Id, item.Input),
-                        item => item.DependsOn!,
-                        options,
-                        configureEach: null,
-                        ct
-                    );
+                    var results = await ((TraxScheduler)scheduler)
+                        .ScheduleManyDependentAsyncUntyped(
+                            trainType,
+                            inputType,
+                            itemList,
+                            item => (item.Id, item.Input),
+                            item => item.DependsOn!,
+                            options,
+                            configureEach: null,
+                            ct
+                        )
+                        .ConfigureAwait(false);
                     return results.FirstOrDefault()!;
                 },
             }

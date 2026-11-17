@@ -51,7 +51,7 @@ public class ScheduleManyItemOptionsTests
             Every.Minutes(5),
             configureEach: (id, item) =>
             {
-                if (id == "weekday-only")
+                if (string.Equals(id, "weekday-only", StringComparison.Ordinal))
                     item.Exclusions.Add(Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday));
             }
         );
@@ -88,7 +88,13 @@ public class ScheduleManyItemOptionsTests
         {
             var original = property.GetValue(source);
             var copied = property.GetValue(copy);
-            if (property.Name == nameof(ManifestOptions.Exclusions))
+            if (
+                string.Equals(
+                    property.Name,
+                    nameof(ManifestOptions.Exclusions),
+                    StringComparison.Ordinal
+                )
+            )
             {
                 copied.Should().NotBeSameAs(original, "each item gets its own exclusion list");
                 copied.Should().BeEquivalentTo(original);

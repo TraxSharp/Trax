@@ -34,7 +34,7 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 ///
 /// This junction runs first in the ManifestManagerTrain chain, before the manifests are loaded.
 /// </remarks>
-internal class CancelTimedOutJobsJunction(
+internal sealed class CancelTimedOutJobsJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     ICancellationRegistry cancellationRegistry,
@@ -62,7 +62,8 @@ internal class CancelTimedOutJobsJunction(
                 m.Manifest != null ? m.Manifest.TimeoutSeconds : null
             ))
             .AsNoTracking()
-            .ToListAsync(CancellationToken);
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
 
         if (inProgressMetadata.Count == 0)
         {
@@ -70,12 +71,9 @@ internal class CancelTimedOutJobsJunction(
             return Unit.Default;
         }
 
-        var bounds = await RunTimeouts.ResolveAsync(
-            dataContext,
-            config,
-            inProgressMetadata,
-            CancellationToken
-        );
+        var bounds = await RunTimeouts
+            .ResolveAsync(dataContext, config, inProgressMetadata, CancellationToken)
+            .ConfigureAwait(false);
 
         var metadataIdsToCancel = new List<long>();
 
@@ -109,9 +107,10 @@ internal class CancelTimedOutJobsJunction(
         await dataContext
             .Metadatas.Where(m => metadataIdsToCancel.Contains(m.Id))
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.CancellationRequested, true),
+                s => s.SetProperty(m => m.CancellationRequested, valueExpression: true),
                 CancellationToken
-            );
+            )
+            .ConfigureAwait(false);
 
         foreach (var metadataId in metadataIdsToCancel)
         {

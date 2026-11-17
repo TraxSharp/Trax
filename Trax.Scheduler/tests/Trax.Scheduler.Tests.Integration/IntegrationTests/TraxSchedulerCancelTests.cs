@@ -31,7 +31,7 @@ public class TraxSchedulerCancelTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _scheduler = Scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
         _registry = Scope.ServiceProvider.GetRequiredService<ICancellationRegistry>();
     }
@@ -125,7 +125,7 @@ public class TraxSchedulerCancelTests : TestSetup
         try
         {
             // Act
-            await _scheduler.CancelAsync(manifest.ExternalId);
+            await _scheduler.CancelAsync(manifest.ExternalId, CancellationToken.None);
 
             // Assert — the CTS should have been cancelled via the registry
             cts.IsCancellationRequested.Should().BeTrue();
@@ -267,10 +267,8 @@ public class TraxSchedulerCancelTests : TestSetup
 
     private async Task<Manifest> CreateManifestWithMetadata(TrainState state)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -283,11 +281,11 @@ public class TraxSchedulerCancelTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
-        await CreateMetadataForManifest(manifest, state);
+        await CreateMetadataForManifest(manifest, state).ConfigureAwait(false);
 
         return manifest;
     }
@@ -296,10 +294,8 @@ public class TraxSchedulerCancelTests : TestSetup
         params TrainState[] states
     )
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -312,13 +308,13 @@ public class TraxSchedulerCancelTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         var metadatas = new List<Metadata>();
         foreach (var state in states)
-            metadatas.Add(await CreateMetadataForManifest(manifest, state));
+            metadatas.Add(await CreateMetadataForManifest(manifest, state).ConfigureAwait(false));
 
         return (manifest, metadatas);
     }
@@ -336,8 +332,8 @@ public class TraxSchedulerCancelTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -354,8 +350,8 @@ public class TraxSchedulerCancelTests : TestSetup
             }
         );
         metadata.TrainState = state;
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return metadata;
     }

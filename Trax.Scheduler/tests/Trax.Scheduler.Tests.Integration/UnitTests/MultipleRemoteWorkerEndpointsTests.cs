@@ -111,7 +111,7 @@ public class MultipleRemoteWorkerEndpointsTests
         var routing = scope.ServiceProvider.GetRequiredService<JobSubmitterRoutingConfiguration>();
         var submitter = routing.ResolveSubmitter(scope.ServiceProvider, train.FullName!);
         submitter.Should().NotBeNull($"{train.Name} is routed");
-        await submitter!.EnqueueAsync(metadataId, CancellationToken.None);
+        await submitter!.EnqueueAsync(metadataId, CancellationToken.None).ConfigureAwait(false);
         return submitter;
     }
 
@@ -166,10 +166,16 @@ public class MultipleRemoteWorkerEndpointsTests
             CancellationToken cancellationToken
         )
         {
-            var body = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
+            var body = await request
+                .Content!.ReadAsByteArrayAsync(cancellationToken)
+                .ConfigureAwait(false);
             var job = JsonSerializer.Deserialize<RemoteJobRequest>(
                 body,
                 new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                {
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
+                }
             )!;
             lock (Requests)
                 Requests.Add(

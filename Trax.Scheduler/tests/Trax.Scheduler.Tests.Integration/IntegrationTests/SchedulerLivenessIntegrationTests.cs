@@ -72,7 +72,7 @@ public class SchedulerLivenessIntegrationTests : TestSetup
                 return true;
             // allowed-delay: poll interval while awaiting the completion signal, bounded by the
             // timeout above. Not a fixed wait for the work to finish.
-            await Task.Delay(25);
+            await Task.Delay(25).ConfigureAwait(false);
         }
         return predicate();
     }

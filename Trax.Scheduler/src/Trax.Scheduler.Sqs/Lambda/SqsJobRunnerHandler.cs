@@ -67,6 +67,8 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
     /// </summary>
     private static readonly JsonSerializerOptions EnvelopeOptions = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         AllowDuplicateProperties = false,
     };
 
@@ -88,7 +90,7 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
         CancellationToken cancellationToken = default
     )
     {
-        var failures = await ProcessAsync(sqsEvent, cancellationToken);
+        var failures = await ProcessAsync(sqsEvent, cancellationToken).ConfigureAwait(false);
 
         return new SQSBatchResponse(
             failures
@@ -110,7 +112,7 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
     /// <param name="cancellationToken">Cancellation token</param>
     public async Task HandleAsync(SQSEvent sqsEvent, CancellationToken cancellationToken = default)
     {
-        var failures = await ProcessAsync(sqsEvent, cancellationToken);
+        var failures = await ProcessAsync(sqsEvent, cancellationToken).ConfigureAwait(false);
 
         if (failures.Count > 0)
             ExceptionDispatchInfo.Capture(failures[0].Exception).Throw();
@@ -140,7 +142,7 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
             RemoteJobRequest request;
             try
             {
-                request = await ReadAsync(record, verifier);
+                request = await ReadAsync(record, verifier).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -152,11 +154,11 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
             try
             {
                 var handler = sp.GetRequiredService<ITraxRequestHandler>();
-                await handler.ExecuteJobAsync(request, cancellationToken);
+                await handler.ExecuteJobAsync(request, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                if (await RunWasStartedAsync(sp, request.MetadataId))
+                if (await RunWasStartedAsync(sp, request.MetadataId).ConfigureAwait(false))
                 {
                     // The train ran and its failure is recorded on the run's row. Delivering the
                     // message again would not run it again; the scheduler's retries act on it.
@@ -196,12 +198,9 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
                 ? attribute.StringValue
                 : null;
 
-        var verdict = await verifier.VerifyAsync(
-            RunnerRequestPurpose.Execute,
-            body,
-            signature,
-            requireFresh: false
-        );
+        var verdict = await verifier
+            .VerifyAsync(RunnerRequestPurpose.Execute, body, signature, requireFresh: false)
+            .ConfigureAwait(false);
         if (verdict != RunnerRequestVerdict.Accepted)
             throw new InvalidOperationException(
                 $"Refused SQS message {record.MessageId}: signature {verdict}."
@@ -225,14 +224,18 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
 
         try
         {
-            await using var context = (IDataContext)
-                await factory.CreateDbContextAsync(CancellationToken.None);
-            var state = await context
-                .Metadatas.Where(m => m.Id == metadataId)
-                .Select(m => (TrainState?)m.TrainState)
-                .FirstOrDefaultAsync(CancellationToken.None);
+            var context = (IDataContext)
+                await factory.CreateDbContextAsync(CancellationToken.None).ConfigureAwait(false);
+            await using (context.ConfigureAwait(false))
+            {
+                var state = await context
+                    .Metadatas.Where(m => m.Id == metadataId)
+                    .Select(m => (TrainState?)m.TrainState)
+                    .FirstOrDefaultAsync(CancellationToken.None)
+                    .ConfigureAwait(false);
 
-            return state is { } started && started != TrainState.Pending;
+                return state is { } started && started != TrainState.Pending;
+            }
         }
         catch (Exception)
         {

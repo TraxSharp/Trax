@@ -188,8 +188,11 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
 
     private async Task<string> StartedToken()
     {
-        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
-        return (await _api.Row(instance.Id, SystemStepMachine.MachineId))!.InvokeToken!;
+        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok))
+            .ConfigureAwait(false);
+        return (
+            await _api.Row(instance.Id, SystemStepMachine.MachineId).ConfigureAwait(false)
+        )!.InvokeToken!;
     }
 
     private async Task<SnapshotDraft?> RowHolding(string token)
@@ -198,7 +201,8 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
-            .SingleOrDefaultAsync(d => d.InvokeToken == token);
+            .SingleOrDefaultAsync(d => d.InvokeToken == token)
+            .ConfigureAwait(false);
     }
 
     private async Task SetVersion(string token, int version)
@@ -209,6 +213,7 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .SnapshotDrafts.Where(d => d.InvokeToken == token)
                 .ExecuteUpdateAsync(s => s.SetProperty(d => d.Version, version))
+                .ConfigureAwait(false)
         )
             .Should()
             .Be(1);

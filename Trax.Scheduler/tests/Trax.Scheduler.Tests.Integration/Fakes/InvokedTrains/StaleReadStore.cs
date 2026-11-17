@@ -25,7 +25,8 @@ internal sealed class StaleReadStore(IMachineInstanceStore inner) : IMachineInst
         string invokeToken,
         CancellationToken cancellationToken = default
     ) =>
-        await inner.GetByInvokeToken(invokeToken, cancellationToken) is { } row
+        await inner.GetByInvokeToken(invokeToken, cancellationToken).ConfigureAwait(false)
+            is { } row
             ? row with
             {
                 Snapshot = row.Snapshot with { Token = Guid.NewGuid() },

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
@@ -85,8 +86,12 @@ public class SchedulerBuilderBatchOverloadsTests
             .Where(m => m.ExternalId.StartsWith("exp-"))
             .ToListAsync();
 
-        var root = manifests.First(m => m.ExternalId == "exp-root");
-        var deps = manifests.Where(m => m.ExternalId.StartsWith("exp-dep-")).ToList();
+        var root = manifests.First(m =>
+            string.Equals(m.ExternalId, "exp-root", StringComparison.Ordinal)
+        );
+        var deps = manifests
+            .Where(m => m.ExternalId.StartsWith("exp-dep-", StringComparison.Ordinal))
+            .ToList();
         deps.Should().HaveCount(2);
         deps.Should().AllSatisfy(d => d.DependsOnManifestId.Should().Be(root.Id));
     }
@@ -113,8 +118,12 @@ public class SchedulerBuilderBatchOverloadsTests
             .DataContext.Manifests.AsNoTracking()
             .Where(m => m.ExternalId.StartsWith("func-"))
             .ToListAsync();
-        var root = manifests.First(m => m.ExternalId == "func-root");
-        var deps = manifests.Where(m => m.ExternalId != "func-root").ToList();
+        var root = manifests.First(m =>
+            string.Equals(m.ExternalId, "func-root", StringComparison.Ordinal)
+        );
+        var deps = manifests
+            .Where(m => !string.Equals(m.ExternalId, "func-root", StringComparison.Ordinal))
+            .ToList();
         deps.Should().AllSatisfy(d => d.DependsOnManifestId.Should().Be(root.Id));
     }
 
@@ -172,8 +181,12 @@ public class SchedulerBuilderBatchOverloadsTests
             .DataContext.Manifests.AsNoTracking()
             .Where(m => m.ExternalId.StartsWith("ti-"))
             .ToListAsync();
-        var mid = manifests.First(m => m.ExternalId == "ti-mid");
-        var leafs = manifests.Where(m => m.ExternalId.StartsWith("ti-leaf-")).ToList();
+        var mid = manifests.First(m =>
+            string.Equals(m.ExternalId, "ti-mid", StringComparison.Ordinal)
+        );
+        var leafs = manifests
+            .Where(m => m.ExternalId.StartsWith("ti-leaf-", StringComparison.Ordinal))
+            .ToList();
         leafs.Should().HaveCount(2);
         leafs.Should().AllSatisfy(l => l.DependsOnManifestId.Should().Be(mid.Id));
     }
@@ -321,7 +334,11 @@ public class SchedulerBuilderBatchOverloadsTests
         await using var fx = await SchedulerE2EFixture.CreateAsync(s =>
             s.ScheduleMany<ISchedulerTestTrain, SchedulerTestInput, Unit, int>(
                 new[] { 1, 2, 3 },
-                i => ($"each-{i}", new SchedulerTestInput()),
+                i =>
+                    (
+                        string.Create(CultureInfo.InvariantCulture, $"each-{i}"),
+                        new SchedulerTestInput()
+                    ),
                 Every.Minutes(5),
                 configureEach: (i, manifestOpts) => manifestOpts.Priority = i
             )

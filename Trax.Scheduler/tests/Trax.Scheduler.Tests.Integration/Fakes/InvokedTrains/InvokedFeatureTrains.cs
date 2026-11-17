@@ -104,7 +104,7 @@ public class InvokedShortCircuitTrain
 public sealed class InvokedStepShortCut : EffectJunction<InvokedStepGated, InvokedStepOutput>
 {
     public override Task<InvokedStepOutput> Run(InvokedStepGated input) =>
-        input.Mode == InvokedStepModes.Short
+        string.Equals(input.Mode, InvokedStepModes.Short, StringComparison.Ordinal)
             ? Task.FromResult(
                 new InvokedStepOutput { Artifact = "short:" + input.Note, Accepted = true }
             )

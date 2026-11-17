@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using Trax.Core.Decisions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
@@ -96,20 +97,28 @@ public static class ResearchProbe
     public static SemaphoreSlim Held { get; private set; } = new(0);
 
     public static IReadOnlyList<string> RanFor(string topic) =>
-        Ran.Where(r => r.Topic == topic).Select(r => r.Junction).ToList();
+        Ran.Where(r => string.Equals(r.Topic, topic, StringComparison.Ordinal))
+            .Select(r => r.Junction)
+            .ToList();
 
     public static async Task Note(string topic, string junction)
     {
         Ran.Enqueue((topic, junction));
 
-        if (HoldIn is { } hold && (hold == AnyJunction || hold == junction))
+        if (
+            HoldIn is { } hold
+            && (
+                string.Equals(hold, AnyJunction, StringComparison.Ordinal)
+                || string.Equals(hold, junction, StringComparison.Ordinal)
+            )
+        )
         {
             HoldIn = null;
             Held.Release();
-            await _released.Task.WaitAsync(HoldBound);
+            await _released.Task.WaitAsync(HoldBound).ConfigureAwait(false);
         }
 
-        if (FailIn == junction)
+        if (string.Equals(FailIn, junction, StringComparison.Ordinal))
             throw new TimeoutException($"{junction} timed out");
     }
 
@@ -173,11 +182,11 @@ public sealed class ResearchDecider : IDecider
         {
             _holdNext = false;
             Asking.Release();
-            await _released.Task.WaitAsync(HoldBound, ct);
+            await _released.Task.WaitAsync(HoldBound, ct).ConfigureAwait(false);
         }
 
         return new DecisionResult(
-            new Dictionary<string, Answer>
+            new Dictionary<string, Answer>(StringComparer.Ordinal)
             {
                 [QuestionKey.For<ResearchDepth>()] = new ChoiceAnswer(Depth.ToString()),
                 [QuestionKey.For<SummaryStyle>()] = new ChoiceAnswer(Style.ToString()),
@@ -193,7 +202,7 @@ public sealed class PlanResearch : EffectJunction<ResearchInput, ResearchBrief>
 {
     public override async Task<ResearchBrief> Run(ResearchInput input)
     {
-        await ResearchProbe.Note(input.Topic, nameof(PlanResearch));
+        await ResearchProbe.Note(input.Topic, nameof(PlanResearch)).ConfigureAwait(false);
         return new ResearchBrief(input.Topic);
     }
 }
@@ -204,16 +213,19 @@ public sealed class WriteResearchNote(IDataContext context)
 {
     public override async Task<ResearchBrief> Run(ResearchBrief input)
     {
-        await ResearchProbe.Note(input.Topic, nameof(WriteResearchNote));
-        await context.Track(
-            new ManifestGroup
-            {
-                Name = ResearchProbe.NotePrefix + input.Topic + "-" + Guid.NewGuid().ToString("N"),
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            }
-        );
-        await context.SaveChanges(CancellationToken.None);
+        await ResearchProbe.Note(input.Topic, nameof(WriteResearchNote)).ConfigureAwait(false);
+        await context
+            .Track(
+                new ManifestGroup
+                {
+                    Name =
+                        ResearchProbe.NotePrefix + input.Topic + "-" + Guid.NewGuid().ToString("N"),
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                }
+            )
+            .ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return input;
     }
 }
@@ -222,7 +234,7 @@ public sealed class SearchQuick : EffectJunction<ResearchBrief, ResearchFindings
 {
     public override async Task<ResearchFindings> Run(ResearchBrief input)
     {
-        await ResearchProbe.Note(input.Topic, nameof(SearchQuick));
+        await ResearchProbe.Note(input.Topic, nameof(SearchQuick)).ConfigureAwait(false);
         return new ResearchFindings(input.Topic, "quick");
     }
 }
@@ -231,7 +243,7 @@ public sealed class SearchDeep : EffectJunction<ResearchBrief, ResearchFindings>
 {
     public override async Task<ResearchFindings> Run(ResearchBrief input)
     {
-        await ResearchProbe.Note(input.Topic, nameof(SearchDeep));
+        await ResearchProbe.Note(input.Topic, nameof(SearchDeep)).ConfigureAwait(false);
         return new ResearchFindings(input.Topic, "deep");
     }
 }
@@ -240,7 +252,7 @@ public sealed class FetchFullTexts : EffectJunction<ResearchFindings, CheckedFin
 {
     public override async Task<CheckedFindings> Run(ResearchFindings input)
     {
-        await ResearchProbe.Note(input.Topic, nameof(FetchFullTexts));
+        await ResearchProbe.Note(input.Topic, nameof(FetchFullTexts)).ConfigureAwait(false);
         return new CheckedFindings(input.Topic, input.Depth, 12);
     }
 }
@@ -249,7 +261,7 @@ public sealed class SummarizeShort : EffectJunction<CheckedFindings, string>
 {
     public override async Task<string> Run(CheckedFindings input)
     {
-        await ResearchProbe.Note(input.Topic, nameof(SummarizeShort));
+        await ResearchProbe.Note(input.Topic, nameof(SummarizeShort)).ConfigureAwait(false);
         return $"short {input.Depth} summary of {input.Topic}";
     }
 }
@@ -258,7 +270,10 @@ public sealed class SummarizeLong : EffectJunction<CheckedFindings, string>
 {
     public override async Task<string> Run(CheckedFindings input)
     {
-        await ResearchProbe.Note(input.Topic, nameof(SummarizeLong));
-        return $"long {input.Depth} summary of {input.Topic}, {input.Pages} pages";
+        await ResearchProbe.Note(input.Topic, nameof(SummarizeLong)).ConfigureAwait(false);
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"long {input.Depth} summary of {input.Topic}, {input.Pages} pages"
+        );
     }
 }

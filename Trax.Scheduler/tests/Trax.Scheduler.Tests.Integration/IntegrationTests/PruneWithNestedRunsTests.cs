@@ -141,7 +141,8 @@ public class PruneWithNestedRunsTests : TestSetup
     {
         var child = await DataContext
             .Metadatas.AsNoTracking()
-            .FirstOrDefaultAsync(m => m.Id == childRunId);
+            .FirstOrDefaultAsync(m => m.Id == childRunId)
+            .ConfigureAwait(false);
         child.Should().NotBeNull("a nested run outlives the run that started it");
         child!.ParentId.Should().BeNull();
     }
@@ -174,10 +175,8 @@ public class PruneWithNestedRunsTests : TestSetup
 
     private async Task<Manifest> CreateManifest(string externalId)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -194,8 +193,8 @@ public class PruneWithNestedRunsTests : TestSetup
         manifest.ManifestGroupId = group.Id;
         manifest.Owner = Owner;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -214,8 +213,8 @@ public class PruneWithNestedRunsTests : TestSetup
         );
         metadata.TrainState = TrainState.Completed;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return metadata;
     }

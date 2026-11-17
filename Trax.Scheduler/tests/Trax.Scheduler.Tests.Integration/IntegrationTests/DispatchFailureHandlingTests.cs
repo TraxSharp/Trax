@@ -282,7 +282,7 @@ public class DispatchFailureHandlingTests
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act & Assert — the dispatcher should not throw; errors are handled gracefully
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync("dispatch failures should be handled gracefully");
 
         if (train is IDisposable d)
@@ -640,14 +640,14 @@ public class DispatchFailureHandlingTests
     {
         using var trainScope = _serviceProvider.CreateScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default).ConfigureAwait(false);
     }
 
     private async Task RunManifestManagerCycle()
     {
         using var trainScope = _serviceProvider.CreateScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default).ConfigureAwait(false);
     }
 
     #endregion
@@ -798,10 +798,9 @@ public class DispatchFailureHandlingTests
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            _dataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(_dataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -815,8 +814,8 @@ public class DispatchFailureHandlingTests
         );
         manifest.ManifestGroupId = group.Id;
 
-        await _dataContext.Track(manifest);
-        await _dataContext.SaveChanges(CancellationToken.None);
+        await _dataContext.Track(manifest).ConfigureAwait(false);
+        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _dataContext.Reset();
 
         return manifest;
@@ -831,7 +830,8 @@ public class DispatchFailureHandlingTests
         _dataContext.Reset();
         await _dataContext
             .WorkQueues.Where(q => q.ScheduledAt != null)
-            .ExecuteUpdateAsync(s => s.SetProperty(q => q.ScheduledAt, (DateTime?)null));
+            .ExecuteUpdateAsync(s => s.SetProperty(q => q.ScheduledAt, (DateTime?)null))
+            .ConfigureAwait(false);
     }
 
     private async Task<WorkQueue> CreateAndSaveWorkQueueEntry(Manifest manifest)
@@ -846,8 +846,8 @@ public class DispatchFailureHandlingTests
             }
         );
 
-        await _dataContext.Track(entry);
-        await _dataContext.SaveChanges(CancellationToken.None);
+        await _dataContext.Track(entry).ConfigureAwait(false);
+        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _dataContext.Reset();
 
         return entry;
@@ -881,7 +881,13 @@ public class DispatchFailureHandlingTests
 
         public void Add(string name, Metadata metadata)
         {
-            if (metadata.Name != typeof(SchedulerTestTrain).FullName)
+            if (
+                !string.Equals(
+                    metadata.Name,
+                    typeof(SchedulerTestTrain).FullName,
+                    StringComparison.Ordinal
+                )
+            )
                 return;
             lock (_events)
                 _events.Add((name, metadata.Id, metadata.ExternalId, metadata.TrainState));
@@ -917,7 +923,11 @@ public class DispatchFailureHandlingTests
         public void AddFailure(Metadata metadata, Exception? exception)
         {
             if (
-                metadata.Name != typeof(SchedulerTestTrain).FullName
+                !string.Equals(
+                    metadata.Name,
+                    typeof(SchedulerTestTrain).FullName,
+                    StringComparison.Ordinal
+                )
                 || metadata.TrainState != TrainState.Failed
             )
                 return;
@@ -952,7 +962,14 @@ public class DispatchFailureHandlingTests
         public Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
         {
             recorder.AddFailure(metadata, exception);
-            if (recorder.HangOnFailed && metadata.Name == typeof(SchedulerTestTrain).FullName)
+            if (
+                recorder.HangOnFailed
+                && string.Equals(
+                    metadata.Name,
+                    typeof(SchedulerTestTrain).FullName,
+                    StringComparison.Ordinal
+                )
+            )
                 return new TaskCompletionSource().Task;
             return Record("Failed", metadata);
         }
@@ -962,7 +979,7 @@ public class DispatchFailureHandlingTests
 
         public Task OnStateChanged(Metadata metadata, CancellationToken ct)
         {
-            recorder.AddFailure(metadata, null);
+            recorder.AddFailure(metadata, exception: null);
             return Record("StateChanged", metadata);
         }
 
@@ -981,7 +998,7 @@ public class DispatchFailureHandlingTests
     /// A job submitter that always throws, simulating a remote worker failure
     /// (network timeout, HTTP 5xx, Lambda unreachable, etc.).
     /// </summary>
-    private class FailingJobSubmitter : IJobSubmitter
+    private sealed class FailingJobSubmitter : IJobSubmitter
     {
         public Task<string> EnqueueAsync(long metadataId) =>
             throw new HttpRequestException("Simulated enqueue failure: remote worker unreachable");

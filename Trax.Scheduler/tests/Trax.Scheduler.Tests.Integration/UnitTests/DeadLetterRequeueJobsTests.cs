@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -69,12 +70,13 @@ public class DeadLetterRequeueJobsTests
                     new CreateDeadLetter
                     {
                         Manifest = manifest,
-                        Reason = $"failure-{i}",
+                        Reason = string.Create(CultureInfo.InvariantCulture, $"failure-{i}"),
                         RetryCount = 3,
-                    }
+                    },
+                    _time
                 );
                 if (i >= Awaiting)
-                    deadLetter.Acknowledge("handled");
+                    deadLetter.Acknowledge("handled", _time);
                 await db.Track(deadLetter);
             }
             await db.SaveChanges(default);
@@ -96,7 +98,7 @@ public class DeadLetterRequeueJobsTests
     [TearDown]
     public async Task TearDown()
     {
-        _fold.TrySetCanceled();
+        _fold.TrySetCanceled(CancellationToken.None);
         await _provider.DisposeAsync();
         _stopping.Dispose();
     }
@@ -142,7 +144,7 @@ public class DeadLetterRequeueJobsTests
     [Test]
     public async Task Start_returns_a_running_job_counting_what_awaits()
     {
-        var job = await Jobs.StartAsync();
+        var job = await Jobs.StartAsync(ct: CancellationToken.None);
 
         job.Status.Should().Be(DeadLetterRequeueJobStatus.Running);
         job.AwaitingAtStart.Should().Be(Awaiting, "acknowledged dead letters are not counted");
@@ -163,7 +165,11 @@ public class DeadLetterRequeueJobsTests
         await Jobs.StartAsync(ct: caller.Token);
 
         await caller.CancelAsync();
-        var call = await fold.WaitAsync(TimeSpan.FromSeconds(10));
+        var call = await fold.WaitAsync(
+            TimeSpan.FromSeconds(10),
+            TimeProvider.System,
+            CancellationToken.None
+        );
 
         call.Token.Should().Be(_stopping.Token);
         Jobs.Current.IsCompleted.Should().BeFalse("the fold runs on after its caller is gone");
@@ -172,7 +178,7 @@ public class DeadLetterRequeueJobsTests
     [Test]
     public async Task A_finished_fold_is_read_as_succeeded_with_its_result()
     {
-        var id = (await Jobs.StartAsync()).Id;
+        var id = (await Jobs.StartAsync(ct: CancellationToken.None)).Id;
 
         _fold.SetResult(new BatchDeadLetterResult(Awaiting, "3 dead letter(s) requeued."));
         await Jobs.Current;
@@ -187,7 +193,7 @@ public class DeadLetterRequeueJobsTests
     [Test]
     public async Task A_fold_stopped_by_the_host_is_read_as_canceled()
     {
-        var id = (await Jobs.StartAsync()).Id;
+        var id = (await Jobs.StartAsync(ct: CancellationToken.None)).Id;
 
         await _stopping.CancelAsync();
         await Jobs.Current;
@@ -201,7 +207,7 @@ public class DeadLetterRequeueJobsTests
     [Test]
     public async Task A_failed_fold_says_nothing_about_the_server()
     {
-        var id = (await Jobs.StartAsync()).Id;
+        var id = (await Jobs.StartAsync(ct: CancellationToken.None)).Id;
 
         _fold.SetException(new InvalidOperationException("connection to 10.0.0.5 refused"));
         await Jobs.Current;
@@ -217,8 +223,12 @@ public class DeadLetterRequeueJobsTests
     public async Task The_fold_is_asked_in_the_jobs_mode_with_a_progress_reporter(bool askAfresh)
     {
         var fold = NextFold();
-        var job = await Jobs.StartAsync(askAfresh);
-        var call = await fold.WaitAsync(TimeSpan.FromSeconds(10));
+        var job = await Jobs.StartAsync(askAfresh, CancellationToken.None);
+        var call = await fold.WaitAsync(
+            TimeSpan.FromSeconds(10),
+            TimeProvider.System,
+            CancellationToken.None
+        );
 
         job.AskAfresh.Should().Be(askAfresh);
         call.AskAfresh.Should().Be(askAfresh);
@@ -237,8 +247,12 @@ public class DeadLetterRequeueJobsTests
     public async Task A_running_job_says_how_many_it_has_requeued_so_far()
     {
         var fold = NextFold();
-        var id = (await Jobs.StartAsync()).Id;
-        var call = await fold.WaitAsync(TimeSpan.FromSeconds(10));
+        var id = (await Jobs.StartAsync(ct: CancellationToken.None)).Id;
+        var call = await fold.WaitAsync(
+            TimeSpan.FromSeconds(10),
+            TimeProvider.System,
+            CancellationToken.None
+        );
 
         call.Progress!.Report(2);
 
@@ -256,14 +270,14 @@ public class DeadLetterRequeueJobsTests
     public async Task Starting_while_one_runs_returns_that_one_and_starts_nothing()
     {
         var fold = NextFold();
-        var first = await Jobs.StartAsync();
-        var second = await Jobs.StartAsync();
+        var first = await Jobs.StartAsync(ct: CancellationToken.None);
+        var second = await Jobs.StartAsync(ct: CancellationToken.None);
 
         second.Id.Should().Be(first.Id);
         second.Started.Should().BeFalse();
         second.Message.Should().Be(first.Message);
         // The fold runs in the background, so the scheduler is called after StartAsync returns.
-        await fold.WaitAsync(TimeSpan.FromSeconds(10));
+        await fold.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System, CancellationToken.None);
         await _scheduler
             .Received(1)
             .RequeueAllDeadLettersAsync(
@@ -279,8 +293,8 @@ public class DeadLetterRequeueJobsTests
         bool runningAsksAfresh
     )
     {
-        var running = await Jobs.StartAsync(runningAsksAfresh);
-        var refused = await Jobs.StartAsync(!runningAsksAfresh);
+        var running = await Jobs.StartAsync(runningAsksAfresh, CancellationToken.None);
+        var refused = await Jobs.StartAsync(!runningAsksAfresh, CancellationToken.None);
 
         refused.Id.Should().Be(running.Id);
         refused.Started.Should().BeFalse();
@@ -294,11 +308,11 @@ public class DeadLetterRequeueJobsTests
     [Test]
     public async Task Starting_after_the_last_one_finished_starts_a_new_one()
     {
-        var first = await Jobs.StartAsync();
+        var first = await Jobs.StartAsync(ct: CancellationToken.None);
         _fold.SetResult(new BatchDeadLetterResult(Awaiting, "done"));
         await Jobs.Current;
 
-        var second = await Jobs.StartAsync();
+        var second = await Jobs.StartAsync(ct: CancellationToken.None);
 
         second.Id.Should().NotBe(first.Id);
         second.Started.Should().BeTrue();
@@ -310,7 +324,7 @@ public class DeadLetterRequeueJobsTests
     [Test]
     public async Task A_finished_job_is_forgotten_after_the_retention()
     {
-        var id = (await Jobs.StartAsync()).Id;
+        var id = (await Jobs.StartAsync(ct: CancellationToken.None)).Id;
         _fold.SetResult(new BatchDeadLetterResult(Awaiting, "done"));
         await Jobs.Current;
 
@@ -324,7 +338,7 @@ public class DeadLetterRequeueJobsTests
     [Test]
     public async Task A_running_job_is_never_forgotten()
     {
-        var id = (await Jobs.StartAsync()).Id;
+        var id = (await Jobs.StartAsync(ct: CancellationToken.None)).Id;
 
         _time.Advance(DeadLetterRequeueJobs.Retention * 2);
 

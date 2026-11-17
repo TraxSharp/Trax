@@ -186,16 +186,19 @@ public static class JobRunnerExtensions
                 ) =>
                 {
                     var (request, refused) = await ReadEnvelopeAsync<RemoteJobRequest>(
-                        httpRequest,
-                        verifier,
-                        RunnerRequestPurpose.Execute
-                    );
+                            httpRequest,
+                            verifier,
+                            RunnerRequestPurpose.Execute
+                        )
+                        .ConfigureAwait(false);
                     if (request is null)
                         return refused!;
 
                     try
                     {
-                        var result = await handler.ExecuteJobAsync(request);
+                        var result = await handler
+                            .ExecuteJobAsync(request, CancellationToken.None)
+                            .ConfigureAwait(false);
                         return Results.Ok(new RemoteJobResponse(result.MetadataId));
                     }
                     catch (Exception ex)
@@ -233,7 +236,7 @@ public static class JobRunnerExtensions
     )
     {
         var runnerOptions = RequirePosture(endpoints, route);
-        TraxRequestHandler.WarnIfExecutionServiceReplaced(
+        _ = TraxRequestHandler.WarnIfExecutionServiceReplacedAsync(
             endpoints.ServiceProvider,
             endpoints.ServiceProvider.GetRequiredService<ILogger<TraxRequestHandler>>(),
             route
@@ -250,17 +253,20 @@ public static class JobRunnerExtensions
                 ) =>
                 {
                     var (request, refused) = await ReadEnvelopeAsync<RemoteRunRequest>(
-                        httpRequest,
-                        verifier,
-                        RunnerRequestPurpose.Run
-                    );
+                            httpRequest,
+                            verifier,
+                            RunnerRequestPurpose.Run
+                        )
+                        .ConfigureAwait(false);
                     if (request is null)
                         return refused!;
 
                     RemoteRunResponse response;
                     try
                     {
-                        response = await handler.RunTrainAsync(request);
+                        response = await handler
+                            .RunTrainAsync(request, CancellationToken.None)
+                            .ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -349,6 +355,8 @@ public static class JobRunnerExtensions
     /// </summary>
     private static readonly JsonSerializerOptions EnvelopeOptions = new(JsonSerializerDefaults.Web)
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         AllowDuplicateProperties = false,
     };
 
@@ -358,7 +366,7 @@ public static class JobRunnerExtensions
     /// header before the body is read, 413 for a body over
     /// <see cref="TraxJobRunnerOptions.MaxRequestBodyBytes"/>, 401 for a signature the body does
     /// not match, 400 for one that does not parse, repeats a property (in any case), or is
-    /// <c>null</c>.
+    /// <see langword="null"/>.
     /// </summary>
     private static async Task<(T? Envelope, IResult? Refused)> ReadEnvelopeAsync<T>(
         HttpRequest request,
@@ -371,7 +379,9 @@ public static class JobRunnerExtensions
             return (null, Results.StatusCode(StatusCodes.Status415UnsupportedMediaType));
 
         // The signature covers the exact bytes, so they are read once and both checked and parsed.
-        var (body, refusedStatus) = await verifier.ReadVerifiedBodyAsync(request, purpose);
+        var (body, refusedStatus) = await verifier
+            .ReadVerifiedBodyAsync(request, purpose)
+            .ConfigureAwait(false);
         if (refusedStatus is { } status)
             return (null, Results.StatusCode(status));
 

@@ -93,17 +93,18 @@ public abstract class TestSetup
 
     public static async Task CleanupDatabase(IDataContext dataContext)
     {
-        await dataContext.BackgroundJobs.ExecuteDeleteAsync();
-        await dataContext.Logs.ExecuteDeleteAsync();
-        await dataContext.WorkQueues.ExecuteDeleteAsync();
-        await dataContext.DeadLetters.ExecuteDeleteAsync();
-        await dataContext.Metadatas.ExecuteDeleteAsync();
+        await dataContext.BackgroundJobs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.Logs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.WorkQueues.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.DeadLetters.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.Metadatas.ExecuteDeleteAsync().ConfigureAwait(false);
 
         await dataContext
             .Manifests.Where(m => m.DependsOnManifestId != null)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null));
-        await dataContext.Manifests.ExecuteDeleteAsync();
-        await dataContext.ManifestGroups.ExecuteDeleteAsync();
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null))
+            .ConfigureAwait(false);
+        await dataContext.Manifests.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.ManifestGroups.ExecuteDeleteAsync().ConfigureAwait(false);
 
         dataContext.Reset();
     }
@@ -125,8 +126,8 @@ public abstract class TestSetup
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
-        await dataContext.Track(group);
-        await dataContext.SaveChanges(CancellationToken.None);
+        await dataContext.Track(group).ConfigureAwait(false);
+        await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         dataContext.Reset();
         return group;
     }

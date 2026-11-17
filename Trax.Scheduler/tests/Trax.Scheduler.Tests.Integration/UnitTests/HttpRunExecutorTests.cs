@@ -223,17 +223,17 @@ public class HttpRunExecutorTests
     private static HttpResponseMessage JsonResponse<T>(HttpStatusCode code, T payload) =>
         new(code) { Content = JsonContent.Create(payload) };
 
-    private record SimpleInput
+    private sealed record SimpleInput
     {
         public string Value { get; init; } = "";
     }
 
-    private record SimpleOutput
+    private sealed record SimpleOutput
     {
         public string Value { get; init; } = "";
     }
 
-    private class StubHandler : HttpMessageHandler
+    private sealed class StubHandler : HttpMessageHandler
     {
         private readonly Func<
             HttpRequestMessage,

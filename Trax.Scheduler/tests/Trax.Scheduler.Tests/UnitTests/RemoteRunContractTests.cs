@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
@@ -194,7 +195,7 @@ public class RemoteRunContractTests
 
         json.Should()
             .Contain(
-                $"\"failureClass\":{wireValue}",
+                string.Create(CultureInfo.InvariantCulture, $"\"failureClass\":{wireValue}"),
                 "reordering FailureClass's members must not change what an older worker's value "
                     + "means. See docs/adr/0001-remote-execution-is-a-json-wire-contract.md"
             );

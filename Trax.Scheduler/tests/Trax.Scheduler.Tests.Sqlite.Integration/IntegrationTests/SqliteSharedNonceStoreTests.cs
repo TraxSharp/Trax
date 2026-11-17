@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
@@ -126,7 +127,12 @@ public class SqliteSharedNonceStoreTests
         await store.TryRecordAsync("expired", now.AddMinutes(-1), now, CancellationToken.None);
 
         for (var i = 0; i < DatabaseNonceStore.SweepEvery; i++)
-            await store.TryRecordAsync($"live-{i}", now.AddMinutes(5), now, CancellationToken.None);
+            await store.TryRecordAsync(
+                string.Create(CultureInfo.InvariantCulture, $"live-{i}"),
+                now.AddMinutes(5),
+                now,
+                CancellationToken.None
+            );
 
         (await Scalar("SELECT count(*) FROM runner_nonce WHERE nonce = 'expired'"))
             .Should()
@@ -160,10 +166,18 @@ public class SqliteSharedNonceStoreTests
 
     private async Task<long> Scalar(string sql)
     {
-        await using var connection = new SqliteConnection($"Data Source={_dbPath}");
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = sql;
-        return await command.ExecuteScalarAsync() is long value ? value : 0;
+        var connection = new SqliteConnection($"Data Source={_dbPath}");
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = connection.CreateCommand();
+            await using (command.ConfigureAwait(false))
+            {
+                command.CommandText = sql;
+                return await command.ExecuteScalarAsync().ConfigureAwait(false) is long value
+                    ? value
+                    : 0;
+            }
+        }
     }
 }

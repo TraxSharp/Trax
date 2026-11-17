@@ -113,10 +113,15 @@ public class LocalWorkerTests(ClusterStore store)
             using (var scope = _full.Services.CreateScope())
             {
                 var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-                if (!await context.BackgroundJobs.AsNoTracking().AnyAsync(j => j.Id == jobId))
+                if (
+                    !await context
+                        .BackgroundJobs.AsNoTracking()
+                        .AnyAsync(j => j.Id == jobId)
+                        .ConfigureAwait(false)
+                )
                     return;
             }
-            await Task.Delay(50); // determinism: polling interval, bounded by the caller's WaitAsync
+            await Task.Delay(50).ConfigureAwait(false); // determinism: polling interval, bounded by the caller's WaitAsync
         }
     }
 }

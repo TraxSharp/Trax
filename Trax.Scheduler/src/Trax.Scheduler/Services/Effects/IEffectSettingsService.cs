@@ -53,7 +53,7 @@ public interface IEffectSettingsService
     /// <remarks>
     /// Each value is text, read as <see cref="EffectSettingField"/> describes: numbers in
     /// invariant culture with <c>.</c> for the decimal point and no thousands separators, a date
-    /// or time with no offset as UTC, a boolean as <c>true</c> or <c>false</c>, an enum by member
+    /// or time with no offset as UTC, a boolean as <see langword="true"/> or <see langword="false"/>, an enum by member
     /// name. Null or blank is no value for a property that accepts null, the empty string for a
     /// non-nullable string, and refused for anything else. An
     /// <see cref="EffectFieldKind.SetInCode"/> setting cannot be written. The change applies to the next
@@ -103,7 +103,7 @@ public record EffectSettings(
 /// <summary>How a setting is edited.</summary>
 public enum EffectFieldKind
 {
-    /// <summary>A switch: <c>true</c> or <c>false</c>.</summary>
+    /// <summary>A switch: <see langword="true"/> or <see langword="false"/>.</summary>
     Boolean = 0,
 
     /// <summary>One of <see cref="EffectSettingField.EnumValues"/>.</summary>

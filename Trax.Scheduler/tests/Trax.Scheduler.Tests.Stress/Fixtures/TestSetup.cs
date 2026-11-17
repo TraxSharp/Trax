@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -114,16 +115,17 @@ public abstract class TestSetup
 
     protected static async Task CleanupDatabase(IDataContext dataContext)
     {
-        await dataContext.BackgroundJobs.ExecuteDeleteAsync();
-        await dataContext.Logs.ExecuteDeleteAsync();
-        await dataContext.WorkQueues.ExecuteDeleteAsync();
-        await dataContext.DeadLetters.ExecuteDeleteAsync();
-        await dataContext.Metadatas.ExecuteDeleteAsync();
+        await dataContext.BackgroundJobs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.Logs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.WorkQueues.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.DeadLetters.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.Metadatas.ExecuteDeleteAsync().ConfigureAwait(false);
         await dataContext
             .Manifests.Where(m => m.DependsOnManifestId != null)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null));
-        await dataContext.Manifests.ExecuteDeleteAsync();
-        await dataContext.ManifestGroups.ExecuteDeleteAsync();
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null))
+            .ConfigureAwait(false);
+        await dataContext.Manifests.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.ManifestGroups.ExecuteDeleteAsync().ConfigureAwait(false);
         dataContext.Reset();
     }
 
@@ -138,13 +140,16 @@ public abstract class TestSetup
     {
         var limit = timeout ?? QueryTimeout;
         var sw = Stopwatch.StartNew();
-        await action();
+        await action().ConfigureAwait(false);
         sw.Stop();
 
         sw.Elapsed.Should()
             .BeLessThan(
                 limit,
-                $"query took {sw.Elapsed.TotalMilliseconds:F0}ms, exceeding {limit.TotalMilliseconds:F0}ms limit"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"query took {sw.Elapsed.TotalMilliseconds:F0}ms, exceeding {limit.TotalMilliseconds:F0}ms limit"
+                )
             );
 
         return sw.Elapsed;
@@ -162,13 +167,13 @@ public abstract class TestSetup
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
-        await DataContext.Track(group);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(group).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return group;
     }
 
-    protected async Task<List<Manifest>> SeedManifests(int count, long groupId)
+    protected async Task<IList<Manifest>> SeedManifests(int count, long groupId)
     {
         var manifests = new List<Manifest>(count);
         for (int i = 0; i < count; i++)
@@ -181,21 +186,24 @@ public abstract class TestSetup
                     ScheduleType = ScheduleType.Interval,
                     IntervalSeconds = 60,
                     MaxRetries = 3,
-                    Properties = new StressTestInput { Value = $"manifest-{i}" },
+                    Properties = new StressTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"manifest-{i}"),
+                    },
                 }
             );
-            manifest.ExternalId = $"stress-{i}";
+            manifest.ExternalId = string.Create(CultureInfo.InvariantCulture, $"stress-{i}");
             manifest.ManifestGroupId = groupId;
-            await DataContext.Track(manifest);
+            await DataContext.Track(manifest).ConfigureAwait(false);
         }
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
-        return await DataContext.Manifests.ToListAsync();
+        return await DataContext.Manifests.ToListAsync().ConfigureAwait(false);
     }
 
     protected async Task SeedMetadata(
-        List<Manifest> manifests,
+        IList<Manifest> manifests,
         int perManifest,
         TrainState state,
         DateTime? startTime = null
@@ -212,7 +220,10 @@ public abstract class TestSetup
                     {
                         Name = typeof(StressTestTrain).FullName!,
                         ExternalId = Guid.NewGuid().ToString("N"),
-                        Input = new StressTestInput { Value = $"input-{i}-{j}" },
+                        Input = new StressTestInput
+                        {
+                            Value = string.Create(CultureInfo.InvariantCulture, $"input-{i}-{j}"),
+                        },
                         ManifestId = manifests[i].Id,
                     }
                 );
@@ -220,14 +231,14 @@ public abstract class TestSetup
                 metadata.StartTime = baseTime.AddMinutes(j);
                 if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
                     metadata.EndTime = metadata.StartTime.AddSeconds(30);
-                await DataContext.Track(metadata);
+                await DataContext.Track(metadata).ConfigureAwait(false);
             }
         }
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
-    protected async Task SeedWorkQueues(List<Manifest> manifests)
+    protected async Task SeedWorkQueues(IList<Manifest> manifests)
     {
         // Only one queued entry per manifest (unique constraint ix_work_queue_unique_queued_manifest)
         for (int i = 0; i < manifests.Count; i++)
@@ -241,15 +252,15 @@ public abstract class TestSetup
                     ManifestId = manifests[i].Id,
                 }
             );
-            await DataContext.Track(entry);
+            await DataContext.Track(entry).ConfigureAwait(false);
         }
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
-    protected async Task SeedDeadLetters(List<Manifest> manifests, int perManifest)
+    protected async Task SeedDeadLetters(IList<Manifest> manifests, int perManifest)
     {
-        var loadedManifests = await DataContext.Manifests.ToListAsync();
+        var loadedManifests = await DataContext.Manifests.ToListAsync().ConfigureAwait(false);
         var manifestDict = loadedManifests.ToDictionary(m => m.Id);
 
         for (int i = 0; i < manifests.Count; i++)
@@ -260,14 +271,17 @@ public abstract class TestSetup
                     new CreateDeadLetter
                     {
                         Manifest = manifestDict[manifests[i].Id],
-                        Reason = $"Test dead letter {i}-{j}",
+                        Reason = string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Test dead letter {i}-{j}"
+                        ),
                         RetryCount = 3,
                     }
                 );
-                await DataContext.Track(deadLetter);
+                await DataContext.Track(deadLetter).ConfigureAwait(false);
             }
         }
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -278,9 +292,9 @@ public abstract class TestSetup
             var job = BackgroundJob.Create(
                 new CreateBackgroundJob { MetadataId = startMetadataId + i }
             );
-            await DataContext.Track(job);
+            await DataContext.Track(job).ConfigureAwait(false);
         }
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 

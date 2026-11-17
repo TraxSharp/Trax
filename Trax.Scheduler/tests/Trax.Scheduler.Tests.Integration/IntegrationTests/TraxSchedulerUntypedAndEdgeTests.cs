@@ -26,7 +26,7 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _scheduler = (TraxScheduler)Scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
     }
 
@@ -99,13 +99,15 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
     public async Task ScheduleDependentAsyncUntyped_MissingParent_Throws()
     {
         var act = async () =>
-            await _scheduler.ScheduleDependentAsyncUntyped(
-                typeof(SchedulerTestTrain),
-                typeof(SchedulerTestInput),
-                "child",
-                new SchedulerTestInput(),
-                "missing-parent"
-            );
+            await _scheduler
+                .ScheduleDependentAsyncUntyped(
+                    typeof(SchedulerTestTrain),
+                    typeof(SchedulerTestInput),
+                    "child",
+                    new SchedulerTestInput(),
+                    "missing-parent"
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*not found*");
     }
@@ -168,13 +170,15 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
         var prefix = $"u-many-dep-{Guid.NewGuid():N}";
 
         var act = async () =>
-            await _scheduler.ScheduleManyDependentAsyncUntyped<string>(
-                typeof(SchedulerTestTrain),
-                typeof(SchedulerTestInput),
-                sources: new[] { "a", "b" },
-                map: s => ($"{prefix}-{s}", new SchedulerTestInput()),
-                dependsOn: _ => "missing-parent-id"
-            );
+            await _scheduler
+                .ScheduleManyDependentAsyncUntyped(
+                    typeof(SchedulerTestTrain),
+                    typeof(SchedulerTestInput),
+                    sources: new[] { "a", "b" },
+                    map: s => ($"{prefix}-{s}", new SchedulerTestInput()),
+                    dependsOn: _ => "missing-parent-id"
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*not found*");
 
@@ -256,16 +260,13 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
         var prefix = $"typed-many-dep-{Guid.NewGuid():N}";
 
         var act = async () =>
-            await _scheduler.ScheduleManyDependentAsync<
-                ISchedulerTestTrain,
-                SchedulerTestInput,
-                Unit,
-                string
-            >(
-                sources: new[] { "a" },
-                map: s => ($"{prefix}-{s}", new SchedulerTestInput()),
-                dependsOn: _ => "missing-typed-parent"
-            );
+            await _scheduler
+                .ScheduleManyDependentAsync<ISchedulerTestTrain, SchedulerTestInput, Unit, string>(
+                    sources: new[] { "a" },
+                    map: s => ($"{prefix}-{s}", new SchedulerTestInput()),
+                    dependsOn: _ => "missing-typed-parent"
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
 
@@ -279,11 +280,13 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
     public async Task ScheduleDependentAsync_MissingParent_Throws()
     {
         var act = async () =>
-            await _scheduler.ScheduleDependentAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-                "typed-child",
-                new SchedulerTestInput(),
-                "missing-typed-parent"
-            );
+            await _scheduler
+                .ScheduleDependentAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                    "typed-child",
+                    new SchedulerTestInput(),
+                    "missing-typed-parent"
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*not found*");
     }
@@ -295,19 +298,16 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
         var prefix = $"typed-many-rb-{Guid.NewGuid():N}";
 
         var act = async () =>
-            await _scheduler.ScheduleManyAsync<
-                ISchedulerTestTrain,
-                SchedulerTestInput,
-                Unit,
-                string
-            >(
-                sources: new[] { "a", "b" },
-                map: s => ($"{prefix}-{s}", new SchedulerTestInput()),
-                schedule: Interval with
-                {
-                    Variance = TimeSpan.FromSeconds(-1),
-                }
-            );
+            await _scheduler
+                .ScheduleManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit, string>(
+                    sources: new[] { "a", "b" },
+                    map: s => ($"{prefix}-{s}", new SchedulerTestInput()),
+                    schedule: Interval with
+                    {
+                        Variance = TimeSpan.FromSeconds(-1),
+                    }
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
 

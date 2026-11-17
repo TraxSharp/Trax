@@ -123,9 +123,15 @@ public class SchedulerBuilderMaterializationTests
             .Where(m => new[] { "root", "child", "grandchild" }.Contains(m.ExternalId))
             .ToListAsync();
         manifests.Should().HaveCount(3);
-        var root = manifests.First(m => m.ExternalId == "root");
-        var child = manifests.First(m => m.ExternalId == "child");
-        var grand = manifests.First(m => m.ExternalId == "grandchild");
+        var root = manifests.First(m =>
+            string.Equals(m.ExternalId, "root", StringComparison.Ordinal)
+        );
+        var child = manifests.First(m =>
+            string.Equals(m.ExternalId, "child", StringComparison.Ordinal)
+        );
+        var grand = manifests.First(m =>
+            string.Equals(m.ExternalId, "grandchild", StringComparison.Ordinal)
+        );
         child.DependsOnManifestId.Should().Be(root.Id);
         grand.DependsOnManifestId.Should().Be(child.Id);
     }
@@ -233,9 +239,15 @@ public class SchedulerBuilderMaterializationTests
         await fx.MaterializePendingManifestsAsync();
 
         var manifests = await fx.DataContext.Manifests.AsNoTracking().ToListAsync();
-        var root = manifests.First(m => m.ExternalId == "root");
-        var ca = manifests.First(m => m.ExternalId == "child-a");
-        var cb = manifests.First(m => m.ExternalId == "child-b");
+        var root = manifests.First(m =>
+            string.Equals(m.ExternalId, "root", StringComparison.Ordinal)
+        );
+        var ca = manifests.First(m =>
+            string.Equals(m.ExternalId, "child-a", StringComparison.Ordinal)
+        );
+        var cb = manifests.First(m =>
+            string.Equals(m.ExternalId, "child-b", StringComparison.Ordinal)
+        );
 
         ca.DependsOnManifestId.Should().Be(root.Id);
         cb.DependsOnManifestId.Should().Be(root.Id);

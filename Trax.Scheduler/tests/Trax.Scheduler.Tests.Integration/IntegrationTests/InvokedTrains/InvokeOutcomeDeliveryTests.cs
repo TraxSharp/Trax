@@ -755,6 +755,7 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .SnapshotDrafts.Where(d => d.InvokeToken == token)
                 .ExecuteUpdateAsync(s => s.SetProperty(d => d.Machine, machine))
+                .ConfigureAwait(false)
         )
             .Should()
             .Be(1);
@@ -814,7 +815,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         using var scope = host.Services.CreateScope();
         await scope
             .ServiceProvider.GetRequiredService<IMetadataCleanupTrain>()
-            .Run(new MetadataCleanupRequest());
+            .Run(new MetadataCleanupRequest())
+            .ConfigureAwait(false);
     }
 
     private async Task<bool> RunExists(long runId)
@@ -823,7 +825,8 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.AsNoTracking()
-            .AnyAsync(m => m.Id == runId);
+            .AnyAsync(m => m.Id == runId)
+            .ConfigureAwait(false);
     }
 
     // Deletes a finished run with everything it owns, as metadata retention does, whoever holds its token.
@@ -831,9 +834,22 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
     {
         using var scope = _api.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await context.WorkQueues.Where(w => w.MetadataId == runId).ExecuteDeleteAsync();
-        await context.Logs.Where(l => l.MetadataId == runId).ExecuteDeleteAsync();
-        (await context.Metadatas.Where(m => m.Id == runId).ExecuteDeleteAsync()).Should().Be(1);
+        await context
+            .WorkQueues.Where(w => w.MetadataId == runId)
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+        await context
+            .Logs.Where(l => l.MetadataId == runId)
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+        (
+            await context
+                .Metadatas.Where(m => m.Id == runId)
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(1);
     }
 
     private async Task DeleteEntry(string token)
@@ -844,6 +860,7 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .WorkQueues.Where(w => w.ExternalId == token)
                 .ExecuteDeleteAsync()
+                .ConfigureAwait(false)
         )
             .Should()
             .Be(1);
@@ -920,19 +937,25 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         var operations = scope.ServiceProvider.GetRequiredService<IOperationsService>();
         var views = new object?[]
         {
-            await operations.GetWorkQueueEntryDetailAsync(entry, CancellationToken.None),
-            await operations.GetMachineInstanceAsync(
-                new MachineInstanceKey(
-                    SystemStepMachine.MachineId,
-                    SnapshotOwnerKind.System,
-                    instance
-                ),
-                CancellationToken.None
-            ),
-            await operations.GetMachineInstancesAsync(
-                new MachineInstanceQuery(SystemStepMachine.MachineId),
-                CancellationToken.None
-            ),
+            await operations
+                .GetWorkQueueEntryDetailAsync(entry, CancellationToken.None)
+                .ConfigureAwait(false),
+            await operations
+                .GetMachineInstanceAsync(
+                    new MachineInstanceKey(
+                        SystemStepMachine.MachineId,
+                        SnapshotOwnerKind.System,
+                        instance
+                    ),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false),
+            await operations
+                .GetMachineInstancesAsync(
+                    new MachineInstanceQuery(SystemStepMachine.MachineId),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false),
         };
         views.Should().AllSatisfy(v => v.Should().NotBeNull());
         foreach (var view in views)
@@ -972,7 +995,7 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         );
         swept.Reconciler.Delivered += (_, e) =>
         {
-            if (e.InvokeToken == token)
+            if (string.Equals(e.InvokeToken, token, StringComparison.Ordinal))
                 delivered.TrySetResult(e.Delivery);
         };
 
@@ -998,12 +1021,12 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
 
     private async Task SweepExpecting(Guid instance, string state)
     {
-        (await _api.Sweep())
+        (await _api.Sweep().ConfigureAwait(false))
             .Should()
             .ContainSingle()
             .Which.Should()
             .BeEquivalentTo(new { To = state, Applied = "cancelled" });
-        (await SystemRow(instance)).State.Should().Be(state);
+        (await SystemRow(instance).ConfigureAwait(false)).State.Should().Be(state);
     }
 
     // A job the test let run to its end, whatever it threw, within the bound.
@@ -1011,10 +1034,10 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         job.ContinueWith(_ => { }, TaskScheduler.Default).WaitAsync(Bound);
 
     private async Task<SnapshotDraft> SystemRow(Guid id) =>
-        (await _api.Row(id, SystemStepMachine.MachineId))!;
+        (await _api.Row(id, SystemStepMachine.MachineId).ConfigureAwait(false))!;
 
     private async Task<SnapshotDraft> UserRow(Guid id) =>
-        (await _api.Row(id, UserStepMachine.MachineId))!;
+        (await _api.Row(id, UserStepMachine.MachineId).ConfigureAwait(false))!;
 
     private static JsonObject Context(SnapshotDraft row) => JsonNode.Parse(row.Context)!.AsObject();
 

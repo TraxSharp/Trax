@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -148,12 +149,15 @@ public class InMemoryDispatchTests
     {
         public List<object> Inputs { get; } = [];
 
-        public Task<string> EnqueueAsync(long metadataId) => Task.FromResult($"job-{metadataId}");
+        public Task<string> EnqueueAsync(long metadataId) =>
+            Task.FromResult(string.Create(CultureInfo.InvariantCulture, $"job-{metadataId}"));
 
         public Task<string> EnqueueAsync(long metadataId, object input)
         {
             Inputs.Add(input);
-            return Task.FromResult($"job-{metadataId}");
+            return Task.FromResult(
+                string.Create(CultureInfo.InvariantCulture, $"job-{metadataId}")
+            );
         }
     }
 }

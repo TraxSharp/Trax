@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Scheduler.Services.Scheduling;
 
 /// <summary>
@@ -53,7 +55,8 @@ public static class Cron
     /// </summary>
     /// <param name="second">The second of the minute to run (0-59)</param>
     /// <returns>A Schedule configured to run every minute at the specified second</returns>
-    public static Schedule Minutely(int second) => Schedule.FromCron($"{second} * * * * *");
+    public static Schedule Minutely(int second) =>
+        Schedule.FromCron(string.Create(CultureInfo.InvariantCulture, $"{second} * * * * *"));
 
     /// <summary>
     /// Creates a schedule that runs hourly at the specified minute and second.
@@ -64,8 +67,10 @@ public static class Cron
     /// <returns>A Schedule configured to run hourly</returns>
     public static Schedule Hourly(int minute = 0, int second = 0) =>
         second == 0
-            ? Schedule.FromCron($"{minute} * * * *")
-            : Schedule.FromCron($"{second} {minute} * * * *");
+            ? Schedule.FromCron(string.Create(CultureInfo.InvariantCulture, $"{minute} * * * *"))
+            : Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{second} {minute} * * * *")
+            );
 
     /// <summary>
     /// Creates a schedule that runs daily at the specified UTC time.
@@ -77,8 +82,12 @@ public static class Cron
     /// <returns>A Schedule configured to run daily</returns>
     public static Schedule Daily(int hour = 0, int minute = 0, int second = 0) =>
         second == 0
-            ? Schedule.FromCron($"{minute} {hour} * * *")
-            : Schedule.FromCron($"{second} {minute} {hour} * * *");
+            ? Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{minute} {hour} * * *")
+            )
+            : Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{second} {minute} {hour} * * *")
+            );
 
     /// <summary>
     /// Creates a schedule that runs weekly on the specified day and UTC time.
@@ -91,8 +100,15 @@ public static class Cron
     /// <returns>A Schedule configured to run weekly</returns>
     public static Schedule Weekly(DayOfWeek day, int hour = 0, int minute = 0, int second = 0) =>
         second == 0
-            ? Schedule.FromCron($"{minute} {hour} * * {(int)day}")
-            : Schedule.FromCron($"{second} {minute} {hour} * * {(int)day}");
+            ? Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{minute} {hour} * * {(int)day}")
+            )
+            : Schedule.FromCron(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{second} {minute} {hour} * * {(int)day}"
+                )
+            );
 
     /// <summary>
     /// Creates a schedule that runs monthly on the specified day and UTC time.
@@ -105,8 +121,12 @@ public static class Cron
     /// <returns>A Schedule configured to run monthly</returns>
     public static Schedule Monthly(int day = 1, int hour = 0, int minute = 0, int second = 0) =>
         second == 0
-            ? Schedule.FromCron($"{minute} {hour} {day} * *")
-            : Schedule.FromCron($"{second} {minute} {hour} {day} * *");
+            ? Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{minute} {hour} {day} * *")
+            )
+            : Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{second} {minute} {hour} {day} * *")
+            );
 
     /// <summary>
     /// Creates a schedule from a custom cron expression.

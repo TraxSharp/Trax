@@ -29,7 +29,7 @@ public class ManifestTimeoutStaleReapTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
         _previousStale = _config.StaleInProgressTimeout;
         _previousDefault = _config.DefaultJobTimeout;
@@ -118,7 +118,10 @@ public class ManifestTimeoutStaleReapTests : TestSetup
 
     private async Task RunManifestManager()
     {
-        await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        await Scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default)
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -127,10 +130,8 @@ public class ManifestTimeoutStaleReapTests : TestSetup
 
     private async Task<Metadata> CreateInProgressRun(TimeSpan timeout, int startedMinutesAgo)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -145,8 +146,8 @@ public class ManifestTimeoutStaleReapTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
         manifest.TimeoutSeconds = (int)timeout.TotalSeconds;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var run = Metadata.Create(
             new CreateMetadata
@@ -159,8 +160,8 @@ public class ManifestTimeoutStaleReapTests : TestSetup
         );
         run.TrainState = TrainState.InProgress;
         run.StartTime = DateTime.UtcNow.AddMinutes(-startedMinutesAgo);
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return run;
     }

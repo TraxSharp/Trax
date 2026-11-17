@@ -110,7 +110,9 @@ public class RemoteRunExecutionTests : TestSetup
         );
 
         var act = async () =>
-            await executionService.RunAsync(nameof(IFailingSchedulerTestTrain), inputJson);
+            await executionService
+                .RunAsync(nameof(IFailingSchedulerTestTrain), inputJson)
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -122,7 +124,8 @@ public class RemoteRunExecutionTests : TestSetup
     {
         var executionService = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var act = async () => await executionService.RunAsync("NonExistent.Train", "{}");
+        var act = async () =>
+            await executionService.RunAsync("NonExistent.Train", "{}").ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -135,7 +138,9 @@ public class RemoteRunExecutionTests : TestSetup
         var executionService = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = async () =>
-            await executionService.RunAsync(nameof(ISchedulerTestTrain), "not valid json");
+            await executionService
+                .RunAsync(nameof(ISchedulerTestTrain), "not valid json")
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<JsonException>();
     }

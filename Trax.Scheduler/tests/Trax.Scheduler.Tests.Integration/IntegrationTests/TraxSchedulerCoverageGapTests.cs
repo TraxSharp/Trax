@@ -19,7 +19,7 @@ public class TraxSchedulerCoverageGapTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _scheduler = Scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
     }
 
@@ -113,10 +113,8 @@ public class TraxSchedulerCoverageGapTests : TestSetup
 
     private async Task<Manifest> CreateScheduledManifest(string externalId)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -130,8 +128,8 @@ public class TraxSchedulerCoverageGapTests : TestSetup
         );
         manifest.ExternalId = externalId;
         manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }

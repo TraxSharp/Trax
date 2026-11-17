@@ -38,7 +38,7 @@ public partial class OperationsService
 
         count = Math.Clamp(count, 0, MaxUpcomingRuns);
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         var rows = await db
             .Manifests.AsNoTracking()
@@ -58,7 +58,7 @@ public partial class OperationsService
                 m.NextScheduledRun,
                 m.VarianceSeconds,
                 m.DependsOnManifestId,
-                GroupEnabled = m.ManifestGroup.IsEnabled,
+                GroupEnabled = m.ManifestGroup != null && m.ManifestGroup.IsEnabled,
                 ParentExternalId = m.DependsOnManifest == null
                     ? null
                     : m.DependsOnManifest.ExternalId,
@@ -71,7 +71,8 @@ public partial class OperationsService
                     .Metadatas.Where(md => md.TrainState == TrainState.Cancelled)
                     .Max(md => (DateTime?)(md.EndTime ?? md.StartTime)),
             })
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         var now = DateTime.UtcNow;
         var byId = rows.ToDictionary(r => r.Id);

@@ -46,7 +46,7 @@ public static class TransportInputRedaction
     );
 
     /// <summary>
-    /// The stored JSON with its sensitive members masked, or <c>null</c> when there is none.
+    /// The stored JSON with its sensitive members masked, or <see langword="null"/> when there is none.
     /// </summary>
     /// <param name="discovery">The trains registered on this host; only their inputs are read.</param>
     /// <param name="json">The stored copy, as the work queue or the manifest holds it.</param>
@@ -135,7 +135,7 @@ public static class TransportInputRedaction
         if (elementTypes.Count == 0)
             return true;
 
-        return depth < MaxElementDepth && elementTypes.Any(e => IsOpenEnded(e, depth + 1));
+        return depth < MaxElementDepth && elementTypes.Exists(e => IsOpenEnded(e, depth + 1));
     }
 
     /// <summary>How many collections deep an element type is looked through.</summary>
@@ -159,7 +159,7 @@ public static class TransportInputRedaction
         public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
-            writer.WriteBoolean(TraxRedaction.MarkerProperty, true);
+            writer.WriteBoolean(TraxRedaction.MarkerProperty, value: true);
             writer.WriteEndObject();
         }
     }

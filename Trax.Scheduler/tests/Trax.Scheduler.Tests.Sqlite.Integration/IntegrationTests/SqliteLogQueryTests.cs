@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -21,7 +22,7 @@ public class SqliteLogQueryTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
         // The data-context logger writes this host's own logs to the same table, so every term
         // carries a tag no other row has.
@@ -79,7 +80,10 @@ public class SqliteLogQueryTests : TestSetup
     public async Task Oldest_first_pages_forward_by_cursor()
     {
         for (var i = 0; i < 5; i++)
-            await Seed($"{_tag} line {i}", "Ascending");
+            await Seed(
+                string.Create(CultureInfo.InvariantCulture, $"{_tag} line {i}"),
+                "Ascending"
+            );
 
         var first = await _operations.GetLogsAsync(
             new LogQuery(Take: 3) { MessageContains = _tag, Order = LogOrder.OldestFirst },
@@ -98,7 +102,11 @@ public class SqliteLogQueryTests : TestSetup
             .Items.Concat(second.Items)
             .Select(l => l.Message)
             .Should()
-            .Equal(Enumerable.Range(0, 5).Select(i => $"{_tag} line {i}"));
+            .Equal(
+                Enumerable
+                    .Range(0, 5)
+                    .Select(i => string.Create(CultureInfo.InvariantCulture, $"{_tag} line {i}"))
+            );
     }
 
     [TestCase(OperationsService.LogCountCap, OperationsService.LogCountCap, false)]
@@ -121,35 +129,39 @@ public class SqliteLogQueryTests : TestSetup
     private async Task SeedMany(int count, string message)
     {
         for (var i = 0; i < count; i++)
-            await DataContext.Track(
-                Log.Create(
-                    new CreateLog
-                    {
-                        Level = LogLevel.Information,
-                        Message = message,
-                        CategoryName = "Capped",
-                        EventId = 0,
-                    }
+            await DataContext
+                .Track(
+                    Log.Create(
+                        new CreateLog
+                        {
+                            Level = LogLevel.Information,
+                            Message = message,
+                            CategoryName = "Capped",
+                            EventId = 0,
+                        }
+                    )
                 )
-            );
-        await DataContext.SaveChanges(CancellationToken.None);
+                .ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
     private async Task Seed(string message, string category)
     {
-        await DataContext.Track(
-            Log.Create(
-                new CreateLog
-                {
-                    Level = LogLevel.Information,
-                    Message = message,
-                    CategoryName = category,
-                    EventId = 0,
-                }
+        await DataContext
+            .Track(
+                Log.Create(
+                    new CreateLog
+                    {
+                        Level = LogLevel.Information,
+                        Message = message,
+                        CategoryName = category,
+                        EventId = 0,
+                    }
+                )
             )
-        );
-        await DataContext.SaveChanges(CancellationToken.None);
+            .ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 }

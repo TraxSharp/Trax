@@ -210,7 +210,7 @@ public static class RunnerRequestSignature
             return false;
 
         var parts = signature.Split(',');
-        if (parts.Length != 4 || parts[0] != Version)
+        if (parts.Length != 4 || !string.Equals(parts[0], Version, StringComparison.Ordinal))
             return false;
 
         if (

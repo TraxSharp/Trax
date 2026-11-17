@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,7 +41,11 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
             var held = new List<long>();
             for (var i = 0; i < 2; i++)
             {
-                var disabled = await SaveManifestAsync($"off{i}", isEnabled: false, group.Id);
+                var disabled = await SaveManifestAsync(
+                    string.Create(CultureInfo.InvariantCulture, $"off{i}"),
+                    isEnabled: false,
+                    group.Id
+                );
                 await QueueScheduledEntryAsync(disabled.Id);
                 held.Add(disabled.Id);
             }
@@ -144,8 +149,8 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
         // Distinct created_at values in the order queued, so the held entries rank ahead of the
         // enabled one.
         entry.CreatedAt = _createdAt = _createdAt.AddSeconds(1);
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -162,8 +167,8 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
             }
         );
         manifest.ManifestGroupId = groupId;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }

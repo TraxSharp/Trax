@@ -186,4 +186,4 @@ public class UseLambdaWorkersBuilderTests
     #endregion
 }
 
-internal interface ITestLambdaTrain { }
+internal interface ITestLambdaTrain;

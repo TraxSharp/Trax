@@ -45,7 +45,7 @@ public partial class SchedulerConfigurationBuilder
     private string? _lastScheduledExternalId;
 
     // Dependency graph tracking for cycle detection at build time
-    private readonly Dictionary<string, string> _externalIdToGroupId = new();
+    private readonly Dictionary<string, string> _externalIdToGroupId = new(StringComparer.Ordinal);
     private readonly List<(string ParentExternalId, string ChildExternalId)> _dependencyEdges = [];
 
     /// <summary>

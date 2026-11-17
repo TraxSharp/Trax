@@ -39,7 +39,7 @@ public class SharedInputTypeDispatchTests
     public interface IUnregisteredSharedInputTrain : IServiceTrain<SharedDispatchInput, Unit>;
 
     /// <summary>Which train ran for which tag. Tags are unique per test.</summary>
-    public static ConcurrentDictionary<string, string> Ran { get; } = new();
+    public static ConcurrentDictionary<string, string> Ran { get; } = new(StringComparer.Ordinal);
 
     public class FirstSharedInputTrain
         : ServiceTrain<SharedDispatchInput, Unit>,

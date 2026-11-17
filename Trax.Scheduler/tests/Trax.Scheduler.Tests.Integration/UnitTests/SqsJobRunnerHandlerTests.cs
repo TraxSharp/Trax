@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Amazon.Lambda.SQSEvents;
 using AwesomeAssertions;
@@ -42,7 +43,7 @@ public class SqsJobRunnerHandlerTests
             ],
         };
 
-        await sut.HandleAsync(sqsEvent);
+        await sut.HandleAsync(sqsEvent, CancellationToken.None);
 
         handler.ExecuteCalls.Should().HaveCount(1);
         handler.ExecuteCalls[0].MetadataId.Should().Be(5);
@@ -66,7 +67,8 @@ public class SqsJobRunnerHandlerTests
             ],
         };
 
-        var act = async () => await sut.HandleAsync(sqsEvent);
+        var act = async () =>
+            await sut.HandleAsync(sqsEvent, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<JsonException>();
         handler.ExecuteCalls.Should().BeEmpty();
@@ -100,7 +102,7 @@ public class SqsJobRunnerHandlerTests
             ],
         };
 
-        await sut.HandleAsync(sqsEvent);
+        await sut.HandleAsync(sqsEvent, CancellationToken.None);
 
         handler.ExecuteCalls.Select(r => r.MetadataId).Should().Equal(1, 2, 3);
     }
@@ -126,7 +128,7 @@ public class SqsJobRunnerHandlerTests
             ],
         };
 
-        var act = () => sut.HandleAsync(sqsEvent);
+        var act = () => sut.HandleAsync(sqsEvent, CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("nope");
     }
 
@@ -141,7 +143,7 @@ public class SqsJobRunnerHandlerTests
             Records = [new SQSEvent.SQSMessage { MessageId = "m1", Body = "null" }],
         };
 
-        var act = () => sut.HandleAsync(sqsEvent);
+        var act = () => sut.HandleAsync(sqsEvent, CancellationToken.None);
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*Failed to deserialize*");
@@ -155,7 +157,7 @@ public class SqsJobRunnerHandlerTests
         var handler = new FakeRequestHandler();
         var sut = CreateHandler(handler);
 
-        await sut.HandleAsync(new SQSEvent { Records = [] });
+        await sut.HandleAsync(new SQSEvent { Records = [] }, CancellationToken.None);
 
         handler.ExecuteCalls.Should().BeEmpty();
     }
@@ -193,7 +195,8 @@ public class SqsJobRunnerHandlerTests
         var sut = CreateHandler(handler);
 
         var response = await sut.HandleBatchAsync(
-            new SQSEvent { Records = [new SQSEvent.SQSMessage { MessageId = "m1", Body = null }] }
+            new SQSEvent { Records = [new SQSEvent.SQSMessage { MessageId = "m1", Body = null }] },
+            CancellationToken.None
         );
 
         response.BatchItemFailures.Select(f => f.ItemIdentifier).Should().Equal(["m1"]);
@@ -213,7 +216,10 @@ public class SqsJobRunnerHandlerTests
             .Returns<Task<IDataContext>>(_ => throw new InvalidOperationException("db down"));
         var sut = CreateHandler(handler, configure: s => s.AddSingleton(factory));
 
-        var response = await sut.HandleBatchAsync(new SQSEvent { Records = [Message(1)] });
+        var response = await sut.HandleBatchAsync(
+            new SQSEvent { Records = [Message(1)] },
+            CancellationToken.None
+        );
 
         response
             .BatchItemFailures.Select(f => f.ItemIdentifier)
@@ -247,9 +253,15 @@ public class SqsJobRunnerHandlerTests
     private static SQSEvent.SQSMessage Message(long metadataId, byte[]? signWith = null)
     {
         var body = JsonSerializer.Serialize(new RemoteJobRequest(MetadataId: metadataId));
-        var message = new SQSEvent.SQSMessage { MessageId = $"m{metadataId}", Body = body };
+        var message = new SQSEvent.SQSMessage
+        {
+            MessageId = string.Create(CultureInfo.InvariantCulture, $"m{metadataId}"),
+            Body = body,
+        };
         if (signWith is not null)
-            message.MessageAttributes = new Dictionary<string, SQSEvent.MessageAttribute>
+            message.MessageAttributes = new Dictionary<string, SQSEvent.MessageAttribute>(
+                StringComparer.Ordinal
+            )
             {
                 [RunnerRequestSignature.HeaderName] = new()
                 {
@@ -270,7 +282,9 @@ public class SqsJobRunnerHandlerTests
         var handler = new FakeRequestHandler();
         var sut = CreateHandler(handler, _ => { });
 
-        var act = async () => await sut.HandleAsync(new SQSEvent { Records = [Message(1)] });
+        var act = async () =>
+            await sut.HandleAsync(new SQSEvent { Records = [Message(1)] }, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -284,7 +298,9 @@ public class SqsJobRunnerHandlerTests
         var handler = new FakeRequestHandler();
         var sut = CreateHandler(handler, o => o.SigningKey = Key);
 
-        var act = async () => await sut.HandleAsync(new SQSEvent { Records = [Message(1)] });
+        var act = async () =>
+            await sut.HandleAsync(new SQSEvent { Records = [Message(1)] }, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Missing*");
         handler
@@ -302,7 +318,11 @@ public class SqsJobRunnerHandlerTests
         var otherKey = Enumerable.Repeat((byte)9, 32).ToArray();
 
         var act = async () =>
-            await sut.HandleAsync(new SQSEvent { Records = [Message(1, otherKey)] });
+            await sut.HandleAsync(
+                    new SQSEvent { Records = [Message(1, otherKey)] },
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Invalid*");
         handler.ExecuteCalls.Should().BeEmpty();
@@ -316,8 +336,8 @@ public class SqsJobRunnerHandlerTests
         var sut = CreateHandler(handler, o => o.SigningKey = Key);
         var message = Message(3, Key);
 
-        await sut.HandleAsync(new SQSEvent { Records = [message] });
-        await sut.HandleAsync(new SQSEvent { Records = [message] });
+        await sut.HandleAsync(new SQSEvent { Records = [message] }, CancellationToken.None);
+        await sut.HandleAsync(new SQSEvent { Records = [message] }, CancellationToken.None);
 
         handler.ExecuteCalls.Should().HaveCount(2);
     }

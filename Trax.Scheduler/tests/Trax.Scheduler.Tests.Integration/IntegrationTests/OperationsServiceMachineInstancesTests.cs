@@ -28,7 +28,7 @@ public class OperationsServiceMachineInstancesTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
         _machine = $"ops-machine-{Guid.NewGuid():N}";
     }
@@ -223,7 +223,7 @@ public class OperationsServiceMachineInstancesTests : TestSetup
 
         total
             .Should()
-            .Be(new MachineInstanceTotal(OperationsService.MachineInstanceCountCap, true));
+            .Be(new MachineInstanceTotal(OperationsService.MachineInstanceCountCap, Capped: true));
     }
 
     [Test]
@@ -435,7 +435,7 @@ public class OperationsServiceMachineInstancesTests : TestSetup
             InvokeToken = invokeToken,
         };
         DataContext.SnapshotDrafts.Add(row);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return row;
     }

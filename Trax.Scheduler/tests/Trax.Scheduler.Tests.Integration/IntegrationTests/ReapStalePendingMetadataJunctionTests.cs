@@ -27,7 +27,7 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
     }
@@ -270,7 +270,7 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
 
         // Act & Assert
-        var act = async () => await _train.Run(Unit.Default);
+        var act = async () => await _train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -411,10 +411,8 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
 
     private async Task<Manifest> CreateManifest(int maxRetries = 3)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -429,8 +427,8 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -453,8 +451,8 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         );
         metadata.TrainState = state;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         if (startTime.HasValue)
         {
@@ -463,7 +461,8 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
                 .ExecuteUpdateAsync(
                     s => s.SetProperty(m => m.StartTime, startTime.Value),
                     CancellationToken.None
-                );
+                )
+                .ConfigureAwait(false);
         }
 
         DataContext.Reset();

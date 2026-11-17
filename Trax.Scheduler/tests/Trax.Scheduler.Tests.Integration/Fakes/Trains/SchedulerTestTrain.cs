@@ -24,7 +24,7 @@ public record SchedulerTestInput : IManifestProperties
 /// <summary>
 /// Interface for the scheduler test train.
 /// </summary>
-public interface ISchedulerTestTrain : IServiceTrain<SchedulerTestInput, Unit> { }
+public interface ISchedulerTestTrain : IServiceTrain<SchedulerTestInput, Unit>;
 
 /// <summary>
 /// A train that always fails, used for testing error handling.
@@ -48,7 +48,7 @@ public record FailingSchedulerTestInput : IManifestProperties
 /// <summary>
 /// Interface for the failing scheduler test train.
 /// </summary>
-public interface IFailingSchedulerTestTrain : IServiceTrain<FailingSchedulerTestInput, Unit> { }
+public interface IFailingSchedulerTestTrain : IServiceTrain<FailingSchedulerTestInput, Unit>;
 
 /// <summary>
 /// A test train with a typed (non-Unit) output, used to verify the scheduler
@@ -74,7 +74,7 @@ public record TypedOutputSchedulerTestInput : IManifestProperties
 /// Interface for the typed output scheduler test train.
 /// </summary>
 public interface ITypedOutputSchedulerTestTrain
-    : IServiceTrain<TypedOutputSchedulerTestInput, string> { }
+    : IServiceTrain<TypedOutputSchedulerTestInput, string>;
 
 /// <summary>Fails with the message the input carries, so the failure path is exercised.</summary>
 internal sealed class FailWithMessage : Junction<FailingSchedulerTestInput, Unit>

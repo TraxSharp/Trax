@@ -22,7 +22,7 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// trains; it is never loaded by name. A manifest whose input resolves to none of them is logged
 /// and not started, so no run is recorded for it.
 /// </remarks>
-internal class InMemoryDispatchJobsJunction(
+internal sealed class InMemoryDispatchJobsJunction(
     IDataContext dataContext,
     IJobSubmitter jobSubmitter,
     ITrainRegistry trainRegistry,
@@ -53,8 +53,8 @@ internal class InMemoryDispatchJobsJunction(
                     }
                 );
 
-                await dataContext.Track(metadata);
-                await dataContext.SaveChanges(CancellationToken);
+                await dataContext.Track(metadata).ConfigureAwait(false);
+                await dataContext.SaveChanges(CancellationToken).ConfigureAwait(false);
 
                 logger.LogDebug(
                     "Created Metadata {MetadataId} for manifest {ManifestId} (name: {ManifestName})",
@@ -64,8 +64,12 @@ internal class InMemoryDispatchJobsJunction(
                 );
 
                 var jobId = input is not null
-                    ? await jobSubmitter.EnqueueAsync(metadata.Id, input, CancellationToken)
-                    : await jobSubmitter.EnqueueAsync(metadata.Id, CancellationToken);
+                    ? await jobSubmitter
+                        .EnqueueAsync(metadata.Id, input, CancellationToken)
+                        .ConfigureAwait(false)
+                    : await jobSubmitter
+                        .EnqueueAsync(metadata.Id, CancellationToken)
+                        .ConfigureAwait(false);
 
                 logger.LogDebug(
                     "Dispatched manifest {ManifestId} as job {JobId} (Metadata: {MetadataId})",

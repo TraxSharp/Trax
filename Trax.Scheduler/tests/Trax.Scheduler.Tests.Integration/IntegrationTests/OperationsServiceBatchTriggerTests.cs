@@ -43,7 +43,7 @@ public class OperationsServiceBatchTriggerTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _signal = new RecordingChangeSignal();
         _operations = new OperationsService(
             Substitute.For<ITrainDiscoveryService>(),
@@ -551,7 +551,8 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         DataContext.Reset();
         return await DataContext
             .WorkQueues.AsNoTracking()
-            .CountAsync(w => w.ManifestId == manifestId && w.Status == WorkQueueStatus.Queued);
+            .CountAsync(w => w.ManifestId == manifestId && w.Status == WorkQueueStatus.Queued)
+            .ConfigureAwait(false);
     }
 
     private async Task<Manifest> SeedManifest(
@@ -573,8 +574,8 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
         manifest.DependsOnManifestId = dependsOn;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -596,8 +597,8 @@ public class OperationsServiceBatchTriggerTests : TestSetup
                 ReplayDecisionsOf = replayDecisionsOf,
             }
         );
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return entry;
     }
@@ -614,8 +615,8 @@ public class OperationsServiceBatchTriggerTests : TestSetup
             }
         );
         metadata.TrainState = state;
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return metadata;
     }
@@ -631,7 +632,7 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         public IEffectProvider Create() => Observe((IDataContext)inner.Create());
 
         public async Task<IDataContext> CreateDbContextAsync(CancellationToken cancellationToken) =>
-            Observe(await inner.CreateDbContextAsync(cancellationToken));
+            Observe(await inner.CreateDbContextAsync(cancellationToken).ConfigureAwait(false));
 
         private IDataContext Observe(IDataContext context)
         {

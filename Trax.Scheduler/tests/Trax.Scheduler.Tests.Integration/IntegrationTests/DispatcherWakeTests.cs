@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -73,8 +74,8 @@ public class DispatcherWakeTests
             );
 
         _dispatcherHost = BuildDispatcherHost(_cycles);
-        Listener.Subscribed += _subscriptions.Increment;
-        Listener.NoticeReceived += _notices.Increment;
+        Listener.Subscribed += (_, _) => _subscriptions.Increment();
+        Listener.NoticeReceived += (_, _) => _notices.Increment();
 
         // The two services under test, started as the host would start them. The rest of a
         // scheduler host (startup validation over every train in this assembly, the manifest
@@ -198,11 +199,9 @@ public class DispatcherWakeTests
     {
         using var scope = _apiHost.CreateScope();
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
-        var result = await execution.QueueAsync(
-            typeof(ISchedulerTestTrain).FullName!,
-            "{}",
-            ct: CancellationToken.None
-        );
+        var result = await execution
+            .QueueAsync(typeof(ISchedulerTestTrain).FullName!, "{}", ct: CancellationToken.None)
+            .ConfigureAwait(false);
         return result.WorkQueueId;
     }
 
@@ -216,14 +215,14 @@ public class DispatcherWakeTests
     {
         var elapsed = Stopwatch.StartNew();
         var next = _cycles.Count + 1;
-        while (!await IsDispatchedAsync(workQueueId))
+        while (!await IsDispatchedAsync(workQueueId).ConfigureAwait(false))
         {
             var remaining = timeout - elapsed.Elapsed;
             if (remaining <= TimeSpan.Zero)
                 break;
             try
             {
-                await _cycles.WhenReached(next).WaitAsync(remaining);
+                await _cycles.WhenReached(next).WaitAsync(remaining).ConfigureAwait(false);
             }
             catch (TimeoutException)
             {
@@ -232,10 +231,13 @@ public class DispatcherWakeTests
             next = _cycles.Count + 1;
         }
 
-        (await IsDispatchedAsync(workQueueId))
+        (await IsDispatchedAsync(workQueueId).ConfigureAwait(false))
             .Should()
             .BeTrue(
-                $"work queue entry {workQueueId} should be dispatched and run within {timeout}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"work queue entry {workQueueId} should be dispatched and run within {timeout}"
+                )
             );
     }
 
@@ -247,15 +249,19 @@ public class DispatcherWakeTests
             .WorkQueues.AsNoTracking()
             .Where(w => w.Id == workQueueId)
             .Select(w => new { w.Status, RunState = (TrainState?)w.Metadata!.TrainState })
-            .SingleAsync();
+            .SingleAsync()
+            .ConfigureAwait(false);
         return entry.Status == WorkQueueStatus.Dispatched
             && entry.RunState is not (null or TrainState.Pending or TrainState.InProgress);
     }
 
     private static async Task ExecuteAsync(NpgsqlConnection connection, string sql)
     {
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
+        var command = new NpgsqlCommand(sql, connection);
+        await using (command.ConfigureAwait(false))
+        {
+            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        }
     }
 
     /// <summary>A host that queues work and dispatches none, with a data source of its own.</summary>
@@ -322,7 +328,7 @@ public class DispatcherWakeTests
         {
             try
             {
-                return await inner.Run(input, cancellationToken);
+                return await inner.Run(input, cancellationToken).ConfigureAwait(false);
             }
             finally
             {

@@ -150,7 +150,7 @@ public class WorkerExtensionsTests
     [Test]
     public void AddTraxWorker_NullConfigure_UsesDefaults()
     {
-        using var provider = BuildWorkerProvider(null);
+        using var provider = BuildWorkerProvider(configure: null);
 
         var options = provider.GetRequiredService<LocalWorkerOptions>();
         options.WorkerCount.Should().Be(Environment.ProcessorCount);

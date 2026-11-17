@@ -136,7 +136,7 @@ public sealed class ReminderPublish : IReminderPublish
         if (ReminderPublishGate.Armed)
         {
             ReminderPublishGate.Enter();
-            await ReminderPublishGate.Released;
+            await ReminderPublishGate.Released.ConfigureAwait(false);
         }
 
         return "published-" + Guid.NewGuid().ToString("N");

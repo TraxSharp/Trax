@@ -29,7 +29,7 @@ namespace Trax.Scheduler.Services.ManifestManagerPollingService;
 /// The resolved <see cref="IManifestManagerTrain"/> is <see cref="InMemoryManifestManagerTrain"/>
 /// which dispatches jobs inline via <see cref="Services.JobSubmitter.InMemoryJobSubmitter"/>.
 /// </remarks>
-internal class ManifestManagerPollingService(
+internal sealed class ManifestManagerPollingService(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration,
     ILogger<ManifestManagerPollingService> logger,
@@ -43,17 +43,16 @@ internal class ManifestManagerPollingService(
             configuration.ManifestManagerPollingInterval
         );
 
-        await RunManifestManager(stoppingToken);
+        await RunManifestManager(stoppingToken).ConfigureAwait(false);
 
         // The interval is read each cycle, so a runtime change applies to the next wait.
         while (
-            await PollingDelay.WaitAsync(
-                () => configuration.ManifestManagerPollingInterval,
-                stoppingToken
-            )
+            await PollingDelay
+                .WaitAsync(() => configuration.ManifestManagerPollingInterval, stoppingToken)
+                .ConfigureAwait(false)
         )
         {
-            await RunManifestManager(stoppingToken);
+            await RunManifestManager(stoppingToken).ConfigureAwait(false);
         }
 
         logger.LogInformation("ManifestManagerPollingService stopping");
@@ -84,18 +83,21 @@ internal class ManifestManagerPollingService(
             {
                 var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
-                using var transaction = await dataContext.BeginTransaction(cancellationToken);
+                using var transaction = await dataContext
+                    .BeginTransaction(cancellationToken)
+                    .ConfigureAwait(false);
 
                 var acquired = await ((DbContext)dataContext)
                     .Database.SqlQuery<bool>(
                         sqlDialect.TryAcquireLeaderLock("trax_manifest_manager")
                     )
-                    .FirstAsync(cancellationToken);
+                    .FirstAsync(cancellationToken)
+                    .ConfigureAwait(false);
 
                 if (!acquired)
                 {
                     logger.LogDebug("Another server is running ManifestManager, skipping cycle");
-                    await dataContext.RollbackTransaction();
+                    await dataContext.RollbackTransaction().ConfigureAwait(false);
                     return;
                 }
 
@@ -103,26 +105,26 @@ internal class ManifestManagerPollingService(
                 var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
 
                 logger.LogDebug("ManifestManager polling cycle starting");
-                await train.Run(Unit.Default, cancellationToken);
+                await train.Run(Unit.Default, cancellationToken).ConfigureAwait(false);
                 logger.LogDebug("ManifestManager polling cycle completed");
 
-                await dataContext.CommitTransaction();
+                await dataContext.CommitTransaction().ConfigureAwait(false);
 
                 // The runs the cycle failed are committed now, so their lifecycle events go out.
                 if (scope.ServiceProvider.GetService<DeferredOutcomeEvents>() is { } outcomeEvents)
-                    await outcomeEvents.FlushAsync();
+                    await outcomeEvents.FlushAsync().ConfigureAwait(false);
             }
             else
             {
                 var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
 
                 logger.LogDebug("ManifestManager polling cycle starting");
-                await train.Run(Unit.Default, cancellationToken);
+                await train.Run(Unit.Default, cancellationToken).ConfigureAwait(false);
                 logger.LogDebug("ManifestManager polling cycle completed");
 
                 // Nothing is held with no transaction open, but flushing keeps the paths alike.
                 if (scope.ServiceProvider.GetService<DeferredOutcomeEvents>() is { } outcomeEvents)
-                    await outcomeEvents.FlushAsync();
+                    await outcomeEvents.FlushAsync().ConfigureAwait(false);
             }
         }
         catch (Exception ex)

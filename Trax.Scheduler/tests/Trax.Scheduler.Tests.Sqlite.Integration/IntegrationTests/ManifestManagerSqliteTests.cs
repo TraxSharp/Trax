@@ -62,8 +62,8 @@ public class ManifestManagerSqliteTests : TestSetup
     private async Task<Metadata> CreateStalePendingRun()
     {
         var run = NewRun(TrainState.Pending, DateTime.UtcNow.AddHours(-1));
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return run;
     }

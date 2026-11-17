@@ -56,7 +56,15 @@ public class RunnerRequestSigningTests
 
     [Test]
     public async Task Verify_NoSignature_IsMissing() =>
-        (await Verifier().VerifyAsync(RunnerRequestPurpose.Execute, Body, null, requireFresh: true))
+        (
+            await Verifier()
+                .VerifyAsync(
+                    RunnerRequestPurpose.Execute,
+                    Body,
+                    signature: null,
+                    requireFresh: true
+                )
+        )
             .Should()
             .Be(RunnerRequestVerdict.Missing);
 
@@ -186,7 +194,7 @@ public class RunnerRequestSigningTests
                     o.SigningKey = null;
                     o.AllowUnsignedRequests();
                 })
-                .VerifyAsync(RunnerRequestPurpose.Run, Body, null, requireFresh: true)
+                .VerifyAsync(RunnerRequestPurpose.Run, Body, signature: null, requireFresh: true)
         ).Should().Be(RunnerRequestVerdict.Accepted);
 
     #endregion
@@ -319,6 +327,10 @@ public class RunnerRequestSigningTests
             .Deserialize<RemoteJobRequest>(
                 body,
                 new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                {
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
+                }
             )!
             .MetadataId.Should()
             .Be(7);
@@ -592,7 +604,7 @@ public class RunnerRequestSigningTests
                 BaseDelay = TimeSpan.FromMilliseconds(1),
                 MaxDelay = TimeSpan.FromMilliseconds(1),
             },
-            null,
+            logger: null,
             CancellationToken.None,
             Key,
             RunnerRequestPurpose.Execute
@@ -632,7 +644,9 @@ public class RunnerRequestSigningTests
             CancellationToken cancellationToken
         )
         {
-            var body = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
+            var body = await request
+                .Content!.ReadAsByteArrayAsync(cancellationToken)
+                .ConfigureAwait(false);
             var signature = request.Headers.TryGetValues(
                 RunnerRequestSignature.HeaderName,
                 out var values

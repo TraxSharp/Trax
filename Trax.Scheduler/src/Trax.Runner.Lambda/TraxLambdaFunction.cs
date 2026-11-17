@@ -90,6 +90,8 @@ public abstract class TraxLambdaFunction
     /// </summary>
     private static readonly JsonSerializerOptions CaseInsensitiveOptions = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNameCaseInsensitive = true,
         AllowDuplicateProperties = false,
     };
@@ -106,7 +108,7 @@ public abstract class TraxLambdaFunction
         {
             var services = BuildServiceProvider();
             if (services.GetService<ILogger<TraxRequestHandler>>() is { } logger)
-                TraxRequestHandler.WarnIfExecutionServiceReplaced(
+                _ = TraxRequestHandler.WarnIfExecutionServiceReplacedAsync(
                     services,
                     logger,
                     nameof(TraxLambdaFunction)
@@ -236,7 +238,8 @@ public abstract class TraxLambdaFunction
                 envelope.Signature,
                 requireFresh: purpose == RunnerRequestPurpose.Run,
                 cts.Token
-            );
+            )
+            .ConfigureAwait(false);
         if (verdict != RunnerRequestVerdict.Accepted)
         {
             logger.LogWarning(
@@ -252,18 +255,20 @@ public abstract class TraxLambdaFunction
         return envelope.Type switch
         {
             LambdaRequestType.Execute => await HandleExecute(
-                envelope.PayloadJson,
-                handler,
-                logger,
-                cts.Token,
-                recordCancelledIn: scope.ServiceProvider
-            ),
+                    envelope.PayloadJson,
+                    handler,
+                    logger,
+                    cts.Token,
+                    recordCancelledIn: scope.ServiceProvider
+                )
+                .ConfigureAwait(false),
             LambdaRequestType.Run => await HandleRun(
-                envelope.PayloadJson,
-                handler,
-                logger,
-                cts.Token
-            ),
+                    envelope.PayloadJson,
+                    handler,
+                    logger,
+                    cts.Token
+                )
+                .ConfigureAwait(false),
             _ => throw new InvalidOperationException(
                 $"Unknown Lambda request type: {envelope.Type}"
             ),
@@ -310,12 +315,14 @@ public abstract class TraxLambdaFunction
     /// completes once it has shut down.</param>
     public async Task RunLocalAsync(string[] args, CancellationToken cancellationToken)
     {
-        await using var app = CreateLocalBuilder(args).Build();
-        ConfigureRoutes(app);
-        await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(
-            app,
-            cancellationToken
-        );
+        var app = CreateLocalBuilder(args).Build();
+        await using (app.ConfigureAwait(false))
+        {
+            ConfigureRoutes(app);
+            await HostingAbstractionsHostExtensions
+                .RunAsync(app, cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -352,13 +359,15 @@ public abstract class TraxLambdaFunction
             routes,
             "/trax/execute",
             RunnerRequestPurpose.Execute,
-            async (body, handler, logger, ct) => await HandleExecute(body, handler, logger, ct)
+            async (body, handler, logger, ct) =>
+                await HandleExecute(body, handler, logger, ct).ConfigureAwait(false)
         );
         MapLocalRoute(
             routes,
             "/trax/run",
             RunnerRequestPurpose.Run,
-            async (body, handler, logger, ct) => await HandleRun(body, handler, logger, ct)
+            async (body, handler, logger, ct) =>
+                await HandleRun(body, handler, logger, ct).ConfigureAwait(false)
         );
     }
 
@@ -403,10 +412,9 @@ public abstract class TraxLambdaFunction
                     }
                 }
 
-                var (body, refusedStatus) = await verifier.ReadVerifiedBodyAsync(
-                    ctx.Request,
-                    purpose
-                );
+                var (body, refusedStatus) = await verifier
+                    .ReadVerifiedBodyAsync(ctx.Request, purpose)
+                    .ConfigureAwait(false);
                 if (refusedStatus is { } status)
                 {
                     ctx.Response.StatusCode = status;
@@ -418,11 +426,12 @@ public abstract class TraxLambdaFunction
                     ILogger<TraxLambdaFunction>
                 >();
                 var result = await handle(
-                    Encoding.UTF8.GetString(body.Span),
-                    handler,
-                    logger,
-                    ctx.RequestAborted
-                );
+                        Encoding.UTF8.GetString(body.Span),
+                        handler,
+                        logger,
+                        ctx.RequestAborted
+                    )
+                    .ConfigureAwait(false);
 
                 // A run's answer is signed over these exact bytes, bound to the request it
                 // answers, when the runner has a signing key, as UseTraxRunEndpoint signs it.
@@ -444,7 +453,9 @@ public abstract class TraxLambdaFunction
                         responseSignature;
 
                 ctx.Response.ContentType = "application/json";
-                await ctx.Response.Body.WriteAsync(responseBody);
+                await ctx
+                    .Response.Body.WriteAsync(responseBody, CancellationToken.None)
+                    .ConfigureAwait(false);
             }
         );
 
@@ -479,7 +490,8 @@ public abstract class TraxLambdaFunction
                 "No time was left to run MetadataId {MetadataId}; not starting it",
                 request.MetadataId
             );
-            await RecordCancelledAsync(recordCancelledIn, request.MetadataId, logger);
+            await RecordCancelledAsync(recordCancelledIn, request.MetadataId, logger)
+                .ConfigureAwait(false);
             return new RemoteJobResponse(
                 request.MetadataId,
                 IsError: true,
@@ -490,7 +502,7 @@ public abstract class TraxLambdaFunction
 
         try
         {
-            var result = await handler.ExecuteJobAsync(request, ct);
+            var result = await handler.ExecuteJobAsync(request, ct).ConfigureAwait(false);
             return new RemoteJobResponse(result.MetadataId);
         }
         catch (Exception ex)
@@ -509,7 +521,8 @@ public abstract class TraxLambdaFunction
                 && ct.IsCancellationRequested
                 && recordCancelledIn is not null
             )
-                await RecordCancelledAsync(recordCancelledIn, request.MetadataId, logger);
+                await RecordCancelledAsync(recordCancelledIn, request.MetadataId, logger)
+                    .ConfigureAwait(false);
 
             // A TrainException's message is Trax's own account of the failure; anything else, and
             // every stack trace, stays in this function's log.
@@ -549,7 +562,9 @@ public abstract class TraxLambdaFunction
 
         try
         {
-            using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+            using var context = await factory
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
             var now = DateTime.UtcNow;
             var pending = context.Metadatas.Where(m =>
                 m.Id == metadataId && m.TrainState == TrainState.Pending
@@ -557,28 +572,32 @@ public abstract class TraxLambdaFunction
 
             int cancelled;
             if (context is DbContext db && db.Database.IsRelational())
-                cancelled = await pending.ExecuteUpdateAsync(
-                    s =>
-                        s.SetProperty(m => m.TrainState, TrainState.Cancelled)
-                            .SetProperty(m => m.EndTime, now),
-                    CancellationToken.None
-                );
+                cancelled = await pending
+                    .ExecuteUpdateAsync(
+                        s =>
+                            s.SetProperty(m => m.TrainState, TrainState.Cancelled)
+                                .SetProperty(m => m.EndTime, now),
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
             else
             {
-                var runs = await pending.ToListAsync(CancellationToken.None);
+                var runs = await pending.ToListAsync(CancellationToken.None).ConfigureAwait(false);
                 foreach (var run in runs)
                 {
                     run.TrainState = TrainState.Cancelled;
                     run.EndTime = now;
                 }
-                await context.SaveChanges(CancellationToken.None);
+                await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 cancelled = runs.Count;
             }
 
             // Committed, and only by this write: its train never ran, so nothing else publishes
             // the outcome.
             if (cancelled > 0)
-                await OutOfTrainOutcomes.PublishCancelledAsync(services, [metadataId], logger);
+                await OutOfTrainOutcomes
+                    .PublishCancelledAsync(services, [metadataId], logger)
+                    .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -603,7 +622,7 @@ public abstract class TraxLambdaFunction
 
         try
         {
-            return await handler.RunTrainAsync(request, ct);
+            return await handler.RunTrainAsync(request, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

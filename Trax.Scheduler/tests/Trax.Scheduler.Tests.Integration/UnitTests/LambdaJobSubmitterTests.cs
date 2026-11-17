@@ -17,7 +17,11 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class LambdaJobSubmitterTests
 {
-    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     #region Helpers
 
@@ -278,7 +282,7 @@ public class LambdaJobSubmitterTests
         cts.Cancel();
 
         // Act & Assert
-        var act = async () => await submitter.EnqueueAsync(1, cts.Token);
+        var act = async () => await submitter.EnqueueAsync(1, cts.Token).ConfigureAwait(false);
         act.Should().ThrowAsync<OperationCanceledException>();
     }
 
@@ -294,7 +298,7 @@ public class LambdaJobSubmitterTests
         client.FunctionError = "Unhandled";
 
         // Act & Assert
-        var act = async () => await submitter.EnqueueAsync(42);
+        var act = async () => await submitter.EnqueueAsync(42).ConfigureAwait(false);
         await act.Should()
             .ThrowAsync<TrainException>()
             .WithMessage("*my-lambda-function*Unhandled*");
@@ -308,7 +312,7 @@ public class LambdaJobSubmitterTests
         client.ThrowOnInvoke = true;
 
         // Act & Assert
-        var act = async () => await submitter.EnqueueAsync(42);
+        var act = async () => await submitter.EnqueueAsync(42).ConfigureAwait(false);
         act.Should().ThrowAsync<AmazonLambdaException>();
     }
 
@@ -321,7 +325,7 @@ public class LambdaJobSubmitterTests
     {
         // Arrange
         var (submitter, _) = CreateSubmitter();
-        var jobIds = new HashSet<string>();
+        var jobIds = new HashSet<string>(StringComparer.Ordinal);
 
         // Act
         for (var i = 0; i < 10; i++)
@@ -375,7 +379,7 @@ public class LambdaJobSubmitterTests
 
     #region MockLambdaClient
 
-    internal class MockLambdaClient : IAmazonLambda
+    internal sealed class MockLambdaClient : IAmazonLambda
     {
         public InvokeRequest? LastRequest { get; private set; }
         public List<InvokeRequest> AllRequests { get; } = [];

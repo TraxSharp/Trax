@@ -54,7 +54,10 @@ public partial class SchedulerConfigurationBuilder
         var group = resolved._groupId ?? resolved._prunePrefix ?? firstId;
         var ownsGroup =
             resolved._groupId is null
-            || (resolved._batchName is not null && resolved._groupId == resolved._batchName);
+            || (
+                resolved._batchName is not null
+                && string.Equals(resolved._groupId, resolved._batchName, StringComparison.Ordinal)
+            );
 
         AddGroupDeclaration(group, declaredBy, resolved, ownsGroup);
 
@@ -105,7 +108,7 @@ public partial class SchedulerConfigurationBuilder
     /// </remarks>
     private void ValidateSeedDeclarations()
     {
-        foreach (var group in _groupDeclarations.GroupBy(d => d.Group))
+        foreach (var group in _groupDeclarations.GroupBy(d => d.Group, StringComparer.Ordinal))
         {
             var members = group.ToList();
             RequireAgreement(
@@ -140,7 +143,10 @@ public partial class SchedulerConfigurationBuilder
                 continue;
 
             // A group-scoped prune never reaches outside its group.
-            if (shorter.ScopedToGroup && shorter.Group != longer.Group)
+            if (
+                shorter.ScopedToGroup
+                && !string.Equals(shorter.Group, longer.Group, StringComparison.Ordinal)
+            )
                 continue;
 
             throw new InvalidOperationException(
@@ -165,7 +171,10 @@ public partial class SchedulerConfigurationBuilder
                 continue;
 
             // A group-scoped prune never reaches outside its group.
-            if (prune.ScopedToGroup && prune.Group != single.Group)
+            if (
+                prune.ScopedToGroup
+                && !string.Equals(prune.Group, single.Group, StringComparison.Ordinal)
+            )
                 continue;
 
             throw new InvalidOperationException(

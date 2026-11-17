@@ -34,7 +34,7 @@ internal sealed class FaultingLauncher(IInvokedTrainLauncher inner) : IInvokedTr
         CancellationToken cancellationToken = default
     )
     {
-        await inner.Launch(launch, context, cancellationToken);
+        await inner.Launch(launch, context, cancellationToken).ConfigureAwait(false);
 
         if (Armed && launch.FromOutcome)
             throw new InvalidOperationException("The host died before the outcome committed.");

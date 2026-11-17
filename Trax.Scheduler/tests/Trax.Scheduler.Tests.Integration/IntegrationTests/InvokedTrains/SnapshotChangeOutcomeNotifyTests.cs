@@ -83,7 +83,13 @@ public class SnapshotChangeOutcomeNotifyTests
         (await SystemRow(instance.Id)).State.Should().Be("Done", "the run's own host applied it");
 
         (await listener.Drain())
-            .Where(p => p == started.RowId.ToString())
+            .Where(p =>
+                string.Equals(
+                    p,
+                    started.RowId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    StringComparison.Ordinal
+                )
+            )
             .Should()
             .ContainSingle(
                 $"the hook's outcome is one committed write, and it sends one notice. See {Adr}"
@@ -107,7 +113,13 @@ public class SnapshotChangeOutcomeNotifyTests
             .BeOfType<InvokeDelivery.Moved>("the worker ran the train and no hook delivered it");
 
         (await listener.Drain())
-            .Where(p => p == started.RowId.ToString())
+            .Where(p =>
+                string.Equals(
+                    p,
+                    started.RowId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    StringComparison.Ordinal
+                )
+            )
             .Should()
             .ContainSingle(
                 $"the reconciler's outcome is one committed write, and it sends one notice. See {Adr}"
@@ -115,5 +127,5 @@ public class SnapshotChangeOutcomeNotifyTests
     }
 
     private async Task<SnapshotDraft> SystemRow(Guid id) =>
-        (await _api.Row(id, SystemStepMachine.MachineId))!;
+        (await _api.Row(id, SystemStepMachine.MachineId).ConfigureAwait(false))!;
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -52,17 +53,18 @@ public class MaxRetriesBoundaryTests : TestSetup
             .Should()
             .Be(
                 deadLettered ? 1 : 0,
-                $"MaxRetries({maxRetries}) allows {maxRetries + 1} attempts and {failures} failed. See "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"MaxRetries({maxRetries}) allows {maxRetries + 1} attempts and {failures} failed. See "
+                )
                     + "docs/adr/0014-a-manifests-retries-count-recent-failures-and-a-cancelled-run-consumes-its-occurrence.md"
             );
     }
 
     private async Task<Manifest> CreateManifest(int maxRetries)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -75,8 +77,8 @@ public class MaxRetriesBoundaryTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -94,8 +96,8 @@ public class MaxRetriesBoundaryTests : TestSetup
         );
         run.TrainState = TrainState.Failed;
         run.StartTime = startTime;
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
@@ -63,8 +64,8 @@ public class OperationsServiceRequeueTests : TestSetup
             }
         );
         run.Input = input;
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return run.Id;
     }
@@ -86,7 +87,7 @@ public class OperationsServiceRequeueTests : TestSetup
                 DecidedAt = DateTime.UtcNow,
             }
         );
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -207,8 +208,10 @@ public class OperationsServiceRequeueTests : TestSetup
         result
             .Message.Should()
             .Be(
-                $"Train Some.Retired.ITrain is no longer registered, so execution {source} "
-                    + "cannot be re-queued."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Train Some.Retired.ITrain is no longer registered, so execution {source} "
+                ) + "cannot be re-queued."
             );
         DataContext.WorkQueues.AsNoTracking().Should().BeEmpty();
     }
@@ -226,8 +229,10 @@ public class OperationsServiceRequeueTests : TestSetup
         result
             .Message.Should()
             .StartWith(
-                $"The saved input of run {source} no longer reads as "
-                    + $"{typeof(SchedulerTestInput).FullName}: "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The saved input of run {source} no longer reads as "
+                ) + $"{typeof(SchedulerTestInput).FullName}: "
             )
             .And.NotContain("InputJson");
         DataContext.WorkQueues.AsNoTracking().Should().BeEmpty();
@@ -240,7 +245,8 @@ public class OperationsServiceRequeueTests : TestSetup
         // exception it does not curate; the message is for the host's log.
         IOperationsService predates = new PredatesRequeue();
 
-        var act = async () => await predates.RequeueExecutionAsync(1, CancellationToken.None);
+        var act = async () =>
+            await predates.RequeueExecutionAsync(1, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<NotSupportedException>()
@@ -391,7 +397,10 @@ public class OperationsServiceRequeueTests : TestSetup
         var result = await _operations.RequeueExecutionAsync(source, CancellationToken.None);
 
         result.Success.Should().BeFalse();
-        result.Message.Should().StartWith($"Execution {source}").And.Contain(reason);
+        result
+            .Message.Should()
+            .StartWith(string.Create(CultureInfo.InvariantCulture, $"Execution {source}"))
+            .And.Contain(reason);
         DataContext.WorkQueues.AsNoTracking().Should().BeEmpty();
     }
 
@@ -415,7 +424,10 @@ public class OperationsServiceRequeueTests : TestSetup
         var logger = new CapturingLogger();
         var service = ServiceOver(new PredatesReplay(Execution), logger);
 
-        var act = async () => await service.RequeueExecutionAsync(source, CancellationToken.None);
+        var act = async () =>
+            await service
+                .RequeueExecutionAsync(source, CancellationToken.None)
+                .ConfigureAwait(false);
 
         var thrown = await act.Should()
             .ThrowAsync<DecisionReplayNotSupportedException>(

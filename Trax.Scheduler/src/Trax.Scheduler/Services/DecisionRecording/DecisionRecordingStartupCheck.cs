@@ -74,7 +74,7 @@ internal sealed class DecisionRecordingStartupCheck(
         if (discoveryService is null || isService.IsService(typeof(IDecisionReplay)))
             return;
 
-        var deciding = await TrainsThatDecideAsync(cancellationToken);
+        var deciding = await TrainsThatDecideAsync(cancellationToken).ConfigureAwait(false);
 
         if (deciding.Count == 0)
             return;
@@ -109,19 +109,27 @@ internal sealed class DecisionRecordingStartupCheck(
     {
         // Async, as the mediator's check does: a train's scoped dependency may implement only
         // IAsyncDisposable.
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var deciding = new List<string>();
-
-        foreach (var registration in discoveryService?.DiscoverTrains() ?? [])
+        var scope = scopeFactory.CreateAsyncScope();
+        // Async, as the mediator's check does: a train's scoped dependency may implement only
+        // IAsyncDisposable.
+        await using (scope.ConfigureAwait(false))
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            var deciding = new List<string>();
 
-            if (DeclaredChain(scope.ServiceProvider, registration) is { } chain && Decides(chain))
-                deciding.Add(registration.ServiceType.FullName ?? registration.ServiceTypeName);
+            foreach (var registration in discoveryService?.DiscoverTrains() ?? [])
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (
+                    DeclaredChain(scope.ServiceProvider, registration) is { } chain
+                    && Decides(chain)
+                )
+                    deciding.Add(registration.ServiceType.FullName ?? registration.ServiceTypeName);
+            }
+
+            deciding.Sort(StringComparer.Ordinal);
+            return deciding;
         }
-
-        deciding.Sort(StringComparer.Ordinal);
-        return deciding;
     }
 
     private static ChainRecorder? DeclaredChain(
@@ -136,7 +144,7 @@ internal sealed class DecisionRecordingStartupCheck(
             return train
                     .GetType()
                     .GetMethod(nameof(Core.Train.Train<,>.DeclaredChain), Type.EmptyTypes)
-                    ?.Invoke(train, null) as ChainRecorder;
+                    ?.Invoke(train, parameters: null) as ChainRecorder;
         }
         catch (Exception)
         {

@@ -29,10 +29,12 @@ public class ChangeSignalEmissionPostgresTests
         RecordingChangeSignal recording,
         Action<Trax.Scheduler.Configuration.SchedulerConfigurationBuilder> configureScheduler
     ) =>
-        await SchedulerE2EFixture.CreateAsync(
-            configureScheduler,
-            services => services.AddSingleton<ITraxChangeSignal>(recording)
-        );
+        await SchedulerE2EFixture
+            .CreateAsync(
+                configureScheduler,
+                services => services.AddSingleton<ITraxChangeSignal>(recording)
+            )
+            .ConfigureAwait(false);
 
     private static async Task<DeadLetter> SeedDeadLetterAsync(
         SchedulerE2EFixture fx,
@@ -41,7 +43,8 @@ public class ChangeSignalEmissionPostgresTests
     {
         var manifest = await fx
             .DataContext.Manifests.Include(m => m.ManifestGroup)
-            .FirstAsync(m => m.ExternalId == externalId);
+            .FirstAsync(m => m.ExternalId == externalId)
+            .ConfigureAwait(false);
         var dl = DeadLetter.Create(
             new CreateDeadLetter
             {
@@ -50,8 +53,8 @@ public class ChangeSignalEmissionPostgresTests
                 RetryCount = 3,
             }
         );
-        await fx.DataContext.Track(dl);
-        await fx.DataContext.SaveChanges(default);
+        await fx.DataContext.Track(dl).ConfigureAwait(false);
+        await fx.DataContext.SaveChanges(default).ConfigureAwait(false);
         fx.DataContext.Reset();
         return dl;
     }
@@ -230,7 +233,9 @@ public class ChangeSignalEmissionPostgresTests
         TrainState state
     )
     {
-        var manifest = await fx.DataContext.Manifests.FirstAsync(m => m.ExternalId == externalId);
+        var manifest = await fx
+            .DataContext.Manifests.FirstAsync(m => m.ExternalId == externalId)
+            .ConfigureAwait(false);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
@@ -241,8 +246,8 @@ public class ChangeSignalEmissionPostgresTests
             }
         );
         metadata.TrainState = state;
-        await fx.DataContext.Track(metadata);
-        await fx.DataContext.SaveChanges(default);
+        await fx.DataContext.Track(metadata).ConfigureAwait(false);
+        await fx.DataContext.SaveChanges(default).ConfigureAwait(false);
         fx.DataContext.Reset();
         return manifest;
     }

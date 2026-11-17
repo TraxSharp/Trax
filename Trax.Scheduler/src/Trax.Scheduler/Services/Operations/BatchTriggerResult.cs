@@ -45,7 +45,7 @@ public record BatchTriggerResult(
 {
     /// <summary>The result for a batch refused as given: nothing triggered.</summary>
     internal static BatchTriggerResult Refused(string message) =>
-        new(false, 0, 0, 0, 0, 0, message, []);
+        new(Success: false, 0, 0, 0, 0, 0, message, []);
 }
 
 /// <summary>One id in a batch, and what happened to it that the caller should know.</summary>

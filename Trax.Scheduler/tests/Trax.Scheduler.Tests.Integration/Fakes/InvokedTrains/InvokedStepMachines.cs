@@ -132,7 +132,7 @@ public abstract class StepMachine : Machine<StepState, StepTrigger>
             State = state,
             Context = (JsonObject)context.DeepClone(),
         };
-        if (!await store.Upsert(user, id, snapshot))
+        if (!await store.Upsert(user, id, snapshot).ConfigureAwait(false))
             throw new InvalidOperationException($"Could not seed draft {id} for {user}.");
     }
 

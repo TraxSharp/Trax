@@ -47,7 +47,7 @@ public class ChangeSignalEmissionTests
                     Every.Minutes(5)
                 )
         );
-        await fx.MaterializePendingManifestsAsync();
+        await fx.MaterializePendingManifestsAsync().ConfigureAwait(false);
         recording.Clear();
         return fx;
     }
@@ -59,7 +59,8 @@ public class ChangeSignalEmissionTests
     {
         var manifest = await fx
             .DataContext.Manifests.Include(m => m.ManifestGroup)
-            .FirstAsync(m => m.ExternalId == externalId);
+            .FirstAsync(m => m.ExternalId == externalId)
+            .ConfigureAwait(false);
         var dl = DeadLetter.Create(
             new CreateDeadLetter
             {
@@ -68,8 +69,8 @@ public class ChangeSignalEmissionTests
                 RetryCount = 3,
             }
         );
-        await fx.DataContext.Track(dl);
-        await fx.DataContext.SaveChanges(default);
+        await fx.DataContext.Track(dl).ConfigureAwait(false);
+        await fx.DataContext.SaveChanges(default).ConfigureAwait(false);
         fx.DataContext.Reset();
         return dl;
     }

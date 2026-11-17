@@ -19,7 +19,11 @@ internal static class HttpRetryHelper
         HttpStatusCode.ServiceUnavailable,
     ];
 
-    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     private static readonly MediaTypeHeaderValue JsonContentType = new("application/json")
     {
@@ -84,7 +88,7 @@ internal static class HttpRetryHelper
                 signed?.Invoke(signature);
             }
 
-            response = await client.SendAsync(message, completion, ct);
+            response = await client.SendAsync(message, completion, ct).ConfigureAwait(false);
 
             if (!TransientStatusCodes.Contains(response.StatusCode))
                 return response;
@@ -102,7 +106,7 @@ internal static class HttpRetryHelper
                 maxRetries
             );
 
-            await Task.Delay(delay, ct);
+            await Task.Delay(delay, ct).ConfigureAwait(false);
         }
 
         return response!;

@@ -31,8 +31,8 @@ public class OperationsServiceManifestGroupTests : TestSetup
         var m = Manifest.Create(new CreateManifest { Name = typeof(ISchedulerTestTrain) });
         m.ManifestGroupId = groupId;
         m.DependsOnManifestId = dependsOn;
-        await DataContext.Track(m);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(m).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return m;
     }

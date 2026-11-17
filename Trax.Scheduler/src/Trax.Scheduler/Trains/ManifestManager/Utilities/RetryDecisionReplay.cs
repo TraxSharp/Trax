@@ -71,7 +71,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
 
         try
         {
-            return await LookUpAsync(replaying, ct);
+            return await LookUpAsync(replaying, ct).ConfigureAwait(false);
         }
         catch (Exception e) when (!ct.IsCancellationRequested)
         {
@@ -88,7 +88,10 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
 
     /// <summary>The run <paramref name="manifest"/>'s retry replays, or null when it asks afresh.</summary>
     public async Task<long?> SourceForRetryAsync(Manifest manifest, CancellationToken ct) =>
-        (await SourcesForRetriesAsync([manifest], ct)).TryGetValue(manifest.Id, out var source)
+        (await SourcesForRetriesAsync([manifest], ct).ConfigureAwait(false)).TryGetValue(
+            manifest.Id,
+            out var source
+        )
             ? source
             : null;
 
@@ -97,7 +100,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
         CancellationToken ct
     )
     {
-        using var context = await contextFactory.CreateDbContextAsync(ct);
+        using var context = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         var manifestIds = manifests.Select(m => m.Id).ToList();
 
@@ -122,7 +125,8 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                     .Select(md => (long?)md.Id)
                     .FirstOrDefault(),
             })
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         var latestIds = latestByManifest
             .Where(l => l.Latest is not null)
@@ -145,7 +149,8 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                 m.ReplayAbandoned,
                 m.StartTime,
             })
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         var runIds = runs.Select(r => r.Id).ToList();
 
@@ -163,6 +168,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                     q.DispatchedAt,
                 })
                 .ToListAsync(ct)
+                .ConfigureAwait(false)
         ).GroupBy(q => q.MetadataId).ToDictionary(g => g.Key, g => g.First());
 
         // Runs whose answers something already replays, in any state: a run queued, running or
@@ -180,6 +186,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                 .Select(r => r.ReplayDecisionsOf!.Value)
                 .Distinct()
                 .ToListAsync(ct)
+                .ConfigureAwait(false)
         ).ToHashSet();
         alreadyReplayed.UnionWith(
             await context
@@ -192,6 +199,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                 .Select(q => q.ReplayDecisionsOf!.Value)
                 .Distinct()
                 .ToListAsync(ct)
+                .ConfigureAwait(false)
         );
 
         // A dependent is fired by its parent's success. Once the parent has succeeded again since
@@ -207,7 +215,8 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                 : await context
                     .Manifests.AsNoTracking()
                     .Where(m => parentIds.Contains(m.Id))
-                    .ToDictionaryAsync(m => m.Id, m => m.LastSuccessfulRun, ct);
+                    .ToDictionaryAsync(m => m.Id, m => m.LastSuccessfulRun, ct)
+                    .ConfigureAwait(false);
 
         // A decision the run acted on: a refused answer is never replayed, so it does not count.
         var decided = (
@@ -217,6 +226,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                 .Select(d => d.MetadataId)
                 .Distinct()
                 .ToListAsync(ct)
+                .ConfigureAwait(false)
         ).ToHashSet();
 
         var runById = runs.ToDictionary(r => r.Id);
@@ -234,7 +244,8 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
             entries.TryGetValue(runId, out var entry);
 
             string? why =
-                run.Name != manifest.Name ? "it is not a run of this manifest's train"
+                !string.Equals(run.Name, manifest.Name, StringComparison.Ordinal)
+                    ? "it is not a run of this manifest's train"
                 : !run.DecisionsRecorded ? "it did not record its decisions"
                 // A run that abandoned its replay asked its deciders itself, so its answers are
                 // its own and may be replayed once, like any run's.

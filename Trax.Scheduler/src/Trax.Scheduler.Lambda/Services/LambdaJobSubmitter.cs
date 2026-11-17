@@ -23,7 +23,7 @@ namespace Trax.Scheduler.Lambda.Services;
 ///
 /// No public endpoint is created — access is governed by IAM policies.
 /// </remarks>
-internal class LambdaJobSubmitter(
+internal sealed class LambdaJobSubmitter(
     IAmazonLambda lambdaClient,
     LambdaWorkerOptions options,
     ILogger<LambdaJobSubmitter> logger
@@ -41,7 +41,7 @@ internal class LambdaJobSubmitter(
     public async Task<string> EnqueueAsync(long metadataId, CancellationToken cancellationToken)
     {
         var request = new RemoteJobRequest(metadataId);
-        await InvokeAsync(request, cancellationToken);
+        await InvokeAsync(request, cancellationToken).ConfigureAwait(false);
         return $"lambda-{Guid.NewGuid():N}";
     }
 
@@ -59,7 +59,7 @@ internal class LambdaJobSubmitter(
         );
 
         var request = new RemoteJobRequest(metadataId, inputJson, input.GetType().FullName);
-        await InvokeAsync(request, cancellationToken);
+        await InvokeAsync(request, cancellationToken).ConfigureAwait(false);
         return $"lambda-{Guid.NewGuid():N}";
     }
 
@@ -90,13 +90,15 @@ internal class LambdaJobSubmitter(
             request.MetadataId
         );
 
-        var response = await LambdaRetryHelper.InvokeWithRetryAsync(
-            lambdaClient,
-            invokeRequest,
-            options.Retry,
-            logger,
-            cancellationToken
-        );
+        var response = await LambdaRetryHelper
+            .InvokeWithRetryAsync(
+                lambdaClient,
+                invokeRequest,
+                options.Retry,
+                logger,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
         if (!string.IsNullOrEmpty(response.FunctionError))
         {

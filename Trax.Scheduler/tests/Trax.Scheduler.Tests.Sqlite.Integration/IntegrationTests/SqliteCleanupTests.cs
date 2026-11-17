@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -59,7 +60,10 @@ public class SqliteCleanupTests : TestSetup
                 {
                     Name = typeof(ISchedulerTestTrain).FullName!,
                     ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = new SchedulerTestInput { Value = $"item-{i}" },
+                    Input = new SchedulerTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"item-{i}"),
+                    },
                 }
             );
             m.TrainState = i < 3 ? TrainState.Completed : TrainState.Failed;
@@ -134,7 +138,10 @@ public class SqliteCleanupTests : TestSetup
                 {
                     Name = typeof(ISchedulerTestTrain).FullName!,
                     ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = new SchedulerTestInput { Value = $"batch-{i}" },
+                    Input = new SchedulerTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"batch-{i}"),
+                    },
                 }
             );
             await DataContext.Track(m);
@@ -319,8 +326,8 @@ public class SqliteCleanupTests : TestSetup
         metadata.StartTime = DateTime.UtcNow.AddHours(-2);
         metadata.EndTime = DateTime.UtcNow.AddHours(-2).AddSeconds(1);
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;

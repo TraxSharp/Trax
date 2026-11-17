@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
@@ -23,7 +24,7 @@ namespace Trax.Scheduler.Trains.JobRunner.Junctions;
 /// The Manifest is eagerly loaded so that UpdateManifestSuccessJunction can persist
 /// LastSuccessfulRun via SaveChanges.
 /// </remarks>
-internal class LoadMetadataJunction(
+internal sealed class LoadMetadataJunction(
     IDataContext dataContext,
     ITrainDiscoveryService trainDiscovery,
     IServiceProvider services,
@@ -40,14 +41,23 @@ internal class LoadMetadataJunction(
         // Always load with Manifest included (tracked so UpdateManifestSuccessJunction works)
         var metadata = await dataContext
             .Metadatas.Include(x => x.Manifest)
-            .FirstOrDefaultAsync(x => x.Id == input.MetadataId, CancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == input.MetadataId, CancellationToken)
+            .ConfigureAwait(false);
 
         if (metadata is null)
-            throw new TrainException($"Metadata with ID {input.MetadataId} not found");
+            throw new TrainException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Metadata with ID {input.MetadataId} not found"
+                )
+            );
 
         if (input.Input is null)
             throw new TrainException(
-                $"Train input is required for Metadata ID {input.MetadataId}. All executions must provide input via the work queue dispatch pipeline."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Train input is required for Metadata ID {input.MetadataId}. All executions must provide input via the work queue dispatch pipeline."
+                )
             );
 
         // The scheduler starts its own trains in its own process; a job never carries one.
@@ -59,15 +69,17 @@ internal class LoadMetadataJunction(
         var registration =
             FindNamedTrain(metadata.Name, input.Input)
             ?? throw new TrainException(
-                $"Metadata ID {input.MetadataId} belongs to train '{metadata.Name}', which is not "
-                    + "a registered train taking the input given."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Metadata ID {input.MetadataId} belongs to train '{metadata.Name}', which is not "
+                ) + "a registered train taking the input given."
             );
 
         if (AdminTrains.Includes(registration))
             throw SchedulerTrain(input.MetadataId, registration.ServiceType.FullName!);
 
         if (metadata is { TrainState: TrainState.Pending, CancellationRequested: true })
-            await RecordCancelledBeforeStartAsync(metadata);
+            await RecordCancelledBeforeStartAsync(metadata).ConfigureAwait(false);
 
         logger.LogDebug(
             "Loaded metadata for train {TrainName} (MetadataId: {MetadataId})",
@@ -99,24 +111,28 @@ internal class LoadMetadataJunction(
         );
 
         var cancelled = dataContext.SupportsSetUpdates()
-            ? await flagged.ExecuteUpdateAsync(
-                s =>
-                    s.SetProperty(m => m.TrainState, TrainState.Cancelled)
-                        .SetProperty(m => m.EndTime, endTime),
-                CancellationToken.None
-            )
-            : await dataContext.UpdateEachAsync(
-                flagged,
-                m =>
-                {
-                    m.TrainState = TrainState.Cancelled;
-                    m.EndTime = endTime;
-                },
-                CancellationToken.None
-            );
+            ? await flagged
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(m => m.TrainState, TrainState.Cancelled)
+                            .SetProperty(m => m.EndTime, endTime),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false)
+            : await dataContext
+                .UpdateEachAsync(
+                    flagged,
+                    m =>
+                    {
+                        m.TrainState = TrainState.Cancelled;
+                        m.EndTime = endTime;
+                    },
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         if (dataContext is DbContext db)
-            await db.Entry(metadata).ReloadAsync(CancellationToken.None);
+            await db.Entry(metadata).ReloadAsync(CancellationToken.None).ConfigureAwait(false);
 
         if (cancelled == 0)
             return;
@@ -130,13 +146,17 @@ internal class LoadMetadataJunction(
 
         // Its train never runs, so nothing else publishes the outcome. Only the delivery whose
         // write matched publishes it, so a second delivery of the same job does not.
-        await OutOfTrainOutcomes.PublishCancelledAsync(services, [metadata.Id], logger);
+        await OutOfTrainOutcomes
+            .PublishCancelledAsync(services, [metadata.Id], logger)
+            .ConfigureAwait(false);
     }
 
     private static TrainException SchedulerTrain(long metadataId, string trainName) =>
         new(
-            $"Metadata ID {metadataId} names '{trainName}', one of the scheduler's own trains, "
-                + "which a runner does not run."
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Metadata ID {metadataId} names '{trainName}', one of the scheduler's own trains, "
+            ) + "which a runner does not run."
         );
 
     /// <summary>
@@ -156,8 +176,10 @@ internal class LoadMetadataJunction(
             return canonical.InputType.IsInstanceOfType(input) ? canonical : null;
 
         var named = trains
-            .Where(t => Matches(name, t.ServiceType) || Matches(name, t.ImplementationType))
-            .Where(t => t.InputType.IsInstanceOfType(input))
+            .Where(t =>
+                (Matches(name, t.ServiceType) || Matches(name, t.ImplementationType))
+                && t.InputType.IsInstanceOfType(input)
+            )
             .ToList();
 
         return named.Count == 1 ? named[0] : null;

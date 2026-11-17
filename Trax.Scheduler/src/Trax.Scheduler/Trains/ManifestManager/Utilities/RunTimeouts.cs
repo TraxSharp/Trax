@@ -70,7 +70,8 @@ internal static class RunTimeouts
                     m.Manifest != null ? m.Manifest.TimeoutSeconds : null
                 ))
                 .AsNoTracking()
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
 
             foreach (var ancestor in ancestors)
                 known.TryAdd(ancestor.Id, ancestor);
@@ -98,12 +99,14 @@ internal static class RunTimeouts
                     )
                     .Select(q => q.MetadataId!.Value)
                     .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false)
             );
             dispatchedRootIds.UnionWith(
                 await dataContext
                     .BackgroundJobs.Where(j => unmanifestedRootIds.Contains(j.MetadataId))
                     .Select(j => j.MetadataId)
                     .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false)
             );
         }
 
@@ -157,5 +160,6 @@ internal static class RunTimeouts
     }
 
     private static bool IsExcluded(SchedulerConfiguration config, string name) =>
-        config.ExcludedTrainTypeNames.Contains(name) || AdminTrains.FullNames.Contains(name);
+        config.ExcludedTrainTypeNames.Contains(name)
+        || AdminTrains.FullNames.Contains(name, StringComparer.Ordinal);
 }

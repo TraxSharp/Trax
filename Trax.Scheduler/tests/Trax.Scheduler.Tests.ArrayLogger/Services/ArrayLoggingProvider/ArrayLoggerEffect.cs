@@ -12,14 +12,14 @@ namespace Trax.Scheduler.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 /// <param name="categoryName">The logger category, copied onto every captured entry.</param>
 public class ArrayLoggerEffect(string categoryName) : ILogger, IDisposable
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private bool _disposed = false;
 
     /// <summary>
     /// Every entry captured so far, oldest first. Writes are locked, but the list itself is not
     /// thread-safe: read it once the code under test has stopped logging. Emptied on dispose.
     /// </summary>
-    public List<Log> Logs { get; } = [];
+    public IList<Log> Logs { get; } = [];
 
     /// <summary>
     /// Formats the entry and appends it to <see cref="Logs"/> with its level, message, category,
@@ -107,7 +107,8 @@ public class ArrayLoggerEffect(string categoryName) : ILogger, IDisposable
                 // Keep only the most recent logs
                 var logsToKeep = Logs.Skip(Logs.Count - maxLogs).ToList();
                 Logs.Clear();
-                Logs.AddRange(logsToKeep);
+                foreach (var log in logsToKeep)
+                    Logs.Add(log);
             }
         }
     }

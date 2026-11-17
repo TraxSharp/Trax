@@ -20,8 +20,8 @@ public class RegisteredInputTypesTests
 
     private sealed class Registry : ITrainRegistry
     {
-        public Dictionary<Type, Type> InputTypeToTrain { get; set; } =
-            new() { [typeof(RegisteredInput)] = typeof(object) };
+        public IReadOnlyDictionary<Type, Type> InputTypeToTrain { get; set; } =
+            new Dictionary<Type, Type> { [typeof(RegisteredInput)] = typeof(object) };
     }
 
     private static readonly Registry TheRegistry = new();

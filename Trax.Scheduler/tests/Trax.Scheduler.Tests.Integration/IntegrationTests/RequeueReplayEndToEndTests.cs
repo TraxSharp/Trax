@@ -180,12 +180,13 @@ public class RequeueReplayEndToEndTests
                         $$"""{"Value":"{{value}}"}"""
                     ),
                     CancellationToken.None
-                );
+                )
+                .ConfigureAwait(false);
             queued.Success.Should().BeTrue(queued.Message);
             entryId = queued.Id!.Value;
         }
 
-        var run = await DispatchAsync(entryId);
+        var run = await DispatchAsync(entryId).ConfigureAwait(false);
         run.TrainState.Should().Be(TrainState.Completed, run.FailureReason);
         return run.Id;
     }
@@ -199,25 +200,35 @@ public class RequeueReplayEndToEndTests
         {
             var requeued = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
-                .RequeueExecutionAsync(metadataId, CancellationToken.None);
+                .RequeueExecutionAsync(metadataId, CancellationToken.None)
+                .ConfigureAwait(false);
             requeued.Success.Should().BeTrue(requeued.Message);
             entryId = requeued.Id!.Value;
         }
 
-        return await DispatchAsync(entryId);
+        return await DispatchAsync(entryId).ConfigureAwait(false);
     }
 
     private async Task<Metadata> DispatchAsync(long entryId)
     {
         using (var scope = _provider.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
+            await scope
+                .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
+                .Run(Unit.Default, CancellationToken.None)
+                .ConfigureAwait(false);
 
         using var read = _provider.CreateScope();
         var data = read.ServiceProvider.GetRequiredService<IDataContext>();
-        var entry = await data.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == entryId);
+        var entry = await data
+            .WorkQueues.AsNoTracking()
+            .SingleAsync(q => q.Id == entryId, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
         entry.Status.Should().Be(WorkQueueStatus.Dispatched);
 
-        return await data.Metadatas.AsNoTracking().SingleAsync(m => m.Id == entry.MetadataId);
+        return await data
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == entry.MetadataId, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private async Task<List<Effect.Models.RecordedDecision.RecordedDecision>> DecisionsOf(
@@ -231,6 +242,7 @@ public class RequeueReplayEndToEndTests
             .RecordedDecisions.AsNoTracking()
             .Where(d => d.MetadataId == metadataId)
             .OrderBy(d => d.Id)
-            .ToListAsync();
+            .ToListAsync(cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
     }
 }

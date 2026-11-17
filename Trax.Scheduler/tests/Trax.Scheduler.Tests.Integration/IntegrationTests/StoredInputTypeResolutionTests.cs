@@ -53,7 +53,7 @@ public class StoredInputTypeResolutionTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         NotATrainInput.ResetCount();
     }
 
@@ -147,7 +147,10 @@ public class StoredInputTypeResolutionTests : TestSetup
         drained.Should().BeTrue("the worker deletes a job it could not run");
         NotATrainInput.Constructed.Should().Be(0);
         DataContext.Reset();
-        var after = await DataContext.Metadatas.FirstAsync(m => m.Id == metadata.Id);
+        var after = await DataContext.Metadatas.FirstAsync(
+            m => m.Id == metadata.Id,
+            cancellationToken: CancellationToken.None
+        );
         after
             .TrainState.Should()
             .Be(TrainState.Failed, "the job is gone, so the worker fails the run it never started");
@@ -164,8 +167,8 @@ public class StoredInputTypeResolutionTests : TestSetup
                 InputTypeName = inputTypeName,
             }
         );
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return entry;
     }
@@ -174,7 +177,7 @@ public class StoredInputTypeResolutionTests : TestSetup
     {
         using var scope = Scope.ServiceProvider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default).ConfigureAwait(false);
     }
 
     private async Task<bool> WaitForJobAbsent(long jobId, TimeSpan timeout)
@@ -184,17 +187,16 @@ public class StoredInputTypeResolutionTests : TestSetup
         {
             DataContext.Reset();
             if (
-                await DataContext.BackgroundJobs.FirstOrDefaultAsync(
-                    j => j.Id == jobId,
-                    CancellationToken.None
-                )
+                await DataContext
+                    .BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId, CancellationToken.None)
+                    .ConfigureAwait(false)
                 is null
             )
                 return true;
             try
             {
                 // allowed-delay: the pause between polls of the completion condition
-                await Task.Delay(50, cts.Token);
+                await Task.Delay(50, cts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

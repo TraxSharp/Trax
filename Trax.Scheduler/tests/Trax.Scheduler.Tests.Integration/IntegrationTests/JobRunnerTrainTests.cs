@@ -34,7 +34,8 @@ public class JobRunnerTrainTests : TestSetup
         var nonExistentMetadataId = 999999;
 
         // Act
-        var act = async () => await JobRunner.Run(new RunJobRequest(nonExistentMetadataId));
+        var act = async () =>
+            await JobRunner.Run(new RunJobRequest(nonExistentMetadataId)).ConfigureAwait(false);
 
         // Assert
         await act.Should().ThrowAsync<TrainException>().WithMessage("*not found*");
@@ -67,7 +68,8 @@ public class JobRunnerTrainTests : TestSetup
         DataContext.Reset();
 
         // Act - Should succeed (RunScheduledTrainJunction skips the manifest update when there is none)
-        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
+        var act = async () =>
+            await JobRunner.Run(new RunJobRequest(metadata.Id, input)).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -135,7 +137,10 @@ public class JobRunnerTrainTests : TestSetup
         // leaves LastSuccessfulRun stale and a Once manifest enabled to run again.
         runner.IsCancellationRequested.Should().BeTrue("the scheduled train cancelled it");
         DataContext.Reset();
-        var updated = await DataContext.Manifests.SingleAsync(x => x.Id == manifest.Id);
+        var updated = await DataContext.Manifests.SingleAsync(
+            x => x.Id == manifest.Id,
+            cancellationToken: CancellationToken.None
+        );
         updated
             .LastSuccessfulRun.Should()
             .NotBeNull(
@@ -233,7 +238,8 @@ public class JobRunnerTrainTests : TestSetup
         var otherInput = new FailingSchedulerTestInput { FailureMessage = "should not run" };
 
         // Act
-        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, otherInput));
+        var act = async () =>
+            await JobRunner.Run(new RunJobRequest(metadata.Id, otherInput)).ConfigureAwait(false);
 
         // Assert
         await act.Should().ThrowAsync<TrainException>().WithMessage("*belongs to train*");
@@ -269,9 +275,9 @@ public class JobRunnerTrainTests : TestSetup
         DataContext.Reset();
 
         var act = async () =>
-            await JobRunner.Run(
-                new RunJobRequest(metadata.Id, manifest.GetProperties<SchedulerTestInput>())
-            );
+            await JobRunner
+                .Run(new RunJobRequest(metadata.Id, manifest.GetProperties<SchedulerTestInput>()))
+                .ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -287,12 +293,14 @@ public class JobRunnerTrainTests : TestSetup
         );
 
         var act = async () =>
-            await JobRunner.Run(
-                new RunJobRequest(
-                    metadata.Id,
-                    new FailingSchedulerTestInput { FailureMessage = "should not run" }
+            await JobRunner
+                .Run(
+                    new RunJobRequest(
+                        metadata.Id,
+                        new FailingSchedulerTestInput { FailureMessage = "should not run" }
+                    )
                 )
-            );
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<TrainException>()
@@ -329,10 +337,8 @@ public class JobRunnerTrainTests : TestSetup
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -346,8 +352,8 @@ public class JobRunnerTrainTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -371,8 +377,8 @@ public class JobRunnerTrainTests : TestSetup
 
         metadata.TrainState = state;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;

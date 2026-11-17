@@ -380,7 +380,7 @@ public interface IOperationsService
     /// </remarks>
     /// <param name="externalId">The manifest's external id.</param>
     /// <param name="delay">
-    /// How long from now the run becomes due; <c>null</c> (or zero or less) means now. An existing
+    /// How long from now the run becomes due; <see langword="null"/> (or zero or less) means now. An existing
     /// entry due sooner keeps its own time.
     /// </param>
     /// <param name="askAfresh">True asks a released retry's deciders afresh.</param>
@@ -553,7 +553,7 @@ public interface IOperationsService
     /// <see cref="CountLogsAsync"/>'s exact count, never capped.</para>
     /// </remarks>
     async Task<LogCount> CountLogsCappedAsync(LogQuery query, CancellationToken ct) =>
-        new(await CountLogsAsync(query, ct), Capped: false);
+        new(await CountLogsAsync(query, ct).ConfigureAwait(false), Capped: false);
 
     /// <summary>
     /// A page of the decisions a run recorded in <c>trax.decision</c> (written when the host calls
@@ -581,7 +581,7 @@ public interface IOperationsService
     ) => throw NotImplementedBy(nameof(GetRecordedDecisionsAsync));
 
     /// <summary>
-    /// One work queue entry as an operator reads it, or <c>null</c> when no entry has the id. Its
+    /// One work queue entry as an operator reads it, or <see langword="null"/> when no entry has the id. Its
     /// train input is masked by <see cref="TransportInputRedaction.Redact"/>: each
     /// <c>[TraxSensitive]</c> member reads <c>{"_redacted": true}</c>, and an input this host cannot
     /// read as its type is masked whole. For a queued entry with a subject it also names what the
@@ -623,7 +623,7 @@ public interface IOperationsService
     ) => throw NotImplementedBy(nameof(CountMachineInstancesAsync));
 
     /// <summary>
-    /// One state-machine instance as an operator reads it, or <c>null</c> when no row matches
+    /// One state-machine instance as an operator reads it, or <see langword="null"/> when no row matches
     /// <paramref name="key"/>. The owner kind is part of every lookup, so a system instance and a
     /// user's draft under the same id are never confused; a user's draft is named by its row id
     /// as well, because several users can hold one id.
@@ -654,7 +654,7 @@ public interface IOperationsService
     /// <summary>
     /// The train runs one state-machine instance invoked, newest first and capped at
     /// <c>OperationsService.MachineInstanceRunCap</c>, with the run its state waits on marked
-    /// live; or <c>null</c> when no row matches <paramref name="key"/>. Each run carries the
+    /// live; or <see langword="null"/> when no row matches <paramref name="key"/>. Each run carries the
     /// fields the run listings show, never its input or output. A system instance lists every run
     /// it invoked; a user's draft lists only its live run, because a run does not record which
     /// user's draft queued it (see <see cref="MachineInstanceRuns"/>). The dashboard's instance
@@ -673,7 +673,7 @@ public interface IOperationsService
     /// <summary>
     /// One page of a state-machine instance's history, newest first: one transition for every snapshot write
     /// Trax recorded (its creation, each command, save, timer and run outcome), with who made it, the states it moved
-    /// between, when, and the run or child machine it started; or <c>null</c> when no row matches
+    /// between, when, and the run or child machine it started; or <see langword="null"/> when no row matches
     /// <paramref name="key"/>. Never the instance's context or its owner's key. The history is the row's
     /// (<see cref="MachineInstanceKey.RowId"/>), so a user's draft shows only its own. The dashboard's instance page
     /// and the API's <c>machineInstance { transitions }</c> both read it here.
@@ -863,7 +863,7 @@ public interface IOperationsService
     /// parent → dependent.
     /// </summary>
     /// <returns>
-    /// <c>null</c> if the group does not exist; otherwise a graph that always includes the focal
+    /// <see langword="null"/> if the group does not exist; otherwise a graph that always includes the focal
     /// group as a node. A group with no manifests, or with no cross-group dependencies, returns a
     /// graph holding only the focal group and no edges.
     /// </returns>

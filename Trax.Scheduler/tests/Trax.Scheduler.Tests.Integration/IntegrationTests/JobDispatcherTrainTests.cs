@@ -37,7 +37,7 @@ public class JobDispatcherTrainTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
     }
 
@@ -74,7 +74,7 @@ public class JobDispatcherTrainTests : TestSetup
         // Arrange - No queued entries
 
         // Act & Assert
-        var act = async () => await _train.Run(Unit.Default);
+        var act = async () => await _train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -267,7 +267,8 @@ public class JobDispatcherTrainTests : TestSetup
         run.FailureException.Should().Be("TrainException");
         run.FailureReason.Should().Be("The run's input could not be read.");
         run.FailureReason.Should().NotContain(nameof(SchedulerTestInput));
-        run.FailureReason.Should().NotContain(entry.Id.ToString());
+        run.FailureReason.Should()
+            .NotContain(entry.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Test]
@@ -666,10 +667,8 @@ public class JobDispatcherTrainTests : TestSetup
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -683,8 +682,8 @@ public class JobDispatcherTrainTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -710,8 +709,8 @@ public class JobDispatcherTrainTests : TestSetup
             }
         );
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return entry;
@@ -741,8 +740,8 @@ public class JobDispatcherTrainTests : TestSetup
             }
         );
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return entry;
@@ -762,8 +761,8 @@ public class JobDispatcherTrainTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;

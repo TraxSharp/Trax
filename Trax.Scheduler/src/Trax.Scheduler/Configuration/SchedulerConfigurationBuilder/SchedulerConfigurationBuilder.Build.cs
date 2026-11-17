@@ -288,7 +288,7 @@ public partial class SchedulerConfigurationBuilder
         {
             if (remoteTrains.Count > 0)
                 throw new InvalidOperationException(
-                    $"{string.Join(", ", remoteTrains.Order().Select(n => $"'{n}'"))} "
+                    $"{string.Join(", ", remoteTrains.Order(StringComparer.Ordinal).Select(n => $"'{n}'"))} "
                         + $"{(remoteTrains.Count == 1 ? "is" : "are")} marked [TraxRemote], but "
                         + "this scheduler has no remote submitter to send "
                         + $"{(remoteTrains.Count == 1 ? "it" : "them")} to, so "
@@ -330,7 +330,7 @@ public partial class SchedulerConfigurationBuilder
             return;
 
         // Derive group-level edges from manifest-level edges
-        var groupNodes = new HashSet<string>(_externalIdToGroupId.Values);
+        var groupNodes = new HashSet<string>(_externalIdToGroupId.Values, StringComparer.Ordinal);
         var groupEdges = _dependencyEdges
             .Select(e =>
             {
@@ -338,7 +338,11 @@ public partial class SchedulerConfigurationBuilder
                 _externalIdToGroupId.TryGetValue(e.ChildExternalId, out var toGroup);
                 return (From: fromGroup, To: toGroup);
             })
-            .Where(e => e.From is not null && e.To is not null && e.From != e.To)
+            .Where(e =>
+                e.From is not null
+                && e.To is not null
+                && !string.Equals(e.From, e.To, StringComparison.Ordinal)
+            )
             .Select(e => (e.From!, e.To!))
             .Distinct()
             .ToList();
@@ -350,7 +354,7 @@ public partial class SchedulerConfigurationBuilder
 
         if (!result.IsAcyclic)
         {
-            var cycleGroups = string.Join(", ", result.CycleMembers.Order());
+            var cycleGroups = string.Join(", ", result.CycleMembers.Order(StringComparer.Ordinal));
             throw new InvalidOperationException(
                 $"Circular dependency detected among manifest groups: [{cycleGroups}]. "
                     + "Manifest groups must form a directed acyclic graph (DAG)."
@@ -390,7 +394,7 @@ public partial class SchedulerConfigurationBuilder
         if (_routedSubmitterRegistrations.Count <= 1)
             return;
 
-        var seen = new Dictionary<string, string>();
+        var seen = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var registration in _routedSubmitterRegistrations)
         {
             var submitterName = registration.Description ?? registration.SubmitterType.Name;

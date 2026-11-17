@@ -26,7 +26,7 @@ public class SchedulingHelpersExtraTests
         return m;
     }
 
-    private class SomeTrain { }
+    private static class SomeTrain;
 
     [Test]
     public void ShouldRunNow_OnDemandSchedule_ReturnsFalse()
@@ -205,7 +205,10 @@ public class SchedulingHelpersExtraTests
     [Test]
     public void IsTimeForCron_NeverRun_ReturnsTrue()
     {
-        SchedulingHelpers.IsTimeForCron(null, "* * * * *", DateTime.UtcNow).Should().BeTrue();
+        SchedulingHelpers
+            .IsTimeForCron(lastSuccessfulRun: null, "* * * * *", DateTime.UtcNow)
+            .Should()
+            .BeTrue();
     }
 
     [Test]
@@ -233,7 +236,10 @@ public class SchedulingHelpersExtraTests
     [Test]
     public void IsTimeForInterval_NeverRun_ReturnsTrue()
     {
-        SchedulingHelpers.IsTimeForInterval(null, 60, DateTime.UtcNow).Should().BeTrue();
+        SchedulingHelpers
+            .IsTimeForInterval(lastSuccessfulRun: null, 60, DateTime.UtcNow)
+            .Should()
+            .BeTrue();
     }
 
     [Test]

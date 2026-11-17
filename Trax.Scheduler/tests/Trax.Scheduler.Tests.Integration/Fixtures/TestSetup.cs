@@ -89,20 +89,21 @@ public abstract class TestSetup
     public static async Task CleanupDatabase(IDataContext dataContext)
     {
         // Delete in FK-safe order (children before parents)
-        await dataContext.BackgroundJobs.ExecuteDeleteAsync();
-        await dataContext.Logs.ExecuteDeleteAsync();
-        await dataContext.WorkQueues.ExecuteDeleteAsync();
-        await dataContext.DeadLetters.ExecuteDeleteAsync();
-        await dataContext.Metadatas.ExecuteDeleteAsync();
+        await dataContext.BackgroundJobs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.Logs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.WorkQueues.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.DeadLetters.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.Metadatas.ExecuteDeleteAsync().ConfigureAwait(false);
 
         // Clear self-referencing FK before deleting manifests
         await dataContext
             .Manifests.Where(m => m.DependsOnManifestId != null)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null));
-        await dataContext.Manifests.ExecuteDeleteAsync();
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null))
+            .ConfigureAwait(false);
+        await dataContext.Manifests.ExecuteDeleteAsync().ConfigureAwait(false);
 
         // Delete manifest groups after manifests (FK dependency)
-        await dataContext.ManifestGroups.ExecuteDeleteAsync();
+        await dataContext.ManifestGroups.ExecuteDeleteAsync().ConfigureAwait(false);
 
         dataContext.Reset();
     }
@@ -127,8 +128,8 @@ public abstract class TestSetup
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
-        await dataContext.Track(group);
-        await dataContext.SaveChanges(CancellationToken.None);
+        await dataContext.Track(group).ConfigureAwait(false);
+        await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         dataContext.Reset();
         return group;
     }

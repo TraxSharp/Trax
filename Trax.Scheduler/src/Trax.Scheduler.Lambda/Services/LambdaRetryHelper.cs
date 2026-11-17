@@ -45,7 +45,7 @@ internal static class LambdaRetryHelper
         {
             try
             {
-                return await client.InvokeAsync(request, ct);
+                return await client.InvokeAsync(request, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (IsTransient(ex))
             {
@@ -64,7 +64,7 @@ internal static class LambdaRetryHelper
                     maxRetries
                 );
 
-                await Task.Delay(delay, ct);
+                await Task.Delay(delay, ct).ConfigureAwait(false);
             }
         }
 

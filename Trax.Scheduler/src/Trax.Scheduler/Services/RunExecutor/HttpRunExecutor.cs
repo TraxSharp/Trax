@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
@@ -24,7 +25,7 @@ namespace Trax.Scheduler.Services.RunExecutor;
 /// Retries transient HTTP failures (429, 502, 503) with exponential backoff.
 /// Configure retry behavior via <see cref="RemoteRunOptions.Retry"/>.
 /// </remarks>
-internal class HttpRunExecutor(
+internal sealed class HttpRunExecutor(
     HttpClient httpClient,
     RemoteRunOptions options,
     ILogger<HttpRunExecutor> logger
@@ -74,17 +75,19 @@ internal class HttpRunExecutor(
         var request = new RemoteRunRequest(trainName, inputJson, input.GetType().FullName!);
 
         string? requestSignature = null;
-        using var httpResponse = await HttpRetryHelper.PostWithRetryAsync(
-            httpClient,
-            request,
-            options.Retry,
-            logger,
-            ct,
-            options.SigningKey,
-            RunnerRequestPurpose.Run,
-            signature => requestSignature = signature,
-            HttpCompletionOption.ResponseHeadersRead
-        );
+        using var httpResponse = await HttpRetryHelper
+            .PostWithRetryAsync(
+                httpClient,
+                request,
+                options.Retry,
+                logger,
+                ct,
+                options.SigningKey,
+                RunnerRequestPurpose.Run,
+                signature => requestSignature = signature,
+                HttpCompletionOption.ResponseHeadersRead
+            )
+            .ConfigureAwait(false);
 
         if (!httpResponse.IsSuccessStatusCode)
         {
@@ -94,24 +97,27 @@ internal class HttpRunExecutor(
             // error filter answers "The train failed." (central docs/0028); Message reaches the
             // caller's log, and the failure recorded for a train that made this run from a
             // junction, which operators read.
-            var body = await ReadErrorBodyAsync(httpResponse, ct);
+            var body = await ReadErrorBodyAsync(httpResponse, ct).ConfigureAwait(false);
             throw new RemoteRunException(
-                $"Remote run endpoint returned HTTP {(int)httpResponse.StatusCode}: {body}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Remote run endpoint returned HTTP {(int)httpResponse.StatusCode}: {body}"
+                )
             );
         }
 
         // Read up to the limit before anything else looks at it, the signature included, so an
         // answer of any size costs at most MaxResponseBodyBytes.
-        var (responseBody, tooLarge) = await BoundedBody.ReadAsync(
-            httpResponse.Content,
-            options.MaxResponseBodyBytes,
-            httpClient.Timeout,
-            ct
-        );
+        var (responseBody, tooLarge) = await BoundedBody
+            .ReadAsync(httpResponse.Content, options.MaxResponseBodyBytes, httpClient.Timeout, ct)
+            .ConfigureAwait(false);
         if (tooLarge)
             throw new RemoteRunException(
                 "The remote run endpoint's response is larger than "
-                    + $"RemoteRunOptions.MaxResponseBodyBytes ({options.MaxResponseBodyBytes} "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"RemoteRunOptions.MaxResponseBodyBytes ({options.MaxResponseBodyBytes} "
+                    )
                     + "bytes), so it was not read."
             );
 
@@ -176,13 +182,15 @@ internal class HttpRunExecutor(
     {
         try
         {
-            var (bytes, exceeded) = await BoundedBody.ReadAsync(
-                response.Content,
-                MaxErrorBodyLength * 4L,
-                httpClient.Timeout,
-                ct,
-                prefix: true
-            );
+            var (bytes, exceeded) = await BoundedBody
+                .ReadAsync(
+                    response.Content,
+                    MaxErrorBodyLength * 4L,
+                    httpClient.Timeout,
+                    ct,
+                    prefix: true
+                )
+                .ConfigureAwait(false);
             var body = System.Text.Encoding.UTF8.GetString(bytes);
 
             if (string.IsNullOrWhiteSpace(body))

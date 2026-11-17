@@ -47,7 +47,8 @@ internal static class PollingDelay
                 if (remaining <= TimeSpan.Zero)
                     return true;
 
-                await Task.Delay(remaining < Slice ? remaining : Slice, stoppingToken);
+                await Task.Delay(remaining < Slice ? remaining : Slice, stoppingToken)
+                    .ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

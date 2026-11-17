@@ -239,7 +239,7 @@ internal static class SchedulingHelpers
         public static ScheduleAnchor For(Manifest manifest, DateTime? lastCancelledRun) =>
             lastCancelledRun is { } cancelled
             && (manifest.LastSuccessfulRun is null || cancelled > manifest.LastSuccessfulRun)
-                ? new ScheduleAnchor(cancelled, null)
+                ? new ScheduleAnchor(cancelled, NextScheduledRun: null)
                 : new ScheduleAnchor(manifest.LastSuccessfulRun, manifest.NextScheduledRun);
     }
 

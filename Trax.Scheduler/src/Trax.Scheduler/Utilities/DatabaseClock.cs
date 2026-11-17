@@ -33,7 +33,8 @@ internal static class DatabaseClock
     )
     {
         var now = await row.Select(_ => (DateTime?)DateTime.UtcNow)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         return now is { } value ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : DateTime.UtcNow;
     }

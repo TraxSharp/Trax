@@ -239,7 +239,9 @@ public class NoDispatcherRefusalTests
 
     private async Task NothingWasQueued()
     {
-        (await _fx.DataContext.WorkQueues.AsNoTracking().CountAsync()).Should().Be(0, Because);
+        (await _fx.DataContext.WorkQueues.AsNoTracking().CountAsync().ConfigureAwait(false))
+            .Should()
+            .Be(0, Because);
         _signal.Domains.Should().NotContain(ChangeDomain.WorkQueue);
     }
 }

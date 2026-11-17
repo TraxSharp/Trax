@@ -30,7 +30,7 @@ public class ResolveStaleStagedEntriesJunctionTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
         _config.StaleStagedEntryTimeout = TimeSpan.FromMinutes(10);
@@ -100,14 +100,17 @@ public class ResolveStaleStagedEntriesJunctionTests : TestSetup
         );
         entry.CreatedAt = DateTime.UtcNow - age;
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return entry.Id;
     }
 
     private async Task<WorkQueue> Load(long id)
     {
         DataContext.Reset();
-        return await DataContext.WorkQueues.AsNoTracking().FirstAsync(w => w.Id == id);
+        return await DataContext
+            .WorkQueues.AsNoTracking()
+            .FirstAsync(w => w.Id == id)
+            .ConfigureAwait(false);
     }
 }

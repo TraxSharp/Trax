@@ -18,7 +18,7 @@ namespace Trax.Scheduler.Services.RequestHandler;
 /// <summary>
 /// Default implementation of <see cref="ITraxRequestHandler"/>.
 /// </summary>
-internal class TraxRequestHandler(
+internal sealed class TraxRequestHandler(
     IJobRunnerTrain jobRunnerTrain,
     ITrainExecutionService executionService,
     ITrustedExecutionScope trustedScope,
@@ -54,7 +54,7 @@ internal class TraxRequestHandler(
             ? new RunJobRequest(request.MetadataId, deserializedInput)
             : new RunJobRequest(request.MetadataId);
 
-        await jobRunnerTrain.Run(jobRequest, ct);
+        await jobRunnerTrain.Run(jobRequest, ct).ConfigureAwait(false);
 
         return new ExecuteJobResult(request.MetadataId);
     }
@@ -78,7 +78,7 @@ internal class TraxRequestHandler(
         {
             RefuseSchedulerTrain(request.TrainName);
 
-            var result = await RunAsync(request, ct);
+            var result = await RunAsync(request, ct).ConfigureAwait(false);
 
             string? outputJson = null;
             string? outputType = null;
@@ -114,30 +114,37 @@ internal class TraxRequestHandler(
     /// the train queues, runs or prepares is checked as it would be on the scheduler's own host.
     /// An <see cref="ITrainExecutionService"/> that replaces the mediator's cannot be split that
     /// way, so it runs the train with no trusted scope at all, which
-    /// <see cref="WarnIfExecutionServiceReplaced"/> says when the entry point starts.
+    /// <see cref="WarnIfExecutionServiceReplacedAsync"/> says when the entry point starts.
     /// </summary>
     private async Task<RunTrainResult> RunAsync(RemoteRunRequest request, CancellationToken ct)
     {
         if (executionService is not TrainExecutionService mediator)
-            return await executionService.RunAsync(request.TrainName, request.InputJson, ct);
+            return await executionService
+                .RunAsync(request.TrainName, request.InputJson, ct)
+                .ConfigureAwait(false);
 
         PreparedTrain prepared;
         using (trustedScope.BeginTrusted("scheduler.remote-run"))
-            prepared = await mediator.PrepareAsync(request.TrainName, request.InputJson, ct);
+            prepared = await mediator
+                .PrepareAsync(request.TrainName, request.InputJson, ct)
+                .ConfigureAwait(false);
 
-        return await mediator.RunPreparedAsync(prepared, new RunTrainOptions(), ct);
+        return await mediator
+            .RunPreparedAsync(prepared, new RunTrainOptions(), ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
     /// Logs a warning when the host's <see cref="ITrainExecutionService"/> is not the mediator's.
     /// The run path then runs a train with no trusted scope (see <see cref="RunAsync"/>), so every
     /// remote run of a train gated with <c>[TraxAuthorize]</c> is refused. Called once by each
-    /// entry point that serves runs, when it starts.
+    /// entry point that serves runs, when it starts. The entry points start it and do not wait
+    /// for it: they are synchronous, and the check only logs.
     /// </summary>
     /// <param name="services">The runner's root services.</param>
     /// <param name="logger">Where the warning goes.</param>
     /// <param name="entryPoint">The entry point, for the message.</param>
-    internal static void WarnIfExecutionServiceReplaced(
+    internal static async Task WarnIfExecutionServiceReplacedAsync(
         IServiceProvider services,
         ILogger logger,
         string entryPoint
@@ -146,8 +153,9 @@ internal class TraxRequestHandler(
         ITrainExecutionService? executionService;
         try
         {
-            using var scope = services.CreateScope();
-            executionService = scope.ServiceProvider.GetService<ITrainExecutionService>();
+            var scope = services.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
+                executionService = scope.ServiceProvider.GetService<ITrainExecutionService>();
         }
         catch (Exception ex)
         {

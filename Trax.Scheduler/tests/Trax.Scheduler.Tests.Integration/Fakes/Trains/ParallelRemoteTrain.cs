@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Core.Functional;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.EffectJunction;
@@ -67,5 +68,10 @@ public class ParallelRemoteCombine
     : EffectJunction<(ParallelRemoteRefinedLeft, ParallelRemoteRight), string>
 {
     public override Task<string> Run((ParallelRemoteRefinedLeft, ParallelRemoteRight) input) =>
-        Task.FromResult($"left={input.Item1.Score}, right={input.Item2.Score}");
+        Task.FromResult(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"left={input.Item1.Score}, right={input.Item2.Score}"
+            )
+        );
 }

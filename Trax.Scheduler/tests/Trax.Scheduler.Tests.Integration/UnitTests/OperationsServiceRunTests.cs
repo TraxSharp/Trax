@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -161,7 +162,7 @@ public class OperationsServiceRunTests
     {
         using var context = (IDataContext)
             _provider.GetRequiredService<IDataContextProviderFactory>().Create();
-        return await context.Metadatas.AsNoTracking().ToListAsync();
+        return await context.Metadatas.AsNoTracking().ToListAsync().ConfigureAwait(false);
     }
 
     [Test]
@@ -276,7 +277,7 @@ public class OperationsServiceRunTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        var act = async () => await Run(typeof(IProbeTrain), "{}", cts.Token);
+        var act = async () => await Run(typeof(IProbeTrain), "{}", cts.Token).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         _submitter.ReceivedCalls().Should().BeEmpty();
@@ -293,9 +294,9 @@ public class OperationsServiceRunTests
                 var id = call.ArgAt<long>(0);
                 using var context = (IDataContext)
                     _provider.GetRequiredService<IDataContextProviderFactory>().Create();
-                var row = await context.Metadatas.FirstAsync(m => m.Id == id);
+                var row = await context.Metadatas.FirstAsync(m => m.Id == id).ConfigureAwait(false);
                 row.TrainState = TrainState.InProgress;
-                await context.SaveChanges(CancellationToken.None);
+                await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 throw new TimeoutException("the runner did not answer in time");
             });
 
@@ -319,7 +320,7 @@ public class OperationsServiceRunTests
             .EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
             .Returns<Task<string>>(_ => throw failure);
 
-        var act = async () => await Run(typeof(IProbeTrain), "{}");
+        var act = async () => await Run(typeof(IProbeTrain), "{}").ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Should()
@@ -404,7 +405,7 @@ public class OperationsServiceRunTests
             .Returns(_ => throw new UnauthorizedAccessException("Not authorized."));
         Build();
 
-        var act = async () => await Run(typeof(IGuardedTrain), "{not json");
+        var act = async () => await Run(typeof(IGuardedTrain), "{not json").ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<UnauthorizedAccessException>(
@@ -418,7 +419,7 @@ public class OperationsServiceRunTests
     [Test]
     public async Task A_guarded_train_with_no_enforcer_is_a_server_fault_not_a_refusal()
     {
-        var act = async () => await Run(typeof(IGuardedTrain), "{}");
+        var act = async () => await Run(typeof(IGuardedTrain), "{}").ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<TrainAuthorizationNotConfiguredException>())
             .Which.Message.Should()
@@ -502,10 +503,12 @@ public class OperationsServiceRunTests
         );
 
         var act = async () =>
-            await service.RunTrainAsync(
-                new RunTrainInput(typeof(IProbeTrain).FullName!),
-                CancellationToken.None
-            );
+            await service
+                .RunTrainAsync(
+                    new RunTrainInput(typeof(IProbeTrain).FullName!),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -521,7 +524,9 @@ public class OperationsServiceRunTests
         private Task<string> Record(long metadataId)
         {
             Submitted.Add(metadataId);
-            return Task.FromResult($"routed-{metadataId}");
+            return Task.FromResult(
+                string.Create(CultureInfo.InvariantCulture, $"routed-{metadataId}")
+            );
         }
     }
 

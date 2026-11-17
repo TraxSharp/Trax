@@ -21,7 +21,7 @@ public class SqliteDashboardMetricsTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
     }
 
@@ -40,7 +40,7 @@ public class SqliteDashboardMetricsTests : TestSetup
         await Seed("Trax.Tests.ISlow", TrainState.Completed, start, start.AddSeconds(20));
         await Seed("Trax.Tests.IFast", TrainState.Completed, start, start.AddMilliseconds(250));
         await Seed("Trax.Tests.IFast", TrainState.Failed, start, start.AddSeconds(1));
-        await Seed("Trax.Tests.IFast", TrainState.InProgress, start, null);
+        await Seed("Trax.Tests.IFast", TrainState.InProgress, start, end: null);
         // A child run is not a root, so it takes no part in the average durations.
         await Seed(
             "Trax.Tests.IChild",
@@ -111,7 +111,7 @@ public class SqliteDashboardMetricsTests : TestSetup
 
         var series = await _operations.GetMetricSeriesAsync(
             MetricSeriesScope.Train,
-            null,
+            id: null,
             "Trax.Tests.ISeries",
             MetricSeriesRange.Last7Days,
             CancellationToken.None
@@ -147,8 +147,8 @@ public class SqliteDashboardMetricsTests : TestSetup
         meta.StartTime = DateTime.SpecifyKind(start, DateTimeKind.Utc);
         meta.EndTime = end is { } e ? DateTime.SpecifyKind(e, DateTimeKind.Utc) : null;
         meta.ParentId = parentId;
-        await DataContext.Track(meta);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(meta).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return meta;
     }

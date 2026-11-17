@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Scheduler.Tests.Meta.Tests;
 
 /// <summary>
@@ -35,9 +37,11 @@ public class NoOrphanPackageVersionTests
         var referenced = ReferencedPackages();
 
         var orphans = PinnedPackages(props)
-            .Where(p => !referenced.Contains(p))
-            .Where(p => !SanctionedStandalonePins.Contains(p, StringComparer.OrdinalIgnoreCase))
-            .OrderBy(p => p, StringComparer.Ordinal)
+            .Where(p =>
+                !referenced.Contains(p)
+                && !SanctionedStandalonePins.Contains(p, StringComparer.OrdinalIgnoreCase)
+            )
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         orphans
@@ -87,37 +91,47 @@ public class NoOrphanPackageVersionTests
             .Descendants("PackageVersion")
             .Select(e => e.Attribute("Include")?.Value)
             .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Select(v => v!)
+            .Select(v => v.NotNull())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
     /// <summary>
     /// Every package named by a <c>PackageReference</c> anywhere in the repository, every folder
-    /// included, since one root file pins them all. Directory.Build.props counts: it is where a
-    /// folder's shared references live, and a package declared only there is referenced just as
-    /// much as one in a csproj.
+    /// included, since one root file pins them all. A .props file counts: Directory.Build.props is
+    /// where a folder's shared references live, and a props file the projects import (such as
+    /// Trax.Analyzers' Analyzer.props) declares a reference just as much as a csproj does.
     /// </summary>
+    private static readonly string[] Skipped = ["obj", "bin", "node_modules"];
+
     private static HashSet<string> ReferencedPackages()
     {
         var files = Directory
             .EnumerateFiles(MonorepoRoot.Path, "*.csproj", SearchOption.AllDirectories)
             .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-            )
-            .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-            )
-            .Where(f =>
                 !f.Contains(
-                    $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}"
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
                 )
             )
             .Concat(
-                Directory.EnumerateFiles(
-                    MonorepoRoot.Path,
-                    "Directory.Build.props",
-                    SearchOption.AllDirectories
-                )
+                Directory
+                    .EnumerateFiles(MonorepoRoot.Path, "*.props", SearchOption.AllDirectories)
+                    .Where(f =>
+                        !Skipped.Any(part =>
+                            f.Contains(
+                                $"{Path.DirectorySeparatorChar}{part}{Path.DirectorySeparatorChar}",
+                                StringComparison.Ordinal
+                            )
+                        )
+                    )
             );
 
         var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -132,7 +146,7 @@ public class NoOrphanPackageVersionTests
                     .Where(v => !string.IsNullOrWhiteSpace(v))
             )
             {
-                referenced.Add(name!);
+                referenced.Add(name.NotNull());
             }
         }
 

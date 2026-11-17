@@ -172,7 +172,10 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
 
     private async Task RunManifestManager()
     {
-        await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        await Scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default)
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -203,8 +206,8 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
         run.TrainState = state;
         run.StartTime = startTime;
         run.EndTime = endTime ?? startTime.AddSeconds(30);
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -216,10 +219,8 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
         long? dependsOn = null
     )
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -237,18 +238,16 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
         manifest.ManifestGroupId = group.Id;
         manifest.LastSuccessfulRun = lastSuccessfulRun;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
 
     private async Task<Manifest> CreateHourlyManifest(DateTime lastSuccessfulRun)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -264,8 +263,8 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
         manifest.ManifestGroupId = group.Id;
         manifest.LastSuccessfulRun = lastSuccessfulRun;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }

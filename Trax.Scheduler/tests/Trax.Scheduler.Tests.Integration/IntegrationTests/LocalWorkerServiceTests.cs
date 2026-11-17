@@ -137,10 +137,9 @@ public class LocalWorkerServiceTests : TestSetup
         var advanced = await WaitUntilAsync(
             async ct =>
             {
-                var m = await DataContext.Metadatas.FirstOrDefaultAsync(
-                    x => x.Id == metadata.Id,
-                    ct
-                );
+                var m = await DataContext
+                    .Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id, ct)
+                    .ConfigureAwait(false);
                 return m is not null && m.TrainState != TrainState.Pending;
             },
             WorkerCompletionTimeout
@@ -264,7 +263,7 @@ public class LocalWorkerServiceTests : TestSetup
             .Returns(async _ =>
             {
                 started.TrySetResult();
-                await release.Task;
+                await release.Task.ConfigureAwait(false);
                 return Unit.Default;
             });
 
@@ -326,7 +325,7 @@ public class LocalWorkerServiceTests : TestSetup
             .Returns(async _ =>
             {
                 started.TrySetResult();
-                await release.Task;
+                await release.Task.ConfigureAwait(false);
                 return Unit.Default;
             });
 
@@ -488,7 +487,8 @@ public class LocalWorkerServiceTests : TestSetup
 
         await workerService.StartAsync(CancellationToken.None);
         await polls.WhenReached(3).WaitAsync(WorkerCompletionTimeout);
-        var stop = async () => await workerService.StopAsync(CancellationToken.None);
+        var stop = async () =>
+            await workerService.StopAsync(CancellationToken.None).ConfigureAwait(false);
 
         // Assert - it polled the empty queue more than once, without errors, and stops cleanly
         await stop.Should().NotThrowAsync();
@@ -716,25 +716,28 @@ public class LocalWorkerServiceTests : TestSetup
         while (DateTime.UtcNow < deadline)
         {
             DataContext.Reset();
-            if (await predicate(cts.Token))
+            if (await predicate(cts.Token).ConfigureAwait(false))
                 return true;
             // allowed-delay: poll interval while awaiting the completion signal, bounded by the
             // timeout above. Not a fixed wait for the work to finish.
-            await Task.Delay(50, cts.Token);
+            await Task.Delay(50, cts.Token).ConfigureAwait(false);
         }
         return false;
     }
 
     private Task<bool> WaitForJobCount(int expected, TimeSpan timeout) =>
         WaitUntilAsync(
-            async ct => await DataContext.BackgroundJobs.CountAsync(ct) == expected,
+            async ct =>
+                await DataContext.BackgroundJobs.CountAsync(ct).ConfigureAwait(false) == expected,
             timeout
         );
 
     private Task<bool> WaitForJobAbsent(long jobId, TimeSpan timeout) =>
         WaitUntilAsync(
             async ct =>
-                await DataContext.BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId, ct)
+                await DataContext
+                    .BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId, ct)
+                    .ConfigureAwait(false)
                     is null,
             timeout
         );
@@ -1212,8 +1215,8 @@ public class LocalWorkerServiceTests : TestSetup
             }
         );
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -1233,8 +1236,8 @@ public class LocalWorkerServiceTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -1257,8 +1260,8 @@ public class LocalWorkerServiceTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -1276,8 +1279,8 @@ public class LocalWorkerServiceTests : TestSetup
             }
         );
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;

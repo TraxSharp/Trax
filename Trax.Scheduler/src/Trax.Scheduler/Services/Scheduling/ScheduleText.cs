@@ -92,17 +92,27 @@ internal static class ScheduleText
                 return null;
             if (IsAny(second))
                 return "Every second";
-            return Step(second) is { } n ? $"Every {n} seconds" : null;
+            return Step(second) is { } n
+                ? string.Create(CultureInfo.InvariantCulture, $"Every {n} seconds")
+                : null;
         }
 
         if (IsAny(hour) && everyDay)
         {
             if (IsAny(minute))
-                return secondValue == 0 ? "Every minute" : $"Every minute at second {secondValue}";
+                return secondValue == 0
+                    ? "Every minute"
+                    : string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Every minute at second {secondValue}"
+                    );
             if (secondValue == 0 && Step(minute) is { } everyMinutes)
-                return $"Every {everyMinutes} minutes";
+                return string.Create(CultureInfo.InvariantCulture, $"Every {everyMinutes} minutes");
             if (IsNumber(minute, out var atMinute))
-                return $"Every hour at :{atMinute:00}{SecondSuffix(secondValue)}";
+                return string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Every hour at :{atMinute:00}{SecondSuffix(secondValue)}"
+                );
             return null;
         }
 
@@ -110,7 +120,10 @@ internal static class ScheduleText
             return null;
 
         if (Step(hour) is { } everyHours && everyDay)
-            return $"Every {everyHours} hours at :{m:00}{SecondSuffix(secondValue)}";
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"Every {everyHours} hours at :{m:00}{SecondSuffix(secondValue)}"
+            );
 
         var hours = NumberList(hour, 0, 23);
         if (hours is null)
@@ -124,7 +137,7 @@ internal static class ScheduleText
 
         if (IsAny(dayOfMonth) && IsAny(month))
         {
-            if (dayOfWeek == "1-5")
+            if (string.Equals(dayOfWeek, "1-5", StringComparison.Ordinal))
                 return $"Weekdays {at}";
             var days = NumberList(dayOfWeek, 0, 7);
             if (days is null)
@@ -140,7 +153,10 @@ internal static class ScheduleText
             if (IsAny(month))
                 return $"Monthly on the {Ordinal(dom)} {at}";
             if (IsNumber(month, out var mon) && mon is >= 1 and <= 12)
-                return $"Yearly on {CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(mon)} {dom} {at}";
+                return string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Yearly on {CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(mon)} {dom} {at}"
+                );
         }
 
         return null;
@@ -167,16 +183,19 @@ internal static class ScheduleText
 
         if (count == 1)
             return singularWithoutCount ? unit : $"1 {unit}";
-        return $"{count} {unit}s";
+        return string.Create(CultureInfo.InvariantCulture, $"{count} {unit}s");
     }
 
     private static string FormatInstant(DateTime at) =>
         at.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 
     private static string Time(int hour, int minute, int second) =>
-        second == 0 ? $"{hour:00}:{minute:00}" : $"{hour:00}:{minute:00}:{second:00}";
+        second == 0
+            ? string.Create(CultureInfo.InvariantCulture, $"{hour:00}:{minute:00}")
+            : string.Create(CultureInfo.InvariantCulture, $"{hour:00}:{minute:00}:{second:00}");
 
-    private static string SecondSuffix(int second) => second == 0 ? "" : $":{second:00}";
+    private static string SecondSuffix(int second) =>
+        second == 0 ? "" : string.Create(CultureInfo.InvariantCulture, $":{second:00}");
 
     private static bool IsAny(string field) => field is "*" or "?";
 
@@ -212,12 +231,12 @@ internal static class ScheduleText
 
     private static string Ordinal(int n) =>
         (n % 100) is 11 or 12 or 13
-            ? $"{n}th"
+            ? string.Create(CultureInfo.InvariantCulture, $"{n}th")
             : (n % 10) switch
             {
-                1 => $"{n}st",
-                2 => $"{n}nd",
-                3 => $"{n}rd",
-                _ => $"{n}th",
+                1 => string.Create(CultureInfo.InvariantCulture, $"{n}st"),
+                2 => string.Create(CultureInfo.InvariantCulture, $"{n}nd"),
+                3 => string.Create(CultureInfo.InvariantCulture, $"{n}rd"),
+                _ => string.Create(CultureInfo.InvariantCulture, $"{n}th"),
             };
 }

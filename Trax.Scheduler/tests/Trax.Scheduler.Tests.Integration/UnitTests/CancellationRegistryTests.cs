@@ -271,7 +271,7 @@ public class CancellationRegistryTests
         // Act — 100 threads all try to cancel the same entry
         var tasks = Enumerable
             .Range(0, 100)
-            .Select(_ => Task.Run(() => _registry.TryCancel(1)))
+            .Select(_ => Task.Run(() => _registry.TryCancel(1), CancellationToken.None))
             .ToArray();
 
         // Assert
@@ -291,7 +291,7 @@ public class CancellationRegistryTests
             {
                 sources[i] = new CancellationTokenSource();
                 var cts = sources[i];
-                return Task.Run(() => _registry.Register(1, cts));
+                return Task.Run(() => _registry.Register(1, cts), CancellationToken.None);
             })
             .ToArray();
 

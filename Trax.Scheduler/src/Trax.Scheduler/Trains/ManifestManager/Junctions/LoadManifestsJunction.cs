@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -22,7 +23,7 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// The projection pushes aggregation into the database via COUNT/EXISTS subqueries,
 /// keeping the query cost O(manifests) regardless of child table sizes.
 /// </remarks>
-internal class LoadManifestsJunction(IDataContext dataContext, SchedulerConfiguration config)
+internal sealed class LoadManifestsJunction(IDataContext dataContext, SchedulerConfiguration config)
     : EffectJunction<Unit, List<ManifestDispatchView>>
 {
     public override async Task<List<ManifestDispatchView>> Run(Unit input)
@@ -37,7 +38,7 @@ internal class LoadManifestsJunction(IDataContext dataContext, SchedulerConfigur
             .Select(m => new ManifestDispatchView
             {
                 Manifest = m,
-                ManifestGroup = m.ManifestGroup,
+                ManifestGroup = m.ManifestGroup.NotNull(),
                 // Each condition below is one reason a failed run counts; add a new one as
                 // another `&&` term.
                 FailedCount = m.Metadatas.Count(md =>
@@ -118,6 +119,7 @@ internal class LoadManifestsJunction(IDataContext dataContext, SchedulerConfigur
                         : null,
             })
             .AsNoTracking()
-            .ToListAsync(CancellationToken);
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
     }
 }

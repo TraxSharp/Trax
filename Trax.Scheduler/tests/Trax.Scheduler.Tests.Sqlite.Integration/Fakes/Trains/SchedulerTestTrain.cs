@@ -15,7 +15,7 @@ public record SchedulerTestInput : IManifestProperties
     public string Value { get; set; } = string.Empty;
 }
 
-public interface ISchedulerTestTrain : IServiceTrain<SchedulerTestInput, Unit> { }
+public interface ISchedulerTestTrain : IServiceTrain<SchedulerTestInput, Unit>;
 
 public class FailingSchedulerTestTrain
     : ServiceTrain<FailingSchedulerTestInput, Unit>,
@@ -30,7 +30,7 @@ public record FailingSchedulerTestInput : IManifestProperties
     public string FailureMessage { get; set; } = "Test failure";
 }
 
-public interface IFailingSchedulerTestTrain : IServiceTrain<FailingSchedulerTestInput, Unit> { }
+public interface IFailingSchedulerTestTrain : IServiceTrain<FailingSchedulerTestInput, Unit>;
 
 /// <summary>Fails with the message the input carries, so the failure path is exercised.</summary>
 internal sealed class FailWithMessage : Junction<FailingSchedulerTestInput, Unit>

@@ -37,7 +37,7 @@ public class OperationsServiceRecordedDecisionsTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
     }
 
@@ -191,8 +191,8 @@ public class OperationsServiceRecordedDecisionsTests : TestSetup
             }
         );
         metadata.TrainState = TrainState.Completed;
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return metadata;
     }
@@ -224,7 +224,7 @@ public class OperationsServiceRecordedDecisionsTests : TestSetup
                 DecidedAt = DateTime.UtcNow,
             }
         );
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 }

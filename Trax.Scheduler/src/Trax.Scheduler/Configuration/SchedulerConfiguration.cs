@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using Trax.Effect.Enums;
 
 namespace Trax.Scheduler.Configuration;
@@ -247,7 +248,10 @@ public class SchedulerConfiguration
             return null;
 
         return $"FailureCountWindow ({FailureCountWindow}) is too short for DefaultMaxRetries "
-            + $"({retries}): the retry backoff alone spaces a failing manifest's {retries + 1} "
+            + string.Create(
+                CultureInfo.InvariantCulture,
+                $"({retries}): the retry backoff alone spaces a failing manifest's {retries + 1} "
+            )
             + $"runs over {TimeSpan.FromSeconds(Math.Min(backoff, TimeSpan.MaxValue.TotalSeconds - 1))}, "
             + "so its oldest failure leaves the window before the last one, and a manifest that "
             + "always fails retries for ever without being dead-lettered. Lengthen "
@@ -473,7 +477,7 @@ public class SchedulerConfiguration
     /// <summary>
     /// The value <c>AutoPurgeDeadLetters(bool)</c> stated in code, or null when the builder left
     /// the default. A saved setting may turn the purge off but never on over a code
-    /// <c>false</c>: the purge deletes, so it runs only when both allow it.
+    /// <see langword="false"/>: the purge deletes, so it runs only when both allow it.
     /// </summary>
     internal bool? ConfiguredAutoPurgeDeadLetters { get; set; }
 

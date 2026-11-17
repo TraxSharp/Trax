@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
@@ -27,7 +28,10 @@ internal sealed class LogLevelOverrides
     private readonly ConcurrentDictionary<string, LogLevel> _levels = new(
         StringComparer.OrdinalIgnoreCase
     );
-    private CancellationTokenSource _changed = new();
+
+    // A reload token signals its listeners on the calling thread, so the options monitor has
+    // recomputed the filter options by the time Set returns and the caller can read them back.
+    private ConfigurationReloadToken _changed = new();
 
     public string? Name => Options.DefaultName;
 
@@ -39,12 +43,11 @@ internal sealed class LogLevelOverrides
         foreach (var (category, level) in levels)
             _levels[category] = level;
 
-        var previous = Interlocked.Exchange(ref _changed, new CancellationTokenSource());
-        previous.Cancel();
-        previous.Dispose();
+        var previous = Interlocked.Exchange(ref _changed, new ConfigurationReloadToken());
+        previous.OnReload();
     }
 
-    public IChangeToken GetChangeToken() => new CancellationChangeToken(_changed.Token);
+    public IChangeToken GetChangeToken() => _changed;
 
     public void PostConfigure(string? name, LoggerFilterOptions options)
     {
@@ -54,13 +57,15 @@ internal sealed class LogLevelOverrides
             for (var i = options.Rules.Count - 1; i >= 0; i--)
                 if (IsCategoryRule(options.Rules[i], filterCategory))
                     options.Rules.RemoveAt(i);
-            options.Rules.Add(new LoggerFilterRule(null, filterCategory, level, null));
+            options.Rules.Add(
+                new LoggerFilterRule(providerName: null, filterCategory, level, filter: null)
+            );
         }
     }
 
     /// <summary>
     /// The level the host's loggers apply to a category from its provider-independent rule, or
-    /// <c>null</c> when no such rule exists. When several rules match, the last one wins, as in
+    /// <see langword="null"/> when no such rule exists. When several rules match, the last one wins, as in
     /// the logger factory's own selection.
     /// </summary>
     public static LogLevel? EffectiveLevel(LoggerFilterOptions options, string category)

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -102,7 +103,7 @@ public class OperationsServiceInMemoryTests
 
         var result = await _operations.SetManifestsEnabledAsync(
             [on.Id, off.Id],
-            false,
+            enabled: false,
             CancellationToken.None
         );
 
@@ -122,7 +123,7 @@ public class OperationsServiceInMemoryTests
 
         var result = await _operations.SetManifestGroupsEnabledAsync(
             [target.Id],
-            false,
+            enabled: false,
             CancellationToken.None
         );
 
@@ -147,7 +148,7 @@ public class OperationsServiceInMemoryTests
         await SeedGroup("c", enabled: false);
 
         var result = await _operations.SetAllManifestGroupsEnabledAsync(
-            false,
+            enabled: false,
             CancellationToken.None
         );
 
@@ -302,7 +303,7 @@ public class OperationsServiceInMemoryTests
                     new Trax.Effect.Models.Log.DTOs.CreateLog
                     {
                         Level = Microsoft.Extensions.Logging.LogLevel.Information,
-                        Message = $"capped line {i}",
+                        Message = string.Create(CultureInfo.InvariantCulture, $"capped line {i}"),
                         CategoryName = "App.Capped",
                         EventId = 0,
                     }
@@ -361,13 +362,14 @@ public class OperationsServiceInMemoryTests
             .DataContext.Metadatas.AsNoTracking()
             .Where(m => m.CancellationRequested)
             .Select(m => m.Id)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
     private async Task<T> Save<T>(T entity)
         where T : class, Trax.Effect.Models.IModel
     {
-        await _fx.DataContext.Track(entity);
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
+        await _fx.DataContext.Track(entity).ConfigureAwait(false);
+        await _fx.DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _fx.DataContext.Reset();
         _signal.Clear();
         return entity;

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Effect.Enums;
 
 namespace Trax.Scheduler.Services.Scheduling;
@@ -157,7 +158,8 @@ public record Schedule
         if (Interval is null)
             return "* * * * *"; // Default to every minute
 
-        var totalSeconds = (int)Math.Max(1, Math.Round(Interval.Value.TotalSeconds));
+        var totalSeconds = (int)
+            Math.Max(1, Math.Round(Interval.Value.TotalSeconds, MidpointRounding.ToEven));
 
         // Sub-minute intervals: produce 6-field cron with seconds
         if (totalSeconds < 60)
@@ -165,22 +167,37 @@ public record Schedule
             return totalSeconds switch
             {
                 1 => "* * * * * *",
-                <= 30 when 60 % totalSeconds == 0 => $"*/{totalSeconds} * * * * *",
-                _ => $"*/{ClosestDivisorOf60(totalSeconds)} * * * * *",
+                <= 30 when 60 % totalSeconds == 0 => string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"*/{totalSeconds} * * * * *"
+                ),
+                _ => string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"*/{ClosestDivisorOf60(totalSeconds)} * * * * *"
+                ),
             };
         }
 
-        var totalMinutes = (int)Math.Max(1, Math.Round(Interval.Value.TotalMinutes));
+        var totalMinutes = (int)
+            Math.Max(1, Math.Round(Interval.Value.TotalMinutes, MidpointRounding.ToEven));
 
         return totalMinutes switch
         {
             1 => "* * * * *",
-            <= 30 when 60 % totalMinutes == 0 => $"*/{totalMinutes} * * * *",
+            <= 30 when 60 % totalMinutes == 0 => string.Create(
+                CultureInfo.InvariantCulture,
+                $"*/{totalMinutes} * * * *"
+            ),
             60 => "0 * * * *",
-            > 60 when totalMinutes % 60 == 0 && 24 % (totalMinutes / 60) == 0 =>
-                $"0 */{totalMinutes / 60} * * *",
+            > 60 when totalMinutes % 60 == 0 && 24 % (totalMinutes / 60) == 0 => string.Create(
+                CultureInfo.InvariantCulture,
+                $"0 */{totalMinutes / 60} * * *"
+            ),
             // For intervals that don't map cleanly to cron, use the closest divisor of 60
-            _ => $"*/{ClosestDivisorOf60(totalMinutes)} * * * *",
+            _ => string.Create(
+                CultureInfo.InvariantCulture,
+                $"*/{ClosestDivisorOf60(totalMinutes)} * * * *"
+            ),
         };
     }
 

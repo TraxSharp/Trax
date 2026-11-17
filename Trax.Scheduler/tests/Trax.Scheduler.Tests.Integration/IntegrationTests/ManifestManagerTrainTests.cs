@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,7 +38,7 @@ public class ManifestManagerTrainTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
     }
 
@@ -472,7 +473,7 @@ public class ManifestManagerTrainTests : TestSetup
             await CreateAndSaveManifest(
                 scheduleType: ScheduleType.Interval,
                 intervalSeconds: 60,
-                inputValue: $"Limited_{i}"
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Limited_{i}")
             );
 
         var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
@@ -511,7 +512,7 @@ public class ManifestManagerTrainTests : TestSetup
             await CreateAndSaveManifest(
                 scheduleType: ScheduleType.Interval,
                 intervalSeconds: 60,
-                inputValue: $"Unlimited_{i}"
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Unlimited_{i}")
             );
 
         var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
@@ -550,9 +551,15 @@ public class ManifestManagerTrainTests : TestSetup
         var groupB = await TestSetup.CreateAndSaveManifestGroup(DataContext, name: "small-group");
 
         for (var i = 0; i < 100; i++)
-            await CreateAndSaveManifestInGroup(groupA, inputValue: $"Large_{i}");
+            await CreateAndSaveManifestInGroup(
+                groupA,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Large_{i}")
+            );
         for (var i = 0; i < 5; i++)
-            await CreateAndSaveManifestInGroup(groupB, inputValue: $"Small_{i}");
+            await CreateAndSaveManifestInGroup(
+                groupB,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Small_{i}")
+            );
 
         var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
         var originalLimit = config.MaxWorkQueueEntriesPerCycle;
@@ -597,12 +604,15 @@ public class ManifestManagerTrainTests : TestSetup
         {
             var group = await TestSetup.CreateAndSaveManifestGroup(
                 DataContext,
-                name: $"equal-group-{g}"
+                name: string.Create(CultureInfo.InvariantCulture, $"equal-group-{g}")
             );
             groups.Add(group);
 
             for (var i = 0; i < 50; i++)
-                await CreateAndSaveManifestInGroup(group, inputValue: $"G{g}_{i}");
+                await CreateAndSaveManifestInGroup(
+                    group,
+                    inputValue: string.Create(CultureInfo.InvariantCulture, $"G{g}_{i}")
+                );
         }
 
         var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
@@ -652,9 +662,15 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         for (var i = 0; i < 50; i++)
-            await CreateAndSaveManifestInGroup(groupA, inputValue: $"HighPri_{i}");
+            await CreateAndSaveManifestInGroup(
+                groupA,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"HighPri_{i}")
+            );
         for (var i = 0; i < 3; i++)
-            await CreateAndSaveManifestInGroup(groupB, inputValue: $"LowPri_{i}");
+            await CreateAndSaveManifestInGroup(
+                groupB,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"LowPri_{i}")
+            );
 
         var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
         var originalLimit = config.MaxWorkQueueEntriesPerCycle;
@@ -698,7 +714,10 @@ public class ManifestManagerTrainTests : TestSetup
         var group = await TestSetup.CreateAndSaveManifestGroup(DataContext, name: "only-group");
 
         for (var i = 0; i < 50; i++)
-            await CreateAndSaveManifestInGroup(group, inputValue: $"Only_{i}");
+            await CreateAndSaveManifestInGroup(
+                group,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Only_{i}")
+            );
 
         var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
         var originalLimit = config.MaxWorkQueueEntriesPerCycle;
@@ -731,9 +750,15 @@ public class ManifestManagerTrainTests : TestSetup
         var groupB = await TestSetup.CreateAndSaveManifestGroup(DataContext, name: "small-b");
 
         for (var i = 0; i < 5; i++)
-            await CreateAndSaveManifestInGroup(groupA, inputValue: $"SmallA_{i}");
+            await CreateAndSaveManifestInGroup(
+                groupA,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"SmallA_{i}")
+            );
         for (var i = 0; i < 5; i++)
-            await CreateAndSaveManifestInGroup(groupB, inputValue: $"SmallB_{i}");
+            await CreateAndSaveManifestInGroup(
+                groupB,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"SmallB_{i}")
+            );
 
         var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
         var originalLimit = config.MaxWorkQueueEntriesPerCycle;
@@ -868,7 +893,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act & Assert - The train should complete successfully without throwing
-        var act = async () => await _train.Run(Unit.Default);
+        var act = async () => await _train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -883,7 +908,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act & Assert - Should complete without throwing
-        var act = async () => await _train.Run(Unit.Default);
+        var act = async () => await _train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -930,7 +955,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act - Should not throw
-        var act = async () => await _train.Run(Unit.Default);
+        var act = async () => await _train.Run(Unit.Default).ConfigureAwait(false);
 
         // Assert
         await act.Should().NotThrowAsync();
@@ -2320,8 +2345,8 @@ public class ManifestManagerTrainTests : TestSetup
 
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -2339,10 +2364,8 @@ public class ManifestManagerTrainTests : TestSetup
         int? misfireThresholdSeconds = null
     )
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -2362,8 +2385,8 @@ public class ManifestManagerTrainTests : TestSetup
 
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -2379,10 +2402,8 @@ public class ManifestManagerTrainTests : TestSetup
         bool isEnabled = true
     )
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -2399,8 +2420,8 @@ public class ManifestManagerTrainTests : TestSetup
 
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -2427,8 +2448,8 @@ public class ManifestManagerTrainTests : TestSetup
         if (startTime.HasValue)
             metadata.StartTime = startTime.Value;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -2441,7 +2462,9 @@ public class ManifestManagerTrainTests : TestSetup
     )
     {
         // Reload the manifest from the current DataContext to avoid EF tracking issues
-        var reloadedManifest = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+        var reloadedManifest = await DataContext
+            .Manifests.FirstAsync(m => m.Id == manifest.Id)
+            .ConfigureAwait(false);
 
         var deadLetter = DeadLetter.Create(
             new CreateDeadLetter
@@ -2457,8 +2480,8 @@ public class ManifestManagerTrainTests : TestSetup
         if (resolvedAt.HasValue)
             deadLetter.ResolvedAt = resolvedAt.Value;
 
-        await DataContext.Track(deadLetter);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(deadLetter).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return deadLetter;
@@ -2469,10 +2492,8 @@ public class ManifestManagerTrainTests : TestSetup
         string inputValue = "Dependent"
     )
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -2488,8 +2509,8 @@ public class ManifestManagerTrainTests : TestSetup
 
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -2507,8 +2528,8 @@ public class ManifestManagerTrainTests : TestSetup
             }
         );
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return entry;
@@ -2519,10 +2540,8 @@ public class ManifestManagerTrainTests : TestSetup
         string inputValue = "Dormant"
     )
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -2538,8 +2557,8 @@ public class ManifestManagerTrainTests : TestSetup
 
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;

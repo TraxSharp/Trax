@@ -37,10 +37,14 @@ public partial class OperationsService
             return [];
 
         var matches = new List<LookupMatch>();
-        long? number = long.TryParse(term, out var n) && n > 0 ? n : null;
+        long? number =
+            long.TryParse(term, System.Globalization.CultureInfo.InvariantCulture, out var n)
+            && n > 0
+                ? n
+                : null;
         Guid? guid = Guid.TryParse(term, out var g) ? g : null;
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         // Runs.
         if (number is { } runId)
@@ -56,6 +60,7 @@ public partial class OperationsService
                             m.TrainState,
                         })
                         .ToListAsync(ct)
+                        .ConfigureAwait(false)
                 ).Select(m => RunMatch(m.Id, m.Name, m.TrainState, "id"))
             );
         matches.AddRange(
@@ -72,6 +77,7 @@ public partial class OperationsService
                         m.TrainState,
                     })
                     .ToListAsync(ct)
+                    .ConfigureAwait(false)
             ).Select(m => RunMatch(m.Id, m.Name, m.TrainState, "externalId"))
         );
 
@@ -84,6 +90,7 @@ public partial class OperationsService
                         .Where(m => m.Id == manifestId)
                         .Select(m => new { m.Id, m.Name })
                         .ToListAsync(ct)
+                        .ConfigureAwait(false)
                 ).Select(m => ManifestMatch(m.Id, m.Name, "id"))
             );
         matches.AddRange(
@@ -94,6 +101,7 @@ public partial class OperationsService
                     .Take(LookupMatchCap)
                     .Select(m => new { m.Id, m.Name })
                     .ToListAsync(ct)
+                    .ConfigureAwait(false)
             ).Select(m => ManifestMatch(m.Id, m.Name, "externalId"))
         );
         matches.AddRange(
@@ -105,6 +113,7 @@ public partial class OperationsService
                     .Take(LookupMatchCap)
                     .Select(m => new { m.Id, m.Name })
                     .ToListAsync(ct)
+                    .ConfigureAwait(false)
             ).Select(m => ManifestMatch(m.Id, m.Name, "name"))
         );
 
@@ -122,6 +131,7 @@ public partial class OperationsService
                             w.Status,
                         })
                         .ToListAsync(ct)
+                        .ConfigureAwait(false)
                 ).Select(w => EntryMatch(w.Id, w.TrainName, w.Status, "id"))
             );
         matches.AddRange(
@@ -137,12 +147,17 @@ public partial class OperationsService
                         w.Status,
                     })
                     .ToListAsync(ct)
+                    .ConfigureAwait(false)
             ).Select(w => EntryMatch(w.Id, w.TrainName, w.Status, "externalId"))
         );
         // Each status on its own, so each read is the partial index that holds it.
         foreach (var status in new[] { WorkQueueStatus.Queued, WorkQueueStatus.Dispatched })
         {
-            var room = LookupMatchCap - matches.Count(x => x.MatchedOn == "subjectKey");
+            var room =
+                LookupMatchCap
+                - matches.Count(x =>
+                    string.Equals(x.MatchedOn, "subjectKey", StringComparison.Ordinal)
+                );
             if (room <= 0)
                 break;
             matches.AddRange(
@@ -159,6 +174,7 @@ public partial class OperationsService
                             w.Status,
                         })
                         .ToListAsync(ct)
+                        .ConfigureAwait(false)
                 ).Select(w => EntryMatch(w.Id, w.TrainName, w.Status, "subjectKey"))
             );
         }
@@ -177,9 +193,10 @@ public partial class OperationsService
                             d.Status,
                         })
                         .ToListAsync(ct)
+                        .ConfigureAwait(false)
                 ).Select(d => new LookupMatch(
                     LookupKind.DeadLetter,
-                    d.Id.ToString(),
+                    d.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     $"{d.Name} · {d.Status}",
                     "id"
                 ))
@@ -204,6 +221,7 @@ public partial class OperationsService
                             x.RowId,
                         })
                         .ToListAsync(ct)
+                        .ConfigureAwait(false)
                 ).Select(x => new LookupMatch(
                     LookupKind.MachineInstance,
                     x.Id.ToString(),
@@ -238,15 +256,31 @@ public partial class OperationsService
     }
 
     private static LookupMatch RunMatch(long id, string train, TrainState state, string on) =>
-        new(LookupKind.Run, id.ToString(), $"{train} · {state}", on);
+        new(
+            LookupKind.Run,
+            id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            $"{train} · {state}",
+            on
+        );
 
     private static LookupMatch ManifestMatch(long id, string name, string on) =>
-        new(LookupKind.Manifest, id.ToString(), name, on);
+        new(
+            LookupKind.Manifest,
+            id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            name,
+            on
+        );
 
     private static LookupMatch EntryMatch(
         long id,
         string train,
         WorkQueueStatus status,
         string on
-    ) => new(LookupKind.WorkQueueEntry, id.ToString(), $"{train} · {status}", on);
+    ) =>
+        new(
+            LookupKind.WorkQueueEntry,
+            id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            $"{train} · {status}",
+            on
+        );
 }

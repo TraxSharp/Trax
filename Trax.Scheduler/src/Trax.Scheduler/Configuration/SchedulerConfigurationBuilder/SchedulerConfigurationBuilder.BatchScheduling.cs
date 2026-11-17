@@ -72,12 +72,16 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler.ScheduleManyAsync<
-                        TTrain,
-                        TInput,
-                        TOutput,
-                        TSource
-                    >(sourceList, map, schedule, options, configureEach, ct: ct);
+                    var results = await scheduler
+                        .ScheduleManyAsync<TTrain, TInput, TOutput, TSource>(
+                            sourceList,
+                            map,
+                            schedule,
+                            options,
+                            configureEach,
+                            ct: ct
+                        )
+                        .ConfigureAwait(false);
                     return results.FirstOrDefault()!;
                 },
             }
@@ -208,12 +212,16 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler.ScheduleManyDependentAsync<
-                        TTrain,
-                        TInput,
-                        TOutput,
-                        TSource
-                    >(sourceList, map, dependsOn, options, configureEach, ct: ct);
+                    var results = await scheduler
+                        .ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(
+                            sourceList,
+                            map,
+                            dependsOn,
+                            options,
+                            configureEach,
+                            ct: ct
+                        )
+                        .ConfigureAwait(false);
                     return results.FirstOrDefault()!;
                 },
             }
@@ -341,12 +349,16 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler.ScheduleManyDependentAsync<
-                        TTrain,
-                        TInput,
-                        TOutput,
-                        TSource
-                    >(sourceList, map, _ => rootExternalId, options, configureEach, ct: ct);
+                    var results = await scheduler
+                        .ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(
+                            sourceList,
+                            map,
+                            _ => rootExternalId,
+                            options,
+                            configureEach,
+                            ct: ct
+                        )
+                        .ConfigureAwait(false);
                     return results.FirstOrDefault()!;
                 },
             }
@@ -475,12 +487,16 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler.ScheduleManyDependentAsync<
-                        TTrain,
-                        TInput,
-                        TOutput,
-                        TSource
-                    >(sourceList, map, dependsOn, options, configureEach, ct: ct);
+                    var results = await scheduler
+                        .ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(
+                            sourceList,
+                            map,
+                            dependsOn,
+                            options,
+                            configureEach,
+                            ct: ct
+                        )
+                        .ConfigureAwait(false);
                     return results.FirstOrDefault()!;
                 },
             }

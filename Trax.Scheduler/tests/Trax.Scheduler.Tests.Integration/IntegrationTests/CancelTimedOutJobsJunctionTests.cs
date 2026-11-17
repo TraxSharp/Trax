@@ -25,7 +25,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
     }
 
@@ -139,13 +139,13 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.CancellationRequested, true),
+                s => s.SetProperty(m => m.CancellationRequested, valueExpression: true),
                 CancellationToken.None
             );
         DataContext.Reset();
 
         // Act — should complete without errors (idempotent)
-        var act = async () => await _train.Run(Unit.Default);
+        var act = async () => await _train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -157,7 +157,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         await CreateMetadata(manifest, TrainState.Completed);
 
         // Act
-        var act = async () => await _train.Run(Unit.Default);
+        var act = async () => await _train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -192,10 +192,8 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
 
     private async Task<Manifest> CreateManifest(int? timeoutSeconds = null, int maxRetries = 3)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -211,8 +209,8 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -235,8 +233,8 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         );
         metadata.TrainState = state;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         if (startTime.HasValue)
         {
@@ -246,7 +244,8 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
                 .ExecuteUpdateAsync(
                     s => s.SetProperty(m => m.StartTime, startTime.Value),
                     CancellationToken.None
-                );
+                )
+                .ConfigureAwait(false);
         }
 
         DataContext.Reset();

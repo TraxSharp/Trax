@@ -32,7 +32,7 @@ namespace Trax.Scheduler.Services.Operations;
 /// deployment skipped the migration), or no row is present, the configured values remain in effect.
 /// </para>
 /// </remarks>
-internal class SchedulerConfigBootstrapHostedService : IHostedService, IDisposable
+internal sealed class SchedulerConfigBootstrapHostedService : IHostedService, IDisposable
 {
     private readonly IServiceProvider _services;
     private readonly ILogger<SchedulerConfigBootstrapHostedService> _logger;
@@ -86,7 +86,7 @@ internal class SchedulerConfigBootstrapHostedService : IHostedService, IDisposab
 
         try
         {
-            await RefreshAsync(startup: true, cancellationToken);
+            await RefreshAsync(startup: true, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -119,7 +119,7 @@ internal class SchedulerConfigBootstrapHostedService : IHostedService, IDisposab
 
         try
         {
-            await stopping.CancelAsync();
+            await stopping.CancelAsync().ConfigureAwait(false);
         }
         catch (ObjectDisposedException)
         {
@@ -132,7 +132,7 @@ internal class SchedulerConfigBootstrapHostedService : IHostedService, IDisposab
     /// <summary>Cancels the refresh, then releases its cancellation source. Safe to call more than once.</summary>
     public void Dispose()
     {
-        var stopping = Interlocked.Exchange(ref _stopping, null);
+        var stopping = Interlocked.Exchange(ref _stopping, value: null);
         if (stopping is null)
             return;
 
@@ -149,18 +149,20 @@ internal class SchedulerConfigBootstrapHostedService : IHostedService, IDisposab
         await Task.Yield();
 
         while (
-            await PollingDelay.WaitAsync(
-                () =>
-                    configuration.SettingsRefreshInterval > TimeSpan.Zero
-                        ? configuration.SettingsRefreshInterval
-                        : TimeSpan.FromSeconds(5),
-                stoppingToken
-            )
+            await PollingDelay
+                .WaitAsync(
+                    () =>
+                        configuration.SettingsRefreshInterval > TimeSpan.Zero
+                            ? configuration.SettingsRefreshInterval
+                            : TimeSpan.FromSeconds(5),
+                    stoppingToken
+                )
+                .ConfigureAwait(false)
         )
         {
             try
             {
-                await RefreshAsync(startup: false, stoppingToken);
+                await RefreshAsync(startup: false, stoppingToken).ConfigureAwait(false);
                 _refreshFailing = false;
                 Interlocked.Increment(ref _completedRefreshes);
             }
@@ -195,10 +197,11 @@ internal class SchedulerConfigBootstrapHostedService : IHostedService, IDisposab
         );
         _configured ??= SchedulerSettings.Capture(target);
 
-        using var db = await factory.CreateDbContextAsync(cancellationToken);
+        using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var row = await db
             .SchedulerConfigs.AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Id == SchedulerConfigRow.SingletonId, cancellationToken);
+            .FirstOrDefaultAsync(r => r.Id == SchedulerConfigRow.SingletonId, cancellationToken)
+            .ConfigureAwait(false);
 
         if (row is null)
         {
@@ -211,7 +214,7 @@ internal class SchedulerConfigBootstrapHostedService : IHostedService, IDisposab
                 // Only a row that was applied and then deleted returns the settings to the
                 // configured values. With no row ever applied there is nothing to undo, and
                 // resetting here would revert every runtime change on each refresh.
-                Apply(null, target);
+                Apply(row: null, target);
                 _logger.LogInformation(
                     "The persisted scheduler config was removed; the configured settings apply again."
                 );

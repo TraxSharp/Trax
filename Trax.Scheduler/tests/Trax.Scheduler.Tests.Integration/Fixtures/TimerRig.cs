@@ -106,11 +106,13 @@ internal static class TimerSteps
                     State = nameof(ReminderState.Idle),
                     Context = ReminderMachine.Context(),
                 }
-            );
+            )
+            .ConfigureAwait(false);
         if (!created)
             throw new InvalidOperationException("The reminder could not be created.");
         return await Reminders(scope)
-            .Advance(new Actor.Client(user, "Editor"), id, nameof(ReminderTrigger.Open));
+            .Advance(new Actor.Client(user, "Editor"), id, nameof(ReminderTrigger.Open))
+            .ConfigureAwait(false);
     }
 
     public static async Task<AdvanceOutcome> Send(
@@ -122,7 +124,9 @@ internal static class TimerSteps
     )
     {
         using var scope = host.Services.CreateScope();
-        return await Reminders(scope).Advance(user, id, trigger.ToString(), requestId: requestId);
+        return await Reminders(scope)
+            .Advance(user, id, trigger.ToString(), requestId: requestId)
+            .ConfigureAwait(false);
     }
 
     public static async Task<AutosaveResult> Save(
@@ -133,13 +137,13 @@ internal static class TimerSteps
     )
     {
         using var scope = host.Services.CreateScope();
-        return await Reminders(scope).Autosave(user, id, json);
+        return await Reminders(scope).Autosave(user, id, json).ConfigureAwait(false);
     }
 
     public static async Task<LoadResult> Load(this ClusterHost host, string user, Guid id)
     {
         using var scope = host.Services.CreateScope();
-        return await Reminders(scope).Load(user, id);
+        return await Reminders(scope).Load(user, id).ConfigureAwait(false);
     }
 
     /// <summary>Runs the reminder's effect for <paramref name="user"/>'s draft, as a send does.</summary>
@@ -154,7 +158,8 @@ internal static class TimerSteps
         return await scope
             .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
             .EffectRunner(ReminderMachine.MachineId)!
-            .Run(user, id, requestId);
+            .Run(user, id, requestId)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -165,7 +170,8 @@ internal static class TimerSteps
     {
         using var scope = host.Services.CreateScope();
         var discarded = await Reminders(scope)
-            .Discard(new Actor.Client(user), id, "discard-" + Guid.NewGuid().ToString("N"));
+            .Discard(new Actor.Client(user), id, "discard-" + Guid.NewGuid().ToString("N"))
+            .ConfigureAwait(false);
         if (discarded is not DiscardOutcome.Discarded)
             throw new InvalidOperationException(
                 $"The reminder could not be discarded: {discarded}"
@@ -185,7 +191,8 @@ internal static class TimerSteps
         using var scope = host.Services.CreateScope();
         return await scope
             .ServiceProvider.GetRequiredService<IMachineInstances>()
-            .Start<TMachine>(MachineKey.Of("timer", Guid.NewGuid().ToString("N")), context);
+            .Start<TMachine>(MachineKey.Of("timer", Guid.NewGuid().ToString("N")), context)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Every row of <paramref name="machine"/> under <paramref name="id"/>, whoever owns it.</summary>
@@ -200,7 +207,8 @@ internal static class TimerSteps
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
             .Where(d => d.Id == id && d.Machine == machine)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>Moves a row's <c>updated_at</c> back by <paramref name="by"/>, as if it had been idle that long.</summary>
@@ -211,7 +219,8 @@ internal static class TimerSteps
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.Where(d => d.RowId == rowId)
-            .ExecuteUpdateAsync(s => s.SetProperty(d => d.UpdatedAt, at));
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.UpdatedAt, at))
+            .ConfigureAwait(false);
     }
 
     /// <summary>Moves a row's <c>created_at</c> back by <paramref name="by"/>, as if it had been made that long ago.</summary>
@@ -222,7 +231,8 @@ internal static class TimerSteps
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.Where(d => d.RowId == rowId)
-            .ExecuteUpdateAsync(s => s.SetProperty(d => d.CreatedAt, at));
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.CreatedAt, at))
+            .ConfigureAwait(false);
     }
 
     private static ISnapshotDraftService Reminders(IServiceScope scope) =>
@@ -273,39 +283,58 @@ internal sealed class TimerDb(InvokeCluster cluster)
                 ("machine", machine)
             );
 
-    /// <summary>The row's <c>due_at</c>, or <c>null</c> when it has no timer pending.</summary>
+    /// <summary>The row's <c>due_at</c>, or <see langword="null"/> when it has no timer pending.</summary>
     public async Task<DateTimeOffset?> DueAt(long rowId)
     {
-        await using var connection = await Open();
-        await using var command = Command(
-            connection,
-            $"SELECT due_at FROM {Table} WHERE row_id = @row",
-            ("row", rowId)
-        );
-        await using var reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
-            throw new InvalidOperationException($"No row {rowId}.");
-        if (await reader.IsDBNullAsync(0))
-            return null;
-        return Postgres
-            ? reader.GetFieldValue<DateTimeOffset>(0)
-            : DateTimeOffset.Parse(reader.GetString(0), CultureInfo.InvariantCulture);
+        var connection = await Open().ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            var command = Command(
+                connection,
+                $"SELECT due_at FROM {Table} WHERE row_id = @row",
+                ("row", rowId)
+            );
+            await using (command.ConfigureAwait(false))
+            {
+                var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+                await using (reader.ConfigureAwait(false))
+                {
+                    if (!await reader.ReadAsync().ConfigureAwait(false))
+                        throw new InvalidOperationException(
+                            string.Create(CultureInfo.InvariantCulture, $"No row {rowId}.")
+                        );
+                    if (await reader.IsDBNullAsync(0).ConfigureAwait(false))
+                        return null;
+                    return Postgres
+                        ? reader.GetFieldValue<DateTimeOffset>(0)
+                        : DateTimeOffset.Parse(reader.GetString(0), CultureInfo.InvariantCulture);
+                }
+            }
+        }
     }
 
     /// <summary>The row's revision.</summary>
     public async Task<long> Revision(long rowId)
     {
-        await using var connection = await Open();
-        await using var command = Command(
-            connection,
-            $"SELECT revision FROM {Table} WHERE row_id = @row",
-            ("row", rowId)
-        );
-        return Convert.ToInt64(
-            await command.ExecuteScalarAsync()
-                ?? throw new InvalidOperationException($"No row {rowId}."),
-            CultureInfo.InvariantCulture
-        );
+        var connection = await Open().ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            var command = Command(
+                connection,
+                $"SELECT revision FROM {Table} WHERE row_id = @row",
+                ("row", rowId)
+            );
+            await using (command.ConfigureAwait(false))
+            {
+                return Convert.ToInt64(
+                    await command.ExecuteScalarAsync().ConfigureAwait(false)
+                        ?? throw new InvalidOperationException(
+                            string.Create(CultureInfo.InvariantCulture, $"No row {rowId}.")
+                        ),
+                    CultureInfo.InvariantCulture
+                );
+            }
+        }
     }
 
     /// <summary>Now, on the clock <c>due_at</c> is written by.</summary>
@@ -313,15 +342,25 @@ internal sealed class TimerDb(InvokeCluster cluster)
     {
         if (!Postgres)
             return DateTimeOffset.UtcNow;
-        await using var connection = await Open();
-        await using var command = Command(connection, "SELECT now()");
-        // Npgsql reads a timestamptz scalar as a UTC DateTime.
-        return (await command.ExecuteScalarAsync()) switch
+        var connection = await Open().ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
         {
-            DateTimeOffset offset => offset,
-            DateTime time => new DateTimeOffset(DateTime.SpecifyKind(time, DateTimeKind.Utc)),
-            var other => throw new InvalidOperationException($"now() came back as {other}."),
-        };
+            var command = Command(connection, "SELECT now()");
+            await using (command.ConfigureAwait(false))
+            {
+                // Npgsql reads a timestamptz scalar as a UTC DateTime.
+                return (await command.ExecuteScalarAsync().ConfigureAwait(false)) switch
+                {
+                    DateTimeOffset offset => offset,
+                    DateTime time => new DateTimeOffset(
+                        DateTime.SpecifyKind(time, DateTimeKind.Utc)
+                    ),
+                    var other => throw new InvalidOperationException(
+                        $"now() came back as {other}."
+                    ),
+                };
+            }
+        }
     }
 
     /// <summary>Overwrites the row's context, as a host write that does not re-enter the state would.</summary>
@@ -336,9 +375,15 @@ internal sealed class TimerDb(InvokeCluster cluster)
 
     private async Task Execute(string sql, params (string Name, object Value)[] parameters)
     {
-        await using var connection = await Open();
-        await using var command = Command(connection, sql, parameters);
-        await command.ExecuteNonQueryAsync();
+        var connection = await Open().ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            var command = Command(connection, sql, parameters);
+            await using (command.ConfigureAwait(false))
+            {
+                await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     private async Task<DbConnection> Open()
@@ -346,7 +391,7 @@ internal sealed class TimerDb(InvokeCluster cluster)
         DbConnection connection = Postgres
             ? new NpgsqlConnection(cluster.ConnectionString)
             : new SqliteConnection(cluster.ConnectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync().ConfigureAwait(false);
         return connection;
     }
 

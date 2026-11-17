@@ -78,7 +78,9 @@ public class NonEntityFrameworkDataContextTests
         public IEffectProvider Create() => Decorator.Wrap((IDataContext)inner.Create());
 
         public async Task<IDataContext> CreateDbContextAsync(CancellationToken cancellationToken) =>
-            Decorator.Wrap(await inner.CreateDbContextAsync(cancellationToken));
+            Decorator.Wrap(
+                await inner.CreateDbContextAsync(cancellationToken).ConfigureAwait(false)
+            );
     }
 
     /// <summary>Forwards every <see cref="IDataContext"/> member to the context it wraps.</summary>

@@ -57,8 +57,8 @@ public class OperationsServiceMetricsTests : TestSetup
         if (endTime.HasValue)
             meta.EndTime = DateTime.SpecifyKind(endTime.Value, DateTimeKind.Utc);
         meta.ManifestId = manifestId;
-        await DataContext.Track(meta);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(meta).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return meta;
     }
@@ -67,11 +67,12 @@ public class OperationsServiceMetricsTests : TestSetup
     {
         var groupId = (
             await CreateAndSaveManifestGroup(DataContext, name: $"dl-{Guid.NewGuid():N}")
+                .ConfigureAwait(false)
         ).Id;
         var manifest = Manifest.Create(new CreateManifest { Name = typeof(ISchedulerTestTrain) });
         manifest.ManifestGroupId = groupId;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         var dl = DeadLetter.Create(
@@ -83,8 +84,8 @@ public class OperationsServiceMetricsTests : TestSetup
             }
         );
         dl.Status = status;
-        await DataContext.Track(dl);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(dl).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -356,7 +357,9 @@ public class OperationsServiceMetricsTests : TestSetup
         metrics.ThroughputSeries.Should().AllSatisfy(s => s.Buckets.Should().HaveCount(28));
         // Other = D + E = 2
         metrics
-            .ThroughputSeries.Single(s => s.TrainName == "Other")
+            .ThroughputSeries.Single(s =>
+                string.Equals(s.TrainName, "Other", StringComparison.Ordinal)
+            )
             .Buckets.Sum(b => b.Count)
             .Should()
             .Be(2);
@@ -412,7 +415,7 @@ public class OperationsServiceMetricsTests : TestSetup
 
         var series = await _operations.GetMetricSeriesAsync(
             MetricSeriesScope.Train,
-            null,
+            id: null,
             name,
             MetricSeriesRange.Last24Hours,
             CancellationToken.None
@@ -474,14 +477,14 @@ public class OperationsServiceMetricsTests : TestSetup
         var ofManifest = await _operations.GetMetricSeriesAsync(
             MetricSeriesScope.Manifest,
             manifest.Id,
-            null,
+            name: null,
             MetricSeriesRange.Last7Days,
             CancellationToken.None
         );
         var ofGroup = await _operations.GetMetricSeriesAsync(
             MetricSeriesScope.Group,
             group.Id,
-            null,
+            name: null,
             MetricSeriesRange.Last7Days,
             CancellationToken.None
         );
@@ -505,14 +508,14 @@ public class OperationsServiceMetricsTests : TestSetup
             _operations.GetMetricSeriesAsync(
                 MetricSeriesScope.Train,
                 42,
-                null,
+                name: null,
                 MetricSeriesRange.LastHour,
                 CancellationToken.None
             );
         var manifest = () =>
             _operations.GetMetricSeriesAsync(
                 MetricSeriesScope.Manifest,
-                null,
+                id: null,
                 "x",
                 MetricSeriesRange.LastHour,
                 CancellationToken.None
@@ -521,7 +524,7 @@ public class OperationsServiceMetricsTests : TestSetup
         var thirtyDays = () =>
             _operations.GetMetricSeriesAsync(
                 MetricSeriesScope.Train,
-                null,
+                id: null,
                 "x",
                 MetricSeriesRange.Last30Days,
                 CancellationToken.None

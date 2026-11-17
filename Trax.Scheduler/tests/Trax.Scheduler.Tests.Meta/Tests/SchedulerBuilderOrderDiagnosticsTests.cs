@@ -97,7 +97,7 @@ public class SchedulerBuilderOrderDiagnosticsTests
             );
 
     /// <summary>
-    /// A call the compiler refuses can still be made through reflection or <c>dynamic</c>, which
+    /// A call the compiler refuses can still be made through reflection or <see langword="dynamic"/>, which
     /// bind at run time and ignore <c>[Obsolete]</c>. Such a call gets the same instruction as the
     /// compile error, and every public member of the class is one of these refusals.
     /// </summary>

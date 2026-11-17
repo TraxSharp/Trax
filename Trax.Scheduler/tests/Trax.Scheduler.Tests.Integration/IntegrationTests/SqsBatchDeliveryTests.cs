@@ -168,7 +168,7 @@ public class SqsBatchDeliveryTests
             ],
         };
 
-        var act = async () => await handler.HandleAsync(batch);
+        var act = async () => await handler.HandleAsync(batch).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<Exception>("m2 must be delivered again");
         DeliveryProbeTrain.Runs[firstKey].Should().Be(1);
@@ -177,7 +177,10 @@ public class SqsBatchDeliveryTests
 
     private async Task<TrainState> StateOf(long metadataId) =>
         (
-            await _dataContext.Metadatas.AsNoTracking().SingleAsync(m => m.Id == metadataId)
+            await _dataContext
+                .Metadatas.AsNoTracking()
+                .SingleAsync(m => m.Id == metadataId)
+                .ConfigureAwait(false)
         ).TrainState;
 
     private async Task<(long MetadataId, string Key)> PendingRun(bool fail = false)
@@ -192,8 +195,8 @@ public class SqsBatchDeliveryTests
                 Input = null,
             }
         );
-        await _dataContext.Track(metadata);
-        await _dataContext.SaveChanges(CancellationToken.None);
+        await _dataContext.Track(metadata).ConfigureAwait(false);
+        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _dataContext.Reset();
         _probeInputs[key] = new DeliveryProbeInput { Key = key, Fail = fail };
         return (metadata.Id, key);

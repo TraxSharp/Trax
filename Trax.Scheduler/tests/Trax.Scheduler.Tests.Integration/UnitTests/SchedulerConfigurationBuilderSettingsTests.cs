@@ -90,7 +90,7 @@ public class SchedulerConfigurationBuilderSettingsTests
     public void MaxActiveJobs_Null_DisablesLimit()
     {
         // Act
-        var config = ResolveConfiguration(b => b.MaxActiveJobs(null));
+        var config = ResolveConfiguration(b => b.MaxActiveJobs(maxJobs: null));
 
         // Assert
         config.MaxActiveJobs.Should().BeNull();
@@ -172,7 +172,7 @@ public class SchedulerConfigurationBuilderSettingsTests
     public void RecoverStuckJobsOnStartup_False_SetsValue()
     {
         // Act
-        var config = ResolveConfiguration(b => b.RecoverStuckJobsOnStartup(false));
+        var config = ResolveConfiguration(b => b.RecoverStuckJobsOnStartup(recover: false));
 
         // Assert
         config.RecoverStuckJobsOnStartup.Should().BeFalse();
@@ -186,7 +186,7 @@ public class SchedulerConfigurationBuilderSettingsTests
     public void PromoteStaleStagedEntries_False_SetsValue()
     {
         // Act
-        var config = ResolveConfiguration(b => b.PromoteStaleStagedEntries(false));
+        var config = ResolveConfiguration(b => b.PromoteStaleStagedEntries(promote: false));
 
         // Assert
         config
@@ -278,7 +278,7 @@ public class SchedulerConfigurationBuilderSettingsTests
     public void MaxQueuedJobsPerCycle_Null_DisablesLimit()
     {
         // Act
-        var config = ResolveConfiguration(b => b.MaxQueuedJobsPerCycle(null));
+        var config = ResolveConfiguration(b => b.MaxQueuedJobsPerCycle(limit: null));
 
         // Assert
         config.MaxQueuedJobsPerCycle.Should().BeNull();

@@ -21,7 +21,7 @@ public class PollingDelayTests
 
         var waited = await PollingDelay
             .WaitAsync(() => TimeSpan.Zero, cts.Token)
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
 
         waited.Should().BeFalse();
     }
@@ -34,7 +34,7 @@ public class PollingDelayTests
 
         var waited = await PollingDelay
             .WaitAsync(() => TimeSpan.FromSeconds(-1), cts.Token)
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
 
         waited.Should().BeFalse();
     }
@@ -63,7 +63,7 @@ public class PollingDelayTests
 
         var waited = await PollingDelay
             .WaitAsync(() => TimeSpan.FromHours(1), cts.Token)
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
 
         waited.Should().BeFalse();
     }

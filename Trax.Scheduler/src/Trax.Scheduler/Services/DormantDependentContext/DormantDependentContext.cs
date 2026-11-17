@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -24,7 +26,7 @@ namespace Trax.Scheduler.Services.DormantDependentContext;
 /// <c>RunScheduledTrainJunction</c> calls <see cref="Initialize"/>) into the child scope
 /// created by <see cref="Trax.Mediator.Services.TrainBus.TrainBus"/> for the user's train.
 /// </remarks>
-internal class DormantDependentContext(
+internal sealed class DormantDependentContext(
     IDataContextProviderFactory dataContextFactory,
     SchedulerConfiguration schedulerConfiguration,
     ILogger<DormantDependentContext> logger
@@ -77,9 +79,12 @@ internal class DormantDependentContext(
             return;
         }
 
-        await using var context = CreateContext();
-        await ActivateSingleAsync<TInput>(context, externalId, input, ct);
-        await context.SaveChanges(ct);
+        var context = CreateContext();
+        await using (context.ConfigureAwait(false))
+        {
+            await ActivateSingleAsync(context, externalId, input, ct).ConfigureAwait(false);
+            await context.SaveChanges(ct).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
@@ -105,31 +110,34 @@ internal class DormantDependentContext(
         if (activationList.Count == 0)
             return;
 
-        await using var context = CreateContext();
-        var transaction = await context.BeginTransaction();
-
-        try
+        var context = CreateContext();
+        await using (context.ConfigureAwait(false))
         {
-            foreach (var (externalId, input) in activationList)
-                await ActivateSingleAsync<TInput>(context, externalId, input, ct);
+            var transaction = await context.BeginTransaction(ct).ConfigureAwait(false);
 
-            await context.SaveChanges(ct);
-            await context.CommitTransaction();
+            try
+            {
+                foreach (var (externalId, input) in activationList)
+                    await ActivateSingleAsync(context, externalId, input, ct).ConfigureAwait(false);
 
-            logger.LogInformation(
-                "Activated {Count} dormant dependents for parent manifest {ParentManifestId}",
-                activationList.Count,
-                ParentManifestId
-            );
-        }
-        catch
-        {
-            await context.RollbackTransaction();
-            throw;
-        }
-        finally
-        {
-            transaction?.Dispose();
+                await context.SaveChanges(ct).ConfigureAwait(false);
+                await context.CommitTransaction().ConfigureAwait(false);
+
+                logger.LogInformation(
+                    "Activated {Count} dormant dependents for parent manifest {ParentManifestId}",
+                    activationList.Count,
+                    ParentManifestId
+                );
+            }
+            catch
+            {
+                await context.RollbackTransaction().ConfigureAwait(false);
+                throw;
+            }
+            finally
+            {
+                transaction?.Dispose();
+            }
         }
     }
 
@@ -149,6 +157,7 @@ internal class DormantDependentContext(
             await context
                 .Manifests.Include(m => m.ManifestGroup)
                 .FirstOrDefaultAsync(m => m.ExternalId == externalId, ct)
+                .ConfigureAwait(false)
             ?? throw new InvalidOperationException(
                 $"No manifest found with ExternalId '{externalId}'"
             );
@@ -164,14 +173,20 @@ internal class DormantDependentContext(
         // Validate parent relationship
         if (manifest.DependsOnManifestId != ParentManifestId)
             throw new InvalidOperationException(
-                $"Manifest '{externalId}' depends on manifest {manifest.DependsOnManifestId}, "
-                    + $"but the current parent is {ParentManifestId}. "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Manifest '{externalId}' depends on manifest {manifest.DependsOnManifestId}, "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"but the current parent is {ParentManifestId}. "
+                    )
                     + "A dormant dependent can only be activated by its declared parent."
             );
 
         // A disabled manifest, or one in a disabled group, stays stopped: its parent's success
         // does not restart it, just as the ManifestManager does not queue it.
-        if (!manifest.IsEnabled || !manifest.ManifestGroup.IsEnabled)
+        if (!manifest.IsEnabled || !manifest.ManifestGroup.NotNull().IsEnabled)
         {
             logger.LogWarning(
                 "Skipping activation of dormant dependent '{ExternalId}' "
@@ -184,10 +199,12 @@ internal class DormantDependentContext(
         }
 
         // Concurrency guard: check for existing queued work
-        var hasQueuedWork = await context.WorkQueues.AnyAsync(
-            w => w.ManifestId == manifest.Id && w.Status == WorkQueueStatus.Queued,
-            ct
-        );
+        var hasQueuedWork = await context
+            .WorkQueues.AnyAsync(
+                w => w.ManifestId == manifest.Id && w.Status == WorkQueueStatus.Queued,
+                ct
+            )
+            .ConfigureAwait(false);
         if (hasQueuedWork)
         {
             logger.LogWarning(
@@ -200,12 +217,16 @@ internal class DormantDependentContext(
         }
 
         // Concurrency guard: check for active execution
-        var hasActiveExecution = await context.Metadatas.AnyAsync(
-            m =>
-                m.ManifestId == manifest.Id
-                && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress),
-            ct
-        );
+        var hasActiveExecution = await context
+            .Metadatas.AnyAsync(
+                m =>
+                    m.ManifestId == manifest.Id
+                    && (
+                        m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress
+                    ),
+                ct
+            )
+            .ConfigureAwait(false);
         if (hasActiveExecution)
         {
             logger.LogWarning(
@@ -240,7 +261,7 @@ internal class DormantDependentContext(
             }
         );
 
-        await context.Track(entry);
+        await context.Track(entry).ConfigureAwait(false);
 
         logger.LogInformation(
             "Activated dormant dependent '{ExternalId}' (ManifestId: {ManifestId}, "

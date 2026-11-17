@@ -40,7 +40,7 @@ public sealed class PauseGate
         if (Interlocked.Exchange(ref _armed, 0) == 0)
             return;
         _reached.TrySetResult();
-        await _release.Task;
+        await _release.Task.ConfigureAwait(false);
     }
 
     private static TaskCompletionSource New() =>
@@ -95,8 +95,8 @@ internal sealed class PausingSnapshotStore(ISnapshotStore inner, PauseGate gate)
         CancellationToken cancellationToken = default
     )
     {
-        await gate.HoldIfArmed();
-        return await inner.Upsert(userKey, id, snapshot, cancellationToken);
+        await gate.HoldIfArmed().ConfigureAwait(false);
+        return await inner.Upsert(userKey, id, snapshot, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> Insert(
@@ -106,8 +106,8 @@ internal sealed class PausingSnapshotStore(ISnapshotStore inner, PauseGate gate)
         CancellationToken cancellationToken = default
     )
     {
-        await gate.HoldIfArmed();
-        return await inner.Insert(userKey, id, snapshot, cancellationToken);
+        await gate.HoldIfArmed().ConfigureAwait(false);
+        return await inner.Insert(userKey, id, snapshot, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> Update(
@@ -119,15 +119,10 @@ internal sealed class PausingSnapshotStore(ISnapshotStore inner, PauseGate gate)
         CancellationToken cancellationToken = default
     )
     {
-        await gate.HoldIfArmed();
-        return await inner.Update(
-            userKey,
-            id,
-            snapshot,
-            expectedToken,
-            requestId,
-            cancellationToken
-        );
+        await gate.HoldIfArmed().ConfigureAwait(false);
+        return await inner
+            .Update(userKey, id, snapshot, expectedToken, requestId, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<bool> UpdateWithRequest(
@@ -139,14 +134,9 @@ internal sealed class PausingSnapshotStore(ISnapshotStore inner, PauseGate gate)
         CancellationToken cancellationToken = default
     )
     {
-        await gate.HoldIfArmed();
-        return await inner.UpdateWithRequest(
-            userKey,
-            id,
-            snapshot,
-            expectedToken,
-            request,
-            cancellationToken
-        );
+        await gate.HoldIfArmed().ConfigureAwait(false);
+        return await inner
+            .UpdateWithRequest(userKey, id, snapshot, expectedToken, request, cancellationToken)
+            .ConfigureAwait(false);
     }
 }

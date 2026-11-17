@@ -66,10 +66,10 @@ public class NonceStoreSelectionTests
         var signature = RunnerRequestSignature.Create(Key, RunnerRequestPurpose.Run, body);
 
         provider.GetRequiredService<INonceStore>().Should().BeOfType<InMemoryNonceStore>();
-        (await verifier.VerifyAsync(RunnerRequestPurpose.Run, body, signature, true))
+        (await verifier.VerifyAsync(RunnerRequestPurpose.Run, body, signature, requireFresh: true))
             .Should()
             .Be(RunnerRequestVerdict.Accepted);
-        (await verifier.VerifyAsync(RunnerRequestPurpose.Run, body, signature, true))
+        (await verifier.VerifyAsync(RunnerRequestPurpose.Run, body, signature, requireFresh: true))
             .Should()
             .Be(RunnerRequestVerdict.Replayed);
     }

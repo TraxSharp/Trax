@@ -26,7 +26,7 @@ public record HttpTimeoutSchedulerTestInput : IManifestProperties
 
 /// <summary>Interface for <see cref="HttpTimeoutSchedulerTestTrain"/>.</summary>
 public interface IHttpTimeoutSchedulerTestTrain
-    : IServiceTrain<HttpTimeoutSchedulerTestInput, Unit> { }
+    : IServiceTrain<HttpTimeoutSchedulerTestInput, Unit>;
 
 /// <summary>Calls an upstream that never answers, so the client's own timeout fires.</summary>
 internal sealed class CallUnresponsiveUpstream : Junction<HttpTimeoutSchedulerTestInput, Unit>
@@ -38,7 +38,9 @@ internal sealed class CallUnresponsiveUpstream : Junction<HttpTimeoutSchedulerTe
             Timeout = TimeSpan.FromMilliseconds(input.TimeoutMilliseconds),
         };
 
-        await client.GetAsync("http://upstream.invalid/slow");
+        await client
+            .GetAsync("http://upstream.invalid/slow", CancellationToken.None)
+            .ConfigureAwait(false);
 
         return Unit.Default;
     }

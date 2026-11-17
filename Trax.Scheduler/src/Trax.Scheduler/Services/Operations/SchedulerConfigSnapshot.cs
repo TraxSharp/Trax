@@ -37,12 +37,12 @@ public record SchedulerConfigSnapshot(
 
 /// <summary>
 /// Patch input for <see cref="IOperationsService.UpdateSchedulerConfigAsync"/>. Each
-/// field is independent: <c>null</c> means "leave unchanged".
+/// field is independent: <see langword="null"/> means "leave unchanged".
 /// </summary>
 /// <remarks>
 /// To clear <see cref="MaxActiveJobs"/> or <see cref="LocalWorkerCount"/> (set them to
-/// "no limit"), set the corresponding <c>Clear*</c> flag to <c>true</c>. Without that
-/// flag, a <c>null</c> value means "no change" because <c>int?</c> can't distinguish
+/// "no limit"), set the corresponding <c>Clear*</c> flag to <see langword="true"/>. Without that
+/// flag, a <see langword="null"/> value means "no change" because <c>int?</c> can't distinguish
 /// "unset" from "set to null" in a patch record.
 /// <para>
 /// A change applies to the running scheduler without a restart: the pollers read their interval
@@ -74,7 +74,7 @@ public record UpdateSchedulerConfigInput(
 )
 {
     /// <summary>
-    /// A new failure count window, or <c>null</c> to leave it unchanged. Must be between one
+    /// A new failure count window, or <see langword="null"/> to leave it unchanged. Must be between one
     /// second and ten years.
     /// </summary>
     public TimeSpan? FailureCountWindow { get; init; }

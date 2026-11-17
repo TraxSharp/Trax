@@ -71,7 +71,7 @@ public class CheckpointCleanupTests(ClusterStore store)
         var manifest = await _cluster.Manifest("kept", maxRetries: 0);
         var source = await Crash(manifest);
         var resume = await _cluster.Operation(o =>
-            o.ResumeExecutionAsync(source.Id, null, CancellationToken.None)
+            o.ResumeExecutionAsync(source.Id, from: null, CancellationToken.None)
         );
         resume.Success.Should().BeTrue(resume.Message);
         await _cluster.Host.Age(source.Id, Expired);
@@ -145,7 +145,7 @@ public class CheckpointCleanupTests(ClusterStore store)
 
         // An operator's resume belongs to no manifest, so the prune keeps it and clears its link.
         var resume = await _cluster.Operation(o =>
-            o.ResumeExecutionAsync(source.Id, null, CancellationToken.None)
+            o.ResumeExecutionAsync(source.Id, from: null, CancellationToken.None)
         );
         resume.Success.Should().BeTrue(resume.Message);
 
@@ -170,7 +170,7 @@ public class CheckpointCleanupTests(ClusterStore store)
     private async Task<Metadata> Crash(Effect.Models.Manifest.Manifest manifest)
     {
         ResearchProbe.FailIn = nameof(SummarizeLong);
-        var failed = await _cluster.Cycle(manifest);
+        var failed = await _cluster.Cycle(manifest).ConfigureAwait(false);
         failed.TrainState.Should().Be(TrainState.Failed);
         ResearchProbe.Reset();
         return failed;
@@ -181,7 +181,8 @@ public class CheckpointCleanupTests(ClusterStore store)
         using var scope = _cluster.Host.Services.CreateScope();
         await scope
             .ServiceProvider.GetRequiredService<IMetadataCleanupTrain>()
-            .Run(new MetadataCleanupRequest());
+            .Run(new MetadataCleanupRequest())
+            .ConfigureAwait(false);
     }
 
     private Task<bool> Exists(long runId) =>

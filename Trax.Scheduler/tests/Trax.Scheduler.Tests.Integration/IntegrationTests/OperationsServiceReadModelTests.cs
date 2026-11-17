@@ -31,7 +31,7 @@ public class OperationsServiceReadModelTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
     }
 
@@ -84,7 +84,21 @@ public class OperationsServiceReadModelTests : TestSetup
             CancellationToken.None
         );
 
-        stats.Should().Be(new ManifestExecutionStats(424242, 0, 0, 0, 0, 0, 0, null, null));
+        stats
+            .Should()
+            .Be(
+                new ManifestExecutionStats(
+                    424242,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    LastRun: null,
+                    LastSuccessfulRun: null
+                )
+            );
     }
 
     #endregion
@@ -116,7 +130,7 @@ public class OperationsServiceReadModelTests : TestSetup
         stats
             .Should()
             .Equal(
-                new ManifestGroupExecutionStats(empty.Id, 0, 0, 0, 0, 0, null),
+                new ManifestGroupExecutionStats(empty.Id, 0, 0, 0, 0, 0, LastRun: null),
                 new ManifestGroupExecutionStats(
                     busy.Id,
                     ManifestCount: 2,
@@ -130,7 +144,7 @@ public class OperationsServiceReadModelTests : TestSetup
                     // Of its ended runs, the failure started last; the later two have not ended.
                     LastEndedRunFailed = true,
                 },
-                new ManifestGroupExecutionStats(idle.Id, 1, 0, 0, 0, 0, null)
+                new ManifestGroupExecutionStats(idle.Id, 1, 0, 0, 0, 0, LastRun: null)
             );
     }
 
@@ -154,7 +168,9 @@ public class OperationsServiceReadModelTests : TestSetup
 
     private async Task<ManifestGroupExecutionStats> StatsOf(long groupId) =>
         (
-            await _operations.GetManifestGroupExecutionStatsAsync([groupId], CancellationToken.None)
+            await _operations
+                .GetManifestGroupExecutionStatsAsync([groupId], CancellationToken.None)
+                .ConfigureAwait(false)
         ).Single();
 
     [Test]
@@ -272,8 +288,18 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_are_newest_first_and_filter_by_run_level_and_category()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
-        var otherRun = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
+        var otherRun = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         await SeedLogs(run.Id, 3, LogLevel.Information, "Alpha");
         await SeedLogs(run.Id, 2, LogLevel.Error, "Alpha");
         await SeedLogs(run.Id, 1, LogLevel.Error, "Beta");
@@ -303,7 +329,12 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_page_by_cursor_without_overlap()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         await SeedLogs(run.Id, 7, LogLevel.Information, "Paged");
 
         var first = await _operations.GetLogsAsync(
@@ -332,7 +363,12 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_page_by_offset()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         await SeedLogs(run.Id, 5, LogLevel.Information, "Offset");
 
         var all = await _operations.GetLogsAsync(
@@ -353,7 +389,12 @@ public class OperationsServiceReadModelTests : TestSetup
     [TestCase(-5, 1, TestName = "A_negative_take_reads_one")]
     public async Task Log_page_size_is_clamped(int take, int expected)
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         await SeedLogs(run.Id, OperationsService.MaxPageSize + 1, LogLevel.Information, "Clamp");
 
         var page = await _operations.GetLogsAsync(
@@ -368,7 +409,12 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_filter_by_text_the_message_contains_ignoring_case()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         await SeedLog(run.Id, "Payment REFUSED for order 7", "Shop.Payments");
         await SeedLog(run.Id, "payment accepted", "Shop.Payments");
         await SeedLog(run.Id, "refused: no stock", "Shop.Stock");
@@ -391,7 +437,12 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_filter_by_text_the_category_contains_ignoring_case()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         await SeedLog(run.Id, "one", "Shop.Payments.Gateway");
         await SeedLog(run.Id, "two", "Shop.Stock");
         await SeedLog(run.Id, "three", "shop.payments");
@@ -421,7 +472,12 @@ public class OperationsServiceReadModelTests : TestSetup
     [TestCase(@"C:\temp", @"wrote C:\temp\out.txt", TestName = "A_backslash_matches_itself")]
     public async Task Log_text_filters_match_wildcards_literally(string term, string expected)
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         await SeedLog(run.Id, "Disk at 50% capacity", "Wildcards");
         await SeedLog(run.Id, "Disk at 500 MB", "Wildcards");
         await SeedLog(run.Id, "key a_b missing", "Wildcards");
@@ -440,7 +496,12 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_read_oldest_first_and_page_forward_by_cursor()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         await SeedLogs(run.Id, 7, LogLevel.Information, "Ascending");
 
         var first = await _operations.GetLogsAsync(
@@ -471,7 +532,12 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_read_oldest_first_page_by_offset()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         await SeedLogs(run.Id, 5, LogLevel.Information, "AscendingOffset");
 
         var all = await _operations.GetLogsAsync(
@@ -490,7 +556,12 @@ public class OperationsServiceReadModelTests : TestSetup
     [TestCase(null, TestName = "A_null_text_filter_matches_everything")]
     public async Task An_empty_text_filter_is_no_filter(string? term)
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         await SeedLogs(run.Id, 3, LogLevel.Information, "Empty");
 
         (
@@ -515,7 +586,12 @@ public class OperationsServiceReadModelTests : TestSetup
     {
         // More rows than the window, with matches near each end and in the middle, so a page
         // starts in the window and finishes past it, whichever end it reads from.
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         var rows = OperationsService.LogTextWindow + 20_000;
         var ctx = (DbContext)DataContext;
         await ctx.Database.ExecuteSqlInterpolatedAsync(
@@ -588,8 +664,8 @@ public class OperationsServiceReadModelTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
         configure?.Invoke(manifest);
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -613,8 +689,8 @@ public class OperationsServiceReadModelTests : TestSetup
         metadata.TrainState = state;
         metadata.StartTime = start;
         metadata.EndTime = end;
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return metadata;
     }
@@ -627,7 +703,12 @@ public class OperationsServiceReadModelTests : TestSetup
         bool expectedCapped
     )
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         await SeedLogs(run.Id, matching, LogLevel.Information, "Shop.Capped");
         await SeedLogs(run.Id, 5, LogLevel.Information, "Shop.Other");
         var query = new LogQuery(MetadataId: run.Id) { CategoryContains = "capped" };
@@ -643,7 +724,12 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task A_count_without_a_text_filter_is_exact_past_the_cap()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            DateTime.UtcNow,
+            DateTime.UtcNow
+        );
         await SeedLogs(run.Id, OperationsService.LogCountCap + 1, LogLevel.Information, "Wide");
 
         var count = await _operations.CountLogsCappedAsync(
@@ -657,9 +743,11 @@ public class OperationsServiceReadModelTests : TestSetup
     private async Task SeedLog(long metadataId, string message, string category)
     {
         var ctx = (DbContext)DataContext;
-        await ctx.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) VALUES ({metadataId}, 0, 'information'::trax.log_level, {message}, {category})"
-        );
+        await ctx
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) VALUES ({metadataId}, 0, 'information'::trax.log_level, {message}, {category})"
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task SeedLogs(long metadataId, int count, LogLevel level, string category)
@@ -668,9 +756,11 @@ public class OperationsServiceReadModelTests : TestSetup
         // directly, so seed the same way.
         var ctx = (DbContext)DataContext;
         var levelName = level.ToString().ToLowerInvariant();
-        await ctx.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {metadataId}, g, {levelName}::trax.log_level, 'msg-' || g, {category} FROM generate_series(1, {count}) g"
-        );
+        await ctx
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {metadataId}, g, {levelName}::trax.log_level, 'msg-' || g, {category} FROM generate_series(1, {count}) g"
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion

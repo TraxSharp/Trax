@@ -12,11 +12,11 @@ public class SubmitterRoutingTests
 {
     #region Test Types
 
-    private interface ITrainA { }
+    private interface ITrainA;
 
-    private interface ITrainB { }
+    private interface ITrainB;
 
-    private interface ITrainC { }
+    private interface ITrainC;
 
     #endregion
 

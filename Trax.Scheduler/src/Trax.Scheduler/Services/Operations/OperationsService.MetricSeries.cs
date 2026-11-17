@@ -41,7 +41,7 @@ public partial class OperationsService
             MetricSeriesRange.Last24Hours => (TimeSpan.FromMinutes(15), 96),
             MetricSeriesRange.Last7Days => (TimeSpan.FromHours(1), 168),
             MetricSeriesRange.Last30Days => (TimeSpan.FromHours(6), 120),
-            _ => throw new ArgumentOutOfRangeException(nameof(range), range, null),
+            _ => throw new ArgumentOutOfRangeException(nameof(range), range, message: null),
         };
 
     /// <inheritdoc />
@@ -91,8 +91,8 @@ public partial class OperationsService
 
         async Task<T> Read<T>(Func<IDataContext, Task<T>> read)
         {
-            using var db = await _dataContextFactory.CreateDbContextAsync(ct);
-            return await read(db);
+            using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            return await read(db).ConfigureAwait(false);
         }
 
         // Counts and the histogram read different index ranges; read them at once.
@@ -129,7 +129,7 @@ public partial class OperationsService
                 ct
             )
         );
-        await Task.WhenAll(countsRead, histogramRead);
+        await Task.WhenAll(countsRead, histogramRead).ConfigureAwait(false);
 
         DateTime BucketOf(DateTime date, int hour, int minute) =>
             DateTime.SpecifyKind(
@@ -137,10 +137,10 @@ public partial class OperationsService
                 DateTimeKind.Utc
             );
 
-        var counts = (await countsRead)
+        var counts = (await countsRead.ConfigureAwait(false))
             .GroupBy(x => (BucketOf(x.Date, x.Hour, x.Minute), x.TrainState))
             .ToDictionary(g => g.Key, g => g.Sum(x => x.Count));
-        var histograms = (await histogramRead)
+        var histograms = (await histogramRead.ConfigureAwait(false))
             .GroupBy(x => BucketOf(x.Date, x.Hour, x.Minute))
             .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Bin).ToList());
 
@@ -226,11 +226,12 @@ public partial class OperationsService
 
         var fromTicks = AveragesDurationFromTicks.GetOrAdd(
             db.GetType(),
-            _ => !Translates(byTimeSpan)
+            static (_, query) => !Translates(query),
+            byTimeSpan
         );
 
         if (!fromTicks)
-            return (await byTimeSpan.ToListAsync(ct))
+            return (await byTimeSpan.ToListAsync(ct).ConfigureAwait(false))
                 .Select(x => new DurationBin(
                     x.Date,
                     x.Hour,
@@ -277,6 +278,7 @@ public partial class OperationsService
                     MaxMs = g.Max(x => x.Ms),
                 })
                 .ToListAsync(ct)
+                .ConfigureAwait(false)
         ).Select(x => new DurationBin(x.Date, x.Hour, x.Minute, x.Bin, x.Count, x.MinMs, x.MaxMs)).ToList();
     }
 

@@ -109,22 +109,24 @@ public class DispatchShutdownTests
         _dataContext.Reset();
         var queued = await _dataContext
             .WorkQueues.AsNoTracking()
-            .SingleAsync(q => q.Id == entry.Id);
+            .SingleAsync(q => q.Id == entry.Id, cancellationToken: CancellationToken.None);
         queued.Status.Should().Be(WorkQueueStatus.Queued, "the job was never delivered");
         queued.MetadataId.Should().BeNull();
 
         var run = await _dataContext
             .Metadatas.AsNoTracking()
-            .SingleAsync(m => m.ManifestId == entry.ManifestId);
+            .SingleAsync(
+                m => m.ManifestId == entry.ManifestId,
+                cancellationToken: CancellationToken.None
+            );
         run.TrainState.Should().Be(TrainState.Failed, "the attempt is recorded, not left Pending");
     }
 
     private async Task<WorkQueue> Queue()
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            _dataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(_dataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -136,8 +138,8 @@ public class DispatchShutdownTests
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await _dataContext.Track(manifest);
-        await _dataContext.SaveChanges(CancellationToken.None);
+        await _dataContext.Track(manifest).ConfigureAwait(false);
+        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -148,8 +150,8 @@ public class DispatchShutdownTests
                 ManifestId = manifest.Id,
             }
         );
-        await _dataContext.Track(entry);
-        await _dataContext.SaveChanges(CancellationToken.None);
+        await _dataContext.Track(entry).ConfigureAwait(false);
+        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _dataContext.Reset();
         return entry;
     }

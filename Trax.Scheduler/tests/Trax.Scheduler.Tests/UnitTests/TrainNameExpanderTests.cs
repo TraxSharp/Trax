@@ -13,12 +13,12 @@ public class TrainNameExpanderTests
     #region Test Types
 
     // Fake Type that reports a custom FullName, used to simulate interface vs concrete types
-    private class FakeType(string fullName) : TypeDelegator(typeof(object))
+    private sealed class FakeType(string fullName) : TypeDelegator(typeof(object))
     {
         public override string? FullName => fullName;
     }
 
-    private class StubDiscoveryService(IReadOnlyList<TrainRegistration> registrations)
+    private sealed class StubDiscoveryService(IReadOnlyList<TrainRegistration> registrations)
         : ITrainDiscoveryService
     {
         public IReadOnlyList<TrainRegistration> DiscoverTrains() => registrations;
@@ -87,7 +87,10 @@ public class TrainNameExpanderTests
     [Test]
     public void NullDiscoveryService_ReturnsOriginalNames()
     {
-        var result = TrainNameExpander.ExpandTrainNames(["Ns.MyTrain", "Ns.OtherTrain"], null);
+        var result = TrainNameExpander.ExpandTrainNames(
+            ["Ns.MyTrain", "Ns.OtherTrain"],
+            discoveryService: null
+        );
 
         result.Should().BeEquivalentTo(["Ns.MyTrain", "Ns.OtherTrain"]);
     }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
@@ -29,7 +30,8 @@ public class SchedulerDeadLetterTests
     {
         var manifest = await fx
             .DataContext.Manifests.Include(m => m.ManifestGroup)
-            .FirstAsync(m => m.ExternalId == externalId);
+            .FirstAsync(m => m.ExternalId == externalId)
+            .ConfigureAwait(false);
         var dl = DeadLetter.Create(
             new CreateDeadLetter
             {
@@ -38,18 +40,24 @@ public class SchedulerDeadLetterTests
                 RetryCount = 3,
             }
         );
-        await fx.DataContext.Track(dl);
-        await fx.DataContext.SaveChanges(default);
+        await fx.DataContext.Track(dl).ConfigureAwait(false);
+        await fx.DataContext.SaveChanges(default).ConfigureAwait(false);
         fx.DataContext.Reset();
         return dl;
     }
 
     private static async Task<SchedulerE2EFixture> CreateWithManifestAsync(string externalId)
     {
-        var fx = await SchedulerE2EFixture.CreateAsync(s =>
-            s.Schedule<ISchedulerTestTrain>(externalId, new SchedulerTestInput(), Every.Minutes(5))
-        );
-        await fx.MaterializePendingManifestsAsync();
+        var fx = await SchedulerE2EFixture
+            .CreateAsync(s =>
+                s.Schedule<ISchedulerTestTrain>(
+                    externalId,
+                    new SchedulerTestInput(),
+                    Every.Minutes(5)
+                )
+            )
+            .ConfigureAwait(false);
+        await fx.MaterializePendingManifestsAsync().ConfigureAwait(false);
         return fx;
     }
 
@@ -170,7 +178,12 @@ public class SchedulerDeadLetterTests
     }
 
     private static async Task<DeadLetterStatus> StatusOfAsync(SchedulerE2EFixture fx, long id) =>
-        (await fx.DataContext.DeadLetters.AsNoTracking().FirstAsync(d => d.Id == id)).Status;
+        (
+            await fx
+                .DataContext.DeadLetters.AsNoTracking()
+                .FirstAsync(d => d.Id == id)
+                .ConfigureAwait(false)
+        ).Status;
 
     [Test]
     public async Task RequeueDeadLettersAsync_BatchAcrossManifests_RequeuesEach()
@@ -326,7 +339,9 @@ public class SchedulerDeadLetterTests
 
     private static async Task SeedQueuedEntryAsync(SchedulerE2EFixture fx, string externalId)
     {
-        var manifest = await fx.DataContext.Manifests.FirstAsync(m => m.ExternalId == externalId);
+        var manifest = await fx
+            .DataContext.Manifests.FirstAsync(m => m.ExternalId == externalId)
+            .ConfigureAwait(false);
         var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
             new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue
             {
@@ -336,8 +351,8 @@ public class SchedulerDeadLetterTests
                 ManifestId = manifest.Id,
             }
         );
-        await fx.DataContext.Track(entry);
-        await fx.DataContext.SaveChanges(default);
+        await fx.DataContext.Track(entry).ConfigureAwait(false);
+        await fx.DataContext.SaveChanges(default).ConfigureAwait(false);
         fx.DataContext.Reset();
     }
 
@@ -346,7 +361,8 @@ public class SchedulerDeadLetterTests
             .DataContext.WorkQueues.AsNoTracking()
             .CountAsync(q =>
                 q.Manifest!.ExternalId == externalId && q.Status == WorkQueueStatus.Queued
-            );
+            )
+            .ConfigureAwait(false);
 
     private static Task<SchedulerE2EFixture> CreateWithTwoManifestsAsync(string a, string b) =>
         SchedulerE2EFixture
@@ -356,7 +372,7 @@ public class SchedulerDeadLetterTests
             )
             .ContinueWith(async t =>
             {
-                await t.Result.MaterializePendingManifestsAsync();
+                await t.Result.MaterializePendingManifestsAsync().ConfigureAwait(false);
                 return t.Result;
             })
             .Unwrap();
@@ -424,7 +440,10 @@ public class SchedulerDeadLetterTests
         var entry = await fx.DataContext.WorkQueues.AsNoTracking().SingleAsync();
         resolved
             .Should()
-            .AllSatisfy(d => d.ResolutionNote.Should().Contain($"WorkQueue {entry.Id}"));
+            .AllSatisfy(d =>
+                d.ResolutionNote.Should()
+                    .Contain(string.Create(CultureInfo.InvariantCulture, $"WorkQueue {entry.Id}"))
+            );
     }
 
     [Test]
@@ -456,7 +475,10 @@ public class SchedulerDeadLetterTests
         var scheduler = (Trax.Scheduler.Services.TraxScheduler.TraxScheduler)fx.Scheduler;
         using var bothChecked = new Barrier(2);
         scheduler.BeforeRequeueInsert = _ =>
-            Task.Run(() => bothChecked.SignalAndWait(TimeSpan.FromSeconds(10)));
+            Task.Run(
+                () => bothChecked.SignalAndWait(TimeSpan.FromSeconds(10), CancellationToken.None),
+                CancellationToken.None
+            );
 
         var results = await Task.WhenAll(
             Task.Run(() => fx.Scheduler.RequeueAllDeadLettersAsync()),
@@ -514,7 +536,10 @@ public class SchedulerDeadLetterTests
     [Test]
     public async Task RequeueAllDeadLettersAsync_AcrossSeveralPages_RequeuesEveryManifestAndFoldsWithinOne()
     {
-        var externalIds = Enumerable.Range(1, 5).Select(i => $"dl-page-{i}").ToArray();
+        var externalIds = Enumerable
+            .Range(1, 5)
+            .Select(i => string.Create(CultureInfo.InvariantCulture, $"dl-page-{i}"))
+            .ToArray();
         await using var fx = await SchedulerE2EFixture.CreateAsync(s =>
         {
             foreach (var id in externalIds)
@@ -547,7 +572,10 @@ public class SchedulerDeadLetterTests
     [Test]
     public async Task RequeueAllDeadLettersAsync_ReportsItsRunningTotalAfterEachPage()
     {
-        var externalIds = Enumerable.Range(1, 5).Select(i => $"dl-progress-{i}").ToArray();
+        var externalIds = Enumerable
+            .Range(1, 5)
+            .Select(i => string.Create(CultureInfo.InvariantCulture, $"dl-progress-{i}"))
+            .ToArray();
         await using var fx = await SchedulerE2EFixture.CreateAsync(s =>
         {
             foreach (var id in externalIds)

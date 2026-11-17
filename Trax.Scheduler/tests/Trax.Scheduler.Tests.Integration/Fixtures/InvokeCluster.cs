@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -92,24 +93,28 @@ public sealed class InvokeCluster : IAsyncDisposable
                 Path.GetTempPath(),
                 $"trax_invoke_delivery_{Guid.NewGuid():N}.db"
             );
-            var onSqlite = new InvokeCluster(store, $"Data Source={file}", file, null);
+            var onSqlite = new InvokeCluster(store, $"Data Source={file}", file, database: null);
             Open[onSqlite] = 0;
             return onSqlite;
         }
 
-        var database =
-            $"trax_invoke_delivery_{Environment.ProcessId}_{Interlocked.Increment(ref _clusters)}";
-        await using (var admin = new NpgsqlConnection(TestPostgres.ConnectionStringFor("postgres")))
+        var database = string.Create(
+            CultureInfo.InvariantCulture,
+            $"trax_invoke_delivery_{Environment.ProcessId}_{Interlocked.Increment(ref _clusters)}"
+        );
+        var admin = new NpgsqlConnection(TestPostgres.ConnectionStringFor("postgres"));
+        await using (admin.ConfigureAwait(false))
         {
-            await admin.OpenAsync();
-            await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
-            await Exec(admin, $"CREATE DATABASE {database}");
+            await admin.OpenAsync().ConfigureAwait(false);
+            await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)")
+                .ConfigureAwait(false);
+            await Exec(admin, $"CREATE DATABASE {database}").ConfigureAwait(false);
         }
 
         var cluster = new InvokeCluster(
             store,
             TestPostgres.ConnectionStringFor(database),
-            null,
+            sqliteFile: null,
             database
         );
         Open[cluster] = 0;
@@ -178,8 +183,8 @@ public sealed class InvokeCluster : IAsyncDisposable
         var host = _hosts.FirstOrDefault() ?? Host(machines: false, scheduler: false);
         using var scope = host.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await context.SnapshotDrafts.ExecuteDeleteAsync();
-        await TestSetup.CleanupDatabase(context);
+        await context.SnapshotDrafts.ExecuteDeleteAsync().ConfigureAwait(false);
+        await TestSetup.CleanupDatabase(context).ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
@@ -187,7 +192,7 @@ public sealed class InvokeCluster : IAsyncDisposable
         Open.TryRemove(this, out _);
 
         foreach (var host in _hosts)
-            await host.DisposeAsync();
+            await host.DisposeAsync().ConfigureAwait(false);
 
         if (_sqliteFile is not null)
         {
@@ -206,19 +211,24 @@ public sealed class InvokeCluster : IAsyncDisposable
         if (_database is not null)
         {
             NpgsqlConnection.ClearAllPools();
-            await using var admin = new NpgsqlConnection(
-                TestPostgres.ConnectionStringFor("postgres")
-            );
-            await admin.OpenAsync();
-            await Exec(admin, $"DROP DATABASE IF EXISTS {_database} WITH (FORCE)");
+            var admin = new NpgsqlConnection(TestPostgres.ConnectionStringFor("postgres"));
+            await using (admin.ConfigureAwait(false))
+            {
+                await admin.OpenAsync().ConfigureAwait(false);
+                await Exec(admin, $"DROP DATABASE IF EXISTS {_database} WITH (FORCE)")
+                    .ConfigureAwait(false);
+            }
         }
     }
 
     private static async Task Exec(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        var command = connection.CreateCommand();
+        await using (command.ConfigureAwait(false))
+        {
+            command.CommandText = sql;
+            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        }
     }
 }
 
@@ -234,13 +244,13 @@ public sealed class HeldSubmitter(HeldJobs held) : IJobSubmitter
     public Task<string> EnqueueAsync(long metadataId)
     {
         held.Inputs[metadataId] = null;
-        return Task.FromResult($"held-{metadataId}");
+        return Task.FromResult(string.Create(CultureInfo.InvariantCulture, $"held-{metadataId}"));
     }
 
     public Task<string> EnqueueAsync(long metadataId, object input)
     {
         held.Inputs[metadataId] = input;
-        return Task.FromResult($"held-{metadataId}");
+        return Task.FromResult(string.Create(CultureInfo.InvariantCulture, $"held-{metadataId}"));
     }
 }
 
@@ -261,21 +271,24 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
             .Start<SystemStepMachine>(
                 MachineKey.Of("delivery", Guid.NewGuid().ToString("N")),
                 context
-            );
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>Saves <paramref name="user"/>'s draft in <c>Idle</c> with <paramref name="context"/> and advances it into <c>Running</c>.</summary>
     public async Task<AdvanceOutcome> EnterRunning(string user, Guid id, JsonObject context)
     {
-        await StepMachine.Seed(services, user, id, UserStepMachine.MachineId, "Idle", context);
+        await StepMachine
+            .Seed(services, user, id, UserStepMachine.MachineId, "Idle", context)
+            .ConfigureAwait(false);
         using var scope = services.CreateScope();
-        return await Drafts(scope).Advance(user, id, nameof(StepTrigger.Go));
+        return await Drafts(scope).Advance(user, id, nameof(StepTrigger.Go)).ConfigureAwait(false);
     }
 
     public async Task<AdvanceOutcome> Advance(string user, Guid id, StepTrigger trigger)
     {
         using var scope = services.CreateScope();
-        return await Drafts(scope).Advance(user, id, trigger.ToString());
+        return await Drafts(scope).Advance(user, id, trigger.ToString()).ConfigureAwait(false);
     }
 
     private static ISnapshotDraftService Drafts(IServiceScope scope) =>
@@ -293,9 +306,12 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
     public async Task<long> Dispatch(string token)
     {
         using (var scope = services.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
+            await scope
+                .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
+                .Run(Unit.Default)
+                .ConfigureAwait(false);
 
-        var entry = await Entry(token);
+        var entry = await Entry(token).ConfigureAwait(false);
         return entry?.MetadataId
             ?? throw new InvalidOperationException(
                 $"The entry {token} was not dispatched: it is {entry?.Status.ToString() ?? "missing"}."
@@ -310,7 +326,10 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
     {
         if (!held.Inputs.TryGetValue(metadataId, out var input))
             throw new InvalidOperationException(
-                $"Run {metadataId} was not dispatched to this host."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Run {metadataId} was not dispatched to this host."
+                )
             );
 
         using var scope = services.CreateScope();
@@ -318,7 +337,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
         {
             await scope
                 .ServiceProvider.GetRequiredService<IJobRunnerTrain>()
-                .Run(new RunJobRequest(metadataId, input));
+                .Run(new RunJobRequest(metadataId, input))
+                .ConfigureAwait(false);
         }
         catch (Exception)
         {
@@ -331,14 +351,17 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
         held.Inputs.TryGetValue(metadataId, out var input)
             ? input
             : throw new InvalidOperationException(
-                $"Run {metadataId} was not dispatched to this host."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Run {metadataId} was not dispatched to this host."
+                )
             );
 
     /// <summary>Dispatches <paramref name="token"/>'s entry and runs it here to its end.</summary>
     public async Task<long> DispatchAndRun(string token)
     {
-        var id = await Dispatch(token);
-        await RunJob(id);
+        var id = await Dispatch(token).ConfigureAwait(false);
+        await RunJob(id).ConfigureAwait(false);
         return id;
     }
 
@@ -354,7 +377,7 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
             NullLogger<ManifestManagerPollingService>.Instance,
             services.GetRequiredService<ISqlDialect>()
         );
-        await polling.RunManifestManager(CancellationToken.None);
+        await polling.RunManifestManager(CancellationToken.None).ConfigureAwait(false);
     }
 
     public async Task<SnapshotDraft?> Row(Guid id, string machine)
@@ -363,7 +386,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Id == id && x.Machine == machine);
+            .SingleOrDefaultAsync(x => x.Id == id && x.Machine == machine)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Every owner's row of instance <paramref name="id"/> of <paramref name="machine"/>.</summary>
@@ -374,7 +398,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
             .Where(x => x.Id == id && x.Machine == machine)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     public async Task<WorkQueue?> Entry(string token)
@@ -383,7 +408,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .WorkQueues.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.ExternalId == token);
+            .SingleOrDefaultAsync(x => x.ExternalId == token)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Every entry an instance's invoking states queued, oldest first.</summary>
@@ -395,7 +421,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
             .WorkQueues.AsNoTracking()
             .Where(x => x.InvokingInstanceId == instance)
             .OrderBy(x => x.Id)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     public async Task<Metadata> Run(long metadataId)
@@ -404,7 +431,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.AsNoTracking()
-            .SingleAsync(x => x.Id == metadataId);
+            .SingleAsync(x => x.Id == metadataId)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Moves a run's start back by <paramref name="age"/>, as if it had been going that long.</summary>
@@ -415,7 +443,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.Where(x => x.Id == metadataId)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartTime, start));
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartTime, start))
+            .ConfigureAwait(false);
     }
 
     public ValueTask DisposeAsync() => services.DisposeAsync();

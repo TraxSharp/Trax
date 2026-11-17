@@ -27,8 +27,11 @@ public partial class OperationsService
         ValidateLookup(key);
         take = Math.Clamp(take, 1, MaxPageSize);
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
-        var rowId = await InstanceRows(db, key).Select(x => (long?)x.RowId).FirstOrDefaultAsync(ct);
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var rowId = await InstanceRows(db, key)
+            .Select(x => (long?)x.RowId)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
         if (rowId is not { } row)
             return null;
 
@@ -49,12 +52,13 @@ public partial class OperationsService
                 t.At,
                 t.InvokeToken,
             })
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         var page = rows.Take(take).ToList();
         var tokens = page.Where(t => t.InvokeToken != null)
             .Select(t => t.InvokeToken!)
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
 
         Dictionary<string, (long Id, TrainState State)> runs = new(StringComparer.Ordinal);
@@ -73,6 +77,7 @@ public partial class OperationsService
                         m.TrainState,
                     })
                     .ToListAsync(ct)
+                    .ConfigureAwait(false)
             )
                 runs[run.ExternalId] = (run.Id, run.TrainState);
             foreach (
@@ -86,6 +91,7 @@ public partial class OperationsService
                         w.Status,
                     })
                     .ToListAsync(ct)
+                    .ConfigureAwait(false)
             )
                 entries[entry.ExternalId] = (entry.Id, entry.Status);
             // A child lives under its parent's owner and shares the token the parent held for it.
@@ -106,6 +112,7 @@ public partial class OperationsService
                         d.RowId,
                     })
                     .ToListAsync(ct)
+                    .ConfigureAwait(false)
             )
                 children[child.SpawnedBy!] = new MachineInstanceStartedChild(
                     child.Machine,

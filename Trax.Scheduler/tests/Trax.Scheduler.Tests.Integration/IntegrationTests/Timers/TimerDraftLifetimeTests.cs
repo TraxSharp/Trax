@@ -134,10 +134,12 @@ public class TimerDraftLifetimeTests(ClusterStore store)
     {
         var user = "user-" + Guid.NewGuid().ToString("N");
         var id = Guid.NewGuid();
-        (await _api.OpenReview(user, id)).Should().BeOfType<AdvanceOutcome.Advanced>();
-        return (user, id, (await Reminder(id)).RowId);
+        (await _api.OpenReview(user, id).ConfigureAwait(false))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
+        return (user, id, (await Reminder(id).ConfigureAwait(false)).RowId);
     }
 
     private async Task<SnapshotDraft> Reminder(Guid id) =>
-        (await _api.Row(id, ReminderMachine.MachineId))!;
+        (await _api.Row(id, ReminderMachine.MachineId).ConfigureAwait(false))!;
 }

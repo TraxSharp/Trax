@@ -45,7 +45,7 @@ public class DuplicateDeliveryTests : TestSetup
             await loser;
             gate.SetResult();
 
-            var both = async () => await Task.WhenAll(first, second);
+            var both = async () => await Task.WhenAll(first, second).ConfigureAwait(false);
             await both.Should().NotThrowAsync("the losing delivery is acknowledged, not failed");
 
             DeliveryProbeTrain.Runs[key].Should().Be(1, "only one delivery owns the run");
@@ -91,7 +91,8 @@ public class DuplicateDeliveryTests : TestSetup
 
         try
         {
-            var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
+            var act = async () =>
+                await JobRunner.Run(new RunJobRequest(metadata.Id, input)).ConfigureAwait(false);
 
             await act.Should().NotThrowAsync("another delivery owns, or owned, this run");
             DeliveryProbeTrain.Runs.ContainsKey(key).Should().BeFalse();
@@ -123,12 +124,15 @@ public class DuplicateDeliveryTests : TestSetup
         var metadata = await CreatePendingRun(input);
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.CancellationRequested, true));
+            .ExecuteUpdateAsync(s =>
+                s.SetProperty(m => m.CancellationRequested, valueExpression: true)
+            );
         DataContext.Reset();
 
         try
         {
-            var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
+            var act = async () =>
+                await JobRunner.Run(new RunJobRequest(metadata.Id, input)).ConfigureAwait(false);
 
             await act.Should().NotThrowAsync("the delivery is settled, not failed");
             DeliveryProbeTrain
@@ -162,15 +166,13 @@ public class DuplicateDeliveryTests : TestSetup
             .ServiceProvider.GetRequiredService<IServiceScopeFactory>()
             .CreateScope();
         var runner = scope.ServiceProvider.GetRequiredService<IJobRunnerTrain>();
-        await runner.Run(request);
+        await runner.Run(request).ConfigureAwait(false);
     }
 
     private async Task<Metadata> CreatePendingRun(DeliveryProbeInput input)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -183,8 +185,8 @@ public class DuplicateDeliveryTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var metadata = Metadata.Create(
             new CreateMetadata
@@ -195,8 +197,8 @@ public class DuplicateDeliveryTests : TestSetup
                 ManifestId = manifest.Id,
             }
         );
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;

@@ -19,7 +19,7 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// ran, or rejected the mutation and the entry's removal was what failed. A cancelled entry
 /// stays visible, so a side-effect the hook may have left can be found and reconciled.
 /// </remarks>
-internal class ResolveStaleStagedEntriesJunction(
+internal sealed class ResolveStaleStagedEntriesJunction(
     IWorkQueuePromotion promotion,
     SchedulerConfiguration config,
     ILogger<ResolveStaleStagedEntriesJunction> logger
@@ -28,8 +28,12 @@ internal class ResolveStaleStagedEntriesJunction(
     public override async Task<List<ManifestDispatchView>> Run(List<ManifestDispatchView> views)
     {
         var resolved = config.PromoteStaleStagedEntries
-            ? await promotion.PromoteStaleAsync(config.StaleStagedEntryTimeout, CancellationToken)
-            : await promotion.CancelStaleAsync(config.StaleStagedEntryTimeout, CancellationToken);
+            ? await promotion
+                .PromoteStaleAsync(config.StaleStagedEntryTimeout, CancellationToken)
+                .ConfigureAwait(false)
+            : await promotion
+                .CancelStaleAsync(config.StaleStagedEntryTimeout, CancellationToken)
+                .ConfigureAwait(false);
 
         if (resolved > 0)
             logger.LogWarning(

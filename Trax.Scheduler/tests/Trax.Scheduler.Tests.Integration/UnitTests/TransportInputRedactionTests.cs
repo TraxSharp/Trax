@@ -58,7 +58,7 @@ public class TransportInputRedactionTests
 
     private static bool IsMarker(JsonElement element) =>
         element.ValueKind == JsonValueKind.Object
-        && element.EnumerateObject().Count() == 1
+        && element.EnumerateObject().Take(2).Count() == 1
         && element.TryGetProperty("_redacted", out var flag)
         && flag.ValueKind == JsonValueKind.True;
 
@@ -132,7 +132,7 @@ public class TransportInputRedactionTests
     [Test]
     public void No_copy_is_null() =>
         TransportInputRedaction
-            .Redact(_discovery, null, typeof(PaymentInput).FullName)
+            .Redact(_discovery, json: null, typeof(PaymentInput).FullName)
             .Should()
             .BeNull();
 

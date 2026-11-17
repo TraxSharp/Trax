@@ -68,22 +68,28 @@ public class SchedulerConfigFromApiHostTests
         using var scope = services.CreateScope();
         return await scope
             .ServiceProvider.GetRequiredService<IOperationsService>()
-            .UpdateSchedulerConfigAsync(input, CancellationToken.None);
+            .UpdateSchedulerConfigAsync(input, CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private static async Task DeleteConfigRow()
     {
-        await using var host = ApiHost();
-        var factory = host.GetRequiredService<IDataContextProviderFactory>();
-        using var db = await factory.CreateDbContextAsync(CancellationToken.None);
-        await db.SchedulerConfigs.ExecuteDeleteAsync();
+        var host = ApiHost();
+        await using (host.ConfigureAwait(false))
+        {
+            var factory = host.GetRequiredService<IDataContextProviderFactory>();
+            using var db = await factory
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            await db.SchedulerConfigs.ExecuteDeleteAsync().ConfigureAwait(false);
+        }
     }
 
     private static async Task WaitFor(Func<bool> condition, string because)
     {
         var deadline = DateTime.UtcNow + SyncTimeout;
         while (!condition() && DateTime.UtcNow < deadline)
-            await Task.Delay(50); // determinism: polls the condition, bounded by SyncTimeout
+            await Task.Delay(50).ConfigureAwait(false); // determinism: polls the condition, bounded by SyncTimeout
         condition().Should().BeTrue($"{because}. See {AdrPath}.");
     }
 
@@ -498,7 +504,7 @@ public class SchedulerConfigFromApiHostTests
 
         // A later deploy keeps resolved dead letters for an audit.
         await using var scheduler = await SchedulerE2EFixture.CreateAsync(s =>
-            s.AutoPurgeDeadLetters(false)
+            s.AutoPurgeDeadLetters(purge: false)
         );
         var settings = SettingsService(scheduler);
         await settings.StartAsync(CancellationToken.None);

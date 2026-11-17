@@ -38,15 +38,17 @@ internal static class ReapedRuns
     )
     {
         var mark = NextMark();
-        var moved = await stillStale.ExecuteUpdateAsync(
-            s =>
-                s.SetProperty(m => m.TrainState, TrainState.Failed)
-                    .SetProperty(m => m.EndTime, mark)
-                    .SetProperty(m => m.FailureReason, reason)
-                    .SetProperty(m => m.FailureException, exception)
-                    .SetProperty(m => m.FailureJunction, junction),
-            cancellationToken
-        );
+        var moved = await stillStale
+            .ExecuteUpdateAsync(
+                s =>
+                    s.SetProperty(m => m.TrainState, TrainState.Failed)
+                        .SetProperty(m => m.EndTime, mark)
+                        .SetProperty(m => m.FailureReason, reason)
+                        .SetProperty(m => m.FailureException, exception)
+                        .SetProperty(m => m.FailureJunction, junction),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         if (moved == 0)
             return [];
 
@@ -61,7 +63,8 @@ internal static class ReapedRuns
                 && m.FailureJunction == junction
             )
             .Select(m => m.Id)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>

@@ -86,10 +86,10 @@ public sealed class InvokedStepEnter : EffectJunction<InvokedStepInput, InvokedS
 {
     public override async Task<InvokedStepGated> Run(InvokedStepInput input)
     {
-        if (input.Mode == InvokedStepModes.Gate)
+        if (string.Equals(input.Mode, InvokedStepModes.Gate, StringComparison.Ordinal))
         {
             InvokedStepGate.Enter();
-            await InvokedStepGate.Released.WaitAsync(CancellationToken);
+            await InvokedStepGate.Released.WaitAsync(CancellationToken).ConfigureAwait(false);
         }
 
         return new InvokedStepGated(input.Mode, input.Note);

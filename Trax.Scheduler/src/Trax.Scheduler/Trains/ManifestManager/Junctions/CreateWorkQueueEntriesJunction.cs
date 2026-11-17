@@ -17,11 +17,10 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// Creates work queue entries for manifests that are due to run.
 /// </summary>
 /// <remarks>
-/// This junction replaces the previous EnqueueJobsJunction. Instead of directly creating Metadata
-/// records and enqueueing to the background task server, it creates WorkQueue entries
-/// that will be picked up by the JobDispatcherTrain.
+/// Rather than creating Metadata records and enqueueing to the background task server, it
+/// creates WorkQueue entries that will be picked up by the JobDispatcherTrain.
 /// </remarks>
-internal class CreateWorkQueueEntriesJunction(
+internal sealed class CreateWorkQueueEntriesJunction(
     IDataContext dataContext,
     SchedulerConfiguration schedulerConfiguration,
     ILogger<CreateWorkQueueEntriesJunction> logger,
@@ -55,16 +54,18 @@ internal class CreateWorkQueueEntriesJunction(
         // the tracks the failed run took instead of asking the model again (docs/adr/0017). The
         // sources are read in one pass, from the database, never supplied; a failed lookup asks
         // afresh rather than holding up the cycle.
-        var replaySources = await retryReplay.SourcesForRetriesAsync(
-            // Exactly the runs the backoff below treats as retries: the latest run failed and
-            // its failure still counts. A failure an acknowledged dead letter or the failure
-            // window has set aside is not retried, so the next occurrence asks afresh.
-            views
-                .Where(v => v.LatestFinishedRunFailed && v.FailedCount > 0)
-                .Select(v => v.Manifest)
-                .ToList(),
-            CancellationToken
-        );
+        var replaySources = await retryReplay
+            .SourcesForRetriesAsync(
+                // Exactly the runs the backoff below treats as retries: the latest run failed and
+                // its failure still counts. A failure an acknowledged dead letter or the failure
+                // window has set aside is not retried, so the next occurrence asks afresh.
+                views
+                    .Where(v => v.LatestFinishedRunFailed && v.FailedCount > 0)
+                    .Select(v => v.Manifest)
+                    .ToList(),
+                CancellationToken
+            )
+            .ConfigureAwait(false);
 
         // A retry also resumes after its failed run's latest checkpoint, when the train declares one
         // and its chain allows the resume, whatever the manifest says about replaying decisions:
@@ -72,13 +73,15 @@ internal class CreateWorkQueueEntriesJunction(
         // the same runs; a failed lookup reruns from the top.
         var resumeSources = retryResume is null
             ? new Dictionary<long, long>()
-            : await retryResume.SourcesForRetriesAsync(
-                views
-                    .Where(v => v.LatestFinishedRunFailed && v.FailedCount > 0)
-                    .Select(v => v.Manifest)
-                    .ToList(),
-                CancellationToken
-            );
+            : await retryResume
+                .SourcesForRetriesAsync(
+                    views
+                        .Where(v => v.LatestFinishedRunFailed && v.FailedCount > 0)
+                        .Select(v => v.Manifest)
+                        .ToList(),
+                    CancellationToken
+                )
+                .ConfigureAwait(false);
 
         // The dispatcher compares ScheduledAt with the database's clock, so a retry's due time is
         // the database's now plus its backoff; read once, by the first retry that has a backoff.
@@ -120,10 +123,12 @@ internal class CreateWorkQueueEntriesJunction(
                     if (clampedDelay > TimeSpan.Zero)
                     {
                         var manifestId = view.Manifest.Id;
-                        databaseNow ??= await DatabaseClock.UtcNowAsync(
-                            dataContext.Manifests.Where(m => m.Id == manifestId),
-                            CancellationToken
-                        );
+                        databaseNow ??= await DatabaseClock
+                            .UtcNowAsync(
+                                dataContext.Manifests.Where(m => m.Id == manifestId),
+                                CancellationToken
+                            )
+                            .ConfigureAwait(false);
                         scheduledAt = databaseNow + clampedDelay;
                     }
 
@@ -158,17 +163,19 @@ internal class CreateWorkQueueEntriesJunction(
                     }
                 );
 
-                await dataContext.Track(entry);
+                await dataContext.Track(entry).ConfigureAwait(false);
                 // Another host, or a requeue, may have queued a replay of the same run since the
                 // lookup: the index refuses a second one and this retry asks afresh instead. An
                 // operator's resume of the same run queued since is refused the same way, and this
                 // retry reruns from the top.
-                await RetryReplayLinks.SaveAskingAfreshOnConflictAsync(
-                    dataContext,
-                    [entry],
-                    logger,
-                    CancellationToken
-                );
+                await RetryReplayLinks
+                    .SaveAskingAfreshOnConflictAsync(
+                        dataContext,
+                        [entry],
+                        logger,
+                        CancellationToken
+                    )
+                    .ConfigureAwait(false);
 
                 logger.LogDebug(
                     "Created WorkQueue entry {WorkQueueId} for manifest {ManifestId} (name: {ManifestName})",
@@ -263,7 +270,9 @@ internal class CreateWorkQueueEntriesJunction(
         {
             var distribution = result
                 .GroupBy(v => v.ManifestGroup.Id)
-                .Select(g => $"{g.First().ManifestGroup.Name ?? g.Key.ToString()}={g.Count()}");
+                .Select(g =>
+                    $"{g.First().ManifestGroup.Name ?? g.Key.ToString(System.Globalization.CultureInfo.InvariantCulture)}={g.Count()}"
+                );
             logger.LogDebug(
                 "Group-fair distribution: {Distribution}",
                 string.Join(", ", distribution)

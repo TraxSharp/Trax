@@ -26,7 +26,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
         _machine = $"ops-history-{Guid.NewGuid():N}";
     }
@@ -58,7 +58,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
             SpawnedBy = spawnedBy,
         };
         DataContext.SnapshotDrafts.Add(row);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return row;
     }
@@ -70,7 +70,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
             t.DraftRowId = row.RowId;
             DataContext.SnapshotTransitions.Add(t);
         }
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -106,7 +106,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
         var t0 = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
         await History(
             instance,
-            Row(1, SnapshotTransitionKind.Start, null, null, "Draft", t0),
+            Row(1, SnapshotTransitionKind.Start, trigger: null, from: null, "Draft", t0),
             Row(2, SnapshotTransitionKind.Command, "Submit", "Draft", "Review", t0.AddMinutes(1)),
             Row(
                 3,
@@ -164,7 +164,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
         var at = DateTimeOffset.UtcNow;
         await History(
             instance,
-            Row(1, SnapshotTransitionKind.Start, null, null, "Running", at, ran),
+            Row(1, SnapshotTransitionKind.Start, trigger: null, from: null, "Running", at, ran),
             Row(2, SnapshotTransitionKind.Outcome, "Running.done", "Running", "Queued", at, queued),
             Row(3, SnapshotTransitionKind.Command, "Spawn", "Queued", "Waiting", at, spawned)
         );
@@ -186,7 +186,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
         {
             var page = await _operations.GetMachineInstanceTransitionsAsync(
                 KeyOf(instance),
-                null,
+                beforeRevision: null,
                 25,
                 CancellationToken.None
             );
@@ -231,8 +231,8 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
             Row(
                 1,
                 SnapshotTransitionKind.Start,
-                null,
-                null,
+                trigger: null,
+                from: null,
                 "Locked",
                 at,
                 actor: SnapshotTransitionActor.Owner
@@ -241,26 +241,26 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
         var other = await Seed(SnapshotOwnerKind.User, "Locked");
         await History(
             other,
-            Row(1, SnapshotTransitionKind.Start, null, null, "Locked", at),
-            Row(2, SnapshotTransitionKind.Save, null, "Locked", "Locked", at)
+            Row(1, SnapshotTransitionKind.Start, trigger: null, from: null, "Locked", at),
+            Row(2, SnapshotTransitionKind.Save, trigger: null, "Locked", "Locked", at)
         );
 
         var page = await _operations.GetMachineInstanceTransitionsAsync(
             KeyOf(mine),
-            null,
+            beforeRevision: null,
             25,
             CancellationToken.None
         );
         var noRow = () =>
             _operations.GetMachineInstanceTransitionsAsync(
                 new MachineInstanceKey(_machine, SnapshotOwnerKind.User, id),
-                null,
+                beforeRevision: null,
                 25,
                 CancellationToken.None
             );
         var missing = await _operations.GetMachineInstanceTransitionsAsync(
             new MachineInstanceKey(_machine, SnapshotOwnerKind.System, Guid.NewGuid()),
-            null,
+            beforeRevision: null,
             25,
             CancellationToken.None
         );

@@ -78,28 +78,28 @@ public class RemoteRunTrustTests : TestSetup
     }
 
     [Test]
-    public void A_runner_on_the_mediators_execution_service_does_not_warn()
+    public async Task A_runner_on_the_mediators_execution_service_does_not_warn()
     {
         var logger = new WarningLogger();
 
-        TraxRequestHandler.WarnIfExecutionServiceReplaced(
-            Scope.ServiceProvider,
-            logger,
-            "/trax/run"
-        );
+        await TraxRequestHandler
+            .WarnIfExecutionServiceReplacedAsync(Scope.ServiceProvider, logger, "/trax/run")
+            .ConfigureAwait(false);
 
         logger.Warnings.Should().BeEmpty();
     }
 
     [Test]
-    public void A_runner_on_a_replaced_execution_service_warns_that_gated_runs_are_refused()
+    public async Task A_runner_on_a_replaced_execution_service_warns_that_gated_runs_are_refused()
     {
         var services = new ServiceCollection()
             .AddScoped(_ => NSubstitute.Substitute.For<ITrainExecutionService>())
             .BuildServiceProvider();
         var logger = new WarningLogger();
 
-        TraxRequestHandler.WarnIfExecutionServiceReplaced(services, logger, "/trax/run");
+        await TraxRequestHandler
+            .WarnIfExecutionServiceReplacedAsync(services, logger, "/trax/run")
+            .ConfigureAwait(false);
 
         logger
             .Warnings.Should()
@@ -190,7 +190,9 @@ public class QueueAdminOnly(ITrainExecutionService trains) : Junction<QueuesGate
 {
     public override async Task<Unit> Run(QueuesGatedInput input)
     {
-        await trains.QueueAsync(typeof(IAdminOnlyTrain).FullName!, "{}");
+        await trains
+            .QueueAsync(typeof(IAdminOnlyTrain).FullName!, "{}", ct: CancellationToken.None)
+            .ConfigureAwait(false);
         return Unit.Default;
     }
 }
@@ -210,7 +212,7 @@ public class ReadsTrustTrain : ServiceTrain<ReadsTrustInput, Unit>, IReadsTrustT
 public class ReadTrust(ITrustedExecutionScope trust) : Junction<ReadsTrustInput, Unit>
 {
     public static System.Collections.Concurrent.ConcurrentDictionary<string, bool> Seen { get; } =
-        new();
+        new(StringComparer.Ordinal);
 
     public override Task<Unit> Run(ReadsTrustInput input)
     {

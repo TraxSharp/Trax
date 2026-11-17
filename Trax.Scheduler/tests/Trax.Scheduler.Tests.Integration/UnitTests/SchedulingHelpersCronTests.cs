@@ -81,7 +81,10 @@ public class SchedulingHelpersCronTests
     [Test]
     public void IsTimeForCron_NullLastRun_ReturnsTrue()
     {
-        SchedulingHelpers.IsTimeForCron(null, "0 3 * * *", DateTime.UtcNow).Should().BeTrue();
+        SchedulingHelpers
+            .IsTimeForCron(lastSuccessfulRun: null, "0 3 * * *", DateTime.UtcNow)
+            .Should()
+            .BeTrue();
     }
 
     [Test]
@@ -123,7 +126,10 @@ public class SchedulingHelpersCronTests
     [Test]
     public void IsTimeForCron_6Field_NullLastRun_ReturnsTrue()
     {
-        SchedulingHelpers.IsTimeForCron(null, "*/15 * * * * *", DateTime.UtcNow).Should().BeTrue();
+        SchedulingHelpers
+            .IsTimeForCron(lastSuccessfulRun: null, "*/15 * * * * *", DateTime.UtcNow)
+            .Should()
+            .BeTrue();
     }
 
     // ── ShouldRunNow — 6-field cron ──────────────────────────────────

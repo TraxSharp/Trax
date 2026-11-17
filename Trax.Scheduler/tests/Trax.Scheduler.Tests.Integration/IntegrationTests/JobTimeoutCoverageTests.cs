@@ -31,7 +31,7 @@ public class JobTimeoutCoverageTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
         _previousTimeout = _config.DefaultJobTimeout;
         _previousStaleTimeout = _config.StaleInProgressTimeout;
@@ -200,7 +200,10 @@ public class JobTimeoutCoverageTests : TestSetup
 
     private async Task RunManifestManager()
     {
-        await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        await Scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default)
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -217,17 +220,15 @@ public class JobTimeoutCoverageTests : TestSetup
         entry.Status = WorkQueueStatus.Dispatched;
         entry.MetadataId = metadataId;
         entry.DispatchedAt = DateTime.UtcNow;
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
     private async Task<Manifest> CreateManifest(bool isEnabled, int? timeoutSeconds = null)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -241,8 +242,8 @@ public class JobTimeoutCoverageTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -264,13 +265,14 @@ public class JobTimeoutCoverageTests : TestSetup
             }
         );
         run.TrainState = TrainState.InProgress;
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         await DataContext
             .Metadatas.Where(m => m.Id == run.Id)
             .ExecuteUpdateAsync(s =>
                 s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-startedMinutesAgo))
-            );
+            )
+            .ConfigureAwait(false);
         DataContext.Reset();
         return run;
     }

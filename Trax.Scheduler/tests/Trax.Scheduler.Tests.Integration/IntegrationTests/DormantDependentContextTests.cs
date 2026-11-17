@@ -30,7 +30,7 @@ public class DormantDependentContextTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _context = Scope.ServiceProvider.GetRequiredService<DormantDependentContext>();
         _schedulerConfig = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
     }
@@ -538,16 +538,19 @@ public class DormantDependentContextTests : TestSetup
     )
     {
         var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}",
-            priority: groupPriority
-        );
-        var parent = await CreateAndSaveManifest(group, ScheduleType.Interval, intervalSeconds: 60);
+                DataContext,
+                name: $"group-{Guid.NewGuid():N}",
+                priority: groupPriority
+            )
+            .ConfigureAwait(false);
+        var parent = await CreateAndSaveManifest(group, ScheduleType.Interval, intervalSeconds: 60)
+            .ConfigureAwait(false);
         var dormant = await CreateAndSaveDormantDependent(
-            group,
-            parent,
-            $"dormant-{Guid.NewGuid():N}"
-        );
+                group,
+                parent,
+                $"dormant-{Guid.NewGuid():N}"
+            )
+            .ConfigureAwait(false);
         return (parent, dormant);
     }
 
@@ -571,8 +574,8 @@ public class DormantDependentContextTests : TestSetup
 
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -599,8 +602,8 @@ public class DormantDependentContextTests : TestSetup
         manifest.ManifestGroupId = group.Id;
         manifest.ExternalId = externalId;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;

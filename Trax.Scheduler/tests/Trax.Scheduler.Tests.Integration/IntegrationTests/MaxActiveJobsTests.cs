@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -119,7 +120,9 @@ public class MaxActiveJobsTests
         // Arrange - Create active metadata at the limit
         for (var i = 0; i < MaxActiveJobsLimit; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Active_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
@@ -128,7 +131,9 @@ public class MaxActiveJobsTests
         var queuedEntries = new List<WorkQueue>();
         for (var i = 0; i < 3; i++)
         {
-            var queueManifest = await CreateAndSaveManifest(inputValue: $"Queued_{i}");
+            var queueManifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             queuedEntries.Add(await CreateAndSaveWorkQueueEntry(queueManifest));
         }
 
@@ -150,7 +155,9 @@ public class MaxActiveJobsTests
         // Arrange - 3 active metadata, limit is 5 → 2 slots available
         for (var i = 0; i < 3; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Active_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
@@ -158,7 +165,9 @@ public class MaxActiveJobsTests
         var entries = new List<WorkQueue>();
         for (var i = 0; i < 3; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Queued_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
@@ -184,7 +193,9 @@ public class MaxActiveJobsTests
         // Arrange - Fill all but one slot
         for (var i = 0; i < MaxActiveJobsLimit - 1; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Active_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
@@ -192,7 +203,9 @@ public class MaxActiveJobsTests
         var entries = new List<WorkQueue>();
         for (var i = 0; i < 3; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Queued_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
@@ -228,13 +241,17 @@ public class MaxActiveJobsTests
 
         for (var i = 0; i < pendingCount; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Pending_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Pending_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         for (var i = 0; i < inProgressCount; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"InProgress_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"InProgress_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.InProgress);
         }
 
@@ -242,7 +259,9 @@ public class MaxActiveJobsTests
         var entries = new List<WorkQueue>();
         for (var i = 0; i < 2; i++)
         {
-            var queueManifest = await CreateAndSaveManifest(inputValue: $"Queued_{i}");
+            var queueManifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(queueManifest));
         }
 
@@ -258,7 +277,10 @@ public class MaxActiveJobsTests
                 .Status.Should()
                 .Be(
                     WorkQueueStatus.Queued,
-                    $"Pending ({pendingCount}) + InProgress ({inProgressCount}) = {MaxActiveJobsLimit} is at limit"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Pending ({pendingCount}) + InProgress ({inProgressCount}) = {MaxActiveJobsLimit} is at limit"
+                    )
                 );
         }
     }
@@ -272,14 +294,18 @@ public class MaxActiveJobsTests
         // Arrange - Fill limit with only InProgress jobs
         for (var i = 0; i < MaxActiveJobsLimit; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"InProgress_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"InProgress_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.InProgress);
         }
 
         var entries = new List<WorkQueue>();
         for (var i = 0; i < 2; i++)
         {
-            var queueManifest = await CreateAndSaveManifest(inputValue: $"Queued_{i}");
+            var queueManifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(queueManifest));
         }
 
@@ -303,7 +329,9 @@ public class MaxActiveJobsTests
         // Arrange - Create many completed jobs — these should NOT count
         for (var i = 0; i < MaxActiveJobsLimit + 5; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Completed_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Completed_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Completed);
         }
 
@@ -311,7 +339,9 @@ public class MaxActiveJobsTests
         var entries = new List<WorkQueue>();
         for (var i = 0; i < 3; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Queued_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
@@ -338,7 +368,9 @@ public class MaxActiveJobsTests
         // Arrange - Create many failed jobs — these should NOT count
         for (var i = 0; i < MaxActiveJobsLimit + 5; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Failed_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Failed_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Failed);
         }
 
@@ -346,7 +378,9 @@ public class MaxActiveJobsTests
         var entries = new List<WorkQueue>();
         for (var i = 0; i < 3; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Queued_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
@@ -378,7 +412,9 @@ public class MaxActiveJobsTests
         var entries = new List<WorkQueue>();
         for (var i = 0; i < MaxActiveJobsLimit + 3; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Queued_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
@@ -409,14 +445,18 @@ public class MaxActiveJobsTests
         // Arrange - More active jobs than the limit (shouldn't normally happen, but test it)
         for (var i = 0; i < MaxActiveJobsLimit + 3; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Active_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         var entries = new List<WorkQueue>();
         for (var i = 0; i < 3; i++)
         {
-            var queueManifest = await CreateAndSaveManifest(inputValue: $"Queued_{i}");
+            var queueManifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(queueManifest));
         }
 
@@ -458,7 +498,9 @@ public class MaxActiveJobsTests
         // Arrange - Fill all but one slot so only 1 entry can be dispatched
         for (var i = 0; i < MaxActiveJobsLimit - 1; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Active_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
@@ -509,7 +551,9 @@ public class MaxActiveJobsTests
         // Arrange - Fill all but one slot so only 1 entry can be dispatched
         for (var i = 0; i < MaxActiveJobsLimit - 1; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Active_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
@@ -557,7 +601,9 @@ public class MaxActiveJobsTests
         // Arrange - Exactly limit - 1 active jobs
         for (var i = 0; i < MaxActiveJobsLimit - 1; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Active_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
@@ -565,7 +611,9 @@ public class MaxActiveJobsTests
         var entries = new List<WorkQueue>();
         for (var i = 0; i < 3; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Queued_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
@@ -596,19 +644,25 @@ public class MaxActiveJobsTests
 
         for (var i = 0; i < 2; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Pending_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Pending_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         for (var i = 0; i < 2; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"InProgress_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"InProgress_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.InProgress);
         }
 
         for (var i = 0; i < 5; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Completed_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Completed_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Completed);
         }
 
@@ -616,7 +670,9 @@ public class MaxActiveJobsTests
         var entries = new List<WorkQueue>();
         for (var i = 0; i < 3; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Queued_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
@@ -647,7 +703,9 @@ public class MaxActiveJobsTests
         var activeManifests = new List<Manifest>();
         for (var i = 0; i < MaxActiveJobsLimit; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Active_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Pending);
             activeManifests.Add(manifest);
         }
@@ -656,7 +714,9 @@ public class MaxActiveJobsTests
         var entries = new List<WorkQueue>();
         for (var i = 0; i < 5; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Queued_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
@@ -736,7 +796,9 @@ public class MaxActiveJobsTests
                             .AddJunctionLogger(serializeJunctionData: true)
                     )
                     .AddMediator(typeof(AssemblyMarker).Assembly, typeof(JobRunnerTrain).Assembly)
-                    .AddScheduler(scheduler => scheduler.UseInMemoryWorkers().MaxActiveJobs(null))
+                    .AddScheduler(scheduler =>
+                        scheduler.UseInMemoryWorkers().MaxActiveJobs(maxJobs: null)
+                    )
             )
             .AddScoped<IDataContext>(sp =>
             {
@@ -764,7 +826,10 @@ public class MaxActiveJobsTests
                     IsEnabled = true,
                     ScheduleType = ScheduleType.None,
                     MaxRetries = 3,
-                    Properties = new SchedulerTestInput { Value = $"Active_{i}" },
+                    Properties = new SchedulerTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"Active_{i}"),
+                    },
                 }
             );
             activeManifest.ManifestGroupId = activeGroup.Id;
@@ -776,7 +841,10 @@ public class MaxActiveJobsTests
                 {
                     Name = typeof(SchedulerTestTrain).FullName!,
                     ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = new SchedulerTestInput { Value = $"Active_{i}" },
+                    Input = new SchedulerTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"Active_{i}"),
+                    },
                     ManifestId = activeManifest.Id,
                 }
             );
@@ -802,7 +870,10 @@ public class MaxActiveJobsTests
                     IsEnabled = true,
                     ScheduleType = ScheduleType.None,
                     MaxRetries = 3,
-                    Properties = new SchedulerTestInput { Value = $"Queued_{i}" },
+                    Properties = new SchedulerTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"Queued_{i}"),
+                    },
                 }
             );
             manifest.ManifestGroupId = queuedGroup.Id;
@@ -1017,10 +1088,9 @@ public class MaxActiveJobsTests
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            _dataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(_dataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -1035,8 +1105,8 @@ public class MaxActiveJobsTests
 
         manifest.ManifestGroupId = group.Id;
 
-        await _dataContext.Track(manifest);
-        await _dataContext.SaveChanges(CancellationToken.None);
+        await _dataContext.Track(manifest).ConfigureAwait(false);
+        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _dataContext.Reset();
 
         return manifest;
@@ -1056,8 +1126,8 @@ public class MaxActiveJobsTests
 
         metadata.TrainState = state;
 
-        await _dataContext.Track(metadata);
-        await _dataContext.SaveChanges(CancellationToken.None);
+        await _dataContext.Track(metadata).ConfigureAwait(false);
+        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _dataContext.Reset();
 
         return metadata;
@@ -1076,8 +1146,8 @@ public class MaxActiveJobsTests
             }
         );
 
-        await _dataContext.Track(entry);
-        await _dataContext.SaveChanges(CancellationToken.None);
+        await _dataContext.Track(entry).ConfigureAwait(false);
+        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _dataContext.Reset();
 
         return entry;

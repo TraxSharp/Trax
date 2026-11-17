@@ -14,4 +14,4 @@ public record StressTestInput : IManifestProperties
     public string Value { get; set; } = string.Empty;
 }
 
-public interface IStressTestTrain : IServiceTrain<StressTestInput, Unit> { }
+public interface IStressTestTrain : IServiceTrain<StressTestInput, Unit>;

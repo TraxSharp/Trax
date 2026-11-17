@@ -77,7 +77,9 @@ public class OperationsServiceRunQueueChecksTests
     private async Task<int> RunsOf(Type train)
     {
         var context = _scope.ServiceProvider.GetRequiredService<IDataContext>();
-        return await context.Metadatas.CountAsync(m => m.Name == train.FullName);
+        return await context
+            .Metadatas.CountAsync(m => m.Name == train.FullName)
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -175,7 +177,7 @@ public class OperationsServiceRunQueueChecksTests
 
         protected override Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            if (TrainInput.Tenant != "mine")
+            if (!string.Equals(TrainInput.Tenant, "mine", StringComparison.Ordinal))
                 throw new TrainException("Record belongs to another tenant.");
 
             Seen.Add(

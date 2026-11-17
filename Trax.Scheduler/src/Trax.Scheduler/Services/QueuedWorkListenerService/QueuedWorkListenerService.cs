@@ -41,10 +41,10 @@ internal sealed class QueuedWorkListenerService(
     internal int Notices => Volatile.Read(ref _notices);
 
     /// <summary>Raised after each subscription opens.</summary>
-    internal event Action? Subscribed;
+    internal event EventHandler? Subscribed;
 
     /// <summary>Raised after each notice, once the dispatcher has been signalled.</summary>
-    internal event Action? NoticeReceived;
+    internal event EventHandler? NoticeReceived;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -63,7 +63,7 @@ internal sealed class QueuedWorkListenerService(
             IQueuedWorkSubscription? subscription = null;
             try
             {
-                subscription = await listener.SubscribeAsync(stoppingToken);
+                subscription = await listener.SubscribeAsync(stoppingToken).ConfigureAwait(false);
 
                 if (Interlocked.Increment(ref _subscriptions) > 1)
                 {
@@ -71,14 +71,14 @@ internal sealed class QueuedWorkListenerService(
                     wake.Signal();
                 }
                 backoff = FirstBackoff;
-                Subscribed?.Invoke();
+                Subscribed?.Invoke(this, EventArgs.Empty);
 
                 while (true)
                 {
-                    await subscription.WaitAsync(stoppingToken);
+                    await subscription.WaitAsync(stoppingToken).ConfigureAwait(false);
                     Interlocked.Increment(ref _notices);
                     wake.Signal();
-                    NoticeReceived?.Invoke();
+                    NoticeReceived?.Invoke(this, EventArgs.Empty);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -97,12 +97,12 @@ internal sealed class QueuedWorkListenerService(
             finally
             {
                 if (subscription is not null)
-                    await DisposeQuietly(subscription);
+                    await DisposeQuietly(subscription).ConfigureAwait(false);
             }
 
             try
             {
-                await Task.Delay(backoff, stoppingToken);
+                await Task.Delay(backoff, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -117,7 +117,7 @@ internal sealed class QueuedWorkListenerService(
     {
         try
         {
-            await subscription.DisposeAsync();
+            await subscription.DisposeAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {

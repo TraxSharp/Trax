@@ -20,7 +20,7 @@ namespace Trax.Scheduler.Trains.DeadLetterCleanup.Junctions;
 /// that entry. Nothing is deleted while <see cref="SchedulerConfiguration.AutoPurgeDeadLetters"/>
 /// is false.
 /// </remarks>
-internal class DeleteResolvedDeadLettersJunction(
+internal sealed class DeleteResolvedDeadLettersJunction(
     IDataContext dataContext,
     SchedulerConfiguration configuration,
     ILogger<DeleteResolvedDeadLettersJunction> logger
@@ -61,7 +61,8 @@ internal class DeleteResolvedDeadLettersJunction(
                 )
                 .Select(dl => dl.Id)
                 .Take(BatchSize)
-                .ToListAsync(CancellationToken);
+                .ToListAsync(CancellationToken)
+                .ConfigureAwait(false);
 
             if (batchIds.Count == 0)
                 break;
@@ -71,11 +72,13 @@ internal class DeleteResolvedDeadLettersJunction(
                 .WorkQueues.Where(wq =>
                     wq.DeadLetterId.HasValue && batchIds.Contains(wq.DeadLetterId.Value)
                 )
-                .ExecuteDeleteAsync(CancellationToken);
+                .ExecuteDeleteAsync(CancellationToken)
+                .ConfigureAwait(false);
 
             totalDeleted += await dataContext
                 .DeadLetters.Where(dl => batchIds.Contains(dl.Id))
-                .ExecuteDeleteAsync(CancellationToken);
+                .ExecuteDeleteAsync(CancellationToken)
+                .ConfigureAwait(false);
 
             if (batchIds.Count < BatchSize)
                 break;

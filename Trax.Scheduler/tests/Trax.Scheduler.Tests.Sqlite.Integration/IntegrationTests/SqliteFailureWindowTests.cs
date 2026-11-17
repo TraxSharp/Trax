@@ -92,17 +92,18 @@ public class SqliteFailureWindowTests : TestSetup
 
     private async Task RunManifestManager()
     {
-        await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        await Scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default)
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 
     /// <summary>An interval manifest whose next run is due now.</summary>
     private async Task<Manifest> CreateDueManifest(int maxRetries, TimeSpan? failureWindow = null)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -117,8 +118,8 @@ public class SqliteFailureWindowTests : TestSetup
         manifest.ManifestGroupId = group.Id;
         manifest.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-5);
         manifest.FailureWindowSeconds = (int?)failureWindow?.TotalSeconds;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -137,8 +138,8 @@ public class SqliteFailureWindowTests : TestSetup
         run.TrainState = state;
         run.StartTime = startTime;
         run.EndTime = startTime.AddMinutes(1);
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 }

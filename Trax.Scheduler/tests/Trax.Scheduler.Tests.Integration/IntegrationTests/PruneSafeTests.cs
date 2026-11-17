@@ -30,7 +30,7 @@ public class PruneSafeTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _scheduler = Scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
     }
 
@@ -443,10 +443,8 @@ public class PruneSafeTests : TestSetup
 
     private async Task<Manifest> CreateManifestWithExternalId(string externalId)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -463,8 +461,8 @@ public class PruneSafeTests : TestSetup
         manifest.ExternalId = externalId;
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -472,10 +470,8 @@ public class PruneSafeTests : TestSetup
 
     private async Task<Manifest> CreateDependentManifest(Manifest parent, string externalId)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -492,8 +488,8 @@ public class PruneSafeTests : TestSetup
         manifest.ExternalId = externalId;
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -513,8 +509,8 @@ public class PruneSafeTests : TestSetup
 
         metadata.TrainState = state;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -532,8 +528,8 @@ public class PruneSafeTests : TestSetup
             }
         );
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return entry;
@@ -541,7 +537,9 @@ public class PruneSafeTests : TestSetup
 
     private async Task<DeadLetter> CreateDeadLetter(Manifest manifest)
     {
-        var reloadedManifest = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+        var reloadedManifest = await DataContext
+            .Manifests.FirstAsync(m => m.Id == manifest.Id)
+            .ConfigureAwait(false);
 
         var deadLetter = DeadLetter.Create(
             new CreateDeadLetter
@@ -552,8 +550,8 @@ public class PruneSafeTests : TestSetup
             }
         );
 
-        await DataContext.Track(deadLetter);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(deadLetter).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return deadLetter;

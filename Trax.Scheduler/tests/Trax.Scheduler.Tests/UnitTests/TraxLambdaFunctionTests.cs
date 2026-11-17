@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using Amazon.Lambda.TestUtilities;
@@ -40,6 +41,8 @@ public class TraxLambdaFunctionTests
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNameCaseInsensitive = true,
     };
 
@@ -93,7 +96,8 @@ public class TraxLambdaFunctionTests
         var fn = new TestFunction();
         var envelope = new LambdaEnvelope(LambdaRequestType.Execute, "null");
 
-        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+        var act = async () =>
+            await fn.FunctionHandler(envelope, CreateContext()).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -136,7 +140,8 @@ public class TraxLambdaFunctionTests
             )
         );
 
-        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+        var act = async () =>
+            await fn.FunctionHandler(envelope, CreateContext()).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("run-fail");
     }
@@ -147,7 +152,8 @@ public class TraxLambdaFunctionTests
         var fn = new TestFunction();
         var envelope = new LambdaEnvelope(LambdaRequestType.Run, "null");
 
-        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+        var act = async () =>
+            await fn.FunctionHandler(envelope, CreateContext()).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -163,7 +169,8 @@ public class TraxLambdaFunctionTests
         var fn = new TestFunction();
         var envelope = new LambdaEnvelope(LambdaRequestType.Execute, payload);
 
-        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+        var act = async () =>
+            await fn.FunctionHandler(envelope, CreateContext()).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<JsonException>();
         fn.Handler.ExecuteCalls.Should().BeEmpty();
@@ -176,7 +183,8 @@ public class TraxLambdaFunctionTests
         var fn = new TestFunction();
         var envelope = new LambdaEnvelope(LambdaRequestType.Run, payload);
 
-        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+        var act = async () =>
+            await fn.FunctionHandler(envelope, CreateContext()).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<JsonException>();
         fn.Handler.RunCalls.Should().BeEmpty();
@@ -213,7 +221,8 @@ public class TraxLambdaFunctionTests
         var fn = new TestFunction(_ => { });
         var envelope = new LambdaEnvelope(LambdaRequestType.Run, RunPayload());
 
-        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+        var act = async () =>
+            await fn.FunctionHandler(envelope, CreateContext()).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -227,7 +236,8 @@ public class TraxLambdaFunctionTests
         var fn = new TestFunction(o => o.SigningKey = Key);
         var envelope = new LambdaEnvelope(LambdaRequestType.Run, RunPayload());
 
-        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+        var act = async () =>
+            await fn.FunctionHandler(envelope, CreateContext()).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Missing*");
         fn.Handler.RunCalls.Should().BeEmpty();
@@ -251,9 +261,10 @@ public class TraxLambdaFunctionTests
 
         var act = async () =>
             await fn.FunctionHandler(
-                Signed(LambdaRequestType.Run, RunPayload(), otherKey),
-                CreateContext()
-            );
+                    Signed(LambdaRequestType.Run, RunPayload(), otherKey),
+                    CreateContext()
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Invalid*");
         fn.Handler.RunCalls.Should().BeEmpty();
@@ -269,7 +280,8 @@ public class TraxLambdaFunctionTests
             Signature = Signed(LambdaRequestType.Execute, payload).Signature,
         };
 
-        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+        var act = async () =>
+            await fn.FunctionHandler(envelope, CreateContext()).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Invalid*");
     }
@@ -281,7 +293,8 @@ public class TraxLambdaFunctionTests
         var envelope = Signed(LambdaRequestType.Run, RunPayload());
 
         await fn.FunctionHandler(envelope, CreateContext());
-        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+        var act = async () =>
+            await fn.FunctionHandler(envelope, CreateContext()).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Replayed*");
         fn.Handler.RunCalls.Should()
@@ -593,7 +606,8 @@ public class TraxLambdaFunctionTests
         var fn = new TestFunction();
         var envelope = new LambdaEnvelope((LambdaRequestType)999, "{}");
 
-        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+        var act = async () =>
+            await fn.FunctionHandler(envelope, CreateContext()).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -612,7 +626,13 @@ public class TraxLambdaFunctionTests
         var environment = $"LocalRunner{Guid.NewGuid():N}";
         var settings = Path.Combine(AppContext.BaseDirectory, $"appsettings.{environment}.json");
         var port = FreePort();
-        await File.WriteAllTextAsync(settings, $$"""{ "Urls": "http://127.0.0.1:{{port}}" }""");
+        await File.WriteAllTextAsync(
+            settings,
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""{ "Urls": "http://127.0.0.1:{{port}}" }"""
+            )
+        );
 
         var elsewhere = Directory.CreateTempSubdirectory("trax-local-runner-");
         var previous = Directory.GetCurrentDirectory();
@@ -625,7 +645,14 @@ public class TraxLambdaFunctionTests
 
             using var http = new HttpClient();
             var response = await RetryUntilListeningAsync(() =>
-                http.PostAsync($"http://127.0.0.1:{port}/trax/run", new StringContent("{}"))
+                http.PostAsync(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"http://127.0.0.1:{port}/trax/run"
+                    ),
+                    new StringContent("{}"),
+                    CancellationToken.None
+                )
             );
             response
                 .StatusCode.Should()
@@ -639,7 +666,7 @@ public class TraxLambdaFunctionTests
 
         await stop.CancelAsync();
         // negative-wait: an upper bound on shutdown, not a wait for it.
-        (await Task.WhenAny(running, Task.Delay(TimeSpan.FromSeconds(10))))
+        (await Task.WhenAny(running, Task.Delay(TimeSpan.FromSeconds(10), CancellationToken.None)))
             .Should()
             .BeSameAs(running, "cancelling the token stops the server");
         await running;
@@ -692,12 +719,12 @@ public class TraxLambdaFunctionTests
         {
             try
             {
-                return await send();
+                return await send().ConfigureAwait(false);
             }
             catch (HttpRequestException) when (DateTime.UtcNow < deadline)
             {
                 // determinism: the poll interval of a bounded wait for the server to listen.
-                await Task.Delay(50);
+                await Task.Delay(50).ConfigureAwait(false);
             }
         }
     }
@@ -923,7 +950,7 @@ public class TraxLambdaFunctionTests
                     app.UseEndpoints(routes => fn.ExposeConfigureRoutes(routes));
                 });
             });
-        var host = await builder.StartAsync();
+        var host = await builder.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -958,8 +985,8 @@ public class TraxLambdaFunctionTests
                     Input = null,
                 }
             );
-            await context.Track(run);
-            await context.SaveChanges(CancellationToken.None);
+            await context.Track(run).ConfigureAwait(false);
+            await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             return run.Id;
         }
 
@@ -968,7 +995,10 @@ public class TraxLambdaFunctionTests
             using var context = (IDataContext)
                 Services.GetRequiredService<IDataContextProviderFactory>().Create();
             return (
-                await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == metadataId)
+                await context
+                    .Metadatas.AsNoTracking()
+                    .SingleAsync(m => m.Id == metadataId)
+                    .ConfigureAwait(false)
             ).TrainState;
         }
 
@@ -1078,8 +1108,8 @@ public class TraxLambdaFunctionTests
                 var cancelled = new TaskCompletionSource(
                     TaskCreationOptions.RunContinuationsAsynchronously
                 );
-                await using (ct.Register(() => cancelled.TrySetCanceled(ct)))
-                    await cancelled.Task;
+                await using (ct.Register(() => cancelled.TrySetCanceled(ct)).ConfigureAwait(false))
+                    await cancelled.Task.ConfigureAwait(false);
             }
             if (ExecuteException is not null)
                 throw ExecuteException;

@@ -254,23 +254,23 @@ internal abstract class RemoteCoverageTrain
     protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 }
 
-internal record RemoteCoverageInput : IManifestProperties { }
+internal sealed record RemoteCoverageInput : IManifestProperties;
 
-internal interface IRemoteCoverageTrain : IServiceTrain<RemoteCoverageInput, Unit> { }
+internal interface IRemoteCoverageTrain : IServiceTrain<RemoteCoverageInput, Unit>;
 
 /// <summary>
 /// Train NOT carrying [TraxRemote], used only to provide a ForTrain target so a
 /// RoutedSubmitterRegistration is created and the attribute-discovery loop runs.
 /// </summary>
-internal class NonRemoteCoverageTrain
+internal sealed class NonRemoteCoverageTrain
     : ServiceTrain<NonRemoteCoverageInput, Unit>,
         INonRemoteCoverageTrain
 {
     protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 }
 
-internal record NonRemoteCoverageInput : IManifestProperties { }
+internal sealed record NonRemoteCoverageInput : IManifestProperties;
 
-internal interface INonRemoteCoverageTrain : IServiceTrain<NonRemoteCoverageInput, Unit> { }
+internal interface INonRemoteCoverageTrain : IServiceTrain<NonRemoteCoverageInput, Unit>;
 
 #endregion

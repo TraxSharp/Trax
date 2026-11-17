@@ -201,20 +201,20 @@ public class ParallelManifestRunTests
     }
 
     private static string Flipped(string way) =>
-        way == nameof(ParallelProbeWay.Left)
+        string.Equals(way, nameof(ParallelProbeWay.Left), StringComparison.Ordinal)
             ? nameof(ParallelProbeWay.Right)
             : nameof(ParallelProbeWay.Left);
 
     /// <summary>A manifest with no retries whose run failed in a branch and was dead-lettered.</summary>
     private async Task<(Manifest Manifest, Metadata Failed)> DeadLetteredAsync(string value)
     {
-        var manifest = await CreateManifestAsync(value, maxRetries: 0);
+        var manifest = await CreateManifestAsync(value, maxRetries: 0).ConfigureAwait(false);
 
         ParallelProbe.Fail = true;
-        var failed = await CycleAsync(manifest);
+        var failed = await CycleAsync(manifest).ConfigureAwait(false);
         failed.TrainState.Should().Be(TrainState.Failed);
-        await RunManifestManagerAsync();
-        (await AwaitingDeadLetterOf(manifest)).Should().NotBeNull();
+        await RunManifestManagerAsync().ConfigureAwait(false);
+        (await AwaitingDeadLetterOf(manifest).ConfigureAwait(false)).Should().NotBeNull();
 
         ParallelProbe.Fail = false;
         return (manifest, failed);
@@ -233,14 +233,17 @@ public class ParallelManifestRunTests
         // The run has been going for longer than its manifest allows.
         var runId = await WithData(async data =>
         {
-            var run = await data.Metadatas.SingleAsync(m =>
-                m.ManifestId == manifest.Id && m.TrainState == TrainState.InProgress
-            );
+            var run = await data
+                .Metadatas.SingleAsync(m =>
+                    m.ManifestId == manifest.Id && m.TrainState == TrainState.InProgress
+                )
+                .ConfigureAwait(false);
             await data
                 .Metadatas.Where(m => m.Id == run.Id)
                 .ExecuteUpdateAsync(s =>
                     s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-5))
-                );
+                )
+                .ConfigureAwait(false);
             return run.Id;
         });
 
@@ -263,10 +266,9 @@ public class ParallelManifestRunTests
         using var scope = Provider.CreateScope();
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            data,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(data, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -280,41 +282,55 @@ public class ParallelManifestRunTests
         );
         manifest.ManifestGroupId = group.Id;
         manifest.TimeoutSeconds = timeoutSeconds;
-        await data.Track(manifest);
-        await data.SaveChanges(CancellationToken.None);
+        await data.Track(manifest).ConfigureAwait(false);
+        await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return manifest;
     }
 
     private async Task<Metadata> CycleAsync(Manifest manifest)
     {
-        await RunManifestManagerAsync();
-        return await DispatchQueuedAsync(manifest);
+        await RunManifestManagerAsync().ConfigureAwait(false);
+        return await DispatchQueuedAsync(manifest).ConfigureAwait(false);
     }
 
     private async Task RunManifestManagerAsync()
     {
         using var scope = Provider.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        await scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default)
+            .ConfigureAwait(false);
     }
 
     private async Task<Metadata> DispatchQueuedAsync(Manifest manifest)
     {
         var entryId = await WithData(data =>
-            data.WorkQueues.AsNoTracking()
-                .Where(q => q.ManifestId == manifest.Id && q.Status == WorkQueueStatus.Queued)
-                .Select(q => q.Id)
-                .SingleAsync()
-        );
+                data.WorkQueues.AsNoTracking()
+                    .Where(q => q.ManifestId == manifest.Id && q.Status == WorkQueueStatus.Queued)
+                    .Select(q => q.Id)
+                    .SingleAsync()
+            )
+            .ConfigureAwait(false);
 
         using (var scope = Provider.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
+            await scope
+                .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
+                .Run(Unit.Default)
+                .ConfigureAwait(false);
 
         return await WithData(async data =>
-        {
-            var entry = await data.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == entryId);
-            entry.Status.Should().Be(WorkQueueStatus.Dispatched);
-            return await data.Metadatas.AsNoTracking().SingleAsync(m => m.Id == entry.MetadataId);
-        });
+            {
+                var entry = await data
+                    .WorkQueues.AsNoTracking()
+                    .SingleAsync(q => q.Id == entryId)
+                    .ConfigureAwait(false);
+                entry.Status.Should().Be(WorkQueueStatus.Dispatched);
+                return await data
+                    .Metadatas.AsNoTracking()
+                    .SingleAsync(m => m.Id == entry.MetadataId)
+                    .ConfigureAwait(false);
+            })
+            .ConfigureAwait(false);
     }
 
     private Task<DeadLetter?> AwaitingDeadLetterOf(Manifest manifest) =>
@@ -327,18 +343,19 @@ public class ParallelManifestRunTests
 
     private async Task<Metadata> RequeueDeadLetterAndRunAsync(Manifest manifest, bool askAfresh)
     {
-        var deadLetter = await AwaitingDeadLetterOf(manifest);
+        var deadLetter = await AwaitingDeadLetterOf(manifest).ConfigureAwait(false);
 
         using (var scope = Provider.CreateScope())
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ITraxScheduler>()
                     .RequeueDeadLetterAsync(deadLetter!.Id, askAfresh)
+                    .ConfigureAwait(false)
             )
                 .Success.Should()
                 .BeTrue();
 
-        return await DispatchQueuedAsync(manifest);
+        return await DispatchQueuedAsync(manifest).ConfigureAwait(false);
     }
 
     private Task<List<Effect.Models.RecordedDecision.RecordedDecision>> DecisionsOf(
@@ -353,7 +370,8 @@ public class ParallelManifestRunTests
     private async Task<T> WithData<T>(Func<IDataContext, Task<T>> read)
     {
         using var scope = Provider.CreateScope();
-        return await read(scope.ServiceProvider.GetRequiredService<IDataContext>());
+        return await read(scope.ServiceProvider.GetRequiredService<IDataContext>())
+            .ConfigureAwait(false);
     }
 }
 
@@ -425,7 +443,7 @@ public static class ParallelProbe
             return;
 
         _held.TrySetResult();
-        await _released.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await _released.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
     }
 
     public static List<(string Branch, string Way)> TakenBy(long run) =>
@@ -454,7 +472,11 @@ public sealed class ParallelProbeDecider : IDecider
     public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _asked);
-        var fast = ChainGraph.CurrentBranchPath == "Parallel#0/fast";
+        var fast = string.Equals(
+            ChainGraph.CurrentBranchPath,
+            "Parallel#0/fast",
+            StringComparison.Ordinal
+        );
         var way = fast ^ _flipped ? ParallelProbeWay.Left : ParallelProbeWay.Right;
         return new ScriptedDecider().Choose(way).Decide(request, cancellationToken);
     }
@@ -485,7 +507,7 @@ public class ParallelProbeFastWork : EffectJunction<ParallelProbeInput, Parallel
 {
     public override async Task<ParallelProbeFast> Run(ParallelProbeInput input)
     {
-        await ParallelProbe.HoldIfAsked();
+        await ParallelProbe.HoldIfAsked().ConfigureAwait(false);
         return new ParallelProbeFast(input.Value);
     }
 }
@@ -510,13 +532,19 @@ public class ParallelProbeSlowWork : EffectJunction<ParallelProbeInput, Parallel
             var stopped = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            await using (CancellationToken.Register(() => stopped.TrySetCanceled()))
-                await stopped.Task;
+            await using (
+                CancellationToken
+                    .Register(() => stopped.TrySetCanceled(CancellationToken.None))
+                    .ConfigureAwait(false)
+            )
+                await stopped.Task.ConfigureAwait(false);
         }
 
         if (ParallelProbe.Fail)
         {
-            await ParallelProbe.FastBranchFinishedIn(Metadata!.TrainMetadataId);
+            await ParallelProbe
+                .FastBranchFinishedIn(Metadata!.TrainMetadataId)
+                .ConfigureAwait(false);
             throw new TimeoutException("the slow branch timed out");
         }
 

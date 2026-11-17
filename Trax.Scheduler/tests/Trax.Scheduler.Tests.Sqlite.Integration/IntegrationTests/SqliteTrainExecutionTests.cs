@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Trax.Core.Functional;
@@ -79,7 +80,10 @@ public class SqliteTrainExecutionTests : TestSetup
         for (var i = 0; i < 3; i++)
         {
             await TrainBus.RunAsync<Unit>(
-                new SchedulerTestInput { Value = $"train-{i}" },
+                new SchedulerTestInput
+                {
+                    Value = string.Create(CultureInfo.InvariantCulture, $"train-{i}"),
+                },
                 CancellationToken.None
             );
         }

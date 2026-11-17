@@ -225,7 +225,12 @@ public class LambdaRunExecutorTests
         // Assert
         var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(
             client.LastRequest!.Payload,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+            new JsonSerializerOptions
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+                PropertyNameCaseInsensitive = true,
+            }
         );
 
         envelope.Should().NotBeNull();
@@ -240,7 +245,12 @@ public class LambdaRunExecutorTests
 
         var request = JsonSerializer.Deserialize<RemoteRunRequest>(
             envelope.PayloadJson,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+            new JsonSerializerOptions
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+                PropertyNameCaseInsensitive = true,
+            }
         );
         request.Should().NotBeNull();
         request!.TrainName.Should().Be("My.Train.FullName");
@@ -266,11 +276,13 @@ public class LambdaRunExecutorTests
 
         // Act
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.FailingTrain",
-                new TestRunInput { Name = "fail" },
-                typeof(TestRunOutput)
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.FailingTrain",
+                    new TestRunInput { Name = "fail" },
+                    typeof(TestRunOutput)
+                )
+                .ConfigureAwait(false);
 
         // Assert
         await act.Should()
@@ -295,11 +307,13 @@ public class LambdaRunExecutorTests
 
         // Act
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.FailingTrain",
-                new TestRunInput { Name = "fail" },
-                typeof(TestRunOutput)
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.FailingTrain",
+                    new TestRunInput { Name = "fail" },
+                    typeof(TestRunOutput)
+                )
+                .ConfigureAwait(false);
 
         // Assert
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
@@ -328,11 +342,13 @@ public class LambdaRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.FailingTrain",
-                new TestRunInput { Name = "fail" },
-                typeof(TestRunOutput)
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.FailingTrain",
+                    new TestRunInput { Name = "fail" },
+                    typeof(TestRunOutput)
+                )
+                .ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         JsonSerializer
@@ -410,11 +426,9 @@ public class LambdaRunExecutorTests
 
         // Act
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestRunInput { Name = "x" },
-                typeof(TestRunOutput)
-            );
+            await executor
+                .ExecuteAsync("My.Train", new TestRunInput { Name = "x" }, typeof(TestRunOutput))
+                .ConfigureAwait(false);
 
         // Assert
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
@@ -437,11 +451,13 @@ public class LambdaRunExecutorTests
 
         // Act
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestRunInput { Name = "crash" },
-                typeof(TestRunOutput)
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.Train",
+                    new TestRunInput { Name = "crash" },
+                    typeof(TestRunOutput)
+                )
+                .ConfigureAwait(false);
 
         // Assert
         await act.Should().ThrowAsync<TrainException>().WithMessage("*Unhandled*");
@@ -454,11 +470,13 @@ public class LambdaRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestRunInput { Name = "crash" },
-                typeof(TestRunOutput)
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.Train",
+                    new TestRunInput { Name = "crash" },
+                    typeof(TestRunOutput)
+                )
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<RemoteRunException>())
             .Which.PublicMessage.Should()
@@ -480,11 +498,13 @@ public class LambdaRunExecutorTests
         var executor = CreateExecutor(CreateMockClient(response));
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.FailingTrain",
-                new TestRunInput { Name = "fail" },
-                typeof(TestRunOutput)
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.FailingTrain",
+                    new TestRunInput { Name = "fail" },
+                    typeof(TestRunOutput)
+                )
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<RemoteRunException>())
             .Which.PublicMessage.Should()
@@ -507,11 +527,9 @@ public class LambdaRunExecutorTests
 
         // Act
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestRunInput { Name = "null" },
-                typeof(TestRunOutput)
-            );
+            await executor
+                .ExecuteAsync("My.Train", new TestRunInput { Name = "null" }, typeof(TestRunOutput))
+                .ConfigureAwait(false);
 
         // Assert
         await act.Should().ThrowAsync<TrainException>().WithMessage("*null response*");
@@ -533,12 +551,14 @@ public class LambdaRunExecutorTests
 
         // Act
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestRunInput { Name = "cancel" },
-                typeof(TestRunOutput),
-                cts.Token
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.Train",
+                    new TestRunInput { Name = "cancel" },
+                    typeof(TestRunOutput),
+                    cts.Token
+                )
+                .ConfigureAwait(false);
 
         // Assert
         await act.Should().ThrowAsync<OperationCanceledException>();
@@ -612,11 +632,13 @@ public class LambdaRunExecutorTests
 
     private static Func<Task> FailingRun(LambdaRunExecutor executor) =>
         async () =>
-            await executor.ExecuteAsync(
-                "My.FailingTrain",
-                new TestRunInput { Name = "fail" },
-                typeof(TestRunOutput)
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.FailingTrain",
+                    new TestRunInput { Name = "fail" },
+                    typeof(TestRunOutput)
+                )
+                .ConfigureAwait(false);
 
     #endregion
 
@@ -646,7 +668,7 @@ public class LambdaRunExecutorTests
 
     #region MockLambdaClient
 
-    private class MockLambdaClient : IAmazonLambda
+    private sealed class MockLambdaClient : IAmazonLambda
     {
         public InvokeRequest? LastRequest { get; private set; }
         public List<InvokeRequest> AllRequests { get; } = [];

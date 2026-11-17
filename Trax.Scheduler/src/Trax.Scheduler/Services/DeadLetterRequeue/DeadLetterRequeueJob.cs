@@ -32,11 +32,11 @@ public enum DeadLetterRequeueJobStatus
 /// <param name="Status">Where the job is.</param>
 /// <param name="AwaitingAtStart">How many dead letters were awaiting intervention when it started.</param>
 /// <param name="StartedAt">When it started (UTC).</param>
-/// <param name="FinishedAt">When it stopped (UTC), or <c>null</c> while running.</param>
-/// <param name="Count">How many dead letters it requeued, once it has succeeded; <c>null</c> before.</param>
+/// <param name="FinishedAt">When it stopped (UTC), or <see langword="null"/> while running.</param>
+/// <param name="Count">How many dead letters it requeued, once it has succeeded; <see langword="null"/> before.</param>
 /// <param name="Message">A human-readable description of where it is or how it ended.</param>
 /// <param name="AskAfresh">
-/// <c>true</c> when every run it queues asks its deciders afresh rather than replaying the failed
+/// <see langword="true"/> when every run it queues asks its deciders afresh rather than replaying the failed
 /// run's decisions.
 /// </param>
 public record DeadLetterRequeueJob(
@@ -51,7 +51,7 @@ public record DeadLetterRequeueJob(
 )
 {
     /// <summary>
-    /// <c>false</c> when a requeue-all was already running on this node, so no second one was
+    /// <see langword="false"/> when a requeue-all was already running on this node, so no second one was
     /// started and this is the one already running.
     /// </summary>
     public bool Started { get; init; } = true;

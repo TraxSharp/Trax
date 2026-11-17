@@ -181,7 +181,7 @@ public class InvokeOutcomeNoticeTests
         );
         reconciler.Delivered += (_, e) =>
         {
-            if (e.InvokeToken == token)
+            if (string.Equals(e.InvokeToken, token, StringComparison.Ordinal))
                 delivered.TrySetResult(e.Delivery);
         };
         return delivered.Task;

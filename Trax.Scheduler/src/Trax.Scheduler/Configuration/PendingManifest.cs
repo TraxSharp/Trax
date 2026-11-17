@@ -14,7 +14,7 @@ namespace Trax.Scheduler.Configuration;
 /// Pending manifests are collected during service configuration and seeded
 /// automatically on startup by the ManifestPollingService.
 /// </remarks>
-internal class PendingManifest
+internal sealed class PendingManifest
 {
     /// <summary>
     /// Gets or sets a closure that captures the generic type parameters and schedules the manifest.

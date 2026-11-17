@@ -40,14 +40,18 @@ public class EffectSettingsServiceTests
 
         public TimeSpan? Timeout { get; set; }
 
-        public List<string>? Tags { get; set; } = ["a"];
+        public IList<string>? Tags { get; set; } = ["a"];
 
         private int _exploding;
 
         public int Exploding
         {
             get => _exploding;
-            set => _exploding = value == 13 ? throw new ArgumentException("13 is unlucky") : value;
+            set =>
+                _exploding =
+                    value == 13
+                        ? throw new ArgumentException("13 is unlucky", nameof(value))
+                        : value;
         }
     }
 
@@ -92,18 +96,25 @@ public class EffectSettingsServiceTests
         var effects = _service.GetEffects();
 
         effects.Select(e => e.FullName).Should().BeInAscendingOrder(StringComparer.Ordinal);
-        var plain = effects.Single(e => e.FullName == FullName<PlainFactory>());
+        var plain = effects.Single(e =>
+            string.Equals(e.FullName, FullName<PlainFactory>(), StringComparison.Ordinal)
+        );
         plain.Enabled.Should().BeFalse();
         plain.IsConfigurable.Should().BeFalse();
         plain.Fields.Should().BeEmpty();
-        effects.Single(e => e.FullName == FullName<FixedFactory>()).Toggleable.Should().BeFalse();
+        effects
+            .Single(e =>
+                string.Equals(e.FullName, FullName<FixedFactory>(), StringComparison.Ordinal)
+            )
+            .Toggleable.Should()
+            .BeFalse();
     }
 
     [Test]
     public void A_configurable_effect_describes_each_setting()
     {
         var effect = _service.GetEffects().Single(e => e.IsConfigurable);
-        var fields = effect.Fields.ToDictionary(f => f.Name);
+        var fields = effect.Fields.ToDictionary(f => f.Name, StringComparer.Ordinal);
 
         effect.ConfigurationTypeName.Should().Be(typeof(Settings).FullName);
         fields["BatchSize"].Kind.Should().Be(EffectFieldKind.Text);
@@ -128,7 +139,9 @@ public class EffectSettingsServiceTests
     public void A_sensitive_setting_is_never_read_back()
     {
         var effect = _service.GetEffects().Single(e => e.IsConfigurable);
-        var apiKey = effect.Fields.Single(f => f.Name == "ApiKey");
+        var apiKey = effect.Fields.Single(f =>
+            string.Equals(f.Name, "ApiKey", StringComparison.Ordinal)
+        );
 
         apiKey.Sensitive.Should().BeTrue();
         apiKey.HasValue.Should().BeTrue();
@@ -140,11 +153,14 @@ public class EffectSettingsServiceTests
     [Test]
     public void Toggling_refuses_an_unknown_or_fixed_effect_and_sets_a_toggleable_one()
     {
-        _service.SetEffectEnabled("No.Such.Factory", false).Success.Should().BeFalse();
-        _service.SetEffectEnabled(FullName<FixedFactory>(), false).Success.Should().BeFalse();
+        _service.SetEffectEnabled("No.Such.Factory", enabled: false).Success.Should().BeFalse();
+        _service
+            .SetEffectEnabled(FullName<FixedFactory>(), enabled: false)
+            .Success.Should()
+            .BeFalse();
         _registry.IsEnabled(typeof(FixedFactory)).Should().BeTrue();
 
-        var result = _service.SetEffectEnabled(FullName<PlainFactory>(), true);
+        var result = _service.SetEffectEnabled(FullName<PlainFactory>(), enabled: true);
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(1);
@@ -156,7 +172,7 @@ public class EffectSettingsServiceTests
     {
         var result = _service.ConfigureEffect(
             FullName<ConfigurableFactory>(),
-            new Dictionary<string, string?>
+            new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 ["BatchSize"] = "42",
                 ["Verbose"] = "true",
@@ -185,7 +201,7 @@ public class EffectSettingsServiceTests
         _service
             .ConfigureEffect(
                 FullName<ConfigurableFactory>(),
-                new Dictionary<string, string?> { ["Note"] = null }
+                new Dictionary<string, string?>(StringComparer.Ordinal) { ["Note"] = null }
             )
             .Success.Should()
             .BeTrue();
@@ -193,7 +209,7 @@ public class EffectSettingsServiceTests
 
         var refused = _service.ConfigureEffect(
             FullName<ConfigurableFactory>(),
-            new Dictionary<string, string?> { ["BatchSize"] = "" }
+            new Dictionary<string, string?>(StringComparer.Ordinal) { ["BatchSize"] = "" }
         );
 
         refused.Success.Should().BeFalse();
@@ -209,7 +225,11 @@ public class EffectSettingsServiceTests
     {
         var result = _service.ConfigureEffect(
             FullName<ConfigurableFactory>(),
-            new Dictionary<string, string?> { ["Verbose"] = "true", [name] = value }
+            new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["Verbose"] = "true",
+                [name] = value,
+            }
         );
 
         result.Success.Should().BeFalse();
@@ -223,7 +243,11 @@ public class EffectSettingsServiceTests
     {
         var result = _service.ConfigureEffect(
             FullName<ConfigurableFactory>(),
-            new Dictionary<string, string?> { ["BatchSize"] = "50", ["Exploding"] = "13" }
+            new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["BatchSize"] = "50",
+                ["Exploding"] = "13",
+            }
         );
 
         result.Success.Should().BeFalse();
@@ -237,12 +261,15 @@ public class EffectSettingsServiceTests
         _service
             .ConfigureEffect(
                 FullName<PlainFactory>(),
-                new Dictionary<string, string?> { ["A"] = "1" }
+                new Dictionary<string, string?>(StringComparer.Ordinal) { ["A"] = "1" }
             )
             .Success.Should()
             .BeFalse();
         _service
-            .ConfigureEffect(FullName<ConfigurableFactory>(), new Dictionary<string, string?>())
+            .ConfigureEffect(
+                FullName<ConfigurableFactory>(),
+                new Dictionary<string, string?>(StringComparer.Ordinal)
+            )
             .Success.Should()
             .BeFalse();
     }
@@ -254,11 +281,14 @@ public class EffectSettingsServiceTests
 
         service.IsAvailable.Should().BeFalse();
         service.GetEffects().Should().BeEmpty();
-        service.SetEffectEnabled(FullName<PlainFactory>(), true).Success.Should().BeFalse();
+        service
+            .SetEffectEnabled(FullName<PlainFactory>(), enabled: true)
+            .Success.Should()
+            .BeFalse();
         service
             .ConfigureEffect(
                 FullName<ConfigurableFactory>(),
-                new Dictionary<string, string?> { ["Verbose"] = "true" }
+                new Dictionary<string, string?>(StringComparer.Ordinal) { ["Verbose"] = "true" }
             )
             .Success.Should()
             .BeFalse();

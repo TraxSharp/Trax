@@ -94,5 +94,7 @@ public class InvokedRunTests(ClusterStore store)
     }
 
     private async Task<SnapshotDraft> AliceRow(Guid id) =>
-        (await _full.Rows(id, UserStepMachine.MachineId)).Single(r => r.UserKey == "alice");
+        (await _full.Rows(id, UserStepMachine.MachineId).ConfigureAwait(false)).Single(r =>
+            string.Equals(r.UserKey, "alice", StringComparison.Ordinal)
+        );
 }

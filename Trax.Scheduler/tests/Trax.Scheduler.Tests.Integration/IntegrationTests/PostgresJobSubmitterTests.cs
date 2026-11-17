@@ -44,7 +44,7 @@ public class PostgresJobSubmitterTests : TestSetup
 
         DataContext.Reset();
         var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
-            j.Id == int.Parse(jobId)
+            j.Id == int.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
 
         job.Should().NotBeNull();
@@ -65,7 +65,7 @@ public class PostgresJobSubmitterTests : TestSetup
         var jobId = await jobSubmitter.EnqueueAsync(metadataId: 1);
 
         // Assert
-        int.TryParse(jobId, out var parsed)
+        int.TryParse(jobId, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
             .Should()
             .BeTrue("job ID should be a parseable integer");
         parsed.Should().BeGreaterThan(0);
@@ -89,7 +89,12 @@ public class PostgresJobSubmitterTests : TestSetup
         DataContext.Reset();
         var jobs = await DataContext
             .BackgroundJobs.Where(j =>
-                new[] { long.Parse(jobId1), long.Parse(jobId2), long.Parse(jobId3) }.Contains(j.Id)
+                new[]
+                {
+                    long.Parse(jobId1, System.Globalization.CultureInfo.InvariantCulture),
+                    long.Parse(jobId2, System.Globalization.CultureInfo.InvariantCulture),
+                    long.Parse(jobId3, System.Globalization.CultureInfo.InvariantCulture),
+                }.Contains(j.Id)
             )
             .ToListAsync();
 
@@ -114,7 +119,7 @@ public class PostgresJobSubmitterTests : TestSetup
         // Assert
         DataContext.Reset();
         var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
-            j.Id == int.Parse(jobId)
+            j.Id == int.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
 
         job.Should().NotBeNull();
@@ -137,7 +142,7 @@ public class PostgresJobSubmitterTests : TestSetup
         // Assert
         DataContext.Reset();
         var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
-            j.Id == int.Parse(jobId)
+            j.Id == int.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
 
         job.Should().NotBeNull();
@@ -157,7 +162,7 @@ public class PostgresJobSubmitterTests : TestSetup
         // Assert
         DataContext.Reset();
         var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
-            j.Id == int.Parse(jobId)
+            j.Id == int.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
 
         job.Should().NotBeNull();
@@ -185,7 +190,7 @@ public class PostgresJobSubmitterTests : TestSetup
         // Assert
         DataContext.Reset();
         var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
-            j.Id == int.Parse(jobId)
+            j.Id == int.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
 
         job.Should().NotBeNull();
@@ -216,7 +221,7 @@ public class PostgresJobSubmitterTests : TestSetup
         // Assert - Newly enqueued jobs should be available for dequeue (FetchedAt == null)
         DataContext.Reset();
         var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
-            j.Id == int.Parse(jobId)
+            j.Id == int.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
 
         job.Should().NotBeNull();
@@ -236,7 +241,7 @@ public class PostgresJobSubmitterTests : TestSetup
         // Assert
         DataContext.Reset();
         var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
-            j.Id == int.Parse(jobId)
+            j.Id == int.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
 
         job.Should().NotBeNull();
@@ -264,7 +269,7 @@ public class PostgresJobSubmitterTests : TestSetup
         // Assert
         DataContext.Reset();
         var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
-            j.Id == long.Parse(jobId)
+            j.Id == long.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
         job.Should().NotBeNull();
         job!.Priority.Should().Be(20, "priority should be stored in the background job");
@@ -288,7 +293,7 @@ public class PostgresJobSubmitterTests : TestSetup
         // Assert
         DataContext.Reset();
         var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
-            j.Id == long.Parse(jobId)
+            j.Id == long.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
         job.Should().NotBeNull();
         job!.Priority.Should().Be(15, "priority should be stored with input");
@@ -310,7 +315,7 @@ public class PostgresJobSubmitterTests : TestSetup
         // Assert
         DataContext.Reset();
         var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
-            j.Id == long.Parse(jobId)
+            j.Id == long.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
         job.Should().NotBeNull();
         job!.Priority.Should().Be(0, "non-priority overload should default to 0");

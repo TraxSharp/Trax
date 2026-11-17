@@ -249,6 +249,10 @@ public class JobRunnerEndpointTests
         var body = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
             envelope,
             new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            }
         );
         var request = new HttpRequestMessage(HttpMethod.Post, path)
         {
@@ -298,7 +302,7 @@ public class JobRunnerEndpointTests
         foreach (var route in new[] { "/trax/execute", "/trax/run" })
             endpoints
                 .OfType<Microsoft.AspNetCore.Routing.RouteEndpoint>()
-                .Single(e => e.RoutePattern.RawText == route)
+                .Single(e => string.Equals(e.RoutePattern.RawText, route, StringComparison.Ordinal))
                 .Metadata.GetOrderedMetadata<Microsoft.AspNetCore.Authorization.IAuthorizeData>()
                 .Should()
                 .Contain(a => a.Policy == "scheduler");
@@ -307,7 +311,9 @@ public class JobRunnerEndpointTests
         // handler runs.
         var client = host.GetTestServer().CreateClient();
         var act = async () =>
-            await client.PostAsJsonAsync("/trax/run", new RemoteRunRequest("T", "{}", "I"));
+            await client
+                .PostAsJsonAsync("/trax/run", new RemoteRunRequest("T", "{}", "I"))
+                .ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
@@ -622,7 +628,10 @@ public class JobRunnerEndpointTests
         for (var i = 0; i < 5; i++)
             await client.SendAsync(PostWithUnreadableBody("/trax/run", signature: null));
 
-        logs.Entries.Count(e => e.Level == LogLevel.Warning && e.Message.Contains("Refused"))
+        logs.Entries.Count(e =>
+                e.Level == LogLevel.Warning
+                && e.Message.Contains("Refused", StringComparison.Ordinal)
+            )
             .Should()
             .Be(1, "refusals are summarised rather than logged one warning each");
     }
@@ -643,8 +652,8 @@ public class JobRunnerEndpointTests
 
         logs.Entries.Count(e =>
                 e.Level == LogLevel.Warning
-                && e.Message.Contains("/trax/run")
-                && e.Message.Contains("[TraxAuthorize]")
+                && e.Message.Contains("/trax/run", StringComparison.Ordinal)
+                && e.Message.Contains("[TraxAuthorize]", StringComparison.Ordinal)
             )
             .Should()
             .Be(1, "a runner whose execution service has no trusted scope says so when it starts");

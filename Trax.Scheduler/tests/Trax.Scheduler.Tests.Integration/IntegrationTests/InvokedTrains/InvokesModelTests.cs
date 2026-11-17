@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CsCheck;
@@ -113,8 +114,8 @@ public class InvokesModelTests(ClusterStore store)
             .SampleAsync(
                 async ops =>
                 {
-                    await _cluster.Reset();
-                    await new World(this).Run(ops);
+                    await _cluster.Reset().ConfigureAwait(false);
+                    await new World(this).Run(ops).ConfigureAwait(false);
                 },
                 iter: Iterations,
                 threads: 1,
@@ -266,7 +267,10 @@ public class InvokesModelTests(ClusterStore store)
     );
 
     private static string Describe(Op[] ops) =>
-        string.Join(Environment.NewLine, ops.Select((op, i) => $"  {i}: {op}"));
+        string.Join(
+            Environment.NewLine,
+            ops.Select((op, i) => string.Create(CultureInfo.InvariantCulture, $"  {i}: {op}"))
+        );
 
     #endregion
 
@@ -341,8 +345,8 @@ public class InvokesModelTests(ClusterStore store)
     /// <summary>One sequence: the model, the real cluster it drives, and the checks after each step.</summary>
     private sealed class World(InvokesModelTests test)
     {
-        private readonly Instance[] _users = [new("u0", false), new("u1", false)];
-        private readonly Instance[] _systems = [new("s0", true), new("s1", true)];
+        private readonly Instance[] _users = [new("u0", system: false), new("u1", system: false)];
+        private readonly Instance[] _systems = [new("s0", system: true), new("s1", system: true)];
         private readonly string _keyPrefix = Guid.NewGuid().ToString("N");
 
         // Every run any step queued, oldest first.
@@ -377,9 +381,9 @@ public class InvokesModelTests(ClusterStore store)
                 var op = ops[_step];
                 try
                 {
-                    await Step(op);
-                    await Adopt();
-                    await Check();
+                    await Step(op).ConfigureAwait(false);
+                    await Adopt().ConfigureAwait(false);
+                    await Check().ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not StepFailed)
                 {
@@ -389,8 +393,10 @@ public class InvokesModelTests(ClusterStore store)
                             + "not reproduce this failure. Rerun it several times before trusting a pass."
                         : "";
                     throw new StepFailed(
-                        $"Step {_step} ({op}) broke the model. Runs: [{string.Join(", ", _runs)}].{replay} "
-                            + $"See {Adr}",
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Step {_step} ({op}) broke the model. Runs: [{string.Join(", ", _runs)}].{replay} "
+                        ) + $"See {Adr}",
                         ex
                     );
                 }
@@ -434,20 +440,21 @@ public class InvokesModelTests(ClusterStore store)
 
         private async Task UserSave(Instance user, string mode)
         {
-            var note = $"n{_step}";
+            var note = string.Create(CultureInfo.InvariantCulture, $"n{_step}");
             var saved = await Drafts(
-                Api,
-                d =>
-                    d.Autosave(
-                        user.UserKey,
-                        user.Id,
-                        StepMachine.Json(
-                            UserStepMachine.MachineId,
-                            "Idle",
-                            StepMachine.Context(mode, note)
+                    Api,
+                    d =>
+                        d.Autosave(
+                            user.UserKey,
+                            user.Id,
+                            StepMachine.Json(
+                                UserStepMachine.MachineId,
+                                "Idle",
+                                StepMachine.Context(mode, note)
+                            )
                         )
-                    )
-            );
+                )
+                .ConfigureAwait(false);
 
             // The soft save does not serve a machine that invokes a train, whatever state its draft is in.
             saved
@@ -464,14 +471,16 @@ public class InvokesModelTests(ClusterStore store)
             if (user.State is "Running" or "Chained")
                 return;
 
-            await StepMachine.Seed(
-                Api.Services,
-                user.UserKey,
-                user.Id,
-                UserStepMachine.MachineId,
-                "Idle",
-                StepMachine.Context(mode, note)
-            );
+            await StepMachine
+                .Seed(
+                    Api.Services,
+                    user.UserKey,
+                    user.Id,
+                    UserStepMachine.MachineId,
+                    "Idle",
+                    StepMachine.Context(mode, note)
+                )
+                .ConfigureAwait(false);
             user.State = "Idle";
             user.Mode = mode;
             user.Note = note;
@@ -480,17 +489,21 @@ public class InvokesModelTests(ClusterStore store)
 
         private async Task UserForgeSave(Instance user, string state)
         {
-            var context = StepMachine.Context(InvokedStepModes.Ok, $"forged{_step}");
+            var context = StepMachine.Context(
+                InvokedStepModes.Ok,
+                string.Create(CultureInfo.InvariantCulture, $"forged{_step}")
+            );
             context["artifact"] = "forged";
             var saved = await Drafts(
-                Api,
-                d =>
-                    d.Autosave(
-                        user.UserKey,
-                        user.Id,
-                        StepMachine.Json(UserStepMachine.MachineId, state, context)
-                    )
-            );
+                    Api,
+                    d =>
+                        d.Autosave(
+                            user.UserKey,
+                            user.Id,
+                            StepMachine.Json(UserStepMachine.MachineId, state, context)
+                        )
+                )
+                .ConfigureAwait(false);
 
             saved
                 .Should()
@@ -502,20 +515,21 @@ public class InvokesModelTests(ClusterStore store)
         private async Task UserForgeOutcome(Instance user, string trigger)
         {
             var advanced = await Drafts(
-                Api,
-                d =>
-                    d.Advance(
-                        user.UserKey,
-                        user.Id,
-                        trigger,
-                        new JsonObject
-                        {
-                            ["artifact"] = "forged",
-                            ["accepted"] = true,
-                            ["chain"] = false,
-                        }
-                    )
-            );
+                    Api,
+                    d =>
+                        d.Advance(
+                            user.UserKey,
+                            user.Id,
+                            trigger,
+                            new JsonObject
+                            {
+                                ["artifact"] = "forged",
+                                ["accepted"] = true,
+                                ["chain"] = false,
+                            }
+                        )
+                )
+                .ConfigureAwait(false);
 
             if (user.State is null)
                 advanced.Should().BeOfType<AdvanceOutcome.NotFound>();
@@ -530,9 +544,10 @@ public class InvokesModelTests(ClusterStore store)
         private async Task UserAdvance(Instance user, StepTrigger trigger)
         {
             var advanced = await Drafts(
-                Api,
-                d => d.Advance(user.UserKey, user.Id, trigger.ToString())
-            );
+                    Api,
+                    d => d.Advance(user.UserKey, user.Id, trigger.ToString())
+                )
+                .ConfigureAwait(false);
 
             if (user.State is null)
             {
@@ -561,7 +576,7 @@ public class InvokesModelTests(ClusterStore store)
 
         private async Task SystemStart(Instance system, string mode)
         {
-            var note = $"n{_step}";
+            var note = string.Create(CultureInfo.InvariantCulture, $"n{_step}");
             MachineInstance started;
             using (var scope = Api.Services.CreateScope())
                 started = await scope
@@ -569,7 +584,8 @@ public class InvokesModelTests(ClusterStore store)
                     .Start<SystemStepMachine>(
                         MachineKey.Of(_keyPrefix, system.Name),
                         StepMachine.Context(mode, note)
-                    );
+                    )
+                    .ConfigureAwait(false);
 
             if (system.State is null)
             {
@@ -600,8 +616,9 @@ public class InvokesModelTests(ClusterStore store)
             using (var scope = host.Services.CreateScope())
                 await scope
                     .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
-                    .Run(Unit.Default);
-            await ObserveDispatch(host);
+                    .Run(Unit.Default)
+                    .ConfigureAwait(false);
+            await ObserveDispatch(host).ConfigureAwait(false);
         }
 
         private async Task RunJob(int pick)
@@ -609,12 +626,13 @@ public class InvokesModelTests(ClusterStore store)
             if (Pick(_runs.Where(r => r.Phase == Phase.Dispatched), pick) is not { } run)
                 return;
 
-            await run.DispatchedBy!.RunJob(run.MetadataId!.Value);
+            await run.DispatchedBy!.RunJob(run.MetadataId!.Value).ConfigureAwait(false);
 
             run.Phase = Phase.Ended;
             run.End =
                 run.CancelRequested ? TrainState.Cancelled
-                : run.Mode == InvokedStepModes.Fail ? TrainState.Failed
+                : string.Equals(run.Mode, InvokedStepModes.Fail, StringComparison.Ordinal)
+                    ? TrainState.Failed
                 : TrainState.Completed;
 
             // The run's own host delivers its outcome through the hook when it registers the machine.
@@ -627,10 +645,10 @@ public class InvokesModelTests(ClusterStore store)
             if (Pick(_runs.Where(r => r.Phase == Phase.Dispatched), pick) is not { } run)
                 return;
 
-            await host.Age(run.MetadataId!.Value, TimeSpan.FromHours(1));
-            await host.RunManifestManager();
+            await host.Age(run.MetadataId!.Value, TimeSpan.FromHours(1)).ConfigureAwait(false);
+            await host.RunManifestManager().ConfigureAwait(false);
 
-            var reaped = (await host.Run(run.MetadataId.Value)).TrainState;
+            var reaped = (await host.Run(run.MetadataId.Value).ConfigureAwait(false)).TrainState;
             reaped
                 .Should()
                 .Be(TrainState.Failed, "a dispatched run nobody picked up is failed by the reaper");
@@ -645,7 +663,7 @@ public class InvokesModelTests(ClusterStore store)
         private async Task Sweep(ClusterHost host)
         {
             var expected = Instances.Where(Deliverable).ToList();
-            var swept = await host.Sweep();
+            var swept = await host.Sweep().ConfigureAwait(false);
 
             foreach (var delivery in swept)
                 Count(delivery);
@@ -669,7 +687,7 @@ public class InvokesModelTests(ClusterStore store)
                 return;
 
             var holder = Holder(run);
-            var delivered = await host.Deliver(run.Token);
+            var delivered = await host.Deliver(run.Token).ConfigureAwait(false);
             Count(delivered);
 
             if (holder is null)
@@ -707,7 +725,7 @@ public class InvokesModelTests(ClusterStore store)
                 test._full.Deliver(run.Token)
             );
             var sweep = test._api2.Sweep();
-            await Task.WhenAll(deliveries, sweep).WaitAsync(Bound);
+            await Task.WhenAll(deliveries, sweep).WaitAsync(Bound).ConfigureAwait(false);
 
             deliveries.Result.Should().NotContainNulls("no delivery fails");
             var all = deliveries.Result.Cast<InvokeDelivery>().Concat(sweep.Result).ToList();
@@ -740,7 +758,8 @@ public class InvokesModelTests(ClusterStore store)
                             instance.Id
                         ),
                         CancellationToken.None
-                    );
+                    )
+                    .ConfigureAwait(false);
 
             if (!instance.System)
             {
@@ -796,10 +815,9 @@ public class InvokesModelTests(ClusterStore store)
             var userOwned = !run.Owner.System;
             if (run.MetadataId is { } metadataId)
             {
-                var cancelled = await operations.CancelExecutionsAsync(
-                    [metadataId],
-                    CancellationToken.None
-                );
+                var cancelled = await operations
+                    .CancelExecutionsAsync([metadataId], CancellationToken.None)
+                    .ConfigureAwait(false);
                 if (userOwned)
                 {
                     cancelled
@@ -813,11 +831,10 @@ public class InvokesModelTests(ClusterStore store)
                 return;
             }
 
-            var entry = (await Api.Entry(run.Token))!;
-            var withdrawn = await operations.CancelWorkQueueEntriesAsync(
-                [entry.Id],
-                CancellationToken.None
-            );
+            var entry = (await Api.Entry(run.Token).ConfigureAwait(false))!;
+            var withdrawn = await operations
+                .CancelWorkQueueEntriesAsync([entry.Id], CancellationToken.None)
+                .ConfigureAwait(false);
             if (userOwned)
             {
                 withdrawn.Success.Should().BeFalse($"a user's run is not an operator's. See {Adr}");
@@ -831,7 +848,10 @@ public class InvokesModelTests(ClusterStore store)
         // The user leaves Running while another host delivers the run's completion: exactly one of them moves it.
         private async Task RaceLeaveAndDeliver(Instance user)
         {
-            if (user.State != "Running" || user.Token is null)
+            if (
+                !string.Equals(user.State, "Running", StringComparison.Ordinal)
+                || user.Token is null
+            )
                 return;
 
             var run = RunOf(user.Token);
@@ -839,19 +859,20 @@ public class InvokesModelTests(ClusterStore store)
             var go = Gate();
             var leave = Task.Run(async () =>
             {
-                await go.Task;
+                await go.Task.ConfigureAwait(false);
                 return await Drafts(
-                    Api,
-                    d => d.Advance(user.UserKey, user.Id, nameof(StepTrigger.Stop))
-                );
+                        Api,
+                        d => d.Advance(user.UserKey, user.Id, nameof(StepTrigger.Stop))
+                    )
+                    .ConfigureAwait(false);
             });
             var delivery = Task.Run(async () =>
             {
-                await go.Task;
-                return await Api2.Deliver(run.Token);
+                await go.Task.ConfigureAwait(false);
+                return await Api2.Deliver(run.Token).ConfigureAwait(false);
             });
             go.SetResult();
-            await Task.WhenAll(leave, delivery).WaitAsync(Bound);
+            await Task.WhenAll(leave, delivery).WaitAsync(Bound).ConfigureAwait(false);
             Count(delivery.Result);
 
             var left = leave.Result is AdvanceOutcome.Advanced;
@@ -880,7 +901,10 @@ public class InvokesModelTests(ClusterStore store)
         // runs, or it is dispatched and its run's cancel is requested.
         private async Task RaceLeaveAndDispatch(Instance user, ClusterHost host)
         {
-            if (user.State != "Running" || user.Token is null)
+            if (
+                !string.Equals(user.State, "Running", StringComparison.Ordinal)
+                || user.Token is null
+            )
                 return;
             var run = RunOf(user.Token);
             if (run.Phase != Phase.Queued)
@@ -889,25 +913,27 @@ public class InvokesModelTests(ClusterStore store)
             var go = Gate();
             var leave = Task.Run(async () =>
             {
-                await go.Task;
+                await go.Task.ConfigureAwait(false);
                 return await Drafts(
-                    Api,
-                    d => d.Advance(user.UserKey, user.Id, nameof(StepTrigger.Stop))
-                );
+                        Api,
+                        d => d.Advance(user.UserKey, user.Id, nameof(StepTrigger.Stop))
+                    )
+                    .ConfigureAwait(false);
             });
             var dispatch = Task.Run(async () =>
             {
-                await go.Task;
+                await go.Task.ConfigureAwait(false);
                 using var scope = host.Services.CreateScope();
                 await scope
                     .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
-                    .Run(Unit.Default);
+                    .Run(Unit.Default)
+                    .ConfigureAwait(false);
             });
             go.SetResult();
-            await Task.WhenAll(leave, dispatch).WaitAsync(Bound);
+            await Task.WhenAll(leave, dispatch).WaitAsync(Bound).ConfigureAwait(false);
 
             leave.Result.Should().BeOfType<AdvanceOutcome.Advanced>();
-            await ObserveDispatch(host);
+            await ObserveDispatch(host).ConfigureAwait(false);
             Move(user, "Idle");
         }
 
@@ -915,7 +941,10 @@ public class InvokesModelTests(ClusterStore store)
         // its hook): the run ends however it ends, and either the leave or the outcome moves the draft, never both.
         private async Task RaceLeaveAndRun(Instance user)
         {
-            if (user.State != "Running" || user.Token is null)
+            if (
+                !string.Equals(user.State, "Running", StringComparison.Ordinal)
+                || user.Token is null
+            )
                 return;
             var run = RunOf(user.Token);
             if (run.Phase != Phase.Dispatched)
@@ -925,22 +954,25 @@ public class InvokesModelTests(ClusterStore store)
             var go = Gate();
             var leave = Task.Run(async () =>
             {
-                await go.Task;
+                await go.Task.ConfigureAwait(false);
                 return await Drafts(
-                    Api,
-                    d => d.Advance(user.UserKey, user.Id, nameof(StepTrigger.Stop))
-                );
+                        Api,
+                        d => d.Advance(user.UserKey, user.Id, nameof(StepTrigger.Stop))
+                    )
+                    .ConfigureAwait(false);
             });
             var job = Task.Run(async () =>
             {
-                await go.Task;
-                await host.RunJob(run.MetadataId!.Value);
+                await go.Task.ConfigureAwait(false);
+                await host.RunJob(run.MetadataId!.Value).ConfigureAwait(false);
             });
             go.SetResult();
-            await Task.WhenAll(leave, job).WaitAsync(Bound);
+            await Task.WhenAll(leave, job).WaitAsync(Bound).ConfigureAwait(false);
 
-            var ended = (await host.Run(run.MetadataId!.Value)).TrainState;
-            var own = run.Mode == InvokedStepModes.Fail ? TrainState.Failed : TrainState.Completed;
+            var ended = (await host.Run(run.MetadataId!.Value).ConfigureAwait(false)).TrainState;
+            var own = string.Equals(run.Mode, InvokedStepModes.Fail, StringComparison.Ordinal)
+                ? TrainState.Failed
+                : TrainState.Completed;
             ended
                 .Should()
                 .BeOneOf(
@@ -967,25 +999,26 @@ public class InvokesModelTests(ClusterStore store)
         // Two hosts start one system instance at once: one creates it and queues its run; the other finds it.
         private async Task SystemStartConcurrently(Instance system, string mode)
         {
-            var note = $"n{_step}";
+            var note = string.Create(CultureInfo.InvariantCulture, $"n{_step}");
             var go = Gate();
             var starts = new[] { Api, Api2 }
                 .Select(host =>
                     Task.Run(async () =>
                     {
-                        await go.Task;
+                        await go.Task.ConfigureAwait(false);
                         using var scope = host.Services.CreateScope();
                         return await scope
                             .ServiceProvider.GetRequiredService<IMachineInstances>()
                             .Start<SystemStepMachine>(
                                 MachineKey.Of(_keyPrefix, system.Name),
                                 StepMachine.Context(mode, note)
-                            );
+                            )
+                            .ConfigureAwait(false);
                     })
                 )
                 .ToArray();
             go.SetResult();
-            var started = await Task.WhenAll(starts).WaitAsync(Bound);
+            var started = await Task.WhenAll(starts).WaitAsync(Bound).ConfigureAwait(false);
 
             started.Select(s => s.Id).Distinct().Should().ContainSingle("one key, one instance");
             started
@@ -1011,13 +1044,18 @@ public class InvokesModelTests(ClusterStore store)
                 await scope
                     .ServiceProvider.GetRequiredService<IDataContext>()
                     .SnapshotDrafts.Where(x => x.Id == user.Id && x.Machine == user.Machine)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.UpdatedAt, aged));
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.UpdatedAt, aged))
+                    .ConfigureAwait(false);
             }
 
             // Expiry is the draft sweep's: it deletes an idle draft, leaves one whose state waits on a run for the
             // run's outcome, and keeps one in a state only the server puts it in.
-            await test._expiring.Services.GetRequiredService<DraftSweeper>().SweepOnce();
-            var loaded = await Drafts(test._expiring, d => d.Load(user.UserKey, user.Id));
+            await test
+                ._expiring.Services.GetRequiredService<DraftSweeper>()
+                .SweepOnce()
+                .ConfigureAwait(false);
+            var loaded = await Drafts(test._expiring, d => d.Load(user.UserKey, user.Id))
+                .ConfigureAwait(false);
 
             if (user.Token is not null)
             {
@@ -1030,7 +1068,9 @@ public class InvokesModelTests(ClusterStore store)
             var kept = test
                 ._expiring.Services.GetServices<IMachine>()
                 .OfType<IMachineInternals>()
-                .Single(m => ((IMachine)m).Name == user.Machine)
+                .Single(m =>
+                    string.Equals(((IMachine)m).Name, user.Machine, StringComparison.Ordinal)
+                )
                 .KeptFromSweep;
             if (user.State is { } state && kept.Contains(state))
             {
@@ -1080,10 +1120,9 @@ public class InvokesModelTests(ClusterStore store)
         {
             instance.State = state;
             instance.Token = null;
-            instance.Entering =
-                state == "Running"
-                    ? (instance.Mode, instance.Note)
-                    : (InvokedStepModes.Ok, "next:" + instance.Note);
+            instance.Entering = string.Equals(state, "Running", StringComparison.Ordinal)
+                ? (instance.Mode, instance.Note)
+                : (InvokedStepModes.Ok, "next:" + instance.Note);
         }
 
         // Applies run's outcome to the instance holding its token, as the hook or a delivery does.
@@ -1142,7 +1181,7 @@ public class InvokesModelTests(ClusterStore store)
         {
             foreach (var instance in Instances.Where(i => i.Entering is not null))
             {
-                var row = (await Api.Row(instance.Id, instance.Machine))!;
+                var row = (await Api.Row(instance.Id, instance.Machine).ConfigureAwait(false))!;
                 row.InvokeToken.Should()
                     .NotBeNull($"{instance.Name} entered {instance.State}, which queues a run");
                 _runs
@@ -1160,7 +1199,7 @@ public class InvokesModelTests(ClusterStore store)
         {
             foreach (var run in _runs.Where(r => r.Phase == Phase.Queued))
             {
-                var entry = (await Api.Entry(run.Token))!;
+                var entry = (await Api.Entry(run.Token).ConfigureAwait(false))!;
                 if (entry.Status == WorkQueueStatus.Dispatched)
                 {
                     run.Phase = Phase.Dispatched;
@@ -1176,25 +1215,28 @@ public class InvokesModelTests(ClusterStore store)
         {
             using var scope = Api.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
-            var rows = await db.SnapshotDrafts.AsNoTracking().ToListAsync();
+            var rows = await db.SnapshotDrafts.AsNoTracking().ToListAsync().ConfigureAwait(false);
             var entries = await db
                 .WorkQueues.AsNoTracking()
                 .Where(w => w.InvokingInstanceId != null)
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
             var metadata = await db
                 .Metadatas.AsNoTracking()
                 .Where(m => m.InvokingInstanceId != null)
-                .ToDictionaryAsync(m => m.Id);
+                .ToDictionaryAsync(m => m.Id)
+                .ConfigureAwait(false);
             var machines = Api
                 .Services.GetServices<IMachine>()
-                .ToDictionary(m => m.Name, m => (IMachineInternals)m);
+                .ToDictionary(m => m.Name, m => (IMachineInternals)m, StringComparer.Ordinal);
 
             // Every stored snapshot rehydrates, in the state the model says.
             rows.Should().HaveCount(Instances.Count(i => i.State is not null));
             foreach (var instance in Instances.Where(i => i.State is not null))
             {
                 var row = rows.SingleOrDefault(r =>
-                    r.Id == instance.Id && r.Machine == instance.Machine
+                    r.Id == instance.Id
+                    && string.Equals(r.Machine, instance.Machine, StringComparison.Ordinal)
                 );
                 row.Should().NotBeNull($"{instance.Name} exists");
                 var json = new JsonObject
@@ -1233,7 +1275,9 @@ public class InvokesModelTests(ClusterStore store)
                 );
             foreach (var run in _runs)
             {
-                var entry = entries.Single(e => e.ExternalId == run.Token);
+                var entry = entries.Single(e =>
+                    string.Equals(e.ExternalId, run.Token, StringComparison.Ordinal)
+                );
                 entry.InvokingInstanceId.Should().Be(run.Owner.Id);
                 entry
                     .Status.Should()
@@ -1275,7 +1319,9 @@ public class InvokesModelTests(ClusterStore store)
                 if (!live || meta?.CancellationRequested == true)
                     continue;
 
-                var holder = rows.SingleOrDefault(r => r.InvokeToken == entry.ExternalId);
+                var holder = rows.SingleOrDefault(r =>
+                    string.Equals(r.InvokeToken, entry.ExternalId, StringComparison.Ordinal)
+                );
                 holder
                     .Should()
                     .NotBeNull(
@@ -1296,7 +1342,7 @@ public class InvokesModelTests(ClusterStore store)
             // No run moved an instance twice.
             _moved.Where(m => m.Value > 1).Should().BeEmpty("an outcome is applied at most once");
 
-            await CheckInvariants(machines.Values);
+            await CheckInvariants(machines.Values).ConfigureAwait(false);
         }
 
         // The database's own invariants, read from the rows rather than from the model, so a token the model and
@@ -1309,15 +1355,19 @@ public class InvokesModelTests(ClusterStore store)
                 .Select(i => new InvokingState(i.Machine, i.State));
             IReadOnlyList<TraxInvariantViolation> found;
             if (test._cluster.Store == ClusterStore.Postgres)
-                found = await TraxInvariants.FindViolationsAsync(
-                    test._cluster.ConnectionString,
-                    invoking
-                );
+                found = await TraxInvariants
+                    .FindViolationsAsync(test._cluster.ConnectionString, invoking)
+                    .ConfigureAwait(false);
             else
             {
-                await using var connection = new SqliteConnection(test._cluster.ConnectionString);
-                await connection.OpenAsync();
-                found = await TraxInvariants.FindViolationsAsync(connection, invoking);
+                var connection = new SqliteConnection(test._cluster.ConnectionString);
+                await using (connection.ConfigureAwait(false))
+                {
+                    await connection.OpenAsync().ConfigureAwait(false);
+                    found = await TraxInvariants
+                        .FindViolationsAsync(connection, invoking)
+                        .ConfigureAwait(false);
+                }
             }
 
             var violations = found.Where(v => AlwaysHold.Contains(v.Invariant)).ToList();
@@ -1337,9 +1387,13 @@ public class InvokesModelTests(ClusterStore store)
 
         #endregion
 
-        private Run RunOf(string token) => _runs.Single(r => r.Token == token);
+        private Run RunOf(string token) =>
+            _runs.Single(r => string.Equals(r.Token, token, StringComparison.Ordinal));
 
-        private Instance? Holder(Run run) => Instances.FirstOrDefault(i => i.Token == run.Token);
+        private Instance? Holder(Run run) =>
+            Instances.FirstOrDefault(i =>
+                string.Equals(i.Token, run.Token, StringComparison.Ordinal)
+            );
 
         private static bool Ended(Run run) => run.Phase is Phase.Ended or Phase.Withdrawn;
 
@@ -1359,10 +1413,11 @@ public class InvokesModelTests(ClusterStore store)
         {
             using var scope = host.Services.CreateScope();
             return await call(
-                scope
-                    .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                    .Service(UserStepMachine.MachineId)!
-            );
+                    scope
+                        .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
+                        .Service(UserStepMachine.MachineId)!
+                )
+                .ConfigureAwait(false);
         }
     }
 

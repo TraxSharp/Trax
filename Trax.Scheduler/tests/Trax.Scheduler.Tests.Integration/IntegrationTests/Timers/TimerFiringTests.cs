@@ -142,10 +142,10 @@ public class TimerFiringTests(ClusterStore store)
         var fires = await Task.WhenAll(_api.FireTimers(), _api2.FireTimers()).WaitAsync(Bound);
 
         var mine = fires.SelectMany(f => f).Where(r => r.InstanceId == id).ToList();
-        mine.Count(r => r.Outcome == TimerFireResult.Fired)
+        mine.Count(r => string.Equals(r.Outcome, TimerFireResult.Fired, StringComparison.Ordinal))
             .Should()
             .Be(1, $"a due timer is applied by one conditional update, on one host. See {Adr}");
-        mine.Where(r => r.Outcome != TimerFireResult.Fired)
+        mine.Where(r => !string.Equals(r.Outcome, TimerFireResult.Fired, StringComparison.Ordinal))
             .Should()
             .OnlyContain(r => r.Outcome == TimerFireResult.Lost, "the other host lost the race");
         var stored = await Reminder(id);
@@ -211,7 +211,7 @@ public class TimerFiringTests(ClusterStore store)
 
         var fired = results
             .SelectMany(r => r)
-            .Where(r => r.Outcome == TimerFireResult.Fired)
+            .Where(r => string.Equals(r.Outcome, TimerFireResult.Fired, StringComparison.Ordinal))
             .ToList();
         fired
             .Select(r => r.InstanceId)
@@ -228,8 +228,12 @@ public class TimerFiringTests(ClusterStore store)
             var all = new List<TimerFireResult>();
             while (true)
             {
-                var batch = await host.FireTimers();
-                if (!batch.Any(r => r.Outcome == TimerFireResult.Fired))
+                var batch = await host.FireTimers().ConfigureAwait(false);
+                if (
+                    !batch.Any(r =>
+                        string.Equals(r.Outcome, TimerFireResult.Fired, StringComparison.Ordinal)
+                    )
+                )
                     return all;
                 all.AddRange(batch);
             }
@@ -289,7 +293,11 @@ public class TimerFiringTests(ClusterStore store)
             // timer's due time can move the row.
             var elapsed = Stopwatch.StartNew();
             while (
-                (await Reminder(id)).State != nameof(ReminderState.Expired)
+                !string.Equals(
+                    (await Reminder(id)).State,
+                    nameof(ReminderState.Expired),
+                    StringComparison.Ordinal
+                )
                 && elapsed.Elapsed < Bound
             )
                 await Task.Yield();
@@ -394,7 +402,7 @@ public class TimerFiringTests(ClusterStore store)
             (await listener.Drain())
                 .Should()
                 .Equal(
-                    [row.ToString()],
+                    [row.ToString(System.Globalization.CultureInfo.InvariantCulture)],
                     $"the fire is one committed write, announced by its row id only. See {Adr}"
                 );
         }
@@ -670,7 +678,7 @@ public class TimerFiringTests(ClusterStore store)
             if (!ids.Contains(fired))
                 return;
             read.TrySetResult();
-            await resume.Task;
+            await resume.Task.ConfigureAwait(false);
         });
         await read.Task.WaitAsync(Bound);
         (await _api2.FireTimers())
@@ -833,10 +841,10 @@ public class TimerFiringTests(ClusterStore store)
             if (row.Id != id)
                 return;
             read.TrySetResult();
-            await resume.Task;
+            await resume.Task.ConfigureAwait(false);
         };
         var sweep = host.FireTimers();
-        await read.Task.WaitAsync(Bound);
+        await read.Task.WaitAsync(Bound).ConfigureAwait(false);
         return new PausedSweep(sweep, resume);
     }
 
@@ -848,7 +856,7 @@ public class TimerFiringTests(ClusterStore store)
         public async Task<IReadOnlyList<TimerFireResult>> Release()
         {
             Resume.TrySetResult();
-            return await Sweep.WaitAsync(Bound);
+            return await Sweep.WaitAsync(Bound).ConfigureAwait(false);
         }
     }
 
@@ -856,14 +864,17 @@ public class TimerFiringTests(ClusterStore store)
     {
         user ??= NewUser();
         var id = Guid.NewGuid();
-        (await _api.OpenReview(user, id)).Should().BeOfType<AdvanceOutcome.Advanced>();
-        return (user, id, (await Reminder(id)).RowId);
+        (await _api.OpenReview(user, id).ConfigureAwait(false))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
+        return (user, id, (await Reminder(id).ConfigureAwait(false)).RowId);
     }
 
     private async Task<SnapshotDraft> Reminder(Guid id) =>
-        (await _api.Row(id, ReminderMachine.MachineId))!;
+        (await _api.Row(id, ReminderMachine.MachineId).ConfigureAwait(false))!;
 
-    private async Task<SnapshotDraft> Wait(Guid id) => (await _api.Row(id, WaitMachine.MachineId))!;
+    private async Task<SnapshotDraft> Wait(Guid id) =>
+        (await _api.Row(id, WaitMachine.MachineId).ConfigureAwait(false))!;
 
     private async Task<MachineInstanceCancelResult> Cancel(Guid id)
     {
@@ -873,7 +884,8 @@ public class TimerFiringTests(ClusterStore store)
             .CancelMachineInstanceAsync(
                 new MachineInstanceKey(WaitMachine.MachineId, SnapshotOwnerKind.System, id),
                 CancellationToken.None
-            );
+            )
+            .ConfigureAwait(false);
     }
 
     private static string NewUser() => "user-" + Guid.NewGuid().ToString("N");
@@ -889,8 +901,16 @@ public class TimerFiringTests(ClusterStore store)
             _listener.InstrumentPublished = (instrument, listener) =>
             {
                 if (
-                    instrument.Meter.Name == StateMachineInstruments.MeterName
-                    && instrument.Name == StateMachineInstruments.TimerFireFailed
+                    string.Equals(
+                        instrument.Meter.Name,
+                        StateMachineInstruments.MeterName,
+                        StringComparison.Ordinal
+                    )
+                    && string.Equals(
+                        instrument.Name,
+                        StateMachineInstruments.TimerFireFailed,
+                        StringComparison.Ordinal
+                    )
                 )
                     listener.EnableMeasurementEvents(instrument);
             };

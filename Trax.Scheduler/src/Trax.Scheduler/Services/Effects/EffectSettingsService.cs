@@ -11,7 +11,10 @@ using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Scheduler.Services.Effects;
 
-/// <inheritdoc />
+/// <summary>
+/// Reads and applies the runtime settings of the registered effect providers, the ones the
+/// operations surfaces show and change.
+/// </summary>
 /// <param name="services">
 /// The provider each effect factory is resolved from, and the effect registry when the host
 /// registered one.
@@ -60,19 +63,19 @@ public sealed class EffectSettingsService(IServiceProvider services) : IEffectSe
     public OperationResult SetEffectEnabled(string fullName, bool enabled)
     {
         if (_registry is null)
-            return new OperationResult(false, Message: NoRegistry);
+            return new OperationResult(Success: false, Message: NoRegistry);
 
         var factoryType = FindFactory(fullName);
 
         if (factoryType is null)
             return new OperationResult(
-                false,
+                Success: false,
                 Message: $"No effect named '{fullName}' is registered in this process."
             );
 
         if (!_registry.IsToggleable(factoryType))
             return new OperationResult(
-                false,
+                Success: false,
                 Message: $"The effect '{fullName}' is registered as not toggleable."
             );
 
@@ -82,7 +85,7 @@ public sealed class EffectSettingsService(IServiceProvider services) : IEffectSe
             _registry.Disable(factoryType);
 
         return new OperationResult(
-            true,
+            Success: true,
             Count: 1,
             Message: enabled ? "Effect enabled in this process" : "Effect disabled in this process"
         );
@@ -128,10 +131,10 @@ public sealed class EffectSettingsService(IServiceProvider services) : IEffectSe
 
         if (errors.Count > 0)
             return new EffectConfigurationResult(
-                false,
+                Success: false,
                 0,
                 "The configuration was not saved: "
-                    + string.Join(" ", errors.Select(e => $"{e.Key}: {e.Value}")),
+                    + string.Join(' ', errors.Select(e => $"{e.Key}: {e.Value}")),
                 errors
             );
 
@@ -157,7 +160,7 @@ public sealed class EffectSettingsService(IServiceProvider services) : IEffectSe
                 var reason =
                     (ex as TargetInvocationException)?.InnerException?.Message ?? ex.Message;
                 return new EffectConfigurationResult(
-                    false,
+                    Success: false,
                     0,
                     $"The configuration was not saved: {failed}: {reason}",
                     new Dictionary<string, string>(StringComparer.Ordinal) { [failed] = reason }
@@ -166,7 +169,7 @@ public sealed class EffectSettingsService(IServiceProvider services) : IEffectSe
         }
 
         return new EffectConfigurationResult(
-            true,
+            Success: true,
             converted.Count,
             $"{configurable.GetConfigurationType().Name} updated in this process. Changes apply to "
                 + "the next train execution.",
@@ -177,7 +180,7 @@ public sealed class EffectSettingsService(IServiceProvider services) : IEffectSe
     private const string NoRegistry = "No effect registry is registered in this process.";
 
     private static EffectConfigurationResult Refused(string message) =>
-        new(false, 0, message, new Dictionary<string, string>(StringComparer.Ordinal));
+        new(Success: false, 0, message, new Dictionary<string, string>(StringComparer.Ordinal));
 
     private static string FullNameOf(Type factoryType) => factoryType.FullName ?? factoryType.Name;
 
@@ -353,6 +356,8 @@ public sealed class EffectSettingsService(IServiceProvider services) : IEffectSe
 
     private static readonly JsonSerializerOptions SettingsJson = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         ReferenceHandler = ReferenceHandler.IgnoreCycles,
         MaxDepth = 8,

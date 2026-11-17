@@ -34,10 +34,9 @@ internal static class DataContextExtensions
         CancellationToken ct = default
     )
     {
-        var existing = await context.ManifestGroups.FirstOrDefaultAsync(
-            g => g.Name == groupName,
-            ct
-        );
+        var existing = await context
+            .ManifestGroups.FirstOrDefaultAsync(g => g.Name == groupName, ct)
+            .ConfigureAwait(false);
 
         if (existing != null)
         {
@@ -72,7 +71,7 @@ internal static class DataContextExtensions
             UpdatedAt = DateTime.UtcNow,
         };
         context.ManifestGroups.Add(created);
-        await context.SaveChanges(ct);
+        await context.SaveChanges(ct).ConfigureAwait(false);
 
         return created.Id;
     }
@@ -118,12 +117,13 @@ internal static class DataContextExtensions
         CancellationToken ct = default
     )
     {
-        var manifestGroupId = await context.EnsureManifestGroupAsync(groupId, group, ct);
+        var manifestGroupId = await context
+            .EnsureManifestGroupAsync(groupId, group, ct)
+            .ConfigureAwait(false);
 
-        var existing = await context.Manifests.FirstOrDefaultAsync(
-            m => m.ExternalId == externalId,
-            ct
-        );
+        var existing = await context
+            .Manifests.FirstOrDefaultAsync(m => m.ExternalId == externalId, ct)
+            .ConfigureAwait(false);
 
         if (existing != null)
         {
@@ -141,7 +141,9 @@ internal static class DataContextExtensions
             ApplyFailureWindow(existing, options);
             ApplyReplayDecisionsOnRetry(existing, options);
             if (options.ReplayDecisionsOnRetry == false)
-                await RetryReplayLinks.ClearQueuedAsync(context, [existing.Id], ct, save: false);
+                await RetryReplayLinks
+                    .ClearQueuedAsync(context, [existing.Id], ct, save: false)
+                    .ConfigureAwait(false);
 
             return existing;
         }
@@ -213,12 +215,13 @@ internal static class DataContextExtensions
         CancellationToken ct = default
     )
     {
-        var manifestGroupId = await context.EnsureManifestGroupAsync(groupId, group, ct);
+        var manifestGroupId = await context
+            .EnsureManifestGroupAsync(groupId, group, ct)
+            .ConfigureAwait(false);
 
-        var existing = await context.Manifests.FirstOrDefaultAsync(
-            m => m.ExternalId == externalId,
-            ct
-        );
+        var existing = await context
+            .Manifests.FirstOrDefaultAsync(m => m.ExternalId == externalId, ct)
+            .ConfigureAwait(false);
 
         var scheduleType = options.IsDormant
             ? ScheduleType.DormantDependent
@@ -241,7 +244,9 @@ internal static class DataContextExtensions
             ApplyFailureWindow(existing, options);
             ApplyReplayDecisionsOnRetry(existing, options);
             if (options.ReplayDecisionsOnRetry == false)
-                await RetryReplayLinks.ClearQueuedAsync(context, [existing.Id], ct, save: false);
+                await RetryReplayLinks
+                    .ClearQueuedAsync(context, [existing.Id], ct, save: false)
+                    .ConfigureAwait(false);
 
             return existing;
         }
@@ -312,12 +317,13 @@ internal static class DataContextExtensions
         CancellationToken ct = default
     )
     {
-        var manifestGroupId = await context.EnsureManifestGroupAsync(groupId, group, ct);
+        var manifestGroupId = await context
+            .EnsureManifestGroupAsync(groupId, group, ct)
+            .ConfigureAwait(false);
 
-        var existing = await context.Manifests.FirstOrDefaultAsync(
-            m => m.ExternalId == externalId,
-            ct
-        );
+        var existing = await context
+            .Manifests.FirstOrDefaultAsync(m => m.ExternalId == externalId, ct)
+            .ConfigureAwait(false);
 
         if (existing != null)
         {
@@ -348,7 +354,9 @@ internal static class DataContextExtensions
             ApplyFailureWindow(existing, options);
             ApplyReplayDecisionsOnRetry(existing, options);
             if (options.ReplayDecisionsOnRetry == false)
-                await RetryReplayLinks.ClearQueuedAsync(context, [existing.Id], ct, save: false);
+                await RetryReplayLinks
+                    .ClearQueuedAsync(context, [existing.Id], ct, save: false)
+                    .ConfigureAwait(false);
 
             return existing;
         }
@@ -403,7 +411,11 @@ internal static class DataContextExtensions
         var unchangedCron =
             manifest.ScheduleType == ScheduleType.Cron
             && schedule.Type == ScheduleType.Cron
-            && manifest.CronExpression == schedule.CronExpression;
+            && string.Equals(
+                manifest.CronExpression,
+                schedule.CronExpression,
+                StringComparison.Ordinal
+            );
         var firstOccurrence = manifest.NextScheduledRun;
 
         manifest.ScheduleType = schedule.Type;
@@ -515,7 +527,7 @@ internal static class DataContextExtensions
     private static bool SameProperties(string? stored, string? written)
     {
         if (stored is null || written is null)
-            return stored == written;
+            return string.Equals(stored, written, StringComparison.Ordinal);
         try
         {
             return System.Text.Json.Nodes.JsonNode.DeepEquals(

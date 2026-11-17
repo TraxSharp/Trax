@@ -368,13 +368,9 @@ public class HttpRetryHelperTests
         cts.CancelAfter(TimeSpan.FromMilliseconds(50));
 
         var act = async () =>
-            await HttpRetryHelper.PostWithRetryAsync(
-                client,
-                new { },
-                options,
-                NullLogger.Instance,
-                cts.Token
-            );
+            await HttpRetryHelper
+                .PostWithRetryAsync(client, new { }, options, NullLogger.Instance, cts.Token)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -383,7 +379,7 @@ public class HttpRetryHelperTests
 
     #region SequentialHandler
 
-    private class SequentialHandler(List<HttpStatusCode> statusCodes) : HttpMessageHandler
+    private sealed class SequentialHandler(List<HttpStatusCode> statusCodes) : HttpMessageHandler
     {
         private int _callIndex;
         public int RequestCount => _callIndex;

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Amazon.SQS;
 using Amazon.SQS.Model;
@@ -13,7 +14,11 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class SqsJobSubmitterTests
 {
-    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     #region Helpers
 
@@ -230,7 +235,7 @@ public class SqsJobSubmitterTests
         cts.Cancel();
 
         // Act & Assert
-        var act = async () => await submitter.EnqueueAsync(1, cts.Token);
+        var act = async () => await submitter.EnqueueAsync(1, cts.Token).ConfigureAwait(false);
         act.Should().ThrowAsync<OperationCanceledException>();
     }
 
@@ -246,7 +251,7 @@ public class SqsJobSubmitterTests
         client.ThrowOnSend = true;
 
         // Act & Assert
-        var act = async () => await submitter.EnqueueAsync(42);
+        var act = async () => await submitter.EnqueueAsync(42).ConfigureAwait(false);
         act.Should().ThrowAsync<AmazonSQSException>();
     }
 
@@ -309,7 +314,7 @@ public class SqsJobSubmitterTests
     {
         // Arrange
         var (submitter, _) = CreateSubmitter();
-        var jobIds = new HashSet<string>();
+        var jobIds = new HashSet<string>(StringComparer.Ordinal);
 
         // Act
         for (var i = 0; i < 10; i++)
@@ -326,7 +331,7 @@ public class SqsJobSubmitterTests
 
     #region MockSqsClient
 
-    private class MockSqsClient : IAmazonSQS
+    private sealed class MockSqsClient : IAmazonSQS
     {
         private int _messageCounter;
 
@@ -351,7 +356,10 @@ public class SqsJobSubmitterTests
             LastRequest = request;
             AllRequests.Add(request);
 
-            var messageId = $"mock-msg-{Interlocked.Increment(ref _messageCounter)}";
+            var messageId = string.Create(
+                CultureInfo.InvariantCulture,
+                $"mock-msg-{Interlocked.Increment(ref _messageCounter)}"
+            );
             return Task.FromResult(new SendMessageResponse { MessageId = messageId });
         }
 

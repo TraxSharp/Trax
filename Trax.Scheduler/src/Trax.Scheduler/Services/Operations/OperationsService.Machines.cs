@@ -61,12 +61,16 @@ public partial class OperationsService
         var byId = drawn.Stickies.ToDictionary(s => s.Id, StringComparer.Ordinal);
         bool IsActor(string id) => byId[id].Kind == Board.Kind.Actor;
         var lane = drawn
-            .Stickies.Where(s => s.Machine == machine && s.Kind != Board.Kind.Actor)
+            .Stickies.Where(s =>
+                string.Equals(s.Machine, machine, StringComparison.Ordinal)
+                && s.Kind != Board.Kind.Actor
+            )
             .Select(s => s.Id)
             .ToHashSet(StringComparer.Ordinal);
         var joined = drawn
-            .Links.Where(l => !IsActor(l.From) && !IsActor(l.To))
-            .Where(l => lane.Contains(l.From) || lane.Contains(l.To))
+            .Links.Where(l =>
+                !IsActor(l.From) && !IsActor(l.To) && (lane.Contains(l.From) || lane.Contains(l.To))
+            )
             .SelectMany(l => new[] { l.From, l.To })
             .Select(id => byId[id].Machine)
             .Append(machine)
@@ -78,7 +82,7 @@ public partial class OperationsService
         // An actor is shown when an arrow ties it to a sticky on this board: in its own lane if it is tied to that
         // machine, otherwise in the first lane it is tied to, the asked-for machine's first.
         var lanes = joined
-            .OrderBy(m => m == machine ? 0 : 1)
+            .OrderBy(m => string.Equals(m, machine, StringComparison.Ordinal) ? 0 : 1)
             .ThenBy(m => m, StringComparer.Ordinal)
             .ToList();
         var actors = drawn
@@ -86,8 +90,13 @@ public partial class OperationsService
             .Select(actor =>
             {
                 var tied = drawn
-                    .Links.Where(l => l.From == actor.Id || l.To == actor.Id)
-                    .Select(l => l.From == actor.Id ? l.To : l.From)
+                    .Links.Where(l =>
+                        string.Equals(l.From, actor.Id, StringComparison.Ordinal)
+                        || string.Equals(l.To, actor.Id, StringComparison.Ordinal)
+                    )
+                    .Select(l =>
+                        string.Equals(l.From, actor.Id, StringComparison.Ordinal) ? l.To : l.From
+                    )
                     .Where(here.Contains)
                     .Select(id => byId[id].Machine)
                     .ToHashSet(StringComparer.Ordinal);
@@ -178,7 +187,16 @@ public partial class OperationsService
 
         return new MachineDescription(
             machine.Name,
-            internals?.Version ?? (int.TryParse(graph.Version, out var v) ? v : 0),
+            internals?.Version
+                ?? (
+                    int.TryParse(
+                        graph.Version,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var v
+                    )
+                        ? v
+                        : 0
+                ),
             internals?.SystemOwned ?? false
         )
         {
@@ -187,7 +205,7 @@ public partial class OperationsService
             States = graph
                 .States.Select(s => new MachineStateDescription(s)
                 {
-                    IsInitial = s == graph.Initial,
+                    IsInitial = string.Equals(s, graph.Initial, StringComparison.Ordinal),
                     IsFinal = !left.Contains(s),
                     IsCommitted = graph.Committed.Contains(s),
                     InvokesTrain = spawns.ContainsKey(s) ? null : invokes.GetValueOrDefault(s),

@@ -67,10 +67,8 @@ public class SqliteQueuedWorkNoticeTests : TestSetup
     private async Task QueueAsync()
     {
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
-        await execution.QueueAsync(
-            typeof(ISchedulerTestTrain).FullName!,
-            "{}",
-            ct: CancellationToken.None
-        );
+        await execution
+            .QueueAsync(typeof(ISchedulerTestTrain).FullName!, "{}", ct: CancellationToken.None)
+            .ConfigureAwait(false);
     }
 }

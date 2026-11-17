@@ -83,7 +83,10 @@ public static class DecisionProbe
     }
 
     public static IReadOnlyList<string> TracksOf(string value) =>
-        Taken.Where(t => t.Value == value).Select(t => t.Track).ToList();
+        Taken
+            .Where(t => string.Equals(t.Value, value, StringComparison.Ordinal))
+            .Select(t => t.Track)
+            .ToList();
 }
 
 public record ProbeAdmitted(string Value);

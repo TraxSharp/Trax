@@ -27,7 +27,7 @@ namespace Trax.Scheduler.Services.MetadataCleanupPollingService;
 /// .NET starts hosted services in registration order and that service sweeps as soon as it
 /// starts.</para>
 /// </remarks>
-internal class MetadataCleanupConfigurationValidator(
+internal sealed class MetadataCleanupConfigurationValidator(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration
 ) : IHostedService, ITraxStartupCheck

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,7 +43,7 @@ public sealed class ResearchCluster : IAsyncDisposable
         Action<SchedulerConfigurationBuilder>? scheduling = null
     )
     {
-        var cluster = await InvokeCluster.Create(store);
+        var cluster = await InvokeCluster.Create(store).ConfigureAwait(false);
         var host = cluster.Host(
             machines: false,
             scheduler: true,
@@ -79,10 +80,9 @@ public sealed class ResearchCluster : IAsyncDisposable
     {
         using var scope = Host.Services.CreateScope();
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            data,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(data, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Effect.Models.Manifest.Manifest.Create(
             new CreateManifest
             {
@@ -97,16 +97,17 @@ public sealed class ResearchCluster : IAsyncDisposable
         );
         manifest.ManifestGroupId = group.Id;
         manifest.TimeoutSeconds = timeoutSeconds;
-        await data.Track(manifest);
-        await data.SaveChanges(CancellationToken.None);
+        await data.Track(manifest).ConfigureAwait(false);
+        await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return manifest;
     }
 
     /// <summary>One ManifestManager cycle, then the manifest's queued entry dispatched and run here.</summary>
     public async Task<Metadata> Cycle(Manifest manifest)
     {
-        await Host.RunManifestManager();
-        return await DispatchAndRun(await QueuedEntry(manifest.Id));
+        await Host.RunManifestManager().ConfigureAwait(false);
+        return await DispatchAndRun(await QueuedEntry(manifest.Id).ConfigureAwait(false))
+            .ConfigureAwait(false);
     }
 
     /// <summary>The manifest's one queued entry.</summary>
@@ -119,21 +120,27 @@ public sealed class ResearchCluster : IAsyncDisposable
     /// <summary>Dispatches <paramref name="entry"/> and runs it here to its end.</summary>
     public async Task<Metadata> DispatchAndRun(WorkQueue entry)
     {
-        var runId = await Dispatch(entry);
-        await Host.RunJob(runId);
-        return await Host.Run(runId);
+        var runId = await Dispatch(entry).ConfigureAwait(false);
+        await Host.RunJob(runId).ConfigureAwait(false);
+        return await Host.Run(runId).ConfigureAwait(false);
     }
 
     /// <summary>Runs the dispatcher once and returns the run it made for <paramref name="entry"/>.</summary>
     public async Task<long> Dispatch(WorkQueue entry)
     {
         using (var scope = Host.Services.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
+            await scope
+                .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
+                .Run(Unit.Default)
+                .ConfigureAwait(false);
 
-        var dispatched = await Entry(entry.Id);
+        var dispatched = await Entry(entry.Id).ConfigureAwait(false);
         return dispatched.MetadataId
             ?? throw new InvalidOperationException(
-                $"Entry {entry.Id} was not dispatched: it is {dispatched.Status}."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Entry {entry.Id} was not dispatched: it is {dispatched.Status}."
+                )
             );
     }
 
@@ -164,14 +171,17 @@ public sealed class ResearchCluster : IAsyncDisposable
                     .GetType()
                     .GetMethod("FlushAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(writer, [CancellationToken.None])!
-        ).WaitAsync(TimeSpan.FromSeconds(30));
+        )
+            .WaitAsync(TimeSpan.FromSeconds(30))
+            .ConfigureAwait(false);
 
         return await With(data =>
-            data.JunctionRuns.AsNoTracking()
-                .Where(j => j.MetadataId == runId)
-                .OrderBy(j => j.Position)
-                .ToListAsync()
-        );
+                data.JunctionRuns.AsNoTracking()
+                    .Where(j => j.MetadataId == runId)
+                    .OrderBy(j => j.Position)
+                    .ToListAsync()
+            )
+            .ConfigureAwait(false);
     }
 
     public async Task<OperationResult> Operation(
@@ -179,13 +189,15 @@ public sealed class ResearchCluster : IAsyncDisposable
     )
     {
         using var scope = Host.Services.CreateScope();
-        return await call(scope.ServiceProvider.GetRequiredService<IOperationsService>());
+        return await call(scope.ServiceProvider.GetRequiredService<IOperationsService>())
+            .ConfigureAwait(false);
     }
 
     public async Task<T> With<T>(Func<IDataContext, Task<T>> read)
     {
         using var scope = Host.Services.CreateScope();
-        return await read(scope.ServiceProvider.GetRequiredService<IDataContext>());
+        return await read(scope.ServiceProvider.GetRequiredService<IDataContext>())
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -194,32 +206,40 @@ public sealed class ResearchCluster : IAsyncDisposable
     /// </summary>
     public async Task<List<string>> ResumesOfMissingRuns() =>
         await With(async data =>
-            (
-                await data
-                    .WorkQueues.AsNoTracking()
-                    .Where(q =>
-                        q.ResumeFrom != null && !data.Metadatas.Any(m => m.Id == q.ResumeFrom)
-                    )
-                    .Select(q => $"work_queue {q.Id} resumes {q.ResumeFrom}")
-                    .ToListAsync()
-            )
-                .Concat(
+                (
                     await data
-                        .Metadatas.AsNoTracking()
-                        .Where(r =>
-                            r.ResumeFrom != null && !data.Metadatas.Any(m => m.Id == r.ResumeFrom)
+                        .WorkQueues.AsNoTracking()
+                        .Where(q =>
+                            q.ResumeFrom != null && !data.Metadatas.Any(m => m.Id == q.ResumeFrom)
                         )
-                        .Select(r => $"metadata {r.Id} resumes {r.ResumeFrom}")
+                        .Select(q =>
+                            "work_queue " + q.Id + " resumes " + q.ResumeFrom
+                        )
                         .ToListAsync()
+                        .ConfigureAwait(false)
                 )
-                .ToList()
-        );
+                    .Concat(
+                        await data
+                            .Metadatas.AsNoTracking()
+                            .Where(r =>
+                                r.ResumeFrom != null
+                                && !data.Metadatas.Any(m => m.Id == r.ResumeFrom)
+                            )
+                            .Select(r =>
+                                "metadata " + r.Id + " resumes " + r.ResumeFrom
+                            )
+                            .ToListAsync()
+                            .ConfigureAwait(false)
+                    )
+                    .ToList()
+            )
+            .ConfigureAwait(false);
 
     public Task Reset() => Cluster.Reset();
 
     public async ValueTask DisposeAsync()
     {
-        await Host.DisposeAsync();
-        await Cluster.DisposeAsync();
+        await Host.DisposeAsync().ConfigureAwait(false);
+        await Cluster.DisposeAsync().ConfigureAwait(false);
     }
 }

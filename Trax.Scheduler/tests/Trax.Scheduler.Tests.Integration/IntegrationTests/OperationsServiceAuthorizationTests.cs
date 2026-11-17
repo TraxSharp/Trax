@@ -74,10 +74,12 @@ public class OperationsServiceAuthorizationTests
     public async Task A_caller_who_may_not_run_the_train_is_refused_and_nothing_is_queued()
     {
         var act = async () =>
-            await Operations.QueueTrainAsync(
-                new QueueTrainInput(typeof(IGuardedTrain).FullName!, "{\"Value\":\"x\"}"),
-                CancellationToken.None
-            );
+            await Operations
+                .QueueTrainAsync(
+                    new QueueTrainInput(typeof(IGuardedTrain).FullName!, "{\"Value\":\"x\"}"),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
 
@@ -89,10 +91,12 @@ public class OperationsServiceAuthorizationTests
     public async Task Malformed_input_from_a_caller_who_may_not_run_the_train_is_not_parsed()
     {
         var act = async () =>
-            await Operations.QueueTrainAsync(
-                new QueueTrainInput(typeof(IGuardedTrain).FullName!, "{not json"),
-                CancellationToken.None
-            );
+            await Operations
+                .QueueTrainAsync(
+                    new QueueTrainInput(typeof(IGuardedTrain).FullName!, "{not json"),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<UnauthorizedAccessException>(
@@ -132,10 +136,12 @@ public class OperationsServiceAuthorizationTests
     public async Task A_caller_who_may_not_run_the_train_cannot_run_it_either()
     {
         var act = async () =>
-            await Operations.RunTrainAsync(
-                new RunTrainInput(typeof(IGuardedTrain).FullName!, "{\"value\":\"x\"}"),
-                CancellationToken.None
-            );
+            await Operations
+                .RunTrainAsync(
+                    new RunTrainInput(typeof(IGuardedTrain).FullName!, "{\"value\":\"x\"}"),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -58,7 +59,9 @@ public class DispatchConcurrencyTests : TestSetup
         var entries = new List<(Manifest manifest, WorkQueue entry)>();
         for (var i = 0; i < 5; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Concurrent_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Concurrent_{i}")
+            );
             var entry = await CreateAndSaveWorkQueueEntry(manifest);
             entries.Add((manifest, entry));
         }
@@ -84,7 +87,10 @@ public class DispatchConcurrencyTests : TestSetup
                 .Should()
                 .Be(
                     1,
-                    $"manifest {manifest.Id} should have exactly one Metadata (concurrent safe dispatch)"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"manifest {manifest.Id} should have exactly one Metadata (concurrent safe dispatch)"
+                    )
                 );
 
             var updatedEntry = await assertContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
@@ -101,7 +107,7 @@ public class DispatchConcurrencyTests : TestSetup
 
         // Act - Run multiple dispatchers; the losers should skip without error
         var tasks = Enumerable.Range(0, 4).Select(_ => RunDispatcherInScope()).ToArray();
-        var act = async () => await Task.WhenAll(tasks);
+        var act = async () => await Task.WhenAll(tasks).ConfigureAwait(false);
 
         // Assert - No exceptions thrown
         await act.Should().NotThrowAsync("losing dispatchers should skip gracefully");
@@ -137,8 +143,8 @@ public class DispatchConcurrencyTests : TestSetup
                     ManifestId = manifest.Id,
                 }
             );
-            await DataContext.Track(entry);
-            await DataContext.SaveChanges(CancellationToken.None);
+            await DataContext.Track(entry).ConfigureAwait(false);
+            await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         };
 
         // Assert - Unique partial index should prevent the duplicate
@@ -168,8 +174,8 @@ public class DispatchConcurrencyTests : TestSetup
                         InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                     }
                 );
-                await DataContext.Track(entry);
-                await DataContext.SaveChanges(CancellationToken.None);
+                await DataContext.Track(entry).ConfigureAwait(false);
+                await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 DataContext.Reset();
             }
         };
@@ -195,7 +201,7 @@ public class DispatchConcurrencyTests : TestSetup
         DataContext.Reset();
 
         // Act - Create a new Queued entry for the same manifest
-        var act = async () => await CreateAndSaveWorkQueueEntry(manifest);
+        var act = async () => await CreateAndSaveWorkQueueEntry(manifest).ConfigureAwait(false);
 
         // Assert - Should succeed since the first entry is no longer Queued
         await act.Should()
@@ -215,7 +221,7 @@ public class DispatchConcurrencyTests : TestSetup
 
         try
         {
-            await train.Run(Unit.Default);
+            await train.Run(Unit.Default).ConfigureAwait(false);
         }
         finally
         {
@@ -226,10 +232,8 @@ public class DispatchConcurrencyTests : TestSetup
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -243,8 +247,8 @@ public class DispatchConcurrencyTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -263,8 +267,8 @@ public class DispatchConcurrencyTests : TestSetup
             }
         );
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return entry;

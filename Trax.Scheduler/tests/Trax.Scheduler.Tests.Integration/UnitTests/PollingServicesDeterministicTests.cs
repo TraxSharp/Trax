@@ -55,12 +55,12 @@ public class PollingServicesDeterministicTests
     )
     {
         using var cts = new CancellationTokenSource();
-        await service.StartAsync(cts.Token);
+        await service.StartAsync(cts.Token).ConfigureAwait(false);
 
-        await trainHit.Task.WaitAsync(SyncTimeout);
+        await trainHit.Task.WaitAsync(SyncTimeout, CancellationToken.None).ConfigureAwait(false);
 
         cts.Cancel();
-        await service.StopAsync(CancellationToken.None);
+        await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     private static async Task<bool> WaitUntilAsync(Func<bool> predicate, TimeSpan timeout)
@@ -72,7 +72,7 @@ public class PollingServicesDeterministicTests
                 return true;
             // allowed-delay: poll interval while awaiting the completion signal, bounded by the
             // timeout above. Not a fixed wait for the work to finish.
-            await Task.Delay(25);
+            await Task.Delay(25).ConfigureAwait(false);
         }
         return predicate();
     }

@@ -32,7 +32,7 @@ public class RetryDueTimeClockTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
         _previousDelay = _config.DefaultRetryDelay;
     }
@@ -62,21 +62,23 @@ public class RetryDueTimeClockTests : TestSetup
     private async Task<Trax.Effect.Models.WorkQueue.WorkQueue> QueuedEntryOf(Manifest manifest) =>
         await DataContext
             .WorkQueues.AsNoTracking()
-            .SingleAsync(q => q.ManifestId == manifest.Id && q.Status == WorkQueueStatus.Queued);
+            .SingleAsync(q => q.ManifestId == manifest.Id && q.Status == WorkQueueStatus.Queued)
+            .ConfigureAwait(false);
 
     private async Task RunManifestManager()
     {
-        await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        await Scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default)
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 
     /// <summary>An interval manifest due now whose latest run failed an hour ago.</summary>
     private async Task<Manifest> CreateManifestWhoseLastRunFailed()
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -90,8 +92,8 @@ public class RetryDueTimeClockTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
         manifest.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-5);
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         var run = Metadata.Create(
@@ -106,8 +108,8 @@ public class RetryDueTimeClockTests : TestSetup
         run.TrainState = TrainState.Failed;
         run.StartTime = DateTime.UtcNow.AddHours(-1);
         run.EndTime = run.StartTime.AddMinutes(1);
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }

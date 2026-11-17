@@ -123,18 +123,19 @@ public class OperationsRunSubmitFailureTests
         public async Task<string> EnqueueAsync(long metadataId, CancellationToken ct)
         {
             var connection = new NpgsqlConnection(TestPostgres.ConnectionString);
-            await connection.OpenAsync(CancellationToken.None);
-            var claim = await connection.BeginTransactionAsync(CancellationToken.None);
-            await using (
-                var update = new NpgsqlCommand(
-                    "UPDATE trax.metadata SET train_state = 'in_progress' WHERE id = @id",
-                    connection,
-                    claim
-                )
-            )
+            await connection.OpenAsync(CancellationToken.None).ConfigureAwait(false);
+            var claim = await connection
+                .BeginTransactionAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            var update = new NpgsqlCommand(
+                "UPDATE trax.metadata SET train_state = 'in_progress' WHERE id = @id",
+                connection,
+                claim
+            );
+            await using (update.ConfigureAwait(false))
             {
                 update.Parameters.AddWithValue("id", metadataId);
-                await update.ExecuteNonQueryAsync(CancellationToken.None);
+                await update.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false);
             }
 
             Runner = CommitOnceAnotherWriterWaits(connection, claim);
@@ -147,27 +148,31 @@ public class OperationsRunSubmitFailureTests
         )
         {
             var deadline = DateTime.UtcNow.AddSeconds(30);
-            await using (var probe = new NpgsqlConnection(TestPostgres.ConnectionString))
+            var probe = new NpgsqlConnection(TestPostgres.ConnectionString);
+            await using (probe.ConfigureAwait(false))
             {
-                await probe.OpenAsync();
+                await probe.OpenAsync().ConfigureAwait(false);
                 while (DateTime.UtcNow < deadline)
                 {
-                    await using var waiting = new NpgsqlCommand(
+                    var waiting = new NpgsqlCommand(
                         """
                         SELECT count(*) FROM pg_stat_activity
                         WHERE wait_event_type = 'Lock' AND query ILIKE '%UPDATE%metadata%'
                         """,
                         probe
                     );
-                    if ((long)(await waiting.ExecuteScalarAsync())! > 0)
-                        break;
-                    await Task.Yield();
+                    await using (waiting.ConfigureAwait(false))
+                    {
+                        if ((long)(await waiting.ExecuteScalarAsync().ConfigureAwait(false))! > 0)
+                            break;
+                        await Task.Yield();
+                    }
                 }
             }
 
-            await claim.CommitAsync();
-            await claim.DisposeAsync();
-            await connection.DisposeAsync();
+            await claim.CommitAsync().ConfigureAwait(false);
+            await claim.DisposeAsync().ConfigureAwait(false);
+            await connection.DisposeAsync().ConfigureAwait(false);
         }
     }
 }

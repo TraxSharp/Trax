@@ -24,6 +24,10 @@ namespace Trax.Scheduler.Tests.UnitTests;
 [TestFixture]
 public class TraxRequestHandlerTests
 {
+    // An ArgumentException as a caller's code would throw it; the parameter it names is not this test's.
+    private static ArgumentException ArgumentFailure(string message, string paramName = "input") =>
+        new(message, paramName);
+
     #region ExecuteJobAsync
 
     [Test]
@@ -79,7 +83,7 @@ public class TraxRequestHandlerTests
         };
         var handler = CreateHandler(jobRunner: jobRunner);
 
-        var act = async () => await handler.ExecuteJobAsync(request);
+        var act = async () => await handler.ExecuteJobAsync(request).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Train exploded");
     }
@@ -95,7 +99,7 @@ public class TraxRequestHandlerTests
         var jobRunner = new FakeJobRunnerTrain();
         var handler = CreateHandler(jobRunner: jobRunner);
 
-        var act = async () => await handler.ExecuteJobAsync(request);
+        var act = async () => await handler.ExecuteJobAsync(request).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<TrainException>()
@@ -115,7 +119,7 @@ public class TraxRequestHandlerTests
         var jobRunner = new FakeJobRunnerTrain();
         var handler = CreateHandler(jobRunner: jobRunner);
 
-        var act = async () => await handler.ExecuteJobAsync(request);
+        var act = async () => await handler.ExecuteJobAsync(request).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>();
         jobRunner.ReceivedRequest.Should().BeNull();
@@ -247,7 +251,7 @@ public class TraxRequestHandlerTests
     [Test]
     public async Task RunTrainAsync_TrainFailsWithNestedInnerException_CapturesOuterExceptionType()
     {
-        var inner = new ArgumentException("Bad argument");
+        var inner = ArgumentFailure("Bad argument");
         var outer = new InvalidOperationException("Operation failed", inner);
         var executionService = new FakeTrainExecutionService { ExceptionToThrow = outer };
         var request = new RemoteRunRequest(
@@ -312,7 +316,7 @@ public class TraxRequestHandlerTests
     [Test]
     public void BuildErrorResponse_WithPlainException_ReportsTypeOnly()
     {
-        var ex = new ArgumentException("Bad value");
+        var ex = ArgumentFailure("Bad value");
 
         var response = TraxRequestHandler.BuildErrorResponse(ex);
 
@@ -433,7 +437,7 @@ public class TraxRequestHandlerTests
     private sealed class FakeTrainRegistry(params Type[] inputTypes)
         : Trax.Mediator.Services.TrainRegistry.ITrainRegistry
     {
-        public Dictionary<Type, Type> InputTypeToTrain { get; set; } =
+        public IReadOnlyDictionary<Type, Type> InputTypeToTrain { get; set; } =
             inputTypes.ToDictionary(t => t, _ => typeof(IJobRunnerTrain));
     }
 
@@ -486,7 +490,7 @@ public class TraxRequestHandlerTests
 
     #region Fakes
 
-    private class FakeJobRunnerTrain : IJobRunnerTrain
+    private sealed class FakeJobRunnerTrain : IJobRunnerTrain
     {
         public RunJobRequest? ReceivedRequest { get; private set; }
         public Exception? ExceptionToThrow { get; init; }
@@ -508,7 +512,7 @@ public class TraxRequestHandlerTests
         }
     }
 
-    private class FakeTrainExecutionService : ITrainExecutionService
+    private sealed class FakeTrainExecutionService : ITrainExecutionService
     {
         public RunTrainResult? ResultToReturn { get; init; }
         public Exception? ExceptionToThrow { get; init; }

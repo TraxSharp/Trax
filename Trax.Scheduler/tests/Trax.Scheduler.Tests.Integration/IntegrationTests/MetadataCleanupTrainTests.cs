@@ -35,7 +35,7 @@ public class MetadataCleanupTrainTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
     }
@@ -781,7 +781,7 @@ public class MetadataCleanupTrainTests : TestSetup
                             }
                         )
                     );
-                    await otherData.SaveChanges(ct);
+                    await otherData.SaveChanges(ct).ConfigureAwait(false);
                 },
                 logger: logger
             );
@@ -851,7 +851,7 @@ public class MetadataCleanupTrainTests : TestSetup
                     }
                 )
             );
-            await otherData.SaveChanges(ct);
+            await otherData.SaveChanges(ct).ConfigureAwait(false);
         };
 
         await junction.Run(new MetadataCleanupRequest());
@@ -868,7 +868,12 @@ public class MetadataCleanupTrainTests : TestSetup
                     .MaxDeleteAttempts,
                 "the batch was tried that many times and not selected again"
             );
-        (await DataContext.Metadatas.AnyAsync(m => m.Id == runs[3].Id))
+        (
+            await DataContext.Metadatas.AnyAsync(
+                m => m.Id == runs[3].Id,
+                cancellationToken: CancellationToken.None
+            )
+        )
             .Should()
             .BeTrue(
                 "a batch left after its attempts waits for the next sweep. See "
@@ -1021,7 +1026,7 @@ public class MetadataCleanupTrainTests : TestSetup
                             }
                         )
                     );
-                    await otherData.SaveChanges(ct);
+                    await otherData.SaveChanges(ct).ConfigureAwait(false);
                 }
             );
 
@@ -1052,8 +1057,8 @@ public class MetadataCleanupTrainTests : TestSetup
                 ReplayDecisionsOf = metadataId,
             }
         );
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return entry;
     }
@@ -1062,7 +1067,8 @@ public class MetadataCleanupTrainTests : TestSetup
     {
         await DataContext
             .Metadatas.Where(m => m.Id == replayerId)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.ReplayDecisionsOf, (long?)sourceId));
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.ReplayDecisionsOf, (long?)sourceId))
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -1074,7 +1080,7 @@ public class MetadataCleanupTrainTests : TestSetup
     public async Task Run_WithNoExpiredMetadata_CompletesSuccessfully()
     {
         // Act & Assert - Should complete without throwing
-        var act = async () => await _train.Run(new MetadataCleanupRequest());
+        var act = async () => await _train.Run(new MetadataCleanupRequest()).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -1382,8 +1388,8 @@ public class MetadataCleanupTrainTests : TestSetup
         if (state is TrainState.Completed or TrainState.Failed)
             metadata.EndTime = startTime.AddSeconds(1);
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -1408,8 +1414,8 @@ public class MetadataCleanupTrainTests : TestSetup
         metadata.TrainState = state;
         metadata.StartTime = DateTime.UtcNow;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -1417,10 +1423,8 @@ public class MetadataCleanupTrainTests : TestSetup
 
     private async Task<Manifest> CreateAndSaveManifest()
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -1436,8 +1440,8 @@ public class MetadataCleanupTrainTests : TestSetup
 
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -1445,7 +1449,9 @@ public class MetadataCleanupTrainTests : TestSetup
 
     private async Task<DeadLetter> CreateAndSaveDeadLetter(Manifest manifest)
     {
-        var reloadedManifest = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+        var reloadedManifest = await DataContext
+            .Manifests.FirstAsync(m => m.Id == manifest.Id)
+            .ConfigureAwait(false);
 
         var deadLetter = DeadLetter.Create(
             new CreateDeadLetter
@@ -1456,8 +1462,8 @@ public class MetadataCleanupTrainTests : TestSetup
             }
         );
 
-        await DataContext.Track(deadLetter);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(deadLetter).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return deadLetter;

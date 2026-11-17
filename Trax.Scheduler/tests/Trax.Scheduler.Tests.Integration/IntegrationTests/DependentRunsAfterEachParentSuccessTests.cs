@@ -213,41 +213,43 @@ public class DependentRunsAfterEachParentSuccessTests : TestSetup
         DateTime dependentSucceededAt
     )
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var parent = await SaveManifestAsync(
-            new CreateManifest
-            {
-                Name = typeof(SchedulerTestTrain),
-                IsEnabled = true,
-                ScheduleType = ScheduleType.Interval,
-                IntervalSeconds = 86400,
-                MaxRetries = 3,
-                Properties = new SchedulerTestInput { Value = "parent" },
-            },
-            group.Id
-        );
-        await AddMetadataAsync(parent.Id, TrainState.Completed, parentSucceededAt.AddMinutes(-1));
-        await SetLastSuccessAsync(parent.Id, parentSucceededAt);
+                new CreateManifest
+                {
+                    Name = typeof(SchedulerTestTrain),
+                    IsEnabled = true,
+                    ScheduleType = ScheduleType.Interval,
+                    IntervalSeconds = 86400,
+                    MaxRetries = 3,
+                    Properties = new SchedulerTestInput { Value = "parent" },
+                },
+                group.Id
+            )
+            .ConfigureAwait(false);
+        await AddMetadataAsync(parent.Id, TrainState.Completed, parentSucceededAt.AddMinutes(-1))
+            .ConfigureAwait(false);
+        await SetLastSuccessAsync(parent.Id, parentSucceededAt).ConfigureAwait(false);
 
         var dependent = await SaveManifestAsync(
-            new CreateManifest
-            {
-                Name = typeof(SchedulerTestTrain),
-                IsEnabled = true,
-                ScheduleType = ScheduleType.Dependent,
-                MaxRetries = 3,
-                Properties = new SchedulerTestInput { Value = "dependent" },
-                DependsOnManifestId = parent.Id,
-            },
-            group.Id
-        );
+                new CreateManifest
+                {
+                    Name = typeof(SchedulerTestTrain),
+                    IsEnabled = true,
+                    ScheduleType = ScheduleType.Dependent,
+                    MaxRetries = 3,
+                    Properties = new SchedulerTestInput { Value = "dependent" },
+                    DependsOnManifestId = parent.Id,
+                },
+                group.Id
+            )
+            .ConfigureAwait(false);
         if (dependentStartedAt is not null)
-            await AddMetadataAsync(dependent.Id, TrainState.Completed, dependentStartedAt.Value);
-        await SetLastSuccessAsync(dependent.Id, dependentSucceededAt);
+            await AddMetadataAsync(dependent.Id, TrainState.Completed, dependentStartedAt.Value)
+                .ConfigureAwait(false);
+        await SetLastSuccessAsync(dependent.Id, dependentSucceededAt).ConfigureAwait(false);
 
         return dependent;
     }
@@ -256,8 +258,8 @@ public class DependentRunsAfterEachParentSuccessTests : TestSetup
     {
         var manifest = Manifest.Create(create);
         manifest.ManifestGroupId = groupId;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -281,8 +283,8 @@ public class DependentRunsAfterEachParentSuccessTests : TestSetup
         metadata.TrainState = state;
         metadata.StartTime = startTime;
         metadata.EndTime = endTime;
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -308,8 +310,8 @@ public class DependentRunsAfterEachParentSuccessTests : TestSetup
         );
         metadata.TrainState = state;
         metadata.StartTime = startTime;
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -321,22 +323,27 @@ public class DependentRunsAfterEachParentSuccessTests : TestSetup
         entry.Status = WorkQueueStatus.Dispatched;
         entry.MetadataId = metadata.Id;
         entry.DispatchedAt = dispatchedAt;
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
     private async Task SetLastSuccessAsync(long manifestId, DateTime at)
     {
-        var manifest = await DataContext.Manifests.FirstAsync(m => m.Id == manifestId);
+        var manifest = await DataContext
+            .Manifests.FirstAsync(m => m.Id == manifestId)
+            .ConfigureAwait(false);
         manifest.LastSuccessfulRun = at;
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
     private async Task RunManifestManagerAsync()
     {
-        await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        await Scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default)
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 

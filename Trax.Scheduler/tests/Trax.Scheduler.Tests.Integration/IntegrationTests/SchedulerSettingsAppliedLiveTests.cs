@@ -73,7 +73,7 @@ public class SchedulerSettingsAppliedLiveTests
     public async Task AutoPurgeDeadLetters_false_in_code_keeps_resolved_dead_letters()
     {
         await using var fx = await SchedulerE2EFixture.CreateAsync(s =>
-            s.AutoPurgeDeadLetters(false)
+            s.AutoPurgeDeadLetters(purge: false)
                 .DeadLetterRetentionPeriod(TimeSpan.FromDays(7))
                 .Schedule<ISchedulerTestTrain>(
                     "purge-off-in-code",

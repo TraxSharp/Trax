@@ -51,7 +51,7 @@ internal class RetryResume(
 
         try
         {
-            return await LookUpAsync(manifests, resumes, chains, ct);
+            return await LookUpAsync(manifests, resumes, chains, ct).ConfigureAwait(false);
         }
         catch (Exception e) when (!ct.IsCancellationRequested)
         {
@@ -67,7 +67,10 @@ internal class RetryResume(
 
     /// <summary>The run <paramref name="manifest"/>'s retry resumes, or null when it reruns.</summary>
     public async Task<long?> SourceForRetryAsync(Manifest manifest, CancellationToken ct) =>
-        (await SourcesForRetriesAsync([manifest], ct)).TryGetValue(manifest.Id, out var source)
+        (await SourcesForRetriesAsync([manifest], ct).ConfigureAwait(false)).TryGetValue(
+            manifest.Id,
+            out var source
+        )
             ? source
             : null;
 
@@ -81,7 +84,7 @@ internal class RetryResume(
         var sources = new Dictionary<long, long>();
         var candidates = new List<(Manifest Manifest, long RunId)>();
 
-        using (var context = await contextFactory.CreateDbContextAsync(ct))
+        using (var context = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false))
         {
             var manifestIds = manifests.Select(m => m.Id).ToList();
 
@@ -106,7 +109,8 @@ internal class RetryResume(
                         .Select(md => (long?)md.Id)
                         .FirstOrDefault(),
                 })
-                .ToListAsync(ct);
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
 
             var latestIds = latestByManifest
                 .Where(l => l.Latest is not null)
@@ -132,7 +136,8 @@ internal class RetryResume(
                     m.InvokingMachine,
                     m.StartTime,
                 })
-                .ToListAsync(ct);
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
 
             if (runs.Count == 0)
                 return sources;
@@ -152,6 +157,7 @@ internal class RetryResume(
                         q.DispatchedAt,
                     })
                     .ToListAsync(ct)
+                    .ConfigureAwait(false)
             ).GroupBy(q => q.MetadataId).ToDictionary(g => g.Key, g => g.First());
 
             var parentIds = manifests
@@ -165,7 +171,8 @@ internal class RetryResume(
                     : await context
                         .Manifests.AsNoTracking()
                         .Where(m => parentIds.Contains(m.Id))
-                        .ToDictionaryAsync(m => m.Id, m => m.LastSuccessfulRun, ct);
+                        .ToDictionaryAsync(m => m.Id, m => m.LastSuccessfulRun, ct)
+                        .ConfigureAwait(false);
 
             var runById = runs.ToDictionary(r => r.Id);
             var latestById = latestByManifest.ToDictionary(l => l.Id, l => l.Latest);
@@ -181,7 +188,8 @@ internal class RetryResume(
                 entries.TryGetValue(runId, out var entry);
 
                 string? why =
-                    run.Name != manifest.Name ? "it is not a run of this manifest's train"
+                    !string.Equals(run.Name, manifest.Name, StringComparison.Ordinal)
+                        ? "it is not a run of this manifest's train"
                     : run.InvokingMachine is not null
                         ? "a state machine invoked it, and only the machine retries it"
                     : manifest.DependsOnManifestId is { } parent
@@ -231,15 +239,17 @@ internal class RetryResume(
                 continue;
             }
 
-            var verdict = await resumes.Check(
-                declared.Train,
-                declared.Chain,
-                declared.Input,
-                declared.Output,
-                runId,
-                resumeAt: null,
-                ct
-            );
+            var verdict = await resumes
+                .Check(
+                    declared.Train,
+                    declared.Chain,
+                    declared.Input,
+                    declared.Output,
+                    runId,
+                    resumeAt: null,
+                    ct
+                )
+                .ConfigureAwait(false);
 
             if (verdict.CanResume)
                 sources[manifest.Id] = runId;

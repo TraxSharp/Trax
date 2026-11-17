@@ -12,7 +12,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 /// <summary>
 /// Drives the full polling cycle (materialise manifests → ManifestManager → JobDispatcher)
-/// against Postgres so the EnqueueJobsJunction / dispatcher junctions / TraxScheduler trigger
+/// against Postgres so the work queue / dispatcher junctions / TraxScheduler trigger
 /// paths actually execute. The unit-level tests can't reach these because they live inside
 /// junction async state machines that only fire when the orchestration trains run.
 /// </summary>

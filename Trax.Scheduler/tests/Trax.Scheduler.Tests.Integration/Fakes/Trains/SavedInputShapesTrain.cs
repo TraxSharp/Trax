@@ -29,4 +29,4 @@ public record SavedInputPlace
 }
 
 /// <summary>Interface for <see cref="SavedInputShapesTrain"/>.</summary>
-public interface ISavedInputShapesTrain : IServiceTrain<SavedInputShapes, Unit> { }
+public interface ISavedInputShapesTrain : IServiceTrain<SavedInputShapes, Unit>;

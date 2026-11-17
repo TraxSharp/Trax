@@ -54,7 +54,8 @@ public class SchedulerChainVerificationTests
         var isService = scope.ServiceProvider.GetRequiredService<IServiceProviderIsService>();
 
         var train = scope.ServiceProvider.GetRequiredService(service);
-        var chain = (ChainRecorder)train.GetType().GetMethod("DeclaredChain")!.Invoke(train, null)!;
+        var chain = (ChainRecorder)
+            train.GetType().GetMethod("DeclaredChain")!.Invoke(train, parameters: null)!;
 
         chain.Steps.Should().NotBeEmpty("the train must actually declare its chain");
         ChainVerification

@@ -106,7 +106,7 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
         var scope = provider.CreateScope();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
-        await TestSetup.CleanupDatabase(dataContext);
+        await TestSetup.CleanupDatabase(dataContext).ConfigureAwait(false);
 
         return new SchedulerE2EFixture(
             provider,
@@ -125,7 +125,7 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
     public async Task MaterializePendingManifestsAsync(CancellationToken ct = default)
     {
         foreach (var pending in Configuration.PendingManifests.ToList())
-            await pending.ScheduleFunc(Scheduler, ct);
+            await pending.ScheduleFunc(Scheduler, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -205,12 +205,12 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (DataContext is IAsyncDisposable async)
-            await async.DisposeAsync();
+            await async.DisposeAsync().ConfigureAwait(false);
         else if (DataContext is IDisposable sync)
             sync.Dispose();
 
         _scope.Dispose();
-        await _provider.DisposeAsync();
+        await _provider.DisposeAsync().ConfigureAwait(false);
 
         // Aggressively clear Npgsql connection pools so the next test in the suite
         // (which builds its own ServiceProvider with its own pool) doesn't hit the

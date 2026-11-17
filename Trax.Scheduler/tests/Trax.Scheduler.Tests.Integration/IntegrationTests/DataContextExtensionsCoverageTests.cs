@@ -329,22 +329,23 @@ public class DataContextExtensionsCoverageTests : TestSetup
         Func<ManifestOptions, Task<Trax.Effect.Models.Manifest.Manifest>> seed
     )
     {
-        await seed(new ManifestOptions());
-        await DataContext.SaveChanges(CancellationToken.None);
+        await seed(new ManifestOptions()).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         await DataContext
             .Manifests.Where(m => m.ExternalId == externalId)
-            .ExecuteUpdateAsync(u => u.SetProperty(m => m.IsEnabled, false));
+            .ExecuteUpdateAsync(u => u.SetProperty(m => m.IsEnabled, valueExpression: false))
+            .ConfigureAwait(false);
         DataContext.Reset();
 
-        var reseeded = await seed(new ManifestOptions());
-        await DataContext.SaveChanges(CancellationToken.None);
+        var reseeded = await seed(new ManifestOptions()).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         reseeded
             .IsEnabled.Should()
             .BeFalse("options that do not state Enabled leave the operator's choice alone");
 
-        var stated = await seed(new ManifestOptions { IsEnabled = true });
-        await DataContext.SaveChanges(CancellationToken.None);
+        var stated = await seed(new ManifestOptions { IsEnabled = true }).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         stated.IsEnabled.Should().BeTrue("options that state Enabled write it");
     }
 
@@ -370,14 +371,15 @@ public class DataContextExtensionsCoverageTests : TestSetup
 
         async Task<DateTime?> SeedAndRead(Schedule schedule)
         {
-            await Seed(schedule);
-            await DataContext.SaveChanges(CancellationToken.None);
+            await Seed(schedule).ConfigureAwait(false);
+            await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             DataContext.Reset();
             return await DataContext
                 .Manifests.AsNoTracking()
                 .Where(m => m.ExternalId == externalId)
                 .Select(m => m.NextScheduledRun)
-                .SingleAsync();
+                .SingleAsync()
+                .ConfigureAwait(false);
         }
 
         var daily = Schedule.FromCron("0 3 * * *");
@@ -429,15 +431,17 @@ public class DataContextExtensionsCoverageTests : TestSetup
 
         var act = async () =>
         {
-            await DataContext.UpsertManifestAsync(
-                typeof(SchedulerTestTrain),
-                $"neg-var-{Guid.NewGuid():N}",
-                new SchedulerTestInput(),
-                schedule,
-                new ManifestOptions(),
-                groupId: "var-g",
-                group: new ManifestGroupSeed(PriorityIfNew: 0)
-            );
+            await DataContext
+                .UpsertManifestAsync(
+                    typeof(SchedulerTestTrain),
+                    $"neg-var-{Guid.NewGuid():N}",
+                    new SchedulerTestInput(),
+                    schedule,
+                    new ManifestOptions(),
+                    groupId: "var-g",
+                    group: new ManifestGroupSeed(PriorityIfNew: 0)
+                )
+                .ConfigureAwait(false);
         };
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*non-negative*");
@@ -448,19 +452,21 @@ public class DataContextExtensionsCoverageTests : TestSetup
     {
         var act = async () =>
         {
-            await DataContext.UpsertManifestAsync(
-                typeof(SchedulerTestTrain),
-                $"bad-var-{Guid.NewGuid():N}",
-                new SchedulerTestInput(),
-                Schedule.FromInterval(TimeSpan.FromMinutes(1)) with
-                {
-                    Type = ScheduleType.OnDemand,
-                    Variance = TimeSpan.FromSeconds(10),
-                },
-                new ManifestOptions(),
-                groupId: "var-g2",
-                group: new ManifestGroupSeed(PriorityIfNew: 0)
-            );
+            await DataContext
+                .UpsertManifestAsync(
+                    typeof(SchedulerTestTrain),
+                    $"bad-var-{Guid.NewGuid():N}",
+                    new SchedulerTestInput(),
+                    Schedule.FromInterval(TimeSpan.FromMinutes(1)) with
+                    {
+                        Type = ScheduleType.OnDemand,
+                        Variance = TimeSpan.FromSeconds(10),
+                    },
+                    new ManifestOptions(),
+                    groupId: "var-g2",
+                    group: new ManifestGroupSeed(PriorityIfNew: 0)
+                )
+                .ConfigureAwait(false);
         };
 
         await act.Should()

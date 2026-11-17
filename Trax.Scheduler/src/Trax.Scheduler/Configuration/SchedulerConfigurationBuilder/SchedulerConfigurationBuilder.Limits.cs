@@ -76,7 +76,7 @@ public partial class SchedulerConfigurationBuilder
         if (problems.Count > 0)
             throw new InvalidOperationException(
                 "The scheduler configuration has values it cannot run with. "
-                    + string.Join(" ", problems)
+                    + string.Join(' ', problems)
             );
     }
 

@@ -15,16 +15,19 @@ namespace Trax.Scheduler.Tests.Integration.Fakes.Trains;
 public class DeliveryProbeTrain : ServiceTrain<DeliveryProbeInput, Unit>, IDeliveryProbeTrain
 {
     /// <summary>How many times the body ran, per key.</summary>
-    public static ConcurrentDictionary<string, int> Runs { get; } = new();
+    public static ConcurrentDictionary<string, int> Runs { get; } = new(StringComparer.Ordinal);
 
     /// <summary>Set when the body starts, per key.</summary>
-    public static ConcurrentDictionary<string, TaskCompletionSource> Started { get; } = new();
+    public static ConcurrentDictionary<string, TaskCompletionSource> Started { get; } =
+        new(StringComparer.Ordinal);
 
     /// <summary>When present for a key, the body waits for it before returning.</summary>
-    public static ConcurrentDictionary<string, TaskCompletionSource> Gates { get; } = new();
+    public static ConcurrentDictionary<string, TaskCompletionSource> Gates { get; } =
+        new(StringComparer.Ordinal);
 
     /// <summary>The token each body ran with, per key.</summary>
-    public static ConcurrentDictionary<string, CancellationToken> Tokens { get; } = new();
+    public static ConcurrentDictionary<string, CancellationToken> Tokens { get; } =
+        new(StringComparer.Ordinal);
 
     /// <summary>Clears everything recorded for a key.</summary>
     public static void Forget(string key)
@@ -48,7 +51,7 @@ public record DeliveryProbeInput : IManifestProperties
 }
 
 /// <summary>Interface for <see cref="DeliveryProbeTrain"/>.</summary>
-public interface IDeliveryProbeTrain : IServiceTrain<DeliveryProbeInput, Unit> { }
+public interface IDeliveryProbeTrain : IServiceTrain<DeliveryProbeInput, Unit>;
 
 internal sealed class ProbeBody : Junction<DeliveryProbeInput, Unit>
 {
@@ -64,7 +67,7 @@ internal sealed class ProbeBody : Junction<DeliveryProbeInput, Unit>
             .TrySetResult();
 
         if (DeliveryProbeTrain.Gates.TryGetValue(input.Key, out var gate))
-            await gate.Task.WaitAsync(CancellationToken);
+            await gate.Task.WaitAsync(CancellationToken).ConfigureAwait(false);
 
         if (input.Fail)
             throw new TrainException($"Probe {input.Key} failed as asked.");

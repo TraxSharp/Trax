@@ -65,10 +65,12 @@ public class PollingServicesTests
     )
     {
         using var cts = new CancellationTokenSource();
-        await service.StartAsync(cts.Token);
-        await trainHit.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await service.StartAsync(cts.Token).ConfigureAwait(false);
+        await trainHit
+            .Task.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None)
+            .ConfigureAwait(false);
         cts.Cancel();
-        await service.StopAsync(CancellationToken.None);
+        await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     private static TaskCompletionSource Hit() =>
@@ -83,7 +85,7 @@ public class PollingServicesTests
                 return true;
             // allowed-delay: poll interval while awaiting the completion signal, bounded by the
             // timeout above. Not a fixed wait for the work to finish.
-            await Task.Delay(25);
+            await Task.Delay(25).ConfigureAwait(false);
         }
         return predicate();
     }

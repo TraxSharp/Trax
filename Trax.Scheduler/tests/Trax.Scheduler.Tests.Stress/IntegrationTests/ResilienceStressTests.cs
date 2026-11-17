@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,7 +64,9 @@ public class ResilienceStressTests : TestSetup
         before
             .Should()
             .Be(dispatcherRows + deadLetterRefRows + (parentChildPairs * 2), "seeded row count");
-        TestContext.Out.WriteLine($"Seeded {before} metadata rows");
+        TestContext.Out.WriteLine(
+            string.Create(CultureInfo.InvariantCulture, $"Seeded {before} metadata rows")
+        );
 
         // The stress fixture doesn't call AddMetadataCleanup, so enable it on the shared config.
         var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
@@ -75,7 +78,7 @@ public class ResilienceStressTests : TestSetup
         var train = Scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
 
         var elapsed = await AssertCompletesWithin(
-            async () => await train.Run(new MetadataCleanupRequest()),
+            async () => await train.Run(new MetadataCleanupRequest()).ConfigureAwait(false),
             TimeSpan.FromSeconds(60)
         );
 
@@ -112,8 +115,14 @@ public class ResilienceStressTests : TestSetup
         childrenWithParent.Should().Be(0, "child parent references should be nulled");
 
         TestContext.Out.WriteLine(
-            $"Cleanup of {before} rows ({dispatcherRows} dispatcher, {deadLetterRefRows} dead-letter-referenced, "
-                + $"{parentChildPairs} parent/child): {elapsed.TotalMilliseconds:F0}ms"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Cleanup of {before} rows ({dispatcherRows} dispatcher, {deadLetterRefRows} dead-letter-referenced, "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{parentChildPairs} parent/child): {elapsed.TotalMilliseconds:F0}ms"
+                )
         );
     }
 
@@ -140,7 +149,8 @@ public class ResilienceStressTests : TestSetup
                 var failedCount = await DataContext
                     .Manifests.Where(m => m.Id == manifest.Id)
                     .Select(m => m.Metadatas.Count(md => md.TrainState == TrainState.Failed))
-                    .FirstAsync();
+                    .FirstAsync()
+                    .ConfigureAwait(false);
 
                 failedCount.Should().Be(500);
             },
@@ -148,7 +158,10 @@ public class ResilienceStressTests : TestSetup
         );
 
         TestContext.Out.WriteLine(
-            $"FailedCount over a 50.5k-row manifest history: {elapsed.TotalMilliseconds:F0}ms"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"FailedCount over a 50.5k-row manifest history: {elapsed.TotalMilliseconds:F0}ms"
+            )
         );
     }
 
@@ -168,28 +181,34 @@ public class ResilienceStressTests : TestSetup
         var writers = Enumerable
             .Range(0, 8)
             .Select(_ =>
-                Task.Run(() =>
-                {
-                    while (!cts.IsCancellationRequested)
-                        monitor.RecordDispatchCycle();
-                })
+                Task.Run(
+                    () =>
+                    {
+                        while (!cts.IsCancellationRequested)
+                            monitor.RecordDispatchCycle();
+                    },
+                    CancellationToken.None
+                )
             );
 
         var readers = Enumerable
             .Range(0, 8)
             .Select(_ =>
-                Task.Run(() =>
-                {
-                    while (!cts.IsCancellationRequested)
+                Task.Run(
+                    () =>
                     {
-                        var last = monitor.LastDispatchCompletedAt;
-                        if (last is not null)
-                            last.Value.Should().BeOnOrAfter(monitor.StartedAt);
-                    }
-                })
+                        while (!cts.IsCancellationRequested)
+                        {
+                            var last = monitor.LastDispatchCompletedAt;
+                            if (last is not null)
+                                last.Value.Should().BeOnOrAfter(monitor.StartedAt);
+                        }
+                    },
+                    CancellationToken.None
+                )
             );
 
-        var run = async () => await Task.WhenAll(writers.Concat(readers));
+        var run = async () => await Task.WhenAll(writers.Concat(readers)).ConfigureAwait(false);
 
         await run.Should().NotThrowAsync("Interlocked reads/writes must never tear");
         monitor.LastDispatchCompletedAt.Should().NotBeNull("writers stamped the monitor");
@@ -204,14 +223,16 @@ public class ResilienceStressTests : TestSetup
         const int flushEvery = 5000;
         for (var i = 0; i < count; i++)
         {
-            await DataContext.Track(NewTerminalAdminMetadata(name, startTime));
+            await DataContext
+                .Track(NewTerminalAdminMetadata(name, startTime))
+                .ConfigureAwait(false);
             if ((i + 1) % flushEvery == 0)
             {
-                await DataContext.SaveChanges(CancellationToken.None);
+                await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 DataContext.Reset();
             }
         }
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -225,10 +246,10 @@ public class ResilienceStressTests : TestSetup
         for (var i = 0; i < count; i++)
         {
             var metadata = NewTerminalAdminMetadata(name, startTime);
-            await DataContext.Track(metadata);
+            await DataContext.Track(metadata).ConfigureAwait(false);
             entities.Add(metadata);
         }
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         var ids = entities.Select(e => e.Id).ToList();
         DataContext.Reset();
         return ids;
@@ -236,7 +257,9 @@ public class ResilienceStressTests : TestSetup
 
     private async Task SeedDeadLettersReferencing(Manifest manifest, List<long> metadataIds)
     {
-        var reloaded = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+        var reloaded = await DataContext
+            .Manifests.FirstAsync(m => m.Id == manifest.Id)
+            .ConfigureAwait(false);
         foreach (var id in metadataIds)
         {
             var deadLetter = DeadLetter.Create(
@@ -248,9 +271,9 @@ public class ResilienceStressTests : TestSetup
                 }
             );
             deadLetter.RetryMetadataId = id;
-            await DataContext.Track(deadLetter);
+            await DataContext.Track(deadLetter).ConfigureAwait(false);
         }
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -264,10 +287,10 @@ public class ResilienceStressTests : TestSetup
         for (var i = 0; i < count; i++)
         {
             var parent = NewTerminalAdminMetadata(adminName, startTime);
-            await DataContext.Track(parent);
+            await DataContext.Track(parent).ConfigureAwait(false);
             parents.Add(parent);
         }
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         var parentIds = parents.Select(p => p.Id).ToList();
         DataContext.Reset();
 
@@ -284,9 +307,9 @@ public class ResilienceStressTests : TestSetup
             );
             child.TrainState = TrainState.InProgress;
             child.StartTime = DateTime.UtcNow;
-            await DataContext.Track(child);
+            await DataContext.Track(child).ConfigureAwait(false);
         }
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -308,14 +331,14 @@ public class ResilienceStressTests : TestSetup
             metadata.TrainState = state;
             metadata.StartTime = baseTime;
             metadata.EndTime = baseTime.AddSeconds(1);
-            await DataContext.Track(metadata);
+            await DataContext.Track(metadata).ConfigureAwait(false);
             if ((i + 1) % flushEvery == 0)
             {
-                await DataContext.SaveChanges(CancellationToken.None);
+                await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 DataContext.Reset();
             }
         }
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 

@@ -102,7 +102,9 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
         DataContext.Reset();
 
         var act = async () =>
-            await JobRunner.Run(new RunJobRequest(metadata.Id, new MetadataCleanupRequest()));
+            await JobRunner
+                .Run(new RunJobRequest(metadata.Id, new MetadataCleanupRequest()))
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*scheduler's own*");
 
@@ -135,7 +137,9 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
         DataContext.Reset();
 
         var act = async () =>
-            await JobRunner.Run(new RunJobRequest(metadata.Id, new MetadataCleanupRequest()));
+            await JobRunner
+                .Run(new RunJobRequest(metadata.Id, new MetadataCleanupRequest()))
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<TrainException>()
@@ -165,7 +169,8 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, Unit.Default));
+        var act = async () =>
+            await JobRunner.Run(new RunJobRequest(metadata.Id, Unit.Default)).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*scheduler's own*");
 

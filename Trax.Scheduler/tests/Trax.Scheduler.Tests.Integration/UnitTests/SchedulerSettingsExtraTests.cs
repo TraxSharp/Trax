@@ -78,7 +78,7 @@ public class SchedulerSettingsExtraTests
     [Test]
     public void MaxWorkQueueEntriesPerCycle_Null_DisablesLimit()
     {
-        var config = ResolveConfiguration(b => b.MaxWorkQueueEntriesPerCycle(null));
+        var config = ResolveConfiguration(b => b.MaxWorkQueueEntriesPerCycle(limit: null));
         config.MaxWorkQueueEntriesPerCycle.Should().BeNull();
     }
 
@@ -137,7 +137,7 @@ public class SchedulerSettingsExtraTests
     public void PruneOrphanedManifests_FlagSetsConfiguration()
     {
         var enabledConfig = ResolveConfiguration(b => b.PruneOrphanedManifests());
-        var disabledConfig = ResolveConfiguration(b => b.PruneOrphanedManifests(false));
+        var disabledConfig = ResolveConfiguration(b => b.PruneOrphanedManifests(prune: false));
 
         enabledConfig.PruneOrphanedManifests.Should().BeTrue();
         disabledConfig.PruneOrphanedManifests.Should().BeFalse();

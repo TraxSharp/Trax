@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,12 +43,15 @@ public class DatabaseClockSkewTests
         await using var connection = new NpgsqlConnection(TestPostgres.ConnectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
+        command.CommandText = string.Create(
+            CultureInfo.InvariantCulture,
+            $"""
             CREATE SCHEMA IF NOT EXISTS clock_skew;
             CREATE OR REPLACE FUNCTION clock_skew.now() RETURNS timestamptz
                 LANGUAGE sql STABLE AS $$ SELECT pg_catalog.now() + interval '{(int)
                 Skew.TotalHours} hours' $$;
-            """;
+            """
+        );
         await command.ExecuteNonQueryAsync();
     }
 
@@ -66,19 +70,21 @@ public class DatabaseClockSkewTests
 
     private async Task CreateFixture(bool failingSubmitter = false)
     {
-        _fx = await SchedulerE2EFixture.CreateAsync(
-            scheduler =>
-            {
-                if (failingSubmitter)
-                    scheduler.OverrideSubmitter(s =>
-                        s.AddScoped<IJobSubmitter, FailingJobSubmitter>()
-                    );
-            },
-            connectionString: SkewedConnectionString
-        );
+        _fx = await SchedulerE2EFixture
+            .CreateAsync(
+                scheduler =>
+                {
+                    if (failingSubmitter)
+                        scheduler.OverrideSubmitter(s =>
+                            s.AddScoped<IJobSubmitter, FailingJobSubmitter>()
+                        );
+                },
+                connectionString: SkewedConnectionString
+            )
+            .ConfigureAwait(false);
 
         // The skew is in place: the database's clock, as the scheduler reads it, is ahead.
-        (await DatabaseNow())
+        (await DatabaseNow().ConfigureAwait(false))
             .Should()
             .BeCloseTo(DateTime.UtcNow + Skew, Tolerance, "the test's clock skew must apply");
     }
@@ -151,12 +157,18 @@ public class DatabaseClockSkewTests
     /// </summary>
     private static async Task<DateTime> DatabaseNow()
     {
-        await using var connection = new NpgsqlConnection(SkewedConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT now()";
-        var value = (DateTime)(await command.ExecuteScalarAsync())!;
-        return value.ToUniversalTime();
+        var connection = new NpgsqlConnection(SkewedConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = connection.CreateCommand();
+            await using (command.ConfigureAwait(false))
+            {
+                command.CommandText = "SELECT now()";
+                var value = (DateTime)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+                return value.ToUniversalTime();
+            }
+        }
     }
 
     private async Task<WorkQueue> QueueEntry(string input, string? inputTypeName)
@@ -169,8 +181,8 @@ public class DatabaseClockSkewTests
                 InputTypeName = inputTypeName,
             }
         );
-        await _fx.DataContext.Track(entry);
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
+        await _fx.DataContext.Track(entry).ConfigureAwait(false);
+        await _fx.DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _fx.DataContext.Reset();
         return entry;
     }
@@ -178,10 +190,9 @@ public class DatabaseClockSkewTests
     /// <summary>An interval manifest due now whose latest run failed an hour ago.</summary>
     private async Task<Manifest> CreateManifestWhoseLastRunFailed()
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            _fx.DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(_fx.DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -195,8 +206,8 @@ public class DatabaseClockSkewTests
         );
         manifest.ManifestGroupId = group.Id;
         manifest.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-5);
-        await _fx.DataContext.Track(manifest);
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
+        await _fx.DataContext.Track(manifest).ConfigureAwait(false);
+        await _fx.DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _fx.DataContext.Reset();
 
         var run = Metadata.Create(
@@ -211,8 +222,8 @@ public class DatabaseClockSkewTests
         run.TrainState = TrainState.Failed;
         run.StartTime = DateTime.UtcNow.AddHours(-1);
         run.EndTime = run.StartTime.AddMinutes(1);
-        await _fx.DataContext.Track(run);
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
+        await _fx.DataContext.Track(run).ConfigureAwait(false);
+        await _fx.DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _fx.DataContext.Reset();
         return manifest;
     }

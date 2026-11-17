@@ -52,7 +52,7 @@ public class CancellationIntegrationTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.CancellationRequested, true),
+                s => s.SetProperty(m => m.CancellationRequested, valueExpression: true),
                 CancellationToken.None
             );
         DataContext.Reset();
@@ -158,7 +158,7 @@ public class CancellationIntegrationTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.CancellationRequested, true),
+                s => s.SetProperty(m => m.CancellationRequested, valueExpression: true),
                 CancellationToken.None
             );
         DataContext.Reset();
@@ -362,8 +362,8 @@ public class CancellationIntegrationTests : TestSetup
             }
         );
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
