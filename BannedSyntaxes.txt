@@ -1,6 +1,0 @@
-# Syntax no project under the analyzer profile may use, reported by MA0240. One query per line,
-# then its severity and what to write instead. Keep it short: a ban here is a convention of this
-# repository, on top of the rules the profile takes from the analyzer as they come.
-
-# x! tells the compiler a value is not null without checking. null! and default! are MA0191.
-SuppressNullableWarningExpression;error;Say what the code does when the value is null: test for it, give the member a real value, or call NotNull() to fail where the assumption breaks

@@ -107,6 +107,7 @@ public static class FunctionalExtensions
     /// <param name="valueExpr">Auto-captured caller argument expression</param>
     /// <returns>The value, known not to be null</returns>
     /// <exception cref="InvalidOperationException">Thrown when the value is null</exception>
+    [return: NotNull]
     public static T NotNull<T>(
         [NotNull] this T? value,
         [CallerArgumentExpression(nameof(value))] string? valueExpr = null
