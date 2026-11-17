@@ -122,7 +122,7 @@ public class CheckpointDeclarationTests : TestSetup
     private sealed class MakesIt<T> : Junction<string, T>
         where T : class
     {
-        public override Task<T> Run(string input) => Task.FromResult<T>(null!);
+        public override Task<T> Run(string input) => Task.FromResult(Null.Of<T>());
     }
 
     private sealed class Ends : Junction<string, Report>

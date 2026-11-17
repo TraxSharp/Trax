@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
@@ -102,7 +103,7 @@ public class JunctionCancellationTests : TestSetup
         // Assert
         result.IsLeft.Should().BeTrue();
         junction.ExceptionData.Should().NotBeNull();
-        junction.ExceptionData!.Junction.Should().Be(nameof(ThrowingStep));
+        junction.ExceptionData.NotNull().Junction.Should().Be(nameof(ThrowingStep));
     }
 
     [Theory]
@@ -139,7 +140,7 @@ public class JunctionCancellationTests : TestSetup
         exception.Data["TrainExceptionData"].Should().NotBeNull();
         var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
         data.Should().NotBeNull();
-        data!.Junction.Should().Be(nameof(ThrowingStep));
+        data.NotNull().Junction.Should().Be(nameof(ThrowingStep));
         data.Type.Should().Be("InvalidOperationException");
         data.Message.Should().Be("test error");
         data.TrainName.Should().Be(nameof(TestTrain));
@@ -161,7 +162,7 @@ public class JunctionCancellationTests : TestSetup
         var exception = result.Swap().ValueUnsafe();
         var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
         data.Should().NotBeNull();
-        data!.StackTrace.Should().NotBeNullOrEmpty();
+        data.NotNull().StackTrace.Should().NotBeNullOrEmpty();
         data.StackTrace.Should().Contain(nameof(ThrowingStep));
     }
 

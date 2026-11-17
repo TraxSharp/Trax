@@ -10,6 +10,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using Trax.Core.Extensions;
 
 namespace Trax.Core.Decisions;
 
@@ -207,8 +208,8 @@ internal static class StateDigest
                 return plan.Kind switch
                 {
                     Kind.Array => Array((Array)value, depth),
-                    Kind.InlineArray => Elements(plan.Spread!(value), depth),
-                    Kind.Wrapper => Value(plan.Inner!(value), depth + 1)
+                    Kind.InlineArray => Elements(plan.Spread.NotNull()(value), depth),
+                    Kind.Wrapper => Value(plan.Inner.NotNull()(value), depth + 1)
                         && Comparers(value, plan, depth)
                         && Fields(value, plan, depth),
                     Kind.Collection => Collection((IEnumerable)value, plan, depth)
@@ -380,7 +381,11 @@ internal static class StateDigest
             {
                 var held = field.GetValue(value);
 
-                if (spread is null ? !Value(held, depth + 1) : !Elements(spread(held!), depth))
+                if (
+                    spread is null
+                        ? !Value(held, depth + 1)
+                        : !Elements(spread(held.NotNull()), depth)
+                )
                     return false;
             }
 
@@ -665,7 +670,7 @@ internal static class StateDigest
                         collection.GetProperty(name, BindingFlags.Public | BindingFlags.Instance)
                     )
                     .Where(p => p is not null && p.GetIndexParameters().Length == 0)
-                    .Select(p => p!)
+                    .Select(p => p.NotNull())
                     .ToArray()
                 : [];
 
@@ -748,7 +753,7 @@ internal static class StateDigest
                 foreach (var member in members)
                 {
                     Text(member.Name);
-                    Long(EnumBits(member.GetRawConstantValue()!, code));
+                    Long(EnumBits(member.GetRawConstantValue().NotNull(), code));
                 }
                 break;
             case Kind.InlineArray:
@@ -766,7 +771,7 @@ internal static class StateDigest
                 Int(fields?.Count ?? 0);
                 foreach (var (field, spread) in fields ?? [])
                 {
-                    Text(Identity(field.DeclaringType!));
+                    Text(Identity(field.DeclaringType.NotNull()));
                     Text(field.Name);
                     Write([spread is null ? (byte)0 : (byte)1]);
                 }
@@ -784,7 +789,7 @@ internal static class StateDigest
     {
         if (type.IsArray)
         {
-            var element = Identity(type.GetElementType()!);
+            var element = Identity(type.GetElementType().NotNull());
             return type.IsSZArray ? $"[{element}][]"
                 : type.GetArrayRank() == 1 ? $"[{element}][*]"
                 : $"[{element}][{new string(',', type.GetArrayRank() - 1)}]";
@@ -805,9 +810,11 @@ internal static class StateDigest
     private static Func<object, object?[]> Spreader(Type buffer, Type element, int length) =>
         (Func<object, object?[]>)
             typeof(StateDigest)
-                .GetMethod(nameof(Spread), BindingFlags.NonPublic | BindingFlags.Static)!
+                .GetMethod(nameof(Spread), BindingFlags.NonPublic | BindingFlags.Static)
+                .NotNull()
                 .MakeGenericMethod(buffer, element)
-                .Invoke(null, [length])!;
+                .Invoke(null, [length])
+                .NotNull();
 
     private static Func<object, object?[]> Spread<TBuffer, TElement>(int length)
         where TBuffer : struct
@@ -922,7 +929,7 @@ internal static class StateDigest
                     || (i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))
                 )
                 && type.GetInterfaceMap(i)
-                    .TargetMethods.Any(m => !IsFramework(m.DeclaringType!.Assembly))
+                    .TargetMethods.Any(m => !IsFramework(m.DeclaringType.NotNull().Assembly))
             );
 
     private static bool IsFramework(Assembly assembly) =>
@@ -960,13 +967,15 @@ internal static class StateDigest
             // A member the framework no longer has fails the plan, so the type is refused.
             if (property is not null)
                 return level
-                    .GetProperty(property, BindingFlags.NonPublic | BindingFlags.Instance)!
+                    .GetProperty(property, BindingFlags.NonPublic | BindingFlags.Instance)
+                    .NotNull()
                     .GetValue;
 
             foreach (var (view, field) in KeyViews)
                 if (definition == view)
                     return level
-                        .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)!
+                        .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)
+                        .NotNull()
                         .GetValue;
         }
 
@@ -978,10 +987,9 @@ internal static class StateDigest
         (typeof(Dictionary<,>.KeyCollection), "_dictionary"),
         (typeof(SortedDictionary<,>.KeyCollection), "_dictionary"),
         (
-            typeof(SortedList<,>).GetNestedType(
-                "KeyList",
-                BindingFlags.Public | BindingFlags.NonPublic
-            )!,
+            typeof(SortedList<,>)
+                .GetNestedType("KeyList", BindingFlags.Public | BindingFlags.NonPublic)
+                .NotNull(),
             "_dict"
         ),
     ];

@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Core.Tests.Meta.Tests;
 
 /// <summary>
@@ -43,7 +45,8 @@ public partial class AnalyzerProfileTests
             }
 
             var expected =
-                labelled.Contains(rule) ? "none"
+                labelled.TryGetValue(rule, out var label)
+                    ? (string.Equals(label, "Added", StringComparison.Ordinal) ? "error" : "none")
                 : vendorSeverity is "none" or "silent" ? vendorSeverity
                 : "error";
 
@@ -64,7 +67,7 @@ public partial class AnalyzerProfileTests
             .Should()
             .BeEmpty(
                 "the profile is generated, not edited: every rule Meziantou.Analyzer reports by "
-                    + "default is an error, and a rule is off only where the generator names it "
+                    + "default is an error, and a rule departs from that only where the generator names it "
                     + $"with its reason. Run {Regenerate}. See {Adr}. Problems:\n  "
                     + string.Join("\n  ", problems)
             );
@@ -143,7 +146,7 @@ public partial class AnalyzerProfileTests
         return Path.Combine(
             packages,
             "meziantou.analyzer",
-            (string)pin.Attribute("Version")!,
+            (string)pin.Attribute("Version").NotNull(),
             "configuration",
             "default.editorconfig"
         );
@@ -159,16 +162,18 @@ public partial class AnalyzerProfileTests
                 StringComparer.Ordinal
             );
 
-    // A rule the generator turned off on purpose carries its reason on the line above.
-    private static HashSet<string> LabelledRules(string[] lines)
+    // A rule the generator set on purpose carries its label and reason on the line above:
+    // Exempt and Deferred turn a rule off, Added turns on one the package leaves off.
+    private static Dictionary<string, string> LabelledRules(string[] lines)
     {
-        var labelled = new HashSet<string>(StringComparer.Ordinal);
+        var labelled = new Dictionary<string, string>(StringComparer.Ordinal);
 
         for (var i = 1; i < lines.Length; i++)
         {
             var match = RuleSeverity.Match(lines[i]);
-            if (match.Success && Label.IsMatch(lines[i - 1]))
-                labelled.Add(match.Groups["rule"].Value);
+            var label = Label.Match(lines[i - 1]);
+            if (match.Success && label.Success)
+                labelled[match.Groups["rule"].Value] = label.Groups["label"].Value;
         }
 
         return labelled;
@@ -205,8 +210,8 @@ public partial class AnalyzerProfileTests
     private static partial Regex RuleSeverity { get; }
 
     [GeneratedRegex(
-        @"^# (?:Exempt|Deferred): \S",
-        RegexOptions.None,
+        @"^# (?<label>Exempt|Deferred|Added): \S",
+        RegexOptions.ExplicitCapture,
         matchTimeoutMilliseconds: 5_000
     )]
     private static partial Regex Label { get; }

@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
@@ -49,10 +50,10 @@ public class CheckpointFingerprintTests : TestSetup
     {
         var shape = CheckpointState
             .Shape(before)
-            .Replace(before.FullName!, "T", StringComparison.Ordinal);
+            .Replace(before.FullName.NotNull(), "T", StringComparison.Ordinal);
         CheckpointState
             .Shape(after)
-            .Replace(after.FullName!, "T", StringComparison.Ordinal)
+            .Replace(after.FullName.NotNull(), "T", StringComparison.Ordinal)
             .Should()
             .NotBe(shape, because);
     }

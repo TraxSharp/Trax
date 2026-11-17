@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Core.Tests.Integration.Examples.Decisions;
 using static Trax.Core.Tests.Integration.Examples.Decisions.Lending;
@@ -215,7 +216,7 @@ public class DecisionExampleTests
             .Contain("confidence of 0.62")
             .And.Contain("below the 0.95")
             .And.Contain("declares no Otherwise track");
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Permanent, "asking the same declaration again gets the same answer");
     }
@@ -444,7 +445,7 @@ public class DecisionExampleTests
         observer
             .Decisions.SelectMany(d => d.Shadows)
             .Should()
-            .OnlyContain(s => !s.Agrees && s.Error!.Contains("shadow is down"));
+            .OnlyContain(s => !s.Agrees && s.Error.NotNull().Contains("shadow is down"));
     }
 
     [Test]

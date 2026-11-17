@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
@@ -117,7 +118,7 @@ public sealed record ChainGraph(
     private static string NameOf(Type type)
     {
         if (type.IsArray)
-            return NameOf(type.GetElementType()!) + "[]";
+            return NameOf(type.GetElementType().NotNull()) + "[]";
 
         if (!type.IsGenericType || type.IsGenericTypeDefinition)
             return type.FullName ?? type.Name;

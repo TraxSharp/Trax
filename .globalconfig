@@ -194,7 +194,8 @@ dotnet_diagnostic.MA0187.severity = none
 dotnet_diagnostic.MA0188.severity = error
 dotnet_diagnostic.MA0189.severity = error
 dotnet_diagnostic.MA0190.severity = error
-dotnet_diagnostic.MA0191.severity = none
+# Added: null! and default! are not values; give the member a real one or make it required
+dotnet_diagnostic.MA0191.severity = error
 dotnet_diagnostic.MA0192.severity = error
 dotnet_diagnostic.MA0193.severity = error
 dotnet_diagnostic.MA0194.severity = error
@@ -248,3 +249,9 @@ dotnet_diagnostic.MA0242.severity = error
 dotnet_diagnostic.MA0243.severity = none
 dotnet_diagnostic.MA0244.severity = error
 dotnet_diagnostic.MA0245.severity = none
+
+# The other analyzers of the team's layer.
+# Added: an API named in BannedSymbols.txt
+dotnet_diagnostic.RS0030.severity = error
+# Added: a duplicate entry in BannedSymbols.txt
+dotnet_diagnostic.RS0031.severity = error

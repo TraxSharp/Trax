@@ -78,4 +78,12 @@
   <ItemGroup>
     <PackageReference Include="Meziantou.Analyzer" PrivateAssets="All" />
   </ItemGroup>
+
+  <!-- The team's layer on the profile: the APIs named in BannedSymbols.txt at the repository
+       root are errors (RS0030). The syntax named in BannedSyntaxes.txt beside it needs no
+       wiring here; Meziantou.Analyzer reads the nearest one above the project (MA0240). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="All" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)../BannedSymbols.txt" Visible="false" />
+  </ItemGroup>
 </Project>

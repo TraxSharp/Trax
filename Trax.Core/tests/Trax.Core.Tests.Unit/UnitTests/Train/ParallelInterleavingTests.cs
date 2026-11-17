@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -186,7 +187,7 @@ public class ParallelInterleavingTests : TestSetup
                 (branch, index) =>
                 {
                     if ((branch, index) == at)
-                        source.Value!.Cancel();
+                        source.Value.NotNull().Cancel();
                 }
             );
 

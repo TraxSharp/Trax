@@ -298,7 +298,7 @@ public class ChainVerificationStepAndConstructorTests : TestSetup
     private sealed class NullServiceSecondTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
-            Chain<StringToBool>().AddServices<IClock>(null!).Resolve();
+            Chain<StringToBool>().AddServices<IClock>(Null.Of<IClock>()).Resolve();
     }
 
     private sealed class ResolvesAValueTrain : Train<string, bool>

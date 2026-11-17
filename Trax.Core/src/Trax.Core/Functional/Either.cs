@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Trax.Core.Functional;
 
 /// <summary>
@@ -15,10 +17,14 @@ namespace Trax.Core.Functional;
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/either">SDK reference</seealso>
 public readonly struct Either<TLeft, TRight> : IEquatable<Either<TLeft, TRight>>
 {
+    // Only the side State names holds a value; the other is left at its default and never read.
+    [AllowNull]
     private readonly TLeft left;
+
+    [AllowNull]
     private readonly TRight right;
 
-    private Either(EitherStatus state, TLeft left, TRight right)
+    private Either(EitherStatus state, [AllowNull] TLeft left, [AllowNull] TRight right)
     {
         State = state;
         this.left = left;
@@ -45,7 +51,7 @@ public readonly struct Either<TLeft, TRight> : IEquatable<Either<TLeft, TRight>>
                 nameof(value),
                 "An Either cannot hold null on its left side."
             )
-            : new(EitherStatus.IsLeft, value, default!);
+            : new(EitherStatus.IsLeft, value, default);
 
     /// <summary>An <c>Either</c> on the right side.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
@@ -55,7 +61,7 @@ public readonly struct Either<TLeft, TRight> : IEquatable<Either<TLeft, TRight>>
                 nameof(value),
                 "An Either cannot hold null on its right side."
             )
-            : new(EitherStatus.IsRight, default!, value);
+            : new(EitherStatus.IsRight, default, value);
 
     /// <summary>Puts a value on the left side.</summary>
     public static implicit operator Either<TLeft, TRight>(TLeft value) => Left(value);
@@ -137,8 +143,8 @@ public readonly struct Either<TLeft, TRight> : IEquatable<Either<TLeft, TRight>>
     public Either<TRight, TLeft> Swap() =>
         State switch
         {
-            EitherStatus.IsRight => new(EitherStatus.IsLeft, right, default!),
-            EitherStatus.IsLeft => new(EitherStatus.IsRight, default!, left),
+            EitherStatus.IsRight => new(EitherStatus.IsLeft, right, default),
+            EitherStatus.IsLeft => new(EitherStatus.IsRight, default, left),
             _ => default,
         };
 

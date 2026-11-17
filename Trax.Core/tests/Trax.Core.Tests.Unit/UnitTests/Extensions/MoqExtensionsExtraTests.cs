@@ -38,7 +38,7 @@ public class MoqExtensionsExtraTests : TestSetup
     [Test]
     public void GetMockedTypeFromObject_NullArgument_Throws()
     {
-        object obj = null!;
+        var obj = Null.Of<object>();
 
         Action act = () => obj.GetMockedTypeFromObject();
 

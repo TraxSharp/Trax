@@ -1,4 +1,5 @@
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 
 namespace Trax.Core.Monad;
@@ -50,8 +51,8 @@ public static partial class ChainVerification
 
         var latestInBranch = checkpoints
             .Where(n => n.BranchPath is not null)
-            .GroupBy(n => n.BranchPath!, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.MaxBy(n => n.Order)!, StringComparer.Ordinal);
+            .GroupBy(n => n.BranchPath.NotNull(), StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.MaxBy(n => n.Order).NotNull(), StringComparer.Ordinal);
 
         Node? main;
         string? target;
@@ -142,7 +143,11 @@ public static partial class ChainVerification
             restored.Add(main);
         restored.AddRange(branchCheckpoints.Values);
 
-        var stateTypes = restored.ToDictionary(n => n.Id, n => n.Step.In!, StringComparer.Ordinal);
+        var stateTypes = restored.ToDictionary(
+            n => n.Id,
+            n => n.Step.In.NotNull(),
+            StringComparer.Ordinal
+        );
         var trackTypes = restored.ToDictionary(
             n => n.Id,
             n => (IReadOnlyList<Type>)TracksBefore(nodes, n, withheld).ToList(),
@@ -344,6 +349,6 @@ public static partial class ChainVerification
                 && taken.GetGenericTypeDefinition() == typeof(TrackTaken<>)
                 && withheld?.Invoke(taken.GetGenericArguments()[0]) != true
             )
-            .Select(n => n.Step.Out!)
+            .Select(n => n.Step.Out.NotNull())
             .Distinct();
 }

@@ -19,7 +19,7 @@ public class MonadExtensionsEdgeCasesTests : TestSetup
 
         result.Should().BeNull();
         monad.Exception.Should().BeOfType<TrainException>();
-        monad.Exception!.Message.Should().Contain("must be a class");
+        monad.Exception.NotNull().Message.Should().Contain("must be a class");
     }
 
     [Test]
@@ -31,8 +31,8 @@ public class MonadExtensionsEdgeCasesTests : TestSetup
 
         result.Should().BeNull();
         monad.Exception.Should().BeOfType<TrainException>();
-        monad.Exception!.Message.Should().Contain(nameof(MultiCtorJunction));
-        monad.Exception!.Message.Should().Contain("2 public constructors");
+        monad.Exception.NotNull().Message.Should().Contain(nameof(MultiCtorJunction));
+        monad.Exception.NotNull().Message.Should().Contain("2 public constructors");
     }
 
     [Test]

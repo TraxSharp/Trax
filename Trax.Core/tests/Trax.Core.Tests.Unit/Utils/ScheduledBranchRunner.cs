@@ -1,4 +1,5 @@
 using System.Globalization;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 
 namespace Trax.Core.Tests.Unit.Utils;
@@ -144,7 +145,7 @@ internal sealed class ScheduledBranchRunner(
             // The parent becomes a candidate the moment its last branch ends, not when its await
             // resumes, so the next choice is made between the same candidates on every replay.
             if (--group.Remaining == 0 && group.ParentGo is { } parentGo)
-                _ready.Add((group.Parent!, parentGo));
+                _ready.Add((group.Parent.NotNull(), parentGo));
 
             _held = false;
         }

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -175,13 +176,16 @@ internal static class ReflectionHelpers
         if (
             !(bool)
                 eitherType
-                    .GetProperty(nameof(Either<object, object>.IsRight))!
-                    .GetValue(eitherObject)!
+                    .GetProperty(nameof(Either<object, object>.IsRight))
+                    .NotNull()
+                    .GetValue(eitherObject)
+                    .NotNull()
         )
             return false;
 
         rightValue = eitherType
-            .GetMethod(nameof(Either<object, object>.ValueUnsafe))!
+            .GetMethod(nameof(Either<object, object>.ValueUnsafe))
+            .NotNull()
             .Invoke(eitherObject, parameters: null);
         return true;
     }

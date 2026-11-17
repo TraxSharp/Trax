@@ -25,6 +25,15 @@ deferred=(
   "MA0051:30 methods in Trax.Core run past 60 lines, the longest 516 (ChainVerification.Replay, Monad.DecideAsync)"
 )
 
+# The team's layer on top of the vendor's set: rules the package leaves off that this
+# repository turns on, and rules of the other analyzers the layer brings. Kept short on purpose;
+# what is banned lives in BannedSymbols.txt and BannedSyntaxes.txt at the repository root.
+added=(
+  "MA0191:null! and default! are not values; give the member a real one or make it required"
+  "RS0030:an API named in BannedSymbols.txt"
+  "RS0031:a duplicate entry in BannedSymbols.txt"
+)
+
 version="$(sed -n 's/.*<PackageVersion Include="Meziantou.Analyzer" Version="\([^"]*\)".*/\1/p' "$root/Directory.Packages.props")"
 [ -n "$version" ] || { echo "❌ Meziantou.Analyzer is not pinned in Directory.Packages.props" >&2; exit 1; }
 
@@ -48,18 +57,36 @@ out="$root/.globalconfig"
       for entry in "${deferred[@]}"; do
         [ "${entry%%:*}" = "$id" ] && owed="${entry#*:}"
       done
+      extra=""
+      for entry in "${added[@]}"; do
+        [ "${entry%%:*}" = "$id" ] && extra="${entry#*:}"
+      done
       if [ -n "$reason" ]; then
         echo "# Exempt: $reason"
         echo "dotnet_diagnostic.$id.severity = none"
       elif [ -n "$owed" ]; then
         echo "# Deferred: $owed"
         echo "dotnet_diagnostic.$id.severity = none"
+      elif [ -n "$extra" ]; then
+        echo "# Added: $extra"
+        echo "dotnet_diagnostic.$id.severity = error"
       elif [ "$severity" = "none" ] || [ "$severity" = "silent" ]; then
         echo "dotnet_diagnostic.$id.severity = $severity"
       else
         echo "dotnet_diagnostic.$id.severity = error"
       fi
     done
+  echo
+  echo "# The other analyzers of the team's layer."
+  for entry in "${added[@]}"; do
+    case "${entry%%:*}" in
+      MA*) ;;
+      *)
+        echo "# Added: ${entry#*:}"
+        echo "dotnet_diagnostic.${entry%%:*}.severity = error"
+        ;;
+    esac
+  done
 } > "$out"
 
 echo "✅ .globalconfig written from Meziantou.Analyzer $version"

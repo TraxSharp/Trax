@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -57,7 +58,9 @@ public class DecisionRuntimeTests : TestSetup
             .ContainSingle()
             .Which.Should()
             .Match<ShadowAnswer>(s =>
-                s.Answer == null && !s.Agrees && s.Error!.Contains("did not answer within 0s")
+                s.Answer == null
+                && !s.Agrees
+                && s.Error.NotNull().Contains("did not answer within 0s")
             );
     }
 
@@ -202,7 +205,9 @@ public class DecisionRuntimeTests : TestSetup
             .Shadows.Single()
             .Should()
             .Match<ShadowAnswer>(s =>
-                s.Answer == null && !s.Agrees && s.Error!.Contains("could not be made through JSON")
+                s.Answer == null
+                && !s.Agrees
+                && s.Error.NotNull().Contains("could not be made through JSON")
             );
     }
 
@@ -742,7 +747,8 @@ public class DecisionRuntimeTests : TestSetup
         observer
             .Decisions.Should()
             .OnlyContain(d =>
-                !d.Replayed && d.ReplayRefused!.Contains("was given about a different state")
+                !d.Replayed
+                && d.ReplayRefused.NotNull().Contains("was given about a different state")
             );
     }
 
@@ -814,7 +820,8 @@ public class DecisionRuntimeTests : TestSetup
             .Decisions.Single()
             .Should()
             .Match<DecisionMade>(d =>
-                !d.Replayed && d.ReplayRefused!.Contains("recorded without a hash of the state")
+                !d.Replayed
+                && d.ReplayRefused.NotNull().Contains("recorded without a hash of the state")
             );
     }
 
@@ -1273,7 +1280,7 @@ public class DecisionRuntimeTests : TestSetup
 
     public sealed class Checkout
     {
-        public Payment Payment { get; set; } = null!;
+        public required Payment Payment { get; set; }
     }
 
     public sealed class IgnoredOrder
@@ -1427,7 +1434,7 @@ public class DecisionRuntimeTests : TestSetup
             .Decisions.Single()
             .Should()
             .Match<DecisionMade>(d =>
-                !d.Replayed && d.ReplayRefused!.Contains("outside its levels 0 to 2")
+                !d.Replayed && d.ReplayRefused.NotNull().Contains("outside its levels 0 to 2")
             );
     }
 
@@ -1965,7 +1972,7 @@ public class DecisionRuntimeTests : TestSetup
             : throw new AssertionException("the run did not fail");
 
     private static TrainExceptionData Data(Exception e) =>
-        (TrainExceptionData)e.Data["TrainExceptionData"]!;
+        (TrainExceptionData)e.Data["TrainExceptionData"].NotNull();
 
     private static FailureClass? ClassOf(Exception e) => Data(e).FailureClass;
 

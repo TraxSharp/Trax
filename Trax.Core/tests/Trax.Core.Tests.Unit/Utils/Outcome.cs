@@ -4,6 +4,7 @@ using System.Reflection;
 using CsCheck;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -84,7 +85,7 @@ internal sealed record Outcome(Either<Exception, string> Result, string? Snapsho
     public override string ToString() =>
         IsRight
             ? $"Right({Snapshot ?? Result.ValueUnsafe()})"
-            : $"Left({Failure!.GetType().Name}: failed [{string.Join(", ", FailedBranches.Order(StringComparer.Ordinal))}], "
+            : $"Left({Failure.NotNull().GetType().Name}: failed [{string.Join(", ", FailedBranches.Order(StringComparer.Ordinal))}], "
                 + $"stopped [{string.Join(", ", Stopped.Order(StringComparer.Ordinal))}], "
                 + $"leaves [{string.Join(", ", Leaves.Select(l => $"{l.Branch}:{l.Message}").Order(StringComparer.Ordinal))}])";
 }

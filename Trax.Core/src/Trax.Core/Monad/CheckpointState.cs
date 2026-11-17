@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
+using Trax.Core.Extensions;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
@@ -97,7 +98,7 @@ internal static class CheckpointState
         if (type.IsArray)
         {
             shape.Append('[');
-            Describe(type.GetElementType()!, shape, seen);
+            Describe(type.GetElementType().NotNull(), shape, seen);
             shape.Append(']');
             return;
         }
@@ -202,7 +203,7 @@ internal static class CheckpointState
 
         if (type.IsArray)
         {
-            Visit(type.GetElementType()!, $"{at}[]", problems, seen);
+            Visit(type.GetElementType().NotNull(), $"{at}[]", problems, seen);
             return;
         }
 

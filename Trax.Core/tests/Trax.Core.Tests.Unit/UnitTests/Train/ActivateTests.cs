@@ -28,7 +28,7 @@ public class ActivateTests : TestSetup
     public async Task TestInvalidActivateTests()
     {
         // Arrange
-        object input = null!;
+        var input = Null.Of<object>();
         var train = new TestTrain();
 
         // Act

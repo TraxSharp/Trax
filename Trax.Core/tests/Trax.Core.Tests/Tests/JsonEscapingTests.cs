@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
@@ -72,7 +73,7 @@ public class JsonEscapingTests
 
         var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
         data.Should().NotBeNull();
-        data!.Junction.Should().Be("TestJunctionWithJsonException");
+        data.NotNull().Junction.Should().Be("TestJunctionWithJsonException");
         data.Type.Should().Be("InvalidOperationException");
         data.Message.Should().Contain("\"success\":false");
     }
@@ -106,7 +107,7 @@ public class JsonEscapingTests
 
         var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
         data.Should().NotBeNull();
-        data!.Junction.Should().Be("TestJunctionWithSpecialCharacters");
+        data.NotNull().Junction.Should().Be("TestJunctionWithSpecialCharacters");
         data.Type.Should().Be("InvalidOperationException");
 
         data.Message.Should().Contain("quotes");
@@ -134,7 +135,7 @@ public class JsonEscapingTests
 
         var roundTripped = JsonSerializer.Deserialize<TrainExceptionData>(json);
         roundTripped.Should().NotBeNull();
-        roundTripped!.Message.Should().Contain("\"success\":false");
+        roundTripped.NotNull().Message.Should().Contain("\"success\":false");
     }
 
     /// <summary>

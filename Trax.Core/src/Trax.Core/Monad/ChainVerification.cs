@@ -179,9 +179,9 @@ public static partial class ChainVerification
 
             // A resumed run numbers every step as the original did and skips those before its
             // resume point, adding nothing they would have added.
-            var id = walk is null ? null : scope!.Next(ChainNodeScope.KeyOf(step));
+            var id = walk is null ? null : scope.NotNull().Next(ChainNodeScope.KeyOf(step));
 
-            if (walk is { Skipping: true } && Skipped(i, step, id!))
+            if (walk is { Skipping: true } && Skipped(i, step, id.NotNull()))
                 continue;
 
             if (step.Kind == ChainStepKind.Checkpoint)
@@ -373,7 +373,7 @@ public static partial class ChainVerification
         // resume point is reached and the step is replayed as the run would run it.
         bool Skipped(int i, ChainStep step, string id)
         {
-            var w = walk!;
+            var w = walk.NotNull();
 
             switch (step.Kind)
             {
@@ -437,7 +437,7 @@ public static partial class ChainVerification
                                 $"{track?.Prefix}track '{name}', "
                             ),
                             walk,
-                            scope!.Track(id, name)
+                            scope.NotNull().Track(id, name)
                         );
                     return true;
 
@@ -469,7 +469,7 @@ public static partial class ChainVerification
             foreach (var type in written.IsTuple() ? written.GetGenericArguments() : [written])
             {
                 // Only a value the resumed run still holds is stale; one it never had is missing.
-                if (walk!.Restores.Contains(type) || !memory.Remove(type))
+                if (walk.NotNull().Restores.Contains(type) || !memory.Remove(type))
                     continue;
 
                 walk.Stale.Add(type);
@@ -553,7 +553,9 @@ public static partial class ChainVerification
                     checkConstructors,
                     context,
                     branchWalk,
-                    branchWalk is null ? null : scope!.Track(parallelId!, declared.Name)
+                    branchWalk is null
+                        ? null
+                        : scope.NotNull().Track(parallelId.NotNull(), declared.Name)
                 );
 
                 // A tuple enters Memory as its elements, so an element is what it replaces.
@@ -661,7 +663,7 @@ public static partial class ChainVerification
                     checkConstructors,
                     context,
                     walk,
-                    walk is null ? null : scope!.Track(routingId!, declared.Name)
+                    walk is null ? null : scope.NotNull().Track(routingId.NotNull(), declared.Name)
                 );
 
                 if (afterEveryTrack is null)

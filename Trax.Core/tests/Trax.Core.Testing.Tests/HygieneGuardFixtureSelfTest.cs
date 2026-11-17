@@ -10,10 +10,15 @@ namespace Trax.Core.Testing.Tests;
 [TestFixture]
 public sealed class HygieneGuardFixtureSelfTest : HygieneGuardFixture
 {
-    private TempRepo _repo = null!;
+    private TempRepo? _repo;
+
+    // NUnit runs the one-time setup before it reads Options for any test.
+    private TempRepo Repo =>
+        _repo
+        ?? throw new InvalidOperationException("The one-time setup has not created the repo.");
 
     protected override ArchitectureGuardOptions Options =>
-        new() { RepoRootOverride = _repo.Root, TestScanRoots = ["tests"] };
+        new() { RepoRootOverride = Repo.Root, TestScanRoots = ["tests"] };
 
     [OneTimeSetUp]
     public void CreateCleanRepo() =>
@@ -23,5 +28,5 @@ public sealed class HygieneGuardFixtureSelfTest : HygieneGuardFixture
         );
 
     [OneTimeTearDown]
-    public void Cleanup() => _repo.Dispose();
+    public void Cleanup() => _repo?.Dispose();
 }

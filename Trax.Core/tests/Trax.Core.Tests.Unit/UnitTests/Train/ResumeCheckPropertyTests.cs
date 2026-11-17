@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Reflection;
 using AwesomeAssertions;
 using CsCheck;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -201,7 +202,7 @@ public class ResumeCheckPropertyTests : TestSetup
                 .Where(w => w.StartsWith(point + "/", StringComparison.Ordinal))
                 .GroupBy(w => w[..w.LastIndexOf('/')], StringComparer.Ordinal)
         )
-            restored[branch.Key] = store.Restored(branch.MaxBy(order.IndexOf)!);
+            restored[branch.Key] = store.Restored(branch.MaxBy(order.IndexOf).NotNull());
 
         return new ResumePlan(point, Inclusive: false, restored);
     }
@@ -352,24 +353,24 @@ public class ResumeCheckPropertyTests : TestSetup
         public override Task<TTo> Run(TFrom input) =>
             Task.FromResult(
                 (TTo)
-                    Activator.CreateInstance(
-                        typeof(TTo),
-                        input.Value * 31 + step + 1000 * rounds.Run(step)
-                    )!
+                    Activator
+                        .CreateInstance(
+                            typeof(TTo),
+                            input.Value * 31 + step + 1000 * rounds.Run(step)
+                        )
+                        .NotNull()
             );
     }
 
     private sealed class GeneratedTrain(Op[] ops, Services services, Rounds rounds) : Train<V0, Out>
     {
-        private static readonly MethodInfo MapStep = typeof(GeneratedTrain).GetMethod(
-            nameof(MapOf),
-            BindingFlags.NonPublic | BindingFlags.Static
-        )!;
+        private static readonly MethodInfo MapStep = typeof(GeneratedTrain)
+            .GetMethod(nameof(MapOf), BindingFlags.NonPublic | BindingFlags.Static)
+            .NotNull();
 
-        private static readonly MethodInfo CheckpointStep = typeof(GeneratedTrain).GetMethod(
-            nameof(CheckpointOf),
-            BindingFlags.NonPublic | BindingFlags.Static
-        )!;
+        private static readonly MethodInfo CheckpointStep = typeof(GeneratedTrain)
+            .GetMethod(nameof(CheckpointOf), BindingFlags.NonPublic | BindingFlags.Static)
+            .NotNull();
 
         protected override Task<Either<Exception, Out>> Junctions()
         {
@@ -416,11 +417,12 @@ public class ResumeCheckPropertyTests : TestSetup
             (MonadTask<V0, Out>)
                 MapStep
                     .MakeGenericMethod(Values[from], to < 0 ? typeof(Out) : Values[to])
-                    .Invoke(null, [chain, step, rounds])!;
+                    .Invoke(null, [chain, step, rounds])
+                    .NotNull();
 
         private static MonadTask<V0, Out> Checkpoint(MonadTask<V0, Out> chain, int state) =>
             (MonadTask<V0, Out>)
-                CheckpointStep.MakeGenericMethod(Values[state]).Invoke(null, [chain])!;
+                CheckpointStep.MakeGenericMethod(Values[state]).Invoke(null, [chain]).NotNull();
 
         private static MonadTask<V0, Out> MapOf<TFrom, TTo>(
             MonadTask<V0, Out> chain,

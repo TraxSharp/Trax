@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -360,7 +361,7 @@ public class DecisionTests : TestSetup
         );
 
         failure.Message.Should().Contain(reason);
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Transient, "a model asked again may well answer properly");
     }
@@ -410,7 +411,7 @@ public class DecisionTests : TestSetup
         );
 
         failure.Message.Should().Contain($"gave no answer to '{QuestionKey.For<Lane>()}'");
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Transient, "a model that dropped a question may answer it next time");
     }
@@ -426,7 +427,9 @@ public class DecisionTests : TestSetup
                             )
                         )
                         .RunEither("x")
-                ).Data["TrainExceptionData"]!
+                )
+                    .Data["TrainExceptionData"]
+                    .NotNull()
         )
             .FailureClass.Should()
             .Be(FailureClass.Permanent);

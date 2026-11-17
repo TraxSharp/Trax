@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Train;
 
@@ -46,7 +47,7 @@ public class ExtractInstanceMemberTests : TestSetup
 
         act.Should().NotThrow("a missing source is a Left, as it is for a reference type");
         monad.Exception.Should().NotBeNull();
-        monad.Exception!.Message.Should().Contain(nameof(DateTime));
+        monad.Exception.NotNull().Message.Should().Contain(nameof(DateTime));
     }
 
     public record Currency(string Code);
@@ -55,14 +56,14 @@ public class ExtractInstanceMemberTests : TestSetup
     {
         public static Currency Default { get; } = new("USD");
 
-        public Currency Currency { get; init; } = null!;
+        public required Currency Currency { get; init; }
     }
 
     public class Bag
     {
         public Currency this[int index] => new("IDX");
 
-        public Currency Currency { get; init; } = null!;
+        public required Currency Currency { get; init; }
     }
 
     private sealed class TestTrain : Train<Order, Currency>

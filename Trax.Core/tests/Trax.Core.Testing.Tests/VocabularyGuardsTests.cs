@@ -292,7 +292,8 @@ public class VocabularyGuardsTests
     [Test]
     public void NullBannedList_Throws()
     {
-        var act = () => VocabularyGuards.TraxVocabularyIsUsed(null!);
+        var act = () =>
+            VocabularyGuards.TraxVocabularyIsUsed(Null.Of<IReadOnlyList<ForeignVocabulary>>());
 
         act.Should().Throw<ArgumentNullException>();
     }

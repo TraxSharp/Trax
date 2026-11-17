@@ -2,6 +2,7 @@ using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Train;
 using Trax.Core.Utils;
@@ -112,7 +113,7 @@ public partial class Monad<TInput, TReturn>
                     declared.Declared.Select(
                         (branch, i) =>
                             runner.Start(
-                                children[i].BranchPath!,
+                                children[i].BranchPath.NotNull(),
                                 () => RunBranch(children[i], branch, i)
                             )
                     )
@@ -128,7 +129,7 @@ public partial class Monad<TInput, TReturn>
             {
                 var (child, branch, at) = (children[i], declared.Declared[i], i);
                 await runner
-                    .Start(child.BranchPath!, () => RunBranch(child, branch, at))
+                    .Start(child.BranchPath.NotNull(), () => RunBranch(child, branch, at))
                     .ConfigureAwait(false);
             }
         }
@@ -146,7 +147,7 @@ public partial class Monad<TInput, TReturn>
             );
             // Two branches log and trace side by side; the scope and the Activity say which one wrote
             // what. Both flow into the branch's junctions with the async context.
-            using var activity = BranchDiagnostics.Source.StartActivity(child.BranchPath!);
+            using var activity = BranchDiagnostics.Source.StartActivity(child.BranchPath.NotNull());
             activity?.SetTag(BranchDiagnostics.BranchPathKey, child.BranchPath);
             using var scope = child.BranchLogScope();
             Exception? failure;
@@ -293,16 +294,18 @@ public partial class Monad<TInput, TReturn>
     )
     {
         var failed = outcomes
-            .Select((o, i) => (Outcome: o, Path: children[i].BranchPath!))
+            .Select((o, i) => (Outcome: o, Path: children[i].BranchPath.NotNull()))
             .Where(f => f.Outcome is not null)
-            .OrderBy(f => f.Outcome!.Order)
+            .OrderBy(f => f.Outcome.NotNull().Order)
             .ToList();
 
         // A cancelled run fails with the cancellation, never with its branches' failures.
         if (CancellationToken.IsCancellationRequested)
         {
             if (
-                failed.FirstOrDefault(f => f.Outcome!.Failure is OperationCanceledException) is
+                failed.FirstOrDefault(f =>
+                    f.Outcome.NotNull().Failure is OperationCanceledException
+                ) is
                 { Outcome: { } cancelled }
             )
                 ExceptionDispatchInfo.Capture(cancelled.Failure).Throw();
@@ -316,7 +319,9 @@ public partial class Monad<TInput, TReturn>
             // cancels the run. Any other cancellation a branch raised on its own (an HttpClient
             // timeout, a junction's own token source) is that branch's failure.
             if (
-                failed.FirstOrDefault(f => f.Outcome!.Failure is CancellationRequestedException) is
+                failed.FirstOrDefault(f =>
+                    f.Outcome.NotNull().Failure is CancellationRequestedException
+                ) is
                 { Outcome: { } asked }
             )
                 ExceptionDispatchInfo.Capture(asked.Failure).Throw();
@@ -326,16 +331,16 @@ public partial class Monad<TInput, TReturn>
             // exception of its own. One that failed before is a failure. The branch whose failure
             // cancelled the others failed before, so there is always at least one.
             var failures = failed
-                .Where(f => !f.Outcome!.SiblingsCancelled)
+                .Where(f => !f.Outcome.NotNull().SiblingsCancelled)
                 .Select(f => new FailedBranch(
                     f.Path,
-                    f.Outcome!.Failure,
+                    f.Outcome.NotNull().Failure,
                     FailureClassification.Carried(f.Outcome.Failure)
                 ))
                 .ToList();
 
             var stopped = failed
-                .Where(f => f.Outcome!.SiblingsCancelled)
+                .Where(f => f.Outcome.NotNull().SiblingsCancelled)
                 .Select(f => f.Path)
                 .ToList();
 
@@ -387,7 +392,7 @@ public partial class Monad<TInput, TReturn>
 
     private MonadTask<TInput, TReturn> RecordParallel(Branches<TInput, TReturn> declared)
     {
-        var recorder = Recorder!;
+        var recorder = Recorder.NotNull();
 
         foreach (var problem in declared.AllProblems)
             recorder.RefuseStep(ChainStepKind.Parallel, junction: null, $"Parallel {problem}");
@@ -444,7 +449,7 @@ public partial class Monad<TInput, TReturn>
     private ChainRecorder RecordBranch(DeclaredBranch<TInput, TReturn> branch)
     {
         var outer = Recorder;
-        var steps = new ChainRecorder(outer!) { InBranch = true };
+        var steps = new ChainRecorder(outer.NotNull()) { InBranch = true };
         Recorder = steps;
 
         try

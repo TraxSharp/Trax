@@ -211,9 +211,9 @@ public class TrainTests : TestSetup
 
     private sealed class OuterProperty
     {
-        public string OuterString { get; set; } = null!;
+        public required string OuterString { get; set; }
 
-        public InnerProperty InnerProperty { get; set; } = null!;
+        public required InnerProperty InnerProperty { get; set; }
     }
 
     private sealed class InnerProperty
@@ -223,9 +223,9 @@ public class TrainTests : TestSetup
 
     private sealed class OuterField
     {
-        public string OuterString = null!;
+        public required string OuterString;
 
-        public InnerField InnerProperty = null!;
+        public required InnerField InnerProperty;
     }
 
     private sealed class InnerField

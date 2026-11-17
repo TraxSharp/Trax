@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
@@ -102,7 +103,7 @@ public class CancellationTokenTests : TestSetup
         }
 
         caught.Should().NotBeNull();
-        HasCancellationException(caught!).Should().BeTrue();
+        HasCancellationException(caught.NotNull()).Should().BeTrue();
         junction.ExecutionCount.Should().Be(0);
     }
 
@@ -127,7 +128,7 @@ public class CancellationTokenTests : TestSetup
         }
 
         caught.Should().NotBeNull();
-        HasCancellationException(caught!).Should().BeTrue();
+        HasCancellationException(caught.NotNull()).Should().BeTrue();
         junction1.ExecutionCount.Should().Be(1);
         junction2.ExecutionCount.Should().Be(0);
     }
@@ -155,7 +156,7 @@ public class CancellationTokenTests : TestSetup
         }
 
         caught.Should().NotBeNull();
-        HasCancellationException(caught!).Should().BeTrue();
+        HasCancellationException(caught.NotNull()).Should().BeTrue();
     }
 
     [Theory]
