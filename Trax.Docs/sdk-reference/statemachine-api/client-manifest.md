@@ -11,6 +11,8 @@ namespace: Trax.StateMachine
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/ClientManifest.cs
   - Trax.Effect/src/Trax.Effect/Configuration/ClientExport/TraxClientExport.cs
+  - Trax.Effect/src/Trax.Effect/Configuration/ClientExport/ClientExportFlag.cs
+  - Trax.Effect/src/Trax.Effect/Configuration/ClientExport/ClientExportServeGate.cs
   - Trax.Effect/src/Trax.Effect/Configuration/ClientExport/ITraxStartupCheck.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Extensions/TraxClientManifestExtensions.cs
 ---

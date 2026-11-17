@@ -63,39 +63,3 @@ public sealed class DeployManifest
         return manifest;
     }
 }
-
-/// <summary>The database a deployed host needs.</summary>
-public sealed class DeployDatabase
-{
-    /// <summary><c>postgres</c>, <c>sqlite</c> or <c>in-memory</c>.</summary>
-    public string Provider { get; set; } = "";
-
-    /// <summary>
-    /// Whether the host migrates the schema when it starts. False when its code calls <c>SkipMigrations()</c>; a
-    /// deployment that runs <c>--trax-migrate</c> sets <c>TRAX_MIGRATIONS=skip</c> on the rest regardless.
-    /// </summary>
-    public bool MigratesOnStart { get; set; }
-}
-
-/// <summary>The paths a deployment routes to or probes. A path the host does not map is null.</summary>
-public sealed class DeployEndpoints
-{
-    /// <summary>The Trax GraphQL endpoint, from <c>UseTraxGraphQL</c>.</summary>
-    public string? GraphQL { get; set; }
-
-    /// <summary>The health check, from <c>MapHealthChecks</c>.</summary>
-    public string? Health { get; set; }
-
-    /// <summary>The operations console, from <c>UseTraxApiDashboard</c>.</summary>
-    public string? Console { get; set; }
-}
-
-/// <summary>An authentication scheme the host registers.</summary>
-public sealed class DeployAuthenticationScheme
-{
-    /// <summary>The scheme's name, as <c>AddAuthentication</c> registered it.</summary>
-    public string Name { get; set; } = "";
-
-    /// <summary>The handler's type name, such as <c>JwtBearerHandler</c> or <c>OpenIdConnectHandler</c>.</summary>
-    public string Handler { get; set; } = "";
-}

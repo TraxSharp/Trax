@@ -8,6 +8,7 @@ source:
   - Trax.Effect/src/Trax.Effect/Attributes/TraxAuthorizeAttribute.cs
   - Trax.Effect/src/Trax.Effect/Attributes/TraxAllowAnonymousAttribute.cs
   - Trax.Effect/src/Trax.Effect/Attributes/TraxAuthorization.cs
+  - Trax.Effect/src/Trax.Effect/Attributes/TraxAuthorizationDeclaration.cs
   - Trax.Api/src/Trax.Api/Services/Authorization/TrainAuthorizationService.cs
   - Trax.Api/src/Trax.Api.GraphQL/Configuration/ExposureAuthorizationRule.cs
   - Trax.Api/src/Trax.Api.GraphQL/Configuration/TypeExtensionExposureRule.cs

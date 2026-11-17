@@ -384,18 +384,3 @@ public class SqliteDecisionRecordingTests
         }
     }
 }
-
-/// <summary>Reads the tracks out of a recorded decision's routes.</summary>
-internal static class RecordedRoutes
-{
-    public static IReadOnlyList<string> Tracks(
-        this Models.RecordedDecision.RecordedDecision decision
-    ) =>
-        decision.Routes is null
-            ? []
-            : System
-                .Text.Json.Nodes.JsonNode.Parse(decision.Routes)!
-                .AsArray()
-                .Select(route => (string)route!["track"]!)
-                .ToList();
-}

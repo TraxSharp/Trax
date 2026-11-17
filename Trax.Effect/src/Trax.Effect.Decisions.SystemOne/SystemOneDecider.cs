@@ -740,8 +740,3 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     /// <summary>A successful status whose body is not a System One response.</summary>
     private sealed class MalformedResponse(string message) : Exception(message);
 }
-
-/// <summary>
-/// The decision model could not answer. Its failure class says whether trying again later can help.
-/// </summary>
-public sealed class DecisionServiceException(string message) : Exception(message);

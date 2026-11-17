@@ -19,14 +19,6 @@ using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Effect.Tests.Integration.Fixtures;
 
-/// <summary>The stores the checkpoint tests run on.</summary>
-public enum CheckpointStoreKind
-{
-    Postgres,
-    Sqlite,
-    InMemory,
-}
-
 /// <summary>
 /// A host over one of the three data providers for the checkpoint and resume tests: the trains a
 /// test registers, a decider it scripts, the log lines it writes, and reads of the rows a run left.

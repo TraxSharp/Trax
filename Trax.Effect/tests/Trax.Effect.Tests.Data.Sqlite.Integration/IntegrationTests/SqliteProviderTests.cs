@@ -1957,14 +1957,3 @@ public class SqliteProviderTests : TestSetup
 
     #endregion
 }
-
-/// <summary>Observes the train's token before any work, so a pre-cancelled run stops here.</summary>
-internal sealed class ObserveCancellation : Junction<Unit, Unit>
-{
-    public override Task<Unit> Run(Unit input)
-    {
-        CancellationToken.ThrowIfCancellationRequested();
-
-        return Task.FromResult(Unit.Default);
-    }
-}

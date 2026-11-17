@@ -8,7 +8,3 @@ public class TestEffectTrain : ServiceTrain<TestEffectTrainInput, TestEffectTrai
     protected override Task<Either<Exception, TestEffectTrain>> Junctions() =>
         Task.FromResult(AddServices(this).Resolve());
 }
-
-public record TestEffectTrainInput();
-
-public interface ITestEffectTrain : IServiceTrain<TestEffectTrainInput, TestEffectTrain>;

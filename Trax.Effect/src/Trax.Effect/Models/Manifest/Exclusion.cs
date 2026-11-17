@@ -3,25 +3,6 @@ using System.Text.Json.Serialization;
 namespace Trax.Effect.Models.Manifest;
 
 /// <summary>
-/// Defines the kind of exclusion window.
-/// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum ExclusionType
-{
-    /// <summary>Exclude specific days of the week (e.g., weekends).</summary>
-    DaysOfWeek = 0,
-
-    /// <summary>Exclude specific dates (e.g., holidays).</summary>
-    Dates = 1,
-
-    /// <summary>Exclude a contiguous date range (start–end inclusive).</summary>
-    DateRange = 2,
-
-    /// <summary>Exclude a daily time window (e.g., 2am–4am maintenance).</summary>
-    TimeWindow = 3,
-}
-
-/// <summary>
 /// Represents a single exclusion window for a manifest schedule.
 /// Uses a flat discriminated model: the <see cref="Type"/> property determines
 /// which other properties are meaningful.
@@ -112,53 +93,4 @@ public class Exclusion
         // Window crosses midnight (e.g., 23:00–02:00)
         return now >= start || now < end;
     }
-}
-
-/// <summary>
-/// Static factory methods for creating <see cref="Exclusion"/> instances.
-/// </summary>
-/// <example>
-/// <code>
-/// options => options
-///     .Exclude(Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday))
-///     .Exclude(Exclude.Dates(new DateOnly(2026, 12, 25)))
-///     .Exclude(Exclude.TimeWindow(TimeOnly.Parse("02:00"), TimeOnly.Parse("04:00")))
-/// </code>
-/// </example>
-public static class Exclude
-{
-    /// <summary>
-    /// Creates an exclusion that skips specific days of the week.
-    /// </summary>
-    public static Exclusion DaysOfWeek(params DayOfWeek[] days) =>
-        new() { Type = ExclusionType.DaysOfWeek, DaysOfWeek = [.. days] };
-
-    /// <summary>
-    /// Creates an exclusion that skips specific dates.
-    /// </summary>
-    public static Exclusion Dates(params DateOnly[] dates) =>
-        new() { Type = ExclusionType.Dates, Dates = [.. dates] };
-
-    /// <summary>
-    /// Creates an exclusion that skips a contiguous date range (start–end inclusive).
-    /// </summary>
-    public static Exclusion DateRange(DateOnly start, DateOnly end) =>
-        new()
-        {
-            Type = ExclusionType.DateRange,
-            StartDate = start,
-            EndDate = end,
-        };
-
-    /// <summary>
-    /// Creates an exclusion that skips a daily time window.
-    /// Supports midnight crossover (e.g., 23:00–02:00).
-    /// </summary>
-    public static Exclusion TimeWindow(TimeOnly start, TimeOnly end) =>
-        new()
-        {
-            Type = ExclusionType.TimeWindow,
-            StartTime = start,
-            EndTime = end,
-        };
 }

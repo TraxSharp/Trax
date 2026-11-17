@@ -9,7 +9,7 @@ nav_order: 24
 package: Trax.Effect
 namespace: Trax.Effect.Extensions
 source:
-  - Trax.Effect/src/Trax.Effect/Extensions/TraxEffectConfigurationBuilderExtensions.cs
+  - Trax.Effect/src/Trax.Effect/Extensions/TraxEffectBuilderExtensions.cs
 ---
 
 # SetEffectLogLevel
