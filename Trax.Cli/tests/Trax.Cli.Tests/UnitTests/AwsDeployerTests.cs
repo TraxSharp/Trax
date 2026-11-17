@@ -834,8 +834,8 @@ public class AwsDeployerTests
     [Test]
     public async Task An_image_tag_starts_with_the_time() =>
         (
-            await AwsDeployer
-                .ImageTagAsync(
+            await ImageTags
+                .CreateAsync(
                     Path.GetTempPath(),
                     new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc)
                 )

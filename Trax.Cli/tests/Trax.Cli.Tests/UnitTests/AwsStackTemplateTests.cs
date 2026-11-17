@@ -36,6 +36,7 @@ public class AwsStackTemplateTests
         };
         file.Environments["production"] = new DeployEnvironment
         {
+            Target = DeployEnvironment.Aws,
             Profile = profile,
             Region = "us-west-2",
             Domain = string.Equals(profile, DeployEnvironment.Production, StringComparison.Ordinal)
