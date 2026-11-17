@@ -5,6 +5,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine;
 
@@ -95,7 +96,7 @@ public sealed record ClientManifest
     public static string Write(ClientManifest manifest)
     {
         ArgumentNullException.ThrowIfNull(manifest);
-        var root = JsonSerializer.SerializeToNode(manifest, Json)!.AsObject();
+        var root = JsonSerializer.SerializeToNode(manifest, Json).NotNull().AsObject();
         ShareOutputSchemas(root);
         return root.ToJsonString(Json) + "\n";
     }
@@ -112,7 +113,10 @@ public sealed record ClientManifest
     private static void ShareOutputSchemas(JsonObject root)
     {
         var shared = OutcomesWithOutput(root)
-            .GroupBy(o => CanonicalJson.Serialize(o["output"]!.AsObject()), StringComparer.Ordinal)
+            .GroupBy(
+                o => CanonicalJson.Serialize(o["output"].NotNull().AsObject()),
+                StringComparer.Ordinal
+            )
             .Where(g => g.Skip(1).Any())
             .Select(g =>
                 (
@@ -131,7 +135,7 @@ public sealed record ClientManifest
         var defs = new JsonObject();
         foreach (var (name, outcomes) in shared)
         {
-            defs[name] = outcomes[0]["output"]!.DeepClone();
+            defs[name] = outcomes[0]["output"].NotNull().DeepClone();
             foreach (var outcome in outcomes)
                 outcome["output"] = new JsonObject { [Ref] = RefPrefix + name };
         }
@@ -147,7 +151,7 @@ public sealed record ClientManifest
 
         foreach (var outcome in OutcomesWithOutput(root))
         {
-            if (outcome["output"]![Ref] is not JsonValue pointer)
+            if (outcome["output"].NotNull()[Ref] is not JsonValue pointer)
                 continue;
             var target =
                 pointer.TryGetValue<string>(out var text)

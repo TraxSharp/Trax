@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine;
 
@@ -195,7 +196,7 @@ internal static class EventPlanner
     private static List<PlannedEvent> PathTo(Node node)
     {
         var events = new List<PlannedEvent>();
-        for (var at = node; at.Event is not null; at = at.Parent!)
+        for (var at = node; at.Event is not null; at = at.Parent.NotNull())
             events.Add(at.Event);
         events.Reverse();
         return events;

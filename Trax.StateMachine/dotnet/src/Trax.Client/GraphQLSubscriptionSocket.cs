@@ -5,6 +5,7 @@ using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Client.Checks;
 
 namespace Trax.Client;
 
@@ -514,11 +515,11 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                 Deliver(connection, subscription, payload);
                 return;
             case "error" when subscription is not null:
-                Remove(connection, id!);
+                Remove(connection, id.NotNull());
                 End(subscription, new SubscriptionErrorException(message["payload"] as JsonArray));
                 return;
             case "complete" when subscription is not null:
-                Remove(connection, id!);
+                Remove(connection, id.NotNull());
                 End(subscription, error: null);
                 return;
         }

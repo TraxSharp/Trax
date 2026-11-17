@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Helpers;
 
 namespace Trax.StateMachine.Tests.Conformance;
@@ -57,15 +58,19 @@ public partial class IrFormatParityTests
     [Test]
     public void The_schema_is_of_the_IR_format_this_engine_exports()
     {
-        var schema = JsonNode.Parse(
-            File.ReadAllText(Path.Combine(FixturePaths.ConformanceRoot, "ir.schema.json"))
-        )!;
+        var schema = JsonNode
+            .Parse(File.ReadAllText(Path.Combine(FixturePaths.ConformanceRoot, "ir.schema.json")))
+            .NotNull();
 
-        schema["$id"]!
+        schema["$id"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be($"urn:trax:state-machine:ir-format:{IrExporter.FormatVersion}");
-        schema["properties"]!["irFormat"]!["const"]!
+        schema["properties"]
+            .NotNull()["irFormat"]
+            .NotNull()["const"]
+            .NotNull()
             .GetValue<int>()
             .Should()
             .Be(IrExporter.FormatVersion);
@@ -74,15 +79,18 @@ public partial class IrFormatParityTests
     [Test]
     public void The_unreadable_IR_formats_sit_just_outside_the_formats_read()
     {
-        var cases = JsonNode.Parse(
-            File.ReadAllText(
-                Path.Combine(FixturePaths.ConformanceRoot, "unreadable-ir", "cases.json")
+        var cases = JsonNode
+            .Parse(
+                File.ReadAllText(
+                    Path.Combine(FixturePaths.ConformanceRoot, "unreadable-ir", "cases.json")
+                )
             )
-        )!["cases"]!
+            .NotNull()["cases"]
+            .NotNull()
             .AsArray()
             .ToDictionary(
-                c => c!["name"]!.GetValue<string>(),
-                c => c!["ir"]!["irFormat"]?.GetValue<int>(),
+                c => c.NotNull()["name"].NotNull().GetValue<string>(),
+                c => c.NotNull()["ir"].NotNull()["irFormat"]?.GetValue<int>(),
                 StringComparer.Ordinal
             );
 

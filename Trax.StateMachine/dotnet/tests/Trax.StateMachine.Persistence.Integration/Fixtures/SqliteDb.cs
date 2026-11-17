@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -19,7 +20,7 @@ public sealed class SqliteDb : IDisposable
         $"sm_sqlite_{Guid.NewGuid():N}.db"
     );
 
-    private ServiceProvider _host = null!;
+    private ServiceProvider? _host;
 
     public static Task<SqliteDb> Create()
     {
@@ -33,9 +34,9 @@ public sealed class SqliteDb : IDisposable
     }
 
     public IDataContext NewContext() =>
-        (IDataContext)_host.GetRequiredService<IDataContextProviderFactory>().Create();
+        (IDataContext)_host.NotNull().GetRequiredService<IDataContextProviderFactory>().Create();
 
-    private ISqlDialect Dialect => _host.GetRequiredService<ISqlDialect>();
+    private ISqlDialect Dialect => _host.NotNull().GetRequiredService<ISqlDialect>();
 
     public EfEffectClaimStore NewClaims() => new(NewContext(), Dialect);
 
@@ -43,7 +44,7 @@ public sealed class SqliteDb : IDisposable
 
     public void Dispose()
     {
-        _host.Dispose();
+        _host?.Dispose();
         SqliteConnection.ClearAllPools();
         try
         {

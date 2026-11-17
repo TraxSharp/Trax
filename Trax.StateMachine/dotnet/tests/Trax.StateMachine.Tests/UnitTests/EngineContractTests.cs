@@ -124,7 +124,7 @@ public class EngineContractTests
     {
         var output = new JsonObject { ["fingerprint"] = 5, ["unsure"] = "yes" };
 
-        AdvanceResult result = null!;
+        AdvanceResult? result = null;
         var apply = () =>
             result = IngestMachine.Machine.ApplyOutcome(Fetching(), new InvokeOutcome.Done(output));
 

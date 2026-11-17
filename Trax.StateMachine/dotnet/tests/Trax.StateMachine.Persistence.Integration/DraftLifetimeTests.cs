@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Persistence.Integration.Fakes;
@@ -178,7 +179,7 @@ public class DraftLifetimeTests(StoreProvider provider)
                     DraftOwner.User(user),
                     RuledBuildMachine.Id,
                     id,
-                    stored!.Token,
+                    stored.NotNull().Token,
                     new InvokeTokenWrite(token)
                 )
             )

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -45,7 +46,7 @@ public class GlossaryFormatTests
     public async Task An_actor_with_no_roles_is_refused_naming_the_actor()
     {
         var glossary = await Bakery().ConfigureAwait(false);
-        glossary["actors"]!["customer"]!.AsObject().Remove("roles");
+        glossary["actors"].NotNull()["customer"].NotNull().AsObject().Remove("roles");
 
         var read = () => Glossary.Read(glossary.ToJsonString());
 
@@ -56,7 +57,7 @@ public class GlossaryFormatTests
     public async Task An_actor_that_says_any_signed_in_caller_is_read_as_one()
     {
         var glossary = await Bakery().ConfigureAwait(false);
-        var customer = glossary["actors"]!["customer"]!.AsObject();
+        var customer = glossary["actors"].NotNull()["customer"].NotNull().AsObject();
         customer.Remove("roles");
         customer["anyAuthenticated"] = true;
 
@@ -71,7 +72,9 @@ public class GlossaryFormatTests
     public async Task Two_triggers_sharing_a_sentence_are_refused_naming_both_places()
     {
         var glossary = await Bakery().ConfigureAwait(false);
-        glossary["machines"]!["shop"]!["triggers"]!["Close"]!["phrase"] = "The  shop OPENS";
+        glossary["machines"].NotNull()["shop"].NotNull()["triggers"].NotNull()["Close"].NotNull()[
+            "phrase"
+        ] = "The  shop OPENS";
 
         var read = () => Glossary.Read(glossary.ToJsonString());
 
@@ -86,8 +89,14 @@ public class GlossaryFormatTests
     public async Task Two_machines_may_share_an_action_their_nouns_tell_apart()
     {
         var glossary = await Bakery().ConfigureAwait(false);
-        glossary["machines"]!["order"]!["triggers"]!["Place"]!["phrase"] = "cancels {subject}";
-        glossary["machines"]!["receipt"]!["triggers"]!["Cancel"]!["phrase"] = "cancels {subject}";
+        glossary["machines"].NotNull()["order"].NotNull()["triggers"].NotNull()["Place"].NotNull()[
+            "phrase"
+        ] = "cancels {subject}";
+        glossary["machines"]
+            .NotNull()["receipt"]
+            .NotNull()["triggers"]
+            .NotNull()["Cancel"]
+            .NotNull()["phrase"] = "cancels {subject}";
 
         var read = Glossary.Read(glossary.ToJsonString());
 
@@ -98,7 +107,9 @@ public class GlossaryFormatTests
     public async Task A_phrase_that_speaks_as_I_is_refused()
     {
         var glossary = await Bakery().ConfigureAwait(false);
-        glossary["machines"]!["order"]!["triggers"]!["Place"]!["phrase"] = "I place {subject}";
+        glossary["machines"].NotNull()["order"].NotNull()["triggers"].NotNull()["Place"].NotNull()[
+            "phrase"
+        ] = "I place {subject}";
 
         var read = () => Glossary.Read(glossary.ToJsonString());
 
@@ -111,7 +122,9 @@ public class GlossaryFormatTests
     public async Task A_users_trigger_that_does_not_say_where_its_machine_goes_is_refused()
     {
         var glossary = await Bakery().ConfigureAwait(false);
-        glossary["machines"]!["order"]!["triggers"]!["Place"]!["phrase"] = "places the order";
+        glossary["machines"].NotNull()["order"].NotNull()["triggers"].NotNull()["Place"].NotNull()[
+            "phrase"
+        ] = "places the order";
 
         var read = () => Glossary.Read(glossary.ToJsonString());
 
@@ -122,7 +135,7 @@ public class GlossaryFormatTests
     public async Task A_key_it_does_not_know_is_refused_naming_it()
     {
         var glossary = await Bakery().ConfigureAwait(false);
-        glossary["actors"]!["customer"]!["role"] = "customer";
+        glossary["actors"].NotNull()["customer"].NotNull()["role"] = "customer";
 
         var read = () => Glossary.Read(glossary.ToJsonString());
 
@@ -133,7 +146,13 @@ public class GlossaryFormatTests
     public async Task A_guard_with_no_rule_is_a_format_error_not_a_crash()
     {
         var glossary = await Bakery().ConfigureAwait(false);
-        glossary["machines"]!["order"]!["guards"]!["hasLoaves"]!.AsObject().Remove("rule");
+        glossary["machines"]
+            .NotNull()["order"]
+            .NotNull()["guards"]
+            .NotNull()["hasLoaves"]
+            .NotNull()
+            .AsObject()
+            .Remove("rule");
 
         var read = () => Glossary.Read(glossary.ToJsonString());
 
@@ -192,6 +211,7 @@ public class GlossaryFormatTests
                         )
                     )
                     .ConfigureAwait(false)
-            )!
+            )
+            .NotNull()
             .AsObject();
 }

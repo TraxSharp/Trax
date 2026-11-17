@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Junction;
 
 namespace Trax.StateMachine.Persistence.Mutations;
@@ -51,7 +52,7 @@ internal sealed class SendSnapshotJunction(
         // A blank one is the client's and names no request: it is refused, as on every other event path.
         var requestId = input.RequestId ?? $"send:{input.Id}";
 
-        var registryService = registry.Service(input.Machine)!;
+        var registryService = registry.Service(input.Machine).NotNull();
         try
         {
             // The effect-bound event's rule is checked against the request's user before the effect is claimed.

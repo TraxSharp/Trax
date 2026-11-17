@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
@@ -20,18 +21,20 @@ public static class TestCheckout
         ctx["total"]?.GetValueKind() == JsonValueKind.Number;
 
     private static double Total(JsonObject ctx) =>
-        ctx["total"]?.GetValueKind() == JsonValueKind.Number ? ctx["total"]!.GetValue<double>() : 0;
+        ctx["total"]?.GetValueKind() == JsonValueKind.Number
+            ? ctx["total"].NotNull().GetValue<double>()
+            : 0;
 
     private static bool ReceiptEmpty(JsonObject ctx) =>
-        ctx["receipt"] is null || ctx["receipt"]!.GetValueKind() == JsonValueKind.Null;
+        ctx["receipt"] is null || ctx["receipt"].NotNull().GetValueKind() == JsonValueKind.Null;
 
     private static bool ReceiptPresent(JsonObject ctx) =>
         ctx["receipt"]?.GetValueKind() == JsonValueKind.String
-        && ctx["receipt"]!.GetValue<string>().Length > 0;
+        && ctx["receipt"].NotNull().GetValue<string>().Length > 0;
 
     private static string? ReceiptInput(JsonNode? input) =>
         input is JsonObject o && o["receipt"]?.GetValueKind() == JsonValueKind.String
-            ? o["receipt"]!.GetValue<string>()
+            ? o["receipt"].NotNull().GetValue<string>()
             : null;
 
     public static readonly MachineDefinition<CheckoutState, CheckoutTrigger> Definition = new()

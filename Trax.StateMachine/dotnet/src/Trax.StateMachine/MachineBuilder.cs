@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine;
 
@@ -456,7 +457,7 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                     .Values.Where(invoke => invoke.Spawn is not null)
                     .Select(invoke => new ServerWrite(
                         $"the start of {invoke.TrainType.Name} in {invoke.State}",
-                        [invoke.Spawn!.ChildIdField]
+                        [invoke.Spawn.NotNull().ChildIdField]
                     ))
             )
             .ToList();
@@ -584,7 +585,7 @@ public sealed partial class MachineBuilder<TState, TTrigger>
             var edges = group.ToList();
             if (edges.TrueForAll(e => e.Rule is null))
                 continue;
-            var first = edges.First(e => e.Rule is not null).Rule!;
+            var first = edges.First(e => e.Rule is not null).Rule.NotNull();
             if (edges.Exists(e => e.Rule is null || !e.Rule.SameAs(first)))
             {
                 problems.Add(
@@ -604,7 +605,7 @@ public sealed partial class MachineBuilder<TState, TTrigger>
         foreach (
             var edge in _edgeRules.Where(e =>
                 e.Rule is { Gated: true }
-                && EqualityComparer<TState>.Default.Equals(e.To, _initial!.Value)
+                && EqualityComparer<TState>.Default.Equals(e.To, _initial.NotNull().Value)
                 && !EqualityComparer<TState>.Default.Equals(e.From, e.To)
                 && !_invokes.Exists(i => EqualityComparer<TState>.Default.Equals(i.State, e.To))
             )
@@ -915,7 +916,7 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                 + $"({declared?.Name ?? "an empty context"}). Declare it on the state's context as a Guid?.";
         else if (field.PropertyType != typeof(Guid?) && field.PropertyType != typeof(Guid))
             yield return $"the state {state} spawns {spawn.ChildMachine.Name} and writes its id into "
-                + $"'{spawn.ChildIdField}', which {declared!.Name} declares as a {field.PropertyType.Name}. "
+                + $"'{spawn.ChildIdField}', which {declared.NotNull().Name} declares as a {field.PropertyType.Name}. "
                 + "Declare it as a Guid?.";
     }
 
@@ -985,7 +986,7 @@ public sealed partial class MachineBuilder<TState, TTrigger>
         foreach (var invoke in invokes.Values)
         foreach (var target in invoke.Targets)
             if (
-                EqualityComparer<TState>.Default.Equals(target, _initial!.Value)
+                EqualityComparer<TState>.Default.Equals(target, _initial.NotNull().Value)
                 && !invokes.ContainsKey(target)
             )
                 throw new InvalidOperationException(
@@ -1137,7 +1138,7 @@ public sealed partial class MachineBuilder<TState, TTrigger>
     )
     {
         var state = draft.State;
-        var selector = draft.Duration!;
+        var selector = draft.Duration.NotNull();
         var body = selector.Body is UnaryExpression { NodeType: ExpressionType.Convert } u
             ? u.Operand
             : selector.Body;
@@ -1178,7 +1179,7 @@ public sealed partial class MachineBuilder<TState, TTrigger>
             if (field.PropertyType != typeof(TimeSpan) && field.PropertyType != typeof(TimeSpan?))
             {
                 problems.Add(
-                    $"the timer of {state} reads its duration from '{name}', which {declared!.Name} declares as a "
+                    $"the timer of {state} reads its duration from '{name}', which {declared.NotNull().Name} declares as a "
                         + $"{field.PropertyType.Name}. A duration field is a TimeSpan? (an ISO-8601 duration on the wire)."
                 );
                 return (null, null);

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence.FromIr;
@@ -19,13 +20,13 @@ namespace Trax.StateMachine.Persistence.Integration;
 [TestFixture(StoreProvider.Sqlite)]
 public class InvokedOwnerInputTests(StoreProvider provider)
 {
-    private InstanceHost _host = null!;
-    private RecordingLauncher _launcher = null!;
+    private InstanceHost? _host;
+    private RecordingLauncher? _launcher;
 
     [OneTimeSetUp]
     public void SetUp()
     {
-        var ir = JsonNode.Parse(File.ReadAllText(IrFile("ingest")))!.AsObject();
+        var ir = JsonNode.Parse(File.ReadAllText(IrFile("ingest"))).NotNull().AsObject();
         ir["id"] = "ir-loan";
         var anyone = new TriggerAccess(AccessRule.AnyAuthenticated);
         var machines = IrMachines.Create(
@@ -51,7 +52,7 @@ public class InvokedOwnerInputTests(StoreProvider provider)
                         {
                             ["Fetching"] = new(
                                 "Fetching",
-                                typeof(IBorrowFromIrTrain).FullName!,
+                                typeof(IBorrowFromIrTrain).FullName.NotNull(),
                                 new Dictionary<string, string>(StringComparer.Ordinal)
                                 {
                                     ["source"] = "source",
@@ -67,20 +68,20 @@ public class InvokedOwnerInputTests(StoreProvider provider)
         _launcher = new RecordingLauncher();
         _host = InstanceHost.Create(
             provider,
-            launcher: _launcher,
+            launcher: _launcher.NotNull(),
             services: s => s.AddIrMachines(machines)
         );
     }
 
     [OneTimeTearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public async Task The_train_receives_the_owners_id()
     {
         var ada = $"jwt:ada-{Guid.NewGuid():N}";
-        using var scope = _host.Scope();
-        var service = _host.Service(scope, "ir-loan");
+        using var scope = _host.NotNull().Scope();
+        var service = _host.NotNull().Service(scope, "ir-loan");
         var id = (await service.Start(DeskRoles.Client(ada), new JsonObject(), requestId: "s1"))
             .Should()
             .BeOfType<StartOutcome.Started>()
@@ -93,6 +94,7 @@ public class InvokedOwnerInputTests(StoreProvider provider)
             .Be("Fetching");
 
         _launcher
+            .NotNull()
             .Launches.Should()
             .ContainSingle(l => l.InvokedBy.InstanceId == id)
             .Which.Input.Should()
@@ -103,8 +105,8 @@ public class InvokedOwnerInputTests(StoreProvider provider)
     public async Task A_client_save_that_writes_the_owner_field_is_refused()
     {
         var ada = $"jwt:ada-{Guid.NewGuid():N}";
-        using var scope = _host.Scope();
-        var service = _host.Service(scope, "ir-loan");
+        using var scope = _host.NotNull().Scope();
+        var service = _host.NotNull().Service(scope, "ir-loan");
         var id = (await service.Start(DeskRoles.Client(ada), new JsonObject(), requestId: "s1"))
             .Should()
             .BeOfType<StartOutcome.Started>()
@@ -140,7 +142,7 @@ public class InvokedOwnerInputTests(StoreProvider provider)
         )
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>("no trigger takes the owner as input either");
-        _launcher.Launches.Should().NotContain(l => l.InvokedBy.InstanceId == id);
+        _launcher.NotNull().Launches.Should().NotContain(l => l.InvokedBy.InstanceId == id);
     }
 
     private static string IrFile(string name)

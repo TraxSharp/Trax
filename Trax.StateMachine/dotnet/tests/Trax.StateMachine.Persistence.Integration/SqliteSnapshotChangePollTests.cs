@@ -4,6 +4,7 @@ using System.Threading.Channels;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -51,7 +52,10 @@ public class SqliteSnapshotChangePollTests
                 try
                 {
                     await foreach (
-                        var change in listener!.ChangesAsync(stop.Token).ConfigureAwait(false)
+                        var change in listener
+                            .NotNull()
+                            .ChangesAsync(stop.Token)
+                            .ConfigureAwait(false)
                     )
                         if (change is SnapshotChange.Row(var rowId))
                             heard.Writer.TryWrite(rowId);

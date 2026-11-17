@@ -1,10 +1,12 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
+using Trax.Testing;
 
 namespace Trax.StateMachine.Persistence.Integration;
 
@@ -22,7 +24,7 @@ public class EffectAndHandshakeDefectTests
         Func<Task<string>> effect = () =>
         {
             Interlocked.Increment(ref calls);
-            return Task.FromResult(receipt!);
+            return Task.FromResult(receipt ?? Null.Of<string>());
         };
 
         // Completing with no receipt would leave the row looking claimed and in flight, and the next caller
@@ -67,7 +69,7 @@ public class EffectAndHandshakeDefectTests
             new SendSnapshotInput { Machine = "order", Id = id }
         );
 
-        send.Problem!.Code.Should().Be(RefusalCode.DeliveryFailed);
+        send.Problem.NotNull().Code.Should().Be(RefusalCode.DeliveryFailed);
         (
             await new LoadSnapshotJunction(registry, user).Run(
                 new LoadSnapshotInput { Machine = "order", Id = id }
@@ -80,7 +82,7 @@ public class EffectAndHandshakeDefectTests
     private sealed class NoReceiptCharge : IOrderCharge
     {
         public Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default) =>
-            Task.FromResult<string>(null!);
+            Task.FromResult(Null.Of<string>());
     }
 
     [Test]

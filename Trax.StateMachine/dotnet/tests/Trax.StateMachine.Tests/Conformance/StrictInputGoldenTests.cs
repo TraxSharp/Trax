@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -48,28 +49,30 @@ public class StrictInputGoldenTests
     {
         // The file stores numbers as the canonical wire writes them (3.4028235e+38, not 3.4028235E+38), so it is
         // replayed as read, not trusted to mean what the C# literals did.
-        var golden = (JsonObject)JsonNode.Parse(File.ReadAllText(CasesFile))!;
-        var start = StrictInputMachine.Machine.Rehydrate(golden["start"]!.GetValue<string>());
+        var golden = (JsonObject)JsonNode.Parse(File.ReadAllText(CasesFile)).NotNull();
+        var start = StrictInputMachine.Machine.Rehydrate(
+            golden["start"].NotNull().GetValue<string>()
+        );
         var snapshot = start.Should().BeOfType<RehydrationResult.Ok>().Which.Snapshot;
-        var trigger = golden["trigger"]!.GetValue<string>();
+        var trigger = golden["trigger"].NotNull().GetValue<string>();
 
         var diffs = new List<string>();
-        foreach (var node in golden["cases"]!.AsArray())
+        foreach (var node in golden["cases"].NotNull().AsArray())
         {
-            var @case = (JsonObject)node!;
-            var input = (JsonObject)golden["validInput"]!.DeepClone();
+            var @case = (JsonObject)node.NotNull();
+            var input = (JsonObject)golden["validInput"].NotNull().DeepClone();
             if (@case["field"] is { } field)
                 input[field.GetValue<string>()] = @case["value"]?.DeepClone();
             var expect = Answer(StrictInputMachine.Machine.Advance(snapshot, trigger, input));
             if (
                 !string.Equals(
                     expect.ToJsonString(),
-                    @case["expect"]!.ToJsonString(),
+                    @case["expect"].NotNull().ToJsonString(),
                     StringComparison.Ordinal
                 )
             )
                 diffs.Add(
-                    $"{@case["name"]}: file says {@case["expect"]!.ToJsonString()}, engine {expect.ToJsonString()}"
+                    $"{@case["name"]}: file says {@case["expect"].NotNull().ToJsonString()}, engine {expect.ToJsonString()}"
                 );
         }
 
@@ -155,7 +158,7 @@ public class StrictInputGoldenTests
             )
         )
             return;
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(path).NotNull());
         await File.WriteAllTextAsync(path, content).ConfigureAwait(false);
     }
 }

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -19,7 +20,7 @@ public class HostFileFormatTests
 
         var order = host.Machines["order"];
         order.SystemKey.Should().BeNull();
-        order.Start!.RoleSets.Should().ContainSingle().Which.Should().Equal("customer");
+        order.Start.NotNull().RoleSets.Should().ContainSingle().Which.Should().Equal("customer");
         order.Triggers["Bake"].IsServer.Should().BeTrue();
         order
             .Invokes["Paying"]
@@ -41,7 +42,7 @@ public class HostFileFormatTests
     public async Task A_key_it_does_not_know_is_refused_naming_it()
     {
         var host = await Bakery().ConfigureAwait(false);
-        host["machines"]!["order"]!["requiresPolicy"] = "CanOrder";
+        host["machines"].NotNull()["order"].NotNull()["requiresPolicy"] = "CanOrder";
 
         var read = () => HostFile.Read(host.ToJsonString());
 
@@ -54,7 +55,10 @@ public class HostFileFormatTests
     public async Task An_owner_named_by_actor_is_refused()
     {
         var host = await Bakery().ConfigureAwait(false);
-        host["machines"]!["order"]!["owner"] = new JsonObject { ["user"] = "customer" };
+        host["machines"].NotNull()["order"].NotNull()["owner"] = new JsonObject
+        {
+            ["user"] = "customer",
+        };
 
         var read = () => HostFile.Read(host.ToJsonString());
 
@@ -67,7 +71,7 @@ public class HostFileFormatTests
     public async Task A_policy_firing_a_trigger_clients_may_fire_is_refused()
     {
         var host = await Bakery().ConfigureAwait(false);
-        host["policies"]![1]!["then"]!["trigger"] = "Place";
+        host["policies"].NotNull()[1].NotNull()["then"].NotNull()["trigger"] = "Place";
 
         var read = () => HostFile.Read(host.ToJsonString());
 
@@ -80,7 +84,7 @@ public class HostFileFormatTests
     public async Task A_client_rule_on_a_system_machine_is_refused()
     {
         var host = await Bakery().ConfigureAwait(false);
-        host["machines"]!["shop"]!["triggers"]!["Open"] = new JsonObject
+        host["machines"].NotNull()["shop"].NotNull()["triggers"].NotNull()["Open"] = new JsonObject
         {
             ["roles"] = new JsonArray(new JsonArray("baker")),
         };
@@ -96,9 +100,9 @@ public class HostFileFormatTests
     public async Task A_policy_listed_twice_is_refused_at_the_second()
     {
         var host = await Bakery().ConfigureAwait(false);
-        var twice = host["policies"]![1]!.DeepClone();
-        twice["then"]!["inState"] = "Draft";
-        host["policies"]!.AsArray().Add(twice);
+        var twice = host["policies"].NotNull()[1].NotNull().DeepClone();
+        twice["then"].NotNull()["inState"] = "Draft";
+        host["policies"].NotNull().AsArray().Add(twice);
 
         var read = () => HostFile.Read(host.ToJsonString());
 
@@ -111,7 +115,7 @@ public class HostFileFormatTests
     public async Task A_batch_size_is_refused_since_it_is_the_hosts_option()
     {
         var host = await Bakery().ConfigureAwait(false);
-        host["policies"]![1]!["batch"] = 100;
+        host["policies"].NotNull()[1].NotNull()["batch"] = 100;
 
         var read = () => HostFile.Read(host.ToJsonString());
 
@@ -131,6 +135,7 @@ public class HostFileFormatTests
                         )
                     )
                     .ConfigureAwait(false)
-            )!
+            )
+            .NotNull()
             .AsObject();
 }

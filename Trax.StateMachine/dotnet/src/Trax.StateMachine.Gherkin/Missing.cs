@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -22,7 +23,7 @@ internal static class Missing
             .ConfigureAwait(false);
         if (baseline.Problems.Count > 0)
             return ([], baseline.Problems);
-        var host = JsonNode.Parse(baseline.Host!)!.AsObject();
+        var host = JsonNode.Parse(baseline.Host.NotNull()).NotNull().AsObject();
         var provenance = host["provenance"] as JsonObject ?? [];
         bool Shown(string machine, string part) => provenance[machine]?[part] is not null;
 
@@ -71,14 +72,15 @@ internal static class Missing
                     .ConfigureAwait(false);
                 continue;
             }
-            var ir = JsonNode.Parse(baseline.Irs[m])!.AsObject();
-            var edges = ir["transitions"]!
+            var ir = JsonNode.Parse(baseline.Irs[m]).NotNull().AsObject();
+            var edges = ir["transitions"]
+                .NotNull()
                 .AsArray()
                 .Select(e =>
                     (
-                        From: e!["from"]!.GetValue<string>(),
-                        Trigger: e["trigger"]!.GetValue<string>(),
-                        To: e["to"]!.GetValue<string>(),
+                        From: e.NotNull()["from"].NotNull().GetValue<string>(),
+                        Trigger: e["trigger"].NotNull().GetValue<string>(),
+                        To: e["to"].NotNull().GetValue<string>(),
                         Guard: e["guard"]
                     )
                 )
@@ -269,7 +271,8 @@ internal static class Missing
 
         foreach (
             var line in baseline
-                .Access!.Split('\n')
+                .Access.NotNull()
+                .Split('\n')
                 .Where(l => l.Contains("(no scenario)", StringComparison.Ordinal))
         )
             gaps.Add(
@@ -312,7 +315,7 @@ internal static class Missing
             .ConfigureAwait(false);
         if (stubbed.Problems.Count > 0)
             return false;
-        var host = JsonNode.Parse(stubbed.Host!)!.AsObject();
+        var host = JsonNode.Parse(stubbed.Host.NotNull()).NotNull().AsObject();
         if (host["provenance"]?[claim.Machine]?[claim.Part] is null)
             return false;
 
@@ -334,15 +337,15 @@ internal static class Missing
 
         if (
             !string.Equals(
-                Outside(JsonNode.Parse(baseline.Host!)!.AsObject(), claim),
+                Outside(JsonNode.Parse(baseline.Host.NotNull()).NotNull().AsObject(), claim),
                 Outside(host, claim),
                 StringComparison.Ordinal
             )
         )
             return false;
 
-        var before = baseline.Access!.Split('\n').ToHashSet(StringComparer.Ordinal);
-        var after = stubbed.Access!.Split('\n').ToHashSet(StringComparer.Ordinal);
+        var before = baseline.Access.NotNull().Split('\n').ToHashSet(StringComparer.Ordinal);
+        var after = stubbed.Access.NotNull().Split('\n').ToHashSet(StringComparer.Ordinal);
         return before
             .Except(after, StringComparer.Ordinal)
             .Concat(after.Except(before, StringComparer.Ordinal))
@@ -372,10 +375,10 @@ internal static class Missing
     {
         var copy = host.DeepClone().AsObject();
         copy.Remove("provenance");
-        if (copy["machines"]![claim.Machine] is JsonObject machine)
+        if (copy["machines"].NotNull()[claim.Machine] is JsonObject machine)
         {
             if (claim.NewMachine)
-                copy["machines"]!.AsObject().Remove(claim.Machine);
+                copy["machines"].NotNull().AsObject().Remove(claim.Machine);
             else
             {
                 machine.Remove("schemaHash");
@@ -558,16 +561,24 @@ internal static class Missing
         var rule = IrMachine.ReadRule(guard.Rule);
         var types = trigger
             .Input.Select(f =>
-                (Name: f!["name"]!.GetValue<string>(), Type: f["type"]!.GetValue<string>())
+                (
+                    Name: f.NotNull()["name"].NotNull().GetValue<string>(),
+                    Type: f["type"].NotNull().GetValue<string>()
+                )
             )
             .ToList();
         var values = types.ToDictionary(f => f.Name, f => Sample(f.Type), StringComparer.Ordinal);
         if (values.Values.Any(v => v is null))
             return null;
+        var samples = values.ToDictionary(
+            kv => kv.Key,
+            kv => kv.Value.NotNull(),
+            StringComparer.Ordinal
+        );
         foreach (var (name, type) in types)
         foreach (var candidate in Candidates(type))
         {
-            var tried = new Dictionary<string, string>(values!, StringComparer.Ordinal)
+            var tried = new Dictionary<string, string>(samples, StringComparer.Ordinal)
             {
                 [name] = candidate,
             };
@@ -656,7 +667,7 @@ internal static class Missing
         var lines = new List<string>();
         if (!machine.IsSystem)
         {
-            lines.Add($"Given {Person} is {glossary.Actors[machine.OwnedBy![0]].Noun}");
+            lines.Add($"Given {Person} is {glossary.Actors[machine.OwnedBy.NotNull()[0]].Noun}");
             lines.Add($"And {Person} {machine.Start}");
             if (!string.Equals(state, machine.Initial, StringComparison.Ordinal))
                 lines.Add($"And {Instance(machine)} {machine.States[state]}");
@@ -676,9 +687,10 @@ internal static class Missing
         var text = trigger.Phrase;
         foreach (var field in trigger.Input)
         {
-            var name = field!["name"]!.GetValue<string>();
+            var name = field.NotNull()["name"].NotNull().GetValue<string>();
             var value =
-                values?.GetValueOrDefault(name) ?? Sample(field["type"]!.GetValue<string>());
+                values?.GetValueOrDefault(name)
+                ?? Sample(field["type"].NotNull().GetValue<string>());
             if (value is null)
                 return null;
             text = text.Replace("{" + name + "}", $"\"{value}\"", StringComparison.Ordinal);
@@ -713,7 +725,10 @@ internal static class Missing
     private static IEnumerable<string> OutcomeTargets(JsonObject ir) =>
         ir["outcomes"] is JsonObject outcomes
             ? outcomes.SelectMany(o =>
-                o.Value!["edges"]!.AsArray().Select(e => e!["to"]!.GetValue<string>())
+                o.Value.NotNull()["edges"]
+                    .NotNull()
+                    .AsArray()
+                    .Select(e => e.NotNull()["to"].NotNull().GetValue<string>())
             )
             : [];
 
@@ -721,7 +736,8 @@ internal static class Missing
     {
         internal static JsonObject Initial(Derived baseline, GlossaryMachine machine) =>
             baseline.Irs.TryGetValue(machine.Id, out var ir)
-                ? JsonNode.Parse(ir)!["initialContext"]?.AsObject().DeepClone().AsObject() ?? []
+                ? JsonNode.Parse(ir).NotNull()["initialContext"]?.AsObject().DeepClone().AsObject()
+                    ?? []
                 : [];
     }
 }

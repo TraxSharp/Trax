@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Ingest.Contracts;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.FromIr;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -16,13 +17,13 @@ namespace Trax.StateMachine.Tests.UnitTests;
 /// </summary>
 public class MachineDirectoryTests
 {
-    private string _directory = null!;
+    private string? _directory;
 
     [SetUp]
     public void SetUp() => _directory = Directory.CreateTempSubdirectory("trax-machines-").FullName;
 
     [TearDown]
-    public void TearDown() => Directory.Delete(_directory, recursive: true);
+    public void TearDown() => Directory.Delete(_directory.NotNull(), recursive: true);
 
     [Test]
     public async Task A_directory_whose_files_agree_serves_every_machine()
@@ -30,7 +31,7 @@ public class MachineDirectoryTests
         await Write(Valid()).ConfigureAwait(false);
 
         var loaded = await IrDirectory
-            .LoadAsync(_directory, [typeof(IFetchTrain).Assembly])
+            .LoadAsync(_directory.NotNull(), [typeof(IFetchTrain).Assembly])
             .ConfigureAwait(false);
 
         loaded.Machines.Select(m => m.Name).Should().BeEquivalentTo(["ingest", "turnstile"]);
@@ -41,7 +42,7 @@ public class MachineDirectoryTests
     public async Task A_machine_the_host_file_serves_with_no_IR_is_refused_naming_it()
     {
         await Write(Valid()).ConfigureAwait(false);
-        File.Delete(Path.Combine(_directory, "ingest.ir.json"));
+        File.Delete(Path.Combine(_directory.NotNull(), "ingest.ir.json"));
 
         var load = Load();
 
@@ -55,7 +56,7 @@ public class MachineDirectoryTests
     public async Task An_IR_with_no_entry_in_the_host_file_is_refused_naming_it()
     {
         var host = Valid();
-        host["machines"]!.AsObject().Remove("ingest");
+        host["machines"].NotNull().AsObject().Remove("ingest");
         host["policies"] = new JsonArray();
         await Write(host).ConfigureAwait(false);
 
@@ -72,8 +73,8 @@ public class MachineDirectoryTests
     {
         await Write(Valid()).ConfigureAwait(false);
         File.Move(
-            Path.Combine(_directory, "turnstile.ir.json"),
-            Path.Combine(_directory, "gate.ir.json")
+            Path.Combine(_directory.NotNull(), "turnstile.ir.json"),
+            Path.Combine(_directory.NotNull(), "gate.ir.json")
         );
 
         var load = Load();
@@ -88,7 +89,7 @@ public class MachineDirectoryTests
     public async Task A_policy_waiting_for_a_state_the_machine_does_not_have_is_refused()
     {
         var host = Valid();
-        host["policies"]![0]!["when"]!["enters"] = "Delivered";
+        host["policies"].NotNull()[0].NotNull()["when"].NotNull()["enters"] = "Delivered";
         await Write(host).ConfigureAwait(false);
 
         var load = Load();
@@ -103,10 +104,8 @@ public class MachineDirectoryTests
     public async Task A_rule_for_a_trigger_the_machine_does_not_have_is_refused()
     {
         var host = Valid();
-        host["machines"]!["ingest"]!["triggers"]!["Refetch"] = new JsonObject
-        {
-            ["anyAuthenticated"] = true,
-        };
+        host["machines"].NotNull()["ingest"].NotNull()["triggers"].NotNull()["Refetch"] =
+            new JsonObject { ["anyAuthenticated"] = true };
         await Write(host).ConfigureAwait(false);
 
         var load = Load();
@@ -121,7 +120,12 @@ public class MachineDirectoryTests
     public async Task A_train_input_mapped_from_a_field_no_context_has_is_refused()
     {
         var host = Valid();
-        host["machines"]!["ingest"]!["invokes"]!["Fetching"]!["input"]!["source"] = "bucket";
+        host["machines"]
+            .NotNull()["ingest"]
+            .NotNull()["invokes"]
+            .NotNull()["Fetching"]
+            .NotNull()["input"]
+            .NotNull()["source"] = "bucket";
         await Write(host).ConfigureAwait(false);
 
         var load = Load();
@@ -136,7 +140,7 @@ public class MachineDirectoryTests
     public async Task A_directory_with_no_host_file_is_refused()
     {
         await Write(Valid()).ConfigureAwait(false);
-        File.Delete(Path.Combine(_directory, "host.json"));
+        File.Delete(Path.Combine(_directory.NotNull(), "host.json"));
 
         var load = Load();
 
@@ -188,7 +192,8 @@ public class MachineDirectoryTests
         var turnstile = JsonNode
             .Parse(
                 await File.ReadAllTextAsync(FixturePaths.IrFile("turnstile")).ConfigureAwait(false)
-            )!
+            )
+            .NotNull()
             .AsObject();
         turnstile["timers"] = new JsonArray(
             new JsonObject
@@ -201,18 +206,18 @@ public class MachineDirectoryTests
             }
         );
         var host = Valid();
-        host["machines"]!["turnstile"]!["schemaHash"] =
+        host["machines"].NotNull()["turnstile"].NotNull()["schemaHash"] =
             Trax.StateMachine.Features.MachineFiles.Hash(turnstile);
         host["policies"] = new JsonArray(TurnstilePolicy("Locked", "Coin"));
         await Write(host).ConfigureAwait(false);
         await File.WriteAllTextAsync(
-                Path.Combine(_directory, "turnstile.ir.json"),
+                Path.Combine(_directory.NotNull(), "turnstile.ir.json"),
                 turnstile.ToJsonString()
             )
             .ConfigureAwait(false);
 
         var loaded = await IrDirectory
-            .LoadAsync(_directory, [typeof(IFetchTrain).Assembly])
+            .LoadAsync(_directory.NotNull(), [typeof(IFetchTrain).Assembly])
             .ConfigureAwait(false);
 
         loaded.Host.Policies.Should().ContainSingle();
@@ -223,10 +228,13 @@ public class MachineDirectoryTests
     {
         // Entering Fetching runs the train, whose outcome moves the instance into Fetched, which retries the fetch.
         var host = Valid();
-        host["machines"]!["ingest"]!["owner"] = new JsonObject { ["system"] = "ingest/main" };
-        host["machines"]!["ingest"]!.AsObject().Remove("start");
-        host["machines"]!["ingest"]!.AsObject().Remove("read");
-        host["machines"]!["ingest"]!["triggers"] = new JsonObject
+        host["machines"].NotNull()["ingest"].NotNull()["owner"] = new JsonObject
+        {
+            ["system"] = "ingest/main",
+        };
+        host["machines"].NotNull()["ingest"].NotNull().AsObject().Remove("start");
+        host["machines"].NotNull()["ingest"].NotNull().AsObject().Remove("read");
+        host["machines"].NotNull()["ingest"].NotNull()["triggers"] = new JsonObject
         {
             ["Start"] = new JsonObject { ["server"] = true },
         };
@@ -267,7 +275,7 @@ public class MachineDirectoryTests
         };
 
     private Func<Task> Load() =>
-        () => IrDirectory.LoadAsync(_directory, [typeof(IFetchTrain).Assembly]);
+        () => IrDirectory.LoadAsync(_directory.NotNull(), [typeof(IFetchTrain).Assembly]);
 
     // The ingest machine, served to its users, and the turnstile as a system machine it opens when a fetch is approved.
     private static JsonObject Valid()
@@ -330,12 +338,15 @@ public class MachineDirectoryTests
 
     private async Task Write(JsonObject host)
     {
-        await File.WriteAllTextAsync(Path.Combine(_directory, "host.json"), host.ToJsonString())
+        await File.WriteAllTextAsync(
+                Path.Combine(_directory.NotNull(), "host.json"),
+                host.ToJsonString()
+            )
             .ConfigureAwait(false);
         foreach (var name in new[] { "ingest", "turnstile" })
             File.Copy(
                 FixturePaths.IrFile(name),
-                Path.Combine(_directory, $"{name}.ir.json"),
+                Path.Combine(_directory.NotNull(), $"{name}.ir.json"),
                 overwrite: true
             );
     }
@@ -351,10 +362,12 @@ public class MachineDirectoryTests
                 SHA256.HashData(
                     Encoding.UTF8.GetBytes(
                         CanonicalJson.Serialize(
-                            JsonNode.Parse(
-                                await File.ReadAllTextAsync(FixturePaths.IrFile(name))
-                                    .ConfigureAwait(false)
-                            )!
+                            JsonNode
+                                .Parse(
+                                    await File.ReadAllTextAsync(FixturePaths.IrFile(name))
+                                        .ConfigureAwait(false)
+                                )
+                                .NotNull()
                         )
                     )
                 )

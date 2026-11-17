@@ -5,6 +5,7 @@ using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Client;
 
@@ -90,7 +91,7 @@ internal sealed class WirePeer(NetworkStream stream, CancellationToken stopping)
             await text.WriteAsync(buffer.AsMemory(0, result.Count), CancellationToken.None)
                 .ConfigureAwait(false);
             if (result.EndOfMessage)
-                return (JsonObject)JsonNode.Parse(text.ToArray())!;
+                return (JsonObject)JsonNode.Parse(text.ToArray()).NotNull();
         }
     }
 
@@ -109,7 +110,7 @@ internal sealed class WirePeer(NetworkStream stream, CancellationToken stopping)
 
     /// <summary>Reads the next subscribe message and returns its id.</summary>
     public async Task<string> SubscribedAsync() =>
-        (await ExpectAsync("subscribe").ConfigureAwait(false))["id"]!.GetValue<string>();
+        (await ExpectAsync("subscribe").ConfigureAwait(false))["id"].NotNull().GetValue<string>();
 
     public Task SendAsync(string text) =>
         Socket.SendAsync(

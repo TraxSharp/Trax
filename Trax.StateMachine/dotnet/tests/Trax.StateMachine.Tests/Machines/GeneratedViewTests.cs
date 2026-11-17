@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Client;
 using Trax.StateMachine.Tests.Helpers;
@@ -26,7 +27,7 @@ public class GeneratedViewTests
         {
             Id = machine,
             IrHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))),
-            Ir = (JsonObject)JsonNode.Parse(text)!,
+            Ir = (JsonObject)JsonNode.Parse(text).NotNull(),
         };
     }
 
@@ -77,7 +78,7 @@ public class GeneratedViewTests
             .WaitAsync(Wait)
             .ConfigureAwait(false);
 
-        sent.Input!.ToJsonString().Should().Be("{\"coin\":\"quarter\"}");
+        sent.Input.NotNull().ToJsonString().Should().Be("{\"coin\":\"quarter\"}");
         sent.ClientResult.Should()
             .Be(
                 "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}"
@@ -98,7 +99,7 @@ public class GeneratedViewTests
             .BeOfType<SendOutcome.Confirmed>();
 
         turnstile.State.Should().Be(TurnstileState.Unlocked);
-        turnstile.UnlockedContext!.PaidWith.Should().Be("quarter");
+        turnstile.UnlockedContext.NotNull().PaidWith.Should().Be("quarter");
         turnstile.LockedContext.Should().BeNull();
     }
 

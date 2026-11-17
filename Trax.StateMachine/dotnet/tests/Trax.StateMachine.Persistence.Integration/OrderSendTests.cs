@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -57,7 +58,12 @@ public class OrderSendTests
             .Which.Snapshot.State.Should()
             .Be("Placed");
         effect.Calls.Should().Be(1);
-        (await Load("u", id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        (await Load("u", id))
+            .Context["receipt"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("receipt-1");
     }
 
     [Test]
@@ -223,7 +229,7 @@ public class OrderSendTests
             .BeOfType<AdvanceOutcome.Advanced>()
             .Subject;
         retry.Snapshot.State.Should().Be("Placed");
-        retry.Snapshot.Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        retry.Snapshot.Context["receipt"].NotNull().GetValue<string>().Should().Be("receipt-1");
         effect.Calls.Should().Be(1, "a retried send never runs the effect again");
         (await Load("u", id)).State.Should().Be("Review", "a replay writes nothing");
 
@@ -233,7 +239,12 @@ public class OrderSendTests
             .Which.Snapshot.State.Should()
             .Be("Placed");
         effect.Calls.Should().Be(2);
-        (await Load("u", id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-2");
+        (await Load("u", id))
+            .Context["receipt"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("receipt-2");
     }
 
     [Test]
@@ -280,7 +291,12 @@ public class OrderSendTests
             .Which.Snapshot.State.Should()
             .Be("Placed");
         effect.Calls.Should().Be(1);
-        (await Load("u", id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        (await Load("u", id))
+            .Context["receipt"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("receipt-1");
     }
 
     [Test]
@@ -321,7 +337,12 @@ public class OrderSendTests
 
         retry.Should().BeOfType<AdvanceOutcome.Advanced>();
         effect.Calls.Should().Be(1);
-        (await Load("u", id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        (await Load("u", id))
+            .Context["receipt"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("receipt-1");
     }
 
     private sealed class CancelsAfterRunningEffect(CancellationTokenSource request)

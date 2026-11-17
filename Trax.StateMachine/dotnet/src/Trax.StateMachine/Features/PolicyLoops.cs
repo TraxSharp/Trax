@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Features;
 
@@ -38,10 +39,11 @@ internal static class PolicyLoops
             var key = Reach(from)
                 .Where(s => Reach(s).Contains(from))
                 .Append(from)
-                .Min(StringComparer.Ordinal)!;
+                .Min(StringComparer.Ordinal)
+                .NotNull();
             if (!loops.TryGetValue(key, out var loop))
                 loops[key] = loop = new SortedSet<string>(StringComparer.Ordinal);
-            loop.Add(id!);
+            loop.Add(id.NotNull());
         }
         return loops
             .Values.Select(l => (IReadOnlyList<string>)l.ToList())

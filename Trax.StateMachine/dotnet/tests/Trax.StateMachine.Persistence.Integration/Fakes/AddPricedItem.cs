@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence.FromIr;
@@ -15,7 +16,7 @@ public sealed class AddPricedItem : ICustomReduction
     {
         var next = (JsonObject)context.DeepClone();
         var items = next["items"] as JsonArray ?? [];
-        items.Add(input!["item"]!.GetValue<string>());
+        items.Add(input.NotNull()["item"].NotNull().GetValue<string>());
         next["items"] = items;
         next["total"] = items.Count * FeatureCheckout.UnitPrice;
         return next;

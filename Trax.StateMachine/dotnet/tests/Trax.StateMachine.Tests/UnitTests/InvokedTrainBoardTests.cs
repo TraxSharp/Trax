@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 
@@ -82,7 +83,7 @@ public class InvokedTrainBoardTests
         );
         derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
 
-        var board = FeatureMachines.Board(derived.Irs, derived.Host!);
+        var board = FeatureMachines.Board(derived.Irs, derived.Host.NotNull());
 
         board
             .Stickies.Where(s => string.Equals(s.Kind, "event", StringComparison.Ordinal))
@@ -105,7 +106,14 @@ public class InvokedTrainBoardTests
         );
         derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
 
-        JsonNode.Parse(derived.Host!)!["machines"]!["order"]!["invokes"]!["Paying"]!["input"]!
+        JsonNode
+            .Parse(derived.Host.NotNull())
+            .NotNull()["machines"]
+            .NotNull()["order"]
+            .NotNull()["invokes"]
+            .NotNull()["Paying"]
+            .NotNull()["input"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"customerId":"$owner"}""");

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence.FromIr;
@@ -86,25 +87,37 @@ public class GherkinDerivationTests
         var derived = await Derive(Background + Placing).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
-        var ir = JsonNode.Parse(derived.Irs["order"])!.AsObject();
-        var place = ir["transitions"]!
+        var ir = JsonNode.Parse(derived.Irs["order"]).NotNull().AsObject();
+        var place = ir["transitions"]
+            .NotNull()
             .AsArray()
             .Single(t =>
-                string.Equals(t!["trigger"]!.GetValue<string>(), "Place", StringComparison.Ordinal)
-            )!;
-        place["from"]!.GetValue<string>().Should().Be("Draft");
-        place["to"]!.GetValue<string>().Should().Be("Placed");
-        place["guard"]!["field"]!.GetValue<string>().Should().Be("loaves");
-        place["guardMessage"]!.GetValue<string>().Should().Be("Add something first.");
-        var order = ir["transitions"]!
+                string.Equals(
+                    t.NotNull()["trigger"].NotNull().GetValue<string>(),
+                    "Place",
+                    StringComparison.Ordinal
+                )
+            )
+            .NotNull();
+        place["from"].NotNull().GetValue<string>().Should().Be("Draft");
+        place["to"].NotNull().GetValue<string>().Should().Be("Placed");
+        place["guard"].NotNull()["field"].NotNull().GetValue<string>().Should().Be("loaves");
+        place["guardMessage"].NotNull().GetValue<string>().Should().Be("Add something first.");
+        var order = ir["transitions"]
+            .NotNull()
             .AsArray()
             .Single(t =>
-                string.Equals(t!["trigger"]!.GetValue<string>(), "Order", StringComparison.Ordinal)
-            )!;
-        order["to"]!.GetValue<string>().Should().Be("Draft");
+                string.Equals(
+                    t.NotNull()["trigger"].NotNull().GetValue<string>(),
+                    "Order",
+                    StringComparison.Ordinal
+                )
+            )
+            .NotNull();
+        order["to"].NotNull().GetValue<string>().Should().Be("Draft");
         order["reduce"].Should().NotBeNull("a trigger's glossary reduction is its edges'");
 
-        var host = HostFile.Read(derived.Host!);
+        var host = HostFile.Read(derived.Host.NotNull());
         var served = IrMachines.Create(new IrMachines.Source(ir, host.Machines["order"]), []);
         served
             .ExportIr()
@@ -163,9 +176,10 @@ public class GherkinDerivationTests
     [Test]
     public async Task A_step_that_leaves_a_required_input_unset_is_refused_at_derivation()
     {
-        var glossary = JsonNode.Parse(Glossary)!;
-        glossary["machines"]!["order"]!["triggers"]!["Note"]!["phrase"] =
-            "notes {text} on {subject}";
+        var glossary = JsonNode.Parse(Glossary).NotNull();
+        glossary["machines"].NotNull()["order"].NotNull()["triggers"].NotNull()["Note"].NotNull()[
+            "phrase"
+        ] = "notes {text} on {subject}";
 
         var derived = (
             await FeatureDerivation

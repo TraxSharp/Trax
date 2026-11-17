@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.UnitTests;
 
@@ -55,7 +56,7 @@ public class ClientManifestTests
 
         ClientManifest.Write(read).Should().Be(text);
         read.Machines.Single().Documents.Single().Operation.Should().Be("get");
-        read.Machines.Single().Requires!.RoleSets.Single().Should().Equal("recovery-user");
+        read.Machines.Single().Requires.NotNull().RoleSets.Single().Should().Equal("recovery-user");
     }
 
     [Test]
@@ -118,7 +119,7 @@ public class ClientManifestTests
         var text = ClientManifest.Write(manifest);
 
         Occurrences(text, "\"name\":\"view\"").Should().Be(1, "the shared schema is written once");
-        JsonNode.Parse(text)!["$defs"]!.AsObject().Should().ContainSingle();
+        JsonNode.Parse(text).NotNull()["$defs"].NotNull().AsObject().Should().ContainSingle();
         text.Should().NotContain("\n  ", "the manifest is written compact");
         var read = ClientManifest.Read(text).Machines.Single();
         read.IrText()
@@ -135,7 +136,7 @@ public class ClientManifestTests
     [Test]
     public void A_newer_format_is_refused_naming_both()
     {
-        var newer = JsonNode.Parse(ClientManifest.Write(Sample()))!.AsObject();
+        var newer = JsonNode.Parse(ClientManifest.Write(Sample())).NotNull().AsObject();
         newer["format"] = ClientManifest.CurrentFormat + 1;
 
         var read = () => ClientManifest.Read(newer.ToJsonString());
@@ -158,8 +159,8 @@ public class ClientManifestTests
     [Test]
     public void A_manifest_missing_a_required_field_is_refused_with_a_message()
     {
-        var missing = JsonNode.Parse(ClientManifest.Write(Sample()))!.AsObject();
-        missing["machines"]![0]!.AsObject().Remove("irHash");
+        var missing = JsonNode.Parse(ClientManifest.Write(Sample())).NotNull().AsObject();
+        missing["machines"].NotNull()[0].NotNull().AsObject().Remove("irHash");
 
         var read = () => ClientManifest.Read(missing.ToJsonString());
 

@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -29,7 +30,7 @@ public class SnapshotChangeListenerTests
     /// <summary>How long a test waits for a row id it expects the listener to hand on.</summary>
     private static readonly TimeSpan HearWithin = TimeSpan.FromSeconds(15);
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
     private readonly List<Feed> _feeds = [];
     private readonly List<IHostedService> _started = [];
     private CountingDataContextFactory? _counting;
@@ -50,29 +51,29 @@ public class SnapshotChangeListenerTests
         foreach (var hosted in _started)
             await hosted.StopAsync(CancellationToken.None);
         _started.Clear();
-        _host.Dispose();
+        _host?.Dispose();
     }
 
     /// <summary>The host's listener, started, with <paramref name="readers"/> readers of its row ids.</summary>
     private async Task<List<Feed>> Listen(int readers = 1)
     {
-        var listener = _host.Services.GetService<ISnapshotChangeListener>();
+        var listener = _host.NotNull().Services.GetService<ISnapshotChangeListener>();
         listener
             .Should()
             .NotBeNull(
                 $"AddStateMachines on Postgres registers the snapshot change listener. See {Adr}"
             );
-        foreach (var hosted in _host.Services.GetServices<IHostedService>())
+        foreach (var hosted in _host.NotNull().Services.GetServices<IHostedService>())
             if (hosted is ISnapshotChangeListener)
             {
                 await hosted.StartAsync(CancellationToken.None).ConfigureAwait(false);
                 _started.Add(hosted);
             }
-        _counting = _host.Services.GetRequiredService<CountingDataContextFactory>();
+        _counting = _host.NotNull().Services.GetRequiredService<CountingDataContextFactory>();
 
         var started = new List<Feed>();
         for (var i = 0; i < readers; i++)
-            started.Add(Feed.Start(listener!));
+            started.Add(Feed.Start(listener.NotNull()));
         _feeds.AddRange(started);
 
         // Every reader is told to reload first, once the listener is listening.
@@ -96,7 +97,7 @@ public class SnapshotChangeListenerTests
     private async Task<long> Seed()
     {
         var id = Guid.NewGuid();
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             await scope
                 .ServiceProvider.GetRequiredService<ISnapshotStore>()
                 .Insert(
@@ -111,7 +112,7 @@ public class SnapshotChangeListenerTests
                     }
                 )
                 .ConfigureAwait(false);
-        return (await _host.Rows(id).ConfigureAwait(false)).Single().RowId;
+        return (await _host.NotNull().Rows(id).ConfigureAwait(false)).Single().RowId;
     }
 
     // A committed write by raw SQL, on a connection of the test's own, so it reads nothing through the host.
@@ -163,7 +164,7 @@ public class SnapshotChangeListenerTests
             "SELECT count(*) FROM (SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
             + "WHERE application_name = @name AND datname = current_database()) terminated";
         command.Parameters.AddWithValue("@name", ApplicationName);
-        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 
     [Test]
@@ -193,7 +194,7 @@ public class SnapshotChangeListenerTests
     {
         await Listen();
         var row = await Seed();
-        var hub = _host.Services.GetRequiredService<SnapshotWatchHub>();
+        var hub = _host.NotNull().Services.GetRequiredService<SnapshotWatchHub>();
         var watch = hub.Watch(row);
         await using var watchDisposal = watch.ConfigureAwait(false);
         var first = await Next(watch);
@@ -241,7 +242,7 @@ public class SnapshotChangeListenerTests
         (await feed.Hears(marker, HearWithin))
             .Should()
             .BeTrue("the insert's own notice is handed on");
-        var before = _counting!.Count;
+        var before = _counting.NotNull().Count;
 
         await SnapshotNotices.Notify(
             SnapshotNotices.Channel,
@@ -389,7 +390,7 @@ public class SnapshotChangeListenerTests
             var since = await DatabaseNow();
             var first = await QueueReadAfter(since);
             first.Should().NotBeNull($"the queue is read while notices keep arriving. See {Adr}");
-            (await QueueReadAfter(first!.Value))
+            (await QueueReadAfter(first.NotNull().Value))
                 .Should()
                 .NotBeNull("and read again an interval later, however busy the session is");
         }
@@ -409,7 +410,7 @@ public class SnapshotChangeListenerTests
         var command = connection.CreateCommand();
         await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = "SELECT clock_timestamp()";
-        return (DateTime)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+        return (DateTime)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 
     // When the listener's session last started reading the queue, once that is after since; null if it does not
@@ -444,7 +445,7 @@ public class SnapshotChangeListenerTests
         await Listen();
         var row = await Seed();
         var sentinel = await Seed();
-        var hub = _host.Services.GetRequiredService<SnapshotWatchHub>();
+        var hub = _host.NotNull().Services.GetRequiredService<SnapshotWatchHub>();
         var watch = hub.Watch(row);
         await using var watchDisposal = watch.ConfigureAwait(false);
         (await Next(watch)).Revision.Should().Be(1);
@@ -477,7 +478,7 @@ public class SnapshotChangeListenerTests
         const int Notices = 20;
         var feed = (await Listen()).Single();
         var row = await Seed();
-        var hub = _host.Services.GetRequiredService<SnapshotWatchHub>();
+        var hub = _host.NotNull().Services.GetRequiredService<SnapshotWatchHub>();
         var watches = Enumerable.Range(0, Subscribers).Select(_ => hub.Watch(row)).ToList();
         try
         {
@@ -485,7 +486,7 @@ public class SnapshotChangeListenerTests
                 (await Next(watch)).Revision.Should().Be(1);
 
             // The next read waits until the test lets it go, so every notice below lands while it is held.
-            var entered = _counting!.Hold();
+            var entered = _counting.NotNull().Hold();
             var before = _counting.Count;
             await Touch(row);
             await entered.WaitAsync(HearWithin);

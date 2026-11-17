@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
@@ -40,8 +41,8 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
             ),
         ];
 
-    private InstanceHost _host = null!;
-    private SharedCharge _charge = null!;
+    private InstanceHost? _host;
+    private SharedCharge? _charge;
 
     [SetUp]
     public void SetUp()
@@ -50,12 +51,12 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
         _host = InstanceHost.Create(
             provider,
             launcher: new RecordingLauncher(),
-            services: services => services.AddSingleton<IOrderCharge>(_charge)
+            services: services => services.AddSingleton<IOrderCharge>(_charge.NotNull())
         );
     }
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static string Because(string name) =>
         $"a request id with a control character ({name}) names no request the row can record. See {Adr}";
@@ -69,9 +70,10 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
         var user = $"{User}-{Guid.NewGuid():N}";
         StartOutcome outcome;
         StartSnapshotOutput generic;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
             outcome = await _host
+                .NotNull()
                 .Service(scope, ExpiringMachine.Id)
                 .Start(new Actor.Client(user), input: null, requestId);
             generic = await new StartSnapshotJunction(
@@ -86,8 +88,8 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
             .BeOfType<StartOutcome.Rejected>()
             .Which.Code.Should()
             .Be(RefusalCode.InvalidRequestId, Because(name));
-        generic.Problem!.Code.Should().Be(RefusalCode.InvalidRequestId, Because(name));
-        (await _host.UserRows(user, ExpiringMachine.Id))
+        generic.Problem.NotNull().Code.Should().Be(RefusalCode.InvalidRequestId, Because(name));
+        (await _host.NotNull().UserRows(user, ExpiringMachine.Id))
             .Should()
             .BeEmpty("a refused start creates nothing");
     }
@@ -96,14 +98,15 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
     public async Task An_advance_is_refused_and_moves_nothing(string requestId, string name)
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, PlainTimerMachine.Json("Idle"));
-        var before = await _host.Revision(id);
+        await _host.NotNull().SeedDraft(User, id, PlainTimerMachine.Json("Idle"));
+        var before = await _host.NotNull().Revision(id);
 
         AdvanceOutcome outcome;
         AdvanceSnapshotOutput generic;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
             outcome = await _host
+                .NotNull()
                 .Service(scope, PlainTimerMachine.Id)
                 .Advance(new Actor.Client(User), id, "Wait", input: null, requestId);
             generic = await new AdvanceSnapshotJunction(
@@ -126,8 +129,8 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
             .Be(RefusalCode.InvalidRequestId, Because(name));
-        generic.Problem!.Code.Should().Be(RefusalCode.InvalidRequestId, Because(name));
-        var row = (await RawSql.Timer(_host, id))!;
+        generic.Problem.NotNull().Code.Should().Be(RefusalCode.InvalidRequestId, Because(name));
+        var row = (await RawSql.Timer(_host.NotNull(), id)).NotNull();
         row.State.Should().Be("Idle", "a refused advance moves nothing");
         row.Revision.Should().Be(before, "a refused advance writes nothing");
     }
@@ -136,18 +139,22 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
     public async Task A_send_is_refused_before_its_effect_runs(string requestId, string name)
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, RenewalMachine.DraftJson);
-        var before = await _host.Revision(id);
+        await _host.NotNull().SeedDraft(User, id, RenewalMachine.DraftJson);
+        var before = await _host.NotNull().Revision(id);
 
         AdvanceOutcome sent;
         AdvanceOutcome ran;
         SendSnapshotOutput generic;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
             sent = await _host
+                .NotNull()
                 .Service(scope, RenewalMachine.Id)
                 .Send(new Actor.Client(User), id, requestId);
-            ran = await Registry(scope).EffectRunner(RenewalMachine.Id)!.Run(User, id, requestId);
+            ran = await Registry(scope)
+                .EffectRunner(RenewalMachine.Id)
+                .NotNull()
+                .Run(User, id, requestId);
             generic = await new SendSnapshotJunction(
                 Registry(scope),
                 new FakePrincipal(User),
@@ -168,9 +175,9 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
                 .BeOfType<AdvanceOutcome.Rejected>()
                 .Which.Reason.Should()
                 .Be(RefusalCode.InvalidRequestId, Because(name));
-        generic.Problem!.Code.Should().Be(RefusalCode.InvalidRequestId, Because(name));
-        _charge.Calls.Should().Be(0, "a refused send delivers nothing");
-        var row = (await RawSql.Timer(_host, id))!;
+        generic.Problem.NotNull().Code.Should().Be(RefusalCode.InvalidRequestId, Because(name));
+        _charge.NotNull().Calls.Should().Be(0, "a refused send delivers nothing");
+        var row = (await RawSql.Timer(_host.NotNull(), id)).NotNull();
         row.State.Should().Be(nameof(RenewalState.Draft), "a refused send moves nothing");
         row.Revision.Should().Be(before, "a refused send writes nothing");
     }
@@ -179,13 +186,14 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
     public async Task A_discard_is_refused_and_deletes_nothing(string requestId, string name)
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, PlainTimerMachine.Json("Idle"));
+        await _host.NotNull().SeedDraft(User, id, PlainTimerMachine.Json("Idle"));
 
         DiscardOutcome outcome;
         DiscardSnapshotOutput generic;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
             outcome = await _host
+                .NotNull()
                 .Service(scope, PlainTimerMachine.Id)
                 .Discard(new Actor.Client(User), id, requestId);
             generic = await new DiscardSnapshotJunction(
@@ -207,8 +215,10 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
             .BeOfType<DiscardOutcome.Rejected>()
             .Which.Code.Should()
             .Be(RefusalCode.InvalidRequestId, Because(name));
-        generic.Problem!.Code.Should().Be(RefusalCode.InvalidRequestId, Because(name));
-        (await _host.Rows(id)).Should().ContainSingle("a refused discard deletes nothing");
+        generic.Problem.NotNull().Code.Should().Be(RefusalCode.InvalidRequestId, Because(name));
+        (await _host.NotNull().Rows(id))
+            .Should()
+            .ContainSingle("a refused discard deletes nothing");
     }
 
     [TestCase("a-b_c.1", TestName = "{m}(ascii)")]
@@ -216,11 +226,12 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
     public async Task An_id_without_a_control_character_is_still_accepted(string requestId)
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, PlainTimerMachine.Json("Idle"));
+        await _host.NotNull().SeedDraft(User, id, PlainTimerMachine.Json("Idle"));
 
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         (
             await _host
+                .NotNull()
                 .Service(scope, PlainTimerMachine.Id)
                 .Advance(new Actor.Client(User), id, "Wait", input: null, requestId)
         )

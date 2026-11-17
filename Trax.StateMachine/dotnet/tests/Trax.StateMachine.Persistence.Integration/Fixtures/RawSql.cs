@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 
 namespace Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -29,7 +30,7 @@ internal static class RawSql
         {
             0 => null,
             1 => new TimerRow(
-                (string)rows[0][0]!,
+                (string)rows[0][0].NotNull(),
                 AsInstant(rows[0][1]),
                 Convert.ToInt64(rows[0][2], CultureInfo.InvariantCulture)
             ),

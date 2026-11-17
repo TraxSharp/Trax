@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
@@ -107,7 +108,7 @@ public class DraftWriteRulesTests
             }
         );
 
-        output.Problem!.Code.Should().Be(RefusalCode.EffectBound, Adr);
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.EffectBound, Adr);
         (await StoredState(id)).Should().Be("Review");
     }
 
@@ -116,11 +117,13 @@ public class DraftWriteRulesTests
     {
         var id = await SeedReview();
         var effect = new CountingEffect();
-        var runner = new OrderMachine().CreateEffectRunner(
-            new OrderMachine().CreateService(TestDb.NewStore(), TestDb.NewClaims()),
-            new IdempotentEffect(TestDb.NewClaims()),
-            new ServiceCollection().AddSingleton<IOrderCharge>(effect).BuildServiceProvider()
-        )!;
+        var runner = new OrderMachine()
+            .CreateEffectRunner(
+                new OrderMachine().CreateService(TestDb.NewStore(), TestDb.NewClaims()),
+                new IdempotentEffect(TestDb.NewClaims()),
+                new ServiceCollection().AddSingleton<IOrderCharge>(effect).BuildServiceProvider()
+            )
+            .NotNull();
 
         (await runner.Run("u", id, "req-1")).Should().BeOfType<AdvanceOutcome.Advanced>();
 
@@ -218,7 +221,7 @@ public class DraftWriteRulesTests
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
             .Be(RefusalCode.DraftCommitted, Adr);
-        (await StoredLedger(id))!["entries"]!.AsArray().Count.Should().Be(1);
+        (await StoredLedger(id)).NotNull()["entries"].NotNull().AsArray().Count.Should().Be(1);
     }
 
     [Test]
@@ -251,7 +254,7 @@ public class DraftWriteRulesTests
             .Which.Code.Should()
             .Be(RefusalCode.SaveNotAllowed, NoSave);
         var stored = (LoadResult.Loaded)await service.Load("u", id);
-        stored.Snapshot.Context["receipt"]!.GetValue<string>().Should().Be("r-1");
+        stored.Snapshot.Context["receipt"].NotNull().GetValue<string>().Should().Be("r-1");
     }
 
     [Test]
@@ -370,7 +373,8 @@ public class DraftWriteRulesTests
 
         output.Problem.Should().NotBeNull("the save is refused");
         output
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(
                 RefusalCode.SaveNotAllowed,
                 $"a gated machine's states are reached through its declared events only. See {MachinesAreTheApi}"
@@ -418,7 +422,8 @@ public class DraftWriteRulesTests
 
         output.Problem.Should().NotBeNull("the save is refused");
         output
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(
                 RefusalCode.SaveNotAllowed,
                 $"only the guard decides whether the hatch opens. See {MachinesAreTheApi}"
@@ -453,13 +458,13 @@ public class DraftWriteRulesTests
 
     private static Snapshot Snapshot(string json)
     {
-        var node = JsonNode.Parse(json)!.AsObject();
+        var node = JsonNode.Parse(json).NotNull().AsObject();
         return new Snapshot
         {
-            Machine = node["machine"]!.GetValue<string>(),
-            Version = node["version"]!.GetValue<int>(),
-            State = node["state"]!.GetValue<string>(),
-            Context = node["context"]!.AsObject().DeepClone().AsObject(),
+            Machine = node["machine"].NotNull().GetValue<string>(),
+            Version = node["version"].NotNull().GetValue<int>(),
+            State = node["state"].NotNull().GetValue<string>(),
+            Context = node["context"].NotNull().AsObject().DeepClone().AsObject(),
         };
     }
 }

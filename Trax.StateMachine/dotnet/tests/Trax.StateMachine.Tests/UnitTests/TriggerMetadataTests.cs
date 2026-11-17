@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 using Trax.StateMachine.Tests.Fakes;
 
@@ -66,9 +67,9 @@ public class TriggerMetadataTests
     [Test]
     public void The_IR_separates_client_inputs_from_outcome_inputs()
     {
-        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(IngestMachine.Built))!;
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(IngestMachine.Built)).NotNull();
 
-        ((JsonObject)ir["inputs"]!)
+        ((JsonObject)ir["inputs"].NotNull())
             .Select(kv => kv.Key)
             .Should()
             .NotContain(
@@ -77,11 +78,16 @@ public class TriggerMetadataTests
             );
 
         // The success outcome's output schema is still exported, under its outcome.
-        var done = (JsonObject)ir["outcomes"]!["Fetching.done"]!;
+        var done = (JsonObject)ir["outcomes"].NotNull()["Fetching.done"].NotNull();
         Descendants(done)
             .OfType<JsonObject>()
             .Where(o => o["fields"] is JsonArray)
-            .Select(o => o["fields"]!.AsArray().Select(f => f!["name"]!.GetValue<string>()))
+            .Select(o =>
+                o["fields"]
+                    .NotNull()
+                    .AsArray()
+                    .Select(f => f.NotNull()["name"].NotNull().GetValue<string>())
+            )
             .Should()
             .ContainSingle()
             .Which.Should()

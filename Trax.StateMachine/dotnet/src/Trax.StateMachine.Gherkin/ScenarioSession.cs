@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -194,9 +195,9 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
                     .ConfigureAwait(false);
                 if (refused is not null)
                     return $"'{step.Text}', and {v.Person} may not read it: {ScenarioRunner.Describe(refused)}.";
-                return values!.Contains(v.Value, StringComparer.Ordinal)
+                return values.NotNull().Contains(v.Value, StringComparer.Ordinal)
                     ? null
-                    : $"'{step.Text}', and it shows {(values!.Count == 0 ? "nothing" : string.Join(" or ", values.Select(x => $"\"{x}\"")))}.";
+                    : $"'{step.Text}', and it shows {(values.NotNull().Count == 0 ? "nothing" : string.Join(" or ", values.Select(x => $"\"{x}\"")))}.";
             }
 
             case (StepKind.Then, Meaning.Told t):

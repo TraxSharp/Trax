@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -62,21 +63,23 @@ internal static class PolicyMerge
             // The trigger: the one edge of the target that goes from where it was to where the scenario says.
             var triggers = group
                 .Select(o =>
-                    irs[targetId]["transitions"]!
+                    irs[targetId]
+                        ["transitions"]
+                        .NotNull()
                         .AsArray()
                         .Where(e =>
                             string.Equals(
-                                e!["from"]!.GetValue<string>(),
+                                e.NotNull()["from"].NotNull().GetValue<string>(),
                                 o.From,
                                 StringComparison.Ordinal
                             )
                             && string.Equals(
-                                e["to"]!.GetValue<string>(),
+                                e["to"].NotNull().GetValue<string>(),
                                 o.To,
                                 StringComparison.Ordinal
                             )
                         )
-                        .Select(e => e!["trigger"]!.GetValue<string>())
+                        .Select(e => e.NotNull()["trigger"].NotNull().GetValue<string>())
                         .Distinct(StringComparer.Ordinal)
                         .ToList()
                 )
@@ -118,15 +121,17 @@ internal static class PolicyMerge
             // does: no user is there to run it as.
             if (
                 !target.IsSystem
-                && irs[targetId]["transitions"]!
+                && irs[targetId]
+                    ["transitions"]
+                    .NotNull()
                     .AsArray()
-                    .Select(e => e!)
+                    .Select(e => e.NotNull())
                     .FirstOrDefault(e =>
                         string.Equals(
-                            e["trigger"]!.GetValue<string>(),
+                            e["trigger"].NotNull().GetValue<string>(),
                             trigger[0],
                             StringComparison.Ordinal
-                        ) && target.Invokes.ContainsKey(e["to"]!.GetValue<string>())
+                        ) && target.Invokes.ContainsKey(e["to"].NotNull().GetValue<string>())
                     )
                     is { } invoking
             )
@@ -224,14 +229,15 @@ internal static class PolicyMerge
         // through the same check.
         var read = policies
             .Select(p => new HostPolicy(
-                p["shape"]!.GetValue<string>(),
-                p["when"]!["machine"]!.GetValue<string>(),
-                p["when"]!["enters"]!.GetValue<string>(),
-                p["then"]!["machine"]!.GetValue<string>(),
-                p["then"]!["trigger"]!.GetValue<string>(),
-                ((JsonObject)p["then"]!)
+                p["shape"].NotNull().GetValue<string>(),
+                p["when"].NotNull()["machine"].NotNull().GetValue<string>(),
+                p["when"].NotNull()["enters"].NotNull().GetValue<string>(),
+                p["then"].NotNull()["machine"].NotNull().GetValue<string>(),
+                p["then"].NotNull()["trigger"].NotNull().GetValue<string>(),
+                ((JsonObject)p["then"].NotNull())
                     .Single(kv => kv.Key is "key" or "inState" or "link")
-                    .Value!.GetValue<string>()
+                    .Value.NotNull()
+                    .GetValue<string>()
             ))
             .ToList();
         foreach (var loop in PolicyLoops.Find(read, irs))

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -277,10 +278,14 @@ internal sealed class MemoryDriver(
     private TimeSpan? TimerOf(InstanceKey key, string state) =>
         irs[key.Machine]["timers"] is JsonArray timers
         && timers.FirstOrDefault(t =>
-            string.Equals(t!["state"]!.GetValue<string>(), state, StringComparison.Ordinal)
+            string.Equals(
+                t.NotNull()["state"].NotNull().GetValue<string>(),
+                state,
+                StringComparison.Ordinal
+            )
         )
             is { } timer
-        && IsoDuration.TryParse(timer["after"]!.GetValue<string>(), out var after)
+        && IsoDuration.TryParse(timer["after"].NotNull().GetValue<string>(), out var after)
             ? after
             : null;
 

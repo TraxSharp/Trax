@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Client;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Client;
 
@@ -79,7 +80,9 @@ public class GraphQLSubscriptionSocketTests
             await peer.NextAsync(first, Frame("A")).ConfigureAwait(false);
             await peer.NextAsync(second, Frame("B")).ConfigureAwait(false);
             completed.TrySetResult(
-                (await peer.ExpectAsync("complete").ConfigureAwait(false))["id"]!.GetValue<string>()
+                (await peer.ExpectAsync("complete").ConfigureAwait(false))["id"]
+                    .NotNull()
+                    .GetValue<string>()
             );
             await peer.NextAsync(second, Frame("C")).ConfigureAwait(false);
             await peer.GoneAsync().ConfigureAwait(false);
@@ -450,9 +453,13 @@ public class GraphQLSubscriptionSocketTests
         var messages = await received.Task.WaitAsync(Wait);
         messages
             .Where(m =>
-                string.Equals(m["type"]!.GetValue<string>(), "subscribe", StringComparison.Ordinal)
+                string.Equals(
+                    m["type"].NotNull().GetValue<string>(),
+                    "subscribe",
+                    StringComparison.Ordinal
+                )
             )
-            .Select(m => m["id"]!.GetValue<string>())
+            .Select(m => m["id"].NotNull().GetValue<string>())
             .Should()
             .Equal("2");
     }
@@ -501,15 +508,19 @@ public class GraphQLSubscriptionSocketTests
         (await sink.Take(1)).Should().Equal("started");
         // The connection, and what it holds, read from the socket's private fields.
         var connection = typeof(GraphQLSubscriptionSocket)
-            .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(socket)!;
+            .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)
+            .NotNull()
+            .GetValue(socket)
+            .NotNull();
         var stop = (CancellationTokenSource)
             connection
                 .GetType()
-                .GetField("_stop", BindingFlags.NonPublic | BindingFlags.Instance)!
-                .GetValue(connection)!;
+                .GetField("_stop", BindingFlags.NonPublic | BindingFlags.Instance)
+                .NotNull()
+                .GetValue(connection)
+                .NotNull();
         var sending = (SemaphoreSlim)
-            connection.GetType().GetProperty("Sending")!.GetValue(connection)!;
+            connection.GetType().GetProperty("Sending").NotNull().GetValue(connection).NotNull();
 
         await socket.DisposeAsync();
 

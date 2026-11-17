@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -217,7 +218,7 @@ internal static class Merge
                 .Shapes.Values.Where(s => s.Requires is not null)
                 .OrderBy(s => s.Name, StringComparer.Ordinal)
         )
-            invariants[shape.Name] = shape.Requires!.DeepClone();
+            invariants[shape.Name] = shape.Requires.NotNull().DeepClone();
         if (invariants.Count > 0)
             ir["invariants"] = invariants;
         if (outcomes.Count > 0)
@@ -281,7 +282,7 @@ internal static class Merge
                 o.Input is not null && served.Contains(o.Trigger, StringComparer.Ordinal)
             )
         )
-            Add(samples, o.Trigger, o.Input!);
+            Add(samples, o.Trigger, o.Input.NotNull());
         foreach (
             var o in walks
                 .SelectMany(w => w.Outcomes)
@@ -361,12 +362,13 @@ internal static class Merge
         // Two outcomes of one run going to the same state reserve it once.
         var reserved = outcomes
             .SelectMany(o =>
-                o.Value!["edges"]!
+                o.Value.NotNull()["edges"]
+                    .NotNull()
                     .AsArray()
                     .Select(e =>
                         (
-                            State: o.Value["state"]!.GetValue<string>(),
-                            Target: e!["to"]!.GetValue<string>()
+                            State: o.Value["state"].NotNull().GetValue<string>(),
+                            Target: e.NotNull()["to"].NotNull().GetValue<string>()
                         )
                     )
             )
@@ -423,14 +425,14 @@ internal static class Merge
             foreach (
                 var timer in timers.Where(t =>
                     string.Equals(
-                        t!["target"]!.GetValue<string>(),
+                        t.NotNull()["target"].NotNull().GetValue<string>(),
                         target,
                         StringComparison.Ordinal
                     )
                 )
             )
             {
-                var from = timer!["state"]!.GetValue<string>();
+                var from = timer.NotNull()["state"].NotNull().GetValue<string>();
                 var by = walks
                     .SelectMany(w => w.Timers)
                     .FirstOrDefault(o =>
@@ -597,7 +599,7 @@ internal static class Merge
                 );
                 continue;
             }
-            var shortest = fired.MinBy(o => o.Elapsed)!;
+            var shortest = fired.MinBy(o => o.Elapsed).NotNull();
             if (shortest.Elapsed <= TimeSpan.Zero)
             {
                 problems.Add(
@@ -682,8 +684,8 @@ internal static class Merge
     private static JsonArray ByName(JsonArray fields) =>
         new(
             fields
-                .Select(f => (JsonObject)f!.DeepClone())
-                .OrderBy(f => f["name"]!.GetValue<string>(), StringComparer.Ordinal)
+                .Select(f => (JsonObject)f.NotNull().DeepClone())
+                .OrderBy(f => f["name"].NotNull().GetValue<string>(), StringComparer.Ordinal)
                 .Select(f => (JsonNode?)Nested(f))
                 .ToArray()
         );

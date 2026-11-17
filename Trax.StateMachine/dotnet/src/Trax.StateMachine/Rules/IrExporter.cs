@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine;
 
@@ -56,12 +57,12 @@ public static class IrExporter
 
         var context = new JsonObject();
         foreach (var (state, schema) in declarative.ContextSchemas)
-            context[state.ToString()!] = WriteSchema(schema);
+            context[state.ToString().NotNull()] = WriteSchema(schema);
 
         // Only what a client may send: an invoked train's output is exported under its outcome instead.
         var inputs = new JsonObject();
         foreach (var (trigger, schema) in declarative.TriggerInputs)
-            inputs[trigger.ToString()!] = WriteSchema(schema);
+            inputs[trigger.ToString().NotNull()] = WriteSchema(schema);
 
         var transitions = BuildTransitions(machine, declarative);
 
@@ -77,7 +78,7 @@ public static class IrExporter
             ["states"] = ToSortedArray(Enum.GetNames<TState>()),
             ["triggers"] = ToSortedArray(Enum.GetNames<TTrigger>()),
             ["committedStates"] = ToSortedArray(
-                machine.CommittedStates.Select(s => s.ToString()!).ToArray()
+                machine.CommittedStates.Select(s => s.ToString().NotNull()).ToArray()
             ),
             ["context"] = context,
             ["inputs"] = inputs,
@@ -90,7 +91,7 @@ public static class IrExporter
         {
             var invariants = new JsonObject();
             foreach (var (state, rule) in declarative.StateInvariants)
-                invariants[state.ToString()!] = WriteRule(rule);
+                invariants[state.ToString().NotNull()] = WriteRule(rule);
             ir["invariants"] = invariants;
         }
 
@@ -255,7 +256,7 @@ public static class IrExporter
         {
             var samples = new JsonObject();
             foreach (var (trigger, inputs) in diff.Samples)
-                samples[trigger.ToString()!] = Copy(inputs);
+                samples[trigger.ToString().NotNull()] = Copy(inputs);
             foreach (var (state, outputs) in diff.OutcomeSamples)
                 samples[OutcomeTriggers.Name(state, InvokeOutcomeKind.Done)] = Copy(outputs);
             obj["samples"] = samples;
@@ -267,7 +268,7 @@ public static class IrExporter
             // One seed is written as the context itself and several as a list of them, so the IR of a machine that
             // seeds each state once is the same as before a state could take more than one, and so is its hash.
             foreach (var (state, contexts) in diff.Seeds)
-                seeds[state.ToString()!] =
+                seeds[state.ToString().NotNull()] =
                     contexts.Count == 1 ? contexts[0].DeepClone() : Copy(contexts);
             obj["seeds"] = seeds;
         }
@@ -341,9 +342,9 @@ public static class IrExporter
         {
             var dt = declarative.Transitions[i];
             var td = machine.Definition.Transitions[i];
-            var from = dt.From.ToString()!;
-            var trigger = dt.Trigger.ToString()!;
-            var to = dt.To.ToString()!;
+            var from = dt.From.ToString().NotNull();
+            var trigger = dt.Trigger.ToString().NotNull();
+            var to = dt.To.ToString().NotNull();
 
             var obj = new JsonObject
             {

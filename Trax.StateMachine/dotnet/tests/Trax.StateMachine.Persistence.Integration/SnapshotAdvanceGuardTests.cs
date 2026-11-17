@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
@@ -63,7 +64,7 @@ public class SnapshotAdvanceGuardTests
             await new LoadSnapshotJunction(NewRegistry(), User)
                 .Run(new LoadSnapshotInput { Machine = machine, Id = id })
                 .ConfigureAwait(false)
-        ).Snapshot!;
+        ).Snapshot.NotNull();
 
     [Test]
     public async Task An_input_over_the_snapshot_limit_is_refused_before_it_is_parsed()
@@ -78,7 +79,7 @@ public class SnapshotAdvanceGuardTests
             new string('{', SnapshotLimits.MaxSnapshotBytes + 1)
         );
 
-        output.Problem!.Code.Should().Be(RefusalCode.TooLarge);
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.TooLarge);
     }
 
     [Test]
@@ -96,7 +97,7 @@ public class SnapshotAdvanceGuardTests
             new JsonObject { ["text"] = half }.ToJsonString()
         );
 
-        output.Problem!.Code.Should().Be(RefusalCode.TooLarge);
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.TooLarge);
         (await Load("log", id)).Should().Be(before);
     }
 
@@ -107,7 +108,7 @@ public class SnapshotAdvanceGuardTests
 
         var output = await Advance("note", id, "Write", "{\"text\":\"a\\u0000b\"}");
 
-        output.Problem!.Code.Should().Be(RefusalCode.Malformed);
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.Malformed);
         (await Load("note", id)).Should().Contain("\"context\":{}");
     }
 
@@ -126,7 +127,7 @@ public class SnapshotAdvanceGuardTests
                     Machine = "note",
                     Version = 1,
                     State = "Draft",
-                    Context = (JsonObject)JsonNode.Parse("{\"n\":1e400}")!,
+                    Context = (JsonObject)JsonNode.Parse("{\"n\":1e400}").NotNull(),
                 }
             );
 
@@ -134,6 +135,6 @@ public class SnapshotAdvanceGuardTests
             new LoadSnapshotInput { Machine = "note", Id = id }
         );
 
-        load.Problem!.Code.Should().Be(RefusalCode.Malformed);
+        load.Problem.NotNull().Code.Should().Be(RefusalCode.Malformed);
     }
 }

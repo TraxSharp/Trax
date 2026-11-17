@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin.Lexical;
 
@@ -90,5 +91,9 @@ internal static class TrainShapes
     }
 
     private static JsonArray Fields(Type record) =>
-        (JsonArray)IrExporter.WriteSchema(SchemaReflection.ForInput(record))["fields"]!.DeepClone();
+        (JsonArray)
+            IrExporter
+                .WriteSchema(SchemaReflection.ForInput(record))["fields"]
+                .NotNull()
+                .DeepClone();
 }

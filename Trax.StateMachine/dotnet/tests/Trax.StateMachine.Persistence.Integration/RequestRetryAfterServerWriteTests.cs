@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -23,9 +24,9 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
 
     private const string User = "retry-user";
 
-    private InstanceHost _host = null!;
-    private RecordingLauncher _launcher = null!;
-    private SharedCharge _charge = null!;
+    private InstanceHost? _host;
+    private RecordingLauncher? _launcher;
+    private SharedCharge? _charge;
 
     [SetUp]
     public void SetUp()
@@ -34,16 +35,16 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
         _charge = new SharedCharge();
         _host = InstanceHost.Create(
             provider,
-            launcher: _launcher,
-            services: services => services.AddSingleton<IOrderCharge>(_charge)
+            launcher: _launcher.NotNull(),
+            services: services => services.AddSingleton<IOrderCharge>(_charge.NotNull())
         );
     }
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private InvokeOutcomeReconciler Reconciler =>
-        _host.Services.GetRequiredService<InvokeOutcomeReconciler>();
+        _host.NotNull().Services.GetRequiredService<InvokeOutcomeReconciler>();
 
     private async Task<AdvanceOutcome> Advance(
         string machine,
@@ -52,8 +53,9 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
         string requestId
     )
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         return await _host
+            .NotNull()
             .Service(scope, machine)
             .Advance(User, id, trigger, input: null, requestId)
             .ConfigureAwait(false);
@@ -62,7 +64,11 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
     private async Task FireDueTimer(Guid id)
     {
         await RawSql
-            .SetDueAt(_host, id, (await RawSql.Now(_host).ConfigureAwait(false)).AddMinutes(-1))
+            .SetDueAt(
+                _host.NotNull(),
+                id,
+                (await RawSql.Now(_host.NotNull()).ConfigureAwait(false)).AddMinutes(-1)
+            )
             .ConfigureAwait(false);
         (await Reconciler.FireDueTimersOnce(CancellationToken.None).ConfigureAwait(false))
             .Should()
@@ -75,7 +81,7 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
     public async Task A_retry_after_a_timer_brought_the_instance_back_replays_its_recorded_result()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, PlainTimerMachine.Json("Idle"));
+        await _host.NotNull().SeedDraft(User, id, PlainTimerMachine.Json("Idle"));
         var first = (await Advance(PlainTimerMachine.Id, id, "Wait", "r1"))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
@@ -83,7 +89,7 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
         first.Snapshot.State.Should().Be("Waiting");
 
         await FireDueTimer(id);
-        var afterTimer = (await RawSql.Timer(_host, id))!;
+        var afterTimer = (await RawSql.Timer(_host.NotNull(), id)).NotNull();
         afterTimer.State.Should().Be("Idle", "the timer went back to the state r1 fired from");
 
         var retry = (await Advance(PlainTimerMachine.Id, id, "Wait", "r1"))
@@ -102,7 +108,7 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
                 $"the row has moved past the recorded revision, so the replay cannot know Waiting's due time. See {Adr}"
             );
         retry.DueAt.Should().BeNull("an unknown due time is left out, never guessed");
-        var row = (await RawSql.Timer(_host, id))!;
+        var row = (await RawSql.Timer(_host.NotNull(), id)).NotNull();
         row.State.Should().Be("Idle", "a replay writes nothing");
         row.Revision.Should().Be(afterTimer.Revision);
     }
@@ -111,11 +117,14 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
     public async Task A_retried_send_after_a_timer_moved_the_instance_on_replays_its_recorded_result()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, RenewalMachine.DraftJson);
+        await _host.NotNull().SeedDraft(User, id, RenewalMachine.DraftJson);
         AdvanceOutcome.Advanced first;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             first = (
-                await _host.Service(scope, RenewalMachine.Id).Send(new Actor.Client(User), id, "c1")
+                await _host
+                    .NotNull()
+                    .Service(scope, RenewalMachine.Id)
+                    .Send(new Actor.Client(User), id, "c1")
             )
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>()
@@ -124,12 +133,13 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
         first.DueAt.Should().NotBeNull("Active arms its timer");
 
         await FireDueTimer(id);
-        var afterTimer = (await RawSql.Timer(_host, id))!;
+        var afterTimer = (await RawSql.Timer(_host.NotNull(), id)).NotNull();
         afterTimer.State.Should().Be(nameof(RenewalState.Lapsed));
 
         AdvanceOutcome retry;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             retry = await _host
+                .NotNull()
                 .Service(scope, RenewalMachine.Id)
                 .Send(new Actor.Client(User), id, "c1");
 
@@ -154,7 +164,7 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
             );
 
         SendSnapshotOutput generic;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             generic = await new SendSnapshotJunction(
                 scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>(),
                 new FakePrincipal(User),
@@ -172,8 +182,8 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
         generic
             .DueAtKnown.Should()
             .BeFalse($"the generic send says the same of the same replay. See {Adr}");
-        _charge.Calls.Should().Be(1, "one send runs the effect once");
-        var row = (await RawSql.Timer(_host, id))!;
+        _charge.NotNull().Calls.Should().Be(1, "one send runs the effect once");
+        var row = (await RawSql.Timer(_host.NotNull(), id)).NotNull();
         row.State.Should().Be(nameof(RenewalState.Lapsed), "a replay writes nothing");
         row.Revision.Should().Be(afterTimer.Revision);
     }
@@ -182,27 +192,29 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
     public async Task A_retry_after_a_failed_run_and_its_cooldown_queues_no_second_run()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, WaitMachine.Json("Idle", TimeSpan.FromMinutes(5)));
+        await _host
+            .NotNull()
+            .SeedDraft(User, id, WaitMachine.Json("Idle", TimeSpan.FromMinutes(5)));
         var first = (await Advance(WaitMachine.Id, id, "Fetch", "fetch-1"))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Subject;
         first.Snapshot.State.Should().Be("Fetching");
-        _launcher.Launches.Should().ContainSingle();
+        _launcher.NotNull().Launches.Should().ContainSingle();
 
         // The run fails (its records are gone), its outcome moves the instance into Cooldown, and Cooldown's timer
         // brings it back to Idle, where fetch-1 fired from.
-        var token = (await _host.Rows(id)).Single().InvokeToken!;
-        using (var scope = _host.Scope())
+        var token = (await _host.NotNull().Rows(id)).Single().InvokeToken.NotNull();
+        using (var scope = _host.NotNull().Scope())
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .WorkQueues.Where(w => w.ExternalId == token)
                 .ExecuteDeleteAsync();
-        (await _host.Services.GetRequiredService<IInvokedRunOutcomes>().Deliver(token))
+        (await _host.NotNull().Services.GetRequiredService<IInvokedRunOutcomes>().Deliver(token))
             .Should()
             .Be("Cooldown");
         await FireDueTimer(id);
-        var before = (await RawSql.Timer(_host, id))!;
+        var before = (await RawSql.Timer(_host.NotNull(), id)).NotNull();
         before.State.Should().Be("Idle");
 
         var retry = (await Advance(WaitMachine.Id, id, "Fetch", "fetch-1"))
@@ -212,9 +224,10 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
 
         retry.Revision.Should().Be(first.Revision, $"the retry replays fetch-1. See {Adr}");
         _launcher
+            .NotNull()
             .Launches.Should()
             .ContainSingle("one request queues one run, however often it is retried");
-        var row = (await RawSql.Timer(_host, id))!;
+        var row = (await RawSql.Timer(_host.NotNull(), id)).NotNull();
         row.State.Should().Be("Idle");
         row.Revision.Should().Be(before.Revision);
     }

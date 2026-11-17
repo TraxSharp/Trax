@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Gherkin;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -89,7 +90,7 @@ public class FeatureMachinesTests
             .Missing(glossary, Features)
             .Should()
             .Contain(g => g.Kind == "trigger" && g.What == "Cancel" && g.Stub != null);
-        var board = FeatureMachines.Board(derived.Irs, derived.Host!);
+        var board = FeatureMachines.Board(derived.Irs, derived.Host.NotNull());
         board.Stickies.Should().Contain(s => s.Kind == "command" && s.Label == "Place");
         board
             .Stickies.Single(s => string.Equals(s.Kind, "command", StringComparison.Ordinal))
@@ -453,7 +454,7 @@ public class FeatureMachinesTests
 
         derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         var policies = Trax
-            .StateMachine.Features.HostFile.Read(derived.Host!)
+            .StateMachine.Features.HostFile.Read(derived.Host.NotNull())
             .Policies.Select(p => $"{p.Shape} {p.Id}")
             .ToList();
         policies
@@ -474,12 +475,12 @@ public class FeatureMachinesTests
         };
 
         FluentActions
-            .Invoking(() => FeatureMachines.Run(glossary, Features, irs, derived.Host!))
+            .Invoking(() => FeatureMachines.Run(glossary, Features, irs, derived.Host.NotNull()))
             .Should()
             .Throw<FormatException>()
             .WithMessage("*'order'*");
         FluentActions
-            .Invoking(() => FeatureMachines.Board(irs, derived.Host!))
+            .Invoking(() => FeatureMachines.Board(irs, derived.Host.NotNull()))
             .Should()
             .Throw<FormatException>()
             .WithMessage("*'order'*");
@@ -493,12 +494,12 @@ public class FeatureMachinesTests
         var none = new Dictionary<string, string>(StringComparer.Ordinal);
 
         FluentActions
-            .Invoking(() => FeatureMachines.Run(glossary, Features, none, derived.Host!))
+            .Invoking(() => FeatureMachines.Run(glossary, Features, none, derived.Host.NotNull()))
             .Should()
             .Throw<FormatException>()
             .WithMessage("*serves 'order'*");
         FluentActions
-            .Invoking(() => FeatureMachines.Board(none, derived.Host!))
+            .Invoking(() => FeatureMachines.Board(none, derived.Host.NotNull()))
             .Should()
             .Throw<FormatException>()
             .WithMessage("*serves 'order'*");
@@ -509,7 +510,7 @@ public class FeatureMachinesTests
     {
         var glossary = FeatureGlossary.Read(Glossary);
         var derived = FeatureMachines.Derive(glossary, Features);
-        var ir = System.Text.Json.Nodes.JsonNode.Parse(derived.Irs["order"])!.AsObject();
+        var ir = System.Text.Json.Nodes.JsonNode.Parse(derived.Irs["order"]).NotNull().AsObject();
         ir["description"] = "edited by hand";
         var irs = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -517,7 +518,7 @@ public class FeatureMachinesTests
         };
 
         FluentActions
-            .Invoking(() => FeatureMachines.Run(glossary, Features, irs, derived.Host!))
+            .Invoking(() => FeatureMachines.Run(glossary, Features, irs, derived.Host.NotNull()))
             .Should()
             .Throw<FormatException>()
             .WithMessage("*derived from another IR of 'order'*");

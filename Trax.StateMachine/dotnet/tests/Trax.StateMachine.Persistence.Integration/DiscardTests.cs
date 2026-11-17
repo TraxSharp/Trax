@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -124,7 +125,7 @@ public class DiscardTests(StoreProvider provider)
                     DraftOwner.User(user),
                     "turnstile",
                     id,
-                    stored!.Token,
+                    stored.NotNull().Token,
                     new InvokeTokenWrite(token)
                 )
             )

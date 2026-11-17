@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -30,7 +31,7 @@ internal static class ViewValues
             )
             .Select(i =>
                 shown.IsState
-                    ? shown.Labels?.GetValueOrDefault(i.State!) ?? i.State!
+                    ? shown.Labels?.GetValueOrDefault(i.State.NotNull()) ?? i.State.NotNull()
                     : Text(i.Context[shown.Source])
             )
             .ToList();

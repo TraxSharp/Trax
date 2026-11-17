@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -31,9 +32,9 @@ public class EffectPendingTests(StoreProvider provider)
 
     private const string Machine = PendingPayMachine.Id;
 
-    private InstanceHost _host = null!;
-    private ControlledCharge _charge = null!;
-    private Actor.Client _owner = null!;
+    private InstanceHost? _host;
+    private ControlledCharge? _charge;
+    private Actor.Client? _owner;
 
     [SetUp]
     public void SetUp()
@@ -42,21 +43,23 @@ public class EffectPendingTests(StoreProvider provider)
         _host = InstanceHost.Create(
             provider,
             options: o => o.MaxDraftLifetime = TimeSpan.FromDays(1),
-            services: s => s.AddSingleton<IOrderCharge>(_charge)
+            services: s => s.AddSingleton<IOrderCharge>(_charge.NotNull())
         );
         _owner = DeskRoles.Client($"pending-{Guid.NewGuid():N}");
     }
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     // A started instance moved into Review, where its effect runs from.
     private async Task<Guid> InReview()
     {
-        var id = await Drive.Start(_host, _owner, Machine).ConfigureAwait(false);
+        var id = await Drive
+            .Start(_host.NotNull(), _owner.NotNull(), Machine)
+            .ConfigureAwait(false);
         (
             await Drive
-                .Event(_host, _owner, Machine, id, nameof(PendingPayTrigger.Go))
+                .Event(_host.NotNull(), _owner.NotNull(), Machine, id, nameof(PendingPayTrigger.Go))
                 .ConfigureAwait(false)
         )
             .Should()
@@ -65,7 +68,7 @@ public class EffectPendingTests(StoreProvider provider)
     }
 
     private async Task<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> Row(Guid id) =>
-        (await _host.Rows(id).ConfigureAwait(false)).Single();
+        (await _host.NotNull().Rows(id).ConfigureAwait(false)).Single();
 
     private static void ShouldBeEffectInProgress(AdvanceOutcome outcome, string because) =>
         outcome
@@ -78,26 +81,26 @@ public class EffectPendingTests(StoreProvider provider)
     public async Task An_event_out_of_the_effects_state_while_it_is_pending_is_refused_effect_in_progress()
     {
         var id = await InReview();
-        _charge.Script(ChargeRun.Hold);
-        var send = Drive.Send(_host, _owner, Machine, id);
-        await _charge.Entered;
+        _charge.NotNull().Script(ChargeRun.Hold);
+        var send = Drive.Send(_host.NotNull(), _owner.NotNull(), Machine, id);
+        await _charge.NotNull().Entered;
 
         var cancel = await Drive.Event(
-            _host,
-            _owner,
+            _host.NotNull(),
+            _owner.NotNull(),
             Machine,
             id,
             nameof(PendingPayTrigger.Cancel)
         );
         var edit = await Drive.Event(
-            _host,
-            _owner,
+            _host.NotNull(),
+            _owner.NotNull(),
             Machine,
             id,
             nameof(PendingPayTrigger.Edit),
             new JsonObject { ["note"] = "n" }
         );
-        _charge.Release();
+        _charge.NotNull().Release();
 
         ShouldBeEffectInProgress(cancel, "the row holds a pending effect");
         ShouldBeEffectInProgress(edit, "the row holds a pending effect");
@@ -108,31 +111,38 @@ public class EffectPendingTests(StoreProvider provider)
             .Be(nameof(PendingPayState.Paid));
         var row = await Row(id);
         row.State.Should().Be(nameof(PendingPayState.Paid));
-        JsonNode.Parse(row.Context)!["receipt"]!.GetValue<string>().Should().Be("receipt-1");
-        _charge.Calls.Should().Be(1);
+        JsonNode
+            .Parse(row.Context)
+            .NotNull()["receipt"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("receipt-1");
+        _charge.NotNull().Calls.Should().Be(1);
     }
 
     [Test]
     public async Task A_reset_and_the_generic_save_are_refused_while_an_effect_is_pending()
     {
         var id = await InReview();
-        _charge.Script(ChargeRun.Hold);
-        var send = Drive.Send(_host, _owner, Machine, id);
-        await _charge.Entered;
+        _charge.NotNull().Script(ChargeRun.Hold);
+        var send = Drive.Send(_host.NotNull(), _owner.NotNull(), Machine, id);
+        await _charge.NotNull().Entered;
 
         var reset = await Drive.Event(
-            _host,
-            _owner,
+            _host.NotNull(),
+            _owner.NotNull(),
             Machine,
             id,
             nameof(PendingPayTrigger.Restart)
         );
         AutosaveResult save;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             save = await _host
+                .NotNull()
                 .Service(scope, Machine)
                 .Autosave(
-                    _owner.UserKey,
+                    _owner.NotNull().UserKey,
                     id,
                     new JsonObject
                     {
@@ -143,7 +153,7 @@ public class EffectPendingTests(StoreProvider provider)
                     }.ToJsonString()
                 );
         var stateWhilePending = (await Row(id)).State;
-        _charge.Release();
+        _charge.NotNull().Release();
 
         ShouldBeEffectInProgress(reset, "a reset is a write like any other");
         save.Should().BeOfType<AutosaveResult.Rejected>("the generic save writes nothing here");
@@ -156,26 +166,28 @@ public class EffectPendingTests(StoreProvider provider)
     public async Task Discard_and_the_draft_sweep_leave_a_row_with_a_pending_effect()
     {
         var id = await InReview();
-        _charge.Script(ChargeRun.Hold);
-        var send = Drive.Send(_host, _owner, Machine, id);
-        await _charge.Entered;
+        _charge.NotNull().Script(ChargeRun.Hold);
+        var send = Drive.Send(_host.NotNull(), _owner.NotNull(), Machine, id);
+        await _charge.NotNull().Entered;
 
-        var discard = await Drive.Discard(_host, _owner, Machine, id);
-        await _host.Execute(
-            $"UPDATE {_host.DraftTable} SET created_at = @p0 WHERE row_id = @p1",
-            provider == StoreProvider.Postgres
-                ? DateTimeOffset.UtcNow.AddDays(-30)
-                : DateTimeOffset
-                    .UtcNow.AddDays(-30)
-                    .ToString(
-                        "yyyy-MM-dd HH:mm:ss.FFFFFFFzzz",
-                        System.Globalization.CultureInfo.InvariantCulture
-                    ),
-            await _host.RowId(id)
-        );
-        await Drive.SweepDrafts(_host);
-        var rowsWhilePending = (await _host.Rows(id)).Count;
-        _charge.Release();
+        var discard = await Drive.Discard(_host.NotNull(), _owner.NotNull(), Machine, id);
+        await _host
+            .NotNull()
+            .Execute(
+                $"UPDATE {_host.NotNull().DraftTable} SET created_at = @p0 WHERE row_id = @p1",
+                provider == StoreProvider.Postgres
+                    ? DateTimeOffset.UtcNow.AddDays(-30)
+                    : DateTimeOffset
+                        .UtcNow.AddDays(-30)
+                        .ToString(
+                            "yyyy-MM-dd HH:mm:ss.FFFFFFFzzz",
+                            System.Globalization.CultureInfo.InvariantCulture
+                        ),
+                await _host.NotNull().RowId(id)
+            );
+        await Drive.SweepDrafts(_host.NotNull());
+        var rowsWhilePending = (await _host.NotNull().Rows(id)).Count;
+        _charge.NotNull().Release();
 
         discard
             .Should()
@@ -191,16 +203,24 @@ public class EffectPendingTests(StoreProvider provider)
     public async Task A_due_timer_waits_for_a_pending_effect_and_fires_after_it_fails()
     {
         var id = await InReview();
-        _charge.Script(ChargeRun.HoldThenFail);
-        var send = Drive.Send(_host, _owner, Machine, id);
-        await _charge.Entered;
-        (await RawSql.SetDueAt(_host, id, (await RawSql.Now(_host)).AddMinutes(-1))).Should().Be(1);
+        _charge.NotNull().Script(ChargeRun.HoldThenFail);
+        var send = Drive.Send(_host.NotNull(), _owner.NotNull(), Machine, id);
+        await _charge.NotNull().Entered;
+        (
+            await RawSql.SetDueAt(
+                _host.NotNull(),
+                id,
+                (await RawSql.Now(_host.NotNull())).AddMinutes(-1)
+            )
+        )
+            .Should()
+            .Be(1);
 
-        await Drive.SweepTimers(_host);
+        await Drive.SweepTimers(_host.NotNull());
         var stateWhilePending = (await Row(id)).State;
-        _charge.Release();
+        _charge.NotNull().Release();
         await FluentActions.Awaiting(() => send).Should().ThrowAsync<InvalidOperationException>();
-        await Drive.SweepTimers(_host);
+        await Drive.SweepTimers(_host.NotNull());
 
         stateWhilePending.Should().Be(nameof(PendingPayState.Review), "the timer waits");
         (await Row(id))
@@ -213,15 +233,23 @@ public class EffectPendingTests(StoreProvider provider)
     {
         var id = await InReview();
 
-        (await Drive.Send(_host, _owner, Machine, id)).Should().BeOfType<AdvanceOutcome.Advanced>();
+        (await Drive.Send(_host.NotNull(), _owner.NotNull(), Machine, id))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
 
         var row = await Row(id);
         row.State.Should().Be(nameof(PendingPayState.Paid));
-        JsonNode.Parse(row.Context)!["receipt"]!.GetValue<string>().Should().Be("receipt-1");
-        (await RawSql.PendingEffect(_host, id))
+        JsonNode
+            .Parse(row.Context)
+            .NotNull()["receipt"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("receipt-1");
+        (await RawSql.PendingEffect(_host.NotNull(), id))
             .Token.Should()
             .BeNull("the mark ended with the move");
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         (
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
@@ -237,18 +265,26 @@ public class EffectPendingTests(StoreProvider provider)
     {
         var id = await InReview();
         var before = await Row(id);
-        _charge.Script(ChargeRun.Fail);
+        _charge.NotNull().Script(ChargeRun.Fail);
 
         await FluentActions
-            .Awaiting(() => Drive.Send(_host, _owner, Machine, id))
+            .Awaiting(() => Drive.Send(_host.NotNull(), _owner.NotNull(), Machine, id))
             .Should()
             .ThrowAsync<InvalidOperationException>();
 
         var after = await Row(id);
         after.State.Should().Be(before.State);
         after.Context.Should().Be(before.Context);
-        (await RawSql.PendingEffect(_host, id)).Token.Should().BeNull();
-        (await Drive.Event(_host, _owner, Machine, id, nameof(PendingPayTrigger.Cancel)))
+        (await RawSql.PendingEffect(_host.NotNull(), id)).Token.Should().BeNull();
+        (
+            await Drive.Event(
+                _host.NotNull(),
+                _owner.NotNull(),
+                Machine,
+                id,
+                nameof(PendingPayTrigger.Cancel)
+            )
+        )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
     }
@@ -257,72 +293,108 @@ public class EffectPendingTests(StoreProvider provider)
     public async Task A_mark_past_its_lease_is_finished_by_the_next_send_under_the_same_key()
     {
         var id = await InReview();
-        _charge.Script(ChargeRun.TimeOut);
+        _charge.NotNull().Script(ChargeRun.TimeOut);
         await FluentActions
-            .Awaiting(() => Drive.Send(_host, _owner, Machine, id))
+            .Awaiting(() => Drive.Send(_host.NotNull(), _owner.NotNull(), Machine, id))
             .Should()
             .ThrowAsync<OperationCanceledException>();
-        (await RawSql.PendingEffect(_host, id))
+        (await RawSql.PendingEffect(_host.NotNull(), id))
             .Token.Should()
             .NotBeNull("an effect whose outcome is unknown stays pending");
-        (await RawSql.SetEffectLease(_host, id, (await RawSql.Now(_host)).AddHours(-1)))
+        (
+            await RawSql.SetEffectLease(
+                _host.NotNull(),
+                id,
+                (await RawSql.Now(_host.NotNull())).AddHours(-1)
+            )
+        )
             .Should()
             .Be(1);
 
-        (await Drive.Send(_host, _owner, Machine, id)).Should().BeOfType<AdvanceOutcome.Advanced>();
+        (await Drive.Send(_host.NotNull(), _owner.NotNull(), Machine, id))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
 
         (await Row(id)).State.Should().Be(nameof(PendingPayState.Paid));
-        _charge.Calls.Should().Be(2);
+        _charge.NotNull().Calls.Should().Be(2);
         _charge
+            .NotNull()
             .Keys.Distinct(StringComparer.Ordinal)
             .Should()
             .ContainSingle($"a run again keeps the effect's key ({Adr})");
-        (await RawSql.PendingEffect(_host, id)).Token.Should().BeNull();
+        (await RawSql.PendingEffect(_host.NotNull(), id)).Token.Should().BeNull();
     }
 
     [Test]
     public async Task A_mark_past_its_lease_is_finished_by_the_reconciler_under_the_same_key()
     {
         var id = await InReview();
-        _charge.Script(ChargeRun.TimeOut);
+        _charge.NotNull().Script(ChargeRun.TimeOut);
         await FluentActions
-            .Awaiting(() => Drive.Send(_host, _owner, Machine, id, "s-first"))
+            .Awaiting(() => Drive.Send(_host.NotNull(), _owner.NotNull(), Machine, id, "s-first"))
             .Should()
             .ThrowAsync<OperationCanceledException>();
-        (await RawSql.SetEffectLease(_host, id, (await RawSql.Now(_host)).AddHours(-1)))
+        (
+            await RawSql.SetEffectLease(
+                _host.NotNull(),
+                id,
+                (await RawSql.Now(_host.NotNull())).AddHours(-1)
+            )
+        )
             .Should()
             .Be(1);
 
-        await Drive.SweepTimers(_host);
+        await Drive.SweepTimers(_host.NotNull());
 
         (await Row(id)).State.Should().Be(nameof(PendingPayState.Paid), $"({Adr})");
-        _charge.KeysOf(id).Distinct(StringComparer.Ordinal).Should().ContainSingle();
-        _charge.KeysOf(id).Should().HaveCount(2);
-        (await RawSql.PendingEffect(_host, id)).Token.Should().BeNull();
-        (await Drive.Send(_host, _owner, Machine, id, "s-first"))
+        _charge.NotNull().KeysOf(id).Distinct(StringComparer.Ordinal).Should().ContainSingle();
+        _charge.NotNull().KeysOf(id).Should().HaveCount(2);
+        (await RawSql.PendingEffect(_host.NotNull(), id)).Token.Should().BeNull();
+        (await Drive.Send(_host.NotNull(), _owner.NotNull(), Machine, id, "s-first"))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>(
                 "the client's retry replays what the reconciler recorded"
             )
             .Which.Snapshot.State.Should()
             .Be(nameof(PendingPayState.Paid));
-        _charge.KeysOf(id).Should().HaveCount(2, "the retry replays without running the effect");
+        _charge
+            .NotNull()
+            .KeysOf(id)
+            .Should()
+            .HaveCount(2, "the retry replays without running the effect");
     }
 
     [Test]
     public async Task A_send_after_the_effect_was_recorded_and_the_draft_reset_runs_under_a_new_key()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(_owner.UserKey, id, OrderMachine.ReviewSnapshot(1, 2));
+        await _host
+            .NotNull()
+            .SeedDraft(_owner.NotNull().UserKey, id, OrderMachine.ReviewSnapshot(1, 2));
 
-        (await Drive.Send(_host, _owner, "order", id)).Should().BeOfType<AdvanceOutcome.Advanced>();
-        (await Drive.Event(_host, _owner, "order", id, nameof(OrderTrigger.Reset)))
+        (await Drive.Send(_host.NotNull(), _owner.NotNull(), "order", id))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
-        await _host.SeedDraft(_owner.UserKey, id, OrderMachine.ReviewSnapshot(3, 4));
-        (await Drive.Send(_host, _owner, "order", id)).Should().BeOfType<AdvanceOutcome.Advanced>();
+        (
+            await Drive.Event(
+                _host.NotNull(),
+                _owner.NotNull(),
+                "order",
+                id,
+                nameof(OrderTrigger.Reset)
+            )
+        )
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
+        await _host
+            .NotNull()
+            .SeedDraft(_owner.NotNull().UserKey, id, OrderMachine.ReviewSnapshot(3, 4));
+        (await Drive.Send(_host.NotNull(), _owner.NotNull(), "order", id))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
 
         _charge
+            .NotNull()
             .KeysOf(id)
             .Should()
             .HaveCount(2)
@@ -389,17 +461,17 @@ public class EffectPendingTests(StoreProvider provider)
     {
         var id = await InReview();
         string fingerprint;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, Machine);
-            var loaded = (await service.Load(_owner.UserKey, id))
+            var service = _host.NotNull().Service(scope, Machine);
+            var loaded = (await service.Load(_owner.NotNull().UserKey, id))
                 .Should()
                 .BeOfType<LoadResult.Loaded>()
                 .Subject;
             fingerprint = SnapshotFingerprint.Of(service.Serialize(loaded.Snapshot));
         }
-        var key = EffectClaimKey.ForUser($"{Machine}:pay", _owner.UserKey, id);
-        using (var scope = _host.Scope())
+        var key = EffectClaimKey.ForUser($"{Machine}:pay", _owner.NotNull().UserKey, id);
+        using (var scope = _host.NotNull().Scope())
         {
             var claims = scope.ServiceProvider.GetRequiredService<IEffectClaimStore>();
             var won = (await claims.TryClaim(key, TimeSpan.FromMinutes(5), fingerprint))
@@ -409,16 +481,21 @@ public class EffectPendingTests(StoreProvider provider)
             await claims.Complete(key, won.OwnerToken, "receipt-from-before");
         }
 
-        (await Drive.Send(_host, _owner, Machine, id)).Should().BeOfType<AdvanceOutcome.Advanced>();
+        (await Drive.Send(_host.NotNull(), _owner.NotNull(), Machine, id))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
 
         var row = await Row(id);
         row.State.Should().Be(nameof(PendingPayState.Paid));
-        JsonNode.Parse(row.Context)!["receipt"]!
+        JsonNode
+            .Parse(row.Context)
+            .NotNull()["receipt"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("receipt-from-before");
-        _charge.Calls.Should().Be(0, "the effect already ran");
-        using var check = _host.Scope();
+        _charge.NotNull().Calls.Should().Be(0, "the effect already ran");
+        using var check = _host.NotNull().Scope();
         (
             await check
                 .ServiceProvider.GetRequiredService<IDataContext>()

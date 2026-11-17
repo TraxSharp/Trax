@@ -52,7 +52,11 @@ public class FluentCheckoutTests
                 .ConfigureAwait(false);
             if (
                 !string.Equals(
-                    JsonNode.Parse(text)!["expect"]!["reason"]?.GetValue<string>(),
+                    JsonNode
+                        .Parse(text)
+                        .NotNull()["expect"]
+                        .NotNull()["reason"]
+                        ?.GetValue<string>(),
                     RefusalCode.InvalidInput.ToWire(),
                     StringComparison.Ordinal
                 )
@@ -66,21 +70,21 @@ public class FluentCheckoutTests
     public async Task Advance_matches_the_shared_fixture(string path)
     {
         var fixture = (JsonObject)
-            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false))!;
-        var given = ToSnapshot((JsonObject)fixture["given"]!);
-        var when = (JsonObject)fixture["when"]!;
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false)).NotNull();
+        var given = ToSnapshot((JsonObject)fixture["given"].NotNull());
+        var when = (JsonObject)fixture["when"].NotNull();
         var input = when["input"]?.DeepClone();
-        var expect = (JsonObject)fixture["expect"]!;
+        var expect = (JsonObject)fixture["expect"].NotNull();
 
         var result = FluentCheckout.Machine.Advance(
             given,
-            when["trigger"]!.GetValue<string>(),
+            when["trigger"].NotNull().GetValue<string>(),
             input
         );
 
         if (
             string.Equals(
-                expect["outcome"]!.GetValue<string>(),
+                expect["outcome"].NotNull().GetValue<string>(),
                 "transitioned",
                 StringComparison.Ordinal
             )
@@ -89,14 +93,14 @@ public class FluentCheckoutTests
                 .Should()
                 .BeOfType<AdvanceResult.Transitioned>()
                 .Which.Snapshot.Should()
-                .Be(ToSnapshot((JsonObject)expect["snapshot"]!));
+                .Be(ToSnapshot((JsonObject)expect["snapshot"].NotNull()));
         else
             result
                 .Should()
                 .BeOfType<AdvanceResult.Rejected>()
                 .Which.Reason.ToWire()
                 .Should()
-                .Be(expect["reason"]!.GetValue<string>());
+                .Be(expect["reason"].NotNull().GetValue<string>());
     }
 
     [TestCaseSource(
@@ -106,36 +110,42 @@ public class FluentCheckoutTests
     public async Task Rehydrate_matches_the_shared_fixture(string path)
     {
         var fixture = (JsonObject)
-            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false))!;
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false)).NotNull();
         var json =
             fixture["raw"] is JsonNode raw && raw.GetValueKind() == JsonValueKind.String
                 ? raw.GetValue<string>()
-                : fixture["json"]!.ToJsonString();
-        var expect = (JsonObject)fixture["expect"]!;
+                : fixture["json"].NotNull().ToJsonString();
+        var expect = (JsonObject)fixture["expect"].NotNull();
 
         var result = FluentCheckout.Machine.Rehydrate(json);
 
-        if (string.Equals(expect["result"]!.GetValue<string>(), "ok", StringComparison.Ordinal))
+        if (
+            string.Equals(
+                expect["result"].NotNull().GetValue<string>(),
+                "ok",
+                StringComparison.Ordinal
+            )
+        )
             result
                 .Should()
                 .BeOfType<RehydrationResult.Ok>()
                 .Which.Snapshot.Should()
-                .Be(ToSnapshot((JsonObject)expect["snapshot"]!));
+                .Be(ToSnapshot((JsonObject)expect["snapshot"].NotNull()));
         else
             result
                 .Should()
                 .BeOfType<RehydrationResult.Error>()
                 .Which.Code.ToWire()
                 .Should()
-                .Be(expect["code"]!.GetValue<string>());
+                .Be(expect["code"].NotNull().GetValue<string>());
     }
 
     private static Snapshot ToSnapshot(JsonObject o) =>
         new()
         {
-            Machine = o["machine"]!.GetValue<string>(),
-            Version = o["version"]!.GetValue<int>(),
-            State = o["state"]!.GetValue<string>(),
-            Context = (JsonObject)o["context"]!.DeepClone(),
+            Machine = o["machine"].NotNull().GetValue<string>(),
+            Version = o["version"].NotNull().GetValue<int>(),
+            State = o["state"].NotNull().GetValue<string>(),
+            Context = (JsonObject)o["context"].NotNull().DeepClone(),
         };
 }

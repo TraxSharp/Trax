@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
+using Trax.Client.Checks;
 
 namespace Trax.Client;
 
@@ -250,7 +251,7 @@ public sealed class TraxClient
             // and the resubscribe delays start over.
             lock (_gate)
                 _attempt = 0;
-            Deliver(new TraxStreamEvent<TResult>.Next(answer.Data!));
+            Deliver(new TraxStreamEvent<TResult>.Next(answer.Data.NotNull()));
         }
 
         public void Error(Exception error)

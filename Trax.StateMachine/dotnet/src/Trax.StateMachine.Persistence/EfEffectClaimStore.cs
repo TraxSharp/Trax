@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using EffectClaim = Trax.Effect.Models.EffectClaim.EffectClaim;
@@ -133,7 +134,7 @@ public sealed class EfEffectClaimStore(IDataContext db, ISqlDialect? dialect = n
         await db
             .EffectClaims.AsNoTracking()
             .Where(x => x.EffectKey == effectKey && x.Receipt != null)
-            .Select(x => new CompletedEffect(x.Receipt!, x.ContentFingerprint))
+            .Select(x => new CompletedEffect(x.Receipt.NotNull(), x.ContentFingerprint))
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 

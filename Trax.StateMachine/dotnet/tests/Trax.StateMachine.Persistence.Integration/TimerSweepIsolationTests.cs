@@ -2,6 +2,7 @@ using System.Diagnostics.Metrics;
 using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -26,9 +27,9 @@ public class TimerSweepIsolationTests(StoreProvider provider)
 
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
 
-    private InstanceHost _host = null!;
-    private ThrowingLauncher _launcher = null!;
-    private ControlledCharge _charge = null!;
+    private InstanceHost? _host;
+    private ThrowingLauncher? _launcher;
+    private ControlledCharge? _charge;
 
     [SetUp]
     public void SetUp()
@@ -37,21 +38,25 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         _charge = new ControlledCharge();
         _host = InstanceHost.Create(
             provider,
-            launcher: _launcher,
-            services: services => services.AddSingleton<IOrderCharge>(_charge)
+            launcher: _launcher.NotNull(),
+            services: services => services.AddSingleton<IOrderCharge>(_charge.NotNull())
         );
     }
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private InvokeOutcomeReconciler Reconciler =>
-        _host.Services.GetRequiredService<InvokeOutcomeReconciler>();
+        _host.NotNull().Services.GetRequiredService<InvokeOutcomeReconciler>();
 
     private async Task MakeDue(Guid id, TimeSpan ago) =>
         (
             await RawSql
-                .SetDueAt(_host, id, (await RawSql.Now(_host).ConfigureAwait(false)) - ago)
+                .SetDueAt(
+                    _host.NotNull(),
+                    id,
+                    (await RawSql.Now(_host.NotNull()).ConfigureAwait(false)) - ago
+                )
                 .ConfigureAwait(false)
         )
             .Should()
@@ -61,8 +66,8 @@ public class TimerSweepIsolationTests(StoreProvider provider)
     private async Task<Guid> Queueing()
     {
         var key = MachineKey.Of("sweep", Guid.NewGuid().ToString("N"));
-        var instance = await _host.Start<QueueingTimerMachine>(key).ConfigureAwait(false);
-        using var scope = _host.Scope();
+        var instance = await _host.NotNull().Start<QueueingTimerMachine>(key).ConfigureAwait(false);
+        using var scope = _host.NotNull().Scope();
         (
             await scope
                 .ServiceProvider.GetRequiredService<IMachineInstances>()
@@ -78,8 +83,11 @@ public class TimerSweepIsolationTests(StoreProvider provider)
     private async Task<Guid> Reminder()
     {
         var key = MachineKey.Of("sweep", Guid.NewGuid().ToString("N"));
-        var instance = await _host.Start<SystemReminderMachine>(key).ConfigureAwait(false);
-        using var scope = _host.Scope();
+        var instance = await _host
+            .NotNull()
+            .Start<SystemReminderMachine>(key)
+            .ConfigureAwait(false);
+        using var scope = _host.NotNull().Scope();
         (
             await scope
                 .ServiceProvider.GetRequiredService<IMachineInstances>()
@@ -94,7 +102,10 @@ public class TimerSweepIsolationTests(StoreProvider provider)
     private async Task<Guid> ChargeInReview()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, TimedChargeMachine.Json("Review")).ConfigureAwait(false);
+        await _host
+            .NotNull()
+            .SeedDraft(User, id, TimedChargeMachine.Json("Review"))
+            .ConfigureAwait(false);
         return id;
     }
 
@@ -102,6 +113,7 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         (
             (IMachineInternals)
                 _host
+                    .NotNull()
                     .Services.GetServices<IMachine>()
                     .Single(m =>
                         string.Equals(m.Name, TimedChargeMachine.Id, StringComparison.Ordinal)
@@ -115,7 +127,7 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         var healthy = await Reminder();
         await MakeDue(poison, TimeSpan.FromMinutes(2));
         await MakeDue(healthy, TimeSpan.FromMinutes(1));
-        var poisonDue = (await RawSql.Timer(_host, poison))!.DueAt;
+        var poisonDue = (await RawSql.Timer(_host.NotNull(), poison)).NotNull().DueAt;
 
         var results = await Reconciler.FireDueTimersOnce(CancellationToken.None);
 
@@ -132,8 +144,11 @@ public class TimerSweepIsolationTests(StoreProvider provider)
             .ContainSingle(r => r.InstanceId == poison)
             .Which.Outcome.Should()
             .Be(TimerFireResult.Retrying);
-        (await RawSql.Timer(_host, healthy))!.State.Should().Be(nameof(ReminderState.Expired));
-        var stuck = (await RawSql.Timer(_host, poison))!;
+        (await RawSql.Timer(_host.NotNull(), healthy))
+            .NotNull()
+            .State.Should()
+            .Be(nameof(ReminderState.Expired));
+        var stuck = (await RawSql.Timer(_host.NotNull(), poison)).NotNull();
         stuck.State.Should().Be(nameof(QueueingTimerState.Waiting), "its fire rolled back");
         stuck.DueAt.Should().Be(poisonDue, "it is tried again");
     }
@@ -183,10 +198,10 @@ public class TimerSweepIsolationTests(StoreProvider provider)
             .Which.Outcome.Should()
             .Be(TimerFireResult.Failed, "the last attempt clears the timer");
 
-        _launcher.Throws.Should().Be(3);
+        _launcher.NotNull().Throws.Should().Be(3);
         errors.Count.Should().Be(3);
         failed.Count.Should().Be(1, "the cleared timer is counted once as failed");
-        var row = (await RawSql.Timer(_host, poison))!;
+        var row = (await RawSql.Timer(_host.NotNull(), poison)).NotNull();
         row.State.Should().Be(nameof(QueueingTimerState.Waiting));
         row.DueAt.Should()
             .BeNull($"a fire that keeps throwing is cleared, not retried forever. See {Adr}");
@@ -204,12 +219,12 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         var time = new SteppingTime();
         Reconciler.Time = time;
         Reconciler.TimerFireAttempts = 2;
-        _launcher.Failure = string.Equals(failure, "timeout", StringComparison.Ordinal)
+        _launcher.NotNull().Failure = string.Equals(failure, "timeout", StringComparison.Ordinal)
             ? () => new InvalidOperationException("The enqueue failed.", new TimeoutException())
             : () => new DroppedConnectionException();
         var row = await Queueing();
         await MakeDue(row, TimeSpan.FromMinutes(1));
-        var due = (await RawSql.Timer(_host, row))!.DueAt;
+        var due = (await RawSql.Timer(_host.NotNull(), row)).NotNull().DueAt;
 
         var wait = InvokeOutcomeReconciler.TimerErrorBackoff;
         for (var i = 0; i < 4; i++)
@@ -228,10 +243,13 @@ public class TimerSweepIsolationTests(StoreProvider provider)
             time.Advance(wait + TimeSpan.FromSeconds(1));
             wait *= 2;
         }
-        (await RawSql.Timer(_host, row))!.DueAt.Should().Be(due, "the timer is still armed");
+        (await RawSql.Timer(_host.NotNull(), row))
+            .NotNull()
+            .DueAt.Should()
+            .Be(due, "the timer is still armed");
 
         // A failure of the row itself still counts, and clears the timer after its attempts.
-        _launcher.Failure = () =>
+        _launcher.NotNull().Failure = () =>
             new InvalidOperationException("The run's input could not be stored.");
         (await Reconciler.FireDueTimersOnce(CancellationToken.None))
             .Should()
@@ -244,7 +262,7 @@ public class TimerSweepIsolationTests(StoreProvider provider)
             .ContainSingle(r => r.InstanceId == row)
             .Which.Outcome.Should()
             .Be(TimerFireResult.Failed);
-        (await RawSql.Timer(_host, row))!.DueAt.Should().BeNull();
+        (await RawSql.Timer(_host.NotNull(), row)).NotNull().DueAt.Should().BeNull();
     }
 
     [Test]
@@ -258,11 +276,11 @@ public class TimerSweepIsolationTests(StoreProvider provider)
             await MakeDue(id, TimeSpan.FromMinutes(3));
             (
                 await RawSql.MarkEffect(
-                    _host,
+                    _host.NotNull(),
                     id,
                     nameof(TimedChargeTrigger.Charge),
                     string.Create(CultureInfo.InvariantCulture, $"charge-{i}"),
-                    (await RawSql.Now(_host)).AddMinutes(5)
+                    (await RawSql.Now(_host.NotNull())).AddMinutes(5)
                 )
             )
                 .Should()
@@ -286,16 +304,19 @@ public class TimerSweepIsolationTests(StoreProvider provider)
                 );
             results.Should().NotContain(r => marked.Contains(r.InstanceId));
             foreach (var id in marked)
-                (await RawSql.Timer(_host, id))!.State.Should().Be(nameof(TimedChargeState.Review));
+                (await RawSql.Timer(_host.NotNull(), id))
+                    .NotNull()
+                    .State.Should()
+                    .Be(nameof(TimedChargeState.Review));
         }
         finally
         {
             foreach (var id in marked)
             {
-                var rowId = await _host.RowId(id);
+                var rowId = await _host.NotNull().RowId(id);
                 await RawSql.Execute(
-                    _host,
-                    $"UPDATE {RawSql.Table(_host)} SET effect_token = NULL, effect_key = NULL, "
+                    _host.NotNull(),
+                    $"UPDATE {RawSql.Table(_host.NotNull())} SET effect_token = NULL, effect_key = NULL, "
                         + "effect_trigger = NULL, effect_request_id = NULL, effect_lease_until = NULL "
                         + string.Create(CultureInfo.InvariantCulture, $"WHERE row_id = {rowId}")
                 );
@@ -324,8 +345,9 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         await paused.Task.WaitAsync(Bound);
         var send = Task.Run(async () =>
         {
-            using var scope = _host.Scope();
+            using var scope = _host.NotNull().Scope();
             return await _host
+                .NotNull()
                 .Service(scope, TimedChargeMachine.Id)
                 .Send(new Actor.Client(User), id, "charge-1")
                 .ConfigureAwait(false);
@@ -341,9 +363,13 @@ public class TimerSweepIsolationTests(StoreProvider provider)
             .Which.Outcome.Should()
             .Be(TimerFireResult.Fired);
         _charge
+            .NotNull()
             .Calls.Should()
             .Be(0, $"the effect never runs on a state the timer has left: never both. See {Adr}");
-        (await RawSql.Timer(_host, id))!.State.Should().Be(nameof(TimedChargeState.Expired));
+        (await RawSql.Timer(_host.NotNull(), id))
+            .NotNull()
+            .State.Should()
+            .Be(nameof(TimedChargeState.Expired));
         sent.Should()
             .BeOfType<AdvanceOutcome.Rejected>(
                 "the send meets the instance the timer left, where the effect has no edge"
@@ -357,20 +383,21 @@ public class TimerSweepIsolationTests(StoreProvider provider)
     {
         var id = await ChargeInReview();
         await MakeDue(id, TimeSpan.FromMinutes(1));
-        _charge.Script(ChargeRun.Hold);
+        _charge.NotNull().Script(ChargeRun.Hold);
         var send = Task.Run(async () =>
         {
-            using var scope = _host.Scope();
+            using var scope = _host.NotNull().Scope();
             return await _host
+                .NotNull()
                 .Service(scope, TimedChargeMachine.Id)
                 .Send(new Actor.Client(User), id, "charge-1")
                 .ConfigureAwait(false);
         });
-        await _charge.Entered.WaitAsync(Bound);
+        await _charge.NotNull().Entered.WaitAsync(Bound);
 
         var fired = await Reconciler.FireDueTimersOnce(CancellationToken.None);
-        var whilePending = (await RawSql.Timer(_host, id))!.State;
-        _charge.Release();
+        var whilePending = (await RawSql.Timer(_host.NotNull(), id)).NotNull().State;
+        _charge.NotNull().Release();
         var sent = await send.WaitAsync(Bound);
 
         fired
@@ -384,7 +411,7 @@ public class TimerSweepIsolationTests(StoreProvider provider)
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot.State.Should()
             .Be(nameof(TimedChargeState.Charged));
-        _charge.Calls.Should().Be(1);
+        _charge.NotNull().Calls.Should().Be(1);
         (await Reconciler.FireDueTimersOnce(CancellationToken.None))
             .Should()
             .NotContain(r => r.InstanceId == id);
@@ -396,9 +423,9 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         var id = await ChargeInReview();
         await MakeDue(id, TimeSpan.FromMinutes(1));
         string fingerprint;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, TimedChargeMachine.Id);
+            var service = _host.NotNull().Service(scope, TimedChargeMachine.Id);
             var loaded = (await service.Load(User, id))
                 .Should()
                 .BeOfType<LoadResult.Loaded>()
@@ -424,9 +451,10 @@ public class TimerSweepIsolationTests(StoreProvider provider)
                 $"the timer never fires past a receipt the instance has not recorded. See {Adr}"
             );
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Service(scope, TimedChargeMachine.Id)
                     .Send(new Actor.Client(User), id, "charge-1")
             )
@@ -434,8 +462,14 @@ public class TimerSweepIsolationTests(StoreProvider provider)
                 .BeOfType<AdvanceOutcome.Advanced>()
                 .Which.Snapshot.State.Should()
                 .Be(nameof(TimedChargeState.Charged), "the next send records the earlier receipt");
-        _charge.Calls.Should().Be(0, "the receipt is recorded, the effect does not run again");
-        (await RawSql.Timer(_host, id))!.State.Should().Be(nameof(TimedChargeState.Charged));
+        _charge
+            .NotNull()
+            .Calls.Should()
+            .Be(0, "the receipt is recorded, the effect does not run again");
+        (await RawSql.Timer(_host.NotNull(), id))
+            .NotNull()
+            .State.Should()
+            .Be(nameof(TimedChargeState.Charged));
     }
 
     [Test]
@@ -445,11 +479,11 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         await MakeDue(id, TimeSpan.FromMinutes(1));
         (
             await RawSql.MarkEffect(
-                _host,
+                _host.NotNull(),
                 id,
                 nameof(TimedChargeTrigger.Charge),
                 "charge-1",
-                (await RawSql.Now(_host)).AddMinutes(-1)
+                (await RawSql.Now(_host.NotNull())).AddMinutes(-1)
             )
         )
             .Should()
@@ -458,13 +492,14 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         var fired = await Reconciler.FireDueTimersOnce(CancellationToken.None);
 
         fired.Should().NotContain(r => r.InstanceId == id && r.Moved);
-        (await RawSql.Timer(_host, id))!
+        (await RawSql.Timer(_host.NotNull(), id))
+            .NotNull()
             .State.Should()
             .Be(
                 nameof(TimedChargeState.Charged),
                 $"the sweep finishes an effect its claimant left, and the timer never fires past it. See {Adr}"
             );
-        _charge.KeysOf(id).Should().ContainSingle();
+        _charge.NotNull().KeysOf(id).Should().ContainSingle();
     }
 
     [Test]
@@ -472,7 +507,7 @@ public class TimerSweepIsolationTests(StoreProvider provider)
     {
         var id = await ChargeInReview();
         await MakeDue(id, TimeSpan.FromMinutes(1));
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
             var claims = scope.ServiceProvider.GetRequiredService<IEffectClaimStore>();
             foreach (var key in EffectKeys(id))
@@ -493,7 +528,10 @@ public class TimerSweepIsolationTests(StoreProvider provider)
                 TimerFireResult.Fired,
                 "a receipt no send would apply to this content never holds the timer"
             );
-        (await RawSql.Timer(_host, id))!.State.Should().Be(nameof(TimedChargeState.Expired));
+        (await RawSql.Timer(_host.NotNull(), id))
+            .NotNull()
+            .State.Should()
+            .Be(nameof(TimedChargeState.Expired));
     }
 
     /// <summary>A clock that moves only when the test moves it.</summary>

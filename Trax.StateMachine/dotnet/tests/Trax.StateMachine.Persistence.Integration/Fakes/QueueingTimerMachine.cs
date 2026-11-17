@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 
 namespace Trax.StateMachine.Persistence.Integration.Fakes;
@@ -24,7 +25,7 @@ public sealed class QueueingTimerMachine : Machine<QueueingTimerState, QueueingT
         m.In(QueueingTimerState.Building)
             .Context<BuildMachine.SourceContext>()
             .Invokes<IBuildTrain, BuildInput, BuildOutput>(ctx => new BuildInput(
-                ctx["source"]!.GetValue<string>()
+                ctx["source"].NotNull().GetValue<string>()
             ))
             .OnDone(QueueingTimerState.Built)
             .OnFailed(QueueingTimerState.Failed)

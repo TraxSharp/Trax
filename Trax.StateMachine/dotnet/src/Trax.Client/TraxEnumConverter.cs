@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Trax.Client.Checks;
 
 namespace Trax.Client;
 
@@ -33,7 +34,7 @@ public sealed class TraxEnumConverter<
         var lowest = 0;
         foreach (var field in typeof(TEnum).GetFields(BindingFlags.Public | BindingFlags.Static))
         {
-            var value = (TEnum)field.GetValue(null)!;
+            var value = (TEnum)field.GetValue(null).NotNull();
             var name =
                 field.GetCustomAttribute<JsonStringEnumMemberNameAttribute>()?.Name ?? field.Name;
             ByName[name] = value;
@@ -52,7 +53,7 @@ public sealed class TraxEnumConverter<
     {
         if (reader.TokenType != JsonTokenType.String)
             throw new JsonException($"A {typeof(TEnum).Name} is written as a string.");
-        var name = reader.GetString()!;
+        var name = reader.GetString().NotNull();
         lock (Gate)
         {
             if (ByName.TryGetValue(name, out var value))

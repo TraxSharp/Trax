@@ -2,10 +2,12 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
+using Trax.Testing;
 
 namespace Trax.StateMachine.Persistence.Integration;
 
@@ -101,13 +103,13 @@ public class SnapshotOwnerKeyTests
             }
         );
 
-        save.Problem!.Code.Should().Be(RefusalCode.Unauthenticated);
+        save.Problem.NotNull().Code.Should().Be(RefusalCode.Unauthenticated);
         save.Snapshot.Should().BeNull();
-        advance.Problem!.Code.Should().Be(RefusalCode.Unauthenticated);
+        advance.Problem.NotNull().Code.Should().Be(RefusalCode.Unauthenticated);
         advance.Snapshot.Should().BeNull();
-        load.Problem!.Code.Should().Be(RefusalCode.Unauthenticated);
+        load.Problem.NotNull().Code.Should().Be(RefusalCode.Unauthenticated);
         load.Snapshot.Should().BeNull("the draft stored under the blank key is not handed out");
-        send.Problem!.Code.Should().Be(RefusalCode.Unauthenticated);
+        send.Problem.NotNull().Code.Should().Be(RefusalCode.Unauthenticated);
         send.Snapshot.Should().BeNull();
 
         (await Rows(newId)).Should().BeEmpty("the save wrote no draft");
@@ -135,23 +137,30 @@ public class SnapshotOwnerKeyTests
         var id = Guid.NewGuid();
 
         await FluentActions
-            .Awaiting(() => service.Load(key!, id))
-            .Should()
-            .ThrowAsync<ArgumentException>();
-        await FluentActions
-            .Awaiting(() => service.Autosave(key!, id, TestTurnstile.InitialJson))
+            .Awaiting(() => service.Load((key ?? Null.Of<string>()), id))
             .Should()
             .ThrowAsync<ArgumentException>();
         await FluentActions
             .Awaiting(() =>
-                service.Advance(key!, id, "Coin", new JsonObject { ["coin"] = "quarter" })
+                service.Autosave((key ?? Null.Of<string>()), id, TestTurnstile.InitialJson)
             )
             .Should()
             .ThrowAsync<ArgumentException>();
         await FluentActions
             .Awaiting(() =>
                 service.Advance(
-                    key!,
+                    (key ?? Null.Of<string>()),
+                    id,
+                    "Coin",
+                    new JsonObject { ["coin"] = "quarter" }
+                )
+            )
+            .Should()
+            .ThrowAsync<ArgumentException>();
+        await FluentActions
+            .Awaiting(() =>
+                service.Advance(
+                    (key ?? Null.Of<string>()),
                     id,
                     "Coin",
                     input: null,
@@ -165,7 +174,12 @@ public class SnapshotOwnerKeyTests
 
         var effect = new CountingEffect();
         await FluentActions
-            .Awaiting(() => NewRegistry(effect).EffectRunner("order")!.Run(key!, id, "r1"))
+            .Awaiting(() =>
+                NewRegistry(effect)
+                    .EffectRunner("order")
+                    .NotNull()
+                    .Run((key ?? Null.Of<string>()), id, "r1")
+            )
             .Should()
             .ThrowAsync<ArgumentException>();
         effect.Calls.Should().Be(0);

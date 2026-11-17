@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine;
 
@@ -83,9 +84,9 @@ internal static partial class SchemaValidator
 
             if (!Matches(node, field.Type))
                 return $"'{name}' must be a {field.Type.ToString().ToLowerInvariant()}.";
-            if (!InRange(node!, field))
+            if (!InRange(node.NotNull(), field))
                 return $"'{name}' is out of range.";
-            if (Shapeless(node!, field) is { } shapeless)
+            if (Shapeless(node.NotNull(), field) is { } shapeless)
                 return $"'{name}' {shapeless}.";
 
             // A constraint names a field of the object being validated, whichever side (context or input) it
@@ -94,11 +95,17 @@ internal static partial class SchemaValidator
                 if (!RuleEvaluator.Evaluate(constraint, obj, obj))
                     return $"'{name}' failed a constraint.";
 
-            if (field.Fields is { } shape && ValidateShape(shape, node!, name) is { } nested)
+            if (
+                field.Fields is { } shape
+                && ValidateShape(shape, node.NotNull(), name) is { } nested
+            )
                 return nested;
-            if (field.Values is { } values && ValidateValues(values, node!, name) is { } value)
+            if (
+                field.Values is { } values
+                && ValidateValues(values, node.NotNull(), name) is { } value
+            )
                 return value;
-            if (field.Keys is { } keys && ValidateKeys(keys, node!, name) is { } key)
+            if (field.Keys is { } keys && ValidateKeys(keys, node.NotNull(), name) is { } key)
                 return key;
         }
 

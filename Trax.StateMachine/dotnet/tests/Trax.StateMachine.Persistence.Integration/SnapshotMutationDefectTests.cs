@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
@@ -68,7 +69,7 @@ public class SnapshotMutationDefectTests
                     "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}",
             }
         );
-        advance.Problem!.Code.Should().Be(RefusalCode.ClientDivergence);
+        advance.Problem.NotNull().Code.Should().Be(RefusalCode.ClientDivergence);
 
         // "the advance is refused" (runtime-integrity docs): the stored draft must still be Locked.
         (await Load("turnstile", id))

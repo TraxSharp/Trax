@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.StateMachine.Gherkin.Lexical;
 
 /// <summary>
@@ -21,7 +23,7 @@ internal sealed record LxTypeRef(
         Kind switch
         {
             List when Element is not null => $"a list of {Element.Name}",
-            Map => $"a map of {Key!.Name} to {Element!.Name}",
+            Map => $"a map of {Key.NotNull().Name} to {Element.NotNull().Name}",
             _ => Name,
         };
 }

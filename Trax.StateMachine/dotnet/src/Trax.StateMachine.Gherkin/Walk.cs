@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -101,7 +102,7 @@ internal sealed class Walk
                 if (unresolved && step.Kind == StepKind.Then)
                     walk.UiSteps.Add(new Problem(scenario.File, step.Line, step.Text));
                 else
-                    walk.Fail(step.Line, problem!);
+                    walk.Fail(step.Line, problem.NotNull());
                 continue;
             }
             walk.Steps.Add((step, meaning));
@@ -189,7 +190,7 @@ internal sealed class Walk
                     instance.Arranged = true;
                 }
                 else
-                    Fail(step.Line, why!);
+                    Fail(step.Line, why.NotNull());
                 break;
             default:
                 Fail(
@@ -454,7 +455,7 @@ internal sealed class Walk
                 new PolicyObservation(
                     first.Machine,
                     first.Owner,
-                    _instances[first].State!,
+                    _instances[first].State.NotNull(),
                     key.Machine,
                     key.Owner,
                     instance.State,
@@ -682,7 +683,7 @@ internal sealed class Walk
                     causeEntered,
                     key.Machine,
                     key.Owner,
-                    target.State!,
+                    target.State.NotNull(),
                     to,
                     _scenario,
                     line
@@ -724,9 +725,11 @@ internal sealed class Walk
             return (JsonObject)given.DeepClone();
         var context = new JsonObject();
         foreach (var field in machine.ContextOf(machine.Initial))
-            context[field!["name"]!.GetValue<string>()] = field["nullable"]!.GetValue<bool>()
+            context[field.NotNull()["name"].NotNull().GetValue<string>()] = field["nullable"]
+                .NotNull()
+                .GetValue<bool>()
                 ? null
-                : field["type"]!.GetValue<string>() switch
+                : field["type"].NotNull().GetValue<string>() switch
                 {
                     "string" => JsonValue.Create(""),
                     "integer" or "number" => JsonValue.Create(0),

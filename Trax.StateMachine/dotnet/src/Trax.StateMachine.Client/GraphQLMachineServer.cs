@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Trax.Client;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Client;
 
@@ -97,9 +98,9 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             nameof(options)
         );
         TransportSecurity.RequireSecure(
-            options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
+            options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is not { } baseAddress
                 ? options.Endpoint
-                : new Uri(options.Http!.BaseAddress, options.Endpoint),
+                : new Uri(baseAddress, options.Endpoint),
             options.AllowInsecureTransport,
             Uri.UriSchemeHttps,
             nameof(options)

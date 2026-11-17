@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Trax.Client.Checks;
 
 namespace Trax.Client;
 
@@ -29,5 +30,5 @@ public sealed class OptionalJsonConverterFactory : JsonConverterFactory
         Justification = "Optional<T> is a struct, whose default value needs no constructor the trimmer could remove."
     )]
     private static IOptional DefaultOf(Type optional) =>
-        (IOptional)Activator.CreateInstance(optional)!;
+        (IOptional)Activator.CreateInstance(optional).NotNull();
 }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence.FromIr;
@@ -17,7 +18,7 @@ public static class FeatureCheckout
 {
     public const int UnitPrice = 999;
 
-    private static readonly string Namespace = typeof(FeatureCheckout).Namespace!;
+    private static readonly string Namespace = typeof(FeatureCheckout).Namespace.NotNull();
 
     private static readonly string Glossary = $$"""
         {
@@ -96,9 +97,12 @@ public static class FeatureCheckout
             [new FeatureFile("checkout.feature", Features)]
         );
         derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
-        var ir = JsonNode.Parse(derived.Irs["feature-checkout"])!.AsObject();
+        var ir = JsonNode.Parse(derived.Irs["feature-checkout"]).NotNull().AsObject();
         return IrMachines.Create(
-            new IrMachines.Source(ir, HostFile.Read(derived.Host!).Machines["feature-checkout"]),
+            new IrMachines.Source(
+                ir,
+                HostFile.Read(derived.Host.NotNull()).Machines["feature-checkout"]
+            ),
             [typeof(FeatureCheckout).Assembly]
         );
     }

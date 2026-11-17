@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -22,18 +23,18 @@ public class InvokesReservedStateTests(StoreProvider provider)
 
     private const string User = "u1";
 
-    private InstanceHost _host = null!;
-    private RecordingLauncher _launcher = null!;
+    private InstanceHost? _host;
+    private RecordingLauncher? _launcher;
 
     [SetUp]
     public void SetUp()
     {
         _launcher = new RecordingLauncher();
-        _host = InstanceHost.Create(provider, launcher: _launcher);
+        _host = InstanceHost.Create(provider, launcher: _launcher.NotNull());
     }
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static JsonObject Source => new() { ["source"] = "repo" };
 
@@ -50,8 +51,8 @@ public class InvokesReservedStateTests(StoreProvider provider)
     private async Task<Guid> DraftInBuilding()
     {
         var id = Guid.NewGuid();
-        using var scope = _host.Scope();
-        var service = _host.Service(scope, BuildMachine.Id);
+        using var scope = _host.NotNull().Scope();
+        var service = _host.NotNull().Service(scope, BuildMachine.Id);
         await TestDb
             .Seed(User, id, BuildMachine.Json("Draft", Source), Store(scope))
             .ConfigureAwait(false);
@@ -69,9 +70,9 @@ public class InvokesReservedStateTests(StoreProvider provider)
         var created = Guid.NewGuid();
         var moved = Guid.NewGuid();
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, BuildMachine.Id);
+            var service = _host.NotNull().Service(scope, BuildMachine.Id);
 
             (await service.Autosave(User, created, BuildMachine.Json("Building", Source)))
                 .Should()
@@ -93,20 +94,20 @@ public class InvokesReservedStateTests(StoreProvider provider)
                 );
         }
 
-        (await _host.Rows(created)).Should().BeEmpty();
-        (await _host.Rows(moved)).Single().State.Should().Be("Draft");
-        _launcher.Launches.Should().BeEmpty("a refused save queues no run");
+        (await _host.NotNull().Rows(created)).Should().BeEmpty();
+        (await _host.NotNull().Rows(moved)).Single().State.Should().Be("Draft");
+        _launcher.NotNull().Launches.Should().BeEmpty("a refused save queues no run");
     }
 
     [Test]
     public async Task Autosave_out_of_an_invoking_state_is_refused()
     {
         var id = await DraftInBuilding();
-        var before = (await _host.Rows(id)).Single();
+        var before = (await _host.NotNull().Rows(id)).Single();
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, BuildMachine.Id);
+            var service = _host.NotNull().Service(scope, BuildMachine.Id);
 
             (await service.Autosave(User, id, BuildMachine.Json("Draft", Source)))
                 .Should()
@@ -140,7 +141,7 @@ public class InvokesReservedStateTests(StoreProvider provider)
                 .BeOfType<AutosaveResult.Rejected>("even a save identical to the draft is refused");
         }
 
-        var after = (await _host.Rows(id)).Single();
+        var after = (await _host.NotNull().Rows(id)).Single();
         after.State.Should().Be("Building");
         after.InvokeToken.Should().Be(before.InvokeToken);
         after.ConcurrencyToken.Should().Be(before.ConcurrencyToken, "nothing was written");
@@ -151,9 +152,9 @@ public class InvokesReservedStateTests(StoreProvider provider)
     {
         var id = Guid.NewGuid();
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, BuildMachine.Id);
+            var service = _host.NotNull().Service(scope, BuildMachine.Id);
             await TestDb.Seed(User, id, BuildMachine.Json("Draft", Source), Store(scope));
 
             foreach (
@@ -179,7 +180,7 @@ public class InvokesReservedStateTests(StoreProvider provider)
             }
         }
 
-        (await _host.Rows(id)).Single().State.Should().Be("Draft");
+        (await _host.NotNull().Rows(id)).Single().State.Should().Be("Draft");
     }
 
     [Test]
@@ -187,9 +188,9 @@ public class InvokesReservedStateTests(StoreProvider provider)
     {
         var id = await DraftInBuilding();
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, BuildMachine.Id);
+            var service = _host.NotNull().Service(scope, BuildMachine.Id);
 
             foreach (
                 var trigger in new[] { "Building.done", "Building.failed", "Building.cancelled" }
@@ -211,19 +212,19 @@ public class InvokesReservedStateTests(StoreProvider provider)
                     );
         }
 
-        (await _host.Rows(id)).Single().State.Should().Be("Building");
+        (await _host.NotNull().Rows(id)).Single().State.Should().Be("Building");
     }
 
     [Test]
     public async Task A_rewritten_context_does_not_change_correlation()
     {
         var id = await DraftInBuilding();
-        var token = (await _host.Rows(id)).Single().InvokeToken;
-        token.Should().NotBeNull().And.Be(_launcher.Launches.Single().ExternalId);
+        var token = (await _host.NotNull().Rows(id)).Single().InvokeToken;
+        token.Should().NotBeNull().And.Be(_launcher.NotNull().Launches.Single().ExternalId);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, BuildMachine.Id);
+            var service = _host.NotNull().Service(scope, BuildMachine.Id);
             var forged = new JsonObject { ["source"] = "repo", ["invokeToken"] = "forged" };
             (await service.Autosave(User, id, BuildMachine.Json("Building", forged)))
                 .Should()
@@ -233,10 +234,13 @@ public class InvokesReservedStateTests(StoreProvider provider)
             service
                 .Serialize(loaded.Snapshot)
                 .Should()
-                .NotContain(token!, $"the token is server-only, never in the snapshot. See {Adr}");
+                .NotContain(
+                    token.NotNull(),
+                    $"the token is server-only, never in the snapshot. See {Adr}"
+                );
 
-            (await _host.Instances(scope).GetByInvokeToken("forged")).Should().BeNull();
-            (await _host.Instances(scope).GetByInvokeToken(token!))
+            (await _host.NotNull().Instances(scope).GetByInvokeToken("forged")).Should().BeNull();
+            (await _host.NotNull().Instances(scope).GetByInvokeToken(token.NotNull()))
                 .Should()
                 .NotBeNull()
                 .And.Match<StoredInstance>(x =>
@@ -244,6 +248,6 @@ public class InvokesReservedStateTests(StoreProvider provider)
                 );
         }
 
-        (await _host.Rows(id)).Single().InvokeToken.Should().Be(token);
+        (await _host.NotNull().Rows(id)).Single().InvokeToken.Should().Be(token);
     }
 }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -33,11 +34,13 @@ public class EffectCommitIntegrityTests
         var context = TestDb.NewContext();
         var claims = TestDb.NewClaims(context);
         var machine = new OrderMachine();
-        return machine.CreateEffectRunner(
-            machine.CreateService(TestDb.NewStore(context), claims),
-            new IdempotentEffect(claims),
-            new ServiceCollection().AddSingleton(charge).BuildServiceProvider()
-        )!;
+        return machine
+            .CreateEffectRunner(
+                machine.CreateService(TestDb.NewStore(context), claims),
+                new IdempotentEffect(claims),
+                new ServiceCollection().AddSingleton(charge).BuildServiceProvider()
+            )
+            .NotNull();
     }
 
     private static string EffectKey(Guid id) => $"order:place:{User}:{id}";
@@ -70,7 +73,8 @@ public class EffectCommitIntegrityTests
             .BeOfType<LoadResult.Loaded>()
             .Which.Snapshot;
 
-    private static int ItemCount(Snapshot snapshot) => snapshot.Context["items"]!.AsArray().Count;
+    private static int ItemCount(Snapshot snapshot) =>
+        snapshot.Context["items"].NotNull().AsArray().Count;
 
     [Test]
     public async Task An_edit_during_the_effect_is_refused_and_the_receipt_recorded_on_what_it_ran_on()
@@ -87,7 +91,7 @@ public class EffectCommitIntegrityTests
         var placed = (await send).Should().BeOfType<AdvanceOutcome.Advanced>().Which.Snapshot;
         placed.State.Should().Be("Placed");
         ItemCount(placed).Should().Be(1, Adr);
-        placed.Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        placed.Context["receipt"].NotNull().GetValue<string>().Should().Be("receipt-1");
         charge.Calls.Should().Be(1, Adr);
         charge.ChargedItemCounts.Should().Equal([1], Adr);
     }
@@ -107,7 +111,10 @@ public class EffectCommitIntegrityTests
 
         var send = await Runner(charge).Run(User, id, "req-1");
 
-        send.Should().BeOfType<AdvanceOutcome.Advanced>().Which.Snapshot.Context["receipt"]!
+        send.Should()
+            .BeOfType<AdvanceOutcome.Advanced>()
+            .Which.Snapshot.Context["receipt"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("receipt-earlier");
@@ -126,7 +133,10 @@ public class EffectCommitIntegrityTests
 
         var send = await Runner(charge).Run(User, id, "req-1");
 
-        send.Should().BeOfType<AdvanceOutcome.Advanced>().Which.Snapshot.Context["receipt"]!
+        send.Should()
+            .BeOfType<AdvanceOutcome.Advanced>()
+            .Which.Snapshot.Context["receipt"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("receipt-legacy");
@@ -155,7 +165,7 @@ public class EffectCommitIntegrityTests
 
         resend.Should().BeOfType<AdvanceOutcome.Advanced>("a send of a placed order replays");
         charge.Calls.Should().Be(1, Adr);
-        (await Stored(id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        (await Stored(id)).Context["receipt"].NotNull().GetValue<string>().Should().Be("receipt-1");
     }
 
     [Test]
@@ -170,7 +180,10 @@ public class EffectCommitIntegrityTests
         await Write(id, OrderMachine.ReviewSnapshot(7));
         var next = await Runner(charge).Run(User, id, "req-2");
 
-        next.Should().BeOfType<AdvanceOutcome.Advanced>().Which.Snapshot.Context["receipt"]!
+        next.Should()
+            .BeOfType<AdvanceOutcome.Advanced>()
+            .Which.Snapshot.Context["receipt"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("receipt-2");
@@ -235,7 +248,7 @@ public class EffectCommitIntegrityTests
             new SendSnapshotInput { Machine = "order", Id = id }
         );
 
-        send.Problem!.Code.Should().Be(RefusalCode.DeliveryFailed);
+        send.Problem.NotNull().Code.Should().Be(RefusalCode.DeliveryFailed);
     }
 
     [Test]
@@ -314,13 +327,13 @@ public class EffectCommitIntegrityTests
 
     private static Snapshot Parse(string json)
     {
-        var node = JsonNode.Parse(json)!.AsObject();
+        var node = JsonNode.Parse(json).NotNull().AsObject();
         return new Snapshot
         {
-            Machine = node["machine"]!.GetValue<string>(),
-            Version = node["version"]!.GetValue<int>(),
-            State = node["state"]!.GetValue<string>(),
-            Context = node["context"]!.AsObject().DeepClone().AsObject(),
+            Machine = node["machine"].NotNull().GetValue<string>(),
+            Version = node["version"].NotNull().GetValue<int>(),
+            State = node["state"].NotNull().GetValue<string>(),
+            Context = node["context"].NotNull().AsObject().DeepClone().AsObject(),
         };
     }
 

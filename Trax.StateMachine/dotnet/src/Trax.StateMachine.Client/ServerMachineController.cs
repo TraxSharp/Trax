@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Client;
 
@@ -271,7 +272,7 @@ public sealed class ServerMachineController : IDisposable
                 _startFailed = false;
                 var waiter = NewOutcome();
                 _startWaiters.Add(waiter);
-                var requestId = _startRequestId!;
+                var requestId = _startRequestId.NotNull();
                 _ = OpeningAsync(() => CreateAsync(requestId, 0));
                 return waiter.Task;
             }
@@ -466,7 +467,7 @@ public sealed class ServerMachineController : IDisposable
             FailUnready();
             return Task.CompletedTask;
         }
-        var requestId = _startRequestId!;
+        var requestId = _startRequestId.NotNull();
         return OpeningAsync(() => CreateAsync(requestId, 0));
     }
 
@@ -603,7 +604,7 @@ public sealed class ServerMachineController : IDisposable
         Listen(id);
         // The stream's first event is the instance as it is then, so a write between the answer and the subscription
         // reaches it there; the answer is the snapshot to show until then.
-        Accept(answer.Snapshot!, Source.Answer, out var unreadable);
+        Accept(answer.Snapshot.NotNull(), Source.Answer, out var unreadable);
         // A snapshot this client's machine cannot read stopped the controller, and settled the start with it.
         if (_error is not null)
             return;
@@ -615,7 +616,7 @@ public sealed class ServerMachineController : IDisposable
             return;
         }
         Emit();
-        SettleStart(new SendOutcome.Confirmed(answer.Snapshot!));
+        SettleStart(new SendOutcome.Confirmed(answer.Snapshot.NotNull()));
         Pump();
     }
 
@@ -807,7 +808,10 @@ public sealed class ServerMachineController : IDisposable
             }
             return;
         }
-        var snapshot = answer.Snapshot! with { RowId = answer.Snapshot.RowId ?? rowId ?? _rowId };
+        var snapshot = answer.Snapshot.NotNull() with
+        {
+            RowId = answer.Snapshot.RowId ?? rowId ?? _rowId,
+        };
         var unopened = _confirmed is null;
         var changed = Accept(snapshot, Source.Load, out var unreadable);
         if (unreadable is not null)
@@ -1090,7 +1094,7 @@ public sealed class ServerMachineController : IDisposable
             {
                 try
                 {
-                    clientResult = _predictor!.Serialize(t.Snapshot);
+                    clientResult = _predictor.NotNull().Serialize(t.Snapshot);
                 }
                 catch (Exception)
                 {
@@ -1136,7 +1140,7 @@ public sealed class ServerMachineController : IDisposable
 
         if (answer.Problem is not { } problem)
         {
-            var snapshot = answer.Snapshot!;
+            var snapshot = answer.Snapshot.NotNull();
             Accept(snapshot, Source.Answer, out var unreadable);
             if (unreadable is not null)
             {
@@ -1248,7 +1252,7 @@ public sealed class ServerMachineController : IDisposable
                 return new SyncOutcome.Superseded();
 
             PlannedEvent next;
-            switch (Plan(_confirmed!, request))
+            switch (Plan(_confirmed.NotNull(), request))
             {
                 case PlanResult.Planned { Events.Count: 0 }:
                     return new SyncOutcome.Synced(ConfirmedSnapshot());
@@ -1264,7 +1268,7 @@ public sealed class ServerMachineController : IDisposable
                         StringComparison.Ordinal
                     )
                         && string.Equals(
-                            _confirmed!.State,
+                            _confirmed.NotNull().State,
                             request.Target,
                             StringComparison.Ordinal
                         )
@@ -1387,7 +1391,7 @@ public sealed class ServerMachineController : IDisposable
         {
             RowId = _rowId,
             Revision = _revision,
-            State = _confirmed!.State,
+            State = _confirmed.NotNull().State,
             Context = (JsonObject)_confirmed.Context.DeepClone(),
             DueAtKnown = true,
             DueAt = _dueAt,

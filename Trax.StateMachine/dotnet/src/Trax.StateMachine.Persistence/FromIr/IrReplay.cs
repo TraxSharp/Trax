@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.StateMachine.Features;
 
@@ -55,9 +56,9 @@ internal sealed class IrReplay(
         where TState : struct, Enum
         where TTrigger : struct, Enum
     {
-        var initialContext = (JsonObject)ir["initialContext"]!.DeepClone();
-        m.Id(ir["id"]!.GetValue<string>())
-            .Version(ir["version"]!.GetValue<int>())
+        var initialContext = (JsonObject)ir["initialContext"].NotNull().DeepClone();
+        m.Id(ir["id"].NotNull().GetValue<string>())
+            .Version(ir["version"].NotNull().GetValue<int>())
             .StartsAt(
                 State<TState>(ir["initialState"]),
                 () => (JsonObject)initialContext.DeepClone()
@@ -75,21 +76,21 @@ internal sealed class IrReplay(
             if (access.IsServer && Enum.TryParse<TTrigger>(trigger, out var serverOnly))
                 ((IIrMachineBuilder<TState, TTrigger>)m).ServerOnly(serverOnly);
 
-        foreach (var (state, schema) in ir["context"]!.AsObject())
+        foreach (var (state, schema) in ir["context"].NotNull().AsObject())
             ((IIrStateBuilder<TState, TTrigger>)m.In(State<TState>(state))).Context(
                 types.Contexts[state],
-                IrMachine.ReadSchema(schema!.AsObject())
+                IrMachine.ReadSchema(schema.NotNull().AsObject())
             );
-        foreach (var state in ir["committedStates"]!.AsArray())
+        foreach (var state in ir["committedStates"].NotNull().AsArray())
             m.In(State<TState>(state)).Committed();
         foreach (var (state, rule) in ir["invariants"] as JsonObject ?? [])
-            m.In(State<TState>(state)).Requires(IrMachine.ReadRule(rule!.AsObject()));
+            m.In(State<TState>(state)).Requires(IrMachine.ReadRule(rule.NotNull().AsObject()));
 
-        var inputs = ir["inputs"]!.AsObject();
-        foreach (var node in ir["transitions"]!.AsArray())
+        var inputs = ir["inputs"].NotNull().AsObject();
+        foreach (var node in ir["transitions"].NotNull().AsArray())
         {
-            var edge = node!.AsObject();
-            var trigger = edge["trigger"]!.GetValue<string>();
+            var edge = node.NotNull().AsObject();
+            var trigger = edge["trigger"].NotNull().GetValue<string>();
             var t = m.In(State<TState>(edge["from"])).On(Enum.Parse<TTrigger>(trigger));
             if (inputs[trigger] is JsonObject schema)
                 ((IIrTransitionBuilder<TState, TTrigger>)t).WithInput(
@@ -106,9 +107,10 @@ internal sealed class IrReplay(
                 Apply(t, rule);
             if (edge["effect"] is JsonObject effect)
                 typeof(ITransitionBuilder<TState, TTrigger>)
-                    .GetMethod(nameof(ITransitionBuilder<TState, TTrigger>.RunsOnce))!
+                    .GetMethod(nameof(ITransitionBuilder<TState, TTrigger>.RunsOnce))
+                    .NotNull()
                     .MakeGenericMethod(Handlers.Effects[trigger])
-                    .Invoke(t, [effect["keyPrefix"]!.GetValue<string>()]);
+                    .Invoke(t, [effect["keyPrefix"].NotNull().GetValue<string>()]);
             t.To(State<TState>(edge["to"]));
         }
 
@@ -126,34 +128,39 @@ internal sealed class IrReplay(
         where TTrigger : struct, Enum
     {
         var byState = (ir["outcomes"] as JsonObject ?? [])
-            .Select(o => o.Value!.AsObject())
-            .GroupBy(o => o["state"]!.GetValue<string>(), StringComparer.Ordinal);
+            .Select(o => o.Value.NotNull().AsObject())
+            .GroupBy(o => o["state"].NotNull().GetValue<string>(), StringComparer.Ordinal);
         foreach (var outcomes in byState)
         {
             var invoke = host.Invokes[outcomes.Key];
             var train = trains[outcomes.Key];
             var (input, output) = IrMachines.TrainTypes(train);
             var mapper = typeof(IrReplay)
-                .GetMethod(nameof(InputOf), BindingFlags.NonPublic | BindingFlags.Static)!
+                .GetMethod(nameof(InputOf), BindingFlags.NonPublic | BindingFlags.Static)
+                .NotNull()
                 .MakeGenericMethod(input)
-                .Invoke(null, [invoke.Input])!;
+                .Invoke(null, [invoke.Input])
+                .NotNull();
             var invokes = typeof(IIrStateBuilder<TState, TTrigger>)
-                .GetMethod(nameof(IIrStateBuilder<TState, TTrigger>.InvokesAsOwner))!
+                .GetMethod(nameof(IIrStateBuilder<TState, TTrigger>.InvokesAsOwner))
+                .NotNull()
                 .MakeGenericMethod(train, input, output);
             var builder =
                 (IInvokeBuilder<TState, TTrigger>)
-                    invokes.Invoke(
-                        (IIrStateBuilder<TState, TTrigger>)m.In(State<TState>(outcomes.Key)),
-                        [mapper]
-                    )!;
+                    invokes
+                        .Invoke(
+                            (IIrStateBuilder<TState, TTrigger>)m.In(State<TState>(outcomes.Key)),
+                            [mapper]
+                        )
+                        .NotNull();
 
             foreach (var outcome in outcomes)
-            foreach (var node in outcome["edges"]!.AsArray())
+            foreach (var node in outcome["edges"].NotNull().AsArray())
             {
-                var edge = node!.AsObject();
+                var edge = node.NotNull().AsObject();
                 var to = State<TState>(edge["to"]);
                 var reduce = edge["reduce"] is JsonObject r ? IrMachine.ReadReduction(r) : null;
-                switch (outcome["outcome"]!.GetValue<string>())
+                switch (outcome["outcome"].NotNull().GetValue<string>())
                 {
                     case "done":
                         builder.OnDone(
@@ -193,7 +200,7 @@ internal sealed class IrReplay(
                             )
                     )
                     : context[from]?.DeepClone();
-            return input.Deserialize<TInput>(TrainInputJson)!;
+            return input.Deserialize<TInput>(TrainInputJson).NotNull();
         };
 
     private void ConfigureTimers<TState, TTrigger>(IMachineBuilder<TState, TTrigger> m)
@@ -202,8 +209,8 @@ internal sealed class IrReplay(
     {
         foreach (var node in ir["timers"] as JsonArray ?? [])
         {
-            var timer = node!.AsObject();
-            var state = timer["state"]!.GetValue<string>();
+            var timer = node.NotNull().AsObject();
+            var state = timer["state"].NotNull().GetValue<string>();
             var target = State<TState>(timer["target"]);
             if (timer["after"] is { } after)
             {
@@ -211,12 +218,17 @@ internal sealed class IrReplay(
                 continue;
             }
             // A duration read from the context: the field's property on the state's emitted context record.
-            var field = timer["field"]!.AsObject();
+            var field = timer["field"].NotNull().AsObject();
             var context = types.Contexts[state];
             var parameter = Expression.Parameter(context, "c");
-            var property = context.GetProperty(
-                IrTypes.PropertyName(field["name"]!.GetValue<string>(), $"{state}Context")
-            )!;
+            var property = context
+                .GetProperty(
+                    IrTypes.PropertyName(
+                        field["name"].NotNull().GetValue<string>(),
+                        $"{state}Context"
+                    )
+                )
+                .NotNull();
             var selector = Expression.Lambda(
                 typeof(Func<,>).MakeGenericType(context, typeof(TimeSpan?)),
                 Expression.Property(parameter, property),
@@ -231,10 +243,12 @@ internal sealed class IrReplay(
                 .MakeGenericMethod(context);
             var builder =
                 (ITimerBuilder<TState, TTrigger>)
-                    afterField.Invoke(
-                        m.In(State<TState>(state)),
-                        [selector, Duration(field["min"]), Duration(field["max"])]
-                    )!;
+                    afterField
+                        .Invoke(
+                            m.In(State<TState>(state)),
+                            [selector, Duration(field["min"]), Duration(field["max"])]
+                        )
+                        .NotNull();
             builder.GoTo(target);
         }
     }
@@ -249,7 +263,8 @@ internal sealed class IrReplay(
             return;
         if (host.Start is { } start)
             typeof(IrReplay)
-                .GetMethod(nameof(StartWith), BindingFlags.NonPublic | BindingFlags.Static)!
+                .GetMethod(nameof(StartWith), BindingFlags.NonPublic | BindingFlags.Static)
+                .NotNull()
                 .MakeGenericMethod(typeof(TState), typeof(TTrigger), types.Start)
                 .Invoke(null, [m, start]);
         if (host.Read is { } read)
@@ -304,27 +319,27 @@ internal sealed class IrReplay(
         where TTrigger : struct, Enum
     {
         foreach (var (name, samples) in differential["samples"] as JsonObject ?? [])
-        foreach (var sample in samples!.AsArray())
+        foreach (var sample in samples.NotNull().AsArray())
             if (OutcomeTriggers.TryParse(name, out var state, out _))
-                d.OutcomeSample(Enum.Parse<TState>(state), sample!.DeepClone());
+                d.OutcomeSample(Enum.Parse<TState>(state), sample.NotNull().DeepClone());
             else
-                d.Sample(Enum.Parse<TTrigger>(name), sample!.DeepClone());
+                d.Sample(Enum.Parse<TTrigger>(name), sample.NotNull().DeepClone());
         foreach (var (state, seeds) in differential["seeds"] as JsonObject ?? [])
         // One seed is written as the context itself, several as a list of them.
         foreach (var seed in seeds is JsonArray several ? several.ToArray() : [seeds])
-            d.Seed(Enum.Parse<TState>(state), seed!.DeepClone().AsObject());
+            d.Seed(Enum.Parse<TState>(state), seed.NotNull().DeepClone().AsObject());
         foreach (var context in differential["contexts"] as JsonArray ?? [])
-            d.Probe(context!.DeepClone().AsObject());
+            d.Probe(context.NotNull().DeepClone().AsObject());
     }
 
     private static TState State<TState>(JsonNode? name)
-        where TState : struct, Enum => Enum.Parse<TState>(name!.GetValue<string>());
+        where TState : struct, Enum => Enum.Parse<TState>(name.NotNull().GetValue<string>());
 
     private static TState State<TState>(string name)
         where TState : struct, Enum => Enum.Parse<TState>(name);
 
     private static TimeSpan Duration(JsonNode? node) =>
-        IsoDuration.TryParse(node!.GetValue<string>(), out var duration)
+        IsoDuration.TryParse(node.NotNull().GetValue<string>(), out var duration)
             ? duration
             : throw new InvalidOperationException($"'{node}' is not an ISO-8601 duration.");
 }

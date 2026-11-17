@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -55,13 +56,13 @@ public static class TestDb
     /// <summary>A snapshot as a client writes it, parsed.</summary>
     public static Snapshot Parse(string json)
     {
-        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json).NotNull().AsObject();
         return new Snapshot
         {
-            Machine = node["machine"]!.GetValue<string>(),
-            Version = node["version"]!.GetValue<int>(),
-            State = node["state"]!.GetValue<string>(),
-            Context = node["context"]!.AsObject().DeepClone().AsObject(),
+            Machine = node["machine"].NotNull().GetValue<string>(),
+            Version = node["version"].NotNull().GetValue<int>(),
+            State = node["state"].NotNull().GetValue<string>(),
+            Context = node["context"].NotNull().AsObject().DeepClone().AsObject(),
         };
     }
 

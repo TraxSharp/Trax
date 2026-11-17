@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence.FromIr;
@@ -81,7 +82,7 @@ public class TimerDerivationTests
         );
 
         derived.Problems.Should().BeEmpty();
-        Timer(derived, "door", "Open")["after"]!.GetValue<string>().Should().Be("PT4S");
+        Timer(derived, "door", "Open")["after"].NotNull().GetValue<string>().Should().Be("PT4S");
     }
 
     [Test]
@@ -131,7 +132,7 @@ public class TimerDerivationTests
         );
 
         derived.Problems.Should().BeEmpty();
-        Timer(derived, "door", "Open")["after"]!.GetValue<string>().Should().Be("PT2S");
+        Timer(derived, "door", "Open")["after"].NotNull().GetValue<string>().Should().Be("PT2S");
     }
 
     [Test]
@@ -178,10 +179,11 @@ public class TimerDerivationTests
                 .ConfigureAwait(false)
         );
 
-        var ir = JsonNode.Parse(derived.Irs["door"])!.AsObject();
-        Timer(derived, "door", "Open")["rules"]!
+        var ir = JsonNode.Parse(derived.Irs["door"]).NotNull().AsObject();
+        Timer(derived, "door", "Open")["rules"]
+            .NotNull()
             .AsArray()
-            .Select(r => r!.GetValue<string>())
+            .Select(r => r.NotNull().GetValue<string>())
             .Should()
             .Equal(
                 ["AnyAuthenticated"],
@@ -189,7 +191,7 @@ public class TimerDerivationTests
             );
 
         var served = IrMachines.Create(
-            new IrMachines.Source(ir, HostFile.Read(derived.Host!).Machines["door"]),
+            new IrMachines.Source(ir, HostFile.Read(derived.Host.NotNull()).Machines["door"]),
             []
         );
 
@@ -216,14 +218,15 @@ public class TimerDerivationTests
         );
 
         derived.Problems.Should().BeEmpty();
-        Timer(derived, "gate", "Up")["rules"]!
+        Timer(derived, "gate", "Up")["rules"]
+            .NotNull()
             .AsArray()
-            .Select(r => r!.GetValue<string>())
+            .Select(r => r.NotNull().GetValue<string>())
             .Should()
             .Equal(["Requires(keeper)"]);
-        var ir = JsonNode.Parse(derived.Irs["gate"])!.AsObject();
+        var ir = JsonNode.Parse(derived.Irs["gate"]).NotNull().AsObject();
         var served = IrMachines.Create(
-            new IrMachines.Source(ir, HostFile.Read(derived.Host!).Machines["gate"]),
+            new IrMachines.Source(ir, HostFile.Read(derived.Host.NotNull()).Machines["gate"]),
             []
         );
         served.ExportIr().Should().Be(derived.Irs["gate"]);
@@ -294,11 +297,19 @@ public class TimerDerivationTests
     }
 
     private static JsonNode Timer(Derived derived, string machine, string state) =>
-        JsonNode.Parse(derived.Irs[machine])!["timers"]!
+        JsonNode
+            .Parse(derived.Irs[machine])
+            .NotNull()["timers"]
+            .NotNull()
             .AsArray()
             .Single(t =>
-                string.Equals(t!["state"]!.GetValue<string>(), state, StringComparison.Ordinal)
-            )!;
+                string.Equals(
+                    t.NotNull()["state"].NotNull().GetValue<string>(),
+                    state,
+                    StringComparison.Ordinal
+                )
+            )
+            .NotNull();
 
     private static Task<Derived> Derive(string feature) =>
         FeatureDerivation.DeriveAsync(

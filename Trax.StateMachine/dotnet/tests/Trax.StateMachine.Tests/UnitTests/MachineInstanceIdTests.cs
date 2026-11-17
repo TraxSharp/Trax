@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.StateMachine.Persistence;
+using Trax.Testing;
 
 namespace Trax.StateMachine.Tests.UnitTests;
 
@@ -104,7 +105,7 @@ public class MachineInstanceIdTests
     public void A_key_refuses_no_parts_a_null_part_and_an_unpaired_surrogate()
     {
         ((Action)(() => MachineKey.Of())).Should().Throw<ArgumentException>();
-        ((Action)(() => MachineKey.Of("a", null!))).Should().Throw<ArgumentException>();
+        ((Action)(() => MachineKey.Of("a", Null.Of<string>()))).Should().Throw<ArgumentException>();
         ((Action)(() => MachineKey.Of("\ud800"))).Should().Throw<ArgumentException>();
     }
 

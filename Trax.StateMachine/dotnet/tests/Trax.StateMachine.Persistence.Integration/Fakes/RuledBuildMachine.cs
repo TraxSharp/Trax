@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using static Trax.StateMachine.Rules;
 
 namespace Trax.StateMachine.Persistence.Integration.Fakes;
@@ -41,7 +42,7 @@ public sealed class RuledBuildMachine : Machine<BuildState, BuildTrigger>
         m.In(BuildState.Building)
             .Context<BuildMachine.SourceContext>()
             .Invokes<IBuildTrain, BuildInput, BuildOutput>(ctx => new BuildInput(
-                ctx["source"]!.GetValue<string>()
+                ctx["source"].NotNull().GetValue<string>()
             ))
             .OnDone(
                 BuildState.Built,

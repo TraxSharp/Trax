@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -287,7 +288,7 @@ public class EventRuleStartupTests
         {
             var draft = new CallerRuleDraft("test", read: false);
             declare(draft);
-            return draft.Build()!;
+            return draft.Build().NotNull();
         }
 
         var role = Rule(d => d.Requires([DeskRoles.Operator]));

@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -37,7 +38,7 @@ public class RefusalCodeParityTests
                 && (Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType)
                     != typeof(RefusalCode)
             )
-            .Select(p => $"{p.DeclaringType!.FullName}.{p.Name}: {p.PropertyType.Name}")
+            .Select(p => $"{p.DeclaringType.NotNull().FullName}.{p.Name}: {p.PropertyType.Name}")
             .ToList();
 
         free.Should()
@@ -75,12 +76,18 @@ public class RefusalCodeParityTests
     [Test]
     public void The_shared_registry_lists_the_same_codes_in_the_same_order()
     {
-        var registry = JsonNode.Parse(
-            File.ReadAllText(Path.Combine(FixturePaths.ConformanceRoot, "refusal-codes.json"))
-        )!["codes"]!
+        var registry = JsonNode
+            .Parse(
+                File.ReadAllText(Path.Combine(FixturePaths.ConformanceRoot, "refusal-codes.json"))
+            )
+            .NotNull()["codes"]
+            .NotNull()
             .AsArray()
             .Select(c =>
-                (Name: c!["name"]!.GetValue<string>(), Wire: c["code"]!.GetValue<string>())
+                (
+                    Name: c.NotNull()["name"].NotNull().GetValue<string>(),
+                    Wire: c["code"].NotNull().GetValue<string>()
+                )
             )
             .ToList();
 
@@ -118,13 +125,17 @@ public class RefusalCodeParityTests
 
         var wrong = new List<string>();
         foreach (
-            var entry in JsonNode.Parse(
-                await File.ReadAllTextAsync(Path.Combine(root, "refusal-codes.json"))
-                    .ConfigureAwait(false)
-            )!["codes"]!.AsArray()
+            var entry in JsonNode
+                .Parse(
+                    await File.ReadAllTextAsync(Path.Combine(root, "refusal-codes.json"))
+                        .ConfigureAwait(false)
+                )
+                .NotNull()["codes"]
+                .NotNull()
+                .AsArray()
         )
         {
-            var code = entry!["code"]!.GetValue<string>();
+            var code = entry.NotNull()["code"].NotNull().GetValue<string>();
             var scope = entry["scope"]?.GetValue<string>();
             var uncovered = entry["uncovered"] is not null;
             if (scope is not ("engine" or "client" or "host"))

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Helpers;
 
@@ -78,18 +79,20 @@ public static class TwinEngine
         };
 
         var answers = (JsonArray)
-            JsonNode.Parse(
-                await Run(engineRoot, "tools/replay-sequences.mjs", request.ToJsonString())
-                    .ConfigureAwait(false)
-            )!;
+            JsonNode
+                .Parse(
+                    await Run(engineRoot, "tools/replay-sequences.mjs", request.ToJsonString())
+                        .ConfigureAwait(false)
+                )
+                .NotNull();
         return answers
             .Select(sequence =>
                 (IReadOnlyList<Answer>)
-                    ((JsonArray)sequence!)
+                    ((JsonArray)sequence.NotNull())
                         .Select(a => new Answer(
-                            a!["outcome"]!.GetValue<string>(),
+                            a.NotNull()["outcome"].NotNull().GetValue<string>(),
                             a["reason"]?.GetValue<string>(),
-                            a["wire"]!.GetValue<string>()
+                            a["wire"].NotNull().GetValue<string>()
                         ))
                         .ToList()
             )
@@ -107,14 +110,18 @@ public static class TwinEngine
         var engineRoot = EngineRoot();
         var request = new JsonArray(irs.Select(ir => (JsonNode)ir.DeepClone()).ToArray());
         var answers = (JsonArray)
-            JsonNode.Parse(
-                await Run(engineRoot, "tools/conformance/ir-schema.mjs", request.ToJsonString())
-                    .ConfigureAwait(false)
-            )!;
+            JsonNode
+                .Parse(
+                    await Run(engineRoot, "tools/conformance/ir-schema.mjs", request.ToJsonString())
+                        .ConfigureAwait(false)
+                )
+                .NotNull();
         return answers
             .Select(errors =>
                 (IReadOnlyList<string>)
-                    ((JsonArray)errors!).Select(e => e!.GetValue<string>()).ToList()
+                    ((JsonArray)errors.NotNull())
+                        .Select(e => e.NotNull().GetValue<string>())
+                        .ToList()
             )
             .ToList();
     }
@@ -136,14 +143,22 @@ public static class TwinEngine
             ["documents"] = new JsonArray(documents.Select(d => (JsonNode)d).ToArray()),
         };
         var answers = (JsonArray)
-            JsonNode.Parse(
-                await Run(engineRoot, "tools/conformance/format-schema.mjs", request.ToJsonString())
-                    .ConfigureAwait(false)
-            )!;
+            JsonNode
+                .Parse(
+                    await Run(
+                            engineRoot,
+                            "tools/conformance/format-schema.mjs",
+                            request.ToJsonString()
+                        )
+                        .ConfigureAwait(false)
+                )
+                .NotNull();
         return answers
             .Select(errors =>
                 (IReadOnlyList<string>)
-                    ((JsonArray)errors!).Select(e => e!.GetValue<string>()).ToList()
+                    ((JsonArray)errors.NotNull())
+                        .Select(e => e.NotNull().GetValue<string>())
+                        .ToList()
             )
             .ToList();
     }
@@ -183,7 +198,7 @@ public static class TwinEngine
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        using var process = Process.Start(start)!;
+        using var process = Process.Start(start).NotNull();
         var stderr = process.StandardError.ReadToEndAsync();
         var conversation = Task.Run(async () =>
         {
@@ -241,7 +256,7 @@ public static class TwinEngine
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        using var process = Process.Start(start)!;
+        using var process = Process.Start(start).NotNull();
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
         await process.StandardInput.WriteAsync(request).ConfigureAwait(false);

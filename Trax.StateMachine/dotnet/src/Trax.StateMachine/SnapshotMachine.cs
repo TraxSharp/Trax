@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine;
 
@@ -540,7 +541,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
     public JsonObject Describe()
     {
         var states = Enum.GetValues<TState>()
-            .Select(s => s.ToString()!)
+            .Select(s => s.ToString().NotNull())
             .Order(StringComparer.Ordinal)
             .ToArray();
 
@@ -548,7 +549,11 @@ public sealed class SnapshotMachine<TState, TTrigger>
         // TypeScript twin lists them.
         var edges = _def
             .Transitions.Select(t =>
-                (From: t.From.ToString()!, Trigger: t.Trigger.ToString()!, To: t.To.ToString()!)
+                (
+                    From: t.From.ToString().NotNull(),
+                    Trigger: t.Trigger.ToString().NotNull(),
+                    To: t.To.ToString().NotNull()
+                )
             )
             .Concat(
                 _def.Invokes.Values.SelectMany(invoke =>
@@ -558,9 +563,9 @@ public sealed class SnapshotMachine<TState, TTrigger>
                                 .EdgesFor(kind)
                                 .Select(e =>
                                     (
-                                        From: invoke.State.ToString()!,
+                                        From: invoke.State.ToString().NotNull(),
                                         Trigger: invoke.TriggerName(kind),
-                                        To: e.To.ToString()!
+                                        To: e.To.ToString().NotNull()
                                     )
                                 )
                         )

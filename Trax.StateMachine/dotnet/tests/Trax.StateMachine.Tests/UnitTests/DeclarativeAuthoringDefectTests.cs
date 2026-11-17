@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using AwesomeAssertions.Execution;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.UnitTests;
 
@@ -44,7 +45,7 @@ public class DeclarativeAuthoringDefectTests
     private static string? ValidateOwnJson<TContext>(TContext value) =>
         SchemaValidator.Validate(
             SchemaReflection.For<TContext>(),
-            (JsonObject)JsonSerializer.SerializeToNode(value, CamelCase)!
+            (JsonObject)JsonSerializer.SerializeToNode(value, CamelCase).NotNull()
         );
 
     [Test]
@@ -225,7 +226,11 @@ public class DeclarativeAuthoringDefectTests
             new JsonObject { ["n"] = 7 }
         );
 
-        result.Should().BeOfType<AdvanceResult.Transitioned>().Which.Snapshot.Context["n"]!
+        result
+            .Should()
+            .BeOfType<AdvanceResult.Transitioned>()
+            .Which.Snapshot.Context["n"]
+            .NotNull()
             .GetValue<int>()
             .Should()
             .Be(7);

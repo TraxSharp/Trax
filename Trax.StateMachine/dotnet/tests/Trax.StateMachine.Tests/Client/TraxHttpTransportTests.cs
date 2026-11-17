@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Client;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Client;
 
@@ -111,7 +112,7 @@ public class TraxHttpTransportTests
             .ExecuteAsync(Request)
             .WaitAsync(TimeSpan.FromSeconds(10));
 
-        answer.Failure!.Message.Should().Contain("did not answer");
+        answer.Failure.NotNull().Message.Should().Contain("did not answer");
     }
 
     [Test]
@@ -123,7 +124,7 @@ public class TraxHttpTransportTests
             .ExecuteAsync(Request)
             .WaitAsync(TimeSpan.FromSeconds(10));
 
-        answer.Failure!.Message.Should().Contain("did not answer");
+        answer.Failure.NotNull().Message.Should().Contain("did not answer");
         body.Disposed.Should().BeTrue();
     }
 
@@ -151,7 +152,7 @@ public class TraxHttpTransportTests
             )
             .WaitAsync(TimeSpan.FromSeconds(10));
 
-        answer.Failure!.Message.Should().Be("The host did not answer within 0.2 seconds.");
+        answer.Failure.NotNull().Message.Should().Be("The host did not answer within 0.2 seconds.");
     }
 
     [Test]
@@ -178,7 +179,7 @@ public class TraxHttpTransportTests
 
         var answered = await answer.WaitAsync(TimeSpan.FromSeconds(10));
         answered.Failure.Should().BeNull();
-        answered.Data!["x"]!.GetValue<int>().Should().Be(1);
+        answered.Data.NotNull()["x"].NotNull().GetValue<int>().Should().Be(1);
     }
 
     [Test]
@@ -188,7 +189,7 @@ public class TraxHttpTransportTests
 
         var answer = await Transport(new Answers(body)).ExecuteAsync(Request);
 
-        answer.Failure!.Message.Should().Contain("could not be reached");
+        answer.Failure.NotNull().Message.Should().Contain("could not be reached");
         body.Disposed.Should().BeTrue();
     }
 
@@ -200,7 +201,7 @@ public class TraxHttpTransportTests
         var answer = await Transport(new Answers(body, length: 4096), max: 1024)
             .ExecuteAsync(Request);
 
-        answer.Failure!.Message.Should().Contain("larger than 1024");
+        answer.Failure.NotNull().Message.Should().Contain("larger than 1024");
         body.Disposed.Should().BeTrue();
     }
 

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Persistence;
 
@@ -107,9 +108,9 @@ internal sealed record MachineGraph(
             Required(root, "id"),
             root["version"]?.ToString() ?? "?",
             Required(root, "initialState"),
-            (root["states"] as JsonArray ?? []).Select(s => s!.ToString()).ToList(),
+            (root["states"] as JsonArray ?? []).Select(s => s.NotNull().ToString()).ToList(),
             (root["committedStates"] as JsonArray ?? [])
-                .Select(s => s!.ToString())
+                .Select(s => s.NotNull().ToString())
                 .ToHashSet(StringComparer.Ordinal),
             transitions,
             timers

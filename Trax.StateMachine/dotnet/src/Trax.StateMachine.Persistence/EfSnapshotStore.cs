@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -1242,7 +1243,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         CancellationToken cancellationToken
     )
     {
-        var snapshot = write.Snapshot!;
+        var snapshot = write.Snapshot.NotNull();
         var context = (DbContext)db;
         using var transaction = context.Database.CurrentTransaction is null
             ? await db.BeginTransaction(cancellationToken).ConfigureAwait(false)
@@ -1610,7 +1611,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             .Take(limit)
             .Select(x => new ExpiredDraft(
                 x.RowId,
-                x.UserKey!,
+                x.UserKey.NotNull(),
                 x.Machine,
                 x.Id,
                 x.Revision,
@@ -2038,7 +2039,13 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             .OrderBy(x => x.EffectLeaseUntil)
             .ThenBy(x => x.RowId)
             .Take(limit)
-            .Select(x => new AbandonedEffect(x.RowId, x.UserKey!, x.Machine, x.Id, x.EffectTrigger))
+            .Select(x => new AbandonedEffect(
+                x.RowId,
+                x.UserKey.NotNull(),
+                x.Machine,
+                x.Id,
+                x.EffectTrigger
+            ))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
     }

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Gherkin.Reqnroll;
 
@@ -9,23 +10,52 @@ namespace Trax.StateMachine.Gherkin.Reqnroll;
 /// </summary>
 public sealed class TraxFeatureDriverOptions
 {
+    // Unset until the host's configure sets them; reading one that is unset throws, naming it.
+    private IServiceProvider? _host;
+    private HttpClient? _client;
+    private FeatureGlossary? _glossary;
+    private Func<FeatureActor, string, string, FeatureCredential>? _credential;
+
+    /// <summary>Whether Host, Client, Glossary and Credential are all set.</summary>
+    internal bool HasRequired =>
+        _host is not null
+        && _client is not null
+        && _glossary is not null
+        && _credential is not null;
+
     /// <summary>The host's services: a Given writes through its store, and a step no person takes fires as its server.</summary>
-    public IServiceProvider Host { get; set; } = null!;
+    public IServiceProvider Host
+    {
+        get => _host.NotNull(nameof(Host));
+        set => _host = value;
+    }
 
     /// <summary>A client of the same host, as <c>WebApplicationFactory.CreateClient()</c> gives one.</summary>
-    public HttpClient Client { get; set; } = null!;
+    public HttpClient Client
+    {
+        get => _client.NotNull(nameof(Client));
+        set => _client = value;
+    }
 
     /// <summary>The path the host serves GraphQL at. Defaults to <c>/trax/graphql</c>.</summary>
     public string GraphQLPath { get; set; } = "/trax/graphql";
 
     /// <summary>The glossary the features are written in.</summary>
-    public FeatureGlossary Glossary { get; set; } = null!;
+    public FeatureGlossary Glossary
+    {
+        get => _glossary.NotNull(nameof(Glossary));
+        set => _glossary = value;
+    }
 
     /// <summary>
     /// The credential of a person: their actor, their name in the scenario, and an id unique to the scenario's run, to
     /// make a user of their own from.
     /// </summary>
-    public Func<FeatureActor, string, string, FeatureCredential> Credential { get; set; } = null!;
+    public Func<FeatureActor, string, string, FeatureCredential> Credential
+    {
+        get => _credential.NotNull(nameof(Credential));
+        set => _credential = value;
+    }
 
     /// <summary>
     /// How long past its due time a timer, a policy or an invoked train may take on the host before a Then is read

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -21,24 +22,28 @@ internal static class TimerRules
                 ? set
                 : entered[state] = new SortedSet<string>(StringComparer.Ordinal);
 
-        foreach (var edge in ir["transitions"]!.AsArray())
-            Of(edge!["to"]!.GetValue<string>())
-                .Add(Text(access["triggers"]?[edge["trigger"]!.GetValue<string>()]));
+        foreach (var edge in ir["transitions"].NotNull().AsArray())
+            Of(edge.NotNull()["to"].NotNull().GetValue<string>())
+                .Add(Text(access["triggers"]?[edge["trigger"].NotNull().GetValue<string>()]));
         if (access["start"] is { } start)
-            Of(ir["initialState"]!.GetValue<string>()).Add(Text(start));
+            Of(ir["initialState"].NotNull().GetValue<string>()).Add(Text(start));
 
         var server = timers
             .Select(t =>
-                (From: t!["state"]!.GetValue<string>(), To: t["target"]!.GetValue<string>())
+                (
+                    From: t.NotNull()["state"].NotNull().GetValue<string>(),
+                    To: t["target"].NotNull().GetValue<string>()
+                )
             )
             .Concat(
                 (ir["outcomes"] as JsonObject ?? []).SelectMany(o =>
-                    o.Value!["edges"]!
+                    o.Value.NotNull()["edges"]
+                        .NotNull()
                         .AsArray()
                         .Select(e =>
                             (
-                                From: o.Value["state"]!.GetValue<string>(),
-                                To: e!["to"]!.GetValue<string>()
+                                From: o.Value["state"].NotNull().GetValue<string>(),
+                                To: e.NotNull()["to"].NotNull().GetValue<string>()
                             )
                         )
                 )
@@ -56,7 +61,7 @@ internal static class TimerRules
 
         foreach (var timer in timers)
         {
-            var state = timer!["state"]!.GetValue<string>();
+            var state = timer.NotNull()["state"].NotNull().GetValue<string>();
             timer["rules"] = new JsonArray(
                 (entered.TryGetValue(state, out var rules) ? rules : [])
                     .Select(r => (JsonNode?)r)
@@ -73,9 +78,9 @@ internal static class TimerRules
             JsonObject r when r["roles"] is JsonArray sets => string.Join(
                 " and ",
                 sets.Select(set =>
-                    set!.AsArray() is { Count: 1 } one
+                    set.NotNull().AsArray() is { Count: 1 } one
                         ? $"Requires({one[0]})"
-                        : $"Requires(one of {string.Join(", ", set.AsArray().Select(x => x!.GetValue<string>()))})"
+                        : $"Requires(one of {string.Join(", ", set.AsArray().Select(x => x.NotNull().GetValue<string>()))})"
                 )
             ),
             _ => "undeclared",

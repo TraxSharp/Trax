@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using static Trax.StateMachine.Rules;
 
@@ -31,7 +32,7 @@ public sealed class WaitMachine : Machine<WaitState, WaitTrigger>
         m.In(WaitState.Fetching)
             .Context<WaitContext>()
             .Invokes<IWaitTrain, WaitInput, WaitOutput>(ctx => new WaitInput(
-                ctx["source"]!.GetValue<string>()
+                ctx["source"].NotNull().GetValue<string>()
             ))
             .OnDone(WaitState.Fetched)
             .OnFailed(WaitState.Cooldown)

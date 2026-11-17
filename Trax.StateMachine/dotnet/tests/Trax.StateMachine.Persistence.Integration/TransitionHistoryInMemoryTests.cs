@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Testing;
@@ -60,7 +61,8 @@ public class TransitionHistoryInMemoryTests
         {
             var turnstile = scope
                 .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                .Service("turnstile")!;
+                .Service("turnstile")
+                .NotNull();
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
@@ -89,7 +91,8 @@ public class TransitionHistoryInMemoryTests
             (
                 await discardScope
                     .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                    .Service("turnstile")!
+                    .Service("turnstile")
+                    .NotNull()
                     .Discard(new Actor.Client(User), id, "d1")
             )
                 .Should()

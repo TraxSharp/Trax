@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.UnitTests.LexiconTrains;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -49,19 +50,29 @@ public class LexiconTrainRecordTests
         var reading = Read("FireShot", Wiring);
 
         reading.Problems.Should().BeEmpty();
-        var invoke = JsonNode.Parse(reading.Json!)!["machines"]!["game"]!["invokes"]!["Firing"]!;
-        invoke["train"]!.GetValue<string>().Should().Be($"{Trains}.IFireShotTrain");
-        invoke["output"]!
+        var invoke = JsonNode
+            .Parse(reading.Json.NotNull())
+            .NotNull()["machines"]
+            .NotNull()["game"]
+            .NotNull()["invokes"]
+            .NotNull()["Firing"]
+            .NotNull();
+        invoke["train"].NotNull().GetValue<string>().Should().Be($"{Trains}.IFireShotTrain");
+        invoke["output"]
+            .NotNull()
             .AsArray()
-            .Select(f => f!["name"]!.GetValue<string>())
+            .Select(f => f.NotNull()["name"].NotNull().GetValue<string>())
             .Should()
             .Equal("result", "shots");
-        invoke["input"]!
+        invoke["input"]
+            .NotNull()
             .AsObject()
-            .Select(kv => (kv.Key, kv.Value!.GetValue<string>()))
+            .Select(kv => (kv.Key, kv.Value.NotNull().GetValue<string>()))
             .Should()
             .Equal(("square", "target"), ("owner", "$owner"), ("shots", "shots"));
-        invoke["examples"]!["the shot misses"]!
+        invoke["examples"]
+            .NotNull()["the shot misses"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"result":"miss","shots":"."}""");

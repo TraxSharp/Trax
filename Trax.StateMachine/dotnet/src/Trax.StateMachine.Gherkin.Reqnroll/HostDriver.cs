@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Features;
@@ -63,7 +64,7 @@ internal sealed class HostDriver(
         // A refused start answers a problem and no id.
         if (answer is { Answer: Answer.Moved, Result: { } result })
             _ids[new InstanceKey(machine, person.Name)] = Guid.Parse(
-                result["id"]!.GetValue<string>()
+                result["id"].NotNull().GetValue<string>()
             );
         return answer.Answer;
     }
@@ -438,7 +439,7 @@ internal sealed class HostDriver(
     {
         if (_actors.TryGetValue(person, out var actor))
             return actor;
-        var ownedBy = glossary.Machines[machine].OwnedBy!;
+        var ownedBy = glossary.Machines[machine].OwnedBy.NotNull();
         if (ownedBy.Count == 1)
             return glossary.Actors[ownedBy[0]];
         throw new InvalidOperationException(
@@ -551,7 +552,7 @@ internal sealed class HostDriver(
             ?? [];
         if (body["errors"] is JsonArray { Count: > 0 } errors)
         {
-            var error = errors[0]!;
+            var error = errors[0].NotNull();
             var code = error["extensions"]?["code"]?.GetValue<string>();
             if (code is not null && PostureCodes.Contains(code))
                 throw new InvalidOperationException(

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Persistence;
 
@@ -143,7 +144,7 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
         )
             return null;
 
-        return found.CreateEffectRunner(Service(machine)!, _idempotent, _services);
+        return found.CreateEffectRunner(Service(machine).NotNull(), _idempotent, _services);
     }
 
     /// <inheritdoc/>

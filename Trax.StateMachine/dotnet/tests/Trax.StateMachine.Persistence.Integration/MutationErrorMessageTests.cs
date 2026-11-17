@@ -33,7 +33,7 @@ public class MutationErrorMessageTests
     {
         var id = Guid.NewGuid();
         await TestDb
-            .Seed(User.CurrentUserKey!, id, OrderMachine.ReviewSnapshot(1))
+            .Seed(User.CurrentUserKey.NotNull(), id, OrderMachine.ReviewSnapshot(1))
             .ConfigureAwait(false);
         return id;
     }
@@ -49,10 +49,10 @@ public class MutationErrorMessageTests
             new SendSnapshotInput { Machine = "order", Id = id }
         );
 
-        send.Problem!.Code.Should().Be(RefusalCode.DeliveryFailed);
+        send.Problem.NotNull().Code.Should().Be(RefusalCode.DeliveryFailed);
         send.Problem.Message.Should().NotContain(Secret);
         var entry = logger.Entries.Should().ContainSingle().Which;
-        entry.Exception!.Message.Should().Be(Secret);
+        entry.Exception.NotNull().Message.Should().Be(Secret);
         send.Problem.Message.Should().Contain(entry.Reference);
     }
 
@@ -123,10 +123,10 @@ public class MutationErrorMessageTests
             }
         );
 
-        advance.Problem!.Code.Should().Be(RefusalCode.InternalError);
+        advance.Problem.NotNull().Code.Should().Be(RefusalCode.InternalError);
         advance.Problem.Message.Should().NotContain(Secret);
         var entry = logger.Entries.Should().ContainSingle().Which;
-        entry.Exception!.Message.Should().Be(Secret);
+        entry.Exception.NotNull().Message.Should().Be(Secret);
         advance.Problem.Message.Should().Contain(entry.Reference);
     }
 

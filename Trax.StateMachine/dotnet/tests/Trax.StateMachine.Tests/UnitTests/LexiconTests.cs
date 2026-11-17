@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Gherkin.Lexical;
@@ -33,20 +34,20 @@ public partial class LexiconTests
         Directory
             .GetFiles(Valid, "*.lexicon")
             .Order(StringComparer.Ordinal)
-            .Select(Path.GetFileName)!;
+            .Select(f => Path.GetFileName(f));
 
     public static IEnumerable<string> InvalidLexicons() =>
         Directory
             .GetFiles(Invalid, "*.lexicon")
             .Order(StringComparer.Ordinal)
-            .Select(Path.GetFileName)
-            .Concat(Directory.GetDirectories(Invalid).Select(Path.GetFileName))!;
+            .Select(f => Path.GetFileName(f))
+            .Concat(Directory.GetDirectories(Invalid).Select(d => Path.GetFileName(d)));
 
     public static IEnumerable<string> ValidGlossaries() =>
         Directory
             .GetFiles(Path.Combine(Formats, "glossary", "valid"), "*.json")
             .Order(StringComparer.Ordinal)
-            .Select(Path.GetFileName)!;
+            .Select(f => Path.GetFileName(f));
 
     [TestCaseSource(nameof(ValidLexicons))]
     public void A_valid_lexicon_elaborates_to_its_glossary_byte_for_byte(string name)
@@ -60,10 +61,13 @@ public partial class LexiconTests
         reading.Json.Should().Be(expected);
         // Backed by meaning, not only bytes: the two read to the same document.
         JsonNode
-            .DeepEquals(JsonNode.Parse(reading.Json!), JsonNode.Parse(expected))
+            .DeepEquals(JsonNode.Parse(reading.Json.NotNull()), JsonNode.Parse(expected))
             .Should()
             .BeTrue();
-        Glossary.Read(expected).Machines.Keys.Should().Equal(reading.Glossary!.Inner.Machines.Keys);
+        Glossary
+            .Read(expected)
+            .Machines.Keys.Should()
+            .Equal(reading.Glossary.NotNull().Inner.Machines.Keys);
     }
 
     [TestCaseSource(nameof(ValidGlossaries))]
@@ -79,7 +83,7 @@ public partial class LexiconTests
     {
         var text = File.ReadAllText(Path.Combine(Formats, "glossary", "valid", name));
 
-        GlossaryWriter.Write(JsonNode.Parse(text)!.AsObject()).Should().Be(text);
+        GlossaryWriter.Write(JsonNode.Parse(text).NotNull().AsObject()).Should().Be(text);
     }
 
     [TestCaseSource(nameof(InvalidLexicons))]
@@ -101,7 +105,7 @@ public partial class LexiconTests
         var words = expect.Groups["words"].Value.Trim();
 
         var reading = directory
-            ? Lexicon.ReadDirectory(path)!
+            ? Lexicon.ReadDirectory(path).NotNull()
             : Lexicon.Read(path, File.ReadAllText(path));
 
         reading.Succeeded.Should().BeFalse();
@@ -140,7 +144,7 @@ public partial class LexiconTests
         var reading = Lexicon.Read("notes.lexicon", lexicon);
         reading.Problems.Should().BeEmpty();
         var derived = FeatureMachines.Derive(
-            reading.Glossary!,
+            reading.Glossary.NotNull(),
             [new FeatureFile("notes.feature", feature)]
         );
 

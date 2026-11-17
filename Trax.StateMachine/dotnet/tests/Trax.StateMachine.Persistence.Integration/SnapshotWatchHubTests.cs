@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -24,34 +25,35 @@ public class SnapshotWatchHubTests(StoreProvider provider)
 
     private static readonly TimeSpan Within = TimeSpan.FromSeconds(15);
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp()
     {
         _host = InstanceHost.Create(provider);
-        _host.Services.GetRequiredService<SnapshotChangeListener>().PollInterval =
+        _host.NotNull().Services.GetRequiredService<SnapshotChangeListener>().PollInterval =
             TimeSpan.FromMilliseconds(50);
     }
 
     // The host's hub; the container owns it and disposes it with the host.
-    private SnapshotWatchHub Hub => _host.Services.GetRequiredService<SnapshotWatchHub>();
+    private SnapshotWatchHub Hub => _host.NotNull().Services.GetRequiredService<SnapshotWatchHub>();
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private async Task<(Guid Id, long RowId)> Saved()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, TestTurnstile.InitialJson).ConfigureAwait(false);
-        return (id, await _host.RowId(id).ConfigureAwait(false));
+        await _host.NotNull().SeedDraft(User, id, TestTurnstile.InitialJson).ConfigureAwait(false);
+        return (id, await _host.NotNull().RowId(id).ConfigureAwait(false));
     }
 
     private async Task Coin(Guid id)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         (
             await _host
+                .NotNull()
                 .Service(scope, "turnstile")
                 .Advance(User, id, "Coin", new JsonObject { ["coin"] = "quarter" })
                 .ConfigureAwait(false)
@@ -104,7 +106,13 @@ public class SnapshotWatchHubTests(StoreProvider provider)
         next.Revision.Should()
             .Be(2, $"each write reaches the watcher as the re-read row. See {Adr}");
         next.State.Should().Be("Unlocked");
-        JsonNode.Parse(next.Context!)!["paidWith"]!.GetValue<string>().Should().Be("quarter");
+        JsonNode
+            .Parse(next.Context.NotNull())
+            .NotNull()["paidWith"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("quarter");
     }
 
     [Test]
@@ -114,7 +122,7 @@ public class SnapshotWatchHubTests(StoreProvider provider)
         var watch = Hub.Watch(rowId);
         (await Next(watch)).Revision.Should().Be(1);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             await scope.ServiceProvider.GetRequiredService<ISnapshotStore>().Delete(User, id);
 
         var gone = await Next(watch);
@@ -145,10 +153,12 @@ public class SnapshotWatchHubTests(StoreProvider provider)
         (await Next(healthyWatch)).Revision.Should().Be(1);
 
         // As a newer version of the machine would leave it: a state this host's machine does not have.
-        await _host.Execute(
-            $"UPDATE {_host.DraftTable} SET state = 'StateFromANewerVersion' WHERE row_id = @p0",
-            broken
-        );
+        await _host
+            .NotNull()
+            .Execute(
+                $"UPDATE {_host.NotNull().DraftTable} SET state = 'StateFromANewerVersion' WHERE row_id = @p0",
+                broken
+            );
 
         var unreadable = await Next(brokenWatch);
         unreadable
@@ -209,7 +219,7 @@ public class SnapshotWatchHubTests(StoreProvider provider)
         created.RowId.Should().Be(rowId);
         created.State.Should().Be("Locked");
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             await scope.ServiceProvider.GetRequiredService<ISnapshotStore>().Delete(User, id);
         var gone = await Next(all);
         gone.Kind.Should().Be(SnapshotRowChangeKind.Gone);

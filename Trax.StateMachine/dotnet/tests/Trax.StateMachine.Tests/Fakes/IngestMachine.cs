@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
 using Ingest.Contracts;
+using Trax.Core.Extensions;
 using static Trax.StateMachine.Rules;
 
 namespace Trax.StateMachine.Tests.Fakes;
@@ -53,7 +54,7 @@ public static class IngestMachine
         m.In(IngestState.Fetching)
             .Context<SourceContext>()
             .Invokes<IFetchTrain, FetchInput, FetchOutput>(ctx => new FetchInput(
-                ctx["source"]!.GetValue<string>()
+                ctx["source"].NotNull().GetValue<string>()
             ))
             .OnDone(
                 IngestState.NeedsReview,

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Features;
 
@@ -474,8 +475,8 @@ internal sealed partial record Glossary(
             foreach (var shape in machine.Shapes.Values.Where(s => s.ContextNames is not null))
             {
                 var c = m["states"][shape.Name]["context"];
-                Distinct(c, shape.ContextNames!);
-                if (shape.ContextNames!.Contains(ViewField.State, StringComparer.Ordinal))
+                Distinct(c, shape.ContextNames.NotNull());
+                if (shape.ContextNames.NotNull().Contains(ViewField.State, StringComparer.Ordinal))
                     throw c.Fail(
                         "has a field named 'state', which a view reads as the machine's state."
                     );
@@ -695,7 +696,7 @@ internal sealed partial record Glossary(
                 && (
                     trigger.InputNames is not [ReceiptField]
                     || !string.Equals(
-                        trigger.Input[0]!["type"]!.GetValue<string>(),
+                        trigger.Input[0].NotNull()["type"].NotNull().GetValue<string>(),
                         "string",
                         StringComparison.Ordinal
                     )
@@ -738,9 +739,9 @@ internal sealed partial record Glossary(
         {
             case JsonObject o:
                 if (IsCustom(o, "rule"))
-                    rules.Add(o["name"]!.GetValue<string>());
+                    rules.Add(o["name"].NotNull().GetValue<string>());
                 if (IsCustom(o, "reduce"))
-                    reductions.Add(o["name"]!.GetValue<string>());
+                    reductions.Add(o["name"].NotNull().GetValue<string>());
                 foreach (var (_, value) in o)
                     CustomNames(value, rules, reductions);
                 break;

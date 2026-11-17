@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.FromIr;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -15,7 +16,7 @@ namespace Trax.StateMachine.Persistence.Integration;
 [TestFixture(StoreProvider.Sqlite)]
 public class MigrationBindingTests(StoreProvider provider)
 {
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [OneTimeSetUp]
     public void SetUp()
@@ -32,35 +33,39 @@ public class MigrationBindingTests(StoreProvider provider)
     }
 
     [OneTimeTearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public async Task A_stored_version_1_row_reads_as_version_2_with_its_total_backfilled()
     {
         var user = $"ada-{Guid.NewGuid():N}";
         var id = Guid.NewGuid();
-        await _host.Seed(
-            user,
-            id,
-            new Snapshot
-            {
-                Machine = "feature-checkout",
-                Version = 1,
-                State = "Cart",
-                Context = new JsonObject
+        await _host
+            .NotNull()
+            .Seed(
+                user,
+                id,
+                new Snapshot
                 {
-                    ["items"] = new JsonArray("bread", "jam"),
-                    ["receipt"] = null,
-                },
-            }
-        );
+                    Machine = "feature-checkout",
+                    Version = 1,
+                    State = "Cart",
+                    Context = new JsonObject
+                    {
+                        ["items"] = new JsonArray("bread", "jam"),
+                        ["receipt"] = null,
+                    },
+                }
+            );
 
-        using var scope = _host.Scope();
-        var loaded = await _host.Service(scope, "feature-checkout").Load(user, id);
+        using var scope = _host.NotNull().Scope();
+        var loaded = await _host.NotNull().Service(scope, "feature-checkout").Load(user, id);
 
         var snapshot = loaded.Should().BeOfType<LoadResult.Loaded>().Subject.Snapshot;
         snapshot.Version.Should().Be(2);
-        snapshot.Context["total"]!
+        snapshot
+            .Context["total"]
+            .NotNull()
             .GetValue<long>()
             .Should()
             .Be(2 * FeatureCheckout.UnitPrice, "the host's migration priced the items");

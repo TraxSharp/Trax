@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Persistence.Integration.Fakes;
 
@@ -14,7 +15,7 @@ public static class TestTurnstile
 
     private static string? Coin(JsonNode? input) =>
         input is JsonObject o && o["coin"]?.GetValueKind() == JsonValueKind.String
-            ? o["coin"]!.GetValue<string>()
+            ? o["coin"].NotNull().GetValue<string>()
             : null;
 
     public static readonly MachineDefinition<TurnstileState, TurnstileTrigger> Definition = new()
@@ -47,7 +48,7 @@ public static class TestTurnstile
             [TurnstileState.Locked] = ctx => ctx.Count == 0 ? null : "Locked carries no context.",
             [TurnstileState.Unlocked] = ctx =>
                 ctx["paidWith"]?.GetValueKind() == JsonValueKind.String
-                && ctx["paidWith"]!.GetValue<string>().Length > 0
+                && ctx["paidWith"].NotNull().GetValue<string>().Length > 0
                     ? null
                     : "Unlocked requires a non-empty paidWith.",
         },

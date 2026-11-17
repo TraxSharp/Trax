@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Gherkin;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -84,12 +85,15 @@ public class ProvenanceDerivationTests
         var provenance = await Provenance([("a.feature", Ordering), ("b.feature", More)])
             .ConfigureAwait(false);
 
-        provenance["order"]!["start"]!
+        provenance["order"]
+            .NotNull()["start"]
+            .NotNull()
             .AsArray()
-            .Select(s => s!["file"] + ":" + s["line"] + " " + s["scenario"])
+            .Select(s => s.NotNull()["file"] + ":" + s["line"] + " " + s["scenario"])
             .Should()
             .Equal("a.feature:6 Ada orders loaves", "b.feature:2 Bo orders too");
-        provenance["order"]!
+        provenance["order"]
+            .NotNull()
             .AsObject()
             .Select(kv => kv.Key)
             .Should()
@@ -127,6 +131,6 @@ public class ProvenanceDerivationTests
                 .ConfigureAwait(false)
         );
         derived.Problems.Should().BeEmpty();
-        return JsonNode.Parse(derived.Host!)!["provenance"]!.AsObject();
+        return JsonNode.Parse(derived.Host.NotNull()).NotNull()["provenance"].NotNull().AsObject();
     }
 }

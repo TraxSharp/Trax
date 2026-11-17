@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence;
@@ -69,25 +70,30 @@ public class KeyedSystemMachineTests
         var derived = await Derive(Tickets).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
-        var host = JsonNode.Parse(derived.Host!)!["machines"]!["ticket"]!;
-        host["owner"]!.ToJsonString().Should().Be("""{"system":{"keyedBy":["id"]}}""");
-        host["triggers"]!
+        var host = JsonNode
+            .Parse(derived.Host.NotNull())
+            .NotNull()["machines"]
+            .NotNull()["ticket"]
+            .NotNull();
+        host["owner"].NotNull().ToJsonString().Should().Be("""{"system":{"keyedBy":["id"]}}""");
+        host["triggers"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"Close":{"server":true},"Triage":{"server":true}}""");
         derived.Access.Should().Contain("ticket Close: the server only\n");
-        HostFile.Read(derived.Host!).Machines["ticket"].KeyedBy.Should().Equal("id");
+        HostFile.Read(derived.Host.NotNull()).Machines["ticket"].KeyedBy.Should().Equal("id");
     }
 
     [Test]
     public async Task It_is_served_as_a_system_machine_and_the_host_starts_none_of_it()
     {
         var derived = await Derive(Tickets).ConfigureAwait(false);
-        var file = HostFile.Read(derived.Host!);
+        var file = HostFile.Read(derived.Host.NotNull());
 
         var machine = IrMachines.Create(
             new IrMachines.Source(
-                JsonNode.Parse(derived.Irs["ticket"])!.AsObject(),
+                JsonNode.Parse(derived.Irs["ticket"]).NotNull().AsObject(),
                 file.Machines["ticket"]
             ),
             []

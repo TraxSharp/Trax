@@ -8,6 +8,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Testing;
@@ -40,13 +41,13 @@ public class RevisionTests(StoreProvider provider)
 
     private const string User = "u1";
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InstanceHost.Create(provider, launcher: new RecordingLauncher());
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static JsonObject Source => new() { ["source"] = "repo" };
 
@@ -72,8 +73,9 @@ public class RevisionTests(StoreProvider provider)
     private async Task<Guid> Saved(string machine, string json)
     {
         var id = Guid.NewGuid();
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         var saved = await _host
+            .NotNull()
             .Service(scope, machine)
             .Autosave(User, id, json)
             .ConfigureAwait(false);
@@ -93,13 +95,13 @@ public class RevisionTests(StoreProvider provider)
 
     private static Snapshot Parse(string json)
     {
-        var node = JsonNode.Parse(json)!.AsObject();
+        var node = JsonNode.Parse(json).NotNull().AsObject();
         return new Snapshot
         {
-            Machine = node["machine"]!.GetValue<string>(),
-            Version = node["version"]!.GetValue<int>(),
-            State = node["state"]!.GetValue<string>(),
-            Context = node["context"]!.AsObject().DeepClone().AsObject(),
+            Machine = node["machine"].NotNull().GetValue<string>(),
+            Version = node["version"].NotNull().GetValue<int>(),
+            State = node["state"].NotNull().GetValue<string>(),
+            Context = node["context"].NotNull().AsObject().DeepClone().AsObject(),
         };
     }
 
@@ -111,8 +113,9 @@ public class RevisionTests(StoreProvider provider)
         string? requestId = null
     )
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         return await _host
+            .NotNull()
             .Service(scope, machine)
             .Advance(User, id, trigger, input, requestId)
             .ConfigureAwait(false);
@@ -132,7 +135,7 @@ public class RevisionTests(StoreProvider provider)
 
     private async Task CancelEntry(string token)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .WorkQueues.Where(w => w.ExternalId == token)
@@ -147,17 +150,22 @@ public class RevisionTests(StoreProvider provider)
     {
         var fast = await Saved("turnstile", TestTurnstile.InitialJson);
         var guarded = await Saved(LedgerMachine.Id, LedgerMachine.Json(LedgerState.Counting, 1));
-        var system = (await _host.Start<SystemTurnstileMachine>(NewKey())).Id;
+        var system = (await _host.NotNull().Start<SystemTurnstileMachine>(NewKey())).Id;
 
-        (await _host.Revision(fast)).Should().Be(1, $"an autosave's insert starts at 1. See {Adr}");
-        (await _host.Revision(guarded)).Should().Be(1, "the guarded autosave's insert too");
-        (await _host.Revision(system, SnapshotOwnerKind.System))
+        (await _host.NotNull().Revision(fast))
+            .Should()
+            .Be(1, $"an autosave's insert starts at 1. See {Adr}");
+        (await _host.NotNull().Revision(guarded))
+            .Should()
+            .Be(1, "the guarded autosave's insert too");
+        (await _host.NotNull().Revision(system, SnapshotOwnerKind.System))
             .Should()
             .Be(1, "a system start's insert too");
 
         StartOutcome started;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             started = await _host
+                .NotNull()
                 .Service(scope, StartableMachine.Id)
                 .Start(
                     new Actor.Client(User),
@@ -166,14 +174,14 @@ public class RevisionTests(StoreProvider provider)
                 );
         var created = started.Should().BeOfType<StartOutcome.Started>().Subject;
         created.Revision.Should().Be(1, "a start's insert too");
-        (await _host.Revision(created.Id)).Should().Be(1);
+        (await _host.NotNull().Revision(created.Id)).Should().Be(1);
 
         new[]
         {
-            await _host.RowId(fast),
-            await _host.RowId(guarded),
-            await _host.RowId(system, SnapshotOwnerKind.System),
-            await _host.RowId(created.Id),
+            await _host.NotNull().RowId(fast),
+            await _host.NotNull().RowId(guarded),
+            await _host.NotNull().RowId(system, SnapshotOwnerKind.System),
+            await _host.NotNull().RowId(created.Id),
         }
             .Should()
             .OnlyHaveUniqueItems("each new row is its own incarnation");
@@ -197,38 +205,42 @@ public class RevisionTests(StoreProvider provider)
                 LedgerMachine.Json(LedgerState.Counting, 1, 2)
             );
         var id = await Saved(machine, first);
-        var r0 = await _host.Revision(id);
+        var r0 = await _host.NotNull().Revision(id);
 
-        using (var scope = _host.Scope())
-            (await _host.Service(scope, machine).Autosave(User, id, second))
+        using (var scope = _host.NotNull().Scope())
+            (await _host.NotNull().Service(scope, machine).Autosave(User, id, second))
                 .Should()
                 .BeOfType<AutosaveResult.Saved>();
 
-        (await _host.Revision(id)).Should().Be(r0 + 1, $"one autosave is one write. See {Adr}");
+        (await _host.NotNull().Revision(id))
+            .Should()
+            .Be(r0 + 1, $"one autosave is one write. See {Adr}");
     }
 
     [Test]
     public async Task An_advance_bumps_the_revision_by_one()
     {
         var id = await Saved("turnstile", TestTurnstile.InitialJson);
-        var r0 = await _host.Revision(id);
+        var r0 = await _host.NotNull().Revision(id);
 
         (await Advance("turnstile", id, "Coin", Quarter))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
 
-        (await _host.Revision(id)).Should().Be(r0 + 1, $"one advance is one write. See {Adr}");
+        (await _host.NotNull().Revision(id))
+            .Should()
+            .Be(r0 + 1, $"one advance is one write. See {Adr}");
     }
 
     [Test]
     public async Task Entering_an_invoking_state_bumps_once()
     {
         var id = await Saved(BuildMachine.Id, BuildMachine.Json("Draft", Source));
-        var r0 = await _host.Revision(id);
+        var r0 = await _host.NotNull().Revision(id);
 
         (await Advance(BuildMachine.Id, id, "Build")).Should().BeOfType<AdvanceOutcome.Advanced>();
 
-        (await _host.Revision(id))
+        (await _host.NotNull().Revision(id))
             .Should()
             .Be(r0 + 1, $"the state and its run's token are one write. See {Adr}");
     }
@@ -237,7 +249,7 @@ public class RevisionTests(StoreProvider provider)
     public async Task Leaving_an_invoking_state_bumps_once()
     {
         var id = await DraftInBuilding();
-        var r0 = await _host.Revision(id);
+        var r0 = await _host.NotNull().Revision(id);
 
         (await Advance(BuildMachine.Id, id, "StopBuild"))
             .Should()
@@ -245,7 +257,7 @@ public class RevisionTests(StoreProvider provider)
             .Which.Snapshot.State.Should()
             .Be("Draft");
 
-        (await _host.Revision(id))
+        (await _host.NotNull().Revision(id))
             .Should()
             .Be(r0 + 1, $"leaving and cancelling the run are one write. See {Adr}");
     }
@@ -254,13 +266,14 @@ public class RevisionTests(StoreProvider provider)
     public async Task A_send_bumps_once_to_mark_and_once_to_record()
     {
         var id = await Saved("order", OrderMachine.ReviewSnapshot(1, 2));
-        var r0 = await _host.Revision(id);
+        var r0 = await _host.NotNull().Revision(id);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                    .EffectRunner("order")!
+                    .EffectRunner("order")
+                    .NotNull()
                     .Run(User, id, "send-1")
             )
                 .Should()
@@ -268,7 +281,7 @@ public class RevisionTests(StoreProvider provider)
                 .Which.Snapshot.State.Should()
                 .Be("Placed");
 
-        (await _host.Revision(id))
+        (await _host.NotNull().Revision(id))
             .Should()
             .Be(
                 r0 + 2,
@@ -280,10 +293,10 @@ public class RevisionTests(StoreProvider provider)
     public async Task A_system_advance_bumps_once()
     {
         var key = NewKey();
-        var id = (await _host.Start<SystemTurnstileMachine>(key)).Id;
-        var r0 = await _host.Revision(id, SnapshotOwnerKind.System);
+        var id = (await _host.NotNull().Start<SystemTurnstileMachine>(key)).Id;
+        var r0 = await _host.NotNull().Revision(id, SnapshotOwnerKind.System);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await scope
                     .ServiceProvider.GetRequiredService<IMachineInstances>()
@@ -292,7 +305,7 @@ public class RevisionTests(StoreProvider provider)
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
 
-        (await _host.Revision(id, SnapshotOwnerKind.System))
+        (await _host.NotNull().Revision(id, SnapshotOwnerKind.System))
             .Should()
             .Be(r0 + 1, $"a host's trusted advance is one write. See {Adr}");
     }
@@ -301,16 +314,16 @@ public class RevisionTests(StoreProvider provider)
     public async Task An_outcome_applied_by_the_hook_bumps_once()
     {
         var id = await DraftInBuilding();
-        var token = (await _host.Rows(id)).Single().InvokeToken!;
+        var token = (await _host.NotNull().Rows(id)).Single().InvokeToken.NotNull();
         await CancelEntry(token);
-        var r0 = await _host.Revision(id);
+        var r0 = await _host.NotNull().Revision(id);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (await scope.ServiceProvider.GetRequiredService<IInvokedRunOutcomes>().Deliver(token))
                 .Should()
                 .Be("BuildCancelled");
 
-        (await _host.Revision(id))
+        (await _host.NotNull().Revision(id))
             .Should()
             .Be(r0 + 1, $"an outcome is applied in one conditional update. See {Adr}");
     }
@@ -319,17 +332,17 @@ public class RevisionTests(StoreProvider provider)
     public async Task An_outcome_applied_by_the_reconciler_bumps_once()
     {
         var id = await DraftInBuilding();
-        var token = (await _host.Rows(id)).Single().InvokeToken!;
+        var token = (await _host.NotNull().Rows(id)).Single().InvokeToken.NotNull();
         await CancelEntry(token);
-        var r0 = await _host.Revision(id);
+        var r0 = await _host.NotNull().Revision(id);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             await scope
                 .ServiceProvider.GetRequiredService<InvokeOutcomeReconciler>()
                 .SweepOnce(CancellationToken.None);
 
-        (await _host.Rows(id)).Single().State.Should().Be("BuildCancelled");
-        (await _host.Revision(id))
+        (await _host.NotNull().Rows(id)).Single().State.Should().Be("BuildCancelled");
+        (await _host.NotNull().Revision(id))
             .Should()
             .Be(r0 + 1, $"the sweep applies an outcome in one conditional update. See {Adr}");
     }
@@ -338,12 +351,12 @@ public class RevisionTests(StoreProvider provider)
     public async Task A_stranded_outcome_bumps_once()
     {
         var id = await DraftInBuilding();
-        var token = (await _host.Rows(id)).Single().InvokeToken!;
-        var r0 = await _host.Revision(id);
+        var token = (await _host.NotNull().Rows(id)).Single().InvokeToken.NotNull();
+        var r0 = await _host.NotNull().Revision(id);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var store = _host.Instances(scope);
+            var store = _host.NotNull().Instances(scope);
             var stored = await store.Get(DraftOwner.User(User), BuildMachine.Id, id);
             var building = new Snapshot
             {
@@ -352,10 +365,12 @@ public class RevisionTests(StoreProvider provider)
                 State = "Building",
                 Context = Source,
             };
-            (await store.StrandByInvokeToken(token, building, stored!.Token)).Should().BeTrue();
+            (await store.StrandByInvokeToken(token, building, stored.NotNull().Token))
+                .Should()
+                .BeTrue();
         }
 
-        (await _host.Revision(id))
+        (await _host.NotNull().Revision(id))
             .Should()
             .Be(r0 + 1, $"stranding an instance is one write. See {Adr}");
     }
@@ -368,17 +383,18 @@ public class RevisionTests(StoreProvider provider)
     {
         var id = Guid.NewGuid();
         Guid concurrency;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var store = _host.Instances(scope);
+            var store = _host.NotNull().Instances(scope);
             (await store.Insert(DraftOwner.System, id, Turnstile("Locked"))).Should().BeTrue();
-            concurrency = (await store.Get(DraftOwner.System, "turnstile", id))!.Token;
+            concurrency = (await store.Get(DraftOwner.System, "turnstile", id)).NotNull().Token;
         }
-        var r0 = await _host.Revision(id, SnapshotOwnerKind.System);
+        var r0 = await _host.NotNull().Revision(id, SnapshotOwnerKind.System);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Instances(scope)
                     .SetInvokeToken(
                         DraftOwner.System,
@@ -391,7 +407,7 @@ public class RevisionTests(StoreProvider provider)
                 .Should()
                 .BeTrue();
 
-        (await _host.Revision(id, SnapshotOwnerKind.System))
+        (await _host.NotNull().Revision(id, SnapshotOwnerKind.System))
             .Should()
             .Be(r0 + 1, $"every UPDATE bumps, the token's included. See {Adr}");
     }
@@ -400,18 +416,20 @@ public class RevisionTests(StoreProvider provider)
     public async Task A_raw_UPDATE_from_host_code_bumps_the_revision()
     {
         var id = await Saved("turnstile", TestTurnstile.InitialJson);
-        var r0 = await _host.Revision(id);
+        var r0 = await _host.NotNull().Revision(id);
 
         (
-            await _host.Execute(
-                $"UPDATE {_host.DraftTable} SET context = context WHERE row_id = @p0",
-                await _host.RowId(id)
-            )
+            await _host
+                .NotNull()
+                .Execute(
+                    $"UPDATE {_host.NotNull().DraftTable} SET context = context WHERE row_id = @p0",
+                    await _host.NotNull().RowId(id)
+                )
         )
             .Should()
             .Be(1);
 
-        (await _host.Revision(id))
+        (await _host.NotNull().Revision(id))
             .Should()
             .Be(
                 r0 + 1,
@@ -425,12 +443,12 @@ public class RevisionTests(StoreProvider provider)
     public async Task A_public_ISnapshotStore_write_bumps_once(string write)
     {
         var id = await Saved("turnstile", TestTurnstile.InitialJson);
-        var r0 = await _host.Revision(id);
+        var r0 = await _host.NotNull().Revision(id);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
             var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
-            var token = (await store.Get(User, "turnstile", id))!.Token;
+            var token = (await store.Get(User, "turnstile", id)).NotNull().Token;
             var wrote = write switch
             {
                 "Update" => await store.Update(User, id, UnlockedTurnstile, token),
@@ -446,7 +464,7 @@ public class RevisionTests(StoreProvider provider)
             wrote.Should().BeTrue();
         }
 
-        (await _host.Revision(id))
+        (await _host.NotNull().Revision(id))
             .Should()
             .Be(r0 + 1, $"a host calling the public store directly bumps it once. See {Adr}");
     }
@@ -460,12 +478,12 @@ public class RevisionTests(StoreProvider provider)
     {
         var id = await Saved("turnstile", TestTurnstile.InitialJson);
         StoredSnapshot stored;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             stored = (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
                     .Get(User, "turnstile", id)
-            )!;
+            ).NotNull();
         stored.Revision.Should().NotBeNull($"a store read carries the row's revision. See {Adr}");
 
         var advanced = (await Advance("turnstile", id, "Coin", Quarter))
@@ -479,7 +497,7 @@ public class RevisionTests(StoreProvider provider)
                 stored.Revision + 1,
                 "a write guarded by the token it read reports the revision it read plus one, without reading back"
             );
-        (await _host.Revision(id)).Should().Be(advanced.Revision);
+        (await _host.NotNull().Revision(id)).Should().Be(advanced.Revision);
     }
 
     [TestCase(nameof(RefusalCode.GuardFailed))]
@@ -494,15 +512,15 @@ public class RevisionTests(StoreProvider provider)
     public async Task A_refusal_conflict_or_replay_never_bumps(string refusal)
     {
         var (id, act) = await Refusal(refusal);
-        var before = (await _host.Rows(id)).Single();
-        var r0 = await _host.Revision(id);
+        var before = (await _host.NotNull().Rows(id)).Single();
+        var r0 = await _host.NotNull().Revision(id);
 
         await act();
 
-        (await _host.Revision(id))
+        (await _host.NotNull().Revision(id))
             .Should()
             .Be(r0, $"a {refusal} writes nothing, so it bumps nothing. See {Adr}");
-        (await _host.Rows(id))
+        (await _host.NotNull().Rows(id))
             .Single()
             .ConcurrencyToken.Should()
             .Be(before.ConcurrencyToken, "nothing was written");
@@ -574,9 +592,10 @@ public class RevisionTests(StoreProvider provider)
                     id,
                     async () =>
                     {
-                        using var scope = _host.Scope();
+                        using var scope = _host.NotNull().Scope();
                         (
                             await _host
+                                .NotNull()
                                 .Service(scope, GatedTurnstileMachine.Id)
                                 .Advance(new Actor.Client(User), id, "Coin")
                                 .ConfigureAwait(false)
@@ -654,7 +673,7 @@ public class RevisionTests(StoreProvider provider)
                     id,
                     async () =>
                     {
-                        using var scope = _host.Scope();
+                        using var scope = _host.NotNull().Scope();
                         (
                             await scope
                                 .ServiceProvider.GetRequiredService<ISnapshotStore>()
@@ -682,9 +701,10 @@ public class RevisionTests(StoreProvider provider)
                     id,
                     async () =>
                     {
-                        using var scope = _host.Scope();
+                        using var scope = _host.NotNull().Scope();
                         (
                             await _host
+                                .NotNull()
                                 .Service(scope, LedgerMachine.Id)
                                 .Autosave(User, id, closed)
                                 .ConfigureAwait(false)
@@ -702,9 +722,10 @@ public class RevisionTests(StoreProvider provider)
                     id,
                     async () =>
                     {
-                        using var scope = _host.Scope();
+                        using var scope = _host.NotNull().Scope();
                         (
                             await _host
+                                .NotNull()
                                 .Service(scope, LedgerMachine.Id)
                                 .Autosave(
                                     User,
@@ -732,19 +753,19 @@ public class RevisionTests(StoreProvider provider)
         (await Advance("turnstile", id, "Coin", Quarter))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
-        var first = await _host.RowId(id);
-        (await _host.Revision(id)).Should().Be(2);
+        var first = await _host.NotNull().RowId(id);
+        (await _host.NotNull().Revision(id)).Should().Be(2);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             await scope
                 .ServiceProvider.GetRequiredService<ISnapshotStore>()
                 .Delete(User, "turnstile", id);
-        await _host.SeedDraft(User, id, TestTurnstile.InitialJson);
+        await _host.NotNull().SeedDraft(User, id, TestTurnstile.InitialJson);
 
-        (await _host.RowId(id))
+        (await _host.NotNull().RowId(id))
             .Should()
             .NotBe(first, $"a re-created instance is a new incarnation. See {Adr}");
-        (await _host.Revision(id)).Should().Be(1, "its ordering starts again");
+        (await _host.NotNull().Revision(id)).Should().Be(1, "its ordering starts again");
     }
 
     [Test]
@@ -752,13 +773,15 @@ public class RevisionTests(StoreProvider provider)
     {
         var id = await Saved("turnstile", TestTurnstile.InitialJson);
         Guid token;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             token = (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
                     .Get(User, "turnstile", id)
-            )!.Token;
-        var r0 = await _host.Revision(id);
+            )
+                .NotNull()
+                .Token;
+        var r0 = await _host.NotNull().Revision(id);
 
         var writes = await Task.WhenAll(
                 Enumerable
@@ -766,7 +789,7 @@ public class RevisionTests(StoreProvider provider)
                     .Select(_ =>
                         Task.Run(async () =>
                         {
-                            using var scope = _host.Scope();
+                            using var scope = _host.NotNull().Scope();
                             return await scope
                                 .ServiceProvider.GetRequiredService<ISnapshotStore>()
                                 .Update(User, id, UnlockedTurnstile, token)
@@ -777,7 +800,7 @@ public class RevisionTests(StoreProvider provider)
             .WaitAsync(TimeSpan.FromSeconds(60));
 
         writes.Count(w => w).Should().Be(1, "one token admits one write");
-        (await _host.Revision(id))
+        (await _host.NotNull().Revision(id))
             .Should()
             .Be(r0 + 1, $"the losing write bumps nothing, never r0 + 2. See {Adr}");
     }
@@ -788,22 +811,26 @@ public class RevisionTests(StoreProvider provider)
         const long Big = 9_007_199_254_740_993;
         const string Owner = "u-big";
         var id = await Saved("turnstile", TestTurnstile.InitialJson);
-        var original = await _host.RowId(id);
+        var original = await _host.NotNull().RowId(id);
 
         // Inserted with the revision set, which no UPDATE trigger touches, then the original row removed.
-        await _host.Execute(
-            $"INSERT INTO {_host.DraftTable} "
-                + "(id, user_key, owner_kind, machine, version, state, context, concurrency_token, updated_at, revision) "
-                + "SELECT id, @p1, owner_kind, machine, version, state, context, concurrency_token, updated_at, @p2 "
-                + $"FROM {_host.DraftTable} WHERE row_id = @p0",
-            original,
-            Owner,
-            Big
-        );
-        await _host.Execute($"DELETE FROM {_host.DraftTable} WHERE row_id = @p0", original);
+        await _host
+            .NotNull()
+            .Execute(
+                $"INSERT INTO {_host.NotNull().DraftTable} "
+                    + "(id, user_key, owner_kind, machine, version, state, context, concurrency_token, updated_at, revision) "
+                    + "SELECT id, @p1, owner_kind, machine, version, state, context, concurrency_token, updated_at, @p2 "
+                    + $"FROM {_host.NotNull().DraftTable} WHERE row_id = @p0",
+                original,
+                Owner,
+                Big
+            );
+        await _host
+            .NotNull()
+            .Execute($"DELETE FROM {_host.NotNull().DraftTable} WHERE row_id = @p0", original);
 
         AdvanceSnapshotOutput output;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             output = await new AdvanceSnapshotJunction(
                 scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>(),
                 new FakePrincipal(Owner)
@@ -824,15 +851,16 @@ public class RevisionTests(StoreProvider provider)
                 Big + 1,
                 $"the output carries the revision beside the snapshot, exactly. See {Adr}"
             );
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
                     .Get(Owner, "turnstile", id)
-            )!
+            )
+                .NotNull()
                 .Revision.Should()
                 .Be(Big + 1, "a store read carries it exactly too");
-        (await _host.Revision(id)).Should().Be(Big + 1);
+        (await _host.NotNull().Revision(id)).Should().Be(Big + 1);
     }
 
     [Test]
@@ -842,8 +870,8 @@ public class RevisionTests(StoreProvider provider)
 
         async Task<string> Wire()
         {
-            using var scope = _host.Scope();
-            var service = _host.Service(scope, "turnstile");
+            using var scope = _host.NotNull().Scope();
+            var service = _host.NotNull().Service(scope, "turnstile");
             return service.Serialize(
                 (await service.Load(User, id).ConfigureAwait(false))
                     .Should()
@@ -854,10 +882,12 @@ public class RevisionTests(StoreProvider provider)
 
         var before = await Wire();
         // A write that bumps the revision, and changes nothing else the snapshot holds.
-        await _host.Execute(
-            $"UPDATE {_host.DraftTable} SET context = context WHERE row_id = @p0",
-            await _host.RowId(id)
-        );
+        await _host
+            .NotNull()
+            .Execute(
+                $"UPDATE {_host.NotNull().DraftTable} SET context = context WHERE row_id = @p0",
+                await _host.NotNull().RowId(id)
+            );
         var after = await Wire();
 
         after
@@ -867,7 +897,7 @@ public class RevisionTests(StoreProvider provider)
             wire.Should().NotContainAny("revision", "dueAt", "due_at", "rowId", "row_id");
 
         LoadSnapshotOutput loaded;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             loaded = await new LoadSnapshotJunction(
                 scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>(),
                 new FakePrincipal(User)
@@ -877,9 +907,10 @@ public class RevisionTests(StoreProvider provider)
         // The twin's result is compared byte for byte with the server's canonical wire, so a revision inside it
         // would make every clientResult diverge.
         var clientResult = TestTurnstile.Machine.Serialize(UnlockedTurnstile);
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Service(scope, "turnstile")
                     .Advance(User, id, "Coin", Quarter, requestId: null, clientResult)
             )
@@ -1102,7 +1133,9 @@ public class RevisionTests(StoreProvider provider)
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
                     .Get(User, "turnstile", id)
                     .ConfigureAwait(false)
-            )!.Revision;
+            )
+                .NotNull()
+                .Revision;
         }
 
         var scope = host.CreateAsyncScope();
@@ -1123,7 +1156,8 @@ public class RevisionTests(StoreProvider provider)
         await using (advanceScope.ConfigureAwait(false))
             advanced = await advanceScope
                 .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                .Service("turnstile")!
+                .Service("turnstile")
+                .NotNull()
                 .Advance(User, id, "Coin", Quarter);
         advanced.Should().BeOfType<AdvanceOutcome.Advanced>().Which.Revision.Should().Be(2);
         (await Stored()).Should().Be(2);
@@ -1148,7 +1182,7 @@ public class RevisionTests(StoreProvider provider)
 
         advanced.Snapshot.State.Should().Be("Unlocked");
         advanced.Revision.Should().BeNull("this store records none");
-        var stored = (await ((ISnapshotStore)store).Get(User, id))!;
+        var stored = (await ((ISnapshotStore)store).Get(User, id)).NotNull();
         stored.Revision.Should().BeNull();
         stored.RowId.Should().BeNull();
     }
@@ -1294,7 +1328,7 @@ public class RevisionTests(StoreProvider provider)
             ("Draft", 1),
         ];
 
-        private InstanceHost Host => test._host;
+        private InstanceHost Host => test._host.NotNull();
 
         public async Task Run(Op[] ops)
         {
@@ -1462,7 +1496,7 @@ public class RevisionTests(StoreProvider provider)
         // Fires trigger from the current state as a new request, as the service would.
         private async Task Fire(string trigger, string requestId)
         {
-            var from = _orderState!;
+            var from = _orderState.NotNull();
             var outcome = await Advance(trigger, requestId).ConfigureAwait(false);
             if (string.Equals(from, "Draft", StringComparison.Ordinal) && _items == 0)
             {
@@ -1509,7 +1543,8 @@ public class RevisionTests(StoreProvider provider)
             using (var scope = Host.Scope())
                 outcome = await scope
                     .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                    .EffectRunner("order")!
+                    .EffectRunner("order")
+                    .NotNull()
                     .Run(_user, _order, string.Create(CultureInfo.InvariantCulture, $"s{_step}"))
                     .ConfigureAwait(false);
 
@@ -1562,7 +1597,7 @@ public class RevisionTests(StoreProvider provider)
                 case "Building":
                     var token = (await Host.Rows(_build).ConfigureAwait(false))
                         .Single()
-                        .InvokeToken!;
+                        .InvokeToken.NotNull();
                     await test.CancelEntry(token).ConfigureAwait(false);
                     using (var scope = Host.Scope())
                         (
@@ -1606,7 +1641,8 @@ public class RevisionTests(StoreProvider provider)
                         state,
                         string.Create(CultureInfo.InvariantCulture, $"after step {_step} ({op})")
                     );
-                (JsonNode.Parse(row.Context)!["items"] as JsonArray)!
+                (JsonNode.Parse(row.Context).NotNull()["items"] as JsonArray)
+                    .NotNull()
                     .Count.Should()
                     .Be(
                         _items,

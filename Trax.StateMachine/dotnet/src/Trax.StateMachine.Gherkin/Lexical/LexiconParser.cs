@@ -1,4 +1,5 @@
 using System.Globalization;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Gherkin.Lexical;
 
@@ -57,7 +58,7 @@ internal sealed class LexiconParser
         }
         if (line.Broken)
         {
-            _open.Add((keyword.Opens!.Value, null));
+            _open.Add((keyword.Opens.NotNull().Value, null));
             return;
         }
         var parent = _open[at].Node;

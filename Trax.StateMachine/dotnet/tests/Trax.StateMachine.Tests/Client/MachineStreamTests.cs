@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using AwesomeAssertions;
 using Microsoft.Extensions.Time.Testing;
 using Trax.Client;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
 
@@ -22,7 +23,7 @@ public class MachineStreamTests
     {
         Id = "turnstile",
         IrHash = MachinePredictor.For(DeclarativeTurnstile.Built).IrHash,
-        Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built))!,
+        Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built)).NotNull(),
         Documents =
         [
             new ClientManifestDocument
@@ -171,7 +172,7 @@ public class MachineStreamTests
         using var following = stream;
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
 
-        first.Push((JsonObject)JsonNode.Parse($$"""{"data":{{data}}}""")!);
+        first.Push((JsonObject)JsonNode.Parse($$"""{"data":{{data}}}""").NotNull());
         first.Push(Changed(2));
 
         (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
@@ -197,9 +198,11 @@ public class MachineStreamTests
 
         first.Push(
             (JsonObject)
-                JsonNode.Parse(
-                    """{"data":{"turnstileChanged":{"state":"Locked","revision":2.0,"context":{},"dueAt":"2026-10-22T12:10:00.5+02:00"}}}"""
-                )!
+                JsonNode
+                    .Parse(
+                        """{"data":{"turnstileChanged":{"state":"Locked","revision":2.0,"context":{},"dueAt":"2026-10-22T12:10:00.5+02:00"}}}"""
+                    )
+                    .NotNull()
         );
 
         var changed = (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
@@ -223,13 +226,15 @@ public class MachineStreamTests
 
         first.Push(
             (JsonObject)
-                JsonNode.Parse(
-                    """{"data":{"turnstileChanged":{"state":"Locked","revision":1,"rowId":ROW,"context":{}}}}""".Replace(
-                        "ROW",
-                        rowId,
-                        StringComparison.Ordinal
+                JsonNode
+                    .Parse(
+                        """{"data":{"turnstileChanged":{"state":"Locked","revision":1,"rowId":ROW,"context":{}}}}""".Replace(
+                            "ROW",
+                            rowId,
+                            StringComparison.Ordinal
+                        )
                     )
-                )!
+                    .NotNull()
         );
 
         (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
@@ -241,9 +246,11 @@ public class MachineStreamTests
 
     private static JsonObject Errors(string code) =>
         (JsonObject)
-            JsonNode.Parse(
-                $$$"""{"data":null,"errors":[{"message":"Not allowed.","extensions":{"code":"{{{code}}}"}}]}"""
-            )!;
+            JsonNode
+                .Parse(
+                    $$$"""{"data":null,"errors":[{"message":"Not allowed.","extensions":{"code":"{{{code}}}"}}]}"""
+                )
+                .NotNull();
 
     [TestCase("TRAX_AUTHORIZATION", "FORBIDDEN")]
     [TestCase("AUTH_NOT_AUTHORIZED", "FORBIDDEN")]
@@ -281,7 +288,7 @@ public class MachineStreamTests
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
 
         first.Sink.Error(
-            new SubscriptionErrorException((JsonArray)Errors(error)["errors"]!.DeepClone())
+            new SubscriptionErrorException((JsonArray)Errors(error)["errors"].NotNull().DeepClone())
         );
 
         var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
@@ -301,7 +308,9 @@ public class MachineStreamTests
         first.Sink.Error(
             new SubscriptionErrorException(
                 (JsonArray)
-                    JsonNode.Parse("""[{"message":"m","extensions":{"code":"A","code":"B"}}]""")!
+                    JsonNode
+                        .Parse("""[{"message":"m","extensions":{"code":"A","code":"B"}}]""")
+                        .NotNull()
             )
         );
 
@@ -485,14 +494,14 @@ public class MachineStreamTests
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
 
         first.Sink.Complete();
-        var ended = PendingTimer(stream)!;
+        var ended = PendingTimer(stream).NotNull();
         time.Advance(TimeSpan.FromSeconds(1));
         var second = await socket
             .Subscriptions.Reader.ReadAsync(CancellationToken.None)
             .AsTask()
             .WaitAsync(Wait, CancellationToken.None);
         second.Sink.Complete();
-        var pending = PendingTimer(stream)!;
+        var pending = PendingTimer(stream).NotNull();
         stream.Dispose();
 
         // A source is cancelled at once and disposed once its callbacks ran, on the thread pool.
@@ -511,7 +520,8 @@ public class MachineStreamTests
         (CancellationTokenSource?)
             stream
                 .GetType()
-                .GetField("_timer", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .GetField("_timer", BindingFlags.NonPublic | BindingFlags.Instance)
+                .NotNull()
                 .GetValue(stream);
 
     private static bool IsDisposed(CancellationTokenSource source)

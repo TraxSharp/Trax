@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Helpers;
 
 namespace Trax.StateMachine.Tests.Client;
@@ -34,7 +35,7 @@ public partial class ClientConformanceTests
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        using var process = Process.Start(start)!;
+        using var process = Process.Start(start).NotNull();
         var stderr = process.StandardError.ReadToEndAsync();
         var writing = new SemaphoreSlim(1, 1);
         var answers = new List<Task>();
@@ -108,17 +109,19 @@ public partial class ClientConformanceTests
         if (!File.Exists(list))
             return 0;
         var entries = JsonNode
-            .Parse(await File.ReadAllTextAsync(list).ConfigureAwait(false))!
+            .Parse(await File.ReadAllTextAsync(list).ConfigureAwait(false))
+            .NotNull()
             .AsArray();
         return Directory
             .GetFiles(Path.Combine(clientKit, "transcripts"), "*.json")
             .Select(Path.GetFileNameWithoutExtension)
             .Count(name =>
                 entries.Any(e =>
-                    string.Equals((string?)e!["case"], name, StringComparison.Ordinal)
+                    string.Equals((string?)e.NotNull()["case"], name, StringComparison.Ordinal)
                     || (
                         e["prefix"] is { } prefix
-                        && name!.StartsWith((string)prefix!, StringComparison.Ordinal)
+                        && name.NotNull()
+                            .StartsWith(((string?)prefix).NotNull(), StringComparison.Ordinal)
                     )
                 )
             );
@@ -136,12 +139,17 @@ public partial class ClientConformanceTests
         var block = LacksBlock.Match(protocol);
         block.Success.Should().BeTrue("PROTOCOL.md has a `json lacks` block");
         var lacked = JsonNode
-            .Parse(block.Groups["lacks"].Value)!
+            .Parse(block.Groups["lacks"].Value)
+            .NotNull()
             .AsArray()
             .Where(e =>
-                string.Equals((string?)e!["client"], ClientTestee.Client, StringComparison.Ordinal)
+                string.Equals(
+                    (string?)e.NotNull()["client"],
+                    ClientTestee.Client,
+                    StringComparison.Ordinal
+                )
             )
-            .Select(e => (string)e!["capability"]!)
+            .Select(e => ((string?)e.NotNull()["capability"]).NotNull())
             .ToHashSet(StringComparer.Ordinal);
         var skipped = 0;
         foreach (var path in Directory.GetFiles(Path.Combine(clientKit, "transcripts"), "*.json"))
@@ -151,10 +159,11 @@ public partial class ClientConformanceTests
                     .Parse(
                         await File.ReadAllTextAsync(path).ConfigureAwait(false),
                         documentOptions: Transcript
-                    )!["needs"]
+                    )
+                    .NotNull()["needs"]
                     ?.AsArray()
                 ?? [];
-            if (needs.Any(n => lacked.Contains((string)n!)))
+            if (needs.Any(n => lacked.Contains(((string?)n).NotNull())))
                 skipped++;
         }
         return skipped;

@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
@@ -84,7 +85,8 @@ public class GenericRulesTests
             .Snapshot.Should()
             .BeNull($"the owner without the role the get rule names reads nothing. See {Adr}");
         refused
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.NotFound, $"a refused read answers as an unknown id does. See {Adr}");
         read.Problem.Should().BeNull();
         read.Snapshot.Should().NotBeNull();
@@ -108,10 +110,12 @@ public class GenericRulesTests
             }
         );
         var host = await registry
-            .Service(ViewerReadMachine.Id)!
+            .Service(ViewerReadMachine.Id)
+            .NotNull()
             .Advance(owner, id, nameof(TurnstileTrigger.Coin), input: null, requestId);
         var client = await registry
-            .Service(ViewerReadMachine.Id)!
+            .Service(ViewerReadMachine.Id)
+            .NotNull()
             .Advance(
                 DeskRoles.Client(owner),
                 id,
@@ -121,7 +125,8 @@ public class GenericRulesTests
             );
 
         generic
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.InvalidRequestId, $"a blank id names no request. See {Adr}");
         foreach (var outcome in new[] { host, client })
             outcome
@@ -129,7 +134,8 @@ public class GenericRulesTests
                 .BeOfType<AdvanceOutcome.Rejected>()
                 .Which.Reason.Should()
                 .Be(RefusalCode.InvalidRequestId, $"a blank id names no request. See {Adr}");
-        (await TestDb.NewStore().Get(owner, ViewerReadMachine.Id, id))!
+        (await TestDb.NewStore().Get(owner, ViewerReadMachine.Id, id))
+            .NotNull()
             .Json.Should()
             .Contain(nameof(TurnstileState.Locked), "nothing moved");
     }
@@ -161,7 +167,8 @@ public class GenericRulesTests
             }
         );
 
-        send.Problem!.Code.Should()
+        send.Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.InvalidRequestId, $"a blank id names no request. See {Adr}");
         effect.Calls.Should().Be(0, "a refused send delivers nothing");
     }

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using static Trax.StateMachine.Rules;
 
 namespace Trax.StateMachine.Persistence.Integration.Fakes;
@@ -27,9 +28,12 @@ public class RuledRawTurnstileMachine : Machine<TurnstileState, TurnstileTrigger
                 (_, input) =>
                     input is JsonObject o
                     && o["coin"]?.GetValueKind() == JsonValueKind.String
-                    && o["coin"]!.GetValue<string>() is "quarter" or "dollar"
+                    && o["coin"].NotNull().GetValue<string>() is "quarter" or "dollar"
             )
-            .Reduce((_, input) => new JsonObject { ["paidWith"] = input!["coin"]!.DeepClone() })
+            .Reduce(
+                (_, input) =>
+                    new JsonObject { ["paidWith"] = input.NotNull()["coin"].NotNull().DeepClone() }
+            )
             .To(TurnstileState.Unlocked);
 
         m.In(TurnstileState.Unlocked)

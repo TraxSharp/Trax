@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -130,7 +131,7 @@ internal sealed class Access
                         new Problem(
                             clash.Scenario.File,
                             clash.Line,
-                            $"{clash.Person} may not {trigger} here, and {also.Person}, also {glossary.Actors[also.Actor!].Noun}, does in '{also.Scenario.Name}' ({also.Scenario.Id}). An actor may fire a trigger or not; say which."
+                            $"{clash.Person} may not {trigger} here, and {also.Person}, also {glossary.Actors[also.Actor.NotNull()].Noun}, does in '{also.Scenario.Name}' ({also.Scenario.Id}). An actor may fire a trigger or not; say which."
                         )
                     );
                     continue;
@@ -142,7 +143,7 @@ internal sealed class Access
                     // The rule is the granted actors' roles, so an actor a scenario denies must hold none of them: a
                     // rule that admits them too is a widening, and a problem.
                     var widened = denied.FirstOrDefault(d =>
-                        Admits(rule, glossary.Actors[d.Actor!])
+                        Admits(rule, glossary.Actors[d.Actor.NotNull()])
                     );
                     if (widened is not null)
                     {
@@ -150,7 +151,7 @@ internal sealed class Access
                             new Problem(
                                 widened.Scenario.File,
                                 widened.Line,
-                                $"{widened.Person} may not {trigger} here, and the rule that lets {string.Join(" and ", granted.Select(a => a.Noun))} fire it in '{allowed[0].Scenario.Name}' ({allowed[0].Scenario.Id}) admits {glossary.Actors[widened.Actor!].Noun} too, by its roles. Give the actors roles that tell them apart."
+                                $"{widened.Person} may not {trigger} here, and the rule that lets {string.Join(" and ", granted.Select(a => a.Noun))} fire it in '{allowed[0].Scenario.Name}' ({allowed[0].Scenario.Id}) admits {glossary.Actors[widened.Actor.NotNull()].Noun} too, by its roles. Give the actors roles that tell them apart."
                             )
                         );
                         continue;
@@ -159,20 +160,20 @@ internal sealed class Access
                     // A gated event may not enter the start state: anyone who may start an instance can put one there,
                     // so the rule would gate nothing. The host refuses it; derivation says so first, per edge.
                     if (!rule.ContainsKey("anyAuthenticated"))
-                        foreach (var edge in irs[machine.Id]["transitions"]!.AsArray())
+                        foreach (var edge in irs[machine.Id]["transitions"].NotNull().AsArray())
                             if (
                                 string.Equals(
-                                    edge!["trigger"]!.GetValue<string>(),
+                                    edge.NotNull()["trigger"].NotNull().GetValue<string>(),
                                     trigger,
                                     StringComparison.Ordinal
                                 )
                                 && string.Equals(
-                                    edge["to"]!.GetValue<string>(),
+                                    edge["to"].NotNull().GetValue<string>(),
                                     machine.Initial,
                                     StringComparison.Ordinal
                                 )
                                 && !string.Equals(
-                                    edge["from"]!.GetValue<string>(),
+                                    edge["from"].NotNull().GetValue<string>(),
                                     machine.Initial,
                                     StringComparison.Ordinal
                                 )
@@ -338,9 +339,11 @@ internal sealed class Access
         rule.ContainsKey("anyAuthenticated")
         || (
             !actor.AnyAuthenticated
-            && rule["roles"]![0]!
+            && rule["roles"]
+                .NotNull()[0]
+                .NotNull()
                 .AsArray()
-                .Select(r => r!.GetValue<string>())
+                .Select(r => r.NotNull().GetValue<string>())
                 .Intersect(actor.Roles, StringComparer.Ordinal)
                 .Any()
         );

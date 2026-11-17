@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Testing;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
@@ -33,7 +34,7 @@ public class DeclarativeTurnstileTests
         var declarative = DeclarativeTurnstile.Built.Declarative;
 
         declarative.Should().NotBeNull();
-        declarative!.ContextSchemas.Should().ContainKey(TurnstileState.Unlocked);
+        declarative.NotNull().ContextSchemas.Should().ContainKey(TurnstileState.Unlocked);
         declarative
             .ContextSchemas[TurnstileState.Unlocked]
             .Fields.Should()

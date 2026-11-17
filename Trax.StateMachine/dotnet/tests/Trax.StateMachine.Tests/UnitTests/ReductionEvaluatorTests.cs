@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.UnitTests;
 
@@ -28,7 +29,7 @@ public class ReductionEvaluatorTests
 
         result.ToJsonString().Should().Be(context.ToJsonString());
         result["a"] = 99; // mutating the result must not touch the source
-        context["a"]!.GetValue<int>().Should().Be(1);
+        context["a"].NotNull().GetValue<int>().Should().Be(1);
     }
 
     [Test]
@@ -51,7 +52,7 @@ public class ReductionEvaluatorTests
 
         result.ToJsonString().Should().Be(initial.ToJsonString());
         result["total"] = 5; // independent of the source initial context
-        initial["total"]!.GetValue<int>().Should().Be(0);
+        initial["total"].NotNull().GetValue<int>().Should().Be(0);
     }
 
     [Test]
@@ -67,14 +68,16 @@ public class ReductionEvaluatorTests
         );
 
         // items survived (clone-and-set, not replace), receipt filled from input.
-        result["items"]!
+        result["items"]
+            .NotNull()
             .AsArray()
             .Should()
             .ContainSingle()
-            .Which!.GetValue<string>()
+            .Which.NotNull()
+            .GetValue<string>()
             .Should()
             .Be("book");
-        result["receipt"]!.GetValue<string>().Should().Be("rcpt_1");
+        result["receipt"].NotNull().GetValue<string>().Should().Be("rcpt_1");
     }
 
     [Test]
@@ -90,8 +93,8 @@ public class ReductionEvaluatorTests
             new JsonObject { ["coin"] = "quarter" }
         );
 
-        result["paidWith"]!.GetValue<string>().Should().Be("quarter");
-        result["flag"]!.GetValue<bool>().Should().BeTrue();
+        result["paidWith"].NotNull().GetValue<string>().Should().Be("quarter");
+        result["flag"].NotNull().GetValue<bool>().Should().BeTrue();
         result["missing"].Should().BeNull("a missing input field resolves to JSON null");
     }
 
@@ -103,16 +106,13 @@ public class ReductionEvaluatorTests
             StringComparer.Ordinal
         )
         {
-            ["double"] = (ctx, _) => new JsonObject { ["a"] = ctx["a"]!.GetValue<int>() * 2 },
+            ["double"] = (ctx, _) =>
+                new JsonObject { ["a"] = ctx["a"].NotNull().GetValue<int>() * 2 },
         };
 
-        ReductionEvaluator.Apply(
-            new Reduction.Custom("double"),
-            context,
-            input: null,
-            NoInitial,
-            reducers
-        )["a"]!
+        ReductionEvaluator
+            .Apply(new Reduction.Custom("double"), context, input: null, NoInitial, reducers)["a"]
+            .NotNull()
             .GetValue<int>()
             .Should()
             .Be(2);

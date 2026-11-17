@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence;
@@ -184,22 +185,33 @@ public class HandlerDerivationTests
     {
         var derived = await Derive(Glossary, Features).ConfigureAwait(false);
 
-        var entry = JsonNode.Parse(derived.Host!)!["machines"]!["checkout"]!;
-        entry["effects"]!
+        var entry = JsonNode
+            .Parse(derived.Host.NotNull())
+            .NotNull()["machines"]
+            .NotNull()["checkout"]
+            .NotNull();
+        entry["effects"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"Pay":"Trax.Samples.StateMachine.ICharge"}""");
-        entry["handlers"]!
+        entry["handlers"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be(
                 """{"reductions":{"checkout:add-item":"Trax.Samples.StateMachine.AddItemToCart"},"rules":{"checkout:total-matches-items":"Trax.Samples.StateMachine.TotalMatchesItems"}}"""
             );
-        entry["migrations"]!
+        entry["migrations"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"1":"Trax.Samples.StateMachine.CheckoutFromVersion1"}""");
-        HostFile.Read(derived.Host!).Machines["checkout"].Effects.Should().ContainKey("Pay");
+        HostFile
+            .Read(derived.Host.NotNull())
+            .Machines["checkout"]
+            .Effects.Should()
+            .ContainKey("Pay");
     }
 
     [Test]
@@ -295,8 +307,8 @@ public class HandlerDerivationTests
     public async Task A_host_file_that_does_not_pair_its_handlers_with_the_IR_is_refused_when_served()
     {
         var derived = await Derive(Glossary, Features).ConfigureAwait(false);
-        var ir = JsonNode.Parse(derived.Irs["checkout"])!.AsObject();
-        var host = HostFile.Read(derived.Host!).Machines["checkout"];
+        var ir = JsonNode.Parse(derived.Irs["checkout"]).NotNull().AsObject();
+        var host = HostFile.Read(derived.Host.NotNull()).Machines["checkout"];
 
         foreach (
             var (broken, expected) in new[]

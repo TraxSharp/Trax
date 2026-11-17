@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
@@ -23,7 +24,7 @@ public class SnapshotDraftServiceTimerTests(StoreProvider provider)
 
     private const string User = "timer-user";
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp() =>
@@ -33,25 +34,25 @@ public class SnapshotDraftServiceTimerTests(StoreProvider provider)
         );
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public async Task Advance_with_the_timer_trigger_is_refused_timer_bound()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, ReminderMachine.Json("Idle"));
-        using (var scope = _host.Scope())
+        await _host.NotNull().SeedDraft(User, id, ReminderMachine.Json("Idle"));
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, ReminderMachine.Id);
+            var service = _host.NotNull().Service(scope, ReminderMachine.Id);
             (await service.Advance(new Actor.Client(User, "Editor"), id, "Open"))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
         }
-        var before = (await _host.Rows(id)).Single();
+        var before = (await _host.NotNull().Rows(id)).Single();
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, ReminderMachine.Id);
+            var service = _host.NotNull().Service(scope, ReminderMachine.Id);
 
             (await service.Advance(User, id, ReminderMachine.ReviewTimer))
                 .Should()
@@ -70,7 +71,7 @@ public class SnapshotDraftServiceTimerTests(StoreProvider provider)
                     Trigger = ReminderMachine.ReviewTimer,
                 }
             );
-            generic.Problem!.Code.Should().Be(RefusalCode.TimerBound, Because);
+            generic.Problem.NotNull().Code.Should().Be(RefusalCode.TimerBound, Because);
 
             // The typed path, and a host train forwarding its caller, both act as that client.
             (
@@ -86,7 +87,7 @@ public class SnapshotDraftServiceTimerTests(StoreProvider provider)
                 .Be(RefusalCode.TimerBound, Because);
         }
 
-        var after = (await _host.Rows(id)).Single();
+        var after = (await _host.NotNull().Rows(id)).Single();
         after.State.Should().Be("Review");
         after.ConcurrencyToken.Should().Be(before.ConcurrencyToken, "nothing was written");
     }
@@ -95,8 +96,8 @@ public class SnapshotDraftServiceTimerTests(StoreProvider provider)
     public async Task IMachineInstances_Advance_with_the_timer_trigger_is_refused()
     {
         var key = MachineKey.Of("timers", Guid.NewGuid().ToString());
-        var instance = await _host.Start<SystemReminderMachine>(key);
-        using (var scope = _host.Scope())
+        var instance = await _host.NotNull().Start<SystemReminderMachine>(key);
+        using (var scope = _host.NotNull().Scope())
             (
                 await scope
                     .ServiceProvider.GetRequiredService<IMachineInstances>()
@@ -104,9 +105,9 @@ public class SnapshotDraftServiceTimerTests(StoreProvider provider)
             )
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
-        var before = (await _host.Rows(instance.Id)).Single();
+        var before = (await _host.NotNull().Rows(instance.Id)).Single();
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await scope
                     .ServiceProvider.GetRequiredService<IMachineInstances>()
@@ -120,7 +121,7 @@ public class SnapshotDraftServiceTimerTests(StoreProvider provider)
                     $"trusted host code cannot fire a timer either. See {Adr}"
                 );
 
-        var after = (await _host.Rows(instance.Id)).Single();
+        var after = (await _host.NotNull().Rows(instance.Id)).Single();
         after.State.Should().Be("Review");
         after.ConcurrencyToken.Should().Be(before.ConcurrencyToken, "nothing was written");
     }

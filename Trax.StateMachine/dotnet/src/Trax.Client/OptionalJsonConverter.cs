@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
@@ -14,7 +15,13 @@ internal sealed class OptionalJsonConverter<T> : JsonConverter<Optional<T>>
         ref Utf8JsonReader reader,
         Type typeToConvert,
         JsonSerializerOptions options
-    ) => new(JsonSerializer.Deserialize(ref reader, TypeInfo(options))!);
+    )
+    {
+        var read = JsonSerializer.Deserialize(ref reader, TypeInfo(options));
+        // A null token is a value that was sent, and an Optional<string?> holds it. Deserialize types its result T?,
+        // which for an unconstrained T is T itself with null allowed, so this reinterprets nothing.
+        return new(Unsafe.As<T?, T>(ref read));
+    }
 
     public override void Write(
         Utf8JsonWriter writer,

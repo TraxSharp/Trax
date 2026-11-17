@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Ingest.Contracts;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
@@ -382,8 +383,13 @@ public class InvokesDeclarationTests
 
         var moved = result.Should().BeOfType<AdvanceResult.Transitioned>().Subject.Snapshot;
         moved.State.Should().Be(nameof(IngestState.NeedsReview));
-        moved.Context["fingerprint"]!.GetValue<string>().Should().Be("sha256:def");
-        moved.Context["source"]!.GetValue<string>().Should().Be(IngestMachine.InitialSource);
+        moved.Context["fingerprint"].NotNull().GetValue<string>().Should().Be("sha256:def");
+        moved
+            .Context["source"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be(IngestMachine.InitialSource);
     }
 
     [Test]
@@ -396,7 +402,7 @@ public class InvokesDeclarationTests
 
         var moved = result.Should().BeOfType<AdvanceResult.Transitioned>().Subject.Snapshot;
         moved.State.Should().Be(nameof(IngestState.Fetched));
-        moved.Context["fingerprint"]!.GetValue<string>().Should().Be("sha256:abc");
+        moved.Context["fingerprint"].NotNull().GetValue<string>().Should().Be("sha256:abc");
     }
 
     [Test]
@@ -514,14 +520,16 @@ public class InvokesDeclarationTests
     {
         var structure = IngestMachine.Machine.Describe();
 
-        structure["triggers"]!
+        structure["triggers"]
+            .NotNull()
             .AsArray()
-            .Select(t => t!.GetValue<string>())
+            .Select(t => t.NotNull().GetValue<string>())
             .Should()
             .Contain(["Fetching.done", "Fetching.failed", "Fetching.cancelled"]);
-        structure["transitions"]!
+        structure["transitions"]
+            .NotNull()
             .AsArray()
-            .Select(t => t!.ToJsonString())
+            .Select(t => t.NotNull().ToJsonString())
             .Should()
             .Contain("""{"from":"Fetching","trigger":"Fetching.done","to":"NeedsReview"}""");
     }
@@ -529,57 +537,73 @@ public class InvokesDeclarationTests
     [Test]
     public void Outcomes_export_as_their_own_trigger_kind_per_invoke_edge_with_the_output_schema()
     {
-        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(IngestMachine.Built))!;
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(IngestMachine.Built)).NotNull();
 
         // The user's triggers are unchanged; outcomes are their own kind, one per outcome of the invoking state.
-        ir["triggers"]!
+        ir["triggers"]
+            .NotNull()
             .AsArray()
-            .Select(t => t!.GetValue<string>())
+            .Select(t => t.NotNull().GetValue<string>())
             .Should()
             .Equal("Abandon", "Approve", "Retry", "Start");
-        var outcomes = (JsonObject)ir["outcomes"]!;
+        var outcomes = (JsonObject)ir["outcomes"].NotNull();
         outcomes
             .Select(kv => kv.Key)
             .Should()
             .BeEquivalentTo("Fetching.done", "Fetching.failed", "Fetching.cancelled");
 
-        var done = (JsonObject)outcomes["Fetching.done"]!;
-        done["state"]!.GetValue<string>().Should().Be("Fetching");
-        done["outcome"]!.GetValue<string>().Should().Be("done");
+        var done = (JsonObject)outcomes["Fetching.done"].NotNull();
+        done["state"].NotNull().GetValue<string>().Should().Be("Fetching");
+        done["outcome"].NotNull().GetValue<string>().Should().Be("done");
         done.ContainsKey("train")
             .Should()
             .BeFalse(
                 "the twin never starts a train, so the IR shipped to the browser does not name the server's "
                     + "train interface"
             );
-        var edges = done["edges"]!.AsArray().Cast<JsonObject>().ToList();
-        edges.Select(e => e["to"]!.GetValue<string>()).Should().Equal("NeedsReview", "Fetched");
-        edges[0]["guard"]!["rule"]!.GetValue<string>().Should().Be("boolEquals");
-        edges[0]["guard"]!["source"]!.GetValue<string>().Should().Be("input");
-        edges[0]["reduce"]!["reduce"]!.GetValue<string>().Should().Be("set");
+        var edges = done["edges"].NotNull().AsArray().Cast<JsonObject>().ToList();
+        edges
+            .Select(e => e["to"].NotNull().GetValue<string>())
+            .Should()
+            .Equal("NeedsReview", "Fetched");
+        edges[0]["guard"].NotNull()["rule"].NotNull().GetValue<string>().Should().Be("boolEquals");
+        edges[0]["guard"].NotNull()["source"].NotNull().GetValue<string>().Should().Be("input");
+        edges[0]["reduce"].NotNull()["reduce"].NotNull().GetValue<string>().Should().Be("set");
         edges[1].ContainsKey("guard").Should().BeFalse();
 
-        outcomes["Fetching.cancelled"]!["edges"]!.AsArray().Single()!["to"]!
+        outcomes["Fetching.cancelled"]
+            .NotNull()["edges"]
+            .NotNull()
+            .AsArray()
+            .Single()
+            .NotNull()["to"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("Cancelled");
 
         // The success outcome's input schema is the train's output type, exported under the outcome rather than
         // with the inputs a client sends; failure and cancel take none.
-        var fields = done["output"]!["fields"]!
+        var fields = done["output"]
+            .NotNull()["fields"]
+            .NotNull()
             .AsArray()
             .Select(f =>
-                (Name: f!["name"]!.GetValue<string>(), Type: f["type"]!.GetValue<string>())
+                (
+                    Name: f.NotNull()["name"].NotNull().GetValue<string>(),
+                    Type: f["type"].NotNull().GetValue<string>()
+                )
             )
             .ToList();
         fields.Should().Equal(("fingerprint", "string"), ("unsure", "boolean"));
-        ((JsonObject)ir["inputs"]!).Should().BeEmpty();
-        outcomes["Fetching.failed"]!.AsObject().ContainsKey("output").Should().BeFalse();
+        ((JsonObject)ir["inputs"].NotNull()).Should().BeEmpty();
+        outcomes["Fetching.failed"].NotNull().AsObject().ContainsKey("output").Should().BeFalse();
 
         // Outcome edges are not ordinary transitions, and the input mapping is never exported.
-        ir["transitions"]!
+        ir["transitions"]
+            .NotNull()
             .AsArray()
-            .Select(t => t!["trigger"]!.GetValue<string>())
+            .Select(t => t.NotNull()["trigger"].NotNull().GetValue<string>())
             .Should()
             .NotContain(t => t.Contains('.'));
         done.Select(kv => kv.Key).Should().BeEquivalentTo("edges", "outcome", "output", "state");
@@ -588,7 +612,8 @@ public class InvokesDeclarationTests
     [Test]
     public void A_machine_that_invokes_nothing_exports_no_outcomes()
     {
-        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built))!;
+        var ir = (JsonObject)
+            JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built)).NotNull();
 
         ir.ContainsKey("outcomes").Should().BeFalse();
     }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine;
 
@@ -120,7 +121,7 @@ public sealed class IrMachine
                     );
             }
             Id = Text(ir["id"], "id");
-            Version = ir["version"]!.GetValue<int>();
+            Version = ir["version"].NotNull().GetValue<int>();
             InitialState = Text(ir["initialState"], "initialState");
             _initialContext = ir["initialContext"] as JsonObject;
             _states = Names(ir["states"], "states");
@@ -132,14 +133,14 @@ public sealed class IrMachine
                 _inputs[trigger] = schema;
 
             var transitions = (ir["transitions"] as JsonArray ?? [])
-                .Select(t => t!.AsObject())
+                .Select(t => t.NotNull().AsObject())
                 .ToList();
             _transitions = transitions
                 .Select(t => ReadEdge(t, Text(t["from"], "from"), Text(t["trigger"], "trigger")))
                 .ToList();
             EffectTriggers = transitions
                 .Where(t => t["effect"] is JsonObject)
-                .Select(t => t["trigger"]!.GetValue<string>())
+                .Select(t => t["trigger"].NotNull().GetValue<string>())
                 .ToHashSet(StringComparer.Ordinal);
             // Every trigger's input is checked against one schema before a guard reads it: the record it declares, else
             // nothing, except that an effect-bound trigger takes the receipt the effect runner hands it.
@@ -152,11 +153,11 @@ public sealed class IrMachine
             _outcomes = new Dictionary<string, Outcome>(StringComparer.Ordinal);
             foreach (var (name, node) in ir["outcomes"] as JsonObject ?? [])
             {
-                var o = node!.AsObject();
+                var o = node.NotNull().AsObject();
                 var state = Text(o["state"], "outcomes.state");
                 var kind = Text(o["outcome"], "outcomes.outcome");
                 var edges = (o["edges"] as JsonArray ?? [])
-                    .Select(e => ReadEdge(e!.AsObject(), state, name))
+                    .Select(e => ReadEdge(e.NotNull().AsObject(), state, name))
                     .ToList();
                 var output =
                     string.Equals(kind, "done", StringComparison.Ordinal)
@@ -169,7 +170,7 @@ public sealed class IrMachine
             _timers = new Dictionary<string, Timer>(StringComparer.Ordinal);
             foreach (var node in ir["timers"] as JsonArray ?? [])
             {
-                var t = node!.AsObject();
+                var t = node.NotNull().AsObject();
                 var field = t["field"] as JsonObject;
                 _timers[Text(t["state"], "timers.state")] = new Timer(
                     Text(t["state"], "timers.state"),
@@ -584,7 +585,7 @@ public sealed class IrMachine
         if (!_timers.TryGetValue(state, out var timer) || timer.After is not null)
             return null;
         if (
-            context[timer.Field!] is not JsonValue value
+            context[timer.Field.NotNull()] is not JsonValue value
             || value.GetValueKind() != JsonValueKind.String
             || !IsoDuration.TryParse(value.GetValue<string>(), out var duration)
         )
@@ -700,7 +701,7 @@ public sealed class IrMachine
     {
         var map = new Dictionary<string, T>(StringComparer.Ordinal);
         foreach (var (key, value) in node as JsonObject ?? [])
-            map[key] = read(value!.AsObject());
+            map[key] = read(value.NotNull().AsObject());
         return map;
     }
 
@@ -740,14 +741,20 @@ public sealed class IrMachine
         new(ReadFields(schema["fields"] as JsonArray ?? []));
 
     private static List<FieldSchema> ReadFields(JsonArray fields) =>
-        fields.Select(f => ReadField(f!.AsObject(), FieldName(f!["name"], "field name"))).ToList();
+        fields
+            .Select(f =>
+                ReadField(f.NotNull().AsObject(), FieldName(f.NotNull()["name"], "field name"))
+            )
+            .ToList();
 
     private static FieldSchema ReadField(JsonObject f, string name) =>
         new FieldSchema(
             name,
             FieldType(Text(f["type"], "type")),
             f["nullable"]?.GetValue<bool>() ?? false,
-            (f["constraints"] as JsonArray ?? []).Select(c => ReadRule(c!.AsObject())).ToList()
+            (f["constraints"] as JsonArray ?? [])
+                .Select(c => ReadRule(c.NotNull().AsObject()))
+                .ToList()
         )
         {
             Minimum = f["minimum"]?.GetValue<double>(),
@@ -794,18 +801,32 @@ public sealed class IrMachine
                 source,
                 field,
                 Op(r["op"]),
-                r["value"]!.GetValue<double>()
+                r["value"].NotNull().GetValue<double>()
             ),
-            "count" => new Rule.Count(source, field, Op(r["op"]), r["value"]!.GetValue<int>()),
-            "length" => new Rule.Length(source, field, Op(r["op"]), r["value"]!.GetValue<int>()),
-            "boolEquals" => new Rule.BoolEquals(source, field, r["value"]!.GetValue<bool>()),
+            "count" => new Rule.Count(
+                source,
+                field,
+                Op(r["op"]),
+                r["value"].NotNull().GetValue<int>()
+            ),
+            "length" => new Rule.Length(
+                source,
+                field,
+                Op(r["op"]),
+                r["value"].NotNull().GetValue<int>()
+            ),
+            "boolEquals" => new Rule.BoolEquals(
+                source,
+                field,
+                r["value"].NotNull().GetValue<bool>()
+            ),
             "arrayOf" => new Rule.ArrayOf(source, field, FieldType(Text(r["type"], "type"))),
             _ => throw new FormatException($"'{kind}' is not a rule."),
         };
     }
 
     private static List<Rule> ReadRules(JsonNode? node) =>
-        (node as JsonArray ?? []).Select(r => ReadRule(r!.AsObject())).ToList();
+        (node as JsonArray ?? []).Select(r => ReadRule(r.NotNull().AsObject())).ToList();
 
     internal static Reduction ReadReduction(JsonObject r) =>
         Text(r["reduce"], "reduce") switch
@@ -817,8 +838,8 @@ public sealed class IrMachine
             "set" => new Reduction.Set(
                 (r["steps"] as JsonArray ?? [])
                     .Select(s => new SetStep(
-                        FieldName(s!["field"], "field"),
-                        ReadSource(s["value"]!.AsObject())
+                        FieldName(s.NotNull()["field"], "field"),
+                        ReadSource(s["value"].NotNull().AsObject())
                     ))
                     .ToList()
             ),

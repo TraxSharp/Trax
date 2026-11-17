@@ -34,12 +34,14 @@ public class ClientSyncTests
     private static async Task<ClientManifestMachine> Manifest()
     {
         var ir = (JsonObject)
-            JsonNode.Parse(
-                await File.ReadAllTextAsync(
-                        Path.Combine(FixturePaths.ConformanceRoot, "plan", "wizard.ir.json")
-                    )
-                    .ConfigureAwait(false)
-            )!;
+            JsonNode
+                .Parse(
+                    await File.ReadAllTextAsync(
+                            Path.Combine(FixturePaths.ConformanceRoot, "plan", "wizard.ir.json")
+                        )
+                        .ConfigureAwait(false)
+                )
+                .NotNull();
         var manifest = new ClientManifestMachine
         {
             Id = "wizard",

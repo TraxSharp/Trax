@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Features;
 
@@ -118,7 +119,11 @@ internal sealed record GlossaryMachine(
                     .SelectMany(s => s.Context ?? [])
             )
             .FirstOrDefault(f =>
-                string.Equals(f!["name"]!.GetValue<string>(), field, StringComparison.Ordinal)
+                string.Equals(
+                    f.NotNull()["name"].NotNull().GetValue<string>(),
+                    field,
+                    StringComparison.Ordinal
+                )
             )
             ?["type"]?.GetValue<string>();
 }

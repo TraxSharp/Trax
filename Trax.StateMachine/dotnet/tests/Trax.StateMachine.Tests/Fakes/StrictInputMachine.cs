@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Helpers;
 
 namespace Trax.StateMachine.Tests.Fakes;
@@ -158,7 +159,7 @@ public static class StrictInputMachine
         )
         {
             why =
-                $"the record writes back {written!.ToJsonString()}, which is refused: {r.Reason} {r.Detail}";
+                $"the record writes back {written.NotNull().ToJsonString()}, which is refused: {r.Reason} {r.Detail}";
             return false;
         }
         return true;

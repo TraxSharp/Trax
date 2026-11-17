@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Meta.Tests;
 
@@ -246,7 +247,7 @@ public partial class ClientSurfaceTests
                 t.ValueKind == JsonValueKind.Object
                 && t.TryGetProperty("language", out var language)
                 && language.ValueKind == JsonValueKind.String
-                    ? language.GetString()!
+                    ? language.GetString().NotNull()
                     : throw new AssertionException(
                         "conformance/testees.json has a testee without a `language` string."
                     )

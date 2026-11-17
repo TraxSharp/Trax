@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 
@@ -255,7 +256,7 @@ internal sealed class SnapshotWatchHub(
                 EveryRow: _all.Count > 0,
                 Machines: _all.Count == 0 || _all.Exists(w => w.Machine is null)
                     ? null
-                    : _all.Select(w => w.Machine!).ToHashSet(StringComparer.Ordinal)
+                    : _all.Select(w => w.Machine.NotNull()).ToHashSet(StringComparer.Ordinal)
             );
     }
 

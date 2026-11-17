@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 
 namespace Trax.StateMachine.Tests.Helpers;
@@ -70,7 +71,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
     /// <summary>Answers one request line with one answer line.</summary>
     public string Answer(string line)
     {
-        var request = (JsonObject)JsonNode.Parse(line)!;
+        var request = (JsonObject)JsonNode.Parse(line).NotNull();
         var answer = Handle(request);
         answer["id"] = request["id"]?.DeepClone();
         return answer.ToJsonString();
@@ -78,7 +79,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
 
     private JsonObject Handle(JsonObject request)
     {
-        var op = request["op"]!.GetValue<string>();
+        var op = request["op"].NotNull().GetValue<string>();
         if (string.Equals(op, "end", StringComparison.Ordinal))
             return new JsonObject();
         if (string.Equals(op, "canonical", StringComparison.Ordinal))
@@ -86,7 +87,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
         if (string.Equals(op, "load", StringComparison.Ordinal))
             return Load(request);
 
-        var name = request["machine"]!.GetValue<string>();
+        var name = request["machine"].NotNull().GetValue<string>();
         if (!_loaded.TryGetValue(name, out var machine))
             return new JsonObject { ["error"] = $"no machine {name} is loaded" };
 
@@ -96,7 +97,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
             "outcome" => machine.Step(op, SnapshotOf(request), Trigger(request), request["input"]),
             "timer" => machine.Step(op, SnapshotOf(request), Trigger(request), input: null),
             "rehydrate" => machine.Rehydrate(
-                request["text"]!.GetValue<string>(),
+                request["text"].NotNull().GetValue<string>(),
                 request["fromServer"]?.GetValue<bool>() == true
             ),
             "serialize" => new JsonObject { ["wire"] = machine.Serialize(SnapshotOf(request)) },
@@ -112,7 +113,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
 
     private JsonObject Load(JsonObject request)
     {
-        var name = request["machine"]!.GetValue<string>();
+        var name = request["machine"].NotNull().GetValue<string>();
         // What the fuzzer found (conformance/found/) is a machine of its own per case, kept only as an IR.
         if (
             fromIr
@@ -144,7 +145,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
 
     private static Served FromIr(JsonObject request)
     {
-        var ir = (JsonObject)request["ir"]!.DeepClone();
+        var ir = (JsonObject)request["ir"].NotNull().DeepClone();
         // An IR nested deeper than any reader takes, built here (conformance/PROTOCOL.md, tooDeep).
         if (string.Equals(request["tooDeep"]?.GetValue<string>(), "ir", StringComparison.Ordinal))
         {
@@ -171,14 +172,18 @@ public sealed class ConformanceTestee(bool fromIr = false)
         int? MaxDepth
     ) PlanOf(JsonObject request) =>
         (
-            request["target"]!.GetValue<string>(),
+            request["target"].NotNull().GetValue<string>(),
             request["fields"] is JsonObject fields
                 ? new PlannedEvent(
-                    fields["trigger"]!.GetValue<string>(),
+                    fields["trigger"].NotNull().GetValue<string>(),
                     fields["input"]?.DeepClone()
                 )
                 : null,
-            request["navigation"]!.AsArray().Select(t => t!.GetValue<string>()).ToList(),
+            request["navigation"]
+                .NotNull()
+                .AsArray()
+                .Select(t => t.NotNull().GetValue<string>())
+                .ToList(),
             request["maxDepth"]?.GetValue<int>()
         );
 
@@ -270,17 +275,18 @@ public sealed class ConformanceTestee(bool fromIr = false)
         return array;
     }
 
-    private static string Trigger(JsonObject request) => request["trigger"]!.GetValue<string>();
+    private static string Trigger(JsonObject request) =>
+        request["trigger"].NotNull().GetValue<string>();
 
     private static Snapshot SnapshotOf(JsonObject request)
     {
-        var snapshot = (JsonObject)request["snapshot"]!;
+        var snapshot = (JsonObject)request["snapshot"].NotNull();
         return new Snapshot
         {
-            Machine = snapshot["machine"]!.GetValue<string>(),
-            Version = snapshot["version"]!.GetValue<int>(),
-            State = snapshot["state"]!.GetValue<string>(),
-            Context = (JsonObject)snapshot["context"]!.DeepClone(),
+            Machine = snapshot["machine"].NotNull().GetValue<string>(),
+            Version = snapshot["version"].NotNull().GetValue<int>(),
+            State = snapshot["state"].NotNull().GetValue<string>(),
+            Context = (JsonObject)snapshot["context"].NotNull().DeepClone(),
         };
     }
 
@@ -289,10 +295,11 @@ public sealed class ConformanceTestee(bool fromIr = false)
     private static string Canonical(JsonObject request)
     {
         var context =
-            request["context"] is { } text ? (JsonObject)JsonNode.Parse(text.GetValue<string>())!
+            request["context"] is { } text
+                ? (JsonObject)JsonNode.Parse(text.GetValue<string>()).NotNull()
             : request["stringUnits"] is JsonArray stringUnits
                 ? new JsonObject { ["s"] = FromUnits(stringUnits) }
-            : new JsonObject { [FromUnits((JsonArray)request["keyUnits"]!)] = 1 };
+            : new JsonObject { [FromUnits((JsonArray)request["keyUnits"].NotNull())] = 1 };
         return TestTurnstile.Machine.Serialize(
             new Snapshot
             {
@@ -305,7 +312,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
     }
 
     private static string FromUnits(JsonArray units) =>
-        new(units.Select(u => (char)u!.GetValue<int>()).ToArray());
+        new(units.Select(u => (char)u.NotNull().GetValue<int>()).ToArray());
 
     /// <summary>One served machine, its type arguments closed over.</summary>
     private sealed record Served(

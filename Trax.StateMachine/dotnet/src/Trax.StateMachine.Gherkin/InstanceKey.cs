@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -16,7 +17,12 @@ internal sealed record InstanceKey(string Machine, string? Owner, string? Key = 
     internal IReadOnlyList<string> Parts =>
         Key is null
             ? []
-            : JsonNode.Parse(Key)!.AsArray().Select(p => p!.GetValue<string>()).ToList();
+            : JsonNode
+                .Parse(Key)
+                .NotNull()
+                .AsArray()
+                .Select(p => p.NotNull().GetValue<string>())
+                .ToList();
 
     /// <summary>The key as a step says it: each part quoted, <c>"T-12"</c>.</summary>
     internal string Said => string.Join(' ', Parts.Select(p => $"\"{p}\""));

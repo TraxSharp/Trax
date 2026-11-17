@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
 namespace Trax.StateMachine.Persistence.Integration;
@@ -7,13 +8,13 @@ namespace Trax.StateMachine.Persistence.Integration;
 /// <summary>The effect-claim and snapshot stores on SQLite, over tables built by the shipped migrations.</summary>
 public class SqliteStoreTests
 {
-    private SqliteDb _db = null!;
+    private SqliteDb? _db;
 
     [SetUp]
     public async Task SetUp() => _db = await SqliteDb.Create();
 
     [TearDown]
-    public void TearDown() => _db.Dispose();
+    public void TearDown() => _db?.Dispose();
 
     private static string Key() => $"claim:{Guid.NewGuid()}";
 
@@ -22,10 +23,10 @@ public class SqliteStoreTests
     {
         var key = Key();
 
-        (await _db.NewClaims().TryClaim(key, TimeSpan.FromMinutes(5)))
+        (await _db.NotNull().NewClaims().TryClaim(key, TimeSpan.FromMinutes(5)))
             .Should()
             .BeOfType<ClaimResult.Won>();
-        (await _db.NewClaims().TryClaim(key, TimeSpan.FromMinutes(5)))
+        (await _db.NotNull().NewClaims().TryClaim(key, TimeSpan.FromMinutes(5)))
             .Should()
             .BeOfType<ClaimResult.Lost>();
     }
@@ -35,13 +36,13 @@ public class SqliteStoreTests
     {
         var expired = Key();
         var live = Key();
-        await _db.NewClaims().TryClaim(expired, TimeSpan.FromSeconds(-10));
-        await _db.NewClaims().TryClaim(live, TimeSpan.FromMinutes(5));
+        await _db.NotNull().NewClaims().TryClaim(expired, TimeSpan.FromSeconds(-10));
+        await _db.NotNull().NewClaims().TryClaim(live, TimeSpan.FromMinutes(5));
 
-        (await _db.NewClaims().TryClaim(expired, TimeSpan.FromMinutes(5)))
+        (await _db.NotNull().NewClaims().TryClaim(expired, TimeSpan.FromMinutes(5)))
             .Should()
             .BeOfType<ClaimResult.Won>();
-        (await _db.NewClaims().TryClaim(live, TimeSpan.FromMinutes(5)))
+        (await _db.NotNull().NewClaims().TryClaim(live, TimeSpan.FromMinutes(5)))
             .Should()
             .BeOfType<ClaimResult.Lost>();
     }
@@ -51,10 +52,12 @@ public class SqliteStoreTests
     {
         var stale = Key();
         var live = Key();
-        await _db.NewClaims().TryClaim(stale, TimeSpan.FromSeconds(-10));
-        await _db.NewClaims().TryClaim(live, TimeSpan.FromMinutes(5));
+        await _db.NotNull().NewClaims().TryClaim(stale, TimeSpan.FromSeconds(-10));
+        await _db.NotNull().NewClaims().TryClaim(live, TimeSpan.FromMinutes(5));
 
-        (await new EffectClaimSweeper(_db.NewClaims()).Sweep(DateTimeOffset.UtcNow)).Should().Be(1);
+        (await new EffectClaimSweeper(_db.NotNull().NewClaims()).Sweep(DateTimeOffset.UtcNow))
+            .Should()
+            .Be(1);
     }
 
     [Test]
@@ -68,10 +71,10 @@ public class SqliteStoreTests
             State = "Locked",
             Context = new JsonObject(),
         };
-        (await _db.NewStore().Upsert("u", id, snapshot)).Should().BeTrue();
+        (await _db.NotNull().NewStore().Upsert("u", id, snapshot)).Should().BeTrue();
 
         // A writer that read "no row" before the first insert landed inserts the same key.
-        (await _db.NewStore().Insert("u", id, snapshot))
+        (await _db.NotNull().NewStore().Insert("u", id, snapshot))
             .Should()
             .BeFalse();
     }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Trax.Client;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 
 namespace Trax.StateMachine.Tests.Client;
@@ -32,7 +33,7 @@ public sealed class ClientTestee : IAsyncDisposable
     /// <summary>Answers one request line with one answer line, once the request has settled.</summary>
     public async Task<string> AnswerAsync(string line)
     {
-        var request = (JsonObject)JsonNode.Parse(line)!;
+        var request = (JsonObject)JsonNode.Parse(line).NotNull();
         JsonObject answer;
         try
         {
@@ -57,7 +58,7 @@ public sealed class ClientTestee : IAsyncDisposable
 
     private async Task<JsonObject> HandleAsync(JsonObject request)
     {
-        var op = request["op"]!.GetValue<string>();
+        var op = request["op"].NotNull().GetValue<string>();
         switch (op)
         {
             case "open":
@@ -78,7 +79,7 @@ public sealed class ClientTestee : IAsyncDisposable
             "send" => OutcomeOf(
                 await controller
                     .SendAsync(
-                        request["trigger"]!.GetValue<string>(),
+                        request["trigger"].NotNull().GetValue<string>(),
                         string.Equals(
                             request["tooDeep"]?.GetValue<string>(),
                             "input",
@@ -95,10 +96,10 @@ public sealed class ClientTestee : IAsyncDisposable
             "sync" => SyncOf(
                 await controller
                     .SyncToAsync(
-                        request["target"]!.GetValue<string>(),
+                        request["target"].NotNull().GetValue<string>(),
                         request["fields"] is JsonObject fields
                             ? new PlannedEvent(
-                                fields["trigger"]!.GetValue<string>(),
+                                fields["trigger"].NotNull().GetValue<string>(),
                                 string.Equals(
                                     request["tooDeep"]?.GetValue<string>(),
                                     "input",
@@ -108,7 +109,11 @@ public sealed class ClientTestee : IAsyncDisposable
                                     : fields["input"]?.DeepClone()
                             )
                             : null,
-                        request["navigation"]!.AsArray().Select(t => t!.GetValue<string>()).ToList()
+                        request["navigation"]
+                            .NotNull()
+                            .AsArray()
+                            .Select(t => t.NotNull().GetValue<string>())
+                            .ToList()
                     )
                     .ConfigureAwait(false)
             ),
@@ -116,7 +121,7 @@ public sealed class ClientTestee : IAsyncDisposable
             "can" => new JsonObject
             {
                 ["can"] = controller.CanSend(
-                    request["trigger"]!.GetValue<string>(),
+                    request["trigger"].NotNull().GetValue<string>(),
                     request["input"]?.DeepClone()
                 ),
             },
@@ -189,11 +194,11 @@ public sealed class ClientTestee : IAsyncDisposable
             built.Socket,
             built.Server,
             built.Controller,
-            built.NewRequestId!
+            built.NewRequestId.NotNull()
         );
         _opened = request;
         if (request["throwingListener"]?.GetValue<bool>() == true)
-            _controller!.Changed += (_, _) =>
+            _controller.NotNull().Changed += (_, _) =>
                 throw new InvalidOperationException("the change listener threw");
         return new JsonObject { ["opened"] = true, ["client"] = Client };
     }
@@ -202,15 +207,15 @@ public sealed class ClientTestee : IAsyncDisposable
     // disposes it unstarted.
     private async Task<JsonObject> AnswerBuildAsync(JsonObject request)
     {
-        var merged = (JsonObject)_opened!.DeepClone();
+        var merged = (JsonObject)_opened.NotNull().DeepClone();
         foreach (var (key, value) in request)
             if (key is not "id" and not "op")
                 merged[key] = value?.DeepClone();
         var built = Build(merged);
         if (built.Code is { } code)
             return new JsonObject { ["built"] = false, ["code"] = code };
-        built.Controller!.Dispose();
-        await built.Socket!.DisposeAsync().ConfigureAwait(false);
+        built.Controller.NotNull().Dispose();
+        await built.Socket.NotNull().DisposeAsync().ConfigureAwait(false);
         return new JsonObject { ["built"] = true };
     }
 
@@ -230,19 +235,20 @@ public sealed class ClientTestee : IAsyncDisposable
 
     private Built Build(JsonObject request)
     {
-        var name = request["machine"]!.GetValue<string>();
+        var name = request["machine"].NotNull().GetValue<string>();
         var machine = new ClientManifestMachine
         {
             Id = name,
-            IrHash = request["irHash"]!.GetValue<string>(),
-            Ir = (JsonObject)request["ir"]!.DeepClone(),
-            Documents = request["documents"]!
+            IrHash = request["irHash"].NotNull().GetValue<string>(),
+            Ir = (JsonObject)request["ir"].NotNull().DeepClone(),
+            Documents = request["documents"]
+                .NotNull()
                 .AsArray()
                 .Select(d => new ClientManifestDocument
                 {
-                    Id = d!["id"]!.GetValue<string>(),
-                    Operation = d["operation"]!.GetValue<string>(),
-                    Document = d["document"]!.GetValue<string>(),
+                    Id = d.NotNull()["id"].NotNull().GetValue<string>(),
+                    Operation = d["operation"].NotNull().GetValue<string>(),
+                    Document = d["document"].NotNull().GetValue<string>(),
                 })
                 .ToList(),
         };
@@ -257,7 +263,7 @@ public sealed class ClientTestee : IAsyncDisposable
             // Only what the transcript sets is set: every other option keeps the client's default, as an app's would.
             var socketOptions = new GraphQLSubscriptionSocketOptions
             {
-                Endpoint = new Uri(request["socket"]!.GetValue<string>()),
+                Endpoint = new Uri(request["socket"].NotNull().GetValue<string>()),
                 AllowInsecureTransport = insecure,
             };
             if (maxResponseSize is { } socketMax)
@@ -276,7 +282,7 @@ public sealed class ClientTestee : IAsyncDisposable
             var serverOptions = new GraphQLMachineServerOptions
             {
                 Http = _http,
-                Endpoint = new Uri(request["endpoint"]!.GetValue<string>()),
+                Endpoint = new Uri(request["endpoint"].NotNull().GetValue<string>()),
                 AllowInsecureTransport = insecure,
                 Machine = machine,
                 Socket = socket,
@@ -361,7 +367,7 @@ public sealed class ClientTestee : IAsyncDisposable
     // Delays the open request does not give are left unset, so the client's defaults are in force.
     private static IReadOnlyList<TimeSpan>? Delays(JsonNode? delays) =>
         (delays as JsonArray)
-            ?.Select(d => TimeSpan.FromMilliseconds(d!.GetValue<double>()))
+            ?.Select(d => TimeSpan.FromMilliseconds(d.NotNull().GetValue<double>()))
             .ToList();
 
     private static JsonObject OutcomeOf(SendOutcome outcome) =>

@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Helpers;
 
 namespace Trax.StateMachine.Tests.Conformance;
@@ -44,18 +45,20 @@ public class IrSchemaTests
             irs.Should().Contain(ir => ir.ContainsKey(section), $"some test machine has {section}");
         irs.Should()
             .Contain(
-                ir => ir["transitions"]!.AsArray().Any(t => t!["effect"] != null),
+                ir => ir["transitions"].NotNull().AsArray().Any(t => t.NotNull()["effect"] != null),
                 "some test machine has an effect-bound edge"
             );
     }
 
     private static List<(string Name, JsonObject Ir)> ExportedIrs()
     {
-        var export = typeof(IrExporter).GetMethod(nameof(IrExporter.Export))!;
-        var refuses = typeof(IrExporter).GetMethod(
-            nameof(IrExporter.RefusesByDesign),
-            BindingFlags.NonPublic | BindingFlags.Static
-        )!;
+        var export = typeof(IrExporter).GetMethod(nameof(IrExporter.Export)).NotNull();
+        var refuses = typeof(IrExporter)
+            .GetMethod(
+                nameof(IrExporter.RefusesByDesign),
+                BindingFlags.NonPublic | BindingFlags.Static
+            )
+            .NotNull();
         const BindingFlags statics =
             BindingFlags.Public
             | BindingFlags.NonPublic
@@ -85,10 +88,10 @@ public class IrSchemaTests
             if (read() is not { } machine)
                 continue;
             var args = machine.GetType().GetGenericArguments();
-            if ((bool)refuses.MakeGenericMethod(args).Invoke(null, [machine])!)
+            if ((bool)refuses.MakeGenericMethod(args).Invoke(null, [machine]).NotNull())
                 continue;
-            var ir = (string)export.MakeGenericMethod(args).Invoke(null, [machine])!;
-            irs.Add(($"{type.FullName}.{name}", (JsonObject)JsonNode.Parse(ir)!));
+            var ir = (string)export.MakeGenericMethod(args).Invoke(null, [machine]).NotNull();
+            irs.Add(($"{type.FullName}.{name}", (JsonObject)JsonNode.Parse(ir).NotNull()));
         }
         return irs;
     }

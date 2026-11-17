@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Ingest.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence;
@@ -348,17 +349,20 @@ public class MachineFromIrTests
 
         var context = machine
             .States.Single(s => string.Equals(s.Name, "Fetched", StringComparison.Ordinal))
-            .ContextType!;
+            .ContextType.NotNull();
         context
-            .GetProperty("Fingerprint")!
-            .GetCustomAttribute<System.Text.Json.Serialization.JsonPropertyNameAttribute>()!
+            .GetProperty("Fingerprint")
+            .NotNull()
+            .GetCustomAttribute<System.Text.Json.Serialization.JsonPropertyNameAttribute>()
+            .NotNull()
             .Name.Should()
             .Be("fingerprint");
     }
 
     private static async Task<JsonObject> Ir(string name) =>
         JsonNode
-            .Parse(await File.ReadAllTextAsync(FixturePaths.IrFile(name)).ConfigureAwait(false))!
+            .Parse(await File.ReadAllTextAsync(FixturePaths.IrFile(name)).ConfigureAwait(false))
+            .NotNull()
             .AsObject();
 
     private static JsonObject Renamed(JsonObject ir, string id)
@@ -369,7 +373,7 @@ public class MachineFromIrTests
 
     private static HostMachine Host(JsonObject ir) =>
         new(
-            ir["id"]!.GetValue<string>(),
+            ir["id"].NotNull().GetValue<string>(),
             Hash(ir),
             SystemKey: null,
             Start: null,
@@ -383,7 +387,7 @@ public class MachineFromIrTests
         {
             [state] = new(
                 state,
-                typeof(IFetchTrain).FullName!,
+                typeof(IFetchTrain).FullName.NotNull(),
                 new Dictionary<string, string>(StringComparer.Ordinal) { ["source"] = "source" }
             ),
         };

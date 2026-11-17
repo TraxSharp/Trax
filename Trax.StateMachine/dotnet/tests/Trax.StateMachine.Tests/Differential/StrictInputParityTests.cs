@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -23,7 +24,7 @@ public class StrictInputParityTests
     public async Task Each_value_gets_one_verdict_in_both_engines()
     {
         var cases = StrictInputMachine.Cases;
-        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(StrictInputMachine.Built))!;
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(StrictInputMachine.Built)).NotNull();
         var start = StrictInputMachine.Open();
         var inputs = cases
             .Select(c => (JsonNode?)StrictInputMachine.InputWith(c.Field, c.Value?.DeepClone()))

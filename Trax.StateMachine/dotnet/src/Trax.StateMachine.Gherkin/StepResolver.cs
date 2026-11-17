@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -339,9 +340,9 @@ internal sealed partial class StepResolver
         var input = new JsonObject();
         foreach (var field in trigger.Input)
         {
-            var name = field!["name"]!.GetValue<string>();
-            var type = field["type"]!.GetValue<string>();
-            var nullable = field["nullable"]!.GetValue<bool>();
+            var name = field.NotNull()["name"].NotNull().GetValue<string>();
+            var type = field["type"].NotNull().GetValue<string>();
+            var nullable = field["nullable"].NotNull().GetValue<bool>();
             if (match.Groups[$"in_{name}"] is not { Success: true } value)
             {
                 if (!nullable)

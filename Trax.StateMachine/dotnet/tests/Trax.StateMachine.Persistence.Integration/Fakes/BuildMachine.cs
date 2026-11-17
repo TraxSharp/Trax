@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using static Trax.StateMachine.Rules;
 
@@ -45,7 +46,7 @@ public sealed class BuildMachine : Machine<BuildState, BuildTrigger>
         m.In(BuildState.Building)
             .Context<SourceContext>()
             .Invokes<IBuildTrain, BuildInput, BuildOutput>(ctx => new BuildInput(
-                ctx["source"]!.GetValue<string>()
+                ctx["source"].NotNull().GetValue<string>()
             ))
             .OnDone(
                 BuildState.Built,

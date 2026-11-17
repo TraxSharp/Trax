@@ -19,7 +19,8 @@ public partial class TesteeRosterTests
     private static readonly string[] NotLanguages = ["conformance", "docs"];
     private static readonly string[] Kits = ["engine", "client", "operations"];
 
-    private static string RepositoryRoot => Directory.GetParent(FixturePaths.FolderRoot)!.FullName;
+    private static string RepositoryRoot =>
+        Directory.GetParent(FixturePaths.FolderRoot).NotNull().FullName;
 
     // The three files are read once for the fixture; each call below parses its own copy.
     private static string? _testees;
@@ -43,17 +44,23 @@ public partial class TesteeRosterTests
             .ConfigureAwait(false);
     }
 
-    private static JsonArray Rows() => JsonNode.Parse(_testees.NotNull())!["languages"]!.AsArray();
+    private static JsonArray Rows() =>
+        JsonNode.Parse(_testees.NotNull()).NotNull()["languages"].NotNull().AsArray();
 
-    private static string Text(JsonNode row, string key) => (string)row[key]!;
+    private static string Text(JsonNode row, string key) => ((string?)row[key]).NotNull();
 
     private static string CiYml() => _ciYml.NotNull();
 
     private static JsonObject Suite(string name) =>
-        JsonNode.Parse(_packages.NotNull())!["suites"]!
+        JsonNode
+            .Parse(_packages.NotNull())
+            .NotNull()["suites"]
+            .NotNull()
             .AsArray()
-            .Select(s => s!.AsObject())
-            .SingleOrDefault(s => string.Equals((string)s["name"]!, name, StringComparison.Ordinal))
+            .Select(s => s.NotNull().AsObject())
+            .SingleOrDefault(s =>
+                string.Equals(((string?)s["name"]).NotNull(), name, StringComparison.Ordinal)
+            )
         ?? throw new InvalidOperationException($"packages.json has no suite named {name}.");
 
     [Test]
@@ -62,13 +69,13 @@ public partial class TesteeRosterTests
         var folders = Directory
             .GetDirectories(FixturePaths.FolderRoot)
             .Select(Path.GetFileName)
-            .Where(d => !d!.StartsWith('.') && !NotLanguages.Contains(d))
+            .Where(d => !d.NotNull().StartsWith('.') && !NotLanguages.Contains(d))
             .Order(StringComparer.Ordinal)
             .ToList();
-        var rows = Rows().Select(r => Text(r!, "folder")).ToList();
+        var rows = Rows().Select(r => Text(r.NotNull(), "folder")).ToList();
 
         rows.Should().OnlyHaveUniqueItems();
-        Rows().Select(r => Text(r!, "name")).Should().OnlyHaveUniqueItems();
+        Rows().Select(r => Text(r.NotNull(), "name")).Should().OnlyHaveUniqueItems();
         rows.Order(StringComparer.Ordinal)
             .Should()
             .Equal(
@@ -93,7 +100,7 @@ public partial class TesteeRosterTests
         headers[1].Should().Equal(headers[0]);
 
         Rows()
-            .Select(r => Text(r!, "surfaceColumn"))
+            .Select(r => Text(r.NotNull(), "surfaceColumn"))
             .Should()
             .BeEquivalentTo(
                 headers[0],
@@ -108,10 +115,11 @@ public partial class TesteeRosterTests
         foreach (var row in Rows())
         foreach (var kit in Kits)
         {
-            var testee = row![kit]?.AsObject();
+            var testee = row.NotNull()[kit]?.AsObject();
             var where = $"{Text(row, "folder")}'s {kit} testee";
             testee.Should().NotBeNull(where);
-            testee!
+            testee
+                .NotNull()
                 .Select(p => p.Key)
                 .Should()
                 .ContainSingle(where)
@@ -127,7 +135,7 @@ public partial class TesteeRosterTests
         var ci = CiYml();
         foreach (var row in Rows())
         foreach (var kit in Kits)
-            if ((string?)row![kit]?["command"] is { } command)
+            if ((string?)row.NotNull()[kit]?["command"] is { } command)
             {
                 command
                     .Should()
@@ -141,7 +149,7 @@ public partial class TesteeRosterTests
     {
         foreach (var row in Rows())
         foreach (var kit in Kits)
-            if ((string?)row![kit]?["test"] is { } test)
+            if ((string?)row.NotNull()[kit]?["test"] is { } test)
             {
                 var path = Path.Combine(RepositoryRoot, test);
                 File.Exists(path)
@@ -170,7 +178,11 @@ public partial class TesteeRosterTests
         needs.Success.Should().BeTrue("the CI result job lists what it needs on one line");
         var gate = needs.Groups["needs"].Value.Split(',', StringSplitOptions.TrimEntries);
 
-        foreach (var name in Rows().Select(r => Text(r!, "suite")).Distinct(StringComparer.Ordinal))
+        foreach (
+            var name in Rows()
+                .Select(r => Text(r.NotNull(), "suite"))
+                .Distinct(StringComparer.Ordinal)
+        )
         {
             var suite = Suite(name);
             // A suite with a dotnet block runs in the suite job's matrix; one without has a job of its own that reads
@@ -186,7 +198,7 @@ public partial class TesteeRosterTests
                     .Select(j => j.Key)
                     .SingleOrDefault();
             job.Should().NotBeNull($"a job of ci.yml runs the suite {name}");
-            gate.Should().Contain(job!, $"CI result needs the job that runs {name}");
+            gate.Should().Contain(job.NotNull(), $"CI result needs the job that runs {name}");
         }
     }
 
@@ -212,12 +224,12 @@ public partial class TesteeRosterTests
                 var name = Path.GetFileNameWithoutExtension(file);
                 var row = Rows()
                     .SingleOrDefault(r =>
-                        string.Equals(Text(r!, "name"), name, StringComparison.Ordinal)
+                        string.Equals(Text(r.NotNull(), "name"), name, StringComparison.Ordinal)
                     );
                 row.Should().NotBeNull($"{file} is named for a testee of testees.json");
                 Path.GetExtension(file).Should().Be(".json", file);
-                row![kit]!
-                    ["none"]
+                row.NotNull()[kit]
+                    .NotNull()["none"]
                     .Should()
                     .BeNull($"{file} lists failures of a testee {name} has none of");
             }

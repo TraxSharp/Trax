@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence;
@@ -75,12 +76,13 @@ public class AccessDerivationTests
         var derived = await Derive(People).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
-        var order = HostFile.Read(derived.Host!).Machines["order"];
-        order.Start!.RoleSets.Should().ContainSingle().Which.Should().Equal("customer");
-        order.Read!.RoleSets.Should().ContainSingle().Which.Should().Equal("customer");
+        var order = HostFile.Read(derived.Host.NotNull()).Machines["order"];
+        order.Start.NotNull().RoleSets.Should().ContainSingle().Which.Should().Equal("customer");
+        order.Read.NotNull().RoleSets.Should().ContainSingle().Which.Should().Equal("customer");
         order
             .Triggers["Place"]
-            .Client!.RoleSets.Should()
+            .Client.NotNull()
+            .RoleSets.Should()
             .ContainSingle()
             .Which.Should()
             .Equal("customer");
@@ -113,19 +115,28 @@ public class AccessDerivationTests
     {
         var derived = await Derive(People).ConfigureAwait(false);
 
-        var ir = JsonNode.Parse(derived.Irs["order"])!;
-        ir["triggers"]!.AsArray().Select(t => t!.GetValue<string>()).Should().Equal("Place");
-        HostFile.Read(derived.Host!).Machines["order"].Triggers.Should().NotContainKey("Rush");
+        var ir = JsonNode.Parse(derived.Irs["order"]).NotNull();
+        ir["triggers"]
+            .NotNull()
+            .AsArray()
+            .Select(t => t.NotNull().GetValue<string>())
+            .Should()
+            .Equal("Place");
+        HostFile
+            .Read(derived.Host.NotNull())
+            .Machines["order"]
+            .Triggers.Should()
+            .NotContainKey("Rush");
     }
 
     [Test]
     public async Task The_derived_host_file_passes_the_hosts_own_startup_checks()
     {
         var derived = await Derive(People).ConfigureAwait(false);
-        var ir = JsonNode.Parse(derived.Irs["order"])!.AsObject();
+        var ir = JsonNode.Parse(derived.Irs["order"]).NotNull().AsObject();
 
         var machine = IrMachines.Create(
-            new IrMachines.Source(ir, HostFile.Read(derived.Host!).Machines["order"]),
+            new IrMachines.Source(ir, HostFile.Read(derived.Host.NotNull()).Machines["order"]),
             []
         );
 
@@ -209,8 +220,10 @@ public class AccessDerivationTests
     [Test]
     public async Task A_trigger_both_a_person_and_the_server_fire_is_refused()
     {
-        var glossary = JsonNode.Parse(Glossary)!;
-        glossary["machines"]!["order"]!["triggers"]!["Bake"]!["phrase"] = "bakes {subject}";
+        var glossary = JsonNode.Parse(Glossary).NotNull();
+        glossary["machines"].NotNull()["order"].NotNull()["triggers"].NotNull()["Bake"].NotNull()[
+            "phrase"
+        ] = "bakes {subject}";
         var derived = (
             await Derive(
                     People
@@ -276,7 +289,12 @@ public class AccessDerivationTests
                 .ConfigureAwait(false)
         );
 
-        HostFile.Read(derived.Host!).Machines["order"].Triggers["Bake"].IsServer.Should().BeTrue();
+        HostFile
+            .Read(derived.Host.NotNull())
+            .Machines["order"]
+            .Triggers["Bake"]
+            .IsServer.Should()
+            .BeTrue();
         derived.Access.Should().Contain("order Bake: the server only");
     }
 
@@ -303,10 +321,11 @@ public class AccessDerivationTests
             .Problems.Should()
             .BeEmpty("a rule that gates nothing is only a problem when it names a role");
         HostFile
-            .Read(derived.Host!)
+            .Read(derived.Host.NotNull())
             .Machines["note"]
             .Triggers["Open"]
-            .Client!.IsAnyAuthenticated.Should()
+            .Client.NotNull()
+            .IsAnyAuthenticated.Should()
             .BeTrue();
     }
 

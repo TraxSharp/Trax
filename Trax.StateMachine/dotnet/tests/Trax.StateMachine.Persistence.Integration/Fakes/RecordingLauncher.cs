@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
@@ -26,7 +27,7 @@ internal sealed class RecordingLauncher : IInvokedTrainLauncher
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = launch.TrainType.FullName!,
+                TrainName = launch.TrainType.FullName.NotNull(),
                 Input = "{}",
                 InputTypeName = launch.Input.GetType().FullName,
                 InvokedBy = launch.InvokedBy,

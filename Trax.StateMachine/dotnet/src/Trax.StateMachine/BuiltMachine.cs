@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine;
 
@@ -47,7 +48,7 @@ public sealed record BuiltMachine<TState, TTrigger>(
         var states = Enum.GetNames<TState>().ToHashSet(StringComparer.Ordinal);
         // A trigger no transition fires on is not one to move with, as in every engine's planner.
         var fired = Definition
-            .Transitions.Select(t => t.Trigger.ToString()!)
+            .Transitions.Select(t => t.Trigger.ToString().NotNull())
             .ToHashSet(StringComparer.Ordinal);
         var clientTriggers = Triggers
             .Where(t => t.Kind == TriggerKind.Client && fired.Contains(t.Name))
@@ -93,7 +94,7 @@ public sealed record BuiltMachine<TState, TTrigger>(
         string Text(CallerRule? rule) => rule?.ToString() ?? "undeclared";
 
         foreach (var t in Definition.Transitions)
-            Of(t.To).Add(Text(Rules.Events.GetValueOrDefault(t.Trigger.ToString()!)));
+            Of(t.To).Add(Text(Rules.Events.GetValueOrDefault(t.Trigger.ToString().NotNull())));
         if (Rules.Start is not null || Start is not null)
             Of(Definition.InitialState).Add(Text(Rules.Start));
 
@@ -142,7 +143,8 @@ public sealed record BuiltMachine<TState, TTrigger>(
             .Concat(
                 Definition
                     .Transitions.Where(t =>
-                        Rules.Events.GetValueOrDefault(t.Trigger.ToString()!) is { Gated: true }
+                        Rules.Events.GetValueOrDefault(t.Trigger.ToString().NotNull())
+                            is { Gated: true }
                     )
                     .Select(t => t.To)
             )
@@ -213,7 +215,7 @@ public sealed record BuiltMachine<TState, TTrigger>(
                     return true;
                 if (edge.Reduce is null)
                     continue;
-                if (!paired || declared![i].Reduce is not Reduction.Keep)
+                if (!paired || declared.NotNull()[i].Reduce is not Reduction.Keep)
                     return true;
             }
             return false;

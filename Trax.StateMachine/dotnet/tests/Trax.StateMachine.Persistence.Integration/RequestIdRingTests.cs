@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -104,7 +105,10 @@ public class RequestIdRingTests
     {
         var stored = await TestDb.NewStore().Get(User, id).ConfigureAwait(false);
         stored.Should().NotBeNull();
-        stored!.RecentRequests.Should().NotBeNull("the row records its recent client requests");
-        return stored.RecentRequests!.Select(r => r.RequestId);
+        stored
+            .NotNull()
+            .RecentRequests.Should()
+            .NotBeNull("the row records its recent client requests");
+        return stored.RecentRequests.NotNull().Select(r => r.RequestId);
     }
 }

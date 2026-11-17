@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 
 namespace Trax.StateMachine.Persistence.Integration;
@@ -88,20 +89,34 @@ public class MachineExportIrTests
     {
         // A legible structural check so a regression in the bridge points at what broke, not just "bytes
         // differ": identity, the per-state context schema, and the guard-as-data all survive the round trip.
-        var ir = (JsonObject)JsonNode.Parse(new DeclarativeTurnstileMachine().ExportIr())!;
+        var ir = (JsonObject)JsonNode.Parse(new DeclarativeTurnstileMachine().ExportIr()).NotNull();
 
-        ir["id"]!.GetValue<string>().Should().Be("declarative-turnstile");
-        ((JsonObject)ir["context"]!["Unlocked"]!)["fields"]!.AsArray().Single()!["name"]!
+        ir["id"].NotNull().GetValue<string>().Should().Be("declarative-turnstile");
+        ((JsonObject)ir["context"].NotNull()["Unlocked"].NotNull())["fields"]
+            .NotNull()
+            .AsArray()
+            .Single()
+            .NotNull()["name"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("paidWith");
-        var coin = ir["transitions"]!
+        var coin = ir["transitions"]
+            .NotNull()
             .AsArray()
             .Cast<JsonObject>()
             .Single(t =>
-                string.Equals(t["trigger"]!.GetValue<string>(), "Coin", StringComparison.Ordinal)
+                string.Equals(
+                    t["trigger"].NotNull().GetValue<string>(),
+                    "Coin",
+                    StringComparison.Ordinal
+                )
             );
-        ((JsonObject)coin["guard"]!)["rule"]!.GetValue<string>().Should().Be("oneOf");
+        ((JsonObject)coin["guard"].NotNull())["rule"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("oneOf");
     }
 
     [Test]

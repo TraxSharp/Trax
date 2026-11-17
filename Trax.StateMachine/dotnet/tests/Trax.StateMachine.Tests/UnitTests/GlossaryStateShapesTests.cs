@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence.FromIr;
@@ -67,16 +68,38 @@ public class GlossaryStateShapesTests
         var derived = await Derive(Receipts, ("paying.feature", Paying)).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
-        var ir = JsonNode.Parse(derived.Irs["checkout"])!.AsObject();
-        ir["version"]!.GetValue<int>().Should().Be(3);
-        ir["committedStates"]!.ToJsonString().Should().Be("""["Paid"]""");
-        ir["invariants"]!["Paid"]!["rule"]!.GetValue<string>().Should().Be("nonEmpty");
-        ir["invariants"]!.AsObject().ContainsKey("Cart").Should().BeFalse();
-        ir["initialContext"]!.ToJsonString().Should().Be("""{"receipt":null}""");
-        ir["context"]!["Paid"]!["fields"]![0]!["nullable"]!.GetValue<bool>().Should().BeFalse();
-        ir["context"]!["Cart"]!["fields"]![0]!["nullable"]!.GetValue<bool>().Should().BeTrue();
+        var ir = JsonNode.Parse(derived.Irs["checkout"]).NotNull().AsObject();
+        ir["version"].NotNull().GetValue<int>().Should().Be(3);
+        ir["committedStates"].NotNull().ToJsonString().Should().Be("""["Paid"]""");
+        ir["invariants"]
+            .NotNull()["Paid"]
+            .NotNull()["rule"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("nonEmpty");
+        ir["invariants"].NotNull().AsObject().ContainsKey("Cart").Should().BeFalse();
+        ir["initialContext"].NotNull().ToJsonString().Should().Be("""{"receipt":null}""");
+        ir["context"]
+            .NotNull()["Paid"]
+            .NotNull()["fields"]
+            .NotNull()[0]
+            .NotNull()["nullable"]
+            .NotNull()
+            .GetValue<bool>()
+            .Should()
+            .BeFalse();
+        ir["context"]
+            .NotNull()["Cart"]
+            .NotNull()["fields"]
+            .NotNull()[0]
+            .NotNull()["nullable"]
+            .NotNull()
+            .GetValue<bool>()
+            .Should()
+            .BeTrue();
 
-        var host = HostFile.Read(derived.Host!);
+        var host = HostFile.Read(derived.Host.NotNull());
         IrMachines
             .Create(
                 new IrMachines.Source(ir, host.Machines["checkout"]),
@@ -248,8 +271,9 @@ public class GlossaryStateShapesTests
         var derived = await Derive(glossary, ("turnstile.feature", features)).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
-        var ir = JsonNode.Parse(derived.Irs["turnstile"])!.AsObject();
-        ir["differential"]!
+        var ir = JsonNode.Parse(derived.Irs["turnstile"]).NotNull().AsObject();
+        ir["differential"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be(
@@ -258,7 +282,7 @@ public class GlossaryStateShapesTests
             );
 
         // The host replays the block into the builder the exporter reads it back from.
-        var host = HostFile.Read(derived.Host!);
+        var host = HostFile.Read(derived.Host.NotNull());
         IrMachines
             .Create(new IrMachines.Source(ir, host.Machines["turnstile"]), [])
             .ExportIr()

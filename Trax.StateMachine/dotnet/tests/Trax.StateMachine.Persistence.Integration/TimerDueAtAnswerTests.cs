@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -23,22 +24,22 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
 
     private static readonly TimeSpan Within = TimeSpan.FromSeconds(15);
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp()
     {
         _host = InstanceHost.Create(provider, launcher: new RecordingLauncher());
-        _host.Services.GetRequiredService<SnapshotChangeListener>().PollInterval =
+        _host.NotNull().Services.GetRequiredService<SnapshotChangeListener>().PollInterval =
             TimeSpan.FromMilliseconds(50);
     }
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private async Task<DateTimeOffset?> RowDueAt(Guid id) =>
         (
-            await RawSql.Timer(_host, id).ConfigureAwait(false)
+            await RawSql.Timer(_host.NotNull(), id).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"No row holds the id {id}.")
         ).DueAt;
 
@@ -46,10 +47,11 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
     {
         row.Should().NotBeNull($"{path} enters a timed state");
         answer.Should().NotBeNull($"{path} answers the due time beside the snapshot. See {Adr}");
-        answer!
+        answer
+            .NotNull()
             .Value.Should()
             .BeCloseTo(
-                row!.Value,
+                row.NotNull().Value,
                 TimeSpan.FromMilliseconds(1),
                 $"{path} answers the row's due time"
             );
@@ -59,9 +61,10 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
     public async Task A_start_into_a_timed_state_answers_its_due_time()
     {
         StartOutcome.Started started;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             started = (
                 await _host
+                    .NotNull()
                     .Service(scope, ExpiringMachine.Id)
                     .Start(new Actor.Client(User), input: null, "start-due")
             )
@@ -72,9 +75,10 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
         ShouldBeTheRows(started.DueAt, await RowDueAt(started.Id), "start");
 
         // A retry answers with the instance the first start created, and its due time.
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Service(scope, ExpiringMachine.Id)
                     .Start(new Actor.Client(User), input: null, "start-due")
             )
@@ -88,12 +92,13 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
     public async Task An_advance_answers_the_due_time_it_armed_and_null_when_it_leaves()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, ReminderMachine.Json("Idle"));
+        await _host.NotNull().SeedDraft(User, id, ReminderMachine.Json("Idle"));
 
         AdvanceOutcome.Advanced opened;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             opened = (
                 await _host
+                    .NotNull()
                     .Service(scope, ReminderMachine.Id)
                     .Advance(new Actor.Client(User, "Editor"), id, "Open")
             )
@@ -102,18 +107,19 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
                 .Subject;
         ShouldBeTheRows(opened.DueAt, await RowDueAt(id), "an advance");
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var loaded = (await _host.Service(scope, ReminderMachine.Id).Load(User, id))
+            var loaded = (await _host.NotNull().Service(scope, ReminderMachine.Id).Load(User, id))
                 .Should()
                 .BeOfType<LoadResult.Loaded>()
                 .Subject;
             ShouldBeTheRows(loaded.DueAt, await RowDueAt(id), "a load");
         }
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Service(scope, ReminderMachine.Id)
                     .Advance(
                         User,
@@ -132,11 +138,15 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
     public async Task An_advance_into_a_timed_invoking_state_answers_its_due_time()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, WaitMachine.Json("Idle", TimeSpan.FromMinutes(5)));
+        await _host
+            .NotNull()
+            .SeedDraft(User, id, WaitMachine.Json("Idle", TimeSpan.FromMinutes(5)));
 
         AdvanceOutcome.Advanced fetching;
-        using (var scope = _host.Scope())
-            fetching = (await _host.Service(scope, WaitMachine.Id).Advance(User, id, "Fetch"))
+        using (var scope = _host.NotNull().Scope())
+            fetching = (
+                await _host.NotNull().Service(scope, WaitMachine.Id).Advance(User, id, "Fetch")
+            )
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>()
                 .Subject;
@@ -148,14 +158,15 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
     public async Task A_send_answers_the_due_time_of_the_state_its_effect_entered()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, RenewalMachine.DraftJson);
+        await _host.NotNull().SeedDraft(User, id, RenewalMachine.DraftJson);
 
         AdvanceOutcome.Advanced sent;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             sent = (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                    .EffectRunner(RenewalMachine.Id)!
+                    .EffectRunner(RenewalMachine.Id)
+                    .NotNull()
                     .Run(User, id, "charge-due")
             )
                 .Should()
@@ -166,11 +177,12 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
         // A retry of the send replays the stored result, with its due time: the row is still at the revision the
         // send recorded, so the replay knows it.
         AdvanceOutcome.Advanced replayed;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             replayed = (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                    .EffectRunner(RenewalMachine.Id)!
+                    .EffectRunner(RenewalMachine.Id)
+                    .NotNull()
                     .Run(User, id, "charge-due")
             )
                 .Should()
@@ -184,10 +196,10 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
     public async Task A_hosts_advance_answers_its_due_time()
     {
         var key = MachineKey.Of("timers", Guid.NewGuid().ToString());
-        var instance = await _host.Start<SystemReminderMachine>(key);
+        var instance = await _host.NotNull().Start<SystemReminderMachine>(key);
 
         AdvanceOutcome.Advanced opened;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             opened = (
                 await scope
                     .ServiceProvider.GetRequiredService<IMachineInstances>()
@@ -204,17 +216,18 @@ public class TimerDueAtAnswerTests(StoreProvider provider)
     public async Task The_hubs_reread_carries_the_rows_due_time()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, ReminderMachine.Json("Idle"));
-        var hub = _host.Services.GetRequiredService<SnapshotWatchHub>();
-        var watch = hub.Watch(await _host.RowId(id));
+        await _host.NotNull().SeedDraft(User, id, ReminderMachine.Json("Idle"));
+        var hub = _host.NotNull().Services.GetRequiredService<SnapshotWatchHub>();
+        var watch = hub.Watch(await _host.NotNull().RowId(id));
         await using var watchDisposal = watch.ConfigureAwait(false);
 
         var first = await Next(watch);
         first.DueAt.Should().BeNull("Idle has no timer");
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Service(scope, ReminderMachine.Id)
                     .Advance(new Actor.Client(User, "Editor"), id, "Open")
             )

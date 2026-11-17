@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 
@@ -170,7 +171,7 @@ internal sealed class InvokeOutcomeDelivery(
         if (among is not null)
         {
             var tokens = among.ToList();
-            drafts = drafts.Where(d => tokens.Contains(d.InvokeToken!));
+            drafts = drafts.Where(d => d.InvokeToken != null && tokens.Contains(d.InvokeToken));
         }
         if (after is not null)
             drafts = drafts.Where(d => string.Compare(d.InvokeToken, after) > 0);
@@ -203,7 +204,7 @@ internal sealed class InvokeOutcomeDelivery(
                     )
                 )
             orderby d.InvokeToken
-            select new { Token = d.InvokeToken!, Unqueued = w == null }
+            select new { Token = d.InvokeToken.NotNull(), Unqueued = w == null }
         )
             .Take(limit)
             .ToListAsync(cancellationToken)
@@ -233,7 +234,7 @@ internal sealed class InvokeOutcomeDelivery(
                 })
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false)
-        ).GroupBy(m => m.ExternalId.Trim(), StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.MaxBy(m => m.Id)!.TrainState, StringComparer.Ordinal);
+        ).GroupBy(m => m.ExternalId.Trim(), StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.MaxBy(m => m.Id).NotNull().TrainState, StringComparer.Ordinal);
 
         var ended = rows.Where(r =>
                 !r.Unqueued
@@ -278,8 +279,8 @@ internal sealed class InvokeOutcomeDelivery(
             children = children.Where(c => string.Compare(c.SpawnedBy, after) > 0);
         var tokens = await children
             .OrderBy(c => c.SpawnedBy)
-            .Select(c => c.SpawnedBy!)
             .Take(limit)
+            .Select(c => c.SpawnedBy.NotNull())
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return new EndedPage(tokens, tokens.Count == limit ? tokens[^1] : null);
@@ -383,7 +384,7 @@ internal sealed class InvokeOutcomeDelivery(
             {
                 w.Status,
                 w.MetadataId,
-                State = (TrainState?)w.Metadata!.TrainState,
+                State = (TrainState?)w.Metadata.NotNull().TrainState,
                 w.Metadata.FailureException,
                 w.Metadata.InvokeOutput,
                 Oversize = (bool?)w.Metadata.InvokeOutputOversize,
@@ -571,11 +572,11 @@ internal sealed class InvokeOutcomeDelivery(
             // the token cleared, so nothing waits on a run that has finished.
             if (outcome.Kind == InvokeOutcomeKind.Done)
             {
-                outcome = Fail(problem!, out reason);
+                outcome = Fail(problem.NotNull(), out reason);
                 continue;
             }
 
-            return await Strand(row, current, invokeToken, problem!, cancellationToken)
+            return await Strand(row, current, invokeToken, problem.NotNull(), cancellationToken)
                 .ConfigureAwait(false);
         }
     }

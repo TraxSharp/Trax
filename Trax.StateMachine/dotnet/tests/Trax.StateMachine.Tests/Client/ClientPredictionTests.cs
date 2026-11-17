@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
 
@@ -19,7 +20,7 @@ public class ClientPredictionTests
     {
         Id = "turnstile",
         IrHash = MachinePredictor.For(DeclarativeTurnstile.Built).IrHash,
-        Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built))!,
+        Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built)).NotNull(),
     };
 
     private static ServerSnapshot At(long? revision, string state, JsonObject? context = null) =>
@@ -46,7 +47,13 @@ public class ClientPredictionTests
                 "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}"
             );
         await Until(controller, v => v.Pending);
-        controller.View.Snapshot!.Context["paidWith"]!.GetValue<string>().Should().Be("quarter");
+        controller
+            .View.Snapshot.NotNull()
+            .Context["paidWith"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("quarter");
 
         sent.Answer.SetResult(
             ServerAnswer.Of(At(2, "Unlocked", new JsonObject { ["paidWith"] = "dollar" }))
@@ -55,7 +62,13 @@ public class ClientPredictionTests
 
         outcome.Should().BeOfType<SendOutcome.Confirmed>();
         controller.View.Pending.Should().BeFalse();
-        controller.View.Snapshot!.Context["paidWith"]!.GetValue<string>().Should().Be("dollar");
+        controller
+            .View.Snapshot.NotNull()
+            .Context["paidWith"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("dollar");
         controller.View.Confirmed.Should().Be(controller.View.Snapshot);
     }
 
@@ -92,13 +105,13 @@ public class ClientPredictionTests
 
         sent.ClientResult.Should().BeNull();
         await Until(controller, v => v.Pending);
-        controller.View.Snapshot!.State.Should().Be("Locked");
+        controller.View.Snapshot.NotNull().State.Should().Be("Locked");
         controller.CanSend("Coin").Should().BeTrue();
         controller.AvailableTriggers().Should().Equal("Coin");
 
         sent.Answer.SetResult(ServerAnswer.Of(At(2, "Unlocked")));
         (await send.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
-        controller.View.Snapshot!.State.Should().Be("Unlocked");
+        controller.View.Snapshot.NotNull().State.Should().Be("Unlocked");
     }
 
     [Test]
@@ -117,7 +130,7 @@ public class ClientPredictionTests
         );
         (await push.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
         controller.View.Revision.Should().BeNull();
-        controller.View.Confirmed!.State.Should().Be("Locked");
+        controller.View.Confirmed.NotNull().State.Should().Be("Locked");
 
         var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
         (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
@@ -126,7 +139,7 @@ public class ClientPredictionTests
         (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
 
         controller.View.Revision.Should().Be(2);
-        controller.View.Confirmed!.State.Should().Be("Unlocked");
+        controller.View.Confirmed.NotNull().State.Should().Be("Unlocked");
     }
 
     [Test]
@@ -156,7 +169,7 @@ public class ClientPredictionTests
                     "connection refused"
                 )
             );
-        controller.View.Snapshot!.State.Should().Be("Unlocked");
+        controller.View.Snapshot.NotNull().State.Should().Be("Unlocked");
     }
 
     [Test]
@@ -205,7 +218,7 @@ public class ClientPredictionTests
         );
 
         (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
-        controller.View.Confirmed!.State.Should().Be("Unlocked");
+        controller.View.Confirmed.NotNull().State.Should().Be("Unlocked");
     }
 
     [Test]
@@ -257,7 +270,7 @@ public class ClientPredictionTests
 
         await Until(controller, v => string.Equals(v.RowId, "row-b", StringComparison.Ordinal));
         controller.View.Revision.Should().Be(1);
-        controller.View.Confirmed!.State.Should().Be("Unlocked");
+        controller.View.Confirmed.NotNull().State.Should().Be("Unlocked");
     }
 
     [Test]
@@ -286,24 +299,26 @@ public class ClientPredictionTests
             Id = "review",
             IrHash = "",
             Ir = (JsonObject)
-                JsonNode.Parse(
-                    """
-                    {"committedStates":[],"context":{"Approved":{"fields":[]},"Closed":{"fields":[]},
-                     "Draft":{"fields":[{"constraints":[],"name":"edits","nullable":false,"type":"integer"}]},
-                     "Escalated":{"fields":[]},"Held":{"fields":[]},"Rejected":{"fields":[]}},
-                     "id":"review","initialContext":{"edits":0},"initialState":"Draft","inputs":{},
-                     "invariants":{"Closed":{"name":"review:closable","rule":"custom"}},
-                     "states":["Approved","Closed","Draft","Escalated","Held","Rejected"],
-                     "transitions":[
-                      {"from":"Draft","reduce":{"name":"review:count-edit","reduce":"custom"},"to":"Draft","trigger":"Edit"},
-                      {"from":"Draft","guard":{"name":"review:is-reviewer","rule":"custom"},"reduce":{"reduce":"clear"},"to":"Approved","trigger":"Approve"},
-                      {"from":"Draft","reduce":{"reduce":"clear"},"to":"Escalated","trigger":"Approve"},
-                      {"from":"Draft","guard":{"name":"review:is-reviewer","rule":"custom"},"reduce":{"reduce":"clear"},"to":"Rejected","trigger":"Reject"},
-                      {"from":"Draft","reduce":{"reduce":"clear"},"to":"Closed","trigger":"Close"},
-                      {"from":"Draft","reduce":{"reduce":"clear"},"to":"Held","trigger":"Hold"}],
-                     "triggers":["Approve","Close","Edit","Hold","Reject"],"version":1}
-                    """
-                )!,
+                JsonNode
+                    .Parse(
+                        """
+                        {"committedStates":[],"context":{"Approved":{"fields":[]},"Closed":{"fields":[]},
+                         "Draft":{"fields":[{"constraints":[],"name":"edits","nullable":false,"type":"integer"}]},
+                         "Escalated":{"fields":[]},"Held":{"fields":[]},"Rejected":{"fields":[]}},
+                         "id":"review","initialContext":{"edits":0},"initialState":"Draft","inputs":{},
+                         "invariants":{"Closed":{"name":"review:closable","rule":"custom"}},
+                         "states":["Approved","Closed","Draft","Escalated","Held","Rejected"],
+                         "transitions":[
+                          {"from":"Draft","reduce":{"name":"review:count-edit","reduce":"custom"},"to":"Draft","trigger":"Edit"},
+                          {"from":"Draft","guard":{"name":"review:is-reviewer","rule":"custom"},"reduce":{"reduce":"clear"},"to":"Approved","trigger":"Approve"},
+                          {"from":"Draft","reduce":{"reduce":"clear"},"to":"Escalated","trigger":"Approve"},
+                          {"from":"Draft","guard":{"name":"review:is-reviewer","rule":"custom"},"reduce":{"reduce":"clear"},"to":"Rejected","trigger":"Reject"},
+                          {"from":"Draft","reduce":{"reduce":"clear"},"to":"Closed","trigger":"Close"},
+                          {"from":"Draft","reduce":{"reduce":"clear"},"to":"Held","trigger":"Hold"}],
+                         "triggers":["Approve","Close","Edit","Hold","Reject"],"version":1}
+                        """
+                    )
+                    .NotNull(),
         }
     );
 
@@ -331,7 +346,13 @@ public class ClientPredictionTests
         sent.ClientResult.Should().BeNull();
         sent.Answer.SetResult(ServerAnswer.Of(At(2, "Draft", new JsonObject { ["edits"] = 1 })));
         (await send.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
-        controller.View.Snapshot!.Context["edits"]!.GetValue<int>().Should().Be(1);
+        controller
+            .View.Snapshot.NotNull()
+            .Context["edits"]
+            .NotNull()
+            .GetValue<int>()
+            .Should()
+            .Be(1);
     }
 
     [Test]
@@ -350,7 +371,7 @@ public class ClientPredictionTests
 
         sent.ClientResult.Should().BeNull();
         await Until(controller, v => v.Pending);
-        controller.View.Snapshot!.State.Should().Be("Draft");
+        controller.View.Snapshot.NotNull().State.Should().Be("Draft");
     }
 
     [Test]
@@ -371,7 +392,7 @@ public class ClientPredictionTests
         sent.Trigger.Should().Be("Reject");
         sent.ClientResult.Should().BeNull();
         await Until(controller, v => v.Pending);
-        controller.View.Snapshot!.State.Should().Be("Draft");
+        controller.View.Snapshot.NotNull().State.Should().Be("Draft");
     }
 
     [Test]
@@ -390,7 +411,7 @@ public class ClientPredictionTests
 
         sent.ClientResult.Should().BeNull();
         await Until(controller, v => v.Pending);
-        controller.View.Snapshot!.State.Should().Be("Draft");
+        controller.View.Snapshot.NotNull().State.Should().Be("Draft");
     }
 
     private static ServerMachineController OpenReview(HandServer server) =>

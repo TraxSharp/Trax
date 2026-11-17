@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -61,7 +62,7 @@ public class InvokedRunLimitTests
         refused
             .Should()
             .NotBeNull("a user owner whose key names nobody cannot be counted, so it is refused");
-        refused!.Code.Should().Be(InvokeOutbox.Forbidden);
+        refused.NotNull().Code.Should().Be(InvokeOutbox.Forbidden);
     }
 
     private static async Task<string> Explain<T>(DbContext context, IQueryable<T> query)

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Helpers;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -16,10 +17,11 @@ public class IrMachineFormatTests
         var ir = JsonNode
             .Parse(
                 await File.ReadAllTextAsync(FixturePaths.IrFile("turnstile")).ConfigureAwait(false)
-            )!
+            )
+            .NotNull()
             .AsObject();
         ir["irFormat"] = JsonNode.Parse(irFormat);
-        return JsonNode.Parse(ir.ToJsonString())!.AsObject();
+        return JsonNode.Parse(ir.ToJsonString()).NotNull().AsObject();
     }
 
     [Test]

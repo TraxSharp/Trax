@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 
@@ -100,7 +101,7 @@ internal sealed class InvokedRunCancellation(IDataContext context) : IInvokedRun
 
         var waitingOn = await context
             .SnapshotDrafts.Where(d => d.SpawnedBy == invokeToken && d.InvokeToken != null)
-            .Select(d => d.InvokeToken!)
+            .Select(d => d.InvokeToken.NotNull())
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         foreach (var token in waitingOn)

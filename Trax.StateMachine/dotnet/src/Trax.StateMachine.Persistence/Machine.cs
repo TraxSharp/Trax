@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 
 namespace Trax.StateMachine.Persistence;
@@ -260,7 +261,7 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
             .Select(i => new SpawnDeclaration(
                 Built.Definition.Id,
                 i.State.ToString(),
-                i.Spawn!.ChildMachine,
+                i.Spawn.NotNull().ChildMachine,
                 Built.SystemOwned
             ))
             .ToList();
@@ -378,9 +379,9 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
         Built
             .Definition.Transitions.Where(t => Built.ServerOnly.Contains(t.Trigger))
             .Select(t => new ServerEdge(
-                t.From.ToString()!,
-                t.Trigger.ToString()!,
-                t.To.ToString()!
+                t.From.ToString().NotNull(),
+                t.Trigger.ToString().NotNull(),
+                t.To.ToString().NotNull()
             ))
             .Distinct()
             .ToList();

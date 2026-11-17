@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -45,24 +46,24 @@ public class ConformanceTests
     private static async Task Replay(string path)
     {
         var fixture = (JsonObject)
-            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false))!;
-        var given = ToSnapshot((JsonObject)fixture["given"]!);
-        var when = (JsonObject)fixture["when"]!;
-        var trigger = when["trigger"]!.GetValue<string>();
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false)).NotNull();
+        var given = ToSnapshot((JsonObject)fixture["given"].NotNull());
+        var when = (JsonObject)fixture["when"].NotNull();
+        var trigger = when["trigger"].NotNull().GetValue<string>();
         var input = when["input"]?.DeepClone();
-        var expect = (JsonObject)fixture["expect"]!;
+        var expect = (JsonObject)fixture["expect"].NotNull();
 
         var result = DeclarativeTurnstile.Machine.Advance(given, trigger, input);
 
         if (
             string.Equals(
-                expect["outcome"]!.GetValue<string>(),
+                expect["outcome"].NotNull().GetValue<string>(),
                 "transitioned",
                 StringComparison.Ordinal
             )
         )
         {
-            var expected = ToSnapshot((JsonObject)expect["snapshot"]!);
+            var expected = ToSnapshot((JsonObject)expect["snapshot"].NotNull());
             result
                 .Should()
                 .BeOfType<AdvanceResult.Transitioned>()
@@ -76,7 +77,7 @@ public class ConformanceTests
                 .BeOfType<AdvanceResult.Rejected>()
                 .Which.Reason.ToWire()
                 .Should()
-                .Be(expect["reason"]!.GetValue<string>());
+                .Be(expect["reason"].NotNull().GetValue<string>());
         }
     }
 
@@ -84,18 +85,24 @@ public class ConformanceTests
     public async Task Rehydrate_matches_the_shared_fixture(string path)
     {
         var fixture = (JsonObject)
-            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false))!;
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false)).NotNull();
         var json =
             fixture["raw"] is JsonNode raw && raw.GetValueKind() == JsonValueKind.String
                 ? raw.GetValue<string>()
-                : fixture["json"]!.ToJsonString();
-        var expect = (JsonObject)fixture["expect"]!;
+                : fixture["json"].NotNull().ToJsonString();
+        var expect = (JsonObject)fixture["expect"].NotNull();
 
         var result = TestTurnstile.Machine.Rehydrate(json);
 
-        if (string.Equals(expect["result"]!.GetValue<string>(), "ok", StringComparison.Ordinal))
+        if (
+            string.Equals(
+                expect["result"].NotNull().GetValue<string>(),
+                "ok",
+                StringComparison.Ordinal
+            )
+        )
         {
-            var expected = ToSnapshot((JsonObject)expect["snapshot"]!);
+            var expected = ToSnapshot((JsonObject)expect["snapshot"].NotNull());
             result.Should().BeOfType<RehydrationResult.Ok>().Which.Snapshot.Should().Be(expected);
         }
         else
@@ -105,16 +112,16 @@ public class ConformanceTests
                 .BeOfType<RehydrationResult.Error>()
                 .Which.Code.ToWire()
                 .Should()
-                .Be(expect["code"]!.GetValue<string>());
+                .Be(expect["code"].NotNull().GetValue<string>());
         }
     }
 
     private static Snapshot ToSnapshot(JsonObject o) =>
         new()
         {
-            Machine = o["machine"]!.GetValue<string>(),
-            Version = o["version"]!.GetValue<int>(),
-            State = o["state"]!.GetValue<string>(),
-            Context = (JsonObject)o["context"]!.DeepClone(),
+            Machine = o["machine"].NotNull().GetValue<string>(),
+            Version = o["version"].NotNull().GetValue<int>(),
+            State = o["state"].NotNull().GetValue<string>(),
+            Context = (JsonObject)o["context"].NotNull().DeepClone(),
         };
 }

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
@@ -132,7 +133,7 @@ public class RegistryJunctionTests
     public async Task A_stale_client_schema_hash_is_refused_while_matching_absent_or_a_hashless_machine_is_not()
     {
         const string Stale = "0000000000000000000000000000000000000000000000000000000000000000";
-        var server = NewRegistry().SchemaHash("declarative-turnstile")!;
+        var server = NewRegistry().SchemaHash("declarative-turnstile").NotNull();
 
         // Save/advance/load refuse a client whose hash differs from the server's (a declarative machine).
         (
@@ -146,7 +147,8 @@ public class RegistryJunctionTests
                 }
             )
         )
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.SchemaMismatch);
         (
             await new AdvanceSnapshotJunction(NewRegistry(), User).Run(
@@ -158,7 +160,7 @@ public class RegistryJunctionTests
                     SchemaHash = Stale,
                 }
             )
-        ).Problem!.Code.Should().Be(RefusalCode.SchemaMismatch);
+        ).Problem.NotNull().Code.Should().Be(RefusalCode.SchemaMismatch);
         (
             await new LoadSnapshotJunction(NewRegistry(), User).Run(
                 new LoadSnapshotInput
@@ -168,7 +170,7 @@ public class RegistryJunctionTests
                     SchemaHash = Stale,
                 }
             )
-        ).Problem!.Code.Should().Be(RefusalCode.SchemaMismatch);
+        ).Problem.NotNull().Code.Should().Be(RefusalCode.SchemaMismatch);
 
         // The matching hash passes the check, and so does omitting it: the save is then refused for the machine's
         // guard, not its hash.
@@ -183,7 +185,8 @@ public class RegistryJunctionTests
                 }
             )
         )
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.SaveNotAllowed);
         (
             await new SaveSnapshotJunction(NewRegistry(), User).Run(
@@ -194,7 +197,7 @@ public class RegistryJunctionTests
                     Snapshot = DeclarativeTurnstileLocked,
                 }
             )
-        ).Problem!.Code.Should().Be(RefusalCode.SaveNotAllowed);
+        ).Problem.NotNull().Code.Should().Be(RefusalCode.SaveNotAllowed);
 
         // A raw-delegate machine has a null server hash, so the guard SKIPS even a stale client hash (it falls
         // through to the normal flow) rather than throwing — advance reaches RefusalCode.NotFound, NOT schema-mismatch.
@@ -210,7 +213,8 @@ public class RegistryJunctionTests
                 }
             )
         )
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.NotFound);
     }
 
@@ -241,7 +245,8 @@ public class RegistryJunctionTests
         var idBad = Guid.NewGuid();
         await Save(idBad);
         (await Advance(idBad, DeclarativeTurnstileLocked))
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.ClientDivergence);
 
         // No client result: no check (older clients that don't send it are unaffected).
@@ -262,7 +267,7 @@ public class RegistryJunctionTests
             }
         );
 
-        output.Problem!.Code.Should().Be(RefusalCode.UnknownMachine);
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.UnknownMachine);
     }
 
     [Test]
@@ -272,7 +277,7 @@ public class RegistryJunctionTests
             new SendSnapshotInput { Machine = "turnstile", Id = Guid.NewGuid() }
         );
 
-        output.Problem!.Code.Should().Be(RefusalCode.NoEffect);
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.NoEffect);
     }
 
     [Test]
@@ -289,7 +294,7 @@ public class RegistryJunctionTests
             }
         );
 
-        output.Problem!.Code.Should().Be(RefusalCode.Unauthenticated);
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.Unauthenticated);
     }
 
     private const string DraftOrder =
@@ -309,7 +314,7 @@ public class RegistryJunctionTests
             }
         );
 
-        output.Problem!.Code.Should().Be(RefusalCode.InvalidContext);
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.InvalidContext);
     }
 
     [Test]
@@ -327,7 +332,7 @@ public class RegistryJunctionTests
                     Trigger = "Coin",
                 }
             )
-        ).Problem!.Code.Should().Be(RefusalCode.UnknownMachine);
+        ).Problem.NotNull().Code.Should().Be(RefusalCode.UnknownMachine);
         (
             await advance(
                 new()
@@ -338,7 +343,7 @@ public class RegistryJunctionTests
                     Input = "{\"coin\":\"quarter\"}",
                 }
             )
-        ).Problem!.Code.Should().Be(RefusalCode.NotFound);
+        ).Problem.NotNull().Code.Should().Be(RefusalCode.NotFound);
 
         var id = Guid.NewGuid();
         await TestDb.Seed("u", id, TestTurnstile.InitialJson);
@@ -352,7 +357,7 @@ public class RegistryJunctionTests
                     Input = "{bad json",
                 }
             )
-        ).Problem!.Code.Should().Be(RefusalCode.Malformed);
+        ).Problem.NotNull().Code.Should().Be(RefusalCode.Malformed);
         (
             await advance(
                 new()
@@ -362,7 +367,7 @@ public class RegistryJunctionTests
                     Trigger = "Push",
                 }
             )
-        ).Problem!.Code.Should().Be(RefusalCode.NoTransition);
+        ).Problem.NotNull().Code.Should().Be(RefusalCode.NoTransition);
     }
 
     [Test]
@@ -373,14 +378,16 @@ public class RegistryJunctionTests
                 new LoadSnapshotInput { Machine = "nope", Id = Guid.NewGuid() }
             )
         )
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.UnknownMachine);
         (
             await new LoadSnapshotJunction(NewRegistry(), User).Run(
                 new LoadSnapshotInput { Machine = "turnstile", Id = Guid.NewGuid() }
             )
         )
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.NotFound);
     }
 
@@ -392,14 +399,16 @@ public class RegistryJunctionTests
                 new SendSnapshotInput { Machine = "nope", Id = Guid.NewGuid() }
             )
         )
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.UnknownMachine);
         (
             await new SendSnapshotJunction(NewRegistry(), User).Run(
                 new SendSnapshotInput { Machine = "order", Id = Guid.NewGuid() }
             )
         )
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.NotFound);
 
         var draftId = Guid.NewGuid();
@@ -409,7 +418,8 @@ public class RegistryJunctionTests
                 new SendSnapshotInput { Machine = "order", Id = draftId }
             )
         )
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.NoTransition);
 
         var reviewId = Guid.NewGuid();
@@ -419,7 +429,8 @@ public class RegistryJunctionTests
                 new SendSnapshotInput { Machine = "order", Id = reviewId }
             )
         )
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(RefusalCode.DeliveryFailed);
     }
 }

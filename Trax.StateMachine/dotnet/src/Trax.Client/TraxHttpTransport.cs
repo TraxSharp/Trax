@@ -36,9 +36,9 @@ public sealed class TraxHttpTransport : ITraxTransport
             nameof(options)
         );
         TransportSecurity.RequireSecure(
-            options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
+            options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is not { } baseAddress
                 ? options.Endpoint
-                : new Uri(options.Http!.BaseAddress, options.Endpoint),
+                : new Uri(baseAddress, options.Endpoint),
             options.AllowInsecureTransport,
             Uri.UriSchemeHttps,
             nameof(options)
@@ -279,7 +279,7 @@ public sealed class TraxHttpTransport : ITraxTransport
         if (answer is not null && (response.IsSuccessStatusCode || answer.Errors.Count > 0))
             return answer;
         return TraxAnswer.Failed(
-            $"The host answered {$"{status} {response.ReasonPhrase}".TrimEnd()} with no GraphQL answer.",
+            $"The host answered {string.Create(CultureInfo.InvariantCulture, $"{status} {response.ReasonPhrase}").TrimEnd()} with no GraphQL answer.",
             status
         );
     }

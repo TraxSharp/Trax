@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 
@@ -116,10 +117,10 @@ public class BoardTests
         return Board.Draw(
             derived.Irs.ToDictionary(
                 kv => kv.Key,
-                kv => JsonNode.Parse(kv.Value)!.AsObject(),
+                kv => JsonNode.Parse(kv.Value).NotNull().AsObject(),
                 StringComparer.Ordinal
             ),
-            HostFile.Read(derived.Host!)
+            HostFile.Read(derived.Host.NotNull())
         );
     }
 }

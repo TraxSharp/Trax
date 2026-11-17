@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 
@@ -77,7 +78,7 @@ public class ViewDerivationTests
         var derived = await Derive(Ordering).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
-        var view = HostFile.Read(derived.Host!).Views["orders"];
+        var view = HostFile.Read(derived.Host.NotNull()).Views["orders"];
         view.Readers.RoleSets.Should().ContainSingle().Which.Should().Equal("customer");
         view.Fields.Select(f => f.Name).Should().BeEquivalentTo(["status", "loaves"]);
         derived.Access.Should().Contain("view orders: customer");
@@ -88,7 +89,7 @@ public class ViewDerivationTests
     {
         var derived = await Derive(Ordering).ConfigureAwait(false);
 
-        HostFile.Read(derived.Host!).Views.Should().NotContainKey("shop sign");
+        HostFile.Read(derived.Host.NotNull()).Views.Should().NotContainKey("shop sign");
     }
 
     [Test]
@@ -97,7 +98,7 @@ public class ViewDerivationTests
         var derived = await Derive(Ordering).ConfigureAwait(false);
 
         derived.Irs.Keys.Should().Equal("order");
-        HostFile.Read(derived.Host!).Machines.Keys.Should().Equal("order");
+        HostFile.Read(derived.Host.NotNull()).Machines.Keys.Should().Equal("order");
     }
 
     [Test]
@@ -168,7 +169,7 @@ public class ViewDerivationTests
 
         derived.Problems.Should().BeEmpty();
         HostFile
-            .Read(derived.Host!)
+            .Read(derived.Host.NotNull())
             .Views["shop sign"]
             .Readers.RoleSets.Should()
             .ContainSingle()

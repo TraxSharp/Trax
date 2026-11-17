@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Features;
 
@@ -156,7 +157,7 @@ internal static class MachineFiles
         var id = machine.Id;
         var effects = (ir["transitions"] as JsonArray ?? [])
             .Where(t => t?["effect"] is JsonObject)
-            .Select(t => t!["trigger"]?.GetValue<string>())
+            .Select(t => t.NotNull()["trigger"]?.GetValue<string>())
             .OfType<string>()
             .ToHashSet(StringComparer.Ordinal);
         Pair(problems, $"'{id}' runs an effect on", "effect", effects, machine.Effects.Keys);

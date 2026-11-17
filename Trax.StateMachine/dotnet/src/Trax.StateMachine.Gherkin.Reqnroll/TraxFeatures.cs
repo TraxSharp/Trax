@@ -18,12 +18,7 @@ public static class TraxFeatures
         ArgumentNullException.ThrowIfNull(configure);
         var options = new TraxFeatureDriverOptions();
         configure(options);
-        if (
-            options.Host is null
-            || options.Client is null
-            || options.Glossary is null
-            || options.Credential is null
-        )
+        if (!options.HasRequired)
             throw new ArgumentException(
                 "TraxFeatures.Configure needs Host, Client, Glossary and Credential set.",
                 nameof(configure)

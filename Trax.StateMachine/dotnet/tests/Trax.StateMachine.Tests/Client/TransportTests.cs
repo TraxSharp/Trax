@@ -8,6 +8,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.Time.Testing;
 using Trax.Client;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
 
@@ -23,7 +24,7 @@ public class TransportTests
     {
         Id = "turnstile",
         IrHash = MachinePredictor.For(DeclarativeTurnstile.Built).IrHash,
-        Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built))!,
+        Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built)).NotNull(),
         Documents =
         [
             new ClientManifestDocument
@@ -264,7 +265,7 @@ public class TransportTests
 
         var answer = await server.GetAsync("i-1");
 
-        answer.Problem!.Code.Should().Be("NOT_FOUND");
+        answer.Problem.NotNull().Code.Should().Be("NOT_FOUND");
     }
 
     [Test]

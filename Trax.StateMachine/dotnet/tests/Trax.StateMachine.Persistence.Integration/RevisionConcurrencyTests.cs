@@ -7,6 +7,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Testing;
@@ -35,20 +36,20 @@ public class RevisionConcurrencyTests
 
     private const string User = "u1";
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InstanceHost.Create(StoreProvider.Postgres);
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public async Task Twenty_concurrent_advances_leave_contiguous_revisions()
     {
         const int Callers = 20;
         var id = Guid.NewGuid();
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
@@ -74,8 +75,9 @@ public class RevisionConcurrencyTests
                         {
                             for (var attempt = 0; attempt < 500; attempt++)
                             {
-                                using var scope = _host.Scope();
+                                using var scope = _host.NotNull().Scope();
                                 var outcome = await _host
+                                    .NotNull()
                                     .Service(scope, BuildMachine.Id)
                                     .Advance(User, id, "Edit")
                                     .ConfigureAwait(false);
@@ -89,7 +91,7 @@ public class RevisionConcurrencyTests
             )
             .WaitAsync(TimeSpan.FromSeconds(120));
 
-        (await _host.Revision(id))
+        (await _host.NotNull().Revision(id))
             .Should()
             .Be(1 + Callers, $"the insert and each successful advance bumped once. See {Adr}");
         advanced

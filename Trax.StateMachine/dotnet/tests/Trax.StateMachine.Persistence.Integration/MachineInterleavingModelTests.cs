@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using AwesomeAssertions.Execution;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -217,7 +218,7 @@ public class MachineInterleavingModelTests(StoreProvider provider)
         foreach (var row in rows)
         {
             var (token, _) = await RawSql.PendingEffect(host, row.Id).ConfigureAwait(false);
-            var context = JsonNode.Parse(row.Context)!;
+            var context = JsonNode.Parse(row.Context).NotNull();
             var receipt = context["receipt"]?.GetValue<string>() ?? "";
             var ran = charge
                 .Receipts.Where(r => r.Key.Contains(row.Id.ToString(), StringComparison.Ordinal))

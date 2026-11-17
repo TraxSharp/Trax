@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 
@@ -146,10 +147,8 @@ public class ScenarioRunnerTests
     public async Task A_caller_the_committed_rule_does_not_admit_is_forbidden_in_the_hosts_words()
     {
         var (irs, host) = await Derived().ConfigureAwait(false);
-        host["machines"]!["order"]!["triggers"]!["Place"] = new JsonObject
-        {
-            ["roles"] = new JsonArray(new JsonArray("manager")),
-        };
+        host["machines"].NotNull()["order"].NotNull()["triggers"].NotNull()["Place"] =
+            new JsonObject { ["roles"] = new JsonArray(new JsonArray("manager")) };
 
         var report = await Run(Ordering, irs, host).ConfigureAwait(false);
 
@@ -161,7 +160,8 @@ public class ScenarioRunnerTests
                     StringComparison.Ordinal
                 )
             )
-            .Failure!.Message.Should()
+            .Failure.NotNull()
+            .Message.Should()
             .Contain("FORBIDDEN \"You may not do this.\"");
     }
 
@@ -185,9 +185,9 @@ public class ScenarioRunnerTests
             .ConfigureAwait(false);
 
         result.Status.Should().Be(ScenarioStatus.Passed);
-        var now = (await driver.Read(Ada.Key()).ConfigureAwait(false))!.Value;
+        var now = (await driver.Read(Ada.Key()).ConfigureAwait(false)).NotNull().Value;
         now.State.Should().Be("Draft");
-        now.Context["loaves"]!.GetValue<long>().Should().BeGreaterThan(0);
+        now.Context["loaves"].NotNull().GetValue<long>().Should().BeGreaterThan(0);
     }
 
     [Test]
@@ -211,7 +211,7 @@ public class ScenarioRunnerTests
                 .ConfigureAwait(false)
         );
 
-        var failure = report.Scenarios.Single().Failure!;
+        var failure = report.Scenarios.Single().Failure.NotNull();
         failure.Step.Line.Should().Be(6);
         failure.Message.Should().Contain("not served");
     }
@@ -240,7 +240,7 @@ public class ScenarioRunnerTests
 
         report.Scenarios.Should().HaveCount(2);
         report.Scenarios.Should().OnlyContain(s => s.Status == ScenarioStatus.Undefined);
-        report.Scenarios.Select(s => s.Failure!.Step.Line).Should().Equal(5, 10);
+        report.Scenarios.Select(s => s.Failure.NotNull().Step.Line).Should().Equal(5, 10);
     }
 
     [Test]
@@ -253,7 +253,7 @@ public class ScenarioRunnerTests
             await session
                 .Step(
                     new FeatureStep(kind, text, 0),
-                    resolver.Resolve(text, session.People, out _, out _)!
+                    resolver.Resolve(text, session.People, out _, out _).NotNull()
                 )
                 .ConfigureAwait(false);
 
@@ -384,7 +384,12 @@ public class ScenarioRunnerTests
     public async Task Fail_fast_stops_at_the_first_scenario_that_does_not_pass()
     {
         var (irs, host) = await Derived().ConfigureAwait(false);
-        host["machines"]!["order"]!["triggers"]!.AsObject().Remove("Order");
+        host["machines"]
+            .NotNull()["order"]
+            .NotNull()["triggers"]
+            .NotNull()
+            .AsObject()
+            .Remove("Order");
 
         var report = await Run(Ordering, irs, host, failFast: true).ConfigureAwait(false);
 
@@ -424,10 +429,10 @@ public class ScenarioRunnerTests
         return (
             derived.Irs.ToDictionary(
                 kv => kv.Key,
-                kv => JsonNode.Parse(kv.Value)!.AsObject(),
+                kv => JsonNode.Parse(kv.Value).NotNull().AsObject(),
                 StringComparer.Ordinal
             ),
-            JsonNode.Parse(derived.Host!)!.AsObject()
+            JsonNode.Parse(derived.Host.NotNull()).NotNull().AsObject()
         );
     }
 

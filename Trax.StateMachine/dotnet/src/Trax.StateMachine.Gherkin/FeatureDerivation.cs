@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -122,11 +123,11 @@ internal static class FeatureDerivation
         foreach (
             var trigger in (ir["transitions"] as JsonArray ?? [])
                 .Where(t => t?["effect"] is JsonObject)
-                .Select(t => t!["trigger"]!.GetValue<string>())
+                .Select(t => t.NotNull()["trigger"].NotNull().GetValue<string>())
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)
         )
-            effects[trigger] = machine.Triggers[trigger].Effect!.Type;
+            effects[trigger] = machine.Triggers[trigger].Effect.NotNull().Type;
         if (effects.Count > 0)
             entry["effects"] = effects;
 
@@ -265,7 +266,7 @@ internal static class FeatureDerivation
                     : "user",
             };
             foreach (var (name, value) in access.Entries[id])
-                entry[name] = value!.DeepClone();
+                entry[name] = value.NotNull().DeepClone();
             if (machine.Invokes.Count > 0)
             {
                 var invokes = new JsonObject();
@@ -292,7 +293,7 @@ internal static class FeatureDerivation
                 }
                 entry["invokes"] = invokes;
             }
-            Handlers(entry, machine, JsonNode.Parse(ir)!.AsObject());
+            Handlers(entry, machine, JsonNode.Parse(ir).NotNull().AsObject());
             machines[id] = entry;
         }
         return CanonicalJson.Serialize(

@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.StateMachine.Features;
 
@@ -64,7 +65,7 @@ internal static class IrMachines
         {
             throw new InvalidOperationException(Refuse(ex.Message), ex);
         }
-        if (!string.Equals(ir["id"]!.GetValue<string>(), id, StringComparison.Ordinal))
+        if (!string.Equals(ir["id"].NotNull().GetValue<string>(), id, StringComparison.Ordinal))
             throw new InvalidOperationException(
                 Refuse($"the IR's id is '{ir["id"]}', and the host file's entry is '{id}'.")
             );
@@ -109,13 +110,15 @@ internal static class IrMachines
         var replay = new IrReplay(ir, host, types, trains, corpus) { Handlers = handlers };
         var kind = host.IsSystem ? typeof(SystemIrMachine<,>) : typeof(ServedIrMachine<,>);
         var machine = (IMachine)
-            Activator.CreateInstance(
-                kind.MakeGenericType(types.State, types.Trigger),
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                binder: null,
-                args: [replay],
-                culture: null
-            )!;
+            Activator
+                .CreateInstance(
+                    kind.MakeGenericType(types.State, types.Trigger),
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    binder: null,
+                    args: [replay],
+                    culture: null
+                )
+                .NotNull();
 
         // Built here, so a refusal names the machine at registration rather than at its first request.
         string exported;
@@ -176,13 +179,13 @@ internal static class IrMachines
         foreach (var (name, outcome) in ir["outcomes"] as JsonObject ?? [])
             if (
                 !string.Equals(
-                    outcome!["outcome"]!.GetValue<string>(),
+                    outcome.NotNull()["outcome"].NotNull().GetValue<string>(),
                     "done",
                     StringComparison.Ordinal
                 )
             )
-                foreach (var edge in outcome["edges"]!.AsArray())
-                    if (edge!["guard"] is not null)
+                foreach (var edge in outcome["edges"].NotNull().AsArray())
+                    if (edge.NotNull()["guard"] is not null)
                         yield return $"the outcome {name} has a guarded edge, and only a done outcome's edges take "
                             + "a guard.";
     }
@@ -232,7 +235,7 @@ internal static class IrMachines
                             + "parameterless constructor."
                     )
                 );
-            return (T)Activator.CreateInstance(type)!;
+            return (T)Activator.CreateInstance(type).NotNull();
         }
 
         var effects = new Dictionary<string, Type>(StringComparer.Ordinal);
@@ -283,7 +286,7 @@ internal static class IrMachines
     )
     {
         var invoking = (ir["outcomes"] as JsonObject ?? [])
-            .Select(o => o.Value!["state"]!.GetValue<string>())
+            .Select(o => o.Value.NotNull()["state"].NotNull().GetValue<string>())
             .ToHashSet(StringComparer.Ordinal);
         foreach (var state in host.Invokes.Keys)
             if (!invoking.Contains(state))
@@ -341,20 +344,22 @@ internal static class IrMachines
     )
     {
         foreach (
-            var outcome in (ir["outcomes"] as JsonObject ?? []).Select(o => o.Value!.AsObject())
+            var outcome in (ir["outcomes"] as JsonObject ?? []).Select(o =>
+                o.Value.NotNull().AsObject()
+            )
         )
         {
             if (
                 !string.Equals(
-                    outcome["outcome"]!.GetValue<string>(),
+                    outcome["outcome"].NotNull().GetValue<string>(),
                     "done",
                     StringComparison.Ordinal
                 )
                 || outcome["output"] is not JsonObject declared
-                || !trains.TryGetValue(outcome["state"]!.GetValue<string>(), out var train)
+                || !trains.TryGetValue(outcome["state"].NotNull().GetValue<string>(), out var train)
             )
                 continue;
-            var state = outcome["state"]!.GetValue<string>();
+            var state = outcome["state"].NotNull().GetValue<string>();
             var output = TrainTypes(train).Output;
             JsonObject reflected;
             try
@@ -392,7 +397,7 @@ internal static class IrMachines
         static Dictionary<string, JsonObject> ByName(JsonArray? fields) =>
             (fields ?? [])
                 .OfType<JsonObject>()
-                .ToDictionary(f => f["name"]!.GetValue<string>(), StringComparer.Ordinal);
+                .ToDictionary(f => f["name"].NotNull().GetValue<string>(), StringComparer.Ordinal);
         var file = ByName(declared);
         var train = ByName(reflected);
         foreach (var (name, field) in train.Where(f => !file.ContainsKey(f.Key)))
@@ -431,7 +436,12 @@ internal static class IrMachines
                 if (string.Equals(key, "fields", StringComparison.Ordinal))
                     CompareFields(file as JsonArray, train as JsonArray, path, differences);
                 else
-                    CompareShape(file!.AsObject(), train!.AsObject(), $"{path}.{key}", differences);
+                    CompareShape(
+                        file.NotNull().AsObject(),
+                        train.NotNull().AsObject(),
+                        $"{path}.{key}",
+                        differences
+                    );
                 continue;
             }
             var written = has ? CanonicalJson.Serialize(file) : null;
@@ -457,14 +467,14 @@ internal static class IrMachines
     }
 
     private static List<string> Names(JsonNode? node) =>
-        node!.AsArray().Select(n => n!.GetValue<string>()).ToList();
+        node.NotNull().AsArray().Select(n => n.NotNull().GetValue<string>()).ToList();
 
     private static Dictionary<string, ContextSchema> Schemas(JsonNode? node) =>
-        node!
+        node.NotNull()
             .AsObject()
             .ToDictionary(
                 kv => kv.Key,
-                kv => IrMachine.ReadSchema(kv.Value!.AsObject()),
+                kv => IrMachine.ReadSchema(kv.Value.NotNull().AsObject()),
                 StringComparer.Ordinal
             );
 

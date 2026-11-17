@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
 namespace Trax.StateMachine.Persistence.Integration;
@@ -87,8 +88,8 @@ public class EfSnapshotStoreTests
         (await TestDb.NewStore().Upsert("user-a", id, Unlocked("quarter"))).Should().BeTrue();
         (await TestDb.NewStore().Upsert("user-b", id, Unlocked("dollar"))).Should().BeTrue();
 
-        (await TestDb.NewStore().Get("user-a", id))!.Json.Should().Contain("quarter");
-        (await TestDb.NewStore().Get("user-b", id))!.Json.Should().Contain("dollar");
+        (await TestDb.NewStore().Get("user-a", id)).NotNull().Json.Should().Contain("quarter");
+        (await TestDb.NewStore().Get("user-b", id)).NotNull().Json.Should().Contain("dollar");
     }
 
     [Test]
@@ -118,7 +119,8 @@ public class EfSnapshotStoreTests
         var id = Guid.NewGuid();
         await TestDb.NewStore().Upsert("u", id, Unlocked());
 
-        (await TestDb.NewStore().Get("u", id))!
+        (await TestDb.NewStore().Get("u", id))
+            .NotNull()
             .UpdatedAt.Should()
             .BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1));
     }
@@ -135,10 +137,10 @@ public class EfSnapshotStoreTests
             .Should()
             .BeFalse();
         // The current token wins.
-        (await TestDb.NewStore().Update("u", id, Unlocked("dollar"), stored!.Token))
+        (await TestDb.NewStore().Update("u", id, Unlocked("dollar"), stored.NotNull().Token))
             .Should()
             .BeTrue();
-        (await TestDb.NewStore().Get("u", id))!.Json.Should().Contain("dollar");
+        (await TestDb.NewStore().Get("u", id)).NotNull().Json.Should().Contain("dollar");
     }
 
     [Test]
@@ -159,7 +161,7 @@ public class EfSnapshotStoreTests
         (await TestDb.NewStore(context).Upsert("u", id, Unlocked("euro")))
             .Should()
             .BeFalse("the row changed after this writer read it");
-        (await TestDb.NewStore().Get("u", id))!.Json.Should().Contain("dollar");
+        (await TestDb.NewStore().Get("u", id)).NotNull().Json.Should().Contain("dollar");
     }
 
     [Test]

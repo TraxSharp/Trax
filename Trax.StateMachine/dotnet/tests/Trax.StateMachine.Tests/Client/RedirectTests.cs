@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Client;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
 
@@ -165,7 +166,7 @@ public class RedirectTests
             .ExecuteAsync(new TraxRequest(Query, new JsonObject()));
 
         answer.Failure.Should().NotBeNull();
-        answer.Failure!.Message.Should().Contain("redirected");
+        answer.Failure.NotNull().Message.Should().Contain("redirected");
         answer.Data.Should().BeNull();
     }
 
@@ -182,7 +183,7 @@ public class RedirectTests
             .ExecuteAsync(new TraxRequest(Query, new JsonObject()));
 
         answer.Failure.Should().NotBeNull();
-        answer.Failure!.Status.Should().Be(307);
+        answer.Failure.NotNull().Status.Should().Be(307);
         other.Received.Should().Be(0);
     }
 
@@ -197,7 +198,7 @@ public class RedirectTests
             .ExecuteAsync(new TraxRequest(Query, new JsonObject()));
 
         answer.Failure.Should().BeNull();
-        answer.Data!["x"]!.GetValue<int>().Should().Be(1);
+        answer.Data.NotNull()["x"].NotNull().GetValue<int>().Should().Be(1);
     }
 
     [Test]
@@ -247,7 +248,8 @@ public class RedirectTests
                 {
                     Id = "turnstile",
                     IrHash = MachinePredictor.For(DeclarativeTurnstile.Built).IrHash,
-                    Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built))!,
+                    Ir = (JsonObject)
+                        JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built)).NotNull(),
                     Documents =
                     [
                         new ClientManifestDocument
@@ -290,7 +292,8 @@ public class RedirectTests
                 return response;
             response.Dispose();
             var body = await request
-                .Content!.ReadAsByteArrayAsync(cancellationToken)
+                .Content.NotNull()
+                .ReadAsByteArrayAsync(cancellationToken)
                 .ConfigureAwait(false);
             var again = new HttpRequestMessage(request.Method, location)
             {

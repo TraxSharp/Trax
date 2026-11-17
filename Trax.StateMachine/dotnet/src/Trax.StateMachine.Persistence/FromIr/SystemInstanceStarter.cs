@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Persistence.FromIr;
@@ -27,7 +28,7 @@ internal sealed class SystemInstanceStarter(IServiceScopeFactory scopes, HostFil
         )
         {
             await instances
-                .Start(entry.Id, KeyOf(entry.SystemKey!), context: null, cancellationToken)
+                .Start(entry.Id, KeyOf(entry.SystemKey.NotNull()), context: null, cancellationToken)
                 .ConfigureAwait(false);
         }
     }

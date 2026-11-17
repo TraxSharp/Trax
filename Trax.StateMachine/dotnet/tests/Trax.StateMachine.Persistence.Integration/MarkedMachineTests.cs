@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
@@ -248,7 +249,7 @@ public class MarkedMachineTests
         var refusal = await StartingHost.Start(
             _ => { },
             new MarkableRuledMachine(),
-            (IMachine)Activator.CreateInstance(served)!
+            (IMachine)Activator.CreateInstance(served).NotNull()
         );
 
         refusal
@@ -258,8 +259,8 @@ public class MarkedMachineTests
             )
             .Which.Message.Should()
             .Contain($"'{MarkableRuledMachine.Id}'")
-            .And.Contain(typeof(MarkableRuledMachine).FullName!)
-            .And.Contain(served.FullName!)
+            .And.Contain(typeof(MarkableRuledMachine).FullName.NotNull())
+            .And.Contain(served.FullName.NotNull())
             .And.Contain($"Register only {served.FullName}");
     }
 
@@ -272,8 +273,8 @@ public class MarkedMachineTests
 
         var refusal = await StartingHost.Start(
             _ => { },
-            (IMachine)Activator.CreateInstance(first)!,
-            (IMachine)Activator.CreateInstance(second)!
+            (IMachine)Activator.CreateInstance(first).NotNull(),
+            (IMachine)Activator.CreateInstance(second).NotNull()
         );
 
         refusal
@@ -282,8 +283,8 @@ public class MarkedMachineTests
                 $"every machine is looked up by its id, so two types under one id break every machine request. See {Adr}"
             )
             .Which.Message.Should()
-            .Contain(first.FullName!)
-            .And.Contain(second.FullName!)
+            .Contain(first.FullName.NotNull())
+            .And.Contain(second.FullName.NotNull())
             .And.Contain("another id");
     }
 
@@ -295,8 +296,8 @@ public class MarkedMachineTests
 
         var refusal = await StartingHost.Start(
             _ => { },
-            (IMachine)Activator.CreateInstance(served)!,
-            (IMachine)Activator.CreateInstance(served)!
+            (IMachine)Activator.CreateInstance(served).NotNull(),
+            (IMachine)Activator.CreateInstance(served).NotNull()
         );
 
         refusal.Should().BeNull($"one type registered twice is one machine. See {Adr}");
@@ -381,7 +382,7 @@ public class MarkedMachineTests
         if (marked)
             type.SetCustomAttribute(
                 new CustomAttributeBuilder(
-                    typeof(TraxMachineAttribute).GetConstructor(Type.EmptyTypes)!,
+                    typeof(TraxMachineAttribute).GetConstructor(Type.EmptyTypes).NotNull(),
                     []
                 )
             );

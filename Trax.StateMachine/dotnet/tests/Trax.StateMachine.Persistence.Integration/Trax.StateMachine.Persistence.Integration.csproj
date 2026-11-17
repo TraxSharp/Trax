@@ -46,4 +46,7 @@
          auto-registered SnapshotDbContext on each provider (FeatureDbConfiguratorTests). -->
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Null.cs" Link="Null.cs" Visible="false" />
+  </ItemGroup>
 </Project>

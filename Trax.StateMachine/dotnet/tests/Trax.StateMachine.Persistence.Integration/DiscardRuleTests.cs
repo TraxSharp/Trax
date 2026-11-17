@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -20,13 +21,13 @@ public class DiscardRuleTests(StoreProvider provider)
     private const string Adr =
         "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [OneTimeSetUp]
     public void SetUp() => _host = InstanceHost.Create(provider);
 
     [OneTimeTearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static string NewUser() => $"u-{Guid.NewGuid():N}";
 
@@ -34,6 +35,7 @@ public class DiscardRuleTests(StoreProvider provider)
     {
         var id = Guid.NewGuid();
         await _host
+            .NotNull()
             .Seed(
                 user,
                 id,
@@ -51,8 +53,9 @@ public class DiscardRuleTests(StoreProvider provider)
 
     private async Task<DiscardOutcome> Discard(string machine, Actor.Client actor, Guid id)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         return await _host
+            .NotNull()
             .Service(scope, machine)
             .Discard(actor, id, $"d-{Guid.NewGuid():N}")
             .ConfigureAwait(false);
@@ -112,7 +115,7 @@ public class DiscardRuleTests(StoreProvider provider)
                 RefusalCode.DiscardNotAllowed,
                 $"an instance the server moved is the record of what it did. See {Adr}"
             );
-        (await _host.Rows(id)).Should().ContainSingle("the instance stays");
+        (await _host.NotNull().Rows(id)).Should().ContainSingle("the instance stays");
     }
 
     [Test]
@@ -129,7 +132,7 @@ public class DiscardRuleTests(StoreProvider provider)
         (await Discard(RuledBuildMachine.Id, new Actor.Client(owner), id))
             .Should()
             .BeOfType<DiscardOutcome.Discarded>();
-        (await _host.Rows(id)).Should().BeEmpty();
+        (await _host.NotNull().Rows(id)).Should().BeEmpty();
     }
 
     [Test]
@@ -148,9 +151,10 @@ public class DiscardRuleTests(StoreProvider provider)
             nameof(ApprovalState.Pending),
             new JsonObject { ["approvedBy"] = "" }
         );
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Service(scope, OperatorApprovalMachine.Id)
                     .Advance(
                         DeskRoles.Client(owner, DeskRoles.Operator),
@@ -171,12 +175,14 @@ public class DiscardRuleTests(StoreProvider provider)
                 RefusalCode.DiscardNotAllowed,
                 $"an operator's approval is the record of a decision only the server's gate let through. See {Adr}"
             );
-        (await _host.Rows(approved)).Should().ContainSingle("the approved instance stays");
+        (await _host.NotNull().Rows(approved))
+            .Should()
+            .ContainSingle("the approved instance stays");
 
         (await Discard(OperatorApprovalMachine.Id, new Actor.Client(owner), pending))
             .Should()
             .BeOfType<DiscardOutcome.Discarded>("a pending instance is still its owner's to drop");
-        (await _host.Rows(pending)).Should().BeEmpty();
+        (await _host.NotNull().Rows(pending)).Should().BeEmpty();
     }
 
     [Test]
@@ -195,12 +201,12 @@ public class DiscardRuleTests(StoreProvider provider)
             .BeOfType<DiscardOutcome.Rejected>()
             .Which.Code.Should()
             .Be(RefusalCode.Forbidden, $"the owner without the role may not discard. See {Adr}");
-        (await _host.Rows(id)).Should().ContainSingle();
+        (await _host.NotNull().Rows(id)).Should().ContainSingle();
 
         (await Discard(OperatorDiscardMachine.Id, DeskRoles.Client(owner, DeskRoles.Operator), id))
             .Should()
             .BeOfType<DiscardOutcome.Discarded>();
-        (await _host.Rows(id)).Should().BeEmpty();
+        (await _host.NotNull().Rows(id)).Should().BeEmpty();
     }
 
     [Test]
@@ -222,6 +228,6 @@ public class DiscardRuleTests(StoreProvider provider)
                 RefusalCode.Forbidden,
                 $"once a machine declares rules, an operation without one admits nobody. See {Adr}"
             );
-        (await _host.Rows(id)).Should().ContainSingle();
+        (await _host.NotNull().Rows(id)).Should().ContainSingle();
     }
 }

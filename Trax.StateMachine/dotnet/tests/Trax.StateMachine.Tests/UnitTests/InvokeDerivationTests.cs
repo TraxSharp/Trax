@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
@@ -95,9 +96,19 @@ public class InvokeDerivationTests
     [Test]
     public async Task Output_fields_out_of_name_order_derive_a_machine_the_host_serves_as_written()
     {
-        var glossary = JsonNode.Parse(Glossary)!;
-        glossary["machines"]!["game"]!["states"]!.AsObject().Remove("Answering");
-        glossary["machines"]!["game"]!["invokes"]!.AsObject().Remove("Answering");
+        var glossary = JsonNode.Parse(Glossary).NotNull();
+        glossary["machines"]
+            .NotNull()["game"]
+            .NotNull()["states"]
+            .NotNull()
+            .AsObject()
+            .Remove("Answering");
+        glossary["machines"]
+            .NotNull()["game"]
+            .NotNull()["invokes"]
+            .NotNull()
+            .AsObject()
+            .Remove("Answering");
         var derived = (
             await Derive(
                     glossary.ToJsonString(),
@@ -110,8 +121,8 @@ public class InvokeDerivationTests
         );
 
         derived.Problems.Should().BeEmpty();
-        var ir = JsonNode.Parse(derived.Irs["game"])!.AsObject();
-        var host = HostFile.Read(derived.Host!);
+        var ir = JsonNode.Parse(derived.Irs["game"]).NotNull().AsObject();
+        var host = HostFile.Read(derived.Host.NotNull());
 
         var served = IrMachines.Create(
             new IrMachines.Source(ir, host.Machines["game"]),
@@ -160,8 +171,8 @@ public class InvokeDerivationTests
     [Test]
     public async Task An_outcome_entering_another_invoking_state_on_a_system_machine_derives()
     {
-        var glossary = JsonNode.Parse(Glossary)!;
-        var game = glossary["machines"]!["game"]!.AsObject();
+        var glossary = JsonNode.Parse(Glossary).NotNull();
+        var game = glossary["machines"].NotNull()["game"].NotNull().AsObject();
         game.Remove("ownedBy");
         game.Remove("noun");
         game.Remove("start");

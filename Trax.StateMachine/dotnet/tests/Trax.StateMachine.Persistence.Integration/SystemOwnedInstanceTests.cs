@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -22,13 +23,13 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
 
     private const string Machine = "system-turnstile";
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InstanceHost.Create(provider);
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static MachineKey NewKey() => MachineKey.Of("source", Guid.NewGuid().ToString());
 
@@ -45,10 +46,10 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
     public async Task Start_twice_with_one_key_returns_one_instance_and_queues_nothing_new()
     {
         var key = NewKey();
-        var queued = await _host.WorkQueueCount();
+        var queued = await _host.NotNull().WorkQueueCount();
 
-        var first = await _host.Start<SystemTurnstileMachine>(key);
-        var second = await _host.Start<SystemTurnstileMachine>(key);
+        var first = await _host.NotNull().Start<SystemTurnstileMachine>(key);
+        var second = await _host.NotNull().Start<SystemTurnstileMachine>(key);
 
         first.Created.Should().BeTrue();
         second
@@ -57,12 +58,14 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
         first.Id.Should().Be(MachineInstanceId.For(Machine, key));
         first.State.Should().Be("Locked");
 
-        var rows = await _host.Rows(first.Id);
+        var rows = await _host.NotNull().Rows(first.Id);
         rows.Should().ContainSingle();
         rows[0].OwnerKind.Should().Be(SnapshotOwnerKind.System);
         rows[0].UserKey.Should().BeNull();
         rows[0].InvokeToken.Should().BeNull();
-        (await _host.WorkQueueCount()).Should().Be(queued, "Start queues nothing of its own");
+        (await _host.NotNull().WorkQueueCount())
+            .Should()
+            .Be(queued, "Start queues nothing of its own");
     }
 
     [Test]
@@ -73,28 +76,35 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
         var results = await Task.WhenAll(
             Enumerable
                 .Range(0, 8)
-                .Select(_ => Task.Run(() => _host.Start<SystemTurnstileMachine>(key)))
+                .Select(_ => Task.Run(() => _host.NotNull().Start<SystemTurnstileMachine>(key)))
         );
 
         results.Select(r => r.Id).Distinct().Should().ContainSingle();
         results.Count(r => r.Created).Should().Be(1, "exactly one Start creates the row");
-        (await _host.Rows(results[0].Id)).Should().ContainSingle();
+        (await _host.NotNull().Rows(results[0].Id)).Should().ContainSingle();
     }
 
     [Test]
     public async Task Start_uses_the_given_context_and_refuses_an_invalid_one()
     {
-        var created = await _host.Start<SystemOrderMachine>(
-            NewKey(),
-            new JsonObject { ["items"] = new JsonArray(1, 2), ["receipt"] = null }
-        );
-        JsonNode.Parse((await _host.Rows(created.Id)).Single().Context)!["items"]!
+        var created = await _host
+            .NotNull()
+            .Start<SystemOrderMachine>(
+                NewKey(),
+                new JsonObject { ["items"] = new JsonArray(1, 2), ["receipt"] = null }
+            );
+        JsonNode
+            .Parse((await _host.NotNull().Rows(created.Id)).Single().Context)
+            .NotNull()["items"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("[1,2]");
 
         var invalid = () =>
-            _host.Start<SystemTurnstileMachine>(NewKey(), new JsonObject { ["stray"] = 1 });
+            _host
+                .NotNull()
+                .Start<SystemTurnstileMachine>(NewKey(), new JsonObject { ["stray"] = 1 });
         await invalid
             .Should()
             .ThrowAsync<ArgumentException>()
@@ -104,7 +114,7 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
     [Test]
     public async Task Start_refuses_a_user_owned_machine()
     {
-        var start = () => _host.Start<TurnstileMachine>(NewKey());
+        var start = () => _host.NotNull().Start<TurnstileMachine>(NewKey());
 
         await start
             .Should()
@@ -117,10 +127,10 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
     [Test]
     public async Task A_system_instance_refuses_advance_and_save_from_any_user()
     {
-        var instance = await _host.Start<SystemTurnstileMachine>(NewKey());
-        var before = (await _host.Rows(instance.Id)).Single();
+        var instance = await _host.NotNull().Start<SystemTurnstileMachine>(NewKey());
+        var before = (await _host.NotNull().Rows(instance.Id)).Single();
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
             var registry = scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>();
             registry
@@ -139,7 +149,7 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
             (await store.Upsert("u1", instance.Id, Unlocked)).Should().BeTrue();
         }
 
-        var after = await _host.Rows(instance.Id);
+        var after = await _host.NotNull().Rows(instance.Id);
         var system = after.Single(x => x.OwnerKind == SnapshotOwnerKind.System);
         system.State.Should().Be("Locked");
         system
@@ -151,12 +161,14 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
     [Test]
     public async Task A_system_instance_refuses_send_from_any_user()
     {
-        var instance = await _host.Start<SystemOrderMachine>(
-            NewKey(),
-            new JsonObject { ["items"] = new JsonArray(1), ["receipt"] = null }
-        );
+        var instance = await _host
+            .NotNull()
+            .Start<SystemOrderMachine>(
+                NewKey(),
+                new JsonObject { ["items"] = new JsonArray(1), ["receipt"] = null }
+            );
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
             scope
                 .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
@@ -168,15 +180,15 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
                 .Be(0);
         }
 
-        (await _host.Rows(instance.Id)).Single().State.Should().Be("Draft");
+        (await _host.NotNull().Rows(instance.Id)).Single().State.Should().Be("Draft");
     }
 
     [Test]
     public async Task A_system_instance_never_appears_in_a_users_load()
     {
-        var instance = await _host.Start<SystemTurnstileMachine>(NewKey());
+        var instance = await _host.NotNull().Start<SystemTurnstileMachine>(NewKey());
 
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         scope
             .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
             .Service(Machine)
@@ -191,9 +203,9 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
     [Test]
     public async Task A_user_holding_the_same_id_does_not_reach_the_system_row()
     {
-        var instance = await _host.Start<SystemTurnstileMachine>(NewKey());
+        var instance = await _host.NotNull().Start<SystemTurnstileMachine>(NewKey());
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
             var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
             (await store.Insert("u1", instance.Id, Unlocked)).Should().BeTrue();
@@ -201,7 +213,13 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
             // The user's read, write and delete act on the user's own row only.
             var own = await store.Get("u1", Machine, instance.Id);
             own.Should().NotBeNull();
-            JsonNode.Parse(own!.Json)!["state"]!.GetValue<string>().Should().Be("Unlocked");
+            JsonNode
+                .Parse(own.NotNull().Json)
+                .NotNull()["state"]
+                .NotNull()
+                .GetValue<string>()
+                .Should()
+                .Be("Unlocked");
             (
                 await store.Update(
                     "u1",
@@ -221,14 +239,14 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
             await store.Delete("u1", instance.Id);
         }
 
-        var rows = await _host.Rows(instance.Id);
+        var rows = await _host.NotNull().Rows(instance.Id);
         rows.Should()
             .ContainSingle($"the user's delete leaves the system row. See {Adr}")
             .Which.OwnerKind.Should()
             .Be(SnapshotOwnerKind.System);
 
-        using var check = _host.Scope();
-        (await _host.Instances(check).Get(DraftOwner.System, Machine, instance.Id))
+        using var check = _host.NotNull().Scope();
+        (await _host.NotNull().Instances(check).Get(DraftOwner.System, Machine, instance.Id))
             .Should()
             .NotBeNull();
     }

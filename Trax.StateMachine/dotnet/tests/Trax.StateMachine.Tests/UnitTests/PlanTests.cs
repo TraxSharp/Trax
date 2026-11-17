@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -21,12 +22,14 @@ public class PlanTests
 
     private static async Task<JsonObject> WizardIr() =>
         (JsonObject)
-            JsonNode.Parse(
-                await File.ReadAllTextAsync(
-                        Path.Combine(FixturePaths.ConformanceRoot, "plan", "wizard.ir.json")
-                    )
-                    .ConfigureAwait(false)
-            )!;
+            JsonNode
+                .Parse(
+                    await File.ReadAllTextAsync(
+                            Path.Combine(FixturePaths.ConformanceRoot, "plan", "wizard.ir.json")
+                        )
+                        .ConfigureAwait(false)
+                )
+                .NotNull();
 
     private static Snapshot Wizard(string state, string? name = null, string? email = null) =>
         new()
@@ -60,7 +63,11 @@ public class PlanTests
     public async Task The_plan_does_not_depend_on_the_order_the_IR_lists_its_transitions()
     {
         var reversed = await WizardIr().ConfigureAwait(false);
-        var transitions = reversed["transitions"]!.AsArray().Select(t => t!.DeepClone()).Reverse();
+        var transitions = reversed["transitions"]
+            .NotNull()
+            .AsArray()
+            .Select(t => t.NotNull().DeepClone())
+            .Reverse();
         reversed["transitions"] = new JsonArray(transitions.ToArray());
 
         var plan = new IrMachine(reversed).Plan(Wizard("Start"), "Review", Fill, Navigation);
@@ -227,7 +234,8 @@ public class PlanTests
     public void The_compiled_machine_holds_every_handler_so_it_plans_what_the_IR_cannot()
     {
         var start = VaultMachine.Built.Definition.CreateInitialSnapshot();
-        var ir = (JsonObject)JsonNode.Parse(File.ReadAllText(FixturePaths.IrFile("vault")))!;
+        var ir = (JsonObject)
+            JsonNode.Parse(File.ReadAllText(FixturePaths.IrFile("vault"))).NotNull();
 
         Triggers(VaultMachine.Built.Plan(start, "Sealed", fields: null, ["Seal"]))
             .Should()
@@ -280,7 +288,8 @@ public class PlanTests
     public void A_compiled_and_an_IR_machine_plan_alike()
     {
         var start = DeclarativeCheckout.Built.Definition.CreateInitialSnapshot();
-        var ir = (JsonObject)JsonNode.Parse(File.ReadAllText(FixturePaths.IrFile("checkout")))!;
+        var ir = (JsonObject)
+            JsonNode.Parse(File.ReadAllText(FixturePaths.IrFile("checkout"))).NotNull();
 
         var compiled = DeclarativeCheckout.Built.Plan(
             start,

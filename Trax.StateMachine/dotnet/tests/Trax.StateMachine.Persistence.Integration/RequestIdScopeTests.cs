@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
@@ -72,7 +73,7 @@ public class RequestIdScopeTests
             await new LoadSnapshotJunction(NewRegistry(), User)
                 .Run(new LoadSnapshotInput { Machine = machine, Id = id })
                 .ConfigureAwait(false)
-        ).Snapshot!;
+        ).Snapshot.NotNull();
 
     [Test]
     public async Task A_requestId_reused_for_a_different_trigger_is_refused_and_writes_nothing()
@@ -144,7 +145,7 @@ public class RequestIdScopeTests
                 "u",
                 id,
                 TestTurnstile.Machine.Definition.CreateInitialSnapshot(),
-                stored!.Token,
+                stored.NotNull().Token,
                 "r1"
             );
 
@@ -209,12 +210,15 @@ public class RequestIdScopeTests
         )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
-            .Which.Snapshot.Context["text"]!.GetValue<string>();
+            .Which.Snapshot.Context["text"]
+            .NotNull()
+            .GetValue<string>();
 
     private static async Task<string> StoredText(string user, Guid id) =>
-        ((LoadResult.Loaded)await Log().Load(user, id).ConfigureAwait(false)).Snapshot.Context[
-            "text"
-        ]!.GetValue<string>();
+        ((LoadResult.Loaded)await Log().Load(user, id).ConfigureAwait(false))
+            .Snapshot.Context["text"]
+            .NotNull()
+            .GetValue<string>();
 
     [Test]
     [Property("adr", Ring)]
@@ -239,7 +243,8 @@ public class RequestIdScopeTests
                 $"a retry replays the result recorded for it, not the current snapshot. See {Ring}"
             );
         (await StoredText(user, id)).Should().Be(stored, "a replay fires nothing");
-        (await TestDb.NewStore().Get(user, id))!
+        (await TestDb.NewStore().Get(user, id))
+            .NotNull()
             .RecentRequests.Should()
             .HaveCount(RequestIdRing.Capacity)
             .And.Contain(r => r.RequestId == "r1");
@@ -263,7 +268,7 @@ public class RequestIdScopeTests
                     DraftOwner.User(user),
                     "log",
                     id,
-                    row!.Token,
+                    row.NotNull().Token,
                     new InvokeTokenWrite(token)
                 )
             )
@@ -291,7 +296,8 @@ public class RequestIdScopeTests
         var (user, id) = await NewLog();
         for (var i = 1; i <= RequestIdRing.Capacity + 1; i++)
             await Append(user, id, "x", string.Create(CultureInfo.InvariantCulture, $"r{i}"));
-        (await TestDb.NewStore().Get(user, id))!
+        (await TestDb.NewStore().Get(user, id))
+            .NotNull()
             .RecentRequests.Should()
             .NotBeNull()
             .And.HaveCount(RequestIdRing.Capacity)
@@ -382,7 +388,10 @@ public class RequestIdScopeTests
         outcomes
             .Should()
             .AllSatisfy(o =>
-                o.Should().BeOfType<AdvanceOutcome.Advanced>().Which.Snapshot.Context["text"]!
+                o.Should()
+                    .BeOfType<AdvanceOutcome.Advanced>()
+                    .Which.Snapshot.Context["text"]
+                    .NotNull()
                     .GetValue<string>()
                     .Should()
                     .Be("ab", $"every attempt of r2 is answered with r2's one result. See {Ring}")

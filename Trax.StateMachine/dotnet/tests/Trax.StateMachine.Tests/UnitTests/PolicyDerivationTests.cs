@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence.FromIr;
@@ -85,13 +86,17 @@ public class PolicyDerivationTests
         var derived = await Derive(Background + Expiring).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
-        var policy = HostFile.Read(derived.Host!).Policies.Should().ContainSingle().Subject;
+        var policy = HostFile
+            .Read(derived.Host.NotNull())
+            .Policies.Should()
+            .ContainSingle()
+            .Subject;
         policy.Shape.Should().Be("linked");
         (policy.When, policy.Enters, policy.Target, policy.Trigger, policy.By)
             .Should()
             .Be(("order", "Expired", "receipt", "Cancel", "orderId"));
         HostFile
-            .Read(derived.Host!)
+            .Read(derived.Host.NotNull())
             .Machines["receipt"]
             .Triggers["Cancel"]
             .IsServer.Should()
@@ -117,7 +122,11 @@ public class PolicyDerivationTests
         );
 
         derived.Problems.Should().BeEmpty();
-        var policy = HostFile.Read(derived.Host!).Policies.Should().ContainSingle().Subject;
+        var policy = HostFile
+            .Read(derived.Host.NotNull())
+            .Policies.Should()
+            .ContainSingle()
+            .Subject;
         (policy.Shape, policy.When, policy.Enters, policy.Target, policy.By, policy.Trigger)
             .Should()
             .Be(("broadcast", "shop", "Open", "order", "Placed", "Bake"));
@@ -126,10 +135,10 @@ public class PolicyDerivationTests
     [Test]
     public async Task A_policy_into_a_state_of_a_users_machine_that_runs_a_train_is_refused()
     {
-        var glossary = JsonNode.Parse(Glossary)!;
-        var order = glossary["machines"]!["order"]!.AsObject();
-        order["states"]!["Baked"] = "is baked";
-        order["states"]!["Burnt"] = "is burnt";
+        var glossary = JsonNode.Parse(Glossary).NotNull();
+        var order = glossary["machines"].NotNull()["order"].NotNull().AsObject();
+        order["states"].NotNull()["Baked"] = "is baked";
+        order["states"].NotNull()["Burnt"] = "is burnt";
         order["invokes"] = JsonNode.Parse(
             """
             {
@@ -189,7 +198,10 @@ public class PolicyDerivationTests
         var directory = Directory.CreateTempSubdirectory("trax-derived-").FullName;
         try
         {
-            await File.WriteAllTextAsync(Path.Combine(directory, "host.json"), derived.Host!)
+            await File.WriteAllTextAsync(
+                    Path.Combine(directory, "host.json"),
+                    derived.Host.NotNull()
+                )
                 .ConfigureAwait(false);
             foreach (var (id, ir) in derived.Irs)
                 await File.WriteAllTextAsync(Path.Combine(directory, $"{id}.ir.json"), ir)
@@ -234,8 +246,8 @@ public class PolicyDerivationTests
     [Test]
     public async Task The_same_owner_without_a_link_is_refused_as_ambiguous()
     {
-        var glossary = JsonNode.Parse(Glossary)!;
-        glossary["machines"]!["receipt"]!.AsObject().Remove("links");
+        var glossary = JsonNode.Parse(Glossary).NotNull();
+        glossary["machines"].NotNull()["receipt"].NotNull().AsObject().Remove("links");
 
         var derived = await Derive(Background + Expiring, glossary.ToJsonString())
             .ConfigureAwait(false);
@@ -397,14 +409,17 @@ public class PolicyDerivationTests
 
         derived.Problems.Should().BeEmpty();
         HostFile
-            .Read(derived.Host!)
+            .Read(derived.Host.NotNull())
             .Policies.Select(p => p.Id)
             .Should()
             .BeEquivalentTo(["bell.Ringing>shop.Wake", "shop.Closed>bell.Ring"]);
         var directory = Directory.CreateTempSubdirectory("trax-derived-").FullName;
         try
         {
-            await File.WriteAllTextAsync(Path.Combine(directory, "host.json"), derived.Host!)
+            await File.WriteAllTextAsync(
+                    Path.Combine(directory, "host.json"),
+                    derived.Host.NotNull()
+                )
                 .ConfigureAwait(false);
             foreach (var (id, ir) in derived.Irs)
                 await File.WriteAllTextAsync(Path.Combine(directory, $"{id}.ir.json"), ir)
@@ -570,7 +585,8 @@ public class PolicyDerivationTests
                         )}} }
                         }
                         """
-                    )!
+                    )
+                    .NotNull()
                     .AsObject(),
                 ["sheet"] = JsonNode
                     .Parse(
@@ -582,7 +598,8 @@ public class PolicyDerivationTests
                           ]
                         }
                         """
-                    )!
+                    )
+                    .NotNull()
                     .AsObject(),
             };
         HostPolicy[] policies =
@@ -615,7 +632,8 @@ public class PolicyDerivationTests
                       "outcomes": { "done": { "state": "Scoring", "edges": [ { "to": "Tallied" } ] } }
                     }
                     """
-                )!
+                )
+                .NotNull()
                 .AsObject(),
             ["sheet"] = JsonNode
                 .Parse(
@@ -628,7 +646,8 @@ public class PolicyDerivationTests
                       "outcomes": { "marked": { "state": "Marking", "edges": [ { "to": "Closed" } ] } }
                     }
                     """
-                )!
+                )
+                .NotNull()
                 .AsObject(),
         };
         HostPolicy[] policies =
@@ -670,7 +689,8 @@ public class PolicyDerivationTests
                     )}} } ]
                     }
                     """
-                )!
+                )
+                .NotNull()
                 .AsObject(),
             ["sheet"] = JsonNode
                 .Parse(
@@ -682,7 +702,8 @@ public class PolicyDerivationTests
                       ]
                     }
                     """
-                )!
+                )
+                .NotNull()
                 .AsObject(),
         };
         HostPolicy[] policies =

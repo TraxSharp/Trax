@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -36,7 +37,7 @@ public class AdvanceTests
 
         var transitioned = result.Should().BeOfType<AdvanceResult.Transitioned>().Which;
         transitioned.Snapshot.State.Should().Be("Unlocked");
-        transitioned.Snapshot.Context["paidWith"]!.GetValue<string>().Should().Be(coin);
+        transitioned.Snapshot.Context["paidWith"].NotNull().GetValue<string>().Should().Be(coin);
     }
 
     [Test]
@@ -139,7 +140,7 @@ public class AdvanceTests
             Context = new JsonObject(),
         };
 
-        AdvanceResult result = null!;
+        AdvanceResult? result = null;
         var act = () => result = FaultyMachine.Machine.Advance(a, "Boom");
 
         act.Should().NotThrow();
@@ -206,7 +207,7 @@ public class AdvanceTests
             Context = new JsonObject(),
         };
 
-        AdvanceResult result = null!;
+        AdvanceResult? result = null;
         var act = () => result = FaultyMachine.Machine.Advance(a, "Trap");
 
         act.Should().NotThrow();

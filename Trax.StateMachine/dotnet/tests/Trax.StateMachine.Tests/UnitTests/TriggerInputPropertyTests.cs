@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CsCheck;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -78,7 +79,8 @@ public class TriggerInputPropertyTests
                     : true;
                 return input;
             case Mutation.Stringify:
-                input[numeric] = input[numeric]!
+                input[numeric] = input[numeric]
+                    .NotNull()
                     .GetValue<int>()
                     .ToString(System.Globalization.CultureInfo.InvariantCulture);
                 return input;
@@ -86,12 +88,12 @@ public class TriggerInputPropertyTests
                 input["extra"] = pick;
                 return input;
             case Mutation.PascalCase:
-                var value = input[field]!.DeepClone();
+                var value = input[field].NotNull().DeepClone();
                 input.Remove(field);
                 input[char.ToUpperInvariant(field[0]) + field[1..]] = value;
                 return input;
             case Mutation.Nest:
-                input[field] = new JsonObject { ["value"] = input[field]!.DeepClone() };
+                input[field] = new JsonObject { ["value"] = input[field].NotNull().DeepClone() };
                 return input;
             case Mutation.Null:
                 input[field] = null;
@@ -114,7 +116,7 @@ public class TriggerInputPropertyTests
     [Test]
     public async Task Generated_inputs_get_the_same_verdict_in_both_engines()
     {
-        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(RangeMachine.Built))!;
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(RangeMachine.Built)).NotNull();
         await Gen.Select(AValidInput, AMutation, Gen.Int[0, 1_000])
             .Select(
                 (input, mutation, pick) => (Mutation: mutation, Sent: Apply(mutation, input, pick))

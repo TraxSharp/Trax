@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.ServiceTrain;
@@ -25,10 +26,10 @@ public class IrMachineHostTests(StoreProvider provider)
 {
     private const string Rider = "Rider";
 
-    private InstanceHost _host = null!;
-    private RecordingLauncher _launcher = null!;
-    private IMachine _turnstile = null!;
-    private IMachine _ingest = null!;
+    private InstanceHost? _host;
+    private RecordingLauncher? _launcher;
+    private IMachine? _turnstile;
+    private IMachine? _ingest;
 
     [OneTimeSetUp]
     public async Task SetUp()
@@ -72,7 +73,7 @@ public class IrMachineHostTests(StoreProvider provider)
                         {
                             ["Fetching"] = new(
                                 "Fetching",
-                                typeof(IFetchFromIrTrain).FullName!,
+                                typeof(IFetchFromIrTrain).FullName.NotNull(),
                                 new Dictionary<string, string>(StringComparer.Ordinal)
                                 {
                                     ["source"] = "source",
@@ -88,13 +89,13 @@ public class IrMachineHostTests(StoreProvider provider)
         _launcher = new RecordingLauncher();
         _host = InstanceHost.Create(
             provider,
-            launcher: _launcher,
+            launcher: _launcher.NotNull(),
             services: s => s.AddIrMachines(machines)
         );
     }
 
     [OneTimeTearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static string NewUser() => $"rider-{Guid.NewGuid():N}";
 
@@ -102,7 +103,7 @@ public class IrMachineHostTests(StoreProvider provider)
     public async Task The_hosts_startup_checks_find_every_rule_they_ask_for()
     {
         var problems = await MachineRulesStartupValidator.Problems(
-            [_turnstile, _ingest],
+            [_turnstile.NotNull(), _ingest.NotNull()],
             new StateMachineOptions(),
             caller: null
         );
@@ -143,8 +144,8 @@ public class IrMachineHostTests(StoreProvider provider)
     public async Task A_client_is_held_to_the_host_entrys_rules()
     {
         var user = NewUser();
-        using var scope = _host.Scope();
-        var service = _host.Service(scope, "ir-turnstile");
+        using var scope = _host.NotNull().Scope();
+        var service = _host.NotNull().Service(scope, "ir-turnstile");
 
         (await service.Start(DeskRoles.Client(user), new JsonObject(), requestId: "s0"))
             .Should()
@@ -200,9 +201,9 @@ public class IrMachineHostTests(StoreProvider provider)
     {
         var user = NewUser();
         Guid id;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, "ir-ingest");
+            var service = _host.NotNull().Service(scope, "ir-ingest");
             id = (await service.Start(DeskRoles.Client(user), new JsonObject(), requestId: "s1"))
                 .Should()
                 .BeOfType<StartOutcome.Started>()
@@ -215,6 +216,7 @@ public class IrMachineHostTests(StoreProvider provider)
         }
 
         var launch = _launcher
+            .NotNull()
             .Launches.Should()
             .ContainSingle(l => l.InvokedBy.InstanceId == id)
             .Subject;
@@ -223,13 +225,13 @@ public class IrMachineHostTests(StoreProvider provider)
             .Input.Should()
             .Be(new FetchFromIrInput("s3://bucket/partition-1"), "the host entry maps source");
 
-        var token = (await _host.Rows(id)).Single().InvokeToken!;
-        using (var scope = _host.Scope())
+        var token = (await _host.NotNull().Rows(id)).Single().InvokeToken.NotNull();
+        using (var scope = _host.NotNull().Scope())
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .WorkQueues.Where(w => w.ExternalId == token)
                 .ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled));
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (await scope.ServiceProvider.GetRequiredService<IInvokedRunOutcomes>().Deliver(token))
                 .Should()
                 .Be("Cancelled", "the cancelled outcome's edge goes where the IR says");
@@ -238,7 +240,8 @@ public class IrMachineHostTests(StoreProvider provider)
     private static async Task<JsonObject> Ir(string name, string id)
     {
         var ir = JsonNode
-            .Parse(await File.ReadAllTextAsync(IrFile(name)).ConfigureAwait(false))!
+            .Parse(await File.ReadAllTextAsync(IrFile(name)).ConfigureAwait(false))
+            .NotNull()
             .AsObject();
         ir["id"] = id;
         return ir;
@@ -267,7 +270,7 @@ public class IrMachineHostTests(StoreProvider provider)
 
     private static HostMachine Host(JsonObject ir) =>
         new(
-            ir["id"]!.GetValue<string>(),
+            ir["id"].NotNull().GetValue<string>(),
             Convert.ToHexStringLower(
                 SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalJson.Serialize(ir)))
             ),

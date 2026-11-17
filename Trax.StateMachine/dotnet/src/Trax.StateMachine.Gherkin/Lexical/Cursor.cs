@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.StateMachine.Gherkin.Lexical;
 
 /// <summary>
@@ -404,7 +406,11 @@ internal sealed class Cursor(LexLine line)
             var type = Type();
             if (
                 string.Equals(type.Kind, LxTypeRef.List, StringComparison.Ordinal)
-                && string.Equals(type.Element!.Kind, LxTypeRef.Simple, StringComparison.Ordinal)
+                && string.Equals(
+                    type.Element.NotNull().Kind,
+                    LxTypeRef.Simple,
+                    StringComparison.Ordinal
+                )
             )
                 return new LxAtom(
                     "arrayOf",

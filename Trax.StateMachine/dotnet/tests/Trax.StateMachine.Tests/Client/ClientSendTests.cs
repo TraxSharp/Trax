@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
 
@@ -21,7 +22,7 @@ public class ClientSendTests
     {
         Id = "turnstile",
         IrHash = MachinePredictor.For(DeclarativeTurnstile.Built).IrHash,
-        Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built))!,
+        Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built)).NotNull(),
     };
 
     private static ServerSnapshot At(long? revision, string state, JsonObject? context = null) =>
@@ -113,7 +114,7 @@ public class ClientSendTests
     {
         // Discard is declared here, as a host would never serve it: only its field's name keeps it from going out.
         var ir = (JsonObject)Turnstile.Ir.DeepClone();
-        ir["triggers"]!.AsArray().Add("Discard");
+        ir["triggers"].NotNull().AsArray().Add("Discard");
         var host = new CountingHost();
         var server = new GraphQLMachineServer(
             new GraphQLMachineServerOptions
@@ -145,7 +146,7 @@ public class ClientSendTests
             .EventAsync("i-1", trigger, input: null, "r1", clientResult: null)
             .WaitAsync(Wait);
 
-        answer.Problem!.Code.Should().Be("NO_TRANSITION");
+        answer.Problem.NotNull().Code.Should().Be("NO_TRANSITION");
         host.Requests.Should().Be(0);
     }
 
@@ -282,8 +283,10 @@ public class ClientSendTests
     private static CancellationTokenSource Timers(ServerMachineController controller) =>
         (CancellationTokenSource)
             typeof(ServerMachineController)
-                .GetField("_timers", BindingFlags.NonPublic | BindingFlags.Instance)!
-                .GetValue(controller)!;
+                .GetField("_timers", BindingFlags.NonPublic | BindingFlags.Instance)
+                .NotNull()
+                .GetValue(controller)
+                .NotNull();
 
     private static bool IsDisposed(CancellationTokenSource source)
     {
@@ -383,7 +386,9 @@ public class ClientSendTests
 
         var push = controller.SendAsync("Push");
         (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
-            ServerAnswer.Of(At(2, "Locked", (JsonObject)JsonNode.Parse("""{"n":1e400}""")!))
+            ServerAnswer.Of(
+                At(2, "Locked", (JsonObject)JsonNode.Parse("""{"n":1e400}""").NotNull())
+            )
         );
 
         (await push.WaitAsync(Wait))
@@ -420,7 +425,7 @@ public class ClientSendTests
 
         await controller.StartAsync().WaitAsync(Wait);
         controller.View.Status.Should().Be(MachineStatus.Loading);
-        controller.View.Problem!.Code.Should().Be("INVALID_REQUEST_ID");
+        controller.View.Problem.NotNull().Code.Should().Be("INVALID_REQUEST_ID");
         server.Starts.Reader.TryRead(out _).Should().BeFalse();
         (await controller.SendAsync("Push").WaitAsync(Wait))
             .Should()
@@ -446,7 +451,7 @@ public class ClientSendTests
 
         server.Push(
             new StreamMessage.Changed(
-                At(2, "Locked", (JsonObject)JsonNode.Parse("""{"n":1e400}""")!)
+                At(2, "Locked", (JsonObject)JsonNode.Parse("""{"n":1e400}""").NotNull())
             )
         );
 
@@ -475,12 +480,14 @@ public class ClientSendTests
 
         var start = controller.StartAsync();
         (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
-            ServerAnswer.Of(At(1, "Locked", (JsonObject)JsonNode.Parse("""{"n":-1e400}""")!))
+            ServerAnswer.Of(
+                At(1, "Locked", (JsonObject)JsonNode.Parse("""{"n":-1e400}""").NotNull())
+            )
         );
 
         await start.WaitAsync(Wait);
         controller.View.Status.Should().Be(MachineStatus.Loading);
-        controller.View.Problem!.Code.Should().Be("TRANSPORT_ERROR");
+        controller.View.Problem.NotNull().Code.Should().Be("TRANSPORT_ERROR");
     }
 
     [Test]
@@ -751,7 +758,7 @@ public class ClientSendTests
             .Which.Error.Code.Should()
             .Be(ClientProblemCodes.TransportError);
         controller.View.Status.Should().Be(MachineStatus.Stopped);
-        controller.View.Error!.Code.Should().Be(ClientProblemCodes.TransportError);
+        controller.View.Error.NotNull().Code.Should().Be(ClientProblemCodes.TransportError);
     }
 
     // A server whose every read answers the turnstile locked, and whose Subscribe throws, as a custom server's bug would.

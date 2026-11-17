@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CsCheck;
 using Ingest.Contracts;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -87,12 +88,13 @@ public class TwinSequenceParityTests
             Machine = machine,
             Version = 1,
             State = state,
-            Context = (JsonObject)JsonNode.Parse(context.ToJsonString())!,
+            Context = (JsonObject)JsonNode.Parse(context.ToJsonString()).NotNull(),
         };
 
     private static JsonObject Export<TState, TTrigger>(BuiltMachine<TState, TTrigger> built)
         where TState : struct, Enum
-        where TTrigger : struct, Enum => (JsonObject)JsonNode.Parse(IrExporter.Export(built))!;
+        where TTrigger : struct, Enum =>
+        (JsonObject)JsonNode.Parse(IrExporter.Export(built)).NotNull();
 
     private static IEnumerable<Subject> Subjects(JsonObject checkoutIr)
     {
@@ -256,12 +258,14 @@ public class TwinSequenceParityTests
             .ConfigureAwait(false);
 
         var checkoutIr = (JsonObject)
-            JsonNode.Parse(
-                await File.ReadAllTextAsync(
-                        Path.Combine(machinesRoot, "checkout", "checkout.ir.json")
-                    )
-                    .ConfigureAwait(false)
-            )!;
+            JsonNode
+                .Parse(
+                    await File.ReadAllTextAsync(
+                            Path.Combine(machinesRoot, "checkout", "checkout.ir.json")
+                        )
+                        .ConfigureAwait(false)
+                )
+                .NotNull();
         foreach (var subject in Subjects(checkoutIr))
             await Sequences(subject)
                 .Array[500]
@@ -309,15 +313,15 @@ public class TwinSequenceParityTests
         };
 
         var twin = (JsonArray)
-            JsonNode.Parse(
-                await RunTool(engineRoot, request.ToJsonString()).ConfigureAwait(false)
-            )!;
+            JsonNode
+                .Parse(await RunTool(engineRoot, request.ToJsonString()).ConfigureAwait(false))
+                .NotNull();
 
         var diffs = new List<string>();
         for (var i = 0; i < batch.Length; i++)
         {
             var current = subject.Starts[batch[i].Start];
-            var answers = (JsonArray)twin[i]!;
+            var answers = (JsonArray)twin[i].NotNull();
             for (var n = 0; n < batch[i].Steps.Length; n++)
             {
                 var step = batch[i].Steps[n];
@@ -348,10 +352,10 @@ public class TwinSequenceParityTests
                         )
                     );
 
-                var answer = (JsonObject)answers[n]!;
-                var twinOutcome = answer["outcome"]!.GetValue<string>();
+                var answer = (JsonObject)answers[n].NotNull();
+                var twinOutcome = answer["outcome"].NotNull().GetValue<string>();
                 var twinReason = answer["reason"]?.GetValue<string>();
-                var twinWire = answer["wire"]!.GetValue<string>();
+                var twinWire = answer["wire"].NotNull().GetValue<string>();
                 if (
                     !string.Equals(outcome, twinOutcome, StringComparison.Ordinal)
                     || !string.Equals(reason, twinReason, StringComparison.Ordinal)
@@ -397,7 +401,7 @@ public class TwinSequenceParityTests
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        using var process = Process.Start(start)!;
+        using var process = Process.Start(start).NotNull();
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
         await process.StandardInput.WriteAsync(request).ConfigureAwait(false);

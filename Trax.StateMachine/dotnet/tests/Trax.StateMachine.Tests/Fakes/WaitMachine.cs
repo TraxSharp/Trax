@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Ingest.Contracts;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
@@ -38,7 +39,7 @@ public static class WaitMachine
             .After<WaitContext>(c => c.Patience, Min, Max)
             .GoTo(WaitState.TimedOut)
             .Invokes<IFetchTrain, FetchInput, FetchOutput>(ctx => new FetchInput(
-                ctx["source"]!.GetValue<string>()
+                ctx["source"].NotNull().GetValue<string>()
             ))
             .OnDone(WaitState.Fetched)
             .OnFailed(WaitState.FetchFailed)

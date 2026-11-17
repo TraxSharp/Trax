@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Sqlite.Extensions;
@@ -104,7 +105,10 @@ public sealed class InstanceHost : IDisposable
     }
 
     public ISnapshotDraftService Service(IServiceScope scope, string machine) =>
-        scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>().Service(machine)!;
+        scope
+            .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
+            .Service(machine)
+            .NotNull();
 
     /// <summary>
     /// Creates <paramref name="user"/>'s draft from <paramref name="json"/> as host code does, through the public
@@ -113,13 +117,13 @@ public sealed class InstanceHost : IDisposable
     /// </summary>
     public async Task SeedDraft(string user, Guid id, string json)
     {
-        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json).NotNull();
         var snapshot = new Snapshot
         {
-            Machine = node["machine"]!.GetValue<string>(),
-            Version = node["version"]!.GetValue<int>(),
-            State = node["state"]!.GetValue<string>(),
-            Context = (System.Text.Json.Nodes.JsonObject)node["context"]!.DeepClone(),
+            Machine = node["machine"].NotNull().GetValue<string>(),
+            Version = node["version"].NotNull().GetValue<int>(),
+            State = node["state"].NotNull().GetValue<string>(),
+            Context = (System.Text.Json.Nodes.JsonObject)node["context"].NotNull().DeepClone(),
         };
         using var scope = Scope();
         if (

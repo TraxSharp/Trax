@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.StateMachine.Persistence;
@@ -27,7 +28,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     // Paid order. This is what stops a stale/racing autosave from resurrecting a completed draft and
     // letting an irreversible action happen a second time. Empty => the fast last-writer-wins path.
     private readonly HashSet<string> _committedStates = BuildStateSet(committedStates);
-    private readonly string _initialState = machine.Definition.InitialState.ToString()!;
+    private readonly string _initialState = machine.Definition.InitialState.ToString().NotNull();
 
     // A draft belongs to one machine: every read and delete names it, so two machines' drafts under one id
     // stay apart.
@@ -39,7 +40,10 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     // The (from, trigger) edges that run the machine's irreversible effect. Only the effect runner fires them,
     // after the effect ran, so the receipt the reducer records is one the effect produced.
     private readonly HashSet<(string From, string Trigger)> _effectEdges =
-        effects?.Select(e => (e.From.ToString()!, e.Trigger.ToString()!)).ToHashSet() ?? [];
+        effects
+            ?.Select(e => (e.From.ToString().NotNull(), e.Trigger.ToString().NotNull()))
+            .ToHashSet()
+        ?? [];
 
     // The states the soft path may not create or move a draft into: every committed state and every state an
     // effect-bound transition lands in, which a draft reaches through the effect runner only; and, for a machine
@@ -50,9 +54,9 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
     private HashSet<string> ReservedNames =>
         _reservedCache ??= ReservedStates is { } reserved
-            ? reserved.Select(s => s.ToString()!).ToHashSet(StringComparer.Ordinal)
+            ? reserved.Select(s => s.ToString().NotNull()).ToHashSet(StringComparer.Ordinal)
             : BuildStateSet(committedStates)
-                .Concat(effects?.Select(e => e.To.ToString()!) ?? [])
+                .Concat(effects?.Select(e => e.To.ToString().NotNull()) ?? [])
                 .ToHashSet(StringComparer.Ordinal);
 
     // The states the soft path may not take a draft out of or rewrite: committed states and effect targets (a
@@ -63,16 +67,17 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
     private HashSet<string> LockedNames =>
         _lockedCache ??= BuildStateSet(committedStates)
-            .Concat(effects?.Select(e => e.To.ToString()!) ?? [])
+            .Concat(effects?.Select(e => e.To.ToString().NotNull()) ?? [])
             .Concat(InvokingNames)
-            .Concat(TimedStates?.Select(s => s.ToString()!) ?? [])
+            .Concat(TimedStates?.Select(s => s.ToString().NotNull()) ?? [])
             .ToHashSet(StringComparer.Ordinal);
 
     private HashSet<string>? _invokingCache;
 
     private HashSet<string> InvokingNames =>
         _invokingCache ??=
-            InvokingStates?.Select(s => s.ToString()!).ToHashSet(StringComparer.Ordinal) ?? [];
+            InvokingStates?.Select(s => s.ToString().NotNull()).ToHashSet(StringComparer.Ordinal)
+            ?? [];
 
     /// <summary>
     /// Every state the soft path may not move a draft into (see <c>BuiltMachine.ReservedStates</c>). Null keeps the
@@ -199,7 +204,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         var set = new HashSet<string>(StringComparer.Ordinal);
         if (states is not null)
             foreach (var s in states)
-                set.Add(s.ToString()!);
+                set.Add(s.ToString().NotNull());
         return set;
     }
 
@@ -383,7 +388,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         Snapshot snapshot,
         CancellationToken cancellationToken
     ) =>
-        await Creates!
+        await Creates
+            .NotNull()
             .Create(
                 DraftOwner.User(userKey),
                 id,
@@ -516,10 +522,12 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             store.GetType(),
             static type =>
             {
-                var get = typeof(ISnapshotStore).GetMethod(
-                    nameof(ISnapshotStore.Get),
-                    [typeof(string), typeof(string), typeof(Guid), typeof(CancellationToken)]
-                )!;
+                var get = typeof(ISnapshotStore)
+                    .GetMethod(
+                        nameof(ISnapshotStore.Get),
+                        [typeof(string), typeof(string), typeof(Guid), typeof(CancellationToken)]
+                    )
+                    .NotNull();
                 var map = type.GetInterfaceMap(typeof(ISnapshotStore));
                 var index = Array.IndexOf(map.InterfaceMethods, get);
                 return index >= 0
@@ -632,7 +640,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 initial = initial with { Timer = timer, ServerRecord = false };
                 break;
             case (_, var problem):
-                return new StartOutcome.Rejected(RefusalCode.InvalidInput, problem!);
+                return new StartOutcome.Rejected(RefusalCode.InvalidInput, problem.NotNull());
         }
 
         if (Creates is not { } creates)
@@ -934,7 +942,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                         RefusalCode.InvalidInput,
                         machine
                             .TimerFor(saved.Snapshot.State, saved.Snapshot.Context, restart: false)
-                            .Problem!
+                            .Problem.NotNull()
                     );
                 var ok = new RehydrationResult.Ok(
                     saved.Snapshot with
@@ -1023,7 +1031,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     stored.InvokeToken is not null
                     || (readable is not null && InvokingNames.Contains(readable.Snapshot.State))
                 )
-                    return unchanged ? Unwritten(readable!.Snapshot, stored) : Invoking();
+                    return unchanged ? Unwritten(readable.NotNull().Snapshot, stored) : Invoking();
 
                 // A stored draft that cannot be read may be committed, so nothing but a reset overwrites it.
                 if (readable is not { } current)
@@ -1524,7 +1532,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
         if (effectOwner is { } owner)
         {
-            var recorded = await Marks!
+            var recorded = await Marks
+                .NotNull()
                 .CompleteEffect(
                     DraftOwner.User(userKey),
                     id,

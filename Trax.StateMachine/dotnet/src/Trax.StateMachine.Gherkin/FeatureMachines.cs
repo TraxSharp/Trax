@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 
 namespace Trax.StateMachine.Gherkin;
@@ -114,7 +115,7 @@ public static class FeatureMachines
                 "The features did not derive, so there are no machines to run them on: fix its problems first.",
                 nameof(machines)
             );
-        return Run(glossary, features, machines.Irs, machines.Host!, options);
+        return Run(glossary, features, machines.Irs, machines.Host.NotNull(), options);
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CsCheck;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 using Trax.StateMachine.Tests.Stress.Fakes;
 using Trax.StateMachine.Tests.Stress.Fixtures;
@@ -136,7 +137,7 @@ public class RevisionStoreModelTests : StressFixture
 
             var reported = committed.Where(c => c.Revision is not null).ToList();
             reported
-                .Select(c => c.Revision!.Value)
+                .Select(c => c.Revision.NotNull().Value)
                 .Should()
                 .OnlyHaveUniqueItems("no two writes committed the same revision")
                 .And.OnlyContain(r => r >= 2 && r <= revision, "none was skipped past the last");
@@ -156,7 +157,7 @@ public class RevisionStoreModelTests : StressFixture
             else if (committed.IsEmpty)
                 (
                     string.Equals(
-                        row["state"]!.GetValue<string>(),
+                        row["state"].NotNull().GetValue<string>(),
                         "Draft",
                         StringComparison.Ordinal
                     )
@@ -240,7 +241,7 @@ public class RevisionStoreModelTests : StressFixture
         op.Kind switch
         {
             Kind.Advance => string.Equals(
-                row["state"]!.GetValue<string>(),
+                row["state"].NotNull().GetValue<string>(),
                 "Review",
                 StringComparison.Ordinal
             ),
@@ -249,12 +250,15 @@ public class RevisionStoreModelTests : StressFixture
         };
 
     private static bool IsDraftOf(JsonObject row, int item) =>
-        string.Equals(row["state"]!.GetValue<string>(), "Draft", StringComparison.Ordinal)
+        string.Equals(row["state"].NotNull().GetValue<string>(), "Draft", StringComparison.Ordinal)
         && Items(row) is [var only]
         && only == item;
 
     private static int[] Items(JsonObject row) =>
-        (row["context"]!["items"] as JsonArray)!.Select(n => n!.GetValue<int>()).ToArray();
+        (row["context"].NotNull()["items"] as JsonArray)
+            .NotNull()
+            .Select(n => n.NotNull().GetValue<int>())
+            .ToArray();
 
     private static Snapshot Draft(int item)
     {

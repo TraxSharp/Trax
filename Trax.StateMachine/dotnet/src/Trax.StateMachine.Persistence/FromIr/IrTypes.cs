@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Persistence.FromIr;
 
@@ -38,8 +39,17 @@ internal sealed partial class IrTypes
     /// <summary>The machine id in Pascal case, which every emitted type name starts with.</summary>
     internal string Prefix { get; }
 
-    internal Type State { get; private set; } = null!;
-    internal Type Trigger { get; private set; } = null!;
+    internal Type State
+    {
+        get => field.NotNull(nameof(State));
+        private set;
+    }
+
+    internal Type Trigger
+    {
+        get => field.NotNull(nameof(Trigger));
+        private set;
+    }
 
     /// <summary>Each declared state's context record, by state.</summary>
     internal Dictionary<string, Type> Contexts { get; } = new(StringComparer.Ordinal);
@@ -48,7 +58,11 @@ internal sealed partial class IrTypes
     internal Dictionary<string, Type> Inputs { get; } = new(StringComparer.Ordinal);
 
     /// <summary>The record a client starts an instance with: no fields, since an IR declares no start input.</summary>
-    internal Type Start { get; private set; } = null!;
+    internal Type Start
+    {
+        get => field.NotNull(nameof(Start));
+        private set;
+    }
 
     /// <summary>Emits every type the machine needs.</summary>
     /// <exception cref="InvalidOperationException">A name in the IR cannot be emitted; the message names it.</exception>
@@ -182,7 +196,7 @@ internal sealed partial class IrTypes
 
         property.SetCustomAttribute(
             new CustomAttributeBuilder(
-                typeof(JsonPropertyNameAttribute).GetConstructor([typeof(string)])!,
+                typeof(JsonPropertyNameAttribute).GetConstructor([typeof(string)]).NotNull(),
                 [jsonName]
             )
         );

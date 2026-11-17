@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Sqlite.Extensions;
 using Trax.Effect.Extensions;
@@ -40,15 +41,15 @@ public class KeyedSystemMachineHostTests
             Then ticket "T-12" is in triage
         """;
 
-    private string _dir = null!;
-    private string _file = null!;
-    private ServiceProvider _provider = null!;
+    private string? _dir;
+    private string? _file;
+    private ServiceProvider? _provider;
 
     [SetUp]
     public async Task SetUp()
     {
         _dir = Path.Combine(Path.GetTempPath(), $"trax-keyed-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_dir);
+        Directory.CreateDirectory(_dir.NotNull());
         _file = Path.Combine(Path.GetTempPath(), $"sm_keyed_{Guid.NewGuid():N}.db");
         var derived = FeatureMachines.Derive(
             FeatureGlossary.Read(Glossary),
@@ -56,20 +57,23 @@ public class KeyedSystemMachineHostTests
         );
         derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         foreach (var (id, ir) in derived.Irs)
-            await File.WriteAllTextAsync(Path.Combine(_dir, id + ".ir.json"), ir)
+            await File.WriteAllTextAsync(Path.Combine(_dir.NotNull(), id + ".ir.json"), ir)
                 .ConfigureAwait(false);
-        await File.WriteAllTextAsync(Path.Combine(_dir, "host.json"), derived.Host)
+        await File.WriteAllTextAsync(Path.Combine(_dir.NotNull(), "host.json"), derived.Host)
             .ConfigureAwait(false);
 
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
-            trax.AddEffects(e => e.UseSqlite($"Data Source={_file}"))
-                .AddStateMachines(o => o.ServeFeatures(_dir))
+            trax.AddEffects(e => e.UseSqlite($"Data Source={_file.NotNull()}"))
+                .AddStateMachines(o => o.ServeFeatures(_dir.NotNull()))
         );
         _provider = services.BuildServiceProvider();
         foreach (
-            var service in _provider.GetServices<IHostedService>().OfType<IHostedLifecycleService>()
+            var service in _provider
+                .NotNull()
+                .GetServices<IHostedService>()
+                .OfType<IHostedLifecycleService>()
         )
             await service.StartingAsync(CancellationToken.None).ConfigureAwait(false);
     }
@@ -77,12 +81,13 @@ public class KeyedSystemMachineHostTests
     [TearDown]
     public async Task TearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         SqliteConnection.ClearAllPools();
-        Directory.Delete(_dir, recursive: true);
+        Directory.Delete(_dir.NotNull(), recursive: true);
         try
         {
-            File.Delete(_file);
+            File.Delete(_file.NotNull());
         }
         catch (IOException)
         {
@@ -93,7 +98,7 @@ public class KeyedSystemMachineHostTests
     [Test]
     public async Task The_host_starts_no_instance_of_it()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
 
         (
@@ -109,7 +114,7 @@ public class KeyedSystemMachineHostTests
     [Test]
     public async Task Host_code_starts_and_moves_each_instance_by_its_key()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
@@ -140,7 +145,7 @@ public class KeyedSystemMachineHostTests
     [Test]
     public async Task A_key_with_another_number_of_parts_is_refused()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
         await instances.Start("ticket", "T-12");

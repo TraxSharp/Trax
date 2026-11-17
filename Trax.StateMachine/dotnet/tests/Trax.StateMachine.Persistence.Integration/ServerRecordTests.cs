@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -21,10 +22,10 @@ public class ServerRecordTests(StoreProvider provider)
 
     private const string Machine = RecordDeskMachine.Id;
 
-    private InstanceHost _host = null!;
-    private Actor.Client _owner = null!;
-    private Actor.Client _operator = null!;
-    private string _user = null!;
+    private InstanceHost? _host;
+    private Actor.Client? _owner;
+    private Actor.Client? _operator;
+    private string? _user;
 
     [SetUp]
     public void SetUp()
@@ -45,19 +46,21 @@ public class ServerRecordTests(StoreProvider provider)
     }
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private Task<AdvanceOutcome> Fire(Actor.Client actor, Guid id, RecordDeskTrigger trigger) =>
-        Drive.Event(_host, actor, Machine, id, trigger.ToString());
+        Drive.Event(_host.NotNull(), actor, Machine, id, trigger.ToString());
 
     // A started instance an operator rejected into Revising.
     private async Task<Guid> RevisingByOperator()
     {
-        var id = await Drive.Start(_host, _owner, Machine).ConfigureAwait(false);
-        (await Fire(_owner, id, RecordDeskTrigger.Submit).ConfigureAwait(false))
+        var id = await Drive
+            .Start(_host.NotNull(), _owner.NotNull(), Machine)
+            .ConfigureAwait(false);
+        (await Fire(_owner.NotNull(), id, RecordDeskTrigger.Submit).ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
-        (await Fire(_operator, id, RecordDeskTrigger.Reject).ConfigureAwait(false))
+        (await Fire(_operator.NotNull(), id, RecordDeskTrigger.Reject).ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
         return id;
@@ -66,8 +69,10 @@ public class ServerRecordTests(StoreProvider provider)
     // A started instance its owner moved into Revising.
     private async Task<Guid> RevisingByOwner()
     {
-        var id = await Drive.Start(_host, _owner, Machine).ConfigureAwait(false);
-        (await Fire(_owner, id, RecordDeskTrigger.Revise).ConfigureAwait(false))
+        var id = await Drive
+            .Start(_host.NotNull(), _owner.NotNull(), Machine)
+            .ConfigureAwait(false);
+        (await Fire(_owner.NotNull(), id, RecordDeskTrigger.Revise).ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
         return id;
@@ -75,8 +80,9 @@ public class ServerRecordTests(StoreProvider provider)
 
     private async Task MakeOld(Guid id) =>
         await _host
+            .NotNull()
             .Execute(
-                $"UPDATE {_host.DraftTable} SET created_at = @p0, updated_at = @p0 WHERE row_id = @p1",
+                $"UPDATE {_host.NotNull().DraftTable} SET created_at = @p0, updated_at = @p0 WHERE row_id = @p1",
                 provider == StoreProvider.Postgres
                     ? DateTimeOffset.UtcNow.AddDays(-30)
                     : DateTimeOffset
@@ -85,28 +91,28 @@ public class ServerRecordTests(StoreProvider provider)
                             "yyyy-MM-dd HH:mm:ss.FFFFFFFzzz",
                             System.Globalization.CultureInfo.InvariantCulture
                         ),
-                await _host.RowId(id).ConfigureAwait(false)
+                await _host.NotNull().RowId(id).ConfigureAwait(false)
             )
             .ConfigureAwait(false);
 
     private async Task<string> State(Guid id) =>
-        (await _host.Rows(id).ConfigureAwait(false)).Single().State;
+        (await _host.NotNull().Rows(id).ConfigureAwait(false)).Single().State;
 
     [Test]
     public async Task A_row_a_gated_event_moved_is_kept_and_refuses_discard()
     {
         var id = await RevisingByOperator();
 
-        var discard = await Drive.Discard(_host, _owner, Machine, id);
+        var discard = await Drive.Discard(_host.NotNull(), _owner.NotNull(), Machine, id);
         await MakeOld(id);
-        await Drive.SweepDrafts(_host);
+        await Drive.SweepDrafts(_host.NotNull());
 
         discard
             .Should()
             .BeOfType<DiscardOutcome.Rejected>()
             .Which.Code.Should()
             .Be(RefusalCode.DiscardNotAllowed, $"an operator put it there ({Adr})");
-        (await _host.Rows(id))
+        (await _host.NotNull().Rows(id))
             .Should()
             .ContainSingle("the sweep keeps the record of what the server did");
     }
@@ -116,23 +122,23 @@ public class ServerRecordTests(StoreProvider provider)
     {
         var id = await RevisingByOwner();
 
-        var discard = await Drive.Discard(_host, _owner, Machine, id);
+        var discard = await Drive.Discard(_host.NotNull(), _owner.NotNull(), Machine, id);
 
         discard
             .Should()
             .BeOfType<DiscardOutcome.Discarded>($"its owner put it there, not the server ({Adr})");
-        (await _host.Rows(id)).Should().BeEmpty();
+        (await _host.NotNull().Rows(id)).Should().BeEmpty();
     }
 
     [Test]
     public async Task A_client_event_out_of_a_kept_row_makes_it_a_draft_again()
     {
         var id = await RevisingByOperator();
-        (await Fire(_owner, id, RecordDeskTrigger.Note))
+        (await Fire(_owner.NotNull(), id, RecordDeskTrigger.Note))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
 
-        var discard = await Drive.Discard(_host, _owner, Machine, id);
+        var discard = await Drive.Discard(_host.NotNull(), _owner.NotNull(), Machine, id);
 
         discard
             .Should()
@@ -155,17 +161,17 @@ public class ServerRecordTests(StoreProvider provider)
     public async Task A_host_upsert_out_of_a_kept_row_leaves_it_judged_by_its_state()
     {
         var id = await RevisingByOperator();
-        var upsertScope = _host.Services.CreateAsyncScope();
+        var upsertScope = _host.NotNull().Services.CreateAsyncScope();
         await using (upsertScope.ConfigureAwait(false))
             (
                 await upsertScope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
-                    .Upsert(_user, id, DraftSnapshot())
+                    .Upsert(_user.NotNull(), id, DraftSnapshot())
             )
                 .Should()
                 .BeTrue();
 
-        var discard = await Drive.Discard(_host, _owner, Machine, id);
+        var discard = await Drive.Discard(_host.NotNull(), _owner.NotNull(), Machine, id);
 
         discard
             .Should()
@@ -178,15 +184,17 @@ public class ServerRecordTests(StoreProvider provider)
     public async Task A_host_update_out_of_a_kept_row_leaves_it_judged_by_its_state()
     {
         var id = await RevisingByOperator();
-        var updateScope = _host.Services.CreateAsyncScope();
+        var updateScope = _host.NotNull().Services.CreateAsyncScope();
         await using (updateScope.ConfigureAwait(false))
         {
             var store = updateScope.ServiceProvider.GetRequiredService<ISnapshotStore>();
-            var stored = await store.Get(_user, Machine, id);
-            (await store.Update(_user, id, DraftSnapshot(), stored!.Token)).Should().BeTrue();
+            var stored = await store.Get(_user.NotNull(), Machine, id);
+            (await store.Update(_user.NotNull(), id, DraftSnapshot(), stored.NotNull().Token))
+                .Should()
+                .BeTrue();
         }
 
-        var discard = await Drive.Discard(_host, _owner, Machine, id);
+        var discard = await Drive.Discard(_host.NotNull(), _owner.NotNull(), Machine, id);
 
         discard
             .Should()
@@ -200,20 +208,20 @@ public class ServerRecordTests(StoreProvider provider)
     {
         var byOperator = await RevisingByOperator();
         var byOwner = await RevisingByOwner();
-        var now = await RawSql.Now(_host);
-        (await RawSql.SetDueAt(_host, byOperator, now.AddMinutes(-1))).Should().Be(1);
-        (await RawSql.SetDueAt(_host, byOwner, now.AddMinutes(-1))).Should().Be(1);
+        var now = await RawSql.Now(_host.NotNull());
+        (await RawSql.SetDueAt(_host.NotNull(), byOperator, now.AddMinutes(-1))).Should().Be(1);
+        (await RawSql.SetDueAt(_host.NotNull(), byOwner, now.AddMinutes(-1))).Should().Be(1);
 
-        await Drive.SweepTimers(_host);
+        await Drive.SweepTimers(_host.NotNull());
 
         (await State(byOperator)).Should().Be(nameof(RecordDeskState.Archived));
         (await State(byOwner)).Should().Be(nameof(RecordDeskState.Archived));
-        (await Drive.Discard(_host, _owner, Machine, byOperator))
+        (await Drive.Discard(_host.NotNull(), _owner.NotNull(), Machine, byOperator))
             .Should()
             .BeOfType<DiscardOutcome.Rejected>(
                 $"the timer moved what the operator decided ({Adr})"
             );
-        (await Drive.Discard(_host, _owner, Machine, byOwner))
+        (await Drive.Discard(_host.NotNull(), _owner.NotNull(), Machine, byOwner))
             .Should()
             .BeOfType<DiscardOutcome.Discarded>("the timer moved what the owner decided");
     }
@@ -224,7 +232,7 @@ public class ServerRecordTests(StoreProvider provider)
         await RevisingByOperator();
         await RevisingByOperator();
 
-        var third = await Drive.TryStart(_host, _owner, Machine);
+        var third = await Drive.TryStart(_host.NotNull(), _owner.NotNull(), Machine);
 
         third
             .Should()
@@ -237,16 +245,16 @@ public class ServerRecordTests(StoreProvider provider)
     public async Task The_upgrade_marks_rows_in_kept_states_as_kept()
     {
         var kept = await RevisingByOwner();
-        var draft = await Drive.Start(_host, _owner, Machine);
-        (await RawSql.SetServerRecord(_host, kept, value: null)).Should().Be(1);
-        (await RawSql.SetServerRecord(_host, draft, value: null)).Should().Be(1);
+        var draft = await Drive.Start(_host.NotNull(), _owner.NotNull(), Machine);
+        (await RawSql.SetServerRecord(_host.NotNull(), kept, value: null)).Should().Be(1);
+        (await RawSql.SetServerRecord(_host.NotNull(), draft, value: null)).Should().Be(1);
 
-        (await Drive.Discard(_host, _owner, Machine, kept))
+        (await Drive.Discard(_host.NotNull(), _owner.NotNull(), Machine, kept))
             .Should()
             .BeOfType<DiscardOutcome.Rejected>(
                 $"a row from before the record is judged by its state, as before ({Adr})"
             );
-        (await Drive.Discard(_host, _owner, Machine, draft))
+        (await Drive.Discard(_host.NotNull(), _owner.NotNull(), Machine, draft))
             .Should()
             .BeOfType<DiscardOutcome.Discarded>();
     }

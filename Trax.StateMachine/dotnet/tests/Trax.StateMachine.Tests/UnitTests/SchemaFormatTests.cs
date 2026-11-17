@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CsCheck;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -29,7 +30,7 @@ public class SchemaFormatTests
     {
         Field("color").Enum.Should().Equal(["red", "darkGreen", "sky-blue"]);
         Field("maybeColor").Enum.Should().Equal(["red", "darkGreen", "sky-blue"]);
-        Field("palette").Values!.Enum.Should().Equal(["red", "darkGreen", "sky-blue"]);
+        Field("palette").Values.NotNull().Enum.Should().Equal(["red", "darkGreen", "sky-blue"]);
     }
 
     [Test]
@@ -41,7 +42,7 @@ public class SchemaFormatTests
                 ["sky-blue"],
                 "System.Text.Json reads a [JsonStringEnumMemberName] only as written"
             );
-        Field("palette").Values!.EnumExact.Should().Equal(["sky-blue"]);
+        Field("palette").Values.NotNull().EnumExact.Should().Equal(["sky-blue"]);
         SchemaReflection
             .ForInput(typeof(PlainEnumInput))
             .Fields.Single()
@@ -122,11 +123,11 @@ public class SchemaFormatTests
     public void A_dictionary_s_keys_carry_their_CLR_key_type()
     {
         Field("owners").Keys.Should().BeNull("a string key is any string");
-        Field("byNumber").Keys!.Type.Should().Be(JsonFieldType.Integer);
-        Field("byNumber").Keys!.Maximum.Should().Be(int.MaxValue);
-        Field("byColor").Keys!.Enum.Should().Equal(["red", "darkGreen", "sky-blue"]);
-        Field("byColor").Keys!.EnumExact.Should().Equal(["sky-blue"]);
-        Field("byId").Keys!.Format.Should().Be("uuid");
+        Field("byNumber").Keys.NotNull().Type.Should().Be(JsonFieldType.Integer);
+        Field("byNumber").Keys.NotNull().Maximum.Should().Be(int.MaxValue);
+        Field("byColor").Keys.NotNull().Enum.Should().Equal(["red", "darkGreen", "sky-blue"]);
+        Field("byColor").Keys.NotNull().EnumExact.Should().Equal(["sky-blue"]);
+        Field("byId").Keys.NotNull().Format.Should().Be("uuid");
     }
 
     private sealed record DurationKeyed(Dictionary<TimeSpan, int> ByWait);
@@ -146,7 +147,7 @@ public class SchemaFormatTests
 
     [Test]
     public void The_values_of_a_dictionary_of_guids_carry_the_format() =>
-        Field("owners").Values!.Format.Should().Be("uuid");
+        Field("owners").Values.NotNull().Format.Should().Be("uuid");
 
     [TestCase("amount", -79228162514264337593543950335d, 79228162514264337593543950335d)]
     [TestCase("ratio", -3.4028235e38, 3.4028235e38)]
@@ -156,7 +157,7 @@ public class SchemaFormatTests
         var field = Field(name);
         field.Minimum.Should().NotBeNull().And.BeGreaterThanOrEqualTo(min);
         field.Maximum.Should().NotBeNull().And.BeLessThanOrEqualTo(max);
-        field.Maximum!.Value.Should().BeApproximately(max, Math.Abs(max) * 1e-15);
+        field.Maximum.NotNull().Value.Should().BeApproximately(max, Math.Abs(max) * 1e-15);
     }
 
     [Test]
@@ -169,21 +170,36 @@ public class SchemaFormatTests
     [Test]
     public void The_enum_format_and_range_are_written_to_the_IR()
     {
-        var ir = JsonNode.Parse(IrExporter.Export(StrictInputMachine.Built))!;
-        var fields = ir["inputs"]!["Submit"]!["fields"]!.AsArray();
+        var ir = JsonNode.Parse(IrExporter.Export(StrictInputMachine.Built)).NotNull();
+        var fields = ir["inputs"].NotNull()["Submit"].NotNull()["fields"].NotNull().AsArray();
         JsonNode F(string name) =>
-            fields.Single(f =>
-                string.Equals(f!["name"]!.GetValue<string>(), name, StringComparison.Ordinal)
-            )!;
+            fields
+                .Single(f =>
+                    string.Equals(
+                        f.NotNull()["name"].NotNull().GetValue<string>(),
+                        name,
+                        StringComparison.Ordinal
+                    )
+                )
+                .NotNull();
 
-        F("color")["enum"]!.ToJsonString().Should().Be("""["red","darkGreen","sky-blue"]""");
-        F("color")["enumExact"]!.ToJsonString().Should().Be("""["sky-blue"]""");
-        F("id")["format"]!.GetValue<string>().Should().Be("uuid");
-        F("palette")["values"]!["enum"]!.ToJsonString().Should().Contain("sky-blue");
-        F("owners")["values"]!["format"]!.GetValue<string>().Should().Be("uuid");
-        F("byNumber")["keys"]!["type"]!.GetValue<string>().Should().Be("integer");
-        F("byId")["keys"]!["format"]!.GetValue<string>().Should().Be("uuid");
-        F("amount")["maximum"]!.GetValue<double>().Should().BeGreaterThan(7.9e28);
+        F("color")["enum"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Be("""["red","darkGreen","sky-blue"]""");
+        F("color")["enumExact"].NotNull().ToJsonString().Should().Be("""["sky-blue"]""");
+        F("id")["format"].NotNull().GetValue<string>().Should().Be("uuid");
+        F("palette")["values"]
+            .NotNull()["enum"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Contain("sky-blue");
+        F("owners")["values"].NotNull()["format"].NotNull().GetValue<string>().Should().Be("uuid");
+        F("byNumber")["keys"].NotNull()["type"].NotNull().GetValue<string>().Should().Be("integer");
+        F("byId")["keys"].NotNull()["format"].NotNull().GetValue<string>().Should().Be("uuid");
+        F("amount")["maximum"].NotNull().GetValue<double>().Should().BeGreaterThan(7.9e28);
         F("wide")["maximum"].Should().BeNull();
     }
 

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -12,7 +13,7 @@ namespace Trax.StateMachine.Tests.UnitTests;
 public class IrExporterTests
 {
     private static JsonObject Ir() =>
-        (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built))!;
+        (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built)).NotNull();
 
     [Test]
     public void Export_is_deterministic()
@@ -28,60 +29,77 @@ public class IrExporterTests
     {
         var ir = Ir();
 
-        ir["id"]!.GetValue<string>().Should().Be("turnstile");
-        ir["version"]!.GetValue<int>().Should().Be(1);
-        ir["initialState"]!.GetValue<string>().Should().Be("Locked");
-        ir["states"]!
+        ir["id"].NotNull().GetValue<string>().Should().Be("turnstile");
+        ir["version"].NotNull().GetValue<int>().Should().Be(1);
+        ir["initialState"].NotNull().GetValue<string>().Should().Be("Locked");
+        ir["states"]
+            .NotNull()
             .AsArray()
-            .Select(n => n!.GetValue<string>())
+            .Select(n => n.NotNull().GetValue<string>())
             .Should()
             .Equal("Locked", "Unlocked");
-        ir["triggers"]!.AsArray().Select(n => n!.GetValue<string>()).Should().Equal("Coin", "Push");
+        ir["triggers"]
+            .NotNull()
+            .AsArray()
+            .Select(n => n.NotNull().GetValue<string>())
+            .Should()
+            .Equal("Coin", "Push");
     }
 
     [Test]
     public void Export_carries_the_per_state_context_schema()
     {
-        var unlocked = (JsonObject)Ir()["context"]!["Unlocked"]!;
-        var field = (JsonObject)unlocked["fields"]!.AsArray().Single()!;
+        var unlocked = (JsonObject)Ir()["context"].NotNull()["Unlocked"].NotNull();
+        var field = (JsonObject)unlocked["fields"].NotNull().AsArray().Single().NotNull();
 
-        field["name"]!.GetValue<string>().Should().Be("paidWith");
-        field["type"]!.GetValue<string>().Should().Be("string");
-        field["nullable"]!.GetValue<bool>().Should().BeFalse();
+        field["name"].NotNull().GetValue<string>().Should().Be("paidWith");
+        field["type"].NotNull().GetValue<string>().Should().Be("string");
+        field["nullable"].NotNull().GetValue<bool>().Should().BeFalse();
         // [MinLength(1)] became a non-empty constraint.
-        var constraint = (JsonObject)field["constraints"]!.AsArray().Single()!;
-        constraint["rule"]!.GetValue<string>().Should().Be("nonEmpty");
+        var constraint = (JsonObject)field["constraints"].NotNull().AsArray().Single().NotNull();
+        constraint["rule"].NotNull().GetValue<string>().Should().Be("nonEmpty");
     }
 
     [Test]
     public void Export_carries_guards_and_reducers_as_data()
     {
-        var coin = Ir()["transitions"]!
+        var coin = Ir()["transitions"]
+            .NotNull()
             .AsArray()
             .Cast<JsonObject>()
             .Single(t =>
-                string.Equals(t["trigger"]!.GetValue<string>(), "Coin", StringComparison.Ordinal)
+                string.Equals(
+                    t["trigger"].NotNull().GetValue<string>(),
+                    "Coin",
+                    StringComparison.Ordinal
+                )
             );
 
-        var guard = (JsonObject)coin["guard"]!;
-        guard["rule"]!.GetValue<string>().Should().Be("oneOf");
-        guard["source"]!.GetValue<string>().Should().Be("input");
-        guard["field"]!.GetValue<string>().Should().Be("coin");
-        guard["values"]!
+        var guard = (JsonObject)coin["guard"].NotNull();
+        guard["rule"].NotNull().GetValue<string>().Should().Be("oneOf");
+        guard["source"].NotNull().GetValue<string>().Should().Be("input");
+        guard["field"].NotNull().GetValue<string>().Should().Be("coin");
+        guard["values"]
+            .NotNull()
             .AsArray()
-            .Select(v => v!.GetValue<string>())
+            .Select(v => v.NotNull().GetValue<string>())
             .Should()
             .Equal("quarter", "dollar");
-        coin["guardMessage"]!
+        coin["guardMessage"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("Only a quarter or a dollar is accepted.");
 
-        var reduce = (JsonObject)coin["reduce"]!;
-        reduce["reduce"]!.GetValue<string>().Should().Be("set");
-        var step = (JsonObject)reduce["steps"]!.AsArray().Single()!;
-        step["field"]!.GetValue<string>().Should().Be("paidWith");
-        ((JsonObject)step["value"]!)["input"]!.GetValue<string>().Should().Be("coin");
+        var reduce = (JsonObject)coin["reduce"].NotNull();
+        reduce["reduce"].NotNull().GetValue<string>().Should().Be("set");
+        var step = (JsonObject)reduce["steps"].NotNull().AsArray().Single().NotNull();
+        step["field"].NotNull().GetValue<string>().Should().Be("paidWith");
+        ((JsonObject)step["value"].NotNull())["input"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("coin");
     }
 
     [Test]
@@ -102,14 +120,14 @@ public class IrExporterTests
         // The .Differential(...) samples authored on the turnstile become the IR's differential block, so the
         // cross-language harness enumerates off this IR instead of a hand-written machine.json. The empty {}
         // sample is preserved (distinct from the harness's always-added no-input case).
-        var samples = (JsonObject)Ir()["differential"]!["samples"]!;
-        var coin = samples["Coin"]!.AsArray();
+        var samples = (JsonObject)Ir()["differential"].NotNull()["samples"].NotNull();
+        var coin = samples["Coin"].NotNull().AsArray();
 
         coin.Should().HaveCount(4);
-        ((JsonObject)coin[0]!)["coin"]!.GetValue<string>().Should().Be("quarter");
-        ((JsonObject)coin[1]!)["coin"]!.GetValue<string>().Should().Be("dollar");
-        ((JsonObject)coin[2]!)["coin"]!.GetValue<string>().Should().Be("penny");
-        coin[3]!.AsObject().Count.Should().Be(0);
+        ((JsonObject)coin[0].NotNull())["coin"].NotNull().GetValue<string>().Should().Be("quarter");
+        ((JsonObject)coin[1].NotNull())["coin"].NotNull().GetValue<string>().Should().Be("dollar");
+        ((JsonObject)coin[2].NotNull())["coin"].NotNull().GetValue<string>().Should().Be("penny");
+        coin[3].NotNull().AsObject().Count.Should().Be(0);
     }
 
     [Test]
@@ -117,18 +135,18 @@ public class IrExporterTests
     {
         // A declarative machine that declares no .Differential(...) has no differential key, so adding the
         // feature leaves every existing machine's IR byte-identical.
-        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(RichExportMachine.Built))!;
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(RichExportMachine.Built)).NotNull();
         ir.ContainsKey("differential").Should().BeFalse();
     }
 
     [Test]
     public void Export_carries_the_trigger_input_schema()
     {
-        var coin = (JsonObject)Ir()["inputs"]!["Coin"]!;
-        var field = (JsonObject)coin["fields"]!.AsArray().Single()!;
+        var coin = (JsonObject)Ir()["inputs"].NotNull()["Coin"].NotNull();
+        var field = (JsonObject)coin["fields"].NotNull().AsArray().Single().NotNull();
 
-        field["name"]!.GetValue<string>().Should().Be("coin");
-        field["type"]!.GetValue<string>().Should().Be("string");
+        field["name"].NotNull().GetValue<string>().Should().Be("coin");
+        field["type"].NotNull().GetValue<string>().Should().Be("string");
     }
 
     // The IR reaches every browser, so an effect edge says only that it is effect-bound and which claim keys it
@@ -137,47 +155,78 @@ public class IrExporterTests
     public void Effect_edge_names_no_server_type()
     {
         var text = IrExporter.Export(RichExportMachine.Built);
-        var ir = (JsonObject)JsonNode.Parse(text)!;
+        var ir = (JsonObject)JsonNode.Parse(text).NotNull();
 
-        var cst = ir["transitions"]!
+        var cst = ir["transitions"]
+            .NotNull()
             .AsArray()
             .Cast<JsonObject>()
             .Single(t =>
-                string.Equals(t["trigger"]!.GetValue<string>(), "Cst", StringComparison.Ordinal)
+                string.Equals(
+                    t["trigger"].NotNull().GetValue<string>(),
+                    "Cst",
+                    StringComparison.Ordinal
+                )
             );
-        var effect = (JsonObject)cst["effect"]!;
+        var effect = (JsonObject)cst["effect"].NotNull();
 
         effect.Select(p => p.Key).Should().Equal("keyPrefix");
-        effect["keyPrefix"]!.GetValue<string>().Should().Be("rich:Cst");
+        effect["keyPrefix"].NotNull().GetValue<string>().Should().Be("rich:Cst");
         text.Should().NotContain("ThingEffect");
     }
 
     [Test]
     public void Export_of_a_rich_machine_covers_every_rule_and_reducer_kind()
     {
-        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(RichExportMachine.Built))!;
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(RichExportMachine.Built)).NotNull();
 
-        ir["id"]!.GetValue<string>().Should().Be("rich");
-        ir["committedStates"]!.AsArray().Select(n => n!.GetValue<string>()).Should().Contain("B");
+        ir["id"].NotNull().GetValue<string>().Should().Be("rich");
+        ir["committedStates"]
+            .NotNull()
+            .AsArray()
+            .Select(n => n.NotNull().GetValue<string>())
+            .Should()
+            .Contain("B");
 
-        var transitions = ir["transitions"]!.AsArray().Cast<JsonObject>().ToList();
+        var transitions = ir["transitions"].NotNull().AsArray().Cast<JsonObject>().ToList();
 
         // The Cst transition carries an effect (key derived from machine id + trigger), a custom guard, and
         // a custom reducer.
         var cst = transitions.Single(t =>
-            string.Equals(t["trigger"]!.GetValue<string>(), "Cst", StringComparison.Ordinal)
+            string.Equals(
+                t["trigger"].NotNull().GetValue<string>(),
+                "Cst",
+                StringComparison.Ordinal
+            )
         );
-        ((JsonObject)cst["effect"]!)["keyPrefix"]!.GetValue<string>().Should().Be("rich:Cst");
-        ((JsonObject)cst["guard"]!)["rule"]!.GetValue<string>().Should().Be("custom");
-        ((JsonObject)cst["reduce"]!)["reduce"]!.GetValue<string>().Should().Be("custom");
+        ((JsonObject)cst["effect"].NotNull())["keyPrefix"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("rich:Cst");
+        ((JsonObject)cst["guard"].NotNull())["rule"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("custom");
+        ((JsonObject)cst["reduce"].NotNull())["reduce"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("custom");
 
         // The Set1 guard is an `all` containing every simple rule kind.
         var set1 = transitions.Single(t =>
-            string.Equals(t["trigger"]!.GetValue<string>(), "Set1", StringComparison.Ordinal)
+            string.Equals(
+                t["trigger"].NotNull().GetValue<string>(),
+                "Set1",
+                StringComparison.Ordinal
+            )
         );
-        var kinds = ((JsonObject)set1["guard"]!)["rules"]!
+        var kinds = ((JsonObject)set1["guard"].NotNull())["rules"]
+            .NotNull()
             .AsArray()
-            .Select(r => ((JsonObject)r!)["rule"]!.GetValue<string>())
+            .Select(r => ((JsonObject)r.NotNull())["rule"].NotNull().GetValue<string>())
             .ToList();
         kinds
             .Should()
@@ -198,7 +247,7 @@ public class IrExporterTests
         // Every reducer kind appears across the transitions.
         var reduceKinds = transitions
             .Where(t => t["reduce"] is not null)
-            .Select(t => ((JsonObject)t["reduce"]!)["reduce"]!.GetValue<string>())
+            .Select(t => ((JsonObject)t["reduce"].NotNull())["reduce"].NotNull().GetValue<string>())
             .ToList();
         reduceKinds.Should().Contain(new[] { "set", "clear", "reset", "keep", "custom" });
     }
@@ -326,8 +375,9 @@ public class IrExporterTests
     [Test]
     public void Timers_export_as_their_own_trigger_kind()
     {
-        var reminder = (JsonObject)JsonNode.Parse(IrExporter.Export(ReminderMachine.Built))!;
-        var wait = (JsonObject)JsonNode.Parse(IrExporter.Export(WaitMachine.Built))!;
+        var reminder = (JsonObject)
+            JsonNode.Parse(IrExporter.Export(ReminderMachine.Built)).NotNull();
+        var wait = (JsonObject)JsonNode.Parse(IrExporter.Export(WaitMachine.Built)).NotNull();
 
         // The fixed form, with the union of the rules entering the timed state.
         var fixedTimer = (JsonObject)
@@ -336,20 +386,20 @@ public class IrExporterTests
                 .BeOfType<JsonArray>($"a timer is a trigger kind of its own ({TimersAdr})")
                 .Subject.Should()
                 .ContainSingle()
-                .Subject!;
-        fixedTimer["state"]!.GetValue<string>().Should().Be("Review");
-        fixedTimer["trigger"]!.GetValue<string>().Should().Be("Review.after");
-        fixedTimer["target"]!.GetValue<string>().Should().Be("Expired");
-        fixedTimer["after"]!.GetValue<string>().Should().Be("PT10M");
+                .Subject.NotNull();
+        fixedTimer["state"].NotNull().GetValue<string>().Should().Be("Review");
+        fixedTimer["trigger"].NotNull().GetValue<string>().Should().Be("Review.after");
+        fixedTimer["target"].NotNull().GetValue<string>().Should().Be("Expired");
+        fixedTimer["after"].NotNull().GetValue<string>().Should().Be("PT10M");
         fixedTimer.ToJsonString().Should().Contain("Editor");
 
         // The field form, with its bounds.
-        var fieldTimer = (JsonObject)wait["timers"]!.AsArray().Single()!;
-        fieldTimer["trigger"]!.GetValue<string>().Should().Be("Fetching.after");
-        fieldTimer["target"]!.GetValue<string>().Should().Be("TimedOut");
-        fieldTimer["field"]!["name"]!.GetValue<string>().Should().Be("patience");
-        fieldTimer["field"]!["min"]!.GetValue<string>().Should().Be("PT1M");
-        fieldTimer["field"]!["max"]!.GetValue<string>().Should().Be("PT1H");
+        var fieldTimer = (JsonObject)wait["timers"].NotNull().AsArray().Single().NotNull();
+        fieldTimer["trigger"].NotNull().GetValue<string>().Should().Be("Fetching.after");
+        fieldTimer["target"].NotNull().GetValue<string>().Should().Be("TimedOut");
+        fieldTimer["field"].NotNull()["name"].NotNull().GetValue<string>().Should().Be("patience");
+        fieldTimer["field"].NotNull()["min"].NotNull().GetValue<string>().Should().Be("PT1M");
+        fieldTimer["field"].NotNull()["max"].NotNull().GetValue<string>().Should().Be("PT1H");
 
         // Canonical: keys sorted, like every other block.
         foreach (var timer in new[] { fixedTimer, fieldTimer })
@@ -359,17 +409,21 @@ public class IrExporterTests
     [Test]
     public void Timers_are_not_in_inputs()
     {
-        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(ReminderMachine.Built))!;
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(ReminderMachine.Built)).NotNull();
 
         ir["timers"]
             .Should()
             .BeOfType<JsonArray>("the timer is exported in a block of its own")
             .Which.Should()
             .ContainSingle();
-        ((JsonObject)ir["inputs"]!).ContainsKey("Review.after").Should().BeFalse(TimersAdr);
-        ir["triggers"]!
+        ((JsonObject)ir["inputs"].NotNull())
+            .ContainsKey("Review.after")
+            .Should()
+            .BeFalse(TimersAdr);
+        ir["triggers"]
+            .NotNull()
             .AsArray()
-            .Select(t => t!.GetValue<string>())
+            .Select(t => t.NotNull().GetValue<string>())
             .Should()
             .NotContain("Review.after", "the triggers list names what a client sends");
     }
@@ -379,7 +433,7 @@ public class IrExporterTests
     public void A_machine_without_timers_exports_no_timers_block()
     {
         Ir().ContainsKey("timers").Should().BeFalse(TimersAdr);
-        ((JsonObject)JsonNode.Parse(IrExporter.Export(IngestMachine.Built))!)
+        ((JsonObject)JsonNode.Parse(IrExporter.Export(IngestMachine.Built)).NotNull())
             .ContainsKey("timers")
             .Should()
             .BeFalse();

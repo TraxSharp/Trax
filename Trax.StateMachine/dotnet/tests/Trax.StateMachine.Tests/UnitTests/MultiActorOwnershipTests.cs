@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence;
@@ -74,18 +75,21 @@ public class MultiActorOwnershipTests
             .And.Contain("assignment SubmitFix: fixer\n")
             .And.Contain("assignment start: fixer, triage\n")
             .And.Contain("assignment read: fixer, triage\n");
-        var host = HostFile.Read(derived.Host!).Machines["assignment"];
+        var host = HostFile.Read(derived.Host.NotNull()).Machines["assignment"];
         host.Triggers["Triage"]
-            .Client!.RoleSets.Should()
+            .Client.NotNull()
+            .RoleSets.Should()
             .ContainSingle()
             .Which.Should()
             .Equal("triage");
         host.Triggers["SubmitFix"]
-            .Client!.RoleSets.Should()
+            .Client.NotNull()
+            .RoleSets.Should()
             .ContainSingle()
             .Which.Should()
             .Equal("fixer");
-        host.Start!.RoleSets.Should()
+        host.Start.NotNull()
+            .RoleSets.Should()
             .ContainSingle()
             .Which.Should()
             .BeEquivalentTo(["triage", "fixer"]);
@@ -97,8 +101,8 @@ public class MultiActorOwnershipTests
         var derived = await Derive(Lanes).ConfigureAwait(false);
         var machine = IrMachines.Create(
             new IrMachines.Source(
-                JsonNode.Parse(derived.Irs["assignment"])!.AsObject(),
-                HostFile.Read(derived.Host!).Machines["assignment"]
+                JsonNode.Parse(derived.Irs["assignment"]).NotNull().AsObject(),
+                HostFile.Read(derived.Host.NotNull()).Machines["assignment"]
             ),
             []
         );
@@ -120,7 +124,7 @@ public class MultiActorOwnershipTests
             .BeFalse();
         (
             await CallerRules
-                .Admits(new("jwt:vic", "visitor"), rules.Start!, default)
+                .Admits(new("jwt:vic", "visitor"), rules.Start.NotNull(), default)
                 .ConfigureAwait(false)
         )
             .Should()

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.StateMachine.Persistence;
@@ -63,9 +64,9 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
         _effect = effect;
         _idempotent = idempotent;
         _effectKey = effectKey;
-        _fromState = fromState.ToString()!;
-        _toState = toState.ToString()!;
-        _trigger = trigger.ToString()!;
+        _fromState = fromState.ToString().NotNull();
+        _toState = toState.ToString().NotNull();
+        _trigger = trigger.ToString().NotNull();
         _receiptKey = receiptKey;
         _lease = lease;
     }
@@ -182,7 +183,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
             { } refused
         )
             return refused;
-        var userKey = CallerRules.UserOf(actor)!;
+        var userKey = CallerRules.UserOf(actor).NotNull();
         return _drafts.Marks is { } marks
             ? await RunMarked(marks, userKey, id, requestId, cancellationToken)
                 .ConfigureAwait(false)
@@ -415,7 +416,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
 
         var outcome = await _drafts
             .RecordEffect(
-                owner.UserKey!,
+                owner.UserKey.NotNull(),
                 id,
                 _trigger,
                 new JsonObject { [_receiptKey] = receipt },

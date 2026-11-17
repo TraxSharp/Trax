@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -61,7 +62,8 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
         // would be kept past it as the record of what the server did.)
         await host.SeedDraft(user, old, PlainTimerMachine.Json("Waiting"));
         await host.SeedDraft(user, young, PlainTimerMachine.Json("Waiting"));
-        (await RawSql.Timer(host, old))!
+        (await RawSql.Timer(host, old))
+            .NotNull()
             .DueAt.Should()
             .NotBeNull("Waiting's timer keeps it past its TTL");
         await Born(host, old, StateMachineOptions.DefaultMaxDraftLifetime + TimeSpan.FromDays(1));
@@ -171,7 +173,7 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
                 $"an idle instance in a state only the server puts it in is the host's to keep. See {Adr}"
             )
             .Which;
-        loaded.Snapshot.Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        loaded.Snapshot.Context["receipt"].NotNull().GetValue<string>().Should().Be("receipt-1");
         effect.Calls.Should().Be(1);
     }
 
@@ -184,7 +186,8 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
         var registry = scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>();
         return (
             await registry
-                .EffectRunner("order")!
+                .EffectRunner("order")
+                .NotNull()
                 .Run(user, id, $"send-{Guid.NewGuid()}")
                 .ConfigureAwait(false)
         )

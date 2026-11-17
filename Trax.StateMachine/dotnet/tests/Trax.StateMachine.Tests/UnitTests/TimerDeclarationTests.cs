@@ -4,9 +4,11 @@ using System.Xml;
 using AwesomeAssertions;
 using Ingest.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.StateMachine.Persistence;
 using Trax.StateMachine.Tests.Fakes;
+using Trax.Testing;
 
 namespace Trax.StateMachine.Tests.UnitTests;
 
@@ -159,15 +161,19 @@ public class TimerDeclarationTests
     [Test]
     public void The_timed_state_is_locked()
     {
-        var service = ReminderMachine.AsMachine().CreateService(null!, claims: null);
+        var service = ReminderMachine
+            .AsMachine()
+            .CreateService(Null.Of<ISnapshotStore>(), claims: null);
 
         // The locked set is private to the draft service: it is what autosave may not leave or rewrite.
         var locked =
             (IReadOnlySet<string>)
                 service
                     .GetType()
-                    .GetProperty("LockedNames", BindingFlags.NonPublic | BindingFlags.Instance)!
-                    .GetValue(service)!;
+                    .GetProperty("LockedNames", BindingFlags.NonPublic | BindingFlags.Instance)
+                    .NotNull()
+                    .GetValue(service)
+                    .NotNull();
 
         locked
             .Should()
@@ -490,11 +496,11 @@ public class TimerDeclarationTests
     [Test]
     public void Entering_a_timed_state_with_duration_max_value()
     {
-        AdvanceResult result = null!;
+        AdvanceResult? result = null;
         var enter = () => result = EnterFetching(XmlConvert.ToString(TimeSpan.MaxValue));
 
         enter.Should().NotThrow("an overflowing duration is an answer, never an exception");
-        ShouldBeInvalidInput(result);
+        ShouldBeInvalidInput(result.NotNull());
     }
 
     // Green today, and it stays so.
@@ -520,13 +526,13 @@ public class TimerDeclarationTests
     [TestCase("P\u0661DT5M")]
     public void Entering_a_timed_state_with_a_non_ascii_digit_in_the_duration(string patience)
     {
-        AdvanceResult result = null!;
+        AdvanceResult? result = null;
         var enter = () => result = EnterFetching(patience);
 
         enter
             .Should()
             .NotThrow("a duration the grammar does not hold is an answer, never an exception");
-        ShouldBeInvalidInput(result);
+        ShouldBeInvalidInput(result.NotNull());
     }
 
     [TestCase("PT\u0665M")]

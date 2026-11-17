@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Features;
 
@@ -71,9 +72,9 @@ internal static class Board
 
             foreach (var edge in ir["transitions"]?.AsArray() ?? [])
             {
-                var from = edge!["from"]!.GetValue<string>();
-                var trigger = edge["trigger"]!.GetValue<string>();
-                var to = edge["to"]!.GetValue<string>();
+                var from = edge.NotNull()["from"].NotNull().GetValue<string>();
+                var trigger = edge["trigger"].NotNull().GetValue<string>();
+                var to = edge["to"].NotNull().GetValue<string>();
                 var command = Add(
                     Kind.Command,
                     id,
@@ -111,10 +112,11 @@ internal static class Board
 
             foreach (var timer in ir["timers"]?.AsArray() ?? [])
             {
-                var state = timer!["state"]!.GetValue<string>();
-                var to = timer["target"]!.GetValue<string>();
+                var state = timer.NotNull()["state"].NotNull().GetValue<string>();
+                var to = timer["target"].NotNull().GetValue<string>();
                 var after =
-                    timer["after"]?.GetValue<string>() ?? $"{timer["field"]!["name"]} later";
+                    timer["after"]?.GetValue<string>()
+                    ?? $"{timer["field"].NotNull()["name"]} later";
                 var rule = Add(
                     Kind.Policy,
                     id,
@@ -136,11 +138,11 @@ internal static class Board
             // The IR keys outcomes by "<state>.<kind>".
             foreach (var (_, outcome) in ir["outcomes"] as JsonObject ?? [])
             {
-                var state = outcome!["state"]!.GetValue<string>();
-                var kind = outcome["outcome"]!.GetValue<string>();
-                foreach (var edge in outcome["edges"]!.AsArray())
+                var state = outcome.NotNull()["state"].NotNull().GetValue<string>();
+                var kind = outcome["outcome"].NotNull().GetValue<string>();
+                foreach (var edge in outcome["edges"].NotNull().AsArray())
                 {
-                    var to = edge!["to"]!.GetValue<string>();
+                    var to = edge.NotNull()["to"].NotNull().GetValue<string>();
                     var happened = Add(
                         Kind.Event,
                         id,

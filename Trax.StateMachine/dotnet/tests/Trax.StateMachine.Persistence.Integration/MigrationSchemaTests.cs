@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -136,7 +137,7 @@ public class MigrationSchemaTests
                     + "change without a migration fails here. See "
                     + "docs/adr/0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md."
             );
-        stored!.Json.Should().Contain("quarter");
+        stored.NotNull().Json.Should().Contain("quarter");
 
         var advanced = Sample() with { State = "Locked", Context = new JsonObject() };
         (
@@ -159,7 +160,7 @@ public class MigrationSchemaTests
         var after = await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id))
             .ConfigureAwait(false);
         after.Should().NotBeNull();
-        after!.Json.Should().Contain("\"state\":\"Locked\"");
+        after.NotNull().Json.Should().Contain("\"state\":\"Locked\"");
         after.LastRequestId.Should().Be("req-1");
 
         // The request scope columns (048 / 013): the trigger and from-state recorded with the request id.
@@ -181,7 +182,7 @@ public class MigrationSchemaTests
             .BeTrue();
         var scoped = await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id))
             .ConfigureAwait(false);
-        scoped!.LastRequest.Should().Be(new AppliedRequest("req-2", "Coin", "Locked"));
+        scoped.NotNull().LastRequest.Should().Be(new AppliedRequest("req-2", "Coin", "Locked"));
 
         // The owner kind and the invoke token (070 / 032): a system row beside the user's under the same id,
         // a token set on it, and the conditional update by that token.
@@ -219,7 +220,7 @@ public class MigrationSchemaTests
                             DraftOwner.System,
                             "turnstile",
                             id,
-                            system!.Token,
+                            system.NotNull().Token,
                             new InvokeTokenWrite(token)
                         )
                 )
@@ -244,7 +245,8 @@ public class MigrationSchemaTests
         (
             await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id))
                 .ConfigureAwait(false)
-        )!
+        )
+            .NotNull()
             .Json.Should()
             .Be(scoped.Json, "the user's draft under the same id is untouched");
 

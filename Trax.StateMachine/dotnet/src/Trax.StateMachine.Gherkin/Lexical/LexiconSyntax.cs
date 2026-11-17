@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Gherkin.Lexical;
 
@@ -120,7 +121,7 @@ internal static class LexiconSyntax
             }
             if (!Tokenize(line, out var tokens, out var problem))
             {
-                problems.Add(new LexProblem(number, problem!));
+                problems.Add(new LexProblem(number, problem.NotNull()));
                 // The words before the first quote still say which block the line meant to open.
                 var quote = line.IndexOf('"', StringComparison.Ordinal);
                 if (

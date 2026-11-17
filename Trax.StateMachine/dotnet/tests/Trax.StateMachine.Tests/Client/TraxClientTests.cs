@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Microsoft.Extensions.Time.Testing;
 using Trax.Client;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Client;
 
@@ -85,7 +86,13 @@ public class TraxClientTests
             .Should()
             .Be("""{"id":"trax_console_Runs_abc","operationName":"Runs","variables":{"take":5}}""");
         answer.Succeeded.Should().BeTrue();
-        answer.Data!.Operations!.Runs.Should().ContainSingle().Which.Id.Should().Be(7);
+        answer
+            .Data.NotNull()
+            .Operations.NotNull()
+            .Runs.Should()
+            .ContainSingle()
+            .Which.Id.Should()
+            .Be(7);
     }
 
     [Test]
@@ -95,9 +102,9 @@ public class TraxClientTests
 
         await Client(host, byId: _ => false).SendAsync(Runs, new RunsVariables { Take = 5 });
 
-        host.Bodies[0]["query"]!.GetValue<string>().Should().Be(Runs.Text);
+        host.Bodies[0]["query"].NotNull().GetValue<string>().Should().Be(Runs.Text);
         host.Bodies[0].ContainsKey("id").Should().BeFalse();
-        host.Bodies[0]["operationName"]!.GetValue<string>().Should().Be("Runs");
+        host.Bodies[0]["operationName"].NotNull().GetValue<string>().Should().Be("Runs");
     }
 
     [Test]
@@ -110,7 +117,7 @@ public class TraxClientTests
         await client.SendAsync(Runs, new RunsVariables { Take = 1, State = null });
         await client.SendAsync(Runs, new RunsVariables { Take = 1, State = "FAILED" });
 
-        host.Bodies.Select(b => b["variables"]!.ToJsonString())
+        host.Bodies.Select(b => b["variables"].NotNull().ToJsonString())
             .Should()
             .Equal(
                 """{"take":1}""",
@@ -143,7 +150,7 @@ public class TraxClientTests
         var answer = await Client(host).SendAsync(Runs, new RunsVariables { Take = 1 });
 
         answer.Failure.Should().NotBeNull();
-        answer.Failure!.Status.Should().Be(502);
+        answer.Failure.NotNull().Status.Should().Be(502);
         answer.Code.Should().Be(TraxTransportFailure.Code);
     }
 
@@ -157,7 +164,10 @@ public class TraxClientTests
 
         var answer = await Client(host).SendAsync(Runs, new RunsVariables { Take = 1 });
 
-        answer.Failure!.Status.Should().Be(500, "the data of a failed response is not an answer");
+        answer
+            .Failure.NotNull()
+            .Status.Should()
+            .Be(500, "the data of a failed response is not an answer");
         answer.Data.Should().BeNull();
     }
 
@@ -182,7 +192,7 @@ public class TraxClientTests
 
         var answer = await Client(host).SendAsync(Runs, new RunsVariables { Take = 1 });
 
-        answer.Failure!.Message.Should().Contain("Connection refused");
+        answer.Failure.NotNull().Message.Should().Contain("Connection refused");
     }
 
     [Test]
@@ -192,7 +202,7 @@ public class TraxClientTests
 
         var answer = await Client(host).SendAsync(Runs, new RunsVariables { Take = 1 });
 
-        answer.Failure!.Message.Should().Contain("does not fit");
+        answer.Failure.NotNull().Message.Should().Contain("does not fit");
     }
 
     [Test]
@@ -274,7 +284,7 @@ public class TraxClientTests
         var failure = ended
             .Should()
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
-            .Which.Failure!;
+            .Which.Failure.NotNull();
         failure.Message.Should().Contain("4403");
         failure
             .CloseStatus.Should()
@@ -303,9 +313,11 @@ public class TraxClientTests
         var opened = await socket.Subscriptions.Take(Wait);
         opened.Sink.Next(
             (JsonObject)
-                JsonNode.Parse(
-                    """{"errors":[{"message":"No.","extensions":{"code":"AUTH_NOT_AUTHORIZED"}}]}"""
-                )!
+                JsonNode
+                    .Parse(
+                        """{"errors":[{"message":"No.","extensions":{"code":"AUTH_NOT_AUTHORIZED"}}]}"""
+                    )
+                    .NotNull()
         );
 
         var ended = (await events.Take(1)).Single();
@@ -341,7 +353,7 @@ public class TraxClientTests
 
         using var stream = client.Subscribe(Changed, TraxNoVariables.Instance, events.Add);
         var opened = await socket.Subscriptions.Take(Wait);
-        opened.Sink.Next((JsonObject)JsonNode.Parse(frame)!);
+        opened.Sink.Next((JsonObject)JsonNode.Parse(frame).NotNull());
 
         var ended = (await events.Take(1)).Single();
         ended
@@ -364,9 +376,9 @@ public class TraxClientTests
         first.Sink.Error(
             new SubscriptionErrorException(
                 (JsonArray)
-                    JsonNode.Parse(
-                        """[{"message":"Not yours.","extensions":{"code":"FORBIDDEN"}}]"""
-                    )!
+                    JsonNode
+                        .Parse("""[{"message":"Not yours.","extensions":{"code":"FORBIDDEN"}}]""")
+                        .NotNull()
             )
         );
         var refusal = (await events.Take(1)).Single();
@@ -423,7 +435,8 @@ public class TraxClientTests
             .Single()
             .Should()
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
-            .Which.Failure!.Message.Should()
+            .Which.Failure.NotNull()
+            .Message.Should()
             .Contain("no socket");
     }
 
@@ -554,10 +567,10 @@ public class TraxClientTests
         ).Subscribe(Changed, TraxNoVariables.Instance, _ => { });
 
         (await socket.Subscriptions.Take(Wait)).Sink.Error(new IOException("dropped"));
-        var ended = PendingTimer(stream)!;
+        var ended = PendingTimer(stream).NotNull();
         time.Advance(TimeSpan.FromSeconds(1));
         (await socket.Subscriptions.Take(Wait)).Sink.Error(new IOException("dropped"));
-        var pending = PendingTimer(stream)!;
+        var pending = PendingTimer(stream).NotNull();
         stream.Dispose();
 
         // A source is cancelled at once and disposed once its callbacks ran, on the thread pool.
@@ -580,7 +593,8 @@ public class TraxClientTests
                     "_timer",
                     System.Reflection.BindingFlags.NonPublic
                         | System.Reflection.BindingFlags.Instance
-                )!
+                )
+                .NotNull()
                 .GetValue(stream);
 
     private static bool IsDisposed(CancellationTokenSource source)
@@ -647,7 +661,7 @@ public class TraxClientTests
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
             .Subject;
         ended.Errors.Should().BeEmpty();
-        ended.Failure!.Message.Should().Contain("socket");
+        ended.Failure.NotNull().Message.Should().Contain("socket");
     }
 
     [Test]
@@ -693,7 +707,8 @@ public class TraxClientTests
         (await broken.Take(2))[^1]
             .Should()
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
-            .Which.Failure!.Message.Should()
+            .Which.Failure.NotNull()
+            .Message.Should()
             .Contain("handler bug");
         first.Disposed.Should().BeTrue();
         (await healthy.Take(1)).Single().Should().BeOfType<TraxStreamEvent<ChangedResult>.Next>();
@@ -771,7 +786,8 @@ public class TraxClientTests
             .Single()
             .Should()
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
-            .Which.Failure!.Status.Should()
+            .Which.Failure.NotNull()
+            .Status.Should()
             .Be(401);
         // negative-wait: a retry would have connected again within the 10 ms delay.
         await Task.Delay(300);
@@ -850,7 +866,8 @@ public class TraxClientTests
             .Single()
             .Should()
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
-            .Which.Failure!.Message.Should()
+            .Which.Failure.NotNull()
+            .Message.Should()
             .Contain("not a GraphQL result");
         // negative-wait: a retry would have connected again within the 10 ms delay.
         await Task.Delay(300);
@@ -937,7 +954,7 @@ public class TraxClientTests
 
         var answer = await Client(host).SendAsync(document, TraxNoVariables.Instance);
 
-        answer.Failure!.Message.Should().Contain("does not fit");
+        answer.Failure.NotNull().Message.Should().Contain("does not fit");
     }
 
     public sealed record Unreadable
@@ -999,7 +1016,7 @@ public class TraxClientTests
         await Client(host, byId: _ => true).SendAsync(document, new RunsVariables { Take = 1 });
 
         host.Bodies[0].ContainsKey("id").Should().BeFalse();
-        host.Bodies[0]["query"]!.GetValue<string>().Should().Be(Runs.Text);
+        host.Bodies[0]["query"].NotNull().GetValue<string>().Should().Be(Runs.Text);
     }
 
     // ── Optional<T> with options of the caller's own ─────────────────────────────────────────────
@@ -1069,10 +1086,10 @@ public class TraxClientTests
         await client.SendAsync(Job, new JobVariables { MaxActiveJobs = 0, Note = null });
         var answer = await client.SendAsync(Job, new JobVariables { MaxActiveJobs = 3 });
 
-        host.Bodies.Select(b => b["variables"]!.ToJsonString())
+        host.Bodies.Select(b => b["variables"].NotNull().ToJsonString())
             .Should()
             .Equal("""{}""", """{"maxActiveJobs":0,"note":null}""", """{"maxActiveJobs":3}""");
-        answer.Data!.MaxActiveJobs.HasValue.Should().BeFalse("it was absent");
+        answer.Data.NotNull().MaxActiveJobs.HasValue.Should().BeFalse("it was absent");
         answer.Data.Note.HasValue.Should().BeTrue("it was null, which is a value");
         answer.Data.Note.Value.Should().BeNull();
     }
@@ -1134,17 +1151,20 @@ public class TraxClientTests
         {
             Bodies.Add(
                 (JsonObject)
-                    JsonNode.Parse(
-                        await request
-                            .Content!.ReadAsStringAsync(cancellationToken)
-                            .ConfigureAwait(false)
-                    )!
+                    JsonNode
+                        .Parse(
+                            await request
+                                .Content.NotNull()
+                                .ReadAsStringAsync(cancellationToken)
+                                .ConfigureAwait(false)
+                        )
+                        .NotNull()
             );
             if (_error is not null)
                 throw _error;
             return new HttpResponseMessage(_status)
             {
-                Content = new StringContent(_answer!, Encoding.UTF8, "application/json"),
+                Content = new StringContent(_answer.NotNull(), Encoding.UTF8, "application/json"),
             };
         }
     }

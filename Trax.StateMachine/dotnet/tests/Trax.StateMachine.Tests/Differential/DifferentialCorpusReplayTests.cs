@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Testing;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
@@ -99,10 +100,15 @@ public class DifferentialCorpusReplayTests
         var file = FixturePaths.DifferentialFile("ingest");
         var corpus = File.ReadAllText(file);
 
-        var outcomeCases = JsonNode.Parse(corpus)!["cases"]!
+        var outcomeCases = JsonNode
+            .Parse(corpus)
+            .NotNull()["cases"]
+            .NotNull()
             .AsArray()
             .Where(c =>
-                c!["when"]!["trigger"]!
+                c.NotNull()["when"]
+                    .NotNull()["trigger"]
+                    .NotNull()
                     .GetValue<string>()
                     .StartsWith("Fetching.", StringComparison.Ordinal)
             )
@@ -110,7 +116,9 @@ public class DifferentialCorpusReplayTests
         outcomeCases
             .Should()
             .Contain(
-                c => c!["expect"]!["outcome"]!.GetValue<string>() == "transitioned",
+                c =>
+                    c.NotNull()["expect"].NotNull()["outcome"].NotNull().GetValue<string>()
+                    == "transitioned",
                 "the corpus must exercise the outcome reductions, not only their rejections"
             );
 
