@@ -1,0 +1,402 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Testing;
+using AnalyzerTest = Trax.Analyzers.Tests.Harness.CSharpAnalyzerTest<
+    Trax.Analyzers.Rules.DoNotThrowFromFinallyBlockAnalyzer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class DoNotThrowFromFinallyBlockAnalyzerTests
+{
+    private static AnalyzerTest CreateTest() => new();
+
+    [Fact]
+    public Task FinallyThrowsDirectly_DiagnosticIsReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        {|TRX0072:throw new System.Exception("Unbecoming exception");|}
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyDoesNotThrow_NoDiagnosticReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    var value = 1;
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        value++;
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyThrowsFromNestedBlock_DiagnosticIsReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    var value = 1;
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        {
+                            Increment(ref value);
+                            {|TRX0072:throw new System.Exception($"Unbecoming exception No {value}");|}
+                        }
+                        void Increment(ref int val) => val++;
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyThrowsFromNestedTryCatchBlock_ExceptionIsHandled_DiagnosticIsReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        try
+                        {
+                            {|TRX0072:throw new System.Exception();|}
+                        }
+                        catch
+                        {
+                        }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyThrowsFromNestedTryCatchBlock_ExceptionIsUnhandled_DiagnosticIsReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        try
+                        {
+                            {|TRX0072:throw new System.Exception();|}
+                        }
+                        catch (System.ArgumentException)
+                        {
+                        }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyDeclaresLambdaThatThrows_NoDiagnosticReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        System.Action action = () => { throw new System.Exception(); };
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyDeclaresAnonymousMethodThatThrows_NoDiagnosticReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        System.Action action = delegate { throw new System.Exception(); };
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyDeclaresLocalFunctionThatThrows_NoDiagnosticReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        void LocalFunction() => Throw();
+                        void Throw()
+                        {
+                            throw new System.Exception();
+                        }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyThrowsFromSeveralLocations_DiagnosticIsReportedForEachOne()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        if (true)
+                        {
+                            {|TRX0072:throw new System.Exception();|}
+                        }
+                        else
+                        {
+                            {|TRX0072:throw new System.Exception();|}
+                        }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyThrowsFromThrowExpression_DiagnosticIsReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test(string value)
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        value = value ?? {|TRX0072:throw new System.Exception()|};
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyRethrowsFromNestedCatchBlock_DiagnosticIsReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        try
+                        {
+                        }
+                        catch
+                        {
+                            {|TRX0072:throw;|}
+                        }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task TryBlockThrows_NoDiagnosticReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    try
+                    {
+                        throw new System.Exception();
+                    }
+                    finally
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyDeclaresLambdaWithThrowExpression_NoDiagnosticReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        System.Action action = () => throw new System.Exception();
+                        System.Func<string> func = () => throw new System.Exception();
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyDeclaresLocalFunctionWithThrowExpression_NoDiagnosticReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        void LocalFunction() => throw new System.Exception();
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task LambdaDeclaredInFinallyHasItsOwnFinallyThatThrows_DiagnosticIsReported()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class TestClass
+            {
+                void Test()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        System.Action action = () =>
+                        {
+                            try
+                            {
+                            }
+                            finally
+                            {
+                                {|TRX0072:throw new System.Exception();|}
+                            }
+                        };
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+}

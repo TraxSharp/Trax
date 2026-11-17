@@ -1,0 +1,3 @@
+// TraxBanConsole: a library does not own the process's console. Log through ILogger, or return the
+// text to the caller. A console application turns this off (TraxBanConsole=false).
+T:System.Console;Log through ILogger, or return the text to the caller

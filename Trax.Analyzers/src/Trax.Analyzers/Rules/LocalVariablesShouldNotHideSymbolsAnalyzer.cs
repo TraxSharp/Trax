@@ -1,0 +1,144 @@
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class LocalVariablesShouldNotHideSymbolsAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.LocalVariablesShouldNotHideSymbols,
+        title: "Local variables should not hide other symbols",
+        messageFormat: "Local variable '{0}' should not hide {1}",
+        RuleCategories.Design,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.LocalVariablesShouldNotHideSymbols));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+        context.RegisterOperationAction(AnalyzeVariableDeclaration, OperationKind.VariableDeclarator);
+    }
+
+    private static void AnalyzeVariableDeclaration(OperationAnalysisContext context)
+    {
+        var operation = (IVariableDeclaratorOperation)context.Operation;
+        var semanticModel = operation.SemanticModel!;
+        var localSymbol = operation.Symbol;
+        if (localSymbol.IsImplicitlyDeclared || !localSymbol.CanBeReferencedByName)
+            return;
+
+        var containingType = localSymbol.ContainingType;
+        if (containingType is null)
+            return;
+
+        foreach (var ancestor in operation.Ancestors())
+        {
+            if (ancestor is not ILocalFunctionOperation localFunction)
+                continue;
+
+            if (!localFunction.Symbol.IsStatic)
+            {
+                foreach (var symbol in semanticModel.LookupSymbols(localFunction.Syntax.SpanStart, name: localSymbol.Name))
+                {
+                    if (symbol is ILocalSymbol hiddenLocal && CanAccessLocal(localFunction.Symbol, hiddenLocal))
+                    {
+                        ReportDiagnostic("local variable");
+                        return;
+                    }
+                }
+            }
+
+            break;
+        }
+
+        foreach (var member in GetSymbols(containingType, localSymbol.Name, context.CancellationToken))
+        {
+            if (!semanticModel.IsAccessible(operation.Syntax.SpanStart, member))
+                continue;
+
+            if (member is IFieldSymbol)
+            {
+                ReportDiagnostic("field");
+                return;
+            }
+
+            if (member is IPropertySymbol)
+            {
+                ReportDiagnostic("property");
+                return;
+            }
+
+            if (member is IParameterSymbol && operation.CanUsePrimaryConstructorParameters(context.CancellationToken))
+            {
+                ReportDiagnostic("parameter");
+                return;
+            }
+        }
+
+        void ReportDiagnostic(string type)
+        {
+            if (operation.Syntax is VariableDeclaratorSyntax declarator)
+            {
+                context.ReportDiagnostic(Rule, declarator.Identifier, localSymbol.Name, type);
+            }
+            else
+            {
+                context.ReportDiagnostic(Rule, operation, localSymbol.Name, type);
+            }
+        }
+    }
+
+    private static bool CanAccessLocal(IMethodSymbol localFunction, ILocalSymbol local)
+    {
+        var currentLocalFunction = localFunction;
+        while (currentLocalFunction.MethodKind is MethodKind.LocalFunction)
+        {
+            if (currentLocalFunction.IsStatic)
+                return false;
+
+            if (currentLocalFunction.ContainingSymbol.IsEqualTo(local.ContainingSymbol))
+                return true;
+
+            if (currentLocalFunction.ContainingSymbol is not IMethodSymbol containingMethod)
+                return false;
+
+            currentLocalFunction = containingMethod;
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<ISymbol> GetSymbols(INamedTypeSymbol? type, string name, CancellationToken cancellationToken)
+    {
+        if (type?.InstanceConstructors is not null)
+        {
+            foreach (var constructor in type.InstanceConstructors)
+            {
+                if (constructor.Parameters.Length == 0 || !constructor.IsPrimaryConstructor(cancellationToken))
+                    continue;
+
+                foreach (var param in constructor.Parameters)
+                {
+                    if (param.Name == name)
+                        yield return param;
+                }
+            }
+        }
+
+        while (type is not null)
+        {
+            var members = type.GetMembers(name);
+            foreach (var member in members)
+            {
+                yield return member;
+            }
+
+            type = type.BaseType;
+        }
+    }
+}

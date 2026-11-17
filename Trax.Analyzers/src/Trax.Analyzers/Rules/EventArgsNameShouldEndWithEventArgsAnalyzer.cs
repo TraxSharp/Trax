@@ -1,0 +1,44 @@
+﻿namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class EventArgsNameShouldEndWithEventArgsAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.EventArgsNameShouldEndWithEventArgs,
+        title: "Class name should end with 'EventArgs'",
+        messageFormat: "Class name should end with 'EventArgs'",
+        RuleCategories.Naming,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.EventArgsNameShouldEndWithEventArgs));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(compilationContext =>
+        {
+            var eventArgsType = compilationContext.Compilation.GetTypeByMetadataName("System.EventArgs");
+            if (eventArgsType is null)
+                return;
+
+            compilationContext.RegisterSymbolAction(context => AnalyzeSymbol(context, eventArgsType), SymbolKind.NamedType);
+        });
+    }
+
+    private static void AnalyzeSymbol(SymbolAnalysisContext context, ITypeSymbol eventArgsType)
+    {
+        var symbol = (INamedTypeSymbol)context.Symbol;
+        if (symbol.Name is null)
+            return;
+
+        if (!symbol.Name.EndsWith("EventArgs", System.StringComparison.Ordinal) && symbol.InheritsFrom(eventArgsType))
+        {
+            context.ReportDiagnostic(Rule, symbol);
+        }
+    }
+}

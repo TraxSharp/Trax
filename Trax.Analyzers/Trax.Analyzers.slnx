@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Trax.Analyzers/Trax.Analyzers.csproj" />
+    <Project Path="src/Trax.Analyzers.Roslyn50/Trax.Analyzers.Roslyn50.csproj" />
+    <Project Path="src/Trax.Analyzers.CodeFixers/Trax.Analyzers.CodeFixers.csproj" />
+    <Project Path="src/Trax.Analyzers.CodeFixers.Roslyn50/Trax.Analyzers.CodeFixers.Roslyn50.csproj" />
+    <Project Path="src/Trax.Analyzers.Annotations/Trax.Analyzers.Annotations.csproj" />
+    <Project Path="src/Trax.Analyzers.Package/Trax.Analyzers.Package.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trax.Analyzers.Tests/Trax.Analyzers.Tests.csproj" />
+    <Project Path="tests/Trax.Analyzers.Package.Tests/Trax.Analyzers.Package.Tests.csproj" />
+  </Folder>
+</Solution>

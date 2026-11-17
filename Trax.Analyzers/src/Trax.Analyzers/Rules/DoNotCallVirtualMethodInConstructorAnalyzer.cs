@@ -1,0 +1,110 @@
+using Microsoft.CodeAnalysis.CSharp;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class DoNotCallVirtualMethodInConstructorAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.DoNotCallVirtualMethodInConstructor,
+        title: "Do not call overridable members in constructor",
+        messageFormat: "Do not call overridable members in constructor",
+        RuleCategories.Design,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.DoNotCallVirtualMethodInConstructor));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterOperationBlockStartAction(ctx =>
+        {
+            if (ctx.OwningSymbol is IMethodSymbol methodSymbol)
+            {
+                if (methodSymbol.MethodKind != MethodKind.Constructor)
+                    return;
+
+                if (methodSymbol.ContainingType.IsSealed)
+                    return;
+
+                ctx.RegisterOperationAction(AnalyzeEventOperation, OperationKind.EventAssignment);
+                ctx.RegisterOperationAction(AnalyzeInvocationOperation, OperationKind.Invocation);
+                ctx.RegisterOperationAction(AnalyzePropertyReferenceOperation, OperationKind.PropertyReference);
+            }
+        });
+    }
+
+    private static void AnalyzeEventOperation(OperationAnalysisContext context)
+    {
+        var operation = (IEventAssignmentOperation)context.Operation;
+        if (operation.EventReference is IEventReferenceOperation eventReference)
+        {
+            if (IsOverridable(eventReference.Member) && IsCurrentInstanceMethod(eventReference.Instance) && !IsInDelegate(operation))
+            {
+                context.ReportDiagnostic(Rule, operation);
+            }
+        }
+    }
+
+    private static void AnalyzePropertyReferenceOperation(OperationAnalysisContext context)
+    {
+        var operation = (IPropertyReferenceOperation)context.Operation;
+        var member = operation.Property;
+        if (IsOverridable(member) && !operation.IsInNameofOperation() && !IsInDelegate(operation))
+        {
+            // Check if the member is actually virtual
+            //
+            // public virtual string A { get; }
+            // ctor() => A = "value";
+            if (member.SetMethod is null && operation.Parent is IAssignmentOperation assignment && assignment.Target.DescendantsAndSelf().Contains(operation))
+                return;
+
+            var children = operation.GetChildOperations().Take(2).ToList();
+            if (children.Count == 1 && IsCurrentInstanceMethod(children[0]))
+            {
+                context.ReportDiagnostic(Rule, operation);
+            }
+        }
+    }
+
+    private static void AnalyzeInvocationOperation(OperationAnalysisContext context)
+    {
+        var operation = (IInvocationOperation)context.Operation;
+        if (IsOverridable(operation.TargetMethod) && IsCurrentInstanceMethod(operation.Instance) && !IsInDelegate(operation))
+        {
+            context.ReportDiagnostic(Rule, operation);
+        }
+    }
+
+    private static bool IsOverridable(ISymbol symbol)
+    {
+        return !symbol.IsSealed && (symbol.IsVirtual || symbol.IsAbstract || symbol.IsOverride);
+    }
+
+    private static bool IsCurrentInstanceMethod(IOperation? operation)
+    {
+        if (operation is null)
+            return false;
+
+        // The members accessed with 'base' are not called virtually (base.A(), base.P)
+        return operation is IInstanceReferenceOperation i && i.ReferenceKind == InstanceReferenceKind.ContainingTypeInstance && !i.Syntax.IsKind(SyntaxKind.BaseExpression);
+    }
+
+    private static bool IsInDelegate(IOperation? operation)
+    {
+        while (operation is not null)
+        {
+            if (operation.Kind is OperationKind.DelegateCreation)
+                return true;
+
+            operation = operation.Parent;
+        }
+
+        return false;
+    }
+}

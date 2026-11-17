@@ -1,0 +1,86 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class ThrowIfNullWithNonNullableInstanceAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.ThrowIfNullWithNonNullableInstance,
+        title: "ArgumentNullException.ThrowIfNull should not be used with non-nullable types",
+        messageFormat: "ArgumentNullException.ThrowIfNull should not be used with non-nullable types",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.ThrowIfNullWithNonNullableInstance));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(context =>
+        {
+            var nullableSymbol = context.Compilation.GetTypeByMetadataName("System.Nullable`1");
+            var symbol = context.Compilation.GetTypeByMetadataName("System.ArgumentNullException");
+            if (symbol is null)
+                return;
+
+            // There are only a couple of ThrowIfNull overloads, so they are compared one by one
+            // instead of being hashed into a set
+            var members = symbol.GetMembers("ThrowIfNull");
+            if (members.Length == 0)
+                return;
+
+            context.RegisterOperationAction(context =>
+            {
+                var operation = (IInvocationOperation)context.Operation;
+                if (operation.Arguments.Length == 0)
+                    return;
+
+                // Comparing the name first avoids comparing the symbols of every invocation of the compilation
+                if (!string.Equals(operation.TargetMethod.Name, "ThrowIfNull", StringComparison.Ordinal))
+                    return;
+
+                if (!IsThrowIfNullMember(members, operation.TargetMethod))
+                    return;
+
+                var instance = operation.Arguments[0].Value;
+                var type = instance.GetActualType(context.CancellationToken);
+                if (type is null)
+                    return;
+
+                // Generic type (T)
+                if (type.TypeKind is TypeKind.TypeParameter)
+                    return;
+
+                if (type.IsReferenceType)
+                    return;
+
+                // void*
+                if (type.TypeKind is TypeKind.Pointer)
+                    return;
+
+                if (type.SpecialType is SpecialType.System_IntPtr or SpecialType.System_UIntPtr)
+                    return;
+
+                if (type is INamedTypeSymbol namedTypeSymbol && namedTypeSymbol.ConstructedFrom.SpecialType == SpecialType.System_Nullable_T)
+                    return;
+
+                context.ReportDiagnostic(Rule, operation);
+            }, OperationKind.Invocation);
+        });
+    }
+
+    private static bool IsThrowIfNullMember(ImmutableArray<ISymbol> members, IMethodSymbol method)
+    {
+        foreach (var member in members)
+        {
+            if (member.IsEqualTo(method))
+                return true;
+        }
+
+        return false;
+    }
+}

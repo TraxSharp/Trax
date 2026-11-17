@@ -1,0 +1,111 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class SequenceNumberMustBeAConstantAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.SequenceNumberMustBeAConstant,
+        title: "Sequence number must be a constant",
+        messageFormat: "Sequence number must be a constant",
+        RuleCategories.Design,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.SequenceNumberMustBeAConstant),
+        customTags: [GeneratedCodeReporting.ReportInGeneratedCodeTag]);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.Analyze | GeneratedCodeAnalysisFlags.ReportDiagnostics);
+
+        context.RegisterCompilationStartAction(context =>
+        {
+            var analyzerContext = new AnalyzerContext(context.Compilation);
+            if (analyzerContext.IsValid)
+            {
+                context.RegisterOperationAction(analyzerContext.AnalyzeInvocation, OperationKind.Invocation);
+            }
+        });
+    }
+
+    private sealed class AnalyzerContext(Compilation compilation)
+    {
+        private static readonly HashSet<string> RenderTreeMethodNames = new(StringComparer.Ordinal)
+        {
+            "AddAttribute",
+            "AddComponentReferenceCapture",
+            "AddContent",
+            "AddElementReferenceCapture",
+            "AddMarkupContent",
+            "AddMultipleAttributes",
+            "OpenComponent",
+            "OpenElement",
+            "OpenRegion",
+        };
+
+        private static readonly HashSet<string> WebRenderTreeBuilderExtensionsSymbolMethodNames = new(StringComparer.Ordinal)
+        {
+            "AddEventPreventDefaultAttribute",
+            "AddEventStopPropagationAttribute",
+        };
+
+        public INamedTypeSymbol? RenderTreeBuilderSymbol { get; } = compilation.GetTypeByMetadataName("Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder");
+        public INamedTypeSymbol? WebRenderTreeBuilderExtensionsSymbol { get; } = compilation.GetTypeByMetadataName("Microsoft.AspNetCore.Components.Web.WebRenderTreeBuilderExtensions");
+
+        public bool IsValid => RenderTreeBuilderSymbol is not null;
+
+        public void AnalyzeInvocation(OperationAnalysisContext context)
+        {
+            var operation = (IInvocationOperation)context.Operation;
+            var targetMethod = operation.TargetMethod;
+            if (targetMethod.ContainingType.IsEqualTo(RenderTreeBuilderSymbol))
+            {
+                if (RenderTreeMethodNames.Contains(targetMethod.Name) && targetMethod.Parameters.Length >= 1 && targetMethod.Parameters[0].Type.IsInt32() && targetMethod.Parameters[0].Name == "sequence")
+                {
+                    AnalyzeSequenceArgument(context, operation, sequenceParameterOrdinal: 0);
+                }
+            }
+            else if (targetMethod.ContainingType.IsEqualTo(WebRenderTreeBuilderExtensionsSymbol))
+            {
+                if (WebRenderTreeBuilderExtensionsSymbolMethodNames.Contains(targetMethod.Name) && targetMethod.Parameters.Length >= 2 && targetMethod.Parameters[1].Type.IsInt32() && targetMethod.Parameters[1].Name == "sequence")
+                {
+                    AnalyzeSequenceArgument(context, operation, sequenceParameterOrdinal: 1);
+                }
+            }
+
+            // The arguments are in the order they are written, which is not the order of the parameters when they are named
+            static void AnalyzeSequenceArgument(OperationAnalysisContext context, IInvocationOperation operation, int sequenceParameterOrdinal)
+            {
+                foreach (var argument in operation.Arguments)
+                {
+                    if (argument.Parameter?.Ordinal != sequenceParameterOrdinal)
+                        continue;
+
+                    if (!IsValidExpression(argument.Value))
+                    {
+                        context.ReportDiagnostic(Rule, argument.Value);
+                    }
+
+                    return;
+                }
+            }
+
+            static bool IsValidExpression(IOperation operation)
+            {
+                if (operation.ConstantValue.HasValue)
+                    return true;
+
+                if (operation is IParameterReferenceOperation)
+                    return true;
+
+                if (operation is IConversionOperation conversion)
+                    return IsValidExpression(conversion.Operand);
+
+                return false;
+            }
+        }
+    }
+}

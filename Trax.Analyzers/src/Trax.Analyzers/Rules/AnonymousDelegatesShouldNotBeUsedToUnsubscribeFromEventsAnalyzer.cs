@@ -1,0 +1,46 @@
+﻿namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class AnonymousDelegatesShouldNotBeUsedToUnsubscribeFromEventsAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.AnonymousDelegatesShouldNotBeUsedToUnsubscribeFromEvents,
+        title: "Anonymous delegates should not be used to unsubscribe from Events",
+        messageFormat: "Anonymous delegates should not be used to unsubscribe from Events",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.AnonymousDelegatesShouldNotBeUsedToUnsubscribeFromEvents));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterOperationAction(AnalyzeOperation, OperationKind.EventAssignment);
+    }
+
+    private static void AnalyzeOperation(OperationAnalysisContext context)
+    {
+        var operation = (IEventAssignmentOperation)context.Operation;
+        if (operation.Adds)
+            return;
+
+        var handler = operation.HandlerValue;
+        while (handler is IConversionOperation op)
+        {
+            handler = op.Operand;
+        }
+
+        if (handler is IDelegateCreationOperation delegateCreation)
+        {
+            if (delegateCreation.Target is IAnonymousFunctionOperation)
+            {
+                context.ReportDiagnostic(Rule, operation);
+            }
+        }
+    }
+}

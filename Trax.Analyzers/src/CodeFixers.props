@@ -1,0 +1,110 @@
+<Project>
+  <!-- What the two code-fixer builds share, on top of Analyzer.props. The fixers compile a few of
+       the rules' own files (the shared data and helpers), as upstream's project did. -->
+  <Import Project="Analyzer.props" />
+
+  <ItemGroup>
+    <Using Include="System.Composition" />
+    <Using Include="Microsoft.CodeAnalysis.CodeActions" />
+    <Using Include="Microsoft.CodeAnalysis.CodeFixes" />
+    <Using Include="Microsoft.CodeAnalysis.CSharp" />
+    <Using Include="Microsoft.CodeAnalysis.CSharp.Syntax" />
+    <Using Include="Microsoft.CodeAnalysis.Editing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/RuleIdentifiers.cs"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Internals/BoundedCache.cs"
+      LinkBase="Internals"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Internals/EnumerableExtensions.cs"
+      LinkBase="Internals"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Internals/ObjectPool.cs"
+      LinkBase="Internals"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Internals/OperationExtensions.cs"
+      LinkBase="Internals"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Internals/OverloadCandidateIndex.cs"
+      LinkBase="Internals"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Internals/StringExtensions.cs"
+      LinkBase="Internals"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Internals/SymbolExtensions.cs"
+      LinkBase="Internals"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Internals/OverloadFinder.cs"
+      LinkBase="Internals"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Internals/OverloadOptions.cs"
+      LinkBase="Internals"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Internals/OverloadLookupCache.cs"
+      LinkBase="Internals"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Internals/OverloadParameterType.cs"
+      LinkBase="Internals"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Rules/DoNotUseBlockingCallInAsyncContextData.cs"
+      LinkBase="Rules"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Rules/OptimizeLinqUsageData.cs"
+      LinkBase="Rules"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Rules/OptimizeStringBuilderUsageData.cs"
+      LinkBase="Rules"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers/Rules/*Common.cs"
+      LinkBase="Rules"
+      Visible="false"
+    />
+  </ItemGroup>
+
+  <!-- The Roslyn helpers annotate the parentheses they add for the simplifier when they can see
+       the workspaces API; without it a fix keeps every one of them. -->
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);ROSLYN_WORKSPACES</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference
+      Include="Microsoft.CodeAnalysis.Workspaces.Common"
+      VersionOverride="$(RoslynPackageVersion)"
+      PrivateAssets="all"
+    />
+  </ItemGroup>
+</Project>

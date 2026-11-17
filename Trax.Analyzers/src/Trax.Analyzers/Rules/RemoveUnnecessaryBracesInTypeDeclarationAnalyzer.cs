@@ -1,0 +1,78 @@
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class RemoveUnnecessaryBracesInTypeDeclarationAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.RemoveUnnecessaryBracesInTypeDeclaration,
+        title: "Remove unnecessary braces in type declaration",
+        messageFormat: "Remove unnecessary braces in type declaration",
+        RuleCategories.Style,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.RemoveUnnecessaryBracesInTypeDeclaration));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterSyntaxNodeAction(
+            AnalyzeTypeDeclaration,
+            SyntaxKind.RecordDeclaration,
+            SyntaxKind.RecordStructDeclaration,
+            SyntaxKind.ClassDeclaration,
+            SyntaxKind.StructDeclaration,
+            SyntaxKind.InterfaceDeclaration);
+    }
+
+    private static void AnalyzeTypeDeclaration(SyntaxNodeAnalysisContext context)
+    {
+        var typeDeclaration = (TypeDeclarationSyntax)context.Node;
+        if (!CanRemoveBraces(typeDeclaration, context.Compilation.GetCSharpLanguageVersion()))
+            return;
+
+        context.ReportDiagnostic(Rule, typeDeclaration.OpenBraceToken.GetLocation());
+    }
+
+    private static bool CanRemoveBraces(TypeDeclarationSyntax typeDeclaration, LanguageVersion languageVersion)
+    {
+        if (!CanUseSemicolonTypeDeclaration(typeDeclaration, languageVersion))
+            return false;
+
+        if (typeDeclaration.Members.Count != 0)
+            return false;
+
+        if (typeDeclaration.OpenBraceToken.IsMissing || typeDeclaration.CloseBraceToken.IsMissing || typeDeclaration.SemicolonToken.IsKind(SyntaxKind.SemicolonToken))
+            return false;
+
+        return !ContainsCommentOrDirectiveInBraces(typeDeclaration);
+    }
+
+    private static bool CanUseSemicolonTypeDeclaration(TypeDeclarationSyntax typeDeclaration, LanguageVersion languageVersion)
+    {
+        if (typeDeclaration is RecordDeclarationSyntax)
+            return true;
+
+        if (!languageVersion.IsCSharp12OrGreater())
+            return false;
+
+        if (typeDeclaration is ClassDeclarationSyntax or StructDeclarationSyntax or InterfaceDeclarationSyntax)
+            return true;
+
+        return false;
+    }
+
+    private static bool ContainsCommentOrDirectiveInBraces(TypeDeclarationSyntax typeDeclaration)
+    {
+        return typeDeclaration.OpenBraceToken.TrailingTrivia
+            .Concat(typeDeclaration.CloseBraceToken.LeadingTrivia)
+            .Any(static trivia => trivia.IsDirective || trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) || trivia.IsKind(SyntaxKind.MultiLineCommentTrivia));
+    }
+}

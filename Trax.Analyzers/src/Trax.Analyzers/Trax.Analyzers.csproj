@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The rules, built against Roslyn 5.6 (Analyzer.props explains the two builds). The sources
+       are copied from Meziantou.Analyzer by tools/sync-upstream.sh; this file is Trax's own. -->
+  <PropertyGroup>
+    <RoslynVersion>5.6</RoslynVersion>
+    <AssemblyName>Trax.Analyzers</AssemblyName>
+    <RootNamespace>Trax.Analyzers</RootNamespace>
+  </PropertyGroup>
+  <Import Project="../Analyzer.props" />
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources/*.txt" />
+  </ItemGroup>
+</Project>

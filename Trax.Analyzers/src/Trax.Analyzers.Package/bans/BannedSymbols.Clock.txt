@@ -1,0 +1,13 @@
+// TraxBanClock: the clock is an input. Code that reads it cannot be replayed or tested at a chosen
+// time. Take a TimeProvider and ask it.
+P:System.DateTime.Now;Take a TimeProvider and call GetLocalNow()
+P:System.DateTime.UtcNow;Take a TimeProvider and call GetUtcNow()
+P:System.DateTime.Today;Take a TimeProvider and call GetLocalNow()
+P:System.DateTimeOffset.Now;Take a TimeProvider and call GetLocalNow()
+P:System.DateTimeOffset.UtcNow;Take a TimeProvider and call GetUtcNow()
+P:System.TimeProvider.System;Take the TimeProvider as a dependency; only the composition root picks TimeProvider.System
+P:System.Environment.TickCount;Take a TimeProvider and call GetTimestamp()
+P:System.Environment.TickCount64;Take a TimeProvider and call GetTimestamp()
+M:System.Diagnostics.Stopwatch.GetTimestamp;Take a TimeProvider and call GetTimestamp()
+M:System.Diagnostics.Stopwatch.StartNew;Take a TimeProvider and call GetTimestamp(), then GetElapsedTime()
+M:System.Diagnostics.Stopwatch.#ctor;Take a TimeProvider and call GetTimestamp(), then GetElapsedTime()

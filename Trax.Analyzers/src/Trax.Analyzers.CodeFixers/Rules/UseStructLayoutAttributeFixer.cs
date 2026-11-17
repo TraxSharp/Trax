@@ -1,0 +1,67 @@
+using System.Runtime.InteropServices;
+using Microsoft.CodeAnalysis.Simplification;
+
+namespace Trax.Analyzers.Rules;
+
+[ExportCodeFixProvider(LanguageNames.CSharp), Shared]
+public sealed class UseStructLayoutAttributeFixer : CodeFixProvider
+{
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(RuleIdentifiers.MissingStructLayoutAttribute);
+
+    public override FixAllProvider GetFixAllProvider()
+    {
+        return WellKnownFixAllProviders.BatchFixer;
+    }
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        var nodeToFix = root?.FindNode(context.Span, getInnermostNodeForTie: true);
+        if (nodeToFix is null or not TypeDeclarationSyntax)
+            return;
+
+        var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+        if (semanticModel is null)
+            return;
+
+        var structLayoutAttribute = semanticModel.Compilation.GetTypeByMetadataName("System.Runtime.InteropServices.StructLayoutAttribute");
+        if (structLayoutAttribute is null)
+            return;
+
+        var layoutKindEnum = semanticModel.Compilation.GetTypeByMetadataName("System.Runtime.InteropServices.LayoutKind");
+        if (layoutKindEnum is null)
+            return;
+
+        context.RegisterCodeFix(
+            CodeAction.Create(
+                "Add Auto StructLayout attribute",
+                ct => Refactor(context.Document, nodeToFix, LayoutKind.Auto, structLayoutAttribute, layoutKindEnum, ct),
+                equivalenceKey: "Add Auto StructLayout attribute"),
+            context.Diagnostics);
+
+        context.RegisterCodeFix(
+            CodeAction.Create(
+                "Add Sequential StructLayout attribute",
+                ct => Refactor(context.Document, nodeToFix, LayoutKind.Sequential, structLayoutAttribute, layoutKindEnum, ct),
+                equivalenceKey: "Add Sequential StructLayout attribute"),
+            context.Diagnostics);
+    }
+
+    private static async Task<Document> Refactor(Document document, SyntaxNode nodeToFix, LayoutKind layoutKind, INamedTypeSymbol structLayoutAttribute, INamedTypeSymbol layoutKindEnum, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var generator = editor.Generator;
+
+        var attribute = editor.Generator.Attribute(
+            generator.TypeExpression(structLayoutAttribute).WithAdditionalAnnotations(Simplifier.AddImportsAnnotation),
+            [
+                generator.AttributeArgument(
+                    generator.MemberAccessExpression(
+                        generator.TypeExpression(layoutKindEnum).WithAdditionalAnnotations(Simplifier.AddImportsAnnotation),
+                        layoutKind.ToString())),
+            ]);
+
+        editor.AddAttribute(nodeToFix, attribute);
+        return editor.GetChangedDocument();
+    }
+}

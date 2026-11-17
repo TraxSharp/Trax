@@ -1,0 +1,104 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class UseEventHandlerOfTAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.UseEventHandlerOfT,
+        title: "Use EventHandler<T> to declare events",
+        messageFormat: "{0}",
+        RuleCategories.Design,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.UseEventHandlerOfT));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(ctx =>
+        {
+            var analyzerContext = new AnalyzerContext(ctx.Compilation);
+            ctx.RegisterSymbolAction(analyzerContext.AnalyzeSymbol, SymbolKind.Event);
+        });
+    }
+
+    private sealed class AnalyzerContext(Compilation compilation)
+    {
+        public INamedTypeSymbol? EventArgsSymbol { get; } = compilation.GetTypeByMetadataName("System.EventArgs");
+
+        /// <summary>
+        /// <c>System.EventHandler&lt;TSender, TEventArgs&gt;</c>, which does not constrain <c>TSender</c> to <c>object</c>
+        /// nor <c>TEventArgs</c> to <c>System.EventArgs</c>, so any construction of it is a valid event type.
+        /// </summary>
+        public INamedTypeSymbol? EventHandlerOfTSenderTEventArgsSymbol { get; } = compilation.GetTypeByMetadataName("System.EventHandler`2");
+
+        public void AnalyzeSymbol(SymbolAnalysisContext context)
+        {
+            var symbol = (IEventSymbol)context.Symbol;
+            var method = (symbol.Type as INamedTypeSymbol)?.DelegateInvokeMethod;
+            if (method is null)
+                return;
+
+            if (IsValidSignature(method, out var message))
+                return;
+
+            // The type of the event is imposed by the base member, which is reported instead
+            if (symbol.IsOverride || symbol.IsInterfaceImplementation())
+                return;
+
+            context.ReportDiagnostic(Rule, symbol, message);
+        }
+
+        private bool IsValidSignature(IMethodSymbol methodSymbol, [NotNullWhen(false)] out string? message)
+        {
+            if (methodSymbol.ContainingType.OriginalDefinition.IsEqualTo(EventHandlerOfTSenderTEventArgsSymbol))
+            {
+                message = null;
+                return true;
+            }
+
+            if (!methodSymbol.ReturnsVoid)
+            {
+                message = "The delegate must return void";
+                return false;
+            }
+
+            if (methodSymbol.Arity != 0)
+            {
+                message = "The delegate must not be a generic method";
+                return false;
+            }
+
+            if (methodSymbol.Parameters.Length != 2)
+            {
+                message = "The delegate must have 2 parameters";
+                return false;
+            }
+
+            if (!methodSymbol.Parameters[0].Type.IsObject())
+            {
+                message = "The first parameter must be of type object";
+                return false;
+            }
+
+            if (!IsEventArgsType(methodSymbol.Parameters[1].Type))
+            {
+                message = "The second parameter must be of type 'System.EventArgs' or a derived type";
+                return false;
+            }
+
+            message = null;
+            return true;
+        }
+
+        private bool IsEventArgsType(ITypeSymbol type)
+        {
+            return type.IsOrInheritsFrom(EventArgsSymbol);
+        }
+    }
+}

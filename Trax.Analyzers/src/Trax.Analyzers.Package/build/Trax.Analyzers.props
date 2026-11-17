@@ -1,0 +1,82 @@
+<Project>
+  <!-- Trax.Analyzers: what referencing the package turns on. Every switch below is an MSBuild
+       property; set it in your project or Directory.Build.props.
+
+       TraxAnalyzers            false turns the whole profile off (the rules stay loaded, at the
+                                severities they ship with, which is mostly off)
+       TraxAnalysisLevel        the profile to apply; pin it to keep a later release from adding
+                                errors to your build. Default: the newest this package ships
+       TraxAnalyzersTests       false leaves test projects (IsTestProject) out of the profile
+       TraxBanClock             DateTime.Now and friends, TimeProvider.System, Stopwatch
+       TraxBanRandom            Random.Shared and new Random()
+       TraxBanConsole           System.Console
+       TraxBanProcessExit       Environment.Exit and FailFast
+       TraxBanNullForgiving     the ! operator (null! and default! are TRX0191, a rule)
+
+       To turn one rule off or down, set its severity in your .editorconfig:
+         dotnet_diagnostic.TRX0048.severity = none
+       The profile is a global config at the lowest level, so any configuration you write wins. -->
+  <PropertyGroup>
+    <TraxAnalyzers Condition="'$(TraxAnalyzers)' == ''">true</TraxAnalyzers>
+    <TraxAnalysisLevel
+      Condition="'$(TraxAnalysisLevel)' == '' Or '$(TraxAnalysisLevel)' == 'latest'"
+      >1</TraxAnalysisLevel>
+    <TraxAnalyzersTests Condition="'$(TraxAnalyzersTests)' == ''">true</TraxAnalyzersTests>
+    <TraxBanClock Condition="'$(TraxBanClock)' == ''">true</TraxBanClock>
+    <TraxBanRandom Condition="'$(TraxBanRandom)' == ''">true</TraxBanRandom>
+    <TraxBanConsole Condition="'$(TraxBanConsole)' == ''">true</TraxBanConsole>
+    <TraxBanProcessExit Condition="'$(TraxBanProcessExit)' == ''">true</TraxBanProcessExit>
+    <TraxBanNullForgiving Condition="'$(TraxBanNullForgiving)' == ''">true</TraxBanNullForgiving>
+    <_TraxAnalyzersRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..'))</_TraxAnalyzersRoot>
+    <_TraxAnalyzersProfile>$(_TraxAnalyzersRoot)configuration/$(TraxAnalysisLevel)/</_TraxAnalyzersProfile>
+  </PropertyGroup>
+
+  <!-- Items are evaluated after every property, so these conditions see the values a project sets
+       in its own file, after this one was imported. A test project with TraxAnalyzersTests=false
+       gets neither the profile nor the bans. -->
+  <ItemGroup Condition="'$(TraxAnalyzers)' == 'true' And ('$(IsTestProject)' != 'true' Or '$(TraxAnalyzersTests)' == 'true')">
+    <GlobalAnalyzerConfigFiles
+      Include="$(_TraxAnalyzersProfile)src.globalconfig"
+      Condition="'$(IsTestProject)' != 'true'"
+    />
+    <GlobalAnalyzerConfigFiles
+      Include="$(_TraxAnalyzersProfile)tests.globalconfig"
+      Condition="'$(IsTestProject)' == 'true'"
+    />
+    <AdditionalFiles
+      Include="$(_TraxAnalyzersRoot)bans/BannedSymbols.Clock.txt"
+      Condition="'$(TraxBanClock)' == 'true'"
+      Visible="false"
+    />
+    <AdditionalFiles
+      Include="$(_TraxAnalyzersRoot)bans/BannedSymbols.Random.txt"
+      Condition="'$(TraxBanRandom)' == 'true'"
+      Visible="false"
+    />
+    <AdditionalFiles
+      Include="$(_TraxAnalyzersRoot)bans/BannedSymbols.Console.txt"
+      Condition="'$(TraxBanConsole)' == 'true'"
+      Visible="false"
+    />
+    <AdditionalFiles
+      Include="$(_TraxAnalyzersRoot)bans/BannedSymbols.ProcessExit.txt"
+      Condition="'$(TraxBanProcessExit)' == 'true'"
+      Visible="false"
+    />
+    <AdditionalFiles
+      Include="$(_TraxAnalyzersRoot)bans/BannedSyntaxes.NullForgiving.txt"
+      Condition="'$(TraxBanNullForgiving)' == 'true'"
+      Visible="false"
+    />
+  </ItemGroup>
+
+  <!-- TRX0240 reads the syntax to ban from BannedSyntaxes*.txt files; like upstream, the package
+       also adds the closest BannedSyntaxes.txt above the project, so a repository can keep its
+       own. TraxIncludeBannedSyntaxesFile=false stops that. -->
+  <PropertyGroup Condition="'$(TraxIncludeBannedSyntaxesFile)' != 'false'">
+    <_TraxBannedSyntaxesDirectory>$([MSBuild]::GetDirectoryNameOfFileAbove('$(MSBuildProjectDirectory)', 'BannedSyntaxes.txt'))</_TraxBannedSyntaxesDirectory>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(_TraxBannedSyntaxesDirectory)' != ''">
+    <AdditionalFiles Include="$([MSBuild]::NormalizePath('$(_TraxBannedSyntaxesDirectory)', 'BannedSyntaxes.txt'))" />
+  </ItemGroup>
+</Project>

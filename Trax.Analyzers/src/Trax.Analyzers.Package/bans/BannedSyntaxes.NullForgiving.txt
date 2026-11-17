@@ -1,0 +1,4 @@
+# TraxBanNullForgiving: x! tells the compiler a value is not null without checking. null! and
+# default! are TRX0191. Say what the code does when the value is null: test for it, give the member
+# a real value or make it required.
+SuppressNullableWarningExpression;error;Say what the code does when the value is null: test for it, give the member a real value, or make it required

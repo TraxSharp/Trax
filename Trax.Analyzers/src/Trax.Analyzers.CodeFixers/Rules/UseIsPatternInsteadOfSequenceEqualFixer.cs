@@ -1,0 +1,45 @@
+namespace Trax.Analyzers.Rules;
+
+[ExportCodeFixProvider(LanguageNames.CSharp), Shared]
+public sealed class UseIsPatternInsteadOfSequenceEqualFixer : CodeFixProvider
+{
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(RuleIdentifiers.UseIsPatternInsteadOfSequenceEqual);
+
+    public override FixAllProvider GetFixAllProvider()
+    {
+        return WellKnownFixAllProviders.BatchFixer;
+    }
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        var nodeToFix = root?.FindNode(context.Span, getInnermostNodeForTie: true);
+        if (nodeToFix is null)
+            return;
+
+        var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+        if (semanticModel is null)
+            return;
+
+        if (semanticModel.GetOperation(nodeToFix, context.CancellationToken) is not IInvocationOperation)
+            return;
+
+        var title = "Use 'is' pattern";
+        context.RegisterCodeFix(CodeAction.Create(title, ct => UseIs(context.Document, nodeToFix, ct), equivalenceKey: title), context.Diagnostics);
+    }
+
+    private static async Task<Document> UseIs(Document document, SyntaxNode nodeToFix, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var operation = (IInvocationOperation)editor.SemanticModel.GetOperation(nodeToFix, cancellationToken)!;
+
+        // The invocation may be the operand of an operator or the target of a member access, both of which bind
+        // tighter than 'is', so the pattern must be parenthesized. Simplifier removes the useless parentheses.
+        var newExpression = SyntaxFactory.IsPatternExpression((ExpressionSyntax)operation.Arguments[0].Value.Syntax, SyntaxFactory.ConstantPattern((ExpressionSyntax)operation.Arguments[1].Value.Syntax))
+            .Parenthesize()
+            .WithTrailingTrivia(nodeToFix.GetTrailingTrivia());
+
+        editor.ReplaceNode(nodeToFix, newExpression);
+        return editor.GetChangedDocument();
+    }
+}

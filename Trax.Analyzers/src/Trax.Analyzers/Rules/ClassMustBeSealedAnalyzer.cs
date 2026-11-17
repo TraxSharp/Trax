@@ -1,0 +1,161 @@
+using Trax.Analyzers.Configurations;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class ClassMustBeSealedAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.ClassMustBeSealed,
+        title: "Make class or record sealed",
+        messageFormat: "Make class or record sealed",
+        RuleCategories.Design,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.ClassMustBeSealed));
+
+    private static readonly ConfigurationDefinition<bool> ExceptionsShouldBeSealedConfiguration = new(RuleIdentifiers.ClassMustBeSealed + ".exceptions_should_be_sealed", defaultValue: false);
+    private static readonly ConfigurationDefinition<bool> PublicClassShouldBeSealedConfiguration = new(RuleIdentifiers.ClassMustBeSealed + ".public_class_should_be_sealed", defaultValue: false);
+    private static readonly ConfigurationDefinition<bool> ClassWithVirtualMemberShouldBeSealedConfiguration = new([RuleIdentifiers.ClassMustBeSealed + ".class_with_virtual_member_should_be_sealed", RuleIdentifiers.ClassMustBeSealed + ".class_with_virtual_member_shoud_be_sealed"], defaultValue: false);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.Analyze);
+
+        context.RegisterCompilationStartAction(ctx =>
+        {
+            var analyzerContext = new AnalyzerContext(ctx.Compilation);
+
+            ctx.RegisterSymbolAction(analyzerContext.AnalyzeNamedTypeSymbol, SymbolKind.NamedType);
+            ctx.RegisterSymbolAction(analyzerContext.AnalyzeMethodSymbol, SymbolKind.Method);
+            ctx.RegisterOperationAction(analyzerContext.AnalyzeLocalFunction, OperationKind.LocalFunction);
+            ctx.RegisterCompilationEndAction(analyzerContext.AnalyzeCompilationEnd);
+        });
+    }
+
+    private sealed class AnalyzerContext(Compilation compilation)
+    {
+        private readonly List<ITypeSymbol> _potentialClasses = [];
+        private readonly ConcurrentHashSet<ITypeSymbol> _cannotBeSealedClasses = new(SymbolEqualityComparer.Default);
+
+        private INamedTypeSymbol? ExceptionSymbol { get; } = compilation.GetTypeByMetadataName("System.Exception");
+        private INamedTypeSymbol? ComImportSymbol { get; } = compilation.GetTypeByMetadataName("System.Runtime.InteropServices.ComImportAttribute");
+        private INamedTypeSymbol? BenchmarkSymbol { get; } = compilation.GetTypeByMetadataName("BenchmarkDotNet.Attributes.BenchmarkAttribute");
+
+        public void AnalyzeNamedTypeSymbol(SymbolAnalysisContext context)
+        {
+            var symbol = (INamedTypeSymbol)context.Symbol;
+            switch (symbol.TypeKind)
+            {
+                case TypeKind.Class:
+                    if (IsPotentialSealed(context.Options, symbol, context.CancellationToken))
+                    {
+                        lock (_potentialClasses)
+                        {
+                            _potentialClasses.Add(symbol);
+                        }
+                    }
+
+                    if (symbol.BaseType is not null)
+                    {
+                        lock (_cannotBeSealedClasses)
+                        {
+                            _cannotBeSealedClasses.Add(symbol.BaseType);
+                            _cannotBeSealedClasses.Add(symbol.BaseType.OriginalDefinition);
+                        }
+                    }
+
+                    break;
+            }
+
+            AddConstraintTypes(symbol.TypeParameters);
+        }
+
+        public void AnalyzeMethodSymbol(SymbolAnalysisContext context)
+        {
+            var symbol = (IMethodSymbol)context.Symbol;
+            if (symbol.ContainingType is not null && symbol.HasAttribute(BenchmarkSymbol))
+            {
+                _cannotBeSealedClasses.Add(symbol.ContainingType);
+                _cannotBeSealedClasses.Add(symbol.ContainingType.OriginalDefinition);
+            }
+
+            AddConstraintTypes(symbol.TypeParameters);
+        }
+
+        public void AnalyzeLocalFunction(OperationAnalysisContext context)
+        {
+            AddConstraintTypes(((ILocalFunctionOperation)context.Operation).Symbol.TypeParameters);
+        }
+
+        // A sealed class cannot be used as a generic constraint (CS0701)
+        private void AddConstraintTypes(ImmutableArray<ITypeParameterSymbol> typeParameters)
+        {
+            foreach (var typeParameter in typeParameters)
+            {
+                foreach (var constraintType in typeParameter.ConstraintTypes)
+                {
+                    if (constraintType.TypeKind is TypeKind.Class)
+                    {
+                        _cannotBeSealedClasses.Add(constraintType);
+                        _cannotBeSealedClasses.Add(constraintType.OriginalDefinition);
+                    }
+                }
+            }
+        }
+
+        public void AnalyzeCompilationEnd(CompilationAnalysisContext context)
+        {
+            foreach (var @class in _potentialClasses)
+            {
+                if (_cannotBeSealedClasses.Contains(@class))
+                    continue;
+
+                context.ReportDiagnostic(Rule, @class);
+            }
+        }
+
+        private bool IsPotentialSealed(AnalyzerOptions options, INamedTypeSymbol symbol, CancellationToken cancellationToken)
+        {
+            if (symbol.IsSealed || symbol.IsAbstract || symbol.IsStatic || symbol.IsValueType || symbol.IsImplicitlyDeclared)
+                return false;
+
+            if (symbol.InheritsFrom(ExceptionSymbol) && !ExceptionClassShouldBeSealed(options, symbol))
+                return false;
+
+            if (symbol.HasAttribute(ComImportSymbol))
+                return false;
+
+            if (symbol.IsTopLevelStatement(cancellationToken))
+                return false;
+
+            if (symbol.GetMembers().Any(member => member.IsVirtual && member.CanBeReferencedByName && !member.IsImplicitlyDeclared) && !SealedClassWithVirtualMember(options, symbol))
+                return false;
+
+            var canBeInheritedOutsideOfAssembly = symbol.IsVisibleOutsideOfAssembly() && symbol.GetMembers().OfType<IMethodSymbol>().Any(member => member.MethodKind is MethodKind.Constructor && member.IsVisibleOutsideOfAssembly());
+            if (canBeInheritedOutsideOfAssembly && !PublicClassShouldBeSealed(options, symbol))
+                return false;
+
+            return true;
+        }
+
+        private static bool ExceptionClassShouldBeSealed(AnalyzerOptions options, ISymbol symbol)
+        {
+            return options.GetConfigurationValue(symbol, ExceptionsShouldBeSealedConfiguration);
+        }
+
+        private static bool PublicClassShouldBeSealed(AnalyzerOptions options, ISymbol symbol)
+        {
+            return options.GetConfigurationValue(symbol, PublicClassShouldBeSealedConfiguration);
+        }
+
+        private static bool SealedClassWithVirtualMember(AnalyzerOptions options, ISymbol symbol)
+        {
+            return options.GetConfigurationValue(symbol, ClassWithVirtualMemberShouldBeSealedConfiguration);
+        }
+    }
+}

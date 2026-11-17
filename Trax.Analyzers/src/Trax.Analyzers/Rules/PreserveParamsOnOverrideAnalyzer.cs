@@ -1,0 +1,82 @@
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class PreserveParamsOnOverrideAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.PreserveParamsOnOverride,
+        title: "Method overrides should not omit params keyword",
+        messageFormat: "Method overrides should not omit params keyword",
+        RuleCategories.Design,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.PreserveParamsOnOverride));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterSymbolAction(AnalyzeSymbol, SymbolKind.Method);
+    }
+
+    private static void AnalyzeSymbol(SymbolAnalysisContext context)
+    {
+        var method = (IMethodSymbol)context.Symbol;
+        if (method.IsImplicitlyDeclared || method.Parameters.Length == 0)
+            return;
+
+        if (method.ExplicitInterfaceImplementations.Length > 0)
+            return;
+
+        IMethodSymbol? baseSymbol;
+        if (method.IsOverride)
+        {
+            baseSymbol = method.OverriddenMethod;
+        }
+        else
+        {
+            baseSymbol = method.GetImplementedInterfaceMember();
+        }
+
+        if (baseSymbol is null)
+            return;
+
+        foreach (var parameter in method.Parameters)
+        {
+            if (parameter.IsImplicitlyDeclared || parameter.IsThis)
+                continue;
+
+            var originalParameter = baseSymbol.Parameters[parameter.Ordinal];
+
+            // We cannot use parameter.IsParams because on overridden member this is true as it is implicitly inherited.
+            // Instead, we need to check if the syntax contains the keyword explicitly
+            if (originalParameter.IsParams)
+            {
+                if (HasParamsKeyword(parameter, context.CancellationToken))
+                    continue;
+
+                context.ReportDiagnostic(Rule, parameter);
+            }
+        }
+
+        static bool HasParamsKeyword(IParameterSymbol parameter, CancellationToken cancellationToken)
+        {
+            foreach (var syntaxReference in parameter.DeclaringSyntaxReferences)
+            {
+                if (syntaxReference.GetSyntax(cancellationToken) is not ParameterSyntax syntax)
+                    continue;
+
+                if (syntax.Modifiers.Any(modifier => modifier.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.ParamsKeyword)))
+                    return true;
+            }
+
+            return false;
+        }
+    }
+}

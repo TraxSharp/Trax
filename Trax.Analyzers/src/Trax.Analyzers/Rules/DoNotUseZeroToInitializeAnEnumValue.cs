@@ -1,0 +1,86 @@
+﻿using Trax.Analyzers.Configurations;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public class DoNotUseZeroToInitializeAnEnumValue : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.DoNotUseZeroToInitializeAnEnumValue,
+        title: "Use Explicit enum value instead of 0",
+        messageFormat: "Use Explicit enum value for '{0}' instead of 0",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.DoNotUseZeroToInitializeAnEnumValue));
+
+    private static readonly ConfigurationDefinition<string> ReportOnConfiguration = new(RuleIdentifiers.DoNotUseZeroToInitializeAnEnumValue + ".report_on", defaultValue: "all");
+    private static readonly ConfigurationDefinition<bool> ExcludeEnumWithoutZeroMemberConfiguration = new(RuleIdentifiers.DoNotUseZeroToInitializeAnEnumValue + ".exclude_enum_without_zero_member", defaultValue: false);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+        context.EnableConcurrentExecution();
+
+        context.RegisterOperationAction(AnalyzeConversion, OperationKind.Conversion);
+    }
+
+    private static void AnalyzeConversion(OperationAnalysisContext context)
+    {
+        var operation = (IConversionOperation)context.Operation;
+        if (!operation.IsImplicit)
+            return;
+
+        if (operation.Type is not INamedTypeSymbol { EnumUnderlyingType: not null and var enumType } enumSymbol)
+            return;
+
+        if (operation.Operand is IDefaultValueOperation)
+            return;
+
+        if (operation.Parent is IArgumentOperation { ArgumentKind: ArgumentKind.DefaultValue })
+            return;
+
+        if (operation.ConstantValue is not { HasValue: true, Value: not null and var value } || !IsZero(enumType, value))
+            return;
+
+        var reportOn = context.Options.GetConfigurationValue(operation, ReportOnConfiguration);
+        if (string.Equals(reportOn, "argument", StringComparison.OrdinalIgnoreCase))
+        {
+            if (operation.Parent is not IArgumentOperation)
+                return;
+        }
+
+        var excludeEnumWithoutZeroMember = context.Options.GetConfigurationValue(operation, ExcludeEnumWithoutZeroMemberConfiguration);
+        if (excludeEnumWithoutZeroMember && !HasZeroMember(enumSymbol, enumType))
+            return;
+
+        context.ReportDiagnostic(Rule, operation, operation.Type.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat));
+
+        static bool IsZero(ITypeSymbol enumType, object value)
+        {
+            return enumType.SpecialType switch
+            {
+                SpecialType.System_SByte => value is sbyte converted && converted == 0,
+                SpecialType.System_Byte => value is byte converted && converted == 0,
+                SpecialType.System_Int16 => value is short converted && converted == 0,
+                SpecialType.System_UInt16 => value is ushort converted && converted == 0,
+                SpecialType.System_Int32 => value is int converted && converted == 0,
+                SpecialType.System_UInt32 => value is uint converted && converted == 0u,
+                SpecialType.System_Int64 => value is long converted && converted == 0L,
+                SpecialType.System_UInt64 => value is ulong converted && converted == 0uL,
+                _ => false,
+            };
+        }
+
+        static bool HasZeroMember(INamedTypeSymbol enumSymbol, ITypeSymbol enumType)
+        {
+            return enumSymbol.GetMembers()
+                .OfType<IFieldSymbol>()
+                .Where(f => f.HasConstantValue)
+                .Any(f => IsZero(enumType, f.ConstantValue!));
+        }
+    }
+}

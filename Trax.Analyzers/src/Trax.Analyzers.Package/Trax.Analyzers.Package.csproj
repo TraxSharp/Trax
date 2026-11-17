@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Packs Trax.Analyzers: both Roslyn builds of the rules and their code fixes, the props that
+       wire them up, the profile (configuration/) and the ban files (bans/). It compiles nothing. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>Trax.Analyzers</PackageId>
+    <Description>Opt-in Roslyn rules for code that builds on Trax .NET, and for any other .NET code: about 250 checks for culture and comparer bugs, async and cancellation mistakes, regex timeouts, null-forgiving operators and more, plus bans on reading the clock, chance or the console. Every rule is an error by default; turn one off in .editorconfig, or switch a group off with an MSBuild property.</Description>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+    <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);AddAnalyzersToPackage</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="build/**" Pack="true" PackagePath="build" />
+    <None Include="buildTransitive/**" Pack="true" PackagePath="buildTransitive" />
+    <None Include="buildMultiTargeting/**" Pack="true" PackagePath="buildMultiTargeting" />
+    <None Include="configuration/**" Pack="true" PackagePath="configuration" />
+    <None Include="bans/**" Pack="true" PackagePath="bans" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- RS0030 reads the ban files; a consumer gets it with this package. -->
+    <!-- PrivateAssets none: by default a dependency's analyzers stay private to this project. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="none" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <_RoslynBuild
+      Include="../Trax.Analyzers.Roslyn50/Trax.Analyzers.Roslyn50.csproj"
+      Roslyn="roslyn5.0"
+    />
+    <_RoslynBuild
+      Include="../Trax.Analyzers.CodeFixers.Roslyn50/Trax.Analyzers.CodeFixers.Roslyn50.csproj"
+      Roslyn="roslyn5.0"
+    />
+    <_RoslynBuild Include="../Trax.Analyzers/Trax.Analyzers.csproj" Roslyn="roslyn5.6" />
+    <_RoslynBuild
+      Include="../Trax.Analyzers.CodeFixers/Trax.Analyzers.CodeFixers.csproj"
+      Roslyn="roslyn5.6"
+    />
+    <!-- Build order only; the assemblies are packed by AddAnalyzersToPackage. -->
+    <ProjectReference
+      Include="@(_RoslynBuild)"
+      ReferenceOutputAssembly="false"
+      PrivateAssets="all"
+    />
+  </ItemGroup>
+
+  <Target Name="AddAnalyzersToPackage">
+    <MSBuild
+      Projects="@(_RoslynBuild->WithMetadataValue('Roslyn', 'roslyn5.0'))"
+      Targets="GetTargetPath"
+      Properties="Configuration=$(Configuration)"
+    >
+      <Output TaskParameter="TargetOutputs" ItemName="_Roslyn50Assembly" />
+    </MSBuild>
+    <MSBuild
+      Projects="@(_RoslynBuild->WithMetadataValue('Roslyn', 'roslyn5.6'))"
+      Targets="GetTargetPath"
+      Properties="Configuration=$(Configuration)"
+    >
+      <Output TaskParameter="TargetOutputs" ItemName="_Roslyn56Assembly" />
+    </MSBuild>
+    <ItemGroup>
+      <TfmSpecificPackageFile
+        Include="@(_Roslyn50Assembly)"
+        PackagePath="analyzers/dotnet/roslyn5.0/cs/"
+      />
+      <TfmSpecificPackageFile
+        Include="@(_Roslyn56Assembly)"
+        PackagePath="analyzers/dotnet/roslyn5.6/cs/"
+      />
+    </ItemGroup>
+  </Target>
+</Project>

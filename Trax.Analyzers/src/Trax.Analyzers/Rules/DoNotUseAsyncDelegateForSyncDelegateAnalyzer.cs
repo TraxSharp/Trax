@@ -1,0 +1,55 @@
+﻿namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class DoNotUseAsyncDelegateForSyncDelegateAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.DoNotUseAsyncDelegateForSyncDelegate,
+        title: "Avoid async void method for delegate",
+        messageFormat: "Avoid async void method for delegate",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.DoNotUseAsyncDelegateForSyncDelegate));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterOperationAction(AnalyzerDelegateCreationOperation, OperationKind.DelegateCreation);
+    }
+
+    private static void AnalyzerDelegateCreationOperation(OperationAnalysisContext context)
+    {
+        var operation = (IDelegateCreationOperation)context.Operation;
+        if (operation.Parent is IEventAssignmentOperation)
+            return;
+
+        if (operation.Type is INamedTypeSymbol { DelegateInvokeMethod: IMethodSymbol delegateInvokeMethod })
+        {
+            if (!delegateInvokeMethod.ReturnsVoid)
+                return;
+        }
+        else
+        {
+            // Cannot determine the delegate type
+            return;
+        }
+
+        var isAsyncVoid = operation.Target switch
+        {
+            IAnonymousFunctionOperation { Symbol.IsAsync: true } => true,
+            IMethodReferenceOperation { Method: { IsAsync: true, ReturnsVoid: true } } => true,
+            _ => false,
+        };
+
+        if (isAsyncVoid)
+        {
+            context.ReportDiagnostic(Rule, operation);
+        }
+    }
+}

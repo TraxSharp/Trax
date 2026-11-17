@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The code fixes for the rules, built against Roslyn 5.6 (Analyzer.props). Copied from
+       Meziantou.Analyzer by tools/sync-upstream.sh; this file is Trax's own. -->
+  <PropertyGroup>
+    <RoslynVersion>5.6</RoslynVersion>
+    <AssemblyName>Trax.Analyzers.CodeFixers</AssemblyName>
+    <RootNamespace>Trax.Analyzers</RootNamespace>
+  </PropertyGroup>
+  <Import Project="../CodeFixers.props" />
+</Project>

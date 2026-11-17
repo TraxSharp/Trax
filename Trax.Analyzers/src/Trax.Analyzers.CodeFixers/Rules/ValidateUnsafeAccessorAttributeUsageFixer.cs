@@ -1,0 +1,86 @@
+using Microsoft.CodeAnalysis.Formatting;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+
+namespace Trax.Analyzers.Rules;
+
+[ExportCodeFixProvider(LanguageNames.CSharp), Shared]
+public sealed class ValidateUnsafeAccessorAttributeUsageFixer : CodeFixProvider
+{
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(RuleIdentifiers.UnsafeAccessorAttribute_NameMustBeSet);
+
+    public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        var nodeToFix = root?.FindNode(context.Span, getInnermostNodeForTie: true);
+
+        // The rule only reports the local functions, as their name is mangled by the compiler
+        if (nodeToFix?.FirstAncestorOrSelf<LocalFunctionStatementSyntax>() is not { } localFunction)
+            return;
+
+        // The Name property can be written without a valid value, in which case the rule reports the local function but there is nothing to add
+        var attribute = FindUnsafeAccessorAttribute(localFunction);
+        if (attribute is null || HasNameProperty(attribute))
+            return;
+
+        const string Title = "Set UnsafeAccessor Name";
+        context.RegisterCodeFix(
+            CodeAction.Create(Title, ct => SetNameProperty(context.Document, localFunction, attribute, ct), equivalenceKey: Title),
+            context.Diagnostics);
+    }
+
+    private static async Task<Document> SetNameProperty(Document document, LocalFunctionStatementSyntax localFunction, AttributeSyntax attribute, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var argument = AttributeArgument(
+            NameEquals(IdentifierName("Name")),
+            nameColon: null,
+            expression: LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(localFunction.Identifier.ValueText)));
+
+        var newArgumentList = attribute.ArgumentList is null
+            ? AttributeArgumentList(SeparatedList(new[] { argument }))
+            : attribute.ArgumentList.AddArguments(argument);
+        var newAttribute = attribute.WithArgumentList(newArgumentList);
+
+        editor.ReplaceNode(attribute, newAttribute.WithAdditionalAnnotations(Formatter.Annotation));
+        return editor.GetChangedDocument();
+    }
+
+    private static AttributeSyntax? FindUnsafeAccessorAttribute(LocalFunctionStatementSyntax localFunction)
+    {
+        foreach (var attributeList in localFunction.AttributeLists)
+        {
+            foreach (var attribute in attributeList.Attributes)
+            {
+                if (IsUnsafeAccessorAttributeName(attribute.Name))
+                    return attribute;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HasNameProperty(AttributeSyntax attribute)
+    {
+        if (attribute.ArgumentList is null)
+            return false;
+
+        foreach (var argument in attribute.ArgumentList.Arguments)
+        {
+            if (argument.NameEquals?.Name.Identifier.ValueText == "Name")
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsUnsafeAccessorAttributeName(NameSyntax name)
+        => name switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText is "UnsafeAccessor" or "UnsafeAccessorAttribute",
+            QualifiedNameSyntax qualified => IsUnsafeAccessorAttributeName(qualified.Right),
+            AliasQualifiedNameSyntax aliasQualified => IsUnsafeAccessorAttributeName(aliasQualified.Name),
+            _ => false,
+        };
+}

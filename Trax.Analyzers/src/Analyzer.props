@@ -1,0 +1,73 @@
+<Project>
+  <!-- What the analyzer and code-fixer projects share. Each project sets RoslynVersion (5.0 or 5.9)
+       and imports this.
+
+       The rules are built twice. An analyzer loads only into a compiler at least as new as the
+       Roslyn it was built against (older ones refuse it with CS9057), so the package carries one
+       build per Roslyn line under analyzers/dotnet/roslyn<version>/cs and the SDK picks the newest
+       one its compiler can load: 5.0 for the first .NET 10 SDKs, 5.6 for 10.0.3xx, the band
+       global.json pins. The 5.6 build is the one this repository's own folders load, and the one
+       the tests run. When global.json moves to a band with a newer compiler, add a build for it. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <RoslynPackageVersion>$(RoslynVersion).0</RoslynPackageVersion>
+    <!-- The copied code is written against the Roslyn APIs' nullable annotations on the newest
+         line, and netstandard2.0's BCL has none; upstream turns these off for the same builds.
+         RS1025: the rules call ConfigureGeneratedCodeAnalysis through
+         ConfigureAnalysisOfGeneratedCode, which BannedSymbols.txt holds them to (upstream's
+         setting). -->
+    <NoWarn>$(NoWarn);nullable;RS1025;RS2008</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="System.Collections.Immutable" />
+    <Using Include="System.Diagnostics.CodeAnalysis" />
+    <Using Include="System.Globalization" />
+    <Using Include="System.Text" />
+    <Using Include="Trax.Analyzers.Internals" />
+    <Using Include="Trax.Analyzers.Roslyn" />
+    <Using Include="Microsoft.CodeAnalysis" />
+    <Using Include="Microsoft.CodeAnalysis.Diagnostics" />
+    <Using Include="Microsoft.CodeAnalysis.Operations" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Roslyn helpers and the polyfills are compiled into each assembly, as upstream's
+         source-only packages were. -->
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers.Roslyn/**/*.cs"
+      LinkBase="Roslyn"
+      Visible="false"
+    />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)Trax.Analyzers.Polyfills/**/*.cs"
+      LinkBase="Polyfills"
+      Visible="false"
+    />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)Trax.Analyzers/BannedSymbols.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference
+      Include="Microsoft.CodeAnalysis.CSharp"
+      VersionOverride="$(RoslynPackageVersion)"
+      PrivateAssets="all"
+    />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- The constants the copied code is conditioned on. Upstream's Roslyn helper package derived
+       them from the Microsoft.CodeAnalysis version in the same way. -->
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);ROSLYN_4_8_OR_GREATER;ROSLYN_4_10_OR_GREATER;ROSLYN_4_14_OR_GREATER;ROSLYN_5_0_OR_GREATER</DefineConstants>
+    <DefineConstants>$(DefineConstants);CSHARP9_OR_GREATER;CSHARP10_OR_GREATER;CSHARP11_OR_GREATER;CSHARP12_OR_GREATER;CSHARP13_OR_GREATER;CSHARP14_OR_GREATER</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(RoslynPackageVersion)', '5.6.0'))">
+    <DefineConstants>$(DefineConstants);ROSLYN_5_3_OR_GREATER;ROSLYN_5_6_OR_GREATER;CSHARP15_OR_GREATER</DefineConstants>
+  </PropertyGroup>
+</Project>
