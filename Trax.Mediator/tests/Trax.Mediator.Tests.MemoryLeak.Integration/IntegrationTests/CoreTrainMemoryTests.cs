@@ -48,13 +48,15 @@ public class CoreTrainMemoryTests
             "CoreTrain_MemoryDictionary_Retention"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Whether the Memory dictionary let go is a question about reachability, so it is asked of
         // the trains. Bounding MemoryRetained against MemoryAllocated cannot answer it: both sides
         // are the same process-wide measurement and the ratio tightens whenever a collection lands
         // inside the window.
-        var aliveTrains = await MemoryProfiler.CountAliveAsync(trainReferences);
+        var aliveTrains = await MemoryProfiler
+            .CountAliveAsync(trainReferences)
+            .ConfigureAwait(false);
 
         aliveTrains
             .Should()
@@ -98,18 +100,22 @@ public class CoreTrainMemoryTests
             iterations
         );
 
-        Console.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"SmallChainTrain: {smallAllocated:N0} bytes over {iterations} runs"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"SmallChainTrain: {smallAllocated:N0} bytes over {iterations} runs"
+                )
             )
-        );
-        Console.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"LargeChainTrain: {largeAllocated:N0} bytes over {iterations} runs"
+            .ConfigureAwait(false);
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"LargeChainTrain: {largeAllocated:N0} bytes over {iterations} runs"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         largeAllocated
             .Should()
@@ -152,7 +158,7 @@ public class CoreTrainMemoryTests
             "TupleTrain_MemoryUsage"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Tuple handling should not cause excessive memory retention
         result
@@ -190,22 +196,24 @@ public class CoreTrainMemoryTests
             "VeryLargeDataTrain_MemoryUsage"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Force GC and check if trains can be collected
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        await Task.Delay(100); // Give GC time to work
+        await Task.Delay(100).ConfigureAwait(false); // Give GC time to work
 
         var aliveTrains = largeObjectTrains.Count(wr => wr.IsAlive);
-        Console.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"Trains still alive after GC: {aliveTrains}/{largeObjectTrains.Count}"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Trains still alive after GC: {aliveTrains}/{largeObjectTrains.Count}"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         aliveTrains
             .Should()
@@ -254,7 +262,7 @@ public class CoreTrainMemoryTests
             "ConcurrentTrains_MemoryUsage"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Concurrent execution should not cause excessive memory retention
         result
@@ -319,7 +327,7 @@ public class CoreTrainMemoryTests
             );
 
             batchResults.Add(result);
-            Console.WriteLine(result.GetSummary());
+            await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
             // Force cleanup between batches
             GC.Collect();

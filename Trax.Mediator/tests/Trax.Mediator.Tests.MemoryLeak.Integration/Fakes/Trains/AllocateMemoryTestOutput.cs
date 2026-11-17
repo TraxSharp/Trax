@@ -20,7 +20,7 @@ internal sealed class AllocateMemoryTestOutput : Junction<MemoryTestInput, Memor
         return new MemoryTestOutput
         {
             Id = input.Id,
-            ProcessedAt = DateTime.UtcNow,
+            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
             ProcessedData = new string('X', input.DataSizeBytes),
             Success = true,
             Message = string.Create(

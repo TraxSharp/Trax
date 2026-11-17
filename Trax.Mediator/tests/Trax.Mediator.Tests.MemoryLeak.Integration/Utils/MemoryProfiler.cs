@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.Utils;
 
 /// <summary>
@@ -67,7 +65,8 @@ public static class MemoryProfiler
         TimeSpan? maxWait = null
     )
     {
-        var deadline = DateTime.UtcNow + (maxWait ?? TimeSpan.FromSeconds(5));
+        var deadline =
+            TimeProvider.System.GetUtcNow().UtcDateTime + (maxWait ?? TimeSpan.FromSeconds(5));
 
         while (true)
         {
@@ -77,7 +76,7 @@ public static class MemoryProfiler
 
             var alive = references.Count(reference => reference.IsAlive);
 
-            if (alive == 0 || DateTime.UtcNow >= deadline)
+            if (alive == 0 || TimeProvider.System.GetUtcNow().UtcDateTime >= deadline)
                 return alive;
 
             // allowed-delay: waiting for the finalizer thread, not for a signal we could await.
@@ -104,7 +103,7 @@ public static class MemoryProfiler
             GC.CollectionCount(0),
             GC.CollectionCount(1),
             GC.CollectionCount(2),
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
     }
 
@@ -117,11 +116,11 @@ public static class MemoryProfiler
     public static MemoryMonitorResult MonitorMemoryUsage(Action action, string description = "")
     {
         var beforeSnapshot = TakeSnapshot(forceGC: true);
-        var stopwatch = Stopwatch.StartNew();
+        var start = TimeProvider.System.GetTimestamp();
 
         action();
 
-        stopwatch.Stop();
+        var elapsed = TimeProvider.System.GetElapsedTime(start);
         var afterSnapshot = TakeSnapshot(forceGC: false);
         var afterGCSnapshot = TakeSnapshot(forceGC: true);
 
@@ -130,7 +129,7 @@ public static class MemoryProfiler
             beforeSnapshot,
             afterSnapshot,
             afterGCSnapshot,
-            stopwatch.Elapsed
+            elapsed
         );
     }
 
@@ -146,11 +145,11 @@ public static class MemoryProfiler
     )
     {
         var beforeSnapshot = TakeSnapshot(forceGC: true);
-        var stopwatch = Stopwatch.StartNew();
+        var start = TimeProvider.System.GetTimestamp();
 
         await action().ConfigureAwait(false);
 
-        stopwatch.Stop();
+        var elapsed = TimeProvider.System.GetElapsedTime(start);
         var afterSnapshot = TakeSnapshot(forceGC: false);
         var afterGCSnapshot = TakeSnapshot(forceGC: true);
 
@@ -159,7 +158,7 @@ public static class MemoryProfiler
             beforeSnapshot,
             afterSnapshot,
             afterGCSnapshot,
-            stopwatch.Elapsed
+            elapsed
         );
     }
 
@@ -199,10 +198,10 @@ public static class MemoryProfiler
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        var startTime = DateTime.UtcNow;
+        var startTime = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         // Wait for objects to be collected
-        while (DateTime.UtcNow - startTime < maxWaitTime)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime - startTime < maxWaitTime)
         {
             var aliveCount = weakReferences.Count(wr => wr.IsAlive);
             if (aliveCount == 0)

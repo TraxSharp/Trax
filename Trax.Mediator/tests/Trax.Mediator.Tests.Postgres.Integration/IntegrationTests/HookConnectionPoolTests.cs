@@ -96,7 +96,9 @@ public class HookConnectionPoolTests : TestSetup
         GatedProbe.Open();
 
         var act = async () =>
-            await Task.WhenAll(outers, unrelated).WaitAsync(SignalTimeout).ConfigureAwait(false);
+            await Task.WhenAll(outers, unrelated)
+                .WaitAsync(SignalTimeout, TimeProvider.System)
+                .ConfigureAwait(false);
         await act.Should()
             .NotThrowAsync(
                 "each outer enqueue holds one connection and its nested enqueue writes on that "
@@ -139,7 +141,7 @@ public class HookConnectionPoolTests : TestSetup
             if (Interlocked.Increment(ref _arrived) == _expected)
                 _allArrived.TrySetResult();
 
-            return _gate.Task.WaitAsync(SignalTimeout, ct);
+            return _gate.Task.WaitAsync(SignalTimeout, TimeProvider.System, ct);
         }
     }
 

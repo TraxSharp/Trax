@@ -44,7 +44,8 @@ public class TrainBusMetadataTests
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
     [Test]

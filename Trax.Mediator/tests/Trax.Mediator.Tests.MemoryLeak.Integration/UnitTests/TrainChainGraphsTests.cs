@@ -31,7 +31,11 @@ public class TrainChainGraphsTests
         await using var provider = Provider(services =>
             services.AddScoped<IGraphedTrain, GraphedTrain>()
         );
-        var graphs = Graphs(provider, Registration<IGraphedTrain, GraphedTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IGraphedTrain, GraphedTrain>(),
+            new ManualTime()
+        );
 
         var graph = graphs.Find(typeof(IGraphedTrain).FullName.NotNull());
 
@@ -48,7 +52,11 @@ public class TrainChainGraphsTests
         await using var provider = Provider(services =>
             services.AddScoped<IGraphedTrain, GraphedTrain>()
         );
-        var graphs = Graphs(provider, Registration<IGraphedTrain, GraphedTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IGraphedTrain, GraphedTrain>(),
+            new ManualTime()
+        );
 
         var first = graphs.Find(typeof(IGraphedTrain).FullName.NotNull());
         var second = graphs.Find(typeof(IGraphedTrain).FullName.NotNull());
@@ -64,7 +72,11 @@ public class TrainChainGraphsTests
         await using var provider = Provider(services =>
             services.AddScoped<IGraphedTrain, GraphedTrain>()
         );
-        var graphs = Graphs(provider, Registration<IGraphedTrain, GraphedTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IGraphedTrain, GraphedTrain>(),
+            new ManualTime()
+        );
 
         var declared = graphs.FindDeclared(typeof(IGraphedTrain).FullName.NotNull());
         var graph = graphs.Find(typeof(IGraphedTrain).FullName.NotNull());
@@ -95,7 +107,11 @@ public class TrainChainGraphsTests
         await using var provider = Provider(services =>
             services.AddScoped<IGraphedTrain, GraphedTrain>()
         );
-        var graphs = Graphs(provider, Registration<IGraphedTrain, GraphedTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IGraphedTrain, GraphedTrain>(),
+            new ManualTime()
+        );
 
         graphs
             .Find(name)
@@ -112,7 +128,11 @@ public class TrainChainGraphsTests
         await using var provider = Provider(services =>
             services.AddScoped<IUnbuildableTrain, UnbuildableTrain>()
         );
-        var graphs = Graphs(provider, Registration<IUnbuildableTrain, UnbuildableTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IUnbuildableTrain, UnbuildableTrain>(),
+            new ManualTime()
+        );
 
         graphs.Find(typeof(IUnbuildableTrain).FullName.NotNull()).Should().BeNull();
     }
@@ -123,7 +143,11 @@ public class TrainChainGraphsTests
         await using var provider = Provider(services =>
             services.AddScoped<IRequestOnlyTrain, RequestOnlyTrain>()
         );
-        var graphs = Graphs(provider, Registration<IRequestOnlyTrain, RequestOnlyTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IRequestOnlyTrain, RequestOnlyTrain>(),
+            new ManualTime()
+        );
 
         graphs
             .Find(typeof(IRequestOnlyTrain).FullName.NotNull())
@@ -139,7 +163,11 @@ public class TrainChainGraphsTests
                 .AddScoped<AsyncOnlyDisposable>()
                 .AddScoped<IAsyncDependentTrain, AsyncDependentTrain>()
         );
-        var graphs = Graphs(provider, Registration<IAsyncDependentTrain, AsyncDependentTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IAsyncDependentTrain, AsyncDependentTrain>(),
+            new ManualTime()
+        );
 
         graphs
             .Find(typeof(IAsyncDependentTrain).FullName.NotNull())

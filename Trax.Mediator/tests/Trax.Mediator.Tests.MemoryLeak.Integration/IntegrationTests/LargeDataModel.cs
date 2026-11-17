@@ -11,5 +11,5 @@ public class LargeDataModel(string name, byte[] data)
 {
     public string Name { get; } = name;
     public byte[] Data { get; } = data;
-    public DateTime CreatedAt { get; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; } = TimeProvider.System.GetUtcNow().UtcDateTime;
 }

@@ -170,7 +170,8 @@ public class SharedInputTypeExecutionTests
                 Name = typeof(IOpenSharedTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         var output = await bus.RunByNameAsync<SharedOutput>(
@@ -265,7 +266,8 @@ public class SharedInputTypeExecutionTests
                 Name = typeof(IOpenSharedTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.InProgress;
 

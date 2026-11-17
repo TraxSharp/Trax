@@ -53,7 +53,8 @@ public class SavedInputJsonbTests : TestSetup
                 Name = typeof(ISpotsTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         row.Input = JsonSerializer.Serialize(original, legacy);
 

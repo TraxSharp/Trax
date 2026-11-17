@@ -69,7 +69,7 @@ public class JsonEffectProviderMemoryTests
                                 ),
                                 ProcessedData = new string('X', 500), // 500 characters
                                 Success = true,
-                                ProcessedAt = DateTime.UtcNow,
+                                ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                             }
                         );
 
@@ -90,7 +90,7 @@ public class JsonEffectProviderMemoryTests
             "JsonEffectProvider_ModelTracking"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Should not retain significant memory after disposal
         result
@@ -143,7 +143,7 @@ public class JsonEffectProviderMemoryTests
                             ),
                             ProcessedData = new string('Y', 2000), // 2KB string
                             Success = true,
-                            ProcessedAt = DateTime.UtcNow,
+                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                         }
                     );
 
@@ -165,22 +165,24 @@ public class JsonEffectProviderMemoryTests
             "JsonEffectProvider_ModelAccumulation"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Force GC and check if models can be collected
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        await Task.Delay(100); // Give GC time to work
+        await Task.Delay(100).ConfigureAwait(false); // Give GC time to work
 
         var aliveModels = modelReferences.Count(wr => wr.IsAlive);
-        Console.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"Models still alive after GC: {aliveModels}/{modelReferences.Count}"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Models still alive after GC: {aliveModels}/{modelReferences.Count}"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         aliveModels
             .Should()
@@ -249,7 +251,7 @@ public class JsonEffectProviderMemoryTests
                                     ),
                                     ProcessedData = new string('Z', 1000), // 1KB string
                                     Success = true,
-                                    ProcessedAt = DateTime.UtcNow,
+                                    ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                                 }
                             );
 
@@ -270,7 +272,7 @@ public class JsonEffectProviderMemoryTests
             "JsonEffectProvider_ConcurrentUsage"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Concurrent usage should not cause excessive memory retention
         result
@@ -333,7 +335,7 @@ public class JsonEffectProviderMemoryTests
                                 ),
                                 ProcessedData = new string(iterationChar, 1500), // 1.5KB string
                                 Success = true,
-                                ProcessedAt = DateTime.UtcNow,
+                                ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                             }
                         );
                     }
@@ -345,7 +347,7 @@ public class JsonEffectProviderMemoryTests
             "JsonEffectProvider_RepeatedSerialization"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Repeated serialization should not cause excessive memory growth
         result
@@ -421,7 +423,7 @@ public class JsonEffectProviderMemoryTests
                             ),
                             ProcessedData = new string('L', 25_000), // 25KB string
                             Success = true,
-                            ProcessedAt = DateTime.UtcNow,
+                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                         }
                     );
 
@@ -440,7 +442,7 @@ public class JsonEffectProviderMemoryTests
             "JsonEffectProvider_LargeObjectSerialization"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Large object serialization should not cause excessive memory retention
         result
@@ -488,7 +490,7 @@ public class JsonEffectProviderMemoryTests
                             ),
                             ProcessedData = new string('D', 5000), // 5KB string
                             Success = true,
-                            ProcessedAt = DateTime.UtcNow,
+                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                         }
                     );
 
@@ -503,7 +505,7 @@ public class JsonEffectProviderMemoryTests
             "JsonEffectProvider_DuplicateTracking"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Duplicate tracking should not cause excessive memory growth
         result

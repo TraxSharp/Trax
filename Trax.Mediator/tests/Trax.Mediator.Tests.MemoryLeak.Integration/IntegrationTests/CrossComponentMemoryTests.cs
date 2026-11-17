@@ -97,7 +97,7 @@ public class CrossComponentMemoryTests
                         var output = new MemoryTestOutput
                         {
                             Id = input.Id,
-                            ProcessedAt = DateTime.UtcNow,
+                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                             ProcessedData = new string('X', 3000), // 3KB
                             Success = true,
                             Message = string.Create(
@@ -143,7 +143,7 @@ public class CrossComponentMemoryTests
             "CrossComponent_MultipleProviders_Stress"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Should not retain excessive memory from cross-component interactions
         result
@@ -210,7 +210,7 @@ public class CrossComponentMemoryTests
                         var output = new MemoryTestOutput
                         {
                             Id = input.Id,
-                            ProcessedAt = DateTime.UtcNow,
+                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                             ProcessedData = new string('R', 2500), // 2.5KB
                             Success = true,
                             Message = string.Create(
@@ -251,7 +251,7 @@ public class CrossComponentMemoryTests
             "CrossComponent_EffectRunner_Memory"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // EffectRunner should properly coordinate disposal across providers
         result
@@ -307,7 +307,7 @@ public class CrossComponentMemoryTests
                         var output = new MemoryTestOutput
                         {
                             Id = input.Id,
-                            ProcessedAt = DateTime.UtcNow,
+                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                             ProcessedData = new string('E', 2000), // 2KB
                             Success = iteration % 3 != 0, // Fail every 3rd iteration
                             Message = string.Create(
@@ -359,12 +359,14 @@ public class CrossComponentMemoryTests
                     }
                 }
 
-                Console.WriteLine(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"Handled {exceptionCount} exceptions during memory test"
+                await TestContext
+                    .Out.WriteLineAsync(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Handled {exceptionCount} exceptions during memory test"
+                        )
                     )
-                );
+                    .ConfigureAwait(false);
 
                 // Final cleanup
                 GC.Collect();
@@ -374,7 +376,7 @@ public class CrossComponentMemoryTests
             "CrossComponent_ExceptionPath_Memory"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Exception scenarios should not cause memory leaks
         result
@@ -424,7 +426,7 @@ public class CrossComponentMemoryTests
                             var output = new MemoryTestOutput
                             {
                                 Id = input.Id,
-                                ProcessedAt = DateTime.UtcNow,
+                                ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                                 ProcessedData = new string('C', 2000), // 2KB
                                 Success = true,
                                 Message = string.Create(
@@ -468,7 +470,7 @@ public class CrossComponentMemoryTests
             "CrossComponent_Concurrent_Memory"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Concurrent cross-component execution should not cause memory issues
         result

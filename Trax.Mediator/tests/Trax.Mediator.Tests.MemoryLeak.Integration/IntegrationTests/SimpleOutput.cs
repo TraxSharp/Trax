@@ -10,5 +10,5 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 public class SimpleOutput(string result)
 {
     public string Result { get; } = result;
-    public DateTime ProcessedAt { get; } = DateTime.UtcNow;
+    public DateTime ProcessedAt { get; } = TimeProvider.System.GetUtcNow().UtcDateTime;
 }

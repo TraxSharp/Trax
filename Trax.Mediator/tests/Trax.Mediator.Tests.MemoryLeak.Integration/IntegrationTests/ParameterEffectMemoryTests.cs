@@ -83,7 +83,7 @@ public class ParameterEffectMemoryTests
                                 ),
                                 ProcessedData = new string('P', 1000), // 1KB string
                                 Success = true,
-                                ProcessedAt = DateTime.UtcNow,
+                                ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                             }
                         );
 
@@ -104,7 +104,7 @@ public class ParameterEffectMemoryTests
             "ParameterEffect_MetadataTracking"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Should not retain significant memory after disposal
         result
@@ -162,7 +162,7 @@ public class ParameterEffectMemoryTests
                             ),
                             ProcessedData = new string('A', 3000), // 3KB string
                             Success = true,
-                            ProcessedAt = DateTime.UtcNow,
+                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                         }
                     );
 
@@ -186,22 +186,24 @@ public class ParameterEffectMemoryTests
             "ParameterEffect_MetadataAccumulation"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Force GC and check if metadata objects can be collected
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        await Task.Delay(100); // Give GC time to work
+        await Task.Delay(100).ConfigureAwait(false); // Give GC time to work
 
         var aliveMetadata = metadataReferences.Count(wr => wr.IsAlive);
-        Console.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"Metadata objects still alive after GC: {aliveMetadata}/{metadataReferences.Count}"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Metadata objects still alive after GC: {aliveMetadata}/{metadataReferences.Count}"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         aliveMetadata
             .Should()
@@ -258,7 +260,7 @@ public class ParameterEffectMemoryTests
                             ),
                             ProcessedData = new string('J', 5000), // 5KB string
                             Success = true,
-                            ProcessedAt = DateTime.UtcNow,
+                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                         }
                     );
 
@@ -269,7 +271,7 @@ public class ParameterEffectMemoryTests
             "ParameterEffect_JsonDocumentDisposal"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // JsonDocument disposal should prevent excessive memory accumulation
         result
@@ -338,7 +340,7 @@ public class ParameterEffectMemoryTests
                                     ),
                                     ProcessedData = new string('C', 2000), // 2KB string
                                     Success = true,
-                                    ProcessedAt = DateTime.UtcNow,
+                                    ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                                 }
                             );
 
@@ -359,7 +361,7 @@ public class ParameterEffectMemoryTests
             "ParameterEffect_ConcurrentUsage"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Concurrent usage should not cause excessive memory retention
         result
@@ -426,7 +428,7 @@ public class ParameterEffectMemoryTests
                                 ),
                                 ProcessedData = new string(iterationChar, 2500), // 2.5KB string
                                 Success = true,
-                                ProcessedAt = DateTime.UtcNow,
+                                ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                             }
                         );
                     }
@@ -438,7 +440,7 @@ public class ParameterEffectMemoryTests
             "ParameterEffect_RepeatedSerialization"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Repeated serialization should not cause excessive memory growth
         result
@@ -524,7 +526,7 @@ public class ParameterEffectMemoryTests
                             ),
                             ProcessedData = new string('L', 30_000), // 30KB string
                             Success = true,
-                            ProcessedAt = DateTime.UtcNow,
+                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                         }
                     );
 
@@ -545,7 +547,7 @@ public class ParameterEffectMemoryTests
             "ParameterEffect_LargeParameterSerialization"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Large parameter serialization should not cause excessive memory retention
         result
@@ -585,7 +587,7 @@ public class ParameterEffectMemoryTests
             "ParameterEffect_EmptyDisposal"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Empty ParameterEffect instances should use minimal memory
         result
@@ -656,7 +658,7 @@ public class ParameterEffectMemoryTests
             "ParameterEffect_PostDisposal"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Post-disposal operations should not cause memory leaks
         result

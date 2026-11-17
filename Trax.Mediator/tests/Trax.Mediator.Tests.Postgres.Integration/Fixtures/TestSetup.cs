@@ -121,7 +121,9 @@ public abstract class TestSetup
     /// </summary>
     protected static async Task AwaitSignalAsync(Task signal, Task run, string what)
     {
-        var first = await Task.WhenAny(signal, run).WaitAsync(SignalTimeout).ConfigureAwait(false);
+        var first = await Task.WhenAny(signal, run)
+            .WaitAsync(SignalTimeout, TimeProvider.System)
+            .ConfigureAwait(false);
         if (first == signal)
             return;
 
@@ -137,7 +139,7 @@ public abstract class TestSetup
     {
         try
         {
-            await run.WaitAsync(SignalTimeout).ConfigureAwait(false);
+            await run.WaitAsync(SignalTimeout, TimeProvider.System).ConfigureAwait(false);
         }
         catch
         {

@@ -62,6 +62,13 @@ public class TrainExecutionService(
     private static readonly ConcurrentDictionary<Type, PropertyInfo?> DeferPromotionCache = new();
 
     /// <summary>
+    /// The clock the rows an enqueue writes are stamped from: the container's
+    /// <see cref="TimeProvider"/> (AddTrax registers the system's), or the system's when the
+    /// container has none.
+    /// </summary>
+    private TimeProvider Clock => serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
+
+    /// <summary>
     /// The enqueue whose <c>OnQueue</c> hook is running on this async flow, which an enqueue
     /// started from inside that hook joins. Static so every instance of this scoped service sees
     /// it, the same way <c>EnqueueContextAccessor</c> keeps its value; each enqueue only joins one
@@ -595,7 +602,8 @@ public class TrainExecutionService(
                 Name = registration.ServiceType.FullName.NotNull(),
                 ExternalId = externalId,
                 Input = input,
-            }
+            },
+            Clock
         );
 
         string? key;
@@ -622,11 +630,11 @@ public class TrainExecutionService(
     /// and throws it as the <see cref="InvalidOperationException"/> an enqueue refusal has always
     /// been.
     /// </summary>
-    private static WorkQueue CreateEntry(TrainRegistration registration, CreateWorkQueue dto)
+    private WorkQueue CreateEntry(TrainRegistration registration, CreateWorkQueue dto)
     {
         try
         {
-            return WorkQueue.Create(dto);
+            return WorkQueue.Create(dto, Clock);
         }
         catch (ArgumentException refused) when (dto.SubjectKey is not null)
         {
@@ -911,7 +919,7 @@ public class TrainExecutionService(
     /// from <c>IServiceTrain&lt;,&gt;</c>, but reflection finds only trains that override the
     /// hook, so a train without one is never resolved for it.
     /// </remarks>
-    private static async Task InvokeQueueHookAsync(
+    private async Task InvokeQueueHookAsync(
         TrainRegistration registration,
         EnqueueTrain train,
         object input,
@@ -929,7 +937,8 @@ public class TrainExecutionService(
                 Name = registration.ServiceType.FullName.NotNull(),
                 ExternalId = externalId,
                 Input = input,
-            }
+            },
+            Clock
         );
 
         // Entered here, in the method that awaits the hook, so the input flows with the hook's

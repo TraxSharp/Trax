@@ -11,5 +11,5 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 public class SimpleInput(string name)
 {
     public string Name { get; } = name;
-    public DateTime CreatedAt { get; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; } = TimeProvider.System.GetUtcNow().UtcDateTime;
 }

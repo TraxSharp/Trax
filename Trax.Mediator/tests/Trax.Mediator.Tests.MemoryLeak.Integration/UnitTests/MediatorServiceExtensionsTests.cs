@@ -500,7 +500,7 @@ public class MediatorServiceExtensionsTests
         var disposeTask = provider.DisposeAsync();
         var completed = await Task.WhenAny(
             disposeTask.AsTask(),
-            Task.Delay(TimeSpan.FromSeconds(10))
+            Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System)
         );
 
         completed.Should().Be(disposeTask.AsTask(), "ServiceProvider disposal should not hang");

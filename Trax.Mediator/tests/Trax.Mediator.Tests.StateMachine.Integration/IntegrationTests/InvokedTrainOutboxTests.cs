@@ -222,8 +222,8 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
                 State = "Idle",
                 Context = """{"source":"repo"}""",
                 ConcurrencyToken = Guid.NewGuid(),
-                CreatedAt = DateTimeOffset.UtcNow,
-                UpdatedAt = DateTimeOffset.UtcNow,
+                CreatedAt = TimeProvider.System.GetUtcNow(),
+                UpdatedAt = TimeProvider.System.GetUtcNow(),
             };
             context.SnapshotDrafts.Add(tracked);
 
@@ -331,7 +331,8 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
                     Name = queued.TrainName,
                     ExternalId = queued.ExternalId,
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             run.TrainState = TrainState.InProgress;
             await db.Track(run);

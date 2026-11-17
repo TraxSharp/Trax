@@ -69,7 +69,7 @@ public class ConcurrencyLimiterTests
         permit1.Dispose();
 
         // Now second should complete
-        var permit2 = await acquireTask.WaitAsync(TimeSpan.FromSeconds(10));
+        var permit2 = await acquireTask.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
         permit2.Dispose();
     }
 
@@ -101,7 +101,7 @@ public class ConcurrencyLimiterTests
 
         // Release A — only A unblocks
         permitA.Dispose();
-        (await acquireA.WaitAsync(TimeSpan.FromSeconds(10))).Dispose();
+        (await acquireA.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System)).Dispose();
 
         // B still blocked
         // negative-wait: a blocked acquire has no signal, only elapsed time can show it.
@@ -109,7 +109,7 @@ public class ConcurrencyLimiterTests
         stillBlockedB.Should().NotBe(acquireB);
 
         permitB.Dispose();
-        (await acquireB.WaitAsync(TimeSpan.FromSeconds(10))).Dispose();
+        (await acquireB.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System)).Dispose();
     }
 
     #endregion
@@ -134,7 +134,7 @@ public class ConcurrencyLimiterTests
         permit1.Dispose();
 
         // Now should complete
-        var permit3 = await acquireTask.WaitAsync(TimeSpan.FromSeconds(10));
+        var permit3 = await acquireTask.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
         permit3.Dispose();
         permit2.Dispose();
     }

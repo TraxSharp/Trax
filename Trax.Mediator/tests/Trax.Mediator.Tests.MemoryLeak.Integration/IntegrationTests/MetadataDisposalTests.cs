@@ -56,7 +56,8 @@ public class MetadataDisposalTests
                 Name = "TestTrain",
                 Input = new { LargeData = new string('X', 10000) },
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TimeProvider.System
         );
 
         // Simulate setting Output JsonDocument (this would normally happen during train execution)
@@ -83,7 +84,8 @@ public class MetadataDisposalTests
                     Name = "TestTrain",
                     Input = new { LargeData = new string('X', 50000) }, // 50KB of data
                     ExternalId = Guid.NewGuid().ToString("N"),
-                }
+                },
+                TimeProvider.System
             );
 
         // Act & Assert
@@ -131,7 +133,7 @@ public class MetadataDisposalTests
             "SuccessfulEffectTrains_ShouldNotLeakMemory"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Successful trains should clean up Memory dictionary contents on disposal
         result
@@ -192,12 +194,14 @@ public class MetadataDisposalTests
         await Task.Delay(100);
 
         var aliveCount = weakReferences.Count(wr => wr.IsAlive);
-        Console.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"EffectTrains still alive after scope disposal + GC: {aliveCount}/{weakReferences.Count}"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"EffectTrains still alive after scope disposal + GC: {aliveCount}/{weakReferences.Count}"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         aliveCount
             .Should()
@@ -246,7 +250,7 @@ public class MetadataDisposalTests
             "FailingTrains_ShouldNotLeakMemory"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Even with failing trains, memory should be cleaned up properly
         // Note: Failing trains retain more memory due to exception handling and error metadata

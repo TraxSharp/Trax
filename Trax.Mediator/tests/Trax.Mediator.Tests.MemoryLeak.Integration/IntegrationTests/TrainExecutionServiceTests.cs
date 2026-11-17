@@ -395,7 +395,8 @@ public class TrainExecutionServiceTests
         gate.Release();
 
         // Third completes once one of the first two hands its permit back
-        var results = await Task.WhenAll(task1, task2, task3).WaitAsync(HoldUntilReleased.Timeout);
+        var results = await Task.WhenAll(task1, task2, task3)
+            .WaitAsync(HoldUntilReleased.Timeout, TimeProvider.System);
         results.Should().OnlyContain(r => r.MetadataId > 0);
         (await gate.WaitForEntriesAsync(1))
             .Should()
@@ -445,14 +446,20 @@ public class TrainExecutionServiceTests
         // Assert
         var waiting = async () =>
             await task2
-                .WaitAsync(HoldUntilReleased.Timeout, CancellationToken.None)
+                .WaitAsync(HoldUntilReleased.Timeout, TimeProvider.System, CancellationToken.None)
                 .ConfigureAwait(false);
         await waiting.Should().ThrowAsync<OperationCanceledException>();
         gate.Entries.Should().Be(0, "the cancelled run never got a permit, so never ran");
 
         // The first run still holds its permit and finishes normally once released
         gate.Release();
-        (await task1.WaitAsync(HoldUntilReleased.Timeout, CancellationToken.None))
+        (
+            await task1.WaitAsync(
+                HoldUntilReleased.Timeout,
+                TimeProvider.System,
+                CancellationToken.None
+            )
+        )
             .MetadataId.Should()
             .BeGreaterThan(0);
     }

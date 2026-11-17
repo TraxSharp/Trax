@@ -67,7 +67,9 @@ public class PerPrincipalConcurrencyTests
 
         principal.Throw = false;
         var next = () =>
-            limiter.AcquireAsync(train, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            limiter
+                .AcquireAsync(train, CancellationToken.None)
+                .WaitAsync(TimeSpan.FromSeconds(5), TimeProvider.System);
 
         (
             await next.Should()
@@ -130,7 +132,7 @@ public class PerPrincipalConcurrencyTests
         // A fresh semaphore starts with the full limit.
         using var next = await limiter
             .AcquireAsync(train, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
+            .WaitAsync(TimeSpan.FromSeconds(5), TimeProvider.System, CancellationToken.None);
     }
 
     [Test]
@@ -162,6 +164,7 @@ public class PerPrincipalConcurrencyTests
 
         using var secondPermit = await second.WaitAsync(
             TimeSpan.FromSeconds(5),
+            TimeProvider.System,
             CancellationToken.None
         );
         limiter

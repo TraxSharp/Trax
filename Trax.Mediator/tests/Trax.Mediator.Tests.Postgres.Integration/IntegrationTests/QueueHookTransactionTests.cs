@@ -290,7 +290,8 @@ public class QueueHookTransactionTests : TestSetup
                 Input = "{}",
                 InputTypeName = typeof(AmbientInput).FullName,
                 Priority = 0,
-            }
+            },
+            TimeProvider.System
         );
 
     public interface IAmbientWritingTrain : IServiceTrain<AmbientInput, Unit>;

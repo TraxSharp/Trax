@@ -52,11 +52,17 @@ public class CancelledEnqueueHookTests : TestSetup
             ct: cancel.Token
         );
 
-        await OrphanedHookTrain.Started.Task.WaitAsync(SignalTimeout, CancellationToken.None);
+        await OrphanedHookTrain.Started.Task.WaitAsync(
+            SignalTimeout,
+            TimeProvider.System,
+            CancellationToken.None
+        );
         await cancel.CancelAsync();
 
         var act = async () =>
-            await outer.WaitAsync(SignalTimeout, CancellationToken.None).ConfigureAwait(false);
+            await outer
+                .WaitAsync(SignalTimeout, TimeProvider.System, CancellationToken.None)
+                .ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         // The caller has been told the enqueue failed. The hook, which ignores its token, is still
@@ -65,7 +71,7 @@ public class CancelledEnqueueHookTests : TestSetup
 
         var nested = async () =>
             await OrphanedHookTrain
-                .Nested.Task.WaitAsync(SignalTimeout, CancellationToken.None)
+                .Nested.Task.WaitAsync(SignalTimeout, TimeProvider.System, CancellationToken.None)
                 .ConfigureAwait(false);
         await nested
             .Should()

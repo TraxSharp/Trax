@@ -131,7 +131,9 @@ public static class TestSetup
         catch (Exception ex)
         {
             // Log cleanup failures but don't throw - we're in cleanup
-            Console.WriteLine($"Warning: Failed to cleanup memory leak tests: {ex.Message}");
+            TestContext.Out.WriteLine(
+                $"Warning: Failed to cleanup memory leak tests: {ex.Message}"
+            );
         }
     }
 }

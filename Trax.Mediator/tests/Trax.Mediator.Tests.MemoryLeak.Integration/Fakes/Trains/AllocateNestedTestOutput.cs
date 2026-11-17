@@ -14,7 +14,7 @@ internal sealed class AllocateNestedTestOutput : Junction<NestedTestInput, Neste
             .ChildInputs.Select(child => new MemoryTestOutput
             {
                 Id = child.Id,
-                ProcessedAt = DateTime.UtcNow,
+                ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                 ProcessedData = new string('Y', child.DataSizeBytes),
                 Success = true,
                 Message = $"Child train {child.Id} processed",
@@ -25,7 +25,7 @@ internal sealed class AllocateNestedTestOutput : Junction<NestedTestInput, Neste
             new NestedTestOutput
             {
                 Id = input.Id,
-                ProcessedAt = DateTime.UtcNow,
+                ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                 ChildResults = results,
                 Success = true,
                 Message = $"Processed {results.Count} child trains",

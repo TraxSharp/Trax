@@ -32,13 +32,17 @@ public class BackgroundJobTests : TestSetup
     public async Task Create_WithRequiredFields_SetsDefaults()
     {
         // Arrange & Act
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 42 });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 42 },
+            TimeProvider.System
+        );
 
         // Assert
         job.MetadataId.Should().Be(42);
         job.Input.Should().BeNull();
         job.InputType.Should().BeNull();
-        job.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        job.CreatedAt.Should()
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(5));
         job.FetchedAt.Should().BeNull();
     }
 
@@ -52,14 +56,16 @@ public class BackgroundJobTests : TestSetup
                 MetadataId = 99,
                 Input = """{"region":"us-east"}""",
                 InputType = "MyApp.SyncInput",
-            }
+            },
+            TimeProvider.System
         );
 
         // Assert
         job.MetadataId.Should().Be(99);
         job.Input.Should().Be("""{"region":"us-east"}""");
         job.InputType.Should().Be("MyApp.SyncInput");
-        job.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        job.CreatedAt.Should()
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(5));
         job.FetchedAt.Should().BeNull();
     }
 
@@ -75,7 +81,10 @@ public class BackgroundJobTests : TestSetup
         var context = (IDataContext)factory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 1 });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 1 },
+            TimeProvider.System
+        );
 
         // Act
         await context.Track(job);
@@ -89,7 +98,9 @@ public class BackgroundJobTests : TestSetup
         found.NotNull().MetadataId.Should().Be(1);
         found.Input.Should().BeNull();
         found.InputType.Should().BeNull();
-        found.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
+        found
+            .CreatedAt.Should()
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(10));
         found.FetchedAt.Should().BeNull();
     }
 
@@ -107,7 +118,8 @@ public class BackgroundJobTests : TestSetup
                 MetadataId = 2,
                 Input = """{"name":"test","count":5}""",
                 InputType = "Trax.Core.Tests.TestInput",
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -132,8 +144,14 @@ public class BackgroundJobTests : TestSetup
         var context = (IDataContext)factory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var job1 = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 10 });
-        var job2 = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 20 });
+        var job1 = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 10 },
+            TimeProvider.System
+        );
+        var job2 = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 20 },
+            TimeProvider.System
+        );
 
         // Act
         await context.Track(job1);
@@ -165,7 +183,8 @@ public class BackgroundJobTests : TestSetup
                 MetadataId = 3,
                 Input = """{"region":"us-east","batchSize":500}""",
                 InputType = "MyApp.SyncInput",
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -201,7 +220,8 @@ public class BackgroundJobTests : TestSetup
                 MetadataId = 4,
                 Input = complexJson,
                 InputType = "Trax.Core.Tests.ComplexInput",
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -230,7 +250,10 @@ public class BackgroundJobTests : TestSetup
         var context = (IDataContext)factory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 5 });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 5 },
+            TimeProvider.System
+        );
 
         // Act
         await context.Track(job);
@@ -257,7 +280,10 @@ public class BackgroundJobTests : TestSetup
         var context = (IDataContext)factory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 6 });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 6 },
+            TimeProvider.System
+        );
 
         // Act
         await context.Track(job);
@@ -279,12 +305,15 @@ public class BackgroundJobTests : TestSetup
         var context = (IDataContext)factory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 7 });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 7 },
+            TimeProvider.System
+        );
         await context.Track(job);
         await context.SaveChanges(CancellationToken.None);
 
         // Act - Simulate worker claiming the job
-        var claimTime = DateTime.UtcNow;
+        var claimTime = TimeProvider.System.GetUtcNow().UtcDateTime;
         job.FetchedAt = claimTime;
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
@@ -305,18 +334,21 @@ public class BackgroundJobTests : TestSetup
         var context = (IDataContext)factory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 8 });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 8 },
+            TimeProvider.System
+        );
         await context.Track(job);
         await context.SaveChanges(CancellationToken.None);
 
         // Simulate a worker that claimed the job 40 minutes ago (stale beyond 30m visibility timeout)
-        job.FetchedAt = DateTime.UtcNow.AddMinutes(-40);
+        job.FetchedAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-40);
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 
         // Act - Query for jobs eligible for re-claim (fetched_at older than visibility timeout)
         var visibilityTimeout = TimeSpan.FromMinutes(30);
-        var cutoff = DateTime.UtcNow - visibilityTimeout;
+        var cutoff = TimeProvider.System.GetUtcNow().UtcDateTime - visibilityTimeout;
 
         var staleJobs = await context
             .BackgroundJobs.Where(j => j.FetchedAt != null && j.FetchedAt < cutoff)
@@ -338,7 +370,10 @@ public class BackgroundJobTests : TestSetup
         var context = (IDataContext)factory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 9 });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 9 },
+            TimeProvider.System
+        );
         await context.Track(job);
         await context.SaveChanges(CancellationToken.None);
         var jobId = job.Id;
@@ -368,15 +403,21 @@ public class BackgroundJobTests : TestSetup
         var context = (IDataContext)factory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var availableJob = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 10 });
-        var claimedJob = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 11 });
+        var availableJob = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 10 },
+            TimeProvider.System
+        );
+        var claimedJob = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 11 },
+            TimeProvider.System
+        );
 
         await context.Track(availableJob);
         await context.Track(claimedJob);
         await context.SaveChanges(CancellationToken.None);
 
         // Claim one job
-        claimedJob.FetchedAt = DateTime.UtcNow;
+        claimedJob.FetchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 
@@ -396,13 +437,19 @@ public class BackgroundJobTests : TestSetup
         var context = (IDataContext)factory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var job1 = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 12 });
+        var job1 = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 12 },
+            TimeProvider.System
+        );
         await context.Track(job1);
         await context.SaveChanges(CancellationToken.None);
 
         await Task.Delay(50); // Ensure different timestamps
 
-        var job2 = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 13 });
+        var job2 = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 13 },
+            TimeProvider.System
+        );
         await context.Track(job2);
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
@@ -427,9 +474,18 @@ public class BackgroundJobTests : TestSetup
         var context = (IDataContext)factory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var job1 = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 100 });
-        var job2 = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 200 });
-        var job3 = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = 100 });
+        var job1 = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 100 },
+            TimeProvider.System
+        );
+        var job2 = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 200 },
+            TimeProvider.System
+        );
+        var job3 = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = 100 },
+            TimeProvider.System
+        );
 
         await context.Track(job1);
         await context.Track(job2);
@@ -461,7 +517,8 @@ public class BackgroundJobTests : TestSetup
                 MetadataId = 42,
                 Input = """{"key":"value"}""",
                 InputType = "MyApp.TestInput",
-            }
+            },
+            TimeProvider.System
         );
 
         // Act

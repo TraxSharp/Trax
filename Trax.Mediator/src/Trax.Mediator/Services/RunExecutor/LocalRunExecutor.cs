@@ -263,7 +263,9 @@ public class LocalRunExecutor : IRunExecutor
                 metadata.TrainState = TrainState.Failed;
             }
 
-            metadata.EndTime = DateTime.UtcNow;
+            metadata.EndTime = (services?.GetService<TimeProvider>() ?? TimeProvider.System)
+                .GetUtcNow()
+                .UtcDateTime;
             await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             closed = metadata.TrainState;
         }

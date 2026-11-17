@@ -634,7 +634,8 @@ public class RunExecutorTests
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
-            await Task.Delay(TimeSpan.FromSeconds(30), CancellationToken).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromSeconds(30), Clock, CancellationToken)
+                .ConfigureAwait(false);
             return Unit.Default;
         }
     }

@@ -71,7 +71,7 @@ public class CancellationContractTests : TestSetup
 
             var awaiting = async () =>
                 await runTask
-                    .WaitAsync(SignalTimeout, CancellationToken.None)
+                    .WaitAsync(SignalTimeout, TimeProvider.System, CancellationToken.None)
                     .ConfigureAwait(false);
             await awaiting.Should().ThrowAsync<OperationCanceledException>();
 
@@ -120,7 +120,7 @@ public class CancellationContractTests : TestSetup
             // up.
             try
             {
-                await runTask.WaitAsync(SignalTimeout, CancellationToken.None);
+                await runTask.WaitAsync(SignalTimeout, TimeProvider.System, CancellationToken.None);
             }
             catch (OperationCanceledException) { }
 

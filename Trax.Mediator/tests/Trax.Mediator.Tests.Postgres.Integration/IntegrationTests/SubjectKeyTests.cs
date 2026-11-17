@@ -368,14 +368,15 @@ public class SubjectKeyTests : TestSetup
                 Name = claimed.TrainName,
                 ExternalId = claimed.ExternalId,
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         await dataContext.Track(metadata).ConfigureAwait(false);
         await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         claimed.Status = Trax.Effect.Enums.WorkQueueStatus.Dispatched;
         claimed.MetadataId = metadata.Id;
-        claimed.DispatchedAt = DateTime.UtcNow;
+        claimed.DispatchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         await dataContext.CommitTransaction().ConfigureAwait(false);
         return true;

@@ -121,7 +121,8 @@ public class EnqueueScopedServicesTests : TestSetup
                     TrainName = name,
                     Input = "{}",
                     InputTypeName = typeof(ScopedWriterInput).FullName,
-                }
+                },
+                TimeProvider.System
             );
     }
 }

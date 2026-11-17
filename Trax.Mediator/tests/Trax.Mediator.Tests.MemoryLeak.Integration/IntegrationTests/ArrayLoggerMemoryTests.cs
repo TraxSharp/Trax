@@ -54,7 +54,7 @@ public class ArrayLoggerMemoryTests
             "ArrayLoggingProvider_LoggerCreation"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Should not retain significant memory after disposal
         result
@@ -67,7 +67,9 @@ public class ArrayLoggerMemoryTests
         // "Everything was freed" is a claim about reachability, not about the process's heap, so it
         // is asserted on the loggers themselves. A byte bound tight enough to mean the same thing
         // sits below the measurement's noise floor — see MemoryProfiler.RetainedNoiseFloorBytes.
-        var aliveLoggers = await MemoryProfiler.CountAliveAsync(loggerReferences);
+        var aliveLoggers = await MemoryProfiler
+            .CountAliveAsync(loggerReferences)
+            .ConfigureAwait(false);
 
         aliveLoggers
             .Should()
@@ -111,7 +113,7 @@ public class ArrayLoggerMemoryTests
             "ArrayLoggerEffect_LogAccumulation"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Memory should be manageable after clearing logs
         result
@@ -156,7 +158,7 @@ public class ArrayLoggerMemoryTests
             "ArrayLoggingProvider_LogTrimming"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Trimming should keep memory usage bounded
         result
@@ -211,7 +213,7 @@ public class ArrayLoggerMemoryTests
             "ArrayLoggingProvider_ConcurrentUsage"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Concurrent usage should not cause excessive memory retention
         result
@@ -252,22 +254,24 @@ public class ArrayLoggerMemoryTests
             "ArrayLoggerEffect_DisposalPattern"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Force GC and check if loggers can be collected
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        await Task.Delay(100); // Give GC time to work
+        await Task.Delay(100).ConfigureAwait(false); // Give GC time to work
 
         var aliveLoggers = loggerReferences.Count(wr => wr.IsAlive);
-        Console.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"Logger effects still alive after GC: {aliveLoggers}/{loggerReferences.Count}"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Logger effects still alive after GC: {aliveLoggers}/{loggerReferences.Count}"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         aliveLoggers
             .Should()

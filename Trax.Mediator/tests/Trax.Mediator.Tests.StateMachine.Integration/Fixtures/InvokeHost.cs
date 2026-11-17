@@ -149,7 +149,8 @@ public sealed class InvokeHost : IDisposable
                         instance,
                         entry.InvokingOwnerKind.NotNull().Value
                     ),
-                }
+                },
+                TimeProvider.System
             );
             run.TrainState = TrainState.InProgress;
             await db.Track(run).ConfigureAwait(false);

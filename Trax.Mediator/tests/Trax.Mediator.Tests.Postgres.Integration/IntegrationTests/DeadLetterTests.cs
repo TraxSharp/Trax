@@ -27,8 +27,8 @@ public class DeadLetterTests : TestSetup
         {
             Name = $"{name}-{Guid.NewGuid():N}",
             Priority = 0,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         context.ManifestGroups.Add(group);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -69,7 +69,8 @@ public class DeadLetterTests : TestSetup
                 Manifest = manifest,
                 Reason = "Max retries exceeded",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(deadLetter);
@@ -123,7 +124,8 @@ public class DeadLetterTests : TestSetup
                 Manifest = manifest,
                 Reason = "Non-retryable exception",
                 RetryCount = 1,
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(deadLetter);
@@ -175,7 +177,8 @@ public class DeadLetterTests : TestSetup
                 Manifest = manifest,
                 Reason = "Test reason",
                 RetryCount = 2,
-            }
+            },
+            TimeProvider.System
         );
         await context.Track(deadLetter);
         await context.SaveChanges(CancellationToken.None);
@@ -188,7 +191,7 @@ public class DeadLetterTests : TestSetup
         );
         foundDeadLetter.Should().NotBeNull();
 
-        foundDeadLetter.NotNull().Acknowledge("Issue resolved manually");
+        foundDeadLetter.NotNull().Acknowledge("Issue resolved manually", TimeProvider.System);
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 
@@ -237,7 +240,8 @@ public class DeadLetterTests : TestSetup
                 Manifest = manifest,
                 Reason = "Max retries exceeded",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
         await context.Track(deadLetter);
         await context.SaveChanges(CancellationToken.None);
@@ -250,7 +254,8 @@ public class DeadLetterTests : TestSetup
                 Name = nameof(TestDeadLetterMarkRetriedPersists) + "_Retry",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { Test = "value", Retry = true },
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(retryMetadata);
@@ -264,7 +269,7 @@ public class DeadLetterTests : TestSetup
         );
         foundDeadLetter.Should().NotBeNull();
 
-        foundDeadLetter.NotNull().MarkRetried(retryMetadataId);
+        foundDeadLetter.NotNull().MarkRetried(retryMetadataId, TimeProvider.System);
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 
@@ -313,7 +318,8 @@ public class DeadLetterTests : TestSetup
                 Manifest = manifest,
                 Reason = "Max retries exceeded",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
         await context.Track(deadLetter);
         await context.SaveChanges(CancellationToken.None);
@@ -322,7 +328,7 @@ public class DeadLetterTests : TestSetup
 
         // Act
         var foundDeadLetter = await context.DeadLetters.FirstAsync(x => x.Id == deadLetterId);
-        foundDeadLetter.Requeue("Re-queued via dashboard (WorkQueue 42)");
+        foundDeadLetter.Requeue("Re-queued via dashboard (WorkQueue 42)", TimeProvider.System);
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 
@@ -366,7 +372,8 @@ public class DeadLetterTests : TestSetup
                 Manifest = manifest,
                 Reason = "Max retries exceeded",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
         await context.Track(deadLetter);
         await context.SaveChanges(CancellationToken.None);
@@ -378,7 +385,8 @@ public class DeadLetterTests : TestSetup
                 Name = nameof(TestDeadLetterLinkRetryMetadataPersists),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { Test = "value" },
-            }
+            },
+            TimeProvider.System
         );
         await context.Track(retryMetadata);
         await context.SaveChanges(CancellationToken.None);
@@ -388,7 +396,7 @@ public class DeadLetterTests : TestSetup
 
         // Act — Requeue first, then link metadata (the real-world two-phase flow)
         var foundDeadLetter = await context.DeadLetters.FirstAsync(x => x.Id == deadLetterId);
-        foundDeadLetter.Requeue("Re-queued via service");
+        foundDeadLetter.Requeue("Re-queued via service", TimeProvider.System);
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 
@@ -437,7 +445,8 @@ public class DeadLetterTests : TestSetup
                 Manifest = manifest,
                 Reason = "Max retries exceeded",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
         await context.Track(deadLetter);
         await context.SaveChanges(CancellationToken.None);
@@ -449,7 +458,8 @@ public class DeadLetterTests : TestSetup
                 TrainName = typeof(DeadLetterTests).FullName.NotNull(),
                 ManifestId = manifest.Id,
                 DeadLetterId = deadLetter.Id,
-            }
+            },
+            TimeProvider.System
         );
         await context.Track(workQueue);
         await context.SaveChanges(CancellationToken.None);
@@ -519,7 +529,8 @@ public class DeadLetterTests : TestSetup
                 Manifest = manifest1,
                 Reason = "Reason 1",
                 RetryCount = 1,
-            }
+            },
+            TimeProvider.System
         );
         var deadLetter2 = DeadLetter.Create(
             new CreateDeadLetter
@@ -527,16 +538,18 @@ public class DeadLetterTests : TestSetup
                 Manifest = manifest2,
                 Reason = "Reason 2",
                 RetryCount = 2,
-            }
+            },
+            TimeProvider.System
         );
-        deadLetter2.Acknowledge("Acknowledged");
+        deadLetter2.Acknowledge("Acknowledged", TimeProvider.System);
         var deadLetter3 = DeadLetter.Create(
             new CreateDeadLetter
             {
                 Manifest = manifest3,
                 Reason = "Reason 3",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(deadLetter1);

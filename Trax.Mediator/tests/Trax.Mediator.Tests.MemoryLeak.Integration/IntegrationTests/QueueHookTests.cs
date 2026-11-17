@@ -208,13 +208,14 @@ public class QueueHookTests
         );
         await LateFaultQueueTrain.Started.Task.WaitAsync(
             TimeSpan.FromSeconds(15),
+            TimeProvider.System,
             CancellationToken.None
         );
         await cancel.CancelAsync();
 
         var act = async () =>
             await enqueue
-                .WaitAsync(TimeSpan.FromSeconds(15), CancellationToken.None)
+                .WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System, CancellationToken.None)
                 .ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
@@ -223,6 +224,7 @@ public class QueueHookTests
 
         var logged = await warnings.Logged.Task.WaitAsync(
             TimeSpan.FromSeconds(15),
+            TimeProvider.System,
             CancellationToken.None
         );
         logged

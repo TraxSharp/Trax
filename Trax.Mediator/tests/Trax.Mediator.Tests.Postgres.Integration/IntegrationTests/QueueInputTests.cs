@@ -252,7 +252,7 @@ public class QueueInputTests : TestSetup
     [Test]
     public async Task A_scheduled_time_in_the_past_is_stored_as_given_and_is_already_due()
     {
-        var past = DateTime.UtcNow.AddHours(-3);
+        var past = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3);
 
         var result = await Execution.QueueAsync(
             typeof(IOptionalInputTrain).FullName.NotNull(),
@@ -268,7 +268,7 @@ public class QueueInputTests : TestSetup
         entry
             .ScheduledAt.Should()
             .BeOnOrBefore(
-                DateTime.UtcNow,
+                TimeProvider.System.GetUtcNow().UtcDateTime,
                 "it is the earliest dispatch time, so a past one is due as soon as a worker is free"
             );
         entry.ConfirmedAt.Should().NotBeNull("nothing stages it, so dispatch can claim it now");
@@ -317,7 +317,7 @@ public class QueueInputTests : TestSetup
     public async Task An_unspecified_scheduled_time_is_taken_as_utc()
     {
         var unspecified = DateTime.SpecifyKind(
-            DateTime.UtcNow.AddHours(2),
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(2),
             DateTimeKind.Unspecified
         );
 
@@ -353,7 +353,9 @@ public class QueueInputTests : TestSetup
                 )
         );
 
-        var act = async () => await all.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        var act = async () =>
+            await all.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
+                .ConfigureAwait(false);
         await act.Should()
             .NotThrowAsync("a Blazor circuit shares one scope across every enqueue it makes");
 
@@ -445,7 +447,7 @@ public class QueueInputTests : TestSetup
             if (Interlocked.Increment(ref _arrived) == _expected)
                 _allArrived.TrySetResult();
 
-            return _allArrived.Task.WaitAsync(TimeSpan.FromSeconds(15), ct);
+            return _allArrived.Task.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System, ct);
         }
     }
 

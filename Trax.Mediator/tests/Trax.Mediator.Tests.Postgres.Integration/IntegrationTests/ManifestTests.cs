@@ -32,8 +32,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -76,8 +76,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -121,8 +121,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -167,8 +167,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -230,8 +230,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -268,8 +268,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -300,7 +300,8 @@ public class ManifestTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { TestInput = "value" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(metadata);
@@ -334,8 +335,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -366,7 +367,8 @@ public class ManifestTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { Run = 1 },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         var metadata2 = Metadata.Create(
@@ -376,7 +378,8 @@ public class ManifestTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { Run = 2 },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(metadata1);
@@ -411,8 +414,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -453,8 +456,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -496,8 +499,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -540,8 +543,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -590,8 +593,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -634,8 +637,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -678,8 +681,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -698,7 +701,7 @@ public class ManifestTests : TestSetup
         var foundManifest = await context.Manifests.FirstOrDefaultAsync(x => x.Id == manifestId);
         foundManifest.Should().NotBeNull();
 
-        var successTime = DateTime.UtcNow;
+        var successTime = TimeProvider.System.GetUtcNow().UtcDateTime;
         foundManifest.NotNull().LastSuccessfulRun = successTime;
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
@@ -727,8 +730,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -780,14 +783,15 @@ public class ManifestTests : TestSetup
         var context = (IDataContext)postgresContextFactory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var scheduledTime = DateTime.UtcNow.AddMinutes(-5);
+        var scheduledTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
                 Name = nameof(TestMetadataCanHaveScheduledTime),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { Test = "value" },
-            }
+            },
+            TimeProvider.System
         );
         metadata.ScheduledTime = scheduledTime;
 
@@ -855,8 +859,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -903,8 +907,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -952,8 +956,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);

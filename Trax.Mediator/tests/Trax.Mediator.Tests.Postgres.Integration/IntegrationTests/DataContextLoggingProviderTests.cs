@@ -50,7 +50,7 @@ public class DataContextLoggingProviderTests : TestSetup
     )
     {
         timeout ??= TimeSpan.FromSeconds(10);
-        var deadline = DateTime.UtcNow + timeout.Value;
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + timeout.Value;
         var count = 0;
 
         // ADR 0014: the query carries this wait's own token so a stalled command
@@ -59,7 +59,7 @@ public class DataContextLoggingProviderTests : TestSetup
         // simply never saw the count.
         using var cts = new CancellationTokenSource(timeout.Value);
 
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             var context = (IDataContext)factory.Create();
             await using var contextDisposal = context.ConfigureAwait(false);

@@ -36,7 +36,8 @@ public class PostgresContextTests : TestSetup
                 Name = "TestMetadata",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(metadata);

@@ -69,7 +69,8 @@ public class DeferredPromotionTests : TestSetup
                 Input = "{}",
                 InputTypeName = typeof(DeferInput).FullName,
                 DeferPromotion = true,
-            }
+            },
+            TimeProvider.System
         );
         entry.CreatedAt = createdAt;
         await context.Track(entry).ConfigureAwait(false);
@@ -194,7 +195,7 @@ public class DeferredPromotionTests : TestSetup
     [Test]
     public async Task PromoteAsync_confirms_an_unconfirmed_entry()
     {
-        var id = await InsertUnconfirmedAsync(DateTime.UtcNow);
+        var id = await InsertUnconfirmedAsync(TimeProvider.System.GetUtcNow().UtcDateTime);
 
         (await Promotion.PromoteAsync(id, CancellationToken.None)).Should().BeTrue();
         (await EntryAsync(id)).NotNull().ConfirmedAt.Should().NotBeNull();
@@ -203,7 +204,7 @@ public class DeferredPromotionTests : TestSetup
     [Test]
     public async Task PromoteAsync_returns_false_when_the_entry_is_already_confirmed()
     {
-        var id = await InsertUnconfirmedAsync(DateTime.UtcNow);
+        var id = await InsertUnconfirmedAsync(TimeProvider.System.GetUtcNow().UtcDateTime);
         await Promotion.PromoteAsync(id, CancellationToken.None);
 
         (await Promotion.PromoteAsync(id, CancellationToken.None))
@@ -220,8 +221,10 @@ public class DeferredPromotionTests : TestSetup
     [Test]
     public async Task PromoteStaleAsync_promotes_only_entries_older_than_the_window()
     {
-        var stale = await InsertUnconfirmedAsync(DateTime.UtcNow.AddMinutes(-30));
-        var fresh = await InsertUnconfirmedAsync(DateTime.UtcNow);
+        var stale = await InsertUnconfirmedAsync(
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
+        );
+        var fresh = await InsertUnconfirmedAsync(TimeProvider.System.GetUtcNow().UtcDateTime);
 
         var promoted = await Promotion.PromoteStaleAsync(
             TimeSpan.FromMinutes(10),
@@ -239,7 +242,7 @@ public class DeferredPromotionTests : TestSetup
     [Test]
     public async Task PromoteStaleAsync_ignores_entries_that_are_already_confirmed()
     {
-        await InsertUnconfirmedAsync(DateTime.UtcNow.AddMinutes(-30));
+        await InsertUnconfirmedAsync(TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30));
         await Promotion.PromoteStaleAsync(TimeSpan.FromMinutes(10), CancellationToken.None);
 
         (await Promotion.PromoteStaleAsync(TimeSpan.FromMinutes(10), CancellationToken.None))
@@ -250,8 +253,10 @@ public class DeferredPromotionTests : TestSetup
     [Test]
     public async Task CancelStaleAsync_cancels_only_entries_older_than_the_window()
     {
-        var stale = await InsertUnconfirmedAsync(DateTime.UtcNow.AddMinutes(-30));
-        var fresh = await InsertUnconfirmedAsync(DateTime.UtcNow);
+        var stale = await InsertUnconfirmedAsync(
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
+        );
+        var fresh = await InsertUnconfirmedAsync(TimeProvider.System.GetUtcNow().UtcDateTime);
 
         var cancelled = await Promotion.CancelStaleAsync(
             TimeSpan.FromMinutes(10),
@@ -266,7 +271,7 @@ public class DeferredPromotionTests : TestSetup
     [Test]
     public async Task PromoteAsync_leaves_an_entry_cancelled_while_its_hook_ran_cancelled()
     {
-        var id = await InsertUnconfirmedAsync(DateTime.UtcNow);
+        var id = await InsertUnconfirmedAsync(TimeProvider.System.GetUtcNow().UtcDateTime);
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var context = await factory.CreateDbContextAsync(CancellationToken.None);
@@ -628,7 +633,14 @@ public class DeferredPromotionTests : TestSetup
             await using var contextDisposal = context.ConfigureAwait(false);
             await context
                 .WorkQueues.Where(w => w.ExternalId == metadata.ExternalId)
-                .ExecuteUpdateAsync(u => u.SetProperty(w => w.ConfirmedAt, DateTime.UtcNow), ct)
+                .ExecuteUpdateAsync(
+                    u =>
+                        u.SetProperty(
+                            w => w.ConfirmedAt,
+                            TimeProvider.System.GetUtcNow().UtcDateTime
+                        ),
+                    ct
+                )
                 .ConfigureAwait(false);
 
             throw new InvalidOperationException("hook failed after promotion");
@@ -657,7 +669,14 @@ public class DeferredPromotionTests : TestSetup
             await using var contextDisposal = context.ConfigureAwait(false);
             await context
                 .WorkQueues.Where(w => w.ExternalId == metadata.ExternalId)
-                .ExecuteUpdateAsync(u => u.SetProperty(w => w.ConfirmedAt, DateTime.UtcNow), ct)
+                .ExecuteUpdateAsync(
+                    u =>
+                        u.SetProperty(
+                            w => w.ConfirmedAt,
+                            TimeProvider.System.GetUtcNow().UtcDateTime
+                        ),
+                    ct
+                )
                 .ConfigureAwait(false);
         }
 

@@ -16,7 +16,7 @@ public class TupleJunction : Junction<SimpleInput, (string Result, int Count, Da
             (
                 Result: $"Tuple result for {input.Name}",
                 Count: input.Name.Length,
-                Timestamp: DateTime.UtcNow
+                Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime
             )
         );
     }

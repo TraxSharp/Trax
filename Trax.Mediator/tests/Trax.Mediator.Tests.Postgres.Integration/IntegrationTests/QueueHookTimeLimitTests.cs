@@ -126,7 +126,8 @@ public class QueueHookTimeLimitTests : TestSetup
             Task.Run(() => execution.QueueAsync(typeof(IHangingTrain).FullName.NotNull(), "{}"))
         );
 
-        var act = async () => await hung.WaitAsync(SignalTimeout).ConfigureAwait(false);
+        var act = async () =>
+            await hung.WaitAsync(SignalTimeout, TimeProvider.System).ConfigureAwait(false);
         await act.Should()
             .ThrowAsync<QueueHookTimeoutException>(
                 $"a hook past the limit fails its enqueue even when it ignores its token ({Adr})"
@@ -139,7 +140,7 @@ public class QueueHookTimeLimitTests : TestSetup
         // Both hooks are still running, but their connections are back in the pool of two.
         var unrelated = await execution
             .QueueAsync(typeof(IQuickTrain).FullName.NotNull(), "{}")
-            .WaitAsync(SignalTimeout);
+            .WaitAsync(SignalTimeout, TimeProvider.System);
 
         unrelated.WorkQueueId.Should().BePositive();
         (await RowsAsync(nameof(IHangingTrain))).Should().Be(0, "a failed enqueue leaves no entry");
@@ -155,7 +156,7 @@ public class QueueHookTimeLimitTests : TestSetup
         var act = async () =>
             await execution
                 .QueueAsync(typeof(IFlushThenHangTrain).FullName.NotNull(), "{}")
-                .WaitAsync(SignalTimeout)
+                .WaitAsync(SignalTimeout, TimeProvider.System)
                 .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<QueueHookTimeoutException>();
@@ -180,11 +181,11 @@ public class QueueHookTimeLimitTests : TestSetup
         var act = async () =>
             await execution
                 .QueueAsync(typeof(ICooperativeTrain).FullName.NotNull(), "{}")
-                .WaitAsync(SignalTimeout)
+                .WaitAsync(SignalTimeout, TimeProvider.System)
                 .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<QueueHookTimeoutException>()).Which.Limit.Should().Be(Limit);
-        (await HangingProbe.TokenCancelled.WaitAsync(SignalTimeout))
+        (await HangingProbe.TokenCancelled.WaitAsync(SignalTimeout, TimeProvider.System))
             .Should()
             .BeTrue("a hook that honours its token stops at the limit");
     }
@@ -200,7 +201,7 @@ public class QueueHookTimeLimitTests : TestSetup
         var act = async () =>
             await execution
                 .QueueAsync(typeof(ILateEnqueueTrain).FullName.NotNull(), "{}")
-                .WaitAsync(SignalTimeout)
+                .WaitAsync(SignalTimeout, TimeProvider.System)
                 .ConfigureAwait(false);
         await act.Should().ThrowAsync<QueueHookTimeoutException>();
 
@@ -208,7 +209,9 @@ public class QueueHookTimeLimitTests : TestSetup
         HangingProbe.Release();
 
         var late = async () =>
-            await LateEnqueueTrain.Nested.Task.WaitAsync(SignalTimeout).ConfigureAwait(false);
+            await LateEnqueueTrain
+                .Nested.Task.WaitAsync(SignalTimeout, TimeProvider.System)
+                .ConfigureAwait(false);
         await late.Should()
             .ThrowAsync<InvalidOperationException>(
                 "the enqueue it would have joined was rolled back, and committing on its own "

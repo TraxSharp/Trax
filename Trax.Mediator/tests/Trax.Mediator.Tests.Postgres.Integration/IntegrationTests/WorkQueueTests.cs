@@ -34,7 +34,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.TestTrain",
                 Input = """{"value":"test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -51,7 +52,9 @@ public class WorkQueueTests : TestSetup
         found.InputTypeName.Should().Be("Trax.Core.Tests.TestInput");
         found.Status.Should().Be(WorkQueueStatus.Queued);
         found.ExternalId.Should().NotBeNullOrEmpty();
-        found.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
+        found
+            .CreatedAt.Should()
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(10));
         found.DispatchedAt.Should().BeNull();
         found.ManifestId.Should().BeNull();
         found.MetadataId.Should().BeNull();
@@ -75,7 +78,8 @@ public class WorkQueueTests : TestSetup
                 Input = """{"value":"priority-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
                 Priority = 15,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -107,7 +111,8 @@ public class WorkQueueTests : TestSetup
                 Input = """{"value":"clamp-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
                 Priority = 50,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -139,7 +144,8 @@ public class WorkQueueTests : TestSetup
                 Input = """{"value":"negative-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
                 Priority = -5,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -168,8 +174,8 @@ public class WorkQueueTests : TestSetup
         {
             Name = $"test-group-{Guid.NewGuid():N}",
             Priority = 0,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         context.ManifestGroups.Add(manifestGroup);
         await context.SaveChanges(CancellationToken.None);
@@ -195,7 +201,8 @@ public class WorkQueueTests : TestSetup
                 Input = """{"value":"test"}""",
                 InputTypeName = typeof(WorkQueueTests).FullName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(entry);
@@ -230,7 +237,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.AdHocTrain",
                 Input = """{"key":"value"}""",
                 InputTypeName = "Trax.Core.Tests.AdHocInput",
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -262,7 +270,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.TestTrain",
                 Input = """{"value":"dispatch-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(entry);
@@ -274,7 +283,8 @@ public class WorkQueueTests : TestSetup
                 Name = "Trax.Core.Tests.TestTrain",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { value = "dispatch-test" },
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(metadata);
@@ -283,7 +293,7 @@ public class WorkQueueTests : TestSetup
         // Act
         entry.Status = WorkQueueStatus.Dispatched;
         entry.MetadataId = metadata.Id;
-        entry.DispatchedAt = DateTime.UtcNow;
+        entry.DispatchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 
@@ -316,7 +326,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.TestTrain",
                 Input = """{"value":"cancel-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(entry);
@@ -353,7 +364,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.QueuedTrain",
                 Input = """{"status":"queued"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
-            }
+            },
+            TimeProvider.System
         );
 
         var cancelledEntry = WorkQueue.Create(
@@ -362,7 +374,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.CancelledTrain",
                 Input = """{"status":"cancelled"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(queuedEntry);
@@ -407,7 +420,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.JsonTestTrain",
                 Input = complexJson,
                 InputTypeName = "Trax.Core.Tests.ComplexInput",
-            }
+            },
+            TimeProvider.System
         );
 
         // Act

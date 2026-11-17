@@ -58,7 +58,7 @@ public class ExecutionModeContractTests : TestSetup
             DownstreamProbe.CompletedAt.Should().BeNull();
 
             DownstreamProbe.Downstream.SetResult();
-            await runTask.WaitAsync(SignalTimeout);
+            await runTask.WaitAsync(SignalTimeout, TimeProvider.System);
 
             DownstreamProbe
                 .CompletedAt.Should()
@@ -108,7 +108,7 @@ public class ExecutionModeContractTests : TestSetup
             }
 
             DownstreamProbe.Downstream.SetResult();
-            await runTask.WaitAsync(SignalTimeout);
+            await runTask.WaitAsync(SignalTimeout, TimeProvider.System);
         }
         finally
         {
@@ -220,7 +220,7 @@ public class ExecutionModeContractTests : TestSetup
         {
             DownstreamProbe.ReachedDownstream.TrySetResult();
             await DownstreamProbe.Downstream.Task.ConfigureAwait(false);
-            DownstreamProbe.CompletedAt = DateTime.UtcNow;
+            DownstreamProbe.CompletedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
 
             return Resolve();
         }

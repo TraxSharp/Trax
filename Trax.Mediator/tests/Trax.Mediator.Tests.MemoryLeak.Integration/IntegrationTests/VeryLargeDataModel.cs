@@ -11,6 +11,6 @@ public class VeryLargeDataModel(string name, byte[] data)
 {
     public string Name { get; } = name;
     public byte[] Data { get; } = data;
-    public DateTime CreatedAt { get; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; } = TimeProvider.System.GetUtcNow().UtcDateTime;
     public string Description { get; } = new string('X', 10000); // Additional 10KB string
 }
