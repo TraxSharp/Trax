@@ -60,6 +60,9 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
             );
 
         var existing = await aws.DescribeStackAsync(stack, ct);
+        // A first deploy that stopped before its change set ran left an empty stack in review: create it again.
+        if (existing is { Created: false })
+            existing = null;
         if (existing is { Dead: true })
             throw new InvalidOperationException(
                 $"{stack} is {existing.Status}: its creation failed and it can only be deleted. Run "
@@ -191,7 +194,10 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
             await aws.DeleteRepositoryAsync(Repository(stack, name), ct);
         foreach (var name in file.Secrets)
             await aws.DeleteSecretAsync(AwsStack.AppSecretName(stack, name), ct);
-        say("Deleted the images and the app's secrets (a secret can be restored for seven days).");
+        say(
+            "Deleted the images and the app's secrets. For seven days 'trax deploy secret set' restores a secret "
+                + "with its new value."
+        );
     }
 
     /// <summary>The ECR repository of a service: <c>trax/&lt;stack&gt;/&lt;service&gt;</c>.</summary>

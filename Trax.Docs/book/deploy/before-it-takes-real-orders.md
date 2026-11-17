@@ -21,8 +21,9 @@ follows: book/deploy/the-console
   with `UseRabbitMqInvalidation(rabbitMq, o => o.SigningKey = broadcastKey)`. Only one hub runs the schedule at a time; the others
   serve.
 
-- **One command.** `trax deploy` writes this chapter's compose stack, or an AWS environment, from what the hub
-  and the worker report they need: [Deploy a Trax app](/docs/reference/deploy-a-trax-app).
+- **One command.** `trax deploy` writes this chapter's compose stack from what the hub and the worker report they
+  need: [Deploy a Trax app](/docs/reference/deploy-a-trax-app). Its AWS target refuses Shopfront for now, because
+  the hub and the worker broadcast through RabbitMQ and an AWS stack does not provide it yet.
 
 ## What we have
 

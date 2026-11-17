@@ -65,6 +65,24 @@
           "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
         }
       },
+      "AWSSDK.SSO": {
+        "type": "Direct",
+        "requested": "[4.0.100.17, )",
+        "resolved": "4.0.100.17",
+        "contentHash": "r44rkllp5cGOcB0+f/OMAXZXqnL3vt+BgvybBct2iKKFklV/pYk99AprOJqoVsxT9eCvgUC3Kj73KI1PC/bm8g==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.SSOOIDC": {
+        "type": "Direct",
+        "requested": "[4.0.100.16, )",
+        "resolved": "4.0.100.16",
+        "contentHash": "6IB/jXbKklu7MO85jCdi+9pI5eAKjAm6FQvKlvgMQLVPq7ZC01kGXPl/PqxSRfOvRyKgWtJS9aOxGzt/RvF5xw==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
       "DotNet.ReproducibleBuilds": {
         "type": "Direct",
         "requested": "[2.0.5, )",

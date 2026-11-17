@@ -195,8 +195,9 @@ MyCompany.Scheduler/
 `Program.cs` registers `AddTrax` with the store `ConnectionStrings:Trax` chooses, `SaveTrainParameters()` and `AddJunctionProgress()`,
 `AddMediator`, `AddScheduler` with the `hello-world` manifest every 20 seconds, the operator key
 `operator-key-do-not-use-in-production` in Development only, `AddTraxGraphQL` exposing only the
-`operations` namespace behind `GateOperations(roles: "Operator")`, and the operations console with
-`AllowAnonymousShell()` in Development only. It exposes no train of its own over GraphQL.
+`operations` namespace behind `GateOperations(roles: "Operator")`, the health check at `/trax/health`,
+and the operations console with `AllowAnonymousShell()` in Development only. It exposes no train of
+its own over GraphQL.
 
 **Packages:** `Trax.Core`, `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Data.Postgres`, `Trax.Effect.Provider.Parameter`,
 `Trax.Effect.JunctionProvider.Progress`, `Trax.Mediator`, `Trax.Scheduler`, `Trax.Api.Auth.ApiKey`,
@@ -215,7 +216,7 @@ which is also the only place the URL is set:
 |----------|------|
 | `trax-hub` | `http://localhost:5400/trax/graphql` for the GraphQL IDE, `http://localhost:5400/trax/dashboard` for the operations console, `/trax/health` |
 | `trax-api` | `http://localhost:5402/trax/graphql` for the GraphQL IDE, `/trax/health` |
-| `trax-scheduler` | `http://localhost:5401/trax/dashboard` for the operations console |
+| `trax-scheduler` | `http://localhost:5401/trax/dashboard` for the operations console, `/trax/health` |
 
 Send `X-Api-Key: demo-key-do-not-use-in-production` with every GraphQL operation:
 

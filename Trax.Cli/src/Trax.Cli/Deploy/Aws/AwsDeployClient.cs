@@ -154,7 +154,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
             {
                 StackName = stack,
                 ChangeSetName = $"trax-{started:yyyyMMddHHmmss}",
-                ChangeSetType = existing is null ? ChangeSetType.CREATE : ChangeSetType.UPDATE,
+                ChangeSetType = ChangeSetTypeFor(existing),
                 TemplateBody = template,
                 UsePreviousTemplate = template is null ? true : null,
                 Parameters =
@@ -178,53 +178,77 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
             ct
         );
 
-        DescribeChangeSetResponse described;
-        while (true)
+        try
         {
-            described = await cfn.DescribeChangeSetAsync(
-                new DescribeChangeSetRequest { ChangeSetName = changeSet.Id },
+            DescribeChangeSetResponse described;
+            while (true)
+            {
+                described = await cfn.DescribeChangeSetAsync(
+                    new DescribeChangeSetRequest { ChangeSetName = changeSet.Id },
+                    ct
+                );
+                if (described.Status == ChangeSetStatus.CREATE_COMPLETE)
+                    break;
+                if (described.Status == ChangeSetStatus.FAILED)
+                {
+                    await cfn.DeleteChangeSetAsync(
+                        new DeleteChangeSetRequest { ChangeSetName = changeSet.Id },
+                        ct
+                    );
+                    if (
+                        described.StatusReason?.Contains(
+                            "didn't contain changes",
+                            StringComparison.Ordinal
+                        )
+                            is true
+                        || described.StatusReason?.Contains("No updates", StringComparison.Ordinal)
+                            is true
+                    )
+                        return false;
+                    throw new InvalidOperationException(
+                        $"CloudFormation refused the change to {stack}: {described.StatusReason}"
+                    );
+                }
+                await Task.Delay(TimeSpan.FromSeconds(3), ct);
+            }
+            foreach (var change in described.Changes ?? [])
+            {
+                var resource = change.ResourceChange;
+                progress(
+                    $"  {resource.Action?.Value, -8}{resource.LogicalResourceId} ({resource.ResourceType})"
+                        + (resource.Replacement?.Value == "True" ? ", replaced" : "")
+                );
+            }
+
+            await cfn.ExecuteChangeSetAsync(
+                new ExecuteChangeSetRequest { ChangeSetName = changeSet.Id },
                 ct
             );
-            if (described.Status == ChangeSetStatus.CREATE_COMPLETE)
-                break;
-            if (described.Status == ChangeSetStatus.FAILED)
+        }
+        catch (OperationCanceledException)
+        {
+            // A change set left behind holds a new stack in REVIEW_IN_PROGRESS. The next deploy creates it again
+            // either way, so a delete that fails (the change set already executing) changes nothing.
+            try
             {
                 await cfn.DeleteChangeSetAsync(
                     new DeleteChangeSetRequest { ChangeSetName = changeSet.Id },
-                    ct
-                );
-                if (
-                    described.StatusReason?.Contains(
-                        "didn't contain changes",
-                        StringComparison.Ordinal
-                    )
-                        is true
-                    || described.StatusReason?.Contains("No updates", StringComparison.Ordinal)
-                        is true
-                )
-                    return false;
-                throw new InvalidOperationException(
-                    $"CloudFormation refused the change to {stack}: {described.StatusReason}"
+                    CancellationToken.None
                 );
             }
-            await Task.Delay(TimeSpan.FromSeconds(3), ct);
+            catch (AmazonCloudFormationException) { }
+            throw;
         }
-        foreach (var change in described.Changes ?? [])
-        {
-            var resource = change.ResourceChange;
-            progress(
-                $"  {resource.Action?.Value, -8}{resource.LogicalResourceId} ({resource.ResourceType})"
-                    + (resource.Replacement?.Value == "True" ? ", replaced" : "")
-            );
-        }
-
-        await cfn.ExecuteChangeSetAsync(
-            new ExecuteChangeSetRequest { ChangeSetName = changeSet.Id },
-            ct
-        );
         await WaitAsync(cfn, stack, started, progress, ct);
         return true;
     }
+
+    /// <summary>
+    /// CREATE for a stack that does not exist or holds nothing yet (REVIEW_IN_PROGRESS, left by a first deploy's
+    /// change set that failed or was abandoned, which CloudFormation lets a CREATE change set replace), else UPDATE.
+    /// </summary>
+    internal static ChangeSetType ChangeSetTypeFor(AwsStackState? existing) =>
+        existing is null or { Created: false } ? ChangeSetType.CREATE : ChangeSetType.UPDATE;
 
     private static async Task WaitAsync(
         AmazonCloudFormationClient cfn,
@@ -385,12 +409,32 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
     )
     {
         using var secrets = new AmazonSecretsManagerClient(_region);
+        await PutSecretAsync(secrets, name, value, tags, ct);
+    }
+
+    /// <summary>
+    /// Stores <paramref name="value"/> as the secret's current value, creating the secret when it does not exist and
+    /// restoring it first when it is pending deletion (as <c>destroy --delete-data</c> leaves it for seven days),
+    /// since a secret pending deletion takes no value and holds its name.
+    /// </summary>
+    internal static async Task PutSecretAsync(
+        IAmazonSecretsManager secrets,
+        string name,
+        string value,
+        IReadOnlyDictionary<string, string> tags,
+        CancellationToken ct
+    )
+    {
+        var put = new PutSecretValueRequest { SecretId = name, SecretString = value };
         try
         {
-            await secrets.PutSecretValueAsync(
-                new PutSecretValueRequest { SecretId = name, SecretString = value },
-                ct
-            );
+            await secrets.PutSecretValueAsync(put, ct);
+        }
+        catch (InvalidRequestException ex)
+            when (ex.Message.Contains("marked for deletion", StringComparison.Ordinal))
+        {
+            await secrets.RestoreSecretAsync(new RestoreSecretRequest { SecretId = name }, ct);
+            await secrets.PutSecretValueAsync(put, ct);
         }
         catch (Amazon.SecretsManager.Model.ResourceNotFoundException)
         {
@@ -492,7 +536,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
     {
         using var logs = new AmazonCloudWatchLogsClient(_region);
         var start = new DateTimeOffset(since, TimeSpan.Zero).ToUnixTimeMilliseconds();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new SeenLogEvents();
         while (true)
         {
             string? next = null;
@@ -508,7 +552,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
                     ct
                 );
                 foreach (var e in page.Events ?? [])
-                    if (seen.Add(e.EventId))
+                    if (seen.Add(e.EventId, e.Timestamp ?? start))
                     {
                         start = Math.Max(start, e.Timestamp ?? start);
                         yield return e.Message.TrimEnd();

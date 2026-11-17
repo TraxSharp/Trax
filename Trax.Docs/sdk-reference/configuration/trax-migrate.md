@@ -70,7 +70,8 @@ A context named without an `IDbContextFactory<TContext>` registered throws, nami
 
 A host started with `--trax-migrate` that calls `app.Run()` rather than `RunTraxAsync` refuses to start, naming
 `RunTraxAsync`, so a migrate process never also starts the host's workers and listeners. On a `WebApplication`,
-`RunTraxAsync` from `Trax.Api.GraphQL.PersistedOperations.Extensions` handles `--trax-migrate` the same way, as
+`RunTraxAsync` from `Trax.Api.GraphQL.PersistedOperations.Extensions` handles `--trax-migrate` and
+`--trax-export-deploy` the same way (see [DeployManifest](/docs/sdk-reference/configuration/deploy-manifest)), as
 well as `--trax-export-client` (see [Client manifest](/docs/sdk-reference/statemachine-api/client-manifest)).
 
 ## Example

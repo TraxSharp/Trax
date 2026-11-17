@@ -185,6 +185,7 @@ internal sealed partial class DeployFile
                 Problem("services is empty. Name at least one project to deploy.")
             );
         var dir = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        var ports = new Dictionary<int, string>();
         foreach (var (name, service) in Services)
         {
             if (!Name().IsMatch(name) || name is "database" or "rabbitmq" or "migrate")
@@ -203,6 +204,12 @@ internal sealed partial class DeployFile
             if (service.Port is < 1 or > 65535)
                 throw new InvalidOperationException(
                     Problem($"service '{name}' has port {service.Port}, which is not a TCP port.")
+                );
+            if (service.Port is { } port && !ports.TryAdd(port, name))
+                throw new InvalidOperationException(
+                    Problem(
+                        $"service '{name}' has port {port}, which service '{ports[port]}' has too."
+                    )
                 );
             if (service.Count < 1)
                 throw new InvalidOperationException(
@@ -322,8 +329,9 @@ internal sealed class DeployService
     public int Count { get; set; } = 1;
 
     /// <summary>
-    /// The port on 127.0.0.1 a compose stack publishes this service's HTTP on. Default: 8080, then 8081 and on for
-    /// each further service that serves HTTP.
+    /// The port on 127.0.0.1 a compose stack publishes this service's HTTP on. Compose publishes one only for a hub
+    /// (a service that serves HTTP and runs the api or scheduler role); without this it takes 8080, or the next port
+    /// no other service has.
     /// </summary>
     public int? Port { get; set; }
 }

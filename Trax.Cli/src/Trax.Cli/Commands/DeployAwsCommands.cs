@@ -61,7 +61,7 @@ internal static class DeployAwsCommands
         };
         command.SetAction(
             (r, ct) =>
-                PlanAsync(PathOf(r, file), r.GetRequiredValue(env), new DotnetHostExporter(), ct)
+                PlanAsync(PathOf(r, file), r.GetRequiredValue(env), new DotnetHostExporter(ct), ct)
         );
         return command;
     }
@@ -396,10 +396,18 @@ internal static class DeployAwsCommands
         if (Console.IsInputRedirected)
             return Console.In.ReadToEnd().TrimEnd('\r', '\n');
         Console.Write("Value (not shown): ");
+        var value = ReadHidden(() => Console.ReadKey(intercept: true));
+        Console.WriteLine();
+        return value;
+    }
+
+    /// <summary>The characters typed until Enter, with Backspace taking one back and every other key ignored.</summary>
+    internal static string ReadHidden(Func<ConsoleKeyInfo> readKey)
+    {
         var value = new System.Text.StringBuilder();
         while (true)
         {
-            var key = Console.ReadKey(intercept: true);
+            var key = readKey();
             if (key.Key == ConsoleKey.Enter)
                 break;
             if (key.Key == ConsoleKey.Backspace)
@@ -408,9 +416,12 @@ internal static class DeployAwsCommands
                     value.Length--;
                 continue;
             }
+            // Arrows, Home, End, Delete and Tab are control characters ('\0', '\t'), which nobody sees typed with
+            // echo off and which would end up in the stored value.
+            if (char.IsControl(key.KeyChar))
+                continue;
             value.Append(key.KeyChar);
         }
-        Console.WriteLine();
         return value.ToString();
     }
 
@@ -422,10 +433,9 @@ internal static class DeployAwsCommands
             return 0;
         }
         catch (Exception ex)
-            when (ex
-                    is InvalidOperationException
-                        or IOException
-                        or Amazon.Runtime.AmazonServiceException
+            when (DeployCommand.Reported(ex)
+                || ex
+                    is Amazon.Runtime.AmazonServiceException
                         or Amazon.Runtime.AmazonClientException
             )
         {

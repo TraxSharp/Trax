@@ -1,8 +1,12 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
+using Amazon.SecretsManager;
+using Amazon.SecretsManager.Model;
 using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Deploy;
 using Trax.Cli.Deploy.Aws;
+using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -117,6 +121,41 @@ public class AwsDeployerTests
     }
 
     [Test]
+    public async Task A_stack_an_abandoned_first_deploy_left_in_review_is_created_again()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = new AwsStackState(
+            "REVIEW_IN_PROGRESS",
+            new Dictionary<string, string>(),
+            new Dictionary<string, string>()
+        );
+
+        await Deploy(deployer);
+
+        aws.Calls.Should().Equal("deploy", "run-task", "deploy");
+        aws.Deploys[0][AwsStack.ScaleParameter].Should().Be("0");
+        aws.Deploys[0]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
+    }
+
+    [TestCase(null, "CREATE")]
+    [TestCase("REVIEW_IN_PROGRESS", "CREATE")]
+    [TestCase("UPDATE_COMPLETE", "UPDATE")]
+    public void A_change_set_creates_a_stack_that_holds_nothing_yet(string? status, string type) =>
+        AwsDeployClient
+            .ChangeSetTypeFor(
+                status is null
+                    ? null
+                    : new AwsStackState(
+                        status,
+                        new Dictionary<string, string>(),
+                        new Dictionary<string, string>()
+                    )
+            )
+            .Value.Should()
+            .Be(type);
+
+    [Test]
     public async Task Destroy_unprotects_a_production_database_then_deletes_the_stack()
     {
         var (deployer, aws, _) = Deployer();
@@ -219,6 +258,176 @@ public class AwsDeployerTests
             .Should()
             .StartWith("20261020-120000");
 
+    [TestCase("AWSSDK.SSO.dll")]
+    [TestCase("AWSSDK.SSOOIDC.dll")]
+    public void The_tool_ships_what_the_AWS_SDK_signs_in_to_an_SSO_profile_with(string assembly) =>
+        File.Exists(
+                Path.Combine(
+                    Path.GetDirectoryName(typeof(AwsDeployClient).Assembly.Location)!,
+                    assembly
+                )
+            )
+            .Should()
+            .BeTrue("the SDK loads it by reflection for a profile signed in with aws sso login");
+
+    [Test]
+    public void A_hidden_secret_keeps_only_the_characters_typed()
+    {
+        var keys = new Queue<ConsoleKeyInfo>([
+            Key('a', ConsoleKey.A),
+            Key('\0', ConsoleKey.LeftArrow),
+            Key('b', ConsoleKey.B),
+            Key('\t', ConsoleKey.Tab),
+            Key('\0', ConsoleKey.Delete),
+            Key('c', ConsoleKey.C),
+            Key('\b', ConsoleKey.Backspace),
+            Key('d', ConsoleKey.D),
+            Key('\r', ConsoleKey.Enter),
+        ]);
+
+        DeployAwsCommands.ReadHidden(keys.Dequeue).Should().Be("abd");
+    }
+
+    private static ConsoleKeyInfo Key(char c, ConsoleKey key) => new(c, key, false, false, false);
+
+    [Test]
+    public async Task Setting_a_secret_that_destroy_deleted_restores_it_first()
+    {
+        var secrets = DispatchProxy.Create<IAmazonSecretsManager, FakeSecretsManager>();
+        var fake = (FakeSecretsManager)(object)secrets;
+        fake.PendingDeletion = true;
+
+        await AwsDeployClient.PutSecretAsync(
+            secrets,
+            "orders-staging/app/Stripe__ApiKey",
+            "sk_test",
+            new Dictionary<string, string>(),
+            CancellationToken.None
+        );
+
+        fake.Calls.Should().Equal("PutSecretValue", "RestoreSecret", "PutSecretValue");
+        fake.Value.Should().Be("sk_test");
+    }
+
+    [Test]
+    public async Task Setting_a_secret_that_does_not_exist_creates_it()
+    {
+        var secrets = DispatchProxy.Create<IAmazonSecretsManager, FakeSecretsManager>();
+        var fake = (FakeSecretsManager)(object)secrets;
+        fake.Missing = true;
+
+        await AwsDeployClient.PutSecretAsync(
+            secrets,
+            "orders-staging/app/Stripe__ApiKey",
+            "sk_test",
+            new Dictionary<string, string>(),
+            CancellationToken.None
+        );
+
+        fake.Calls.Should().Equal("PutSecretValue", "CreateSecret");
+        fake.Value.Should().Be("sk_test");
+    }
+
+    [Test]
+    public void Following_a_log_keeps_only_the_ids_at_its_newest_time()
+    {
+        var seen = new SeenLogEvents();
+
+        for (var i = 0; i < 10_000; i++)
+            seen.Add($"e{i}", 1_000 + i).Should().BeTrue();
+
+        seen.Count.Should().Be(1, "only an event at the newest time can be read again");
+        seen.Add("e9999", 10_999).Should().BeFalse("it was printed already");
+        seen.Add("other", 10_999).Should().BeTrue();
+        seen.Add("late", 10_000)
+            .Should()
+            .BeTrue("the next read starts after it, so it cannot repeat");
+    }
+
+    [TestCase(typeof(UnauthorizedAccessException))]
+    [TestCase(typeof(System.Text.Json.JsonException))]
+    [TestCase(typeof(System.ComponentModel.Win32Exception))]
+    public async Task A_deploy_that_fails_reports_it_in_a_line(Type failure)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"trax-deploy-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(dir, "Orders"));
+        Directory.CreateDirectory(Path.Combine(dir, "Orders.Worker"));
+        File.WriteAllText(Path.Combine(dir, "Orders/Orders.csproj"), "<Project />");
+        File.WriteAllText(Path.Combine(dir, "Orders.Worker/Orders.Worker.csproj"), "<Project />");
+        var path = Path.Combine(dir, DeployFile.FileName);
+        File.WriteAllText(path, AwsStackTemplateTests.File_().Write());
+        try
+        {
+            (
+                await DeployAwsCommands.DeployAsync(
+                    path,
+                    "production",
+                    new ThrowingExporter((Exception)Activator.CreateInstance(failure)!),
+                    CancellationToken.None
+                )
+            )
+                .Should()
+                .Be(1);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    internal sealed class ThrowingExporter(Exception failure) : IHostExporter
+    {
+        public DeployManifest Export(
+            string projectPath,
+            IReadOnlyDictionary<string, string> environment
+        ) => throw failure;
+    }
+
+    /// <summary>
+    /// Secrets Manager, holding one secret that is missing or pending deletion, as the service answers for each.
+    /// </summary>
+    public class FakeSecretsManager : DispatchProxy
+    {
+        public List<string> Calls { get; } = [];
+        public bool PendingDeletion { get; set; }
+        public bool Missing { get; set; }
+        public string? Value { get; private set; }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            var name = targetMethod!.Name;
+            if (name == "Dispose")
+                return null;
+            Calls.Add(name.Replace("Async", "", StringComparison.Ordinal));
+            switch (name)
+            {
+                case "PutSecretValueAsync":
+                    if (PendingDeletion)
+                        return System.Threading.Tasks.Task.FromException<PutSecretValueResponse>(
+                            new InvalidRequestException(
+                                "You can't perform this operation on the secret because it was marked for deletion."
+                            )
+                        );
+                    if (Missing)
+                        return System.Threading.Tasks.Task.FromException<PutSecretValueResponse>(
+                            new ResourceNotFoundException(
+                                "Secrets Manager can't find the specified secret."
+                            )
+                        );
+                    Value = ((PutSecretValueRequest)args![0]!).SecretString;
+                    return System.Threading.Tasks.Task.FromResult(new PutSecretValueResponse());
+                case "RestoreSecretAsync":
+                    PendingDeletion = false;
+                    return System.Threading.Tasks.Task.FromResult(new RestoreSecretResponse());
+                case "CreateSecretAsync":
+                    Value = ((CreateSecretRequest)args![0]!).SecretString;
+                    return System.Threading.Tasks.Task.FromResult(new CreateSecretResponse());
+                default:
+                    throw new NotSupportedException(name);
+            }
+        }
+    }
+
     internal sealed class FakeImages : IImagePublisher
     {
         public List<string> Published { get; } = [];
@@ -285,13 +494,12 @@ public class AwsDeployerTests
 
         public Task<AwsStackState?> DescribeStackAsync(string stack, CancellationToken ct) =>
             System.Threading.Tasks.Task.FromResult(
-                Calls.Contains("deploy")
-                    ? Existing
-                        ?? new AwsStackState(
-                            "CREATE_COMPLETE",
-                            Outputs(),
-                            new Dictionary<string, string>()
-                        )
+                Calls.Contains("deploy") && Existing is null or { Created: false }
+                    ? new AwsStackState(
+                        "CREATE_COMPLETE",
+                        Outputs(),
+                        new Dictionary<string, string>()
+                    )
                     : Existing
             );
 

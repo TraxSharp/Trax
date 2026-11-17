@@ -668,7 +668,9 @@ C# client does not type one yet; the console selects none.
 database, its roles, its endpoints) is not written in the file: trax runs each project once with
 `--trax-export-deploy`, in Production, and reads what the host reports
 ([DeployManifest](/docs/sdk-reference/configuration/deploy-manifest)). A host that would refuse to start in
-Production refuses the deploy the same way, before anything is written.
+Production refuses the deploy the same way, before anything is written. A run still going after ten minutes, its
+build included, is stopped and the deploy fails with what it printed: a host that calls `app.Run()` serves instead
+of reporting.
 
 ```bash
 # Write a first trax.deploy.json from the Trax host projects under this directory.
@@ -697,7 +699,7 @@ trax deploy --target compose --build
 | Key | Meaning |
 |---|---|
 | `app` | Lower case, a letter first, then letters, digits or dashes. Names the database, its user and the images. |
-| `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes its HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `init` names a lone project `hub` and several by the last part of their names. |
+| `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes a hub's HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `init` names a lone project `hub` and several by the last part of their names. |
 | `connectionStrings` | The names under `ConnectionStrings:` the hosts read Postgres and RabbitMQ from. Default `Trax` and `RabbitMq`. |
 | `settings`, `secrets` | Configuration the deployment must supply, as environment names (`__` for `:`). Every one is required. |
 
@@ -712,8 +714,10 @@ compose:
 - `database`, Postgres 17, with the app's name as database and user;
 - `rabbitmq`, only when a host connects to RabbitMQ;
 - `migrate`, the image of the service that serves the API, started once with `--trax-migrate` before any service;
-- each service, with `TRAX_MIGRATIONS=skip`, waiting for `migrate` to finish; a service that serves HTTP is
-  published on `127.0.0.1` only, on its `port` or 8080 (then 8081 and on), and `count` becomes `deploy.replicas`.
+- each service, with `TRAX_MIGRATIONS=skip`, waiting for `migrate` to finish, and `count` becomes
+  `deploy.replicas`. A hub (a service that serves HTTP and runs the `api` or `scheduler` role, so runs as one) is
+  published on `127.0.0.1` only, on its `port` or the first port from 8080 no other service names. No other service
+  publishes a port, so a `port` on one is refused, and so are two services with the same `port`.
 
 The Trax services drop every Linux capability and run with `no-new-privileges`; Postgres and RabbitMQ get
 `no-new-privileges`. Nothing is reachable from other machines until something in front of the stack (a reverse
@@ -788,7 +792,8 @@ trax deploy destroy --env production     # asks for the stack's name; --delete-d
 ```
 
 `destroy` turns a production database's deletion protection off, then deletes the stack; the database leaves a
-final snapshot, which RDS keeps until you delete it.
+final snapshot, which RDS keeps until you delete it. A secret `--delete-data` deleted can be recovered for seven days, and
+`secret set` restores it with the new value, so the environment can be deployed again the same day.
 
 ## SDK Reference
 

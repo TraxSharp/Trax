@@ -63,7 +63,7 @@ internal static class DeployCommand
                             path,
                             parseResult.GetValue(output)?.FullName,
                             parseResult.GetValue(build),
-                            new DotnetHostExporter(),
+                            new DotnetHostExporter(ct),
                             BuildImage
                         )
                     );
@@ -77,7 +77,7 @@ internal static class DeployCommand
                 return DeployAwsCommands.DeployAsync(
                     path,
                     environment,
-                    new DotnetHostExporter(),
+                    new DotnetHostExporter(ct),
                     ct
                 );
             }
@@ -173,7 +173,7 @@ internal static class DeployCommand
             );
             return 0;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        catch (Exception ex) when (Reported(ex))
         {
             Console.Error.WriteLine(ex.Message);
             return 1;
@@ -234,12 +234,24 @@ internal static class DeployCommand
             );
             return 0;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        catch (Exception ex) when (Reported(ex))
         {
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
     }
+
+    /// <summary>
+    /// The failures a deploy command prints as one line and exit 1, rather than a stack trace: what it refuses, and
+    /// what the file system, a host's report or a process it starts can throw.
+    /// </summary>
+    internal static bool Reported(Exception ex) =>
+        ex
+            is InvalidOperationException
+                or IOException
+                or UnauthorizedAccessException
+                or System.Text.Json.JsonException
+                or System.ComponentModel.Win32Exception;
 
     /// <summary>Asks each service's host what it needs, by running it once with --trax-export-deploy.</summary>
     internal static Dictionary<string, DeployManifest> Export(
