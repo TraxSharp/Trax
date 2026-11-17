@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
@@ -33,7 +34,7 @@ public class TraxBuilderWithMediatorGettersTests
         });
 
         captured.Should().NotBeNull();
-        captured!.ServiceCollection.Should().BeSameAs(capture);
+        captured.NotNull().ServiceCollection.Should().BeSameAs(capture);
         captured.HasDataProvider.Should().BeTrue();
         captured.HasDatabaseProvider.Should().BeFalse();
         captured.Root.Should().NotBeNull();

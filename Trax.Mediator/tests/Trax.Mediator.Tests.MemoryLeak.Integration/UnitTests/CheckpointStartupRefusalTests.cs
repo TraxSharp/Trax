@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -38,7 +39,11 @@ public class CheckpointStartupRefusalTests
         var failure = await Start<ISecretTrain, SecretTrain>();
         failure.Should().NotBeNull();
 
-        failure!.Message.Should().Contain("Checkpoint<Secret>").And.Contain("[TraxSensitive]", Adr);
+        failure
+            .NotNull()
+            .Message.Should()
+            .Contain("Checkpoint<Secret>")
+            .And.Contain("[TraxSensitive]", Adr);
     }
 
     [Test]
@@ -49,7 +54,8 @@ public class CheckpointStartupRefusalTests
         );
         failure.Should().NotBeNull();
 
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain("inside a track whose routing key is marked [TraxSensitive]", Adr);
     }

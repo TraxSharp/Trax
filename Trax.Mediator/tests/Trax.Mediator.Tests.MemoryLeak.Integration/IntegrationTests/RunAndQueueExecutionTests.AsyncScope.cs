@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Configuration;
@@ -14,7 +15,7 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task TrainBus_TrainWithAnAsyncOnlyDisposableDependency_ReturnsItsOutput()
     {
-        await using var scope = _serviceProvider.CreateAsyncScope();
+        await using var scope = _serviceProvider.NotNull().CreateAsyncScope();
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         (await bus.RunAsync<string>(new AsyncScopedInput())).Should().Be("ran");
@@ -34,7 +35,7 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task TrainBus_FailingTrainWithAnAsyncOnlyDisposableDependency_SurfacesItsOwnFailure()
     {
-        await using var scope = _serviceProvider.CreateAsyncScope();
+        await using var scope = _serviceProvider.NotNull().CreateAsyncScope();
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var act = async () =>

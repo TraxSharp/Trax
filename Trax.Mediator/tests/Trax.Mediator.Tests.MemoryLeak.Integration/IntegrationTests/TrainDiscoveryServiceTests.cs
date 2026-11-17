@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Extensions;
@@ -28,7 +29,7 @@ public class TrainDiscoveryServiceTests
         );
 
         subscription.Should().NotBeNull();
-        subscription!.IsBroadcastEnabled.Should().BeTrue();
+        subscription.NotNull().IsBroadcastEnabled.Should().BeTrue();
     }
 
     [Test]
@@ -43,7 +44,7 @@ public class TrainDiscoveryServiceTests
         var plain = registrations.FirstOrDefault(r => r.ImplementationType == typeof(PlainTrain));
 
         plain.Should().NotBeNull();
-        plain!.IsBroadcastEnabled.Should().BeFalse();
+        plain.NotNull().IsBroadcastEnabled.Should().BeFalse();
     }
 
     [Test]
@@ -60,8 +61,8 @@ public class TrainDiscoveryServiceTests
         );
 
         both.Should().NotBeNull();
-        both!.IsMutation.Should().BeTrue();
-        both!.IsBroadcastEnabled.Should().BeTrue();
+        both.NotNull().IsMutation.Should().BeTrue();
+        both.NotNull().IsBroadcastEnabled.Should().BeTrue();
     }
 
     [Test]
@@ -78,8 +79,8 @@ public class TrainDiscoveryServiceTests
         );
 
         graphqlOnly.Should().NotBeNull();
-        graphqlOnly!.IsMutation.Should().BeTrue();
-        graphqlOnly!.IsBroadcastEnabled.Should().BeFalse();
+        graphqlOnly.NotNull().IsMutation.Should().BeTrue();
+        graphqlOnly.NotNull().IsBroadcastEnabled.Should().BeFalse();
     }
 
     [Test]
@@ -96,8 +97,8 @@ public class TrainDiscoveryServiceTests
         );
 
         subscription.Should().NotBeNull();
-        subscription!.IsBroadcastEnabled.Should().BeTrue();
-        subscription!.IsMutation.Should().BeFalse();
+        subscription.NotNull().IsBroadcastEnabled.Should().BeTrue();
+        subscription.NotNull().IsMutation.Should().BeFalse();
     }
 
     #endregion
@@ -134,7 +135,7 @@ public class TrainDiscoveryServiceTests
         var plain = registrations.FirstOrDefault(r => r.ImplementationType == typeof(PlainTrain));
 
         plain.Should().NotBeNull();
-        plain!.OutputType.Should().Be(typeof(Unit));
+        plain.NotNull().OutputType.Should().Be(typeof(Unit));
     }
 
     [Test]
@@ -151,7 +152,7 @@ public class TrainDiscoveryServiceTests
         );
 
         typed.Should().NotBeNull();
-        typed!.OutputType.Should().Be(typeof(DiscoveryOutput));
+        typed.NotNull().OutputType.Should().Be(typeof(DiscoveryOutput));
     }
 
     [Test]
@@ -168,7 +169,7 @@ public class TrainDiscoveryServiceTests
         );
 
         typed.Should().NotBeNull();
-        typed!.OutputTypeName.Should().Contain("DiscoveryOutput");
+        typed.NotNull().OutputTypeName.Should().Contain("DiscoveryOutput");
     }
 
     [Test]
@@ -185,8 +186,8 @@ public class TrainDiscoveryServiceTests
         );
 
         typed.Should().NotBeNull();
-        typed!.OutputType.Should().Be(typeof(DiscoveryOutput));
-        typed!.IsMutation.Should().BeTrue();
+        typed.NotNull().OutputType.Should().Be(typeof(DiscoveryOutput));
+        typed.NotNull().IsMutation.Should().BeTrue();
     }
 
     [Test]
@@ -203,7 +204,7 @@ public class TrainDiscoveryServiceTests
         );
 
         typed.Should().NotBeNull();
-        typed!.InputType.Should().Be(typeof(TypedOutputInput));
+        typed.NotNull().InputType.Should().Be(typeof(TypedOutputInput));
     }
 
     #endregion
@@ -224,7 +225,7 @@ public class TrainDiscoveryServiceTests
         );
 
         limited.Should().NotBeNull();
-        limited!.MaxConcurrentRun.Should().Be(15);
+        limited.NotNull().MaxConcurrentRun.Should().Be(15);
     }
 
     [Test]
@@ -239,7 +240,7 @@ public class TrainDiscoveryServiceTests
         var plain = registrations.FirstOrDefault(r => r.ImplementationType == typeof(PlainTrain));
 
         plain.Should().NotBeNull();
-        plain!.MaxConcurrentRun.Should().BeNull();
+        plain.NotNull().MaxConcurrentRun.Should().BeNull();
     }
 
     #endregion

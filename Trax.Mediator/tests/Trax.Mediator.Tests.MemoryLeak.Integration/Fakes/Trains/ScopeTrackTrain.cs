@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
@@ -18,6 +19,6 @@ public class ScopeTrackTrain : ServiceTrain<ScopeTrackInput, ScopeTrackOutput>, 
 
     protected override Task<Either<Exception, ScopeTrackOutput>> Junctions() =>
         Task.FromResult<Either<Exception, ScopeTrackOutput>>(
-            new ScopeTrackOutput(Marker!.Id, Tracker!)
+            new ScopeTrackOutput(Marker.NotNull().Id, Tracker.NotNull())
         );
 }

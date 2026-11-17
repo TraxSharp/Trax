@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -34,7 +35,7 @@ public abstract class TestSetup
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
             .Build();
         var connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
 
         var arrayLoggingProvider = new ArrayLoggingProvider();

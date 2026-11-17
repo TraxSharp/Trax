@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue.DTOs;
@@ -24,7 +25,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
     private const string Adr =
         "Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md";
 
-    private InvokeHost _host = null!;
+    private InvokeHost? _host;
 
     [SetUp]
     public void SetUp()
@@ -38,7 +39,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
     public void TearDown()
     {
         RecordingAuthorization.Refused.Clear();
-        _host.Dispose();
+        _host?.Dispose();
     }
 
     private static string NewUser() => "user-" + Guid.NewGuid().ToString("N");
@@ -48,12 +49,12 @@ public class InvokesAuthorizationTests(StoreProvider provider)
     {
         var user = NewUser();
         for (var i = 0; i < 10; i++)
-            (await _host.EnterRunning(user, Guid.NewGuid(), GoodMachine.MachineId))
+            (await _host.NotNull().EnterRunning(user, Guid.NewGuid(), GoodMachine.MachineId))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
 
         var eleventh = Guid.NewGuid();
-        (await _host.EnterRunning(user, eleventh, GoodMachine.MachineId))
+        (await _host.NotNull().EnterRunning(user, eleventh, GoodMachine.MachineId))
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
@@ -61,11 +62,14 @@ public class InvokesAuthorizationTests(StoreProvider provider)
                 RefusalCode.InvokeLimitReached,
                 $"a user holds at most 10 live runs by default. See {Adr}"
             );
-        (await _host.Row(eleventh, GoodMachine.MachineId))!.State.Should().Be("Idle");
-        (await _host.Runs(eleventh)).Should().BeEmpty();
+        (await _host.NotNull().Row(eleventh, GoodMachine.MachineId))
+            .NotNull()
+            .State.Should()
+            .Be("Idle");
+        (await _host.NotNull().Runs(eleventh)).Should().BeEmpty();
 
         // Another user is not held to the first one's runs.
-        (await _host.EnterRunning(NewUser(), Guid.NewGuid(), GoodMachine.MachineId))
+        (await _host.NotNull().EnterRunning(NewUser(), Guid.NewGuid(), GoodMachine.MachineId))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
     }
@@ -74,13 +78,13 @@ public class InvokesAuthorizationTests(StoreProvider provider)
     public async Task A_machines_limit_counts_the_users_live_runs_in_every_machine()
     {
         var user = NewUser();
-        await _host.EnterRunning(user, Guid.NewGuid(), GoodMachine.MachineId);
+        await _host.NotNull().EnterRunning(user, Guid.NewGuid(), GoodMachine.MachineId);
         var first = Guid.NewGuid();
-        (await _host.EnterRunning(user, first, CappedMachine.MachineId))
+        (await _host.NotNull().EnterRunning(user, first, CappedMachine.MachineId))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
 
-        (await _host.EnterRunning(user, Guid.NewGuid(), CappedMachine.MachineId))
+        (await _host.NotNull().EnterRunning(user, Guid.NewGuid(), CappedMachine.MachineId))
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
@@ -91,10 +95,13 @@ public class InvokesAuthorizationTests(StoreProvider provider)
             );
 
         // A queued run is cancelled outright when its state is left, so it stops counting at once.
-        using (var scope = _host.Scope())
-            await _host.Service(scope, CappedMachine.MachineId).Advance(user, first, "Stop");
+        using (var scope = _host.NotNull().Scope())
+            await _host
+                .NotNull()
+                .Service(scope, CappedMachine.MachineId)
+                .Advance(user, first, "Stop");
 
-        (await _host.EnterRunning(user, Guid.NewGuid(), CappedMachine.MachineId))
+        (await _host.NotNull().EnterRunning(user, Guid.NewGuid(), CappedMachine.MachineId))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>("a cancelled queued run is no longer live");
     }
@@ -104,7 +111,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
     {
         var user = NewUser();
         var id = Guid.NewGuid();
-        (await _host.EnterRunning(user, id, CappedMachine.MachineId))
+        (await _host.NotNull().EnterRunning(user, id, CappedMachine.MachineId))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
 
@@ -114,13 +121,19 @@ public class InvokesAuthorizationTests(StoreProvider provider)
         AdvanceOutcome entered;
         do
         {
-            await _host.Dispatch(id);
-            using (var scope = _host.Scope())
-                (await _host.Service(scope, CappedMachine.MachineId).Advance(user, id, "Stop"))
+            await _host.NotNull().Dispatch(id);
+            using (var scope = _host.NotNull().Scope())
+                (
+                    await _host
+                        .NotNull()
+                        .Service(scope, CappedMachine.MachineId)
+                        .Advance(user, id, "Stop")
+                )
                     .Should()
                     .BeOfType<AdvanceOutcome.Advanced>();
-            using (var scope = _host.Scope())
+            using (var scope = _host.NotNull().Scope())
                 entered = await _host
+                    .NotNull()
                     .Service(scope, CappedMachine.MachineId)
                     .Advance(user, id, "Go");
             laps++;
@@ -136,9 +149,9 @@ public class InvokesAuthorizationTests(StoreProvider provider)
         laps.Should().Be(2, "the machine's limit is 2");
 
         // Once the flagged runs end, their slots are free again.
-        await _host.End(id, TrainState.Cancelled);
-        using (var scope = _host.Scope())
-            (await _host.Service(scope, CappedMachine.MachineId).Advance(user, id, "Go"))
+        await _host.NotNull().End(id, TrainState.Cancelled);
+        using (var scope = _host.NotNull().Scope())
+            (await _host.NotNull().Service(scope, CappedMachine.MachineId).Advance(user, id, "Go"))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
     }
@@ -150,14 +163,15 @@ public class InvokesAuthorizationTests(StoreProvider provider)
         var ids = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToList();
         TestPrincipal.Become(user);
         foreach (var id in ids)
-            await _host.SeedIdle(user, id, CappedMachine.MachineId);
+            await _host.NotNull().SeedIdle(user, id, CappedMachine.MachineId);
 
         var outcomes = await Task.WhenAll(
             ids.Select(id =>
                 Task.Run(async () =>
                 {
-                    using var scope = _host.Scope();
+                    using var scope = _host.NotNull().Scope();
                     return await _host
+                        .NotNull()
                         .Service(scope, CappedMachine.MachineId)
                         .Advance(user, id, "Go")
                         .ConfigureAwait(false);
@@ -182,13 +196,13 @@ public class InvokesAuthorizationTests(StoreProvider provider)
         var instances = new List<MachineInstance>();
         for (var i = 0; i < 12; i++)
             instances.Add(
-                await _host.Start<PartitionMachine>(
-                    MachineKey.Of("uncapped", Guid.NewGuid().ToString())
-                )
+                await _host
+                    .NotNull()
+                    .Start<PartitionMachine>(MachineKey.Of("uncapped", Guid.NewGuid().ToString()))
             );
 
         foreach (var instance in instances)
-            (await _host.Runs(instance.Id))
+            (await _host.NotNull().Runs(instance.Id))
                 .Should()
                 .ContainSingle(
                     $"the dispatcher's MaxActiveJobs bounds system runs, not a cap. See {Adr}"
@@ -200,14 +214,14 @@ public class InvokesAuthorizationTests(StoreProvider provider)
     {
         var user = NewUser();
 
-        await _host.EnterRunning(user, Guid.NewGuid(), GoodMachine.MachineId);
+        await _host.NotNull().EnterRunning(user, Guid.NewGuid(), GoodMachine.MachineId);
 
         RecordingAuthorization
             .Calls.Should()
             .ContainSingle(c => c.Train == typeof(IGoodTrain).FullName)
             .Which.Should()
             .Be(
-                new AuthorizationCall(typeof(IGoodTrain).FullName!, user, Trusted: false),
+                new AuthorizationCall(typeof(IGoodTrain).FullName.NotNull(), user, Trusted: false),
                 $"the train is authorized against the user entering the state, at entry. See {Adr}"
             );
 
@@ -215,19 +229,21 @@ public class InvokesAuthorizationTests(StoreProvider provider)
         var refused = NewUser();
         RecordingAuthorization.Refused.Add(refused);
         var id = Guid.NewGuid();
-        (await _host.EnterRunning(refused, id, GoodMachine.MachineId))
+        (await _host.NotNull().EnterRunning(refused, id, GoodMachine.MachineId))
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
             .Be(RefusalCode.InvokeForbidden);
-        (await _host.Row(id, GoodMachine.MachineId))!.State.Should().Be("Idle");
-        (await _host.Runs(id)).Should().BeEmpty();
+        (await _host.NotNull().Row(id, GoodMachine.MachineId)).NotNull().State.Should().Be("Idle");
+        (await _host.NotNull().Runs(id)).Should().BeEmpty();
     }
 
     [Test]
     public async Task A_system_owned_machines_train_runs_under_the_trusted_scope()
     {
-        await _host.Start<PartitionMachine>(MachineKey.Of("trusted", Guid.NewGuid().ToString()));
+        await _host
+            .NotNull()
+            .Start<PartitionMachine>(MachineKey.Of("trusted", Guid.NewGuid().ToString()));
 
         RecordingAuthorization
             .Calls.Should()
@@ -276,7 +292,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
 
         var launch = async () =>
         {
-            using var scope = _host.Scope();
+            using var scope = _host.NotNull().Scope();
             await scope
                 .ServiceProvider.GetRequiredService<IInvokedTrainLauncher>()
                 .Launch(
@@ -317,7 +333,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
 
         var launch = async () =>
         {
-            using var scope = _host.Scope();
+            using var scope = _host.NotNull().Scope();
             await scope
                 .ServiceProvider.GetRequiredService<IInvokedTrainLauncher>()
                 .Launch(
@@ -348,7 +364,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
 
     private async Task LaunchFromOutcome(string externalId, string machine, SnapshotOwnerKind owner)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         await scope
             .ServiceProvider.GetRequiredService<IInvokedTrainLauncher>()
             .Launch(
@@ -369,7 +385,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
 
     private async Task<int> Entries(string externalId)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .WorkQueues.AsNoTracking()

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainExecution;
@@ -11,12 +12,15 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task RunAsync_TrainWhoseOutputTypeIsNotPublic_ReturnsItsOutput()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = () =>
-            execution.RunAsync(typeof(INonPublicOutputTrain).FullName!, """{"name":"x"}""");
+            execution.RunAsync(
+                typeof(INonPublicOutputTrain).FullName.NotNull(),
+                """{"name":"x"}"""
+            );
 
         var result = (await act.Should().NotThrowAsync()).Subject;
         result.Output.Should().BeOfType<NonPublicOutput>();

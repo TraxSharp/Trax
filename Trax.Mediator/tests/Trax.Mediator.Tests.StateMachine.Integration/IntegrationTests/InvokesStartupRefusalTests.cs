@@ -2,6 +2,7 @@ using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.Core.Train;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
@@ -25,24 +26,25 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     private const string Adr48 =
         "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
 
-    private InvokeHost _host = null!;
+    private InvokeHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InvokeHost.Create(provider);
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public void A_train_the_host_can_run_cancel_and_authorize_is_not_refused()
     {
-        _host.Problems<GoodMachine>().Should().BeEmpty();
-        _host.Problems<PartitionMachine>().Should().BeEmpty();
+        _host.NotNull().Problems<GoodMachine>().Should().BeEmpty();
+        _host.NotNull().Problems<PartitionMachine>().Should().BeEmpty();
     }
 
     [Test]
     public void A_plain_Junction_is_refused() =>
         _host
+            .NotNull()
             .Problems<PlainJunctionMachine>()
             .Should()
             .ContainSingle(
@@ -57,6 +59,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Test]
     public void An_IChain_over_a_non_effect_interface_is_refused() =>
         _host
+            .NotNull()
             .Problems<ContractMachine>()
             .Should()
             .ContainSingle()
@@ -67,6 +70,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Test]
     public void A_train_that_is_not_a_ServiceTrain_is_refused() =>
         _host
+            .NotNull()
             .Problems<BareMachine>()
             .Should()
             .Contain(p =>
@@ -76,6 +80,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Test]
     public void A_recorder_refusal_is_refused() =>
         _host
+            .NotNull()
             .Problems<RefusedChainMachine>()
             .Should()
             .Contain(p =>
@@ -87,6 +92,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Test]
     public void A_plain_Junction_inside_a_Parallel_branch_is_refused() =>
         _host
+            .NotNull()
             .Problems<ForkMachine>()
             .Should()
             .ContainSingle()
@@ -126,7 +132,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Test]
     public void Deferred_promotion_or_an_OnQueue_hook_is_refused()
     {
-        var problems = _host.Problems<HookedMachine>();
+        var problems = _host.NotNull().Problems<HookedMachine>();
 
         problems.Should().HaveCount(2);
         problems
@@ -157,6 +163,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Property("adr", Adr48)]
     public void A_user_owned_machine_invoking_a_stricter_authorized_train_is_refused() =>
         _host
+            .NotNull()
             .Problems<AdminMachine>()
             .Should()
             .ContainSingle(
@@ -172,6 +179,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Test]
     public void A_user_owned_machine_invoking_a_broadcast_train_is_refused() =>
         _host
+            .NotNull()
             .Problems<LoudMachine>()
             .Should()
             .ContainSingle()
@@ -182,6 +190,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Test]
     public void A_system_owned_machine_invoking_a_train_with_user_only_requirements_is_refused() =>
         _host
+            .NotNull()
             .Problems<SystemAdminMachine>()
             .Should()
             .ContainSingle()
@@ -194,6 +203,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Test]
     public void A_user_owned_machine_whose_outcome_enters_an_invoking_state_is_refused() =>
         _host
+            .NotNull()
             .Problems<UserChainMachine>()
             .Should()
             .ContainSingle(
@@ -212,10 +222,12 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     public void A_system_owned_machine_or_a_user_event_may_chain_invoking_states()
     {
         _host
+            .NotNull()
             .Problems<SystemChainMachine>()
             .Should()
             .BeEmpty("a system-owned machine's next run is authorized in the trusted scope");
         _host
+            .NotNull()
             .Problems<UserContinueMachine>()
             .Should()
             .BeEmpty("a user's own event into an invoking state is authorized as that user");
@@ -224,6 +236,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Test]
     public void An_output_reaching_a_sensitive_member_is_refused() =>
         _host
+            .NotNull()
             .Problems<SecretMachine>()
             .Should()
             .ContainSingle()
@@ -258,6 +271,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Property("adr", Adr48)]
     public void An_Operator_event_entering_an_invoking_state_may_invoke_an_Operator_train() =>
         _host
+            .NotNull()
             .Problems<OperatorInvokesOperatorMachine>()
             .Should()
             .BeEmpty(
@@ -269,6 +283,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Property("adr", Adr48)]
     public void An_Operator_event_entering_an_invoking_state_refuses_an_Admin_train() =>
         _host
+            .NotNull()
             .Problems<OperatorInvokesAdminMachine>()
             .Should()
             .ContainSingle(
@@ -285,6 +300,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Property("adr", Adr48)]
     public void Every_event_entering_the_invoking_state_is_compared() =>
         _host
+            .NotNull()
             .Problems<EveryEnteringEventMachine>()
             .Should()
             .ContainSingle(
@@ -300,6 +316,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Property("adr", Adr48)]
     public void An_any_of_role_event_admits_a_role_the_train_lacks_and_is_refused() =>
         _host
+            .NotNull()
             .Problems<AnyOfRoleMachine>()
             .Should()
             .ContainSingle(
@@ -314,6 +331,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     [Property("adr", Adr48)]
     public void A_policy_rule_against_a_role_train_cannot_be_proven_and_is_refused() =>
         _host
+            .NotNull()
             .Problems<PolicyRuleMachine>()
             .Should()
             .ContainSingle(
@@ -331,6 +349,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     public void A_train_with_two_role_sets_needs_an_event_satisfying_both()
     {
         _host
+            .NotNull()
             .Problems<OneRoleSetMachine>()
             .Should()
             .ContainSingle(
@@ -341,6 +360,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
             .And.Contain("Build")
             .And.Contain("Auditor");
         _host
+            .NotNull()
             .Problems<BothRoleSetsMachine>()
             .Should()
             .BeEmpty($"whoever may send Build holds Operator and Auditor. See {Adr48}");
@@ -351,12 +371,14 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     public void Start_entering_an_invoking_initial_state_is_compared_too()
     {
         _host
+            .NotNull()
             .Problems<OperatorStartMachine>()
             .Should()
             .BeEmpty(
                 $"only an Operator may start an instance, and starting it runs the Operator train. See {Adr48}"
             );
         _host
+            .NotNull()
             .Problems<AnyoneStartMachine>()
             .Should()
             .ContainSingle(
@@ -373,6 +395,7 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     public async Task The_host_refuses_to_start_with_every_problem_listed()
     {
         var validator = _host
+            .NotNull()
             .Services.GetServices<IHostedService>()
             .OfType<IHostedLifecycleService>()
             .Single(s =>

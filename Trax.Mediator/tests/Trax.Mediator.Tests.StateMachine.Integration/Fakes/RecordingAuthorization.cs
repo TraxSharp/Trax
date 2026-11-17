@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrustedExecution;
@@ -21,7 +22,9 @@ public sealed class RecordingAuthorization(IServiceProvider services) : ITrainAu
         var user = services.GetRequiredService<ISnapshotPrincipal>().CurrentUserKey;
         var trusted = services.GetRequiredService<ITrustedExecutionScope>().IsTrusted;
         lock (Calls)
-            Calls.Add(new AuthorizationCall(registration.ServiceType.FullName!, user, trusted));
+            Calls.Add(
+                new AuthorizationCall(registration.ServiceType.FullName.NotNull(), user, trusted)
+            );
 
         if (!trusted && user is not null && Refused.Contains(user))
             throw new UnauthorizedAccessException(

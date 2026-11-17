@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectJunction;
@@ -52,7 +53,9 @@ public abstract class RuleStageMachine<TTrain, TInput> : Machine<RuleState, Rule
             rebuild(idle.On(RuleTrigger.Rebuild)).To(RuleState.Running);
 
         m.In(RuleState.Running)
-            .Invokes<TTrain, TInput, JobOutput>(ctx => Input(ctx["source"]!.GetValue<string>()))
+            .Invokes<TTrain, TInput, JobOutput>(ctx =>
+                Input(ctx["source"].NotNull().GetValue<string>())
+            )
             .OnDone(RuleState.Done)
             .OnFailed(RuleState.Failed)
             .OnCancelled(RuleState.Cancelled)

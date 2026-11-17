@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -125,8 +126,10 @@ internal sealed class TrainChainGraphs(
                 var chain = (ChainRecorder)
                     train
                         .GetType()
-                        .GetMethod(nameof(Core.Train.Train<,>.DeclaredChain), Type.EmptyTypes)!
-                        .Invoke(train, parameters: null)!;
+                        .GetMethod(nameof(Core.Train.Train<,>.DeclaredChain), Type.EmptyTypes)
+                        .NotNull()
+                        .Invoke(train, parameters: null)
+                        .NotNull();
 
                 return new Declared(
                     ChainGraph.From(

@@ -12,6 +12,7 @@ using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Services.ChainVerification;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Testing;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;
 
@@ -147,7 +148,8 @@ public class TrainChainStartupValidatorTests
         var failure = await Start<IInjectsUnregisteredTrain, InjectsUnregisteredTrain>();
 
         failure.Should().BeOfType<TrainException>();
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(
                 $"{nameof(IInjectsUnregisteredTrain)}: its [Inject] property "
@@ -205,7 +207,8 @@ public class TrainChainStartupValidatorTests
                 "GetService throws for a registered type it cannot build, so resolving the "
                     + "train fails on every run however the property is declared"
             );
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(
                 $"needs '{nameof(IUnregisteredProbeService)}', which is not registered, and the "
@@ -271,7 +274,8 @@ public class TrainChainStartupValidatorTests
         });
 
         failure.Should().BeOfType<TrainException>();
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain($"'{nameof(FillFailsTrain.Repository)}' reaches it through")
             .And.NotContain(
@@ -329,7 +333,7 @@ public class TrainChainStartupValidatorTests
         // NullabilityInfoContext reads the switch once; read it before changing it, so the
         // change reaches only the validator.
         _ = new System.Reflection.NullabilityInfoContext().Create(
-            typeof(ObliviousInjectTrain).GetProperty(nameof(ObliviousInjectTrain.Probe))!
+            typeof(ObliviousInjectTrain).GetProperty(nameof(ObliviousInjectTrain.Probe)).NotNull()
         );
 
         (await Start<IObliviousInjectTrain, ObliviousInjectTrain>())
@@ -382,7 +386,8 @@ public class TrainChainStartupValidatorTests
         var failure = await Start<IBrokenFlowTrain, BrokenFlowTrain>();
 
         failure.Should().BeOfType<TrainException>();
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(nameof(IBrokenFlowTrain))
             .And.Contain("Chain a junction that produces it first");
@@ -393,7 +398,8 @@ public class TrainChainStartupValidatorTests
     {
         var failure = await Start<IBrokenFlowTrain, BrokenFlowTrain>();
 
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .EndWith(
                 "See https://traxsharp.net/docs/cross-cutting/troubleshooting#n-of-m-registered-trains-cannot-run"
@@ -406,7 +412,7 @@ public class TrainChainStartupValidatorTests
         var failure = await Start<IReadsInputTrain, ReadsInputTrain>();
 
         failure.Should().BeOfType<TrainException>();
-        failure!.Message.Should().Contain("TrainInput");
+        failure.NotNull().Message.Should().Contain("TrainInput");
     }
 
     [Test]
@@ -452,7 +458,8 @@ public class TrainChainStartupValidatorTests
         var failure = await Start<IAsyncReadsInputTrain, AsyncReadsInputTrain>();
 
         failure.Should().BeOfType<TrainException>();
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(
                 "TrainInput",
@@ -466,7 +473,7 @@ public class TrainChainStartupValidatorTests
         var failure = await Start<IAwaitingTrain, AwaitingTrain>();
 
         failure.Should().BeOfType<TrainException>();
-        failure!.Message.Should().Contain("awaited something");
+        failure.NotNull().Message.Should().Contain("awaited something");
     }
 
     [Test]
@@ -517,7 +524,8 @@ public class TrainChainStartupValidatorTests
         );
 
         failure.Should().BeOfType<TrainException>("the broken train after the skipped one is read");
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain("1 of 1", "the skipped train is not counted as checked")
             .And.Contain(nameof(IBrokenFlowTrain))
@@ -551,7 +559,8 @@ public class TrainChainStartupValidatorTests
             ),
         ]);
 
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain("2 of 3", "one start reports every train rather than one per attempt")
             .And.Contain(nameof(IBrokenFlowTrain))
@@ -580,7 +589,8 @@ public class TrainChainStartupValidatorTests
         var failure = await Start<IThrowingDeclarationTrain, ThrowingDeclarationTrain>();
 
         failure.Should().BeOfType<TrainException>();
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain($"{nameof(IThrowingDeclarationTrain)}: its chain could not be read (")
             .And.Contain(
@@ -600,7 +610,8 @@ public class TrainChainStartupValidatorTests
         );
 
         failure.Should().BeOfType<TrainException>();
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(
                 $"{nameof(IBrokenFlowTrain)}: its chain could not be verified "
@@ -652,7 +663,8 @@ public class TrainChainStartupValidatorTests
                 "a missing registration fails every run of the train, which is not the same as a "
                     + "dependency only a request can supply"
             );
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(
                 $"{nameof(INeedsUnregisteredTrain)} cannot be built: its constructor needs "
@@ -667,7 +679,8 @@ public class TrainChainStartupValidatorTests
     {
         var failure = await Start<IBrokenFlowTrain, BrokenFlowTrain>();
 
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(
                 $"{nameof(IBrokenFlowTrain)}: step 1 ({nameof(NumberToFlag)}) needs",
@@ -682,7 +695,8 @@ public class TrainChainStartupValidatorTests
 
         failure.Should().BeOfType<TrainException>();
 
-        var lines = failure!
+        var lines = failure
+            .NotNull()
             .Message.Split(Environment.NewLine)
             .Where(line => line.Contains(nameof(INotAJunctionTrain), StringComparison.Ordinal))
             .ToList();
@@ -704,7 +718,8 @@ public class TrainChainStartupValidatorTests
     {
         var failure = await Start<ISeveralFaultsTrain, SeveralFaultsTrain>();
 
-        var lines = failure!
+        var lines = failure
+            .NotNull()
             .Message.Split(Environment.NewLine)
             .Where(line => line.Contains(nameof(ISeveralFaultsTrain), StringComparison.Ordinal))
             .ToList();
@@ -732,7 +747,8 @@ public class TrainChainStartupValidatorTests
         failure
             .Should()
             .BeOfType<TrainException>("Trax builds a junction through its single constructor");
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(nameof(ITwoConstructorJunctionTrain))
             .And.Contain(nameof(TwoConstructorJunction));
@@ -744,7 +760,8 @@ public class TrainChainStartupValidatorTests
         var failure = await Start<INeedsSeveralUnregisteredTrain, NeedsSeveralUnregisteredTrain>();
 
         failure.Should().BeOfType<TrainException>();
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(
                 $"{nameof(INeedsSeveralUnregisteredTrain)} cannot be built: its constructor needs "
@@ -858,7 +875,8 @@ public class TrainChainStartupValidatorTests
         var failure = await Start<INoResultTrain, NoResultTrain>();
 
         failure.Should().BeOfType<TrainException>();
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(
                 $"{nameof(INoResultTrain)}: step 2 (Resolve) the chain ends without",
@@ -878,7 +896,8 @@ public class TrainChainStartupValidatorTests
         ]);
 
         failure.Should().BeOfType<TrainException>();
-        failure!
+        failure
+            .NotNull()
             .Message.Split(Environment.NewLine)
             .Should()
             .Contain(
@@ -894,7 +913,8 @@ public class TrainChainStartupValidatorTests
     {
         var failure = await Start<IRefusalAndNoResultTrain, RefusalAndNoResultTrain>();
 
-        var lines = failure!
+        var lines = failure
+            .NotNull()
             .Message.Split(Environment.NewLine)
             .Where(line =>
                 line.Contains(nameof(IRefusalAndNoResultTrain), StringComparison.Ordinal)
@@ -920,7 +940,8 @@ public class TrainChainStartupValidatorTests
         >();
 
         failure.Should().BeOfType<TrainException>();
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(
                 $"{nameof(IJunctionNeedsUnregisteredTrain)}: step 1 ({nameof(NeedsProbeJunction)}) needs '",
@@ -945,7 +966,8 @@ public class TrainChainStartupValidatorTests
                 "the train's own argument is registered, but building it needs a type nothing "
                     + "registers, so the train fails on every run"
             );
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(
                 $"{nameof(INeedsNestedUnregisteredTrain)} cannot be built: {nameof(ProbeRepository)} "
@@ -985,7 +1007,8 @@ public class TrainChainStartupValidatorTests
             .BeOfType<TrainException>(
                 "the container cannot build a class with no public constructor"
             );
-        failure!
+        failure
+            .NotNull()
             .Message.Should()
             .Contain(
                 $"{nameof(INoPublicConstructorTrain)} cannot be built: "
@@ -1457,7 +1480,7 @@ public class TrainChainStartupValidatorTests
             IInjectsUnregisteredTrain
     {
         [Inject]
-        public IUnregisteredProbeService Probe { get; set; } = null!;
+        public IUnregisteredProbeService Probe { get; set; } = Null.Of<IUnregisteredProbeService>();
 
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
@@ -1581,7 +1604,7 @@ public class TrainChainStartupValidatorTests
         public IRequestOnlyService RequestOnly { get; } = requestOnly;
 
         [Inject]
-        public IUnregisteredProbeService Probe { get; set; } = null!;
+        public IUnregisteredProbeService Probe { get; set; } = Null.Of<IUnregisteredProbeService>();
 
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();

@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Services.ConcurrencyLimiter;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -238,10 +239,10 @@ public class ConcurrencyLimiterTests
 
         var discovery = new StubDiscoveryService([registration]);
         var config = new MediatorConfiguration();
-        config.ConcurrencyOverrides[typeof(IFakeConcurrencyTrain).FullName!] = 3;
+        config.ConcurrencyOverrides[typeof(IFakeConcurrencyTrain).FullName.NotNull()] = 3;
 
         var limiter = new ConcurrencyLimiter(config, discovery, new NullPrincipalProvider());
-        var trainName = typeof(IFakeConcurrencyTrain).FullName!;
+        var trainName = typeof(IFakeConcurrencyTrain).FullName.NotNull();
 
         // Should allow 3 concurrent (builder override), not 1 (attribute)
         var permit1 = await limiter.AcquireAsync(trainName, CancellationToken.None);

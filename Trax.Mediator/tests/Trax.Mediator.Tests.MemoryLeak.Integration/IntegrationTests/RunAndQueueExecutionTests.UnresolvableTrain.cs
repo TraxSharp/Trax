@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -14,12 +15,12 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task RunAsync_TrainThatCannotBeResolved_LeavesNoPendingMetadata()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = () =>
-            execution.RunAsync(typeof(IUnresolvableTrain).FullName!, """{"label":"x"}""");
+            execution.RunAsync(typeof(IUnresolvableTrain).FullName.NotNull(), """{"label":"x"}""");
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();

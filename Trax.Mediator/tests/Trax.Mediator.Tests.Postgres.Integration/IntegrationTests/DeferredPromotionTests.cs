@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.EnqueueContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -85,7 +86,8 @@ public class DeferredPromotionTests : TestSetup
         await using var contextDisposal = context.ConfigureAwait(false);
         await context
             .WorkQueues.Where(w =>
-                w.TrainName!.Contains("DeferTx") || w.TrainName!.Contains("DeferredPromotionTests")
+                w.TrainName != null && w.TrainName.Contains("DeferTx")
+                || w.TrainName != null && w.TrainName.Contains("DeferredPromotionTests")
             )
             .ExecuteDeleteAsync();
     }
@@ -95,9 +97,13 @@ public class DeferredPromotionTests : TestSetup
     [Test]
     public async Task A_train_without_a_hook_is_confirmed_immediately()
     {
-        var result = await Execution.QueueAsync(typeof(IPlainTrain).FullName!, "{\"Value\":\"x\"}");
+        var result = await Execution.QueueAsync(
+            typeof(IPlainTrain).FullName.NotNull(),
+            "{\"Value\":\"x\"}"
+        );
 
-        (await EntryAsync(result.WorkQueueId))!
+        (await EntryAsync(result.WorkQueueId))
+            .NotNull()
             .ConfirmedAt.Should()
             .NotBeNull("immediate promotion is the default — nothing is staged");
     }
@@ -106,11 +112,12 @@ public class DeferredPromotionTests : TestSetup
     public async Task A_hook_that_does_not_defer_is_confirmed_immediately()
     {
         var result = await Execution.QueueAsync(
-            typeof(IImmediateHookTrain).FullName!,
+            typeof(IImmediateHookTrain).FullName.NotNull(),
             "{\"Value\":\"x\"}"
         );
 
-        (await EntryAsync(result.WorkQueueId))!
+        (await EntryAsync(result.WorkQueueId))
+            .NotNull()
             .ConfirmedAt.Should()
             .NotBeNull(
                 "overriding OnQueue alone must not change when the entry becomes dispatchable"
@@ -121,11 +128,11 @@ public class DeferredPromotionTests : TestSetup
     public async Task Deferring_without_a_hook_is_confirmed_immediately()
     {
         var result = await Execution.QueueAsync(
-            typeof(IDeferWithoutHookTrain).FullName!,
+            typeof(IDeferWithoutHookTrain).FullName.NotNull(),
             "{\"Value\":\"x\"}"
         );
 
-        var entry = (await EntryAsync(result.WorkQueueId))!;
+        var entry = (await EntryAsync(result.WorkQueueId)).NotNull();
 
         entry
             .ConfirmedAt.Should()
@@ -141,7 +148,7 @@ public class DeferredPromotionTests : TestSetup
     public async Task A_deferring_train_stages_its_entry_unconfirmed_while_the_hook_runs()
     {
         var result = await Execution.QueueAsync(
-            typeof(IDeferringTrain).FullName!,
+            typeof(IDeferringTrain).FullName.NotNull(),
             "{\"Value\":\"x\"}"
         );
 
@@ -154,7 +161,8 @@ public class DeferredPromotionTests : TestSetup
                     + "crash during the hook recoverable rather than invisible"
             );
 
-        (await EntryAsync(result.WorkQueueId))!
+        (await EntryAsync(result.WorkQueueId))
+            .NotNull()
             .ConfirmedAt.Should()
             .NotBeNull("a successful hook is followed by promotion");
     }
@@ -164,7 +172,7 @@ public class DeferredPromotionTests : TestSetup
     {
         var act = async () =>
             await Execution
-                .QueueAsync(typeof(IDeferringThrowTrain).FullName!, "{\"Value\":\"x\"}")
+                .QueueAsync(typeof(IDeferringThrowTrain).FullName.NotNull(), "{\"Value\":\"x\"}")
                 .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<Exception>()).WithMessage("*hook rejected*");
@@ -172,7 +180,11 @@ public class DeferredPromotionTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var context = await factory.CreateDbContextAsync(CancellationToken.None);
         await using var contextDisposal = context.ConfigureAwait(false);
-        (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("DeferringThrowTrain")))
+        (
+            await context.WorkQueues.CountAsync(w =>
+                w.TrainName != null && w.TrainName.Contains("DeferringThrowTrain")
+            )
+        )
             .Should()
             .Be(0, "a rejected mutation leaves no trace — the staged entry is removed");
     }
@@ -185,7 +197,7 @@ public class DeferredPromotionTests : TestSetup
         var id = await InsertUnconfirmedAsync(DateTime.UtcNow);
 
         (await Promotion.PromoteAsync(id, CancellationToken.None)).Should().BeTrue();
-        (await EntryAsync(id))!.ConfirmedAt.Should().NotBeNull();
+        (await EntryAsync(id)).NotNull().ConfirmedAt.Should().NotBeNull();
     }
 
     [Test]
@@ -217,8 +229,9 @@ public class DeferredPromotionTests : TestSetup
         );
 
         promoted.Should().Be(1);
-        (await EntryAsync(stale))!.ConfirmedAt.Should().NotBeNull();
-        (await EntryAsync(fresh))!
+        (await EntryAsync(stale)).NotNull().ConfirmedAt.Should().NotBeNull();
+        (await EntryAsync(fresh))
+            .NotNull()
             .ConfirmedAt.Should()
             .BeNull("an entry still inside the window may simply have a slow hook in flight");
     }
@@ -246,8 +259,8 @@ public class DeferredPromotionTests : TestSetup
         );
 
         cancelled.Should().Be(1);
-        (await EntryAsync(stale))!.Status.Should().Be(WorkQueueStatus.Cancelled);
-        (await EntryAsync(fresh))!.Status.Should().Be(WorkQueueStatus.Queued);
+        (await EntryAsync(stale)).NotNull().Status.Should().Be(WorkQueueStatus.Cancelled);
+        (await EntryAsync(fresh)).NotNull().Status.Should().Be(WorkQueueStatus.Queued);
     }
 
     [Test]
@@ -265,7 +278,7 @@ public class DeferredPromotionTests : TestSetup
         (await Promotion.PromoteAsync(id, CancellationToken.None))
             .Should()
             .BeFalse("confirming it would revive work an operator cancelled");
-        (await EntryAsync(id))!.ConfirmedAt.Should().BeNull();
+        (await EntryAsync(id)).NotNull().ConfirmedAt.Should().BeNull();
     }
 
     [Test]
@@ -275,12 +288,13 @@ public class DeferredPromotionTests : TestSetup
         Observed.CancelCallerAfterHook = caller;
 
         var result = await Execution.QueueAsync(
-            typeof(IDeferringCancelAfterTrain).FullName!,
+            typeof(IDeferringCancelAfterTrain).FullName.NotNull(),
             "{\"Value\":\"x\"}",
             ct: caller.Token
         );
 
-        (await EntryAsync(result.WorkQueueId))!
+        (await EntryAsync(result.WorkQueueId))
+            .NotNull()
             .ConfirmedAt.Should()
             .NotBeNull(
                 "once the hook has returned its side-effect may have landed, so the entry that "
@@ -297,7 +311,7 @@ public class DeferredPromotionTests : TestSetup
         var act = async () =>
             await Execution
                 .QueueAsync(
-                    typeof(IDeferringCancelDuringTrain).FullName!,
+                    typeof(IDeferringCancelDuringTrain).FullName.NotNull(),
                     "{\"Value\":\"x\"}",
                     ct: caller.Token
                 )
@@ -310,7 +324,7 @@ public class DeferredPromotionTests : TestSetup
         await using var contextDisposal = context.ConfigureAwait(false);
         (
             await context.WorkQueues.CountAsync(
-                w => w.TrainName!.Contains("CancelDuringTrain"),
+                w => w.TrainName != null && w.TrainName.Contains("CancelDuringTrain"),
                 cancellationToken: CancellationToken.None
             )
         )
@@ -324,7 +338,7 @@ public class DeferredPromotionTests : TestSetup
     [Test]
     public async Task A_deferring_hook_has_no_enqueue_context()
     {
-        await Execution.QueueAsync(typeof(IDeferringTrain).FullName!, "{\"Value\":\"x\"}");
+        await Execution.QueueAsync(typeof(IDeferringTrain).FullName.NotNull(), "{\"Value\":\"x\"}");
 
         Observed
             .ContextDuringHook.Should()
@@ -338,7 +352,10 @@ public class DeferredPromotionTests : TestSetup
     {
         var act = async () =>
             await Execution
-                .QueueAsync(typeof(IDeferringSelfCancelTrain).FullName!, "{\"Value\":\"x\"}")
+                .QueueAsync(
+                    typeof(IDeferringSelfCancelTrain).FullName.NotNull(),
+                    "{\"Value\":\"x\"}"
+                )
                 .ConfigureAwait(false);
 
         var cancelled = (
@@ -357,11 +374,12 @@ public class DeferredPromotionTests : TestSetup
     public async Task An_entry_promoted_elsewhere_while_its_hook_ran_is_a_successful_enqueue()
     {
         var result = await Execution.QueueAsync(
-            typeof(IDeferringPromotedElsewhereTrain).FullName!,
+            typeof(IDeferringPromotedElsewhereTrain).FullName.NotNull(),
             "{\"Value\":\"x\"}"
         );
 
-        (await EntryAsync(result.WorkQueueId))!
+        (await EntryAsync(result.WorkQueueId))
+            .NotNull()
             .ConfirmedAt.Should()
             .NotBeNull(
                 "a promoting sweep confirmed it, so it will run and the enqueue did not fail"
@@ -374,7 +392,7 @@ public class DeferredPromotionTests : TestSetup
         var act = async () =>
             await Execution
                 .QueueAsync(
-                    typeof(IDeferringPromotedThenThrowsTrain).FullName!,
+                    typeof(IDeferringPromotedThenThrowsTrain).FullName.NotNull(),
                     "{\"Value\":\"x\"}"
                 )
                 .ConfigureAwait(false);
@@ -384,7 +402,11 @@ public class DeferredPromotionTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var context = await factory.CreateDbContextAsync(CancellationToken.None);
         await using var contextDisposal = context.ConfigureAwait(false);
-        (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("PromotedThenThrowsTrain")))
+        (
+            await context.WorkQueues.CountAsync(w =>
+                w.TrainName != null && w.TrainName.Contains("PromotedThenThrowsTrain")
+            )
+        )
             .Should()
             .Be(
                 1,

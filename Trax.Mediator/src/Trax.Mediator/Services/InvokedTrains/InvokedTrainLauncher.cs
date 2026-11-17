@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Services.EffectJunction;
@@ -170,7 +171,7 @@ internal sealed class InvokedTrainLauncher(
                 ? null
                 : "admits any authenticated user";
 
-        var eventRoleSets = rule!.RoleSets;
+        var eventRoleSets = rule.NotNull().RoleSets;
         foreach (var policy in policies)
             if (!rule.Policies.Contains(policy, StringComparer.Ordinal))
                 return $"admits a caller without the policy {policy}";
@@ -210,7 +211,7 @@ internal sealed class InvokedTrainLauncher(
                 ?? throw new InvalidOperationException(
                     $"{train.GetType().Name} does not derive from Train<TIn, TOut>"
                 );
-            chain = (ChainRecorder)declared.Invoke(train, parameters: null)!;
+            chain = (ChainRecorder)declared.Invoke(train, parameters: null).NotNull();
         }
         catch (Exception ex)
         {

@@ -1,5 +1,7 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Mediator.Services.TrustedExecution;
+using Trax.Testing;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;
 
@@ -68,7 +70,7 @@ public class TrustedExecutionScopeTests
     {
         var scope = new TrustedExecutionScope();
 
-        var act = () => scope.BeginTrusted(null!);
+        var act = () => scope.BeginTrusted(Null.Of<string>());
 
         act.Should().Throw<ArgumentException>();
     }

@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Mediator.Configuration;
 
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/concurrency-limiting">SDK reference</seealso>
@@ -35,7 +37,7 @@ public partial class TraxMediatorBuilder
                 $"ConcurrentRunLimit<{typeof(TTrain).Name}> must be >= 1"
             );
 
-        _concurrencyOverrides[typeof(TTrain).FullName!] = maxConcurrent;
+        _concurrencyOverrides[typeof(TTrain).FullName.NotNull()] = maxConcurrent;
         return this;
     }
 }

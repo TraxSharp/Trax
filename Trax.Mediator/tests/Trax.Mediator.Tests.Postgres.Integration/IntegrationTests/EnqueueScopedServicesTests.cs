@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -34,7 +35,7 @@ public class EnqueueScopedServicesTests : TestSetup
         var context = await factory.CreateDbContextAsync(CancellationToken.None);
         await using var contextDisposal = context.ConfigureAwait(false);
         await context
-            .WorkQueues.Where(w => w.TrainName!.StartsWith("EnqueueScope."))
+            .WorkQueues.Where(w => w.TrainName != null && w.TrainName.StartsWith("EnqueueScope."))
             .ExecuteDeleteAsync();
     }
 
@@ -44,7 +45,7 @@ public class EnqueueScopedServicesTests : TestSetup
         var poisoned = async () =>
             await Execution
                 .QueueAsync(
-                    typeof(IScopedWriterTrain).FullName!,
+                    typeof(IScopedWriterTrain).FullName.NotNull(),
                     """{"poison":true,"label":"first"}"""
                 )
                 .ConfigureAwait(false);
@@ -56,7 +57,7 @@ public class EnqueueScopedServicesTests : TestSetup
         var clean = async () =>
             await Execution
                 .QueueAsync(
-                    typeof(IScopedWriterTrain).FullName!,
+                    typeof(IScopedWriterTrain).FullName.NotNull(),
                     """{"poison":false,"label":"second"}"""
                 )
                 .ConfigureAwait(false);
@@ -95,7 +96,7 @@ public class EnqueueScopedServicesTests : TestSetup
     {
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            var input = metadata.GetInput<ScopedWriterInput>()!;
+            var input = metadata.GetInput<ScopedWriterInput>().NotNull();
 
             if (input.Poison)
             {

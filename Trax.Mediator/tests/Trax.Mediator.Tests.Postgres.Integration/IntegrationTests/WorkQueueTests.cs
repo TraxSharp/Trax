@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -45,7 +46,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.TrainName.Should().Be("Trax.Core.Tests.TestTrain");
+        found.NotNull().TrainName.Should().Be("Trax.Core.Tests.TestTrain");
         found.Input.Should().Be("""{"value": "test"}""");
         found.InputTypeName.Should().Be("Trax.Core.Tests.TestInput");
         found.Status.Should().Be(WorkQueueStatus.Queued);
@@ -86,7 +87,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Priority.Should().Be(15);
+        found.NotNull().Priority.Should().Be(15);
     }
 
     [Theory]
@@ -118,7 +119,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Priority.Should().Be(WorkQueue.MaxPriority);
+        found.NotNull().Priority.Should().Be(WorkQueue.MaxPriority);
     }
 
     [Theory]
@@ -150,7 +151,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Priority.Should().Be(WorkQueue.MinPriority);
+        found.NotNull().Priority.Should().Be(WorkQueue.MinPriority);
     }
 
     [Theory]
@@ -190,7 +191,7 @@ public class WorkQueueTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(WorkQueueTests).FullName!,
+                TrainName = typeof(WorkQueueTests).FullName.NotNull(),
                 Input = """{"value":"test"}""",
                 InputTypeName = typeof(WorkQueueTests).FullName,
                 ManifestId = manifest.Id,
@@ -208,9 +209,9 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.ManifestId.Should().Be(manifest.Id);
+        found.NotNull().ManifestId.Should().Be(manifest.Id);
         found.Manifest.Should().NotBeNull();
-        found.Manifest!.Id.Should().Be(manifest.Id);
+        found.Manifest.NotNull().Id.Should().Be(manifest.Id);
     }
 
     [Theory]
@@ -241,7 +242,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.ManifestId.Should().BeNull();
+        found.NotNull().ManifestId.Should().BeNull();
         found.Manifest.Should().BeNull();
     }
 
@@ -292,11 +293,11 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Status.Should().Be(WorkQueueStatus.Dispatched);
+        found.NotNull().Status.Should().Be(WorkQueueStatus.Dispatched);
         found.MetadataId.Should().Be(metadata.Id);
         found.DispatchedAt.Should().NotBeNull();
         found.Metadata.Should().NotBeNull();
-        found.Metadata!.Id.Should().Be(metadata.Id);
+        found.Metadata.NotNull().Id.Should().Be(metadata.Id);
     }
 
     [Theory]
@@ -331,7 +332,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Status.Should().Be(WorkQueueStatus.Cancelled);
+        found.NotNull().Status.Should().Be(WorkQueueStatus.Cancelled);
         found.DispatchedAt.Should().BeNull();
         found.MetadataId.Should().BeNull();
     }
@@ -418,7 +419,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Input.Should().NotBeNull();
+        found.NotNull().Input.Should().NotBeNull();
         // JSONB normalizes whitespace but preserves data
         found.Input.Should().Contain("\"name\"");
         found.Input.Should().Contain("\"test\"");

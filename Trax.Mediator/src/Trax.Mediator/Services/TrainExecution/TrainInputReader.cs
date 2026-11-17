@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Utils;
 using Trax.Mediator.Exceptions;
@@ -66,7 +67,7 @@ public static class TrainInputReader
     )
     {
         var missing = string.IsNullOrWhiteSpace(inputJson);
-        var json = missing ? EmptyInput : inputJson!;
+        var json = missing ? EmptyInput : inputJson.NotNull();
 
         // Before deserialization, so oversized JSON never reaches the deserializer. Byte length
         // (UTF-8) is the bounded resource: char length would miscount surrogate pairs and

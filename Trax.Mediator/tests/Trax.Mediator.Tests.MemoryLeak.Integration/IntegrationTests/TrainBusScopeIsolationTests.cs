@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -14,7 +15,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class TrainBusScopeIsolationTests
 {
-    private IServiceProvider _serviceProvider = null!;
+    private IServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -53,7 +54,7 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_TwoCalls_GetDifferentScopes()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
@@ -66,7 +67,7 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_WithCancellationToken_CreatesChildScope()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
@@ -85,7 +86,7 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_NonGeneric_CreatesChildScope()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
@@ -97,7 +98,7 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_NonGeneric_WithCancellationToken_CreatesChildScope()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
@@ -108,7 +109,7 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_TrainScope_DiffersFromCallerScope()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
         var callerMarker = scope.ServiceProvider.GetRequiredService<ScopeMarker>();
@@ -125,7 +126,7 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_ScopeDisposed_AfterCompletion()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
@@ -137,7 +138,7 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_FailingTrain_ScopeStillDisposed()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
@@ -160,7 +161,7 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_NestedDispatch_EachTrainGetsOwnScope()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
@@ -176,7 +177,7 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_Concurrent_AllGetUniqueScopeIds()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
@@ -198,7 +199,7 @@ public class TrainBusScopeIsolationTests
     [Test]
     public void InitializeTrain_ResolvesFromOwnScope_NotChildScope()
     {
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = _serviceProvider.NotNull().CreateScope();
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
         var callerMarker = scope.ServiceProvider.GetRequiredService<ScopeMarker>();
 
@@ -208,7 +209,7 @@ public class TrainBusScopeIsolationTests
         scopeTrackTrain.Should().NotBeNull();
         // InitializeTrain resolves from the TrainBus's own scope (the caller's scope),
         // not from a child scope — so the marker should match.
-        scopeTrackTrain!.Marker!.Id.Should().Be(callerMarker.Id);
+        scopeTrackTrain.NotNull().Marker.NotNull().Id.Should().Be(callerMarker.Id);
     }
 
     #endregion

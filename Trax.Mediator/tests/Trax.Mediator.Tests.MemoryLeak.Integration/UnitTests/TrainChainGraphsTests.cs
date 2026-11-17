@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -32,10 +33,10 @@ public class TrainChainGraphsTests
         );
         var graphs = Graphs(provider, Registration<IGraphedTrain, GraphedTrain>());
 
-        var graph = graphs.Find(typeof(IGraphedTrain).FullName!);
+        var graph = graphs.Find(typeof(IGraphedTrain).FullName.NotNull());
 
         graph.Should().NotBeNull();
-        graph!.Train.Should().Be(typeof(GraphedTrain).FullName);
+        graph.NotNull().Train.Should().Be(typeof(GraphedTrain).FullName);
         graph.Input.Should().Be(nameof(GraphInput));
         graph.Nodes.Select(n => n.Id).Should().Equal("TextToCount#0", "CountToFlag#0", "Resolve#0");
     }
@@ -49,8 +50,8 @@ public class TrainChainGraphsTests
         );
         var graphs = Graphs(provider, Registration<IGraphedTrain, GraphedTrain>());
 
-        var first = graphs.Find(typeof(IGraphedTrain).FullName!);
-        var second = graphs.Find(typeof(IGraphedTrain).FullName!);
+        var first = graphs.Find(typeof(IGraphedTrain).FullName.NotNull());
+        var second = graphs.Find(typeof(IGraphedTrain).FullName.NotNull());
 
         second.Should().BeSameAs(first);
         GraphedTrain.Declared.Should().Be(1, "a chain cannot change while the host runs");
@@ -65,17 +66,20 @@ public class TrainChainGraphsTests
         );
         var graphs = Graphs(provider, Registration<IGraphedTrain, GraphedTrain>());
 
-        var declared = graphs.FindDeclared(typeof(IGraphedTrain).FullName!);
-        var graph = graphs.Find(typeof(IGraphedTrain).FullName!);
+        var declared = graphs.FindDeclared(typeof(IGraphedTrain).FullName.NotNull());
+        var graph = graphs.Find(typeof(IGraphedTrain).FullName.NotNull());
 
         declared.Should().NotBeNull();
-        declared!.Train.Should().Be(typeof(GraphedTrain));
+        declared.NotNull().Train.Should().Be(typeof(GraphedTrain));
         declared.Input.Should().Be(typeof(GraphInput));
         declared.Output.Should().Be(typeof(bool));
         ChainGraph
             .From(declared.Chain, declared.Train, declared.Input, declared.Output)
             .Hash.Should()
-            .Be(graph!.Hash, "a resume is checked against the chain the graph is drawn from");
+            .Be(
+                graph.NotNull().Hash,
+                "a resume is checked against the chain the graph is drawn from"
+            );
         GraphedTrain.Declared.Should().Be(1, "the graph and the chain are read together");
         graphs.FindDeclared("System.IO.File").Should().BeNull();
     }
@@ -110,7 +114,7 @@ public class TrainChainGraphsTests
         );
         var graphs = Graphs(provider, Registration<IUnbuildableTrain, UnbuildableTrain>());
 
-        graphs.Find(typeof(IUnbuildableTrain).FullName!).Should().BeNull();
+        graphs.Find(typeof(IUnbuildableTrain).FullName.NotNull()).Should().BeNull();
     }
 
     [Test]
@@ -122,7 +126,7 @@ public class TrainChainGraphsTests
         var graphs = Graphs(provider, Registration<IRequestOnlyTrain, RequestOnlyTrain>());
 
         graphs
-            .Find(typeof(IRequestOnlyTrain).FullName!)
+            .Find(typeof(IRequestOnlyTrain).FullName.NotNull())
             .Should()
             .NotBeNull("reading a declaration needs the class, not the request");
     }
@@ -138,7 +142,7 @@ public class TrainChainGraphsTests
         var graphs = Graphs(provider, Registration<IAsyncDependentTrain, AsyncDependentTrain>());
 
         graphs
-            .Find(typeof(IAsyncDependentTrain).FullName!)
+            .Find(typeof(IAsyncDependentTrain).FullName.NotNull())
             .Should()
             .NotBeNull("the scope it was built in is disposed asynchronously, as a request's is");
     }
@@ -153,7 +157,7 @@ public class TrainChainGraphsTests
         );
         var time = new ManualTime();
         var graphs = Graphs(provider, Registration<IFlakyTrain, FlakyTrain>(), time);
-        var name = typeof(IFlakyTrain).FullName!;
+        var name = typeof(IFlakyTrain).FullName.NotNull();
 
         graphs.Find(name).Should().BeNull("building the train failed");
         var attempts = FlakyTrain.Built;

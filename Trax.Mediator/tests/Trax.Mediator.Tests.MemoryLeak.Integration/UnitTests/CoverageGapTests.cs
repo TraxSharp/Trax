@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -219,7 +220,7 @@ public class CoverageGapTests
             new AuthGapInput { Value = "x" },
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions
         );
-        var trainName = typeof(IAuthorizedGapTrain).FullName!;
+        var trainName = typeof(IAuthorizedGapTrain).FullName.NotNull();
 
         using (trusted.BeginTrusted("test.admin-surface"))
         {
@@ -263,7 +264,7 @@ public class CoverageGapTests
         using (trusted.BeginTrusted("test.admin-surface"))
         {
             var queued = await execution.QueueAsync(
-                typeof(IAuthorizedGapTrain).FullName!,
+                typeof(IAuthorizedGapTrain).FullName.NotNull(),
                 inputJson
             );
             queued.WorkQueueId.Should().BeGreaterThan(0);
@@ -271,7 +272,7 @@ public class CoverageGapTests
 
         var outside = async () =>
             await execution
-                .QueueAsync(typeof(IAuthorizedGapTrain).FullName!, inputJson)
+                .QueueAsync(typeof(IAuthorizedGapTrain).FullName.NotNull(), inputJson)
                 .ConfigureAwait(false);
         await outside
             .Should()
@@ -300,7 +301,7 @@ public class CoverageGapTests
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions
         );
 
-        var trainName = typeof(IAuthorizedGapTrain).FullName!;
+        var trainName = typeof(IAuthorizedGapTrain).FullName.NotNull();
         var act = async () => await execution.RunAsync(trainName, inputJson).ConfigureAwait(false);
 
         await act.Should()
@@ -331,7 +332,7 @@ public class CoverageGapTests
 
         var act = async () =>
             await execution
-                .QueueAsync(typeof(IAuthorizedGapTrain).FullName!, inputJson)
+                .QueueAsync(typeof(IAuthorizedGapTrain).FullName.NotNull(), inputJson)
                 .ConfigureAwait(false);
 
         var thrown = await act.Should()

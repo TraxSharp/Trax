@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.QueuedWorkListener;
 using Trax.Effect.Data.Testing;
@@ -34,7 +35,7 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
 
     private static readonly TimeSpan NoticeTimeout = TimeSpan.FromSeconds(10);
 
-    private InvokeHost _host = null!;
+    private InvokeHost? _host;
 
     [SetUp]
     public void SetUp()
@@ -52,7 +53,7 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
     {
         ObservedLauncher.Fault = LaunchFault.None;
         ObservedLauncher.Observe = null;
-        _host.Dispose();
+        _host?.Dispose();
     }
 
     [Test]
@@ -60,16 +61,18 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
     {
         var id = Guid.NewGuid();
 
-        (await _host.EnterRunning(User, id, GoodMachine.MachineId))
+        (await _host.NotNull().EnterRunning(User, id, GoodMachine.MachineId))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot.State.Should()
             .Be("Running");
 
-        var row = await _host.Row(id, GoodMachine.MachineId);
-        var runs = await _host.Runs(id);
+        var row = await _host.NotNull().Row(id, GoodMachine.MachineId);
+        var runs = await _host.NotNull().Runs(id);
         var run = runs.Should().ContainSingle($"one entry queues one run. See {Adr}").Subject;
-        row!.InvokeToken.Should().Be(run.ExternalId, "the token names the run the entry queued");
+        row.NotNull()
+            .InvokeToken.Should()
+            .Be(run.ExternalId, "the token names the run the entry queued");
         run.TrainName.Should().Be(typeof(IGoodTrain).FullName);
         run.Status.Should().Be(WorkQueueStatus.Queued);
         run.ConfirmedAt.Should().NotBeNull("an invoked run is never staged");
@@ -87,15 +90,15 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
             var id = Guid.NewGuid();
             ObservedLauncher.Fault = fault;
 
-            var enter = () => _host.EnterRunning(User, id, GoodMachine.MachineId);
+            var enter = () => _host.NotNull().EnterRunning(User, id, GoodMachine.MachineId);
             await enter.Should().ThrowAsync<InvalidOperationException>();
 
-            var row = await _host.Row(id, GoodMachine.MachineId);
-            row!
+            var row = await _host.NotNull().Row(id, GoodMachine.MachineId);
+            row.NotNull()
                 .State.Should()
                 .Be("Idle", $"the advance is rolled back with the enqueue ({fault}). See {Adr}");
             row.InvokeToken.Should().BeNull();
-            (await _host.Runs(id))
+            (await _host.NotNull().Runs(id))
                 .Should()
                 .BeEmpty($"no run is queued for a machine that never moved ({fault})");
         }
@@ -103,10 +106,10 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
         // The data context the request shares is left clean: the next entry commits normally.
         ObservedLauncher.Fault = LaunchFault.None;
         var next = Guid.NewGuid();
-        (await _host.EnterRunning(User, next, GoodMachine.MachineId))
+        (await _host.NotNull().EnterRunning(User, next, GoodMachine.MachineId))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
-        (await _host.Runs(next)).Should().ContainSingle();
+        (await _host.NotNull().Runs(next)).Should().ContainSingle();
     }
 
     [Test]
@@ -116,7 +119,7 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
         {
             var id = Guid.NewGuid();
             TestPrincipal.Become(User);
-            await _host.SeedIdle(User, id, GoodMachine.MachineId);
+            await _host.NotNull().SeedIdle(User, id, GoodMachine.MachineId);
 
             // Observed from another connection while the outbox's transaction is open: the advance train's own
             // run record has been saved (and committed) through its effect runner, and nothing the outbox wrote is
@@ -127,7 +130,7 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
             ObservedLauncher.Fault = fault;
             ObservedLauncher.Observe = async () =>
             {
-                using var other = _host.Scope();
+                using var other = _host.NotNull().Scope();
                 var db = other.ServiceProvider.GetRequiredService<IDataContext>();
                 trainRun = await db
                     .Metadatas.AsNoTracking()
@@ -147,7 +150,7 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
                     .ConfigureAwait(false);
             };
 
-            using (var scope = _host.Scope())
+            using (var scope = _host.NotNull().Scope())
             {
                 var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
                 var advance = () =>
@@ -166,21 +169,21 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
             }
 
             trainRun.Should().NotBeNull("the observation ran inside the outbox's transaction");
-            trainRun!.TrainState.Should().Be(TrainState.InProgress);
+            trainRun.NotNull().TrainState.Should().Be(TrainState.InProgress);
             stateSeen.Should().Be("Idle", $"the snapshot is not committed part-way. See {Adr}");
             runsSeen.Should().Be(0, "the run is not committed part-way");
 
-            using var check = _host.Scope();
+            using var check = _host.NotNull().Scope();
             var finished = await check
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .Metadatas.AsNoTracking()
                 .SingleAsync(m => m.Id == trainRun.Id);
-            var row = await _host.Row(id, GoodMachine.MachineId);
+            var row = await _host.NotNull().Row(id, GoodMachine.MachineId);
             if (fault == LaunchFault.None)
             {
                 finished.TrainState.Should().Be(TrainState.Completed);
-                row!.State.Should().Be("Running");
-                (await _host.Runs(id)).Should().ContainSingle();
+                row.NotNull().State.Should().Be("Running");
+                (await _host.NotNull().Runs(id)).Should().ContainSingle();
             }
             else
             {
@@ -190,8 +193,10 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
                         TrainState.Failed,
                         "the train's own failure is recorded through its own context"
                     );
-                row!.State.Should().Be("Idle", "and it does not commit the outbox's writes");
-                (await _host.Runs(id)).Should().BeEmpty();
+                row.NotNull()
+                    .State.Should()
+                    .Be("Idle", "and it does not commit the outbox's writes");
+                (await _host.NotNull().Runs(id)).Should().BeEmpty();
             }
         }
     }
@@ -206,7 +211,7 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
         {
             ObservedLauncher.Fault = fault;
             var pending = Guid.NewGuid();
-            using var scope = _host.Scope();
+            using var scope = _host.NotNull().Scope();
             var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
             var tracked = new SnapshotDraft
             {
@@ -231,7 +236,7 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
             else
                 await start.Should().ThrowAsync<InvalidOperationException>();
 
-            (await _host.Row(pending, GoodMachine.MachineId))
+            (await _host.NotNull().Row(pending, GoodMachine.MachineId))
                 .Should()
                 .BeNull(
                     $"the caller's tracked write is not committed by the outbox ({fault}). See {Adr}"
@@ -242,7 +247,7 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
                 .Be(EntityState.Added, $"the caller's write is still pending ({fault})");
 
             await context.SaveChanges(CancellationToken.None);
-            (await _host.Row(pending, GoodMachine.MachineId))
+            (await _host.NotNull().Row(pending, GoodMachine.MachineId))
                 .Should()
                 .NotBeNull($"the caller's own save commits it ({fault})");
         }
@@ -253,18 +258,19 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
     {
         var key = MachineKey.Of("partition", Guid.NewGuid().ToString());
 
-        var first = await _host.Start<PartitionMachine>(key);
-        var second = await _host.Start<PartitionMachine>(key);
+        var first = await _host.NotNull().Start<PartitionMachine>(key);
+        var second = await _host.NotNull().Start<PartitionMachine>(key);
 
         first.Created.Should().BeTrue();
         second.Created.Should().BeFalse();
         first.State.Should().Be("Running");
-        var runs = await _host.Runs(first.Id);
+        var runs = await _host.NotNull().Runs(first.Id);
         var run = runs.Should()
             .ContainSingle($"one instance, one entry, one run. See {Adr}")
             .Subject;
         run.InvokingOwnerKind.Should().Be(SnapshotOwnerKind.System);
-        (await _host.Row(first.Id, PartitionMachine.MachineId))!
+        (await _host.NotNull().Row(first.Id, PartitionMachine.MachineId))
+            .NotNull()
             .InvokeToken.Should()
             .Be(run.ExternalId);
     }
@@ -273,29 +279,35 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
     public async Task Leaving_an_invoking_state_cancels_its_queued_run_and_clears_the_token()
     {
         var id = Guid.NewGuid();
-        await _host.EnterRunning(User, id, GoodMachine.MachineId);
-        var queued = (await _host.Runs(id)).Single();
+        await _host.NotNull().EnterRunning(User, id, GoodMachine.MachineId);
+        var queued = (await _host.NotNull().Runs(id)).Single();
 
-        using (var scope = _host.Scope())
-            (await _host.Service(scope, GoodMachine.MachineId).Advance(User, id, "Stop"))
+        using (var scope = _host.NotNull().Scope())
+            (await _host.NotNull().Service(scope, GoodMachine.MachineId).Advance(User, id, "Stop"))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>()
                 .Which.Snapshot.State.Should()
                 .Be("Idle");
 
-        (await _host.Runs(id))
+        (await _host.NotNull().Runs(id))
             .Single()
             .Status.Should()
             .Be(WorkQueueStatus.Cancelled, $"leaving the state cancels its run. See {Adr}");
-        (await _host.Row(id, GoodMachine.MachineId))!.InvokeToken.Should().BeNull();
+        (await _host.NotNull().Row(id, GoodMachine.MachineId))
+            .NotNull()
+            .InvokeToken.Should()
+            .BeNull();
 
         // Entering again queues a new run under a new token.
-        using (var scope = _host.Scope())
-            await _host.Service(scope, GoodMachine.MachineId).Advance(User, id, "Go");
-        var runs = await _host.Runs(id);
+        using (var scope = _host.NotNull().Scope())
+            await _host.NotNull().Service(scope, GoodMachine.MachineId).Advance(User, id, "Go");
+        var runs = await _host.NotNull().Runs(id);
         runs.Should().HaveCount(2);
         runs[1].ExternalId.Should().NotBe(queued.ExternalId);
-        (await _host.Row(id, GoodMachine.MachineId))!.InvokeToken.Should().Be(runs[1].ExternalId);
+        (await _host.NotNull().Row(id, GoodMachine.MachineId))
+            .NotNull()
+            .InvokeToken.Should()
+            .Be(runs[1].ExternalId);
     }
 
     [LeavesStuckRuns(
@@ -305,12 +317,12 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
     public async Task Leaving_an_invoking_state_flags_its_dispatched_run_for_cancellation()
     {
         var id = Guid.NewGuid();
-        await _host.EnterRunning(User, id, GoodMachine.MachineId);
-        var queued = (await _host.Runs(id)).Single();
+        await _host.NotNull().EnterRunning(User, id, GoodMachine.MachineId);
+        var queued = (await _host.NotNull().Runs(id)).Single();
 
         // Dispatch it the way the dispatcher does: the entry claimed, and the run recorded under its external id.
         long runId;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
             var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
             var run = Metadata.Create(
@@ -333,10 +345,10 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
                 );
         }
 
-        using (var scope = _host.Scope())
-            await _host.Service(scope, GoodMachine.MachineId).Advance(User, id, "Stop");
+        using (var scope = _host.NotNull().Scope())
+            await _host.NotNull().Service(scope, GoodMachine.MachineId).Advance(User, id, "Stop");
 
-        using var check = _host.Scope();
+        using var check = _host.NotNull().Scope();
         (
             await check
                 .ServiceProvider.GetRequiredService<IDataContext>()
@@ -347,13 +359,13 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
             .BeTrue(
                 $"a dispatched run is cancelled through its flag, on whichever host runs it. See {Adr}"
             );
-        (await _host.Runs(id)).Single().Status.Should().Be(WorkQueueStatus.Dispatched);
+        (await _host.NotNull().Runs(id)).Single().Status.Should().Be(WorkQueueStatus.Dispatched);
     }
 
     [Test]
     public async Task A_committed_entry_wakes_a_dispatcher_and_a_rolled_back_one_does_not()
     {
-        var listener = _host.Services.GetRequiredService<IQueuedWorkListener>();
+        var listener = _host.NotNull().Services.GetRequiredService<IQueuedWorkListener>();
         await using var subscription = await listener.SubscribeAsync(CancellationToken.None);
 
         // On Postgres, the test's own session on the channel: once a query on it returns, every
@@ -372,12 +384,13 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
         }
 
         ObservedLauncher.Fault = LaunchFault.AfterEnqueue;
-        var refused = () => _host.EnterRunning(User, Guid.NewGuid(), GoodMachine.MachineId);
+        var refused = () =>
+            _host.NotNull().EnterRunning(User, Guid.NewGuid(), GoodMachine.MachineId);
         await refused.Should().ThrowAsync<InvalidOperationException>();
 
         // Committed after the rollback, so its notice is the only one that can exist.
         ObservedLauncher.Fault = LaunchFault.None;
-        await _host.EnterRunning(User, Guid.NewGuid(), GoodMachine.MachineId);
+        await _host.NotNull().EnterRunning(User, Guid.NewGuid(), GoodMachine.MachineId);
 
         var woken = () => subscription.WaitAsync(new CancellationTokenSource(NoticeTimeout).Token);
         await woken

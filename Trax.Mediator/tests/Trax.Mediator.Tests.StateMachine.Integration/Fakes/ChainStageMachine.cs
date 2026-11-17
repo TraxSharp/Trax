@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
@@ -33,7 +34,7 @@ public abstract class ChainStageMachine : Machine<ChainState, ChainTrigger>
 
         m.In(ChainState.Fetching)
             .Invokes<IGoodTrain, GoodInput, JobOutput>(ctx =>
-                new(ctx["source"]!.GetValue<string>())
+                new(ctx["source"].NotNull().GetValue<string>())
             )
             .OnDone(ChainedByOutcome ? ChainState.Embedding : ChainState.Fetched)
             .OnFailed(ChainState.Failed)
@@ -43,7 +44,7 @@ public abstract class ChainStageMachine : Machine<ChainState, ChainTrigger>
 
         m.In(ChainState.Embedding)
             .Invokes<IGoodTrain, GoodInput, JobOutput>(ctx =>
-                new(ctx["source"]!.GetValue<string>())
+                new(ctx["source"].NotNull().GetValue<string>())
             )
             .OnDone(ChainState.Done)
             .OnFailed(ChainState.Failed)

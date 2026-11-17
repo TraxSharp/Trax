@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -82,7 +83,7 @@ public class DeadLetterTests : TestSetup
 
         // Assert
         foundDeadLetter.Should().NotBeNull();
-        foundDeadLetter!.ManifestId.Should().Be(manifest.Id);
+        foundDeadLetter.NotNull().ManifestId.Should().Be(manifest.Id);
         foundDeadLetter.Reason.Should().Be("Max retries exceeded");
         foundDeadLetter.RetryCountAtDeadLetter.Should().Be(3);
         foundDeadLetter.Status.Should().Be(DeadLetterStatus.AwaitingIntervention);
@@ -136,8 +137,8 @@ public class DeadLetterTests : TestSetup
 
         // Assert
         foundDeadLetter.Should().NotBeNull();
-        foundDeadLetter!.Manifest.Should().NotBeNull();
-        foundDeadLetter.Manifest!.Id.Should().Be(manifest.Id);
+        foundDeadLetter.NotNull().Manifest.Should().NotBeNull();
+        foundDeadLetter.Manifest.NotNull().Id.Should().Be(manifest.Id);
         foundDeadLetter.Manifest.Name.Should().Be(typeof(DeadLetterTests).FullName);
     }
 
@@ -187,7 +188,7 @@ public class DeadLetterTests : TestSetup
         );
         foundDeadLetter.Should().NotBeNull();
 
-        foundDeadLetter!.Acknowledge("Issue resolved manually");
+        foundDeadLetter.NotNull().Acknowledge("Issue resolved manually");
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 
@@ -197,7 +198,7 @@ public class DeadLetterTests : TestSetup
         );
 
         acknowledgedDeadLetter.Should().NotBeNull();
-        acknowledgedDeadLetter!.Status.Should().Be(DeadLetterStatus.Acknowledged);
+        acknowledgedDeadLetter.NotNull().Status.Should().Be(DeadLetterStatus.Acknowledged);
         acknowledgedDeadLetter.ResolutionNote.Should().Be("Issue resolved manually");
         acknowledgedDeadLetter.ResolvedAt.Should().NotBeNull();
     }
@@ -263,7 +264,7 @@ public class DeadLetterTests : TestSetup
         );
         foundDeadLetter.Should().NotBeNull();
 
-        foundDeadLetter!.MarkRetried(retryMetadataId);
+        foundDeadLetter.NotNull().MarkRetried(retryMetadataId);
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 
@@ -273,11 +274,11 @@ public class DeadLetterTests : TestSetup
             .FirstOrDefaultAsync(x => x.Id == deadLetterId);
 
         retriedDeadLetter.Should().NotBeNull();
-        retriedDeadLetter!.Status.Should().Be(DeadLetterStatus.Retried);
+        retriedDeadLetter.NotNull().Status.Should().Be(DeadLetterStatus.Retried);
         retriedDeadLetter.RetryMetadataId.Should().Be(retryMetadataId);
         retriedDeadLetter.ResolvedAt.Should().NotBeNull();
         retriedDeadLetter.RetryMetadata.Should().NotBeNull();
-        retriedDeadLetter.RetryMetadata!.Id.Should().Be(retryMetadataId);
+        retriedDeadLetter.RetryMetadata.NotNull().Id.Should().Be(retryMetadataId);
     }
 
     [Theory]
@@ -445,7 +446,7 @@ public class DeadLetterTests : TestSetup
         var workQueue = Effect.Models.WorkQueue.WorkQueue.Create(
             new Effect.Models.WorkQueue.DTOs.CreateWorkQueue
             {
-                TrainName = typeof(DeadLetterTests).FullName!,
+                TrainName = typeof(DeadLetterTests).FullName.NotNull(),
                 ManifestId = manifest.Id,
                 DeadLetterId = deadLetter.Id,
             }

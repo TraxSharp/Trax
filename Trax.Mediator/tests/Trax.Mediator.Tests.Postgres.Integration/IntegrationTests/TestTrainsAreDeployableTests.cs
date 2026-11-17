@@ -1,5 +1,6 @@
 using System.Reflection;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Core.Train;
 
@@ -75,7 +76,7 @@ public class TestTrainsAreDeployableTests
             object train;
             try
             {
-                train = Activator.CreateInstance(type, nonPublic: true)!;
+                train = Activator.CreateInstance(type, nonPublic: true).NotNull();
             }
             catch
             {
@@ -94,7 +95,7 @@ public class TestTrainsAreDeployableTests
             ChainRecorder chain;
             try
             {
-                chain = (ChainRecorder)declaredChain.Invoke(train, parameters: null)!;
+                chain = (ChainRecorder)declaredChain.Invoke(train, parameters: null).NotNull();
             }
             catch (Exception ex)
             {
@@ -129,8 +130,8 @@ public class TestTrainsAreDeployableTests
             .Select(entry =>
                 (
                     entry.Type,
-                    entry.Base!.GetGenericArguments()[0],
-                    entry.Base!.GetGenericArguments()[1]
+                    entry.Base.NotNull().GetGenericArguments()[0],
+                    entry.Base.NotNull().GetGenericArguments()[1]
                 )
             );
 

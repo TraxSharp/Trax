@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
@@ -82,7 +83,7 @@ public class TrainExecutionServiceLookupTests
         );
         try
         {
-            return method!.Invoke(svc, [name])!;
+            return method.NotNull().Invoke(svc, [name]).NotNull();
         }
         catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
         {
@@ -96,7 +97,7 @@ public class TrainExecutionServiceLookupTests
         var reg = FakeRegistration("Ns.Foo.IMyTrain", "IMyTrain");
         var svc = BuildService(reg);
 
-        var result = InvokeFindTrain(svc, typeof(IFakeTrain).FullName!);
+        var result = InvokeFindTrain(svc, typeof(IFakeTrain).FullName.NotNull());
 
         result.Should().BeSameAs(reg);
     }
@@ -154,8 +155,8 @@ public class TrainExecutionServiceLookupTests
     public async Task RunAsync_InputOverCap_Throws_TrainInputValidationException()
     {
         var reg = FakeRegistration(
-            typeof(IFakeTrain).FullName!,
-            typeof(IFakeTrain).FullName!,
+            typeof(IFakeTrain).FullName.NotNull(),
+            typeof(IFakeTrain).FullName.NotNull(),
             typeof(IFakeTrain)
         );
         var config = new MediatorConfiguration { MaxInputJsonBytes = 32 };
@@ -163,7 +164,8 @@ public class TrainExecutionServiceLookupTests
         var oversized = "{\"pad\":\"" + new string('x', 128) + "\"}";
 
         var act = async () =>
-            await svc.RunAsync(typeof(IFakeTrain).FullName!, oversized).ConfigureAwait(false);
+            await svc.RunAsync(typeof(IFakeTrain).FullName.NotNull(), oversized)
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<TrainInputValidationException>())
             .Which.MaxBytes.Should()
@@ -174,8 +176,8 @@ public class TrainExecutionServiceLookupTests
     public async Task QueueAsync_InputOverCap_Throws_TrainInputValidationException()
     {
         var reg = FakeRegistration(
-            typeof(IFakeTrain).FullName!,
-            typeof(IFakeTrain).FullName!,
+            typeof(IFakeTrain).FullName.NotNull(),
+            typeof(IFakeTrain).FullName.NotNull(),
             typeof(IFakeTrain)
         );
         var config = new MediatorConfiguration { MaxInputJsonBytes = 16 };
@@ -183,7 +185,8 @@ public class TrainExecutionServiceLookupTests
         var oversized = "{\"pad\":\"" + new string('x', 64) + "\"}";
 
         var act = async () =>
-            await svc.QueueAsync(typeof(IFakeTrain).FullName!, oversized).ConfigureAwait(false);
+            await svc.QueueAsync(typeof(IFakeTrain).FullName.NotNull(), oversized)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainInputValidationException>();
     }
@@ -195,8 +198,8 @@ public class TrainExecutionServiceLookupTests
         // call will fail later for a different reason. We just need to confirm the
         // size check does NOT fire on a byte-count equal to the cap.
         var reg = FakeRegistration(
-            typeof(IFakeTrain).FullName!,
-            typeof(IFakeTrain).FullName!,
+            typeof(IFakeTrain).FullName.NotNull(),
+            typeof(IFakeTrain).FullName.NotNull(),
             typeof(IFakeTrain)
         );
         var json = "{\"pad\":\"ok\"}"; // 12 UTF-8 bytes
@@ -204,7 +207,7 @@ public class TrainExecutionServiceLookupTests
         var svc = BuildService(config, reg);
 
         var act = async () =>
-            await svc.RunAsync(typeof(IFakeTrain).FullName!, json).ConfigureAwait(false);
+            await svc.RunAsync(typeof(IFakeTrain).FullName.NotNull(), json).ConfigureAwait(false);
 
         // Any thrown exception must not be the size-check one.
         try
@@ -229,8 +232,8 @@ public class TrainExecutionServiceLookupTests
         // service that always throws; the thrown exception must be the authz one,
         // not the size one, even though the input is both oversized and unauthorized.
         var reg = FakeRegistration(
-            typeof(IFakeTrain).FullName!,
-            typeof(IFakeTrain).FullName!,
+            typeof(IFakeTrain).FullName.NotNull(),
+            typeof(IFakeTrain).FullName.NotNull(),
             typeof(IFakeTrain),
             hasAuthorize: true
         );
@@ -261,7 +264,8 @@ public class TrainExecutionServiceLookupTests
 
         var oversized = "{\"big\":\"" + new string('x', 256) + "\"}";
         var act = async () =>
-            await svc.RunAsync(typeof(IFakeTrain).FullName!, oversized).ConfigureAwait(false);
+            await svc.RunAsync(typeof(IFakeTrain).FullName.NotNull(), oversized)
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()

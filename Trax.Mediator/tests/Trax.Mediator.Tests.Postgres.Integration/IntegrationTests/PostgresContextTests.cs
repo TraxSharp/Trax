@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Services.DataContext;
@@ -60,7 +61,7 @@ public class PostgresContextTests : TestSetup
         var train = await TrainBus.RunAsync<ITestTrain>(new TestTrainInput());
 
         // Assert
-        var metadata = train!.Metadata!;
+        var metadata = train.NotNull().Metadata.NotNull();
         metadata.Name.Should().Be(typeof(ITestTrain).FullName);
         metadata.FailureException.Should().BeNullOrEmpty();
         metadata.FailureReason.Should().BeNullOrEmpty();
@@ -77,7 +78,7 @@ public class PostgresContextTests : TestSetup
         await TrainBus.RunAsync<Unit>(new TestTrainWithoutInterfaceInput());
 
         // Assert
-        var metadata = train!.Metadata!;
+        var metadata = train.NotNull().Metadata.NotNull();
         metadata.Name.Should().Be(typeof(ITestTrain).FullName);
         metadata.FailureException.Should().BeNullOrEmpty();
         metadata.FailureReason.Should().BeNullOrEmpty();
@@ -99,13 +100,13 @@ public class PostgresContextTests : TestSetup
         );
 
         // Assert
-        var trainMetadata = train!.Metadata!;
+        var trainMetadata = train.NotNull().Metadata.NotNull();
         trainMetadata.Name.Should().Be(typeof(ITestTrainWithinTrain).FullName);
         trainMetadata.FailureException.Should().BeNullOrEmpty();
         trainMetadata.FailureReason.Should().BeNullOrEmpty();
         trainMetadata.FailureJunction.Should().BeNullOrEmpty();
         trainMetadata.TrainState.Should().Be(TrainState.Completed);
-        var innerTrainMetadata = innerTrain!.Metadata!;
+        var innerTrainMetadata = innerTrain.NotNull().Metadata.NotNull();
         innerTrainMetadata.Name.Should().Be(typeof(ITestTrain).FullName);
         innerTrainMetadata.FailureException.Should().BeNullOrEmpty();
         innerTrainMetadata.FailureReason.Should().BeNullOrEmpty();
@@ -122,13 +123,13 @@ public class PostgresContextTests : TestSetup
             x.Id == innerTrainMetadata.Id
         );
         parentTrainResult.Should().NotBeNull();
-        parentTrainResult!.Id.Should().Be(trainMetadata.Id);
-        parentTrainResult!.TrainState.Should().Be(TrainState.Completed);
+        parentTrainResult.NotNull().Id.Should().Be(trainMetadata.Id);
+        parentTrainResult.NotNull().TrainState.Should().Be(TrainState.Completed);
         parentTrainResult.Input.Should().NotBeNull();
         parentTrainResult.Output.Should().NotBeNull();
 
         childTrainResult.Should().NotBeNull();
-        childTrainResult!.Id.Should().Be(innerTrainMetadata.Id);
+        childTrainResult.NotNull().Id.Should().Be(innerTrainMetadata.Id);
         childTrainResult.TrainState.Should().Be(TrainState.Completed);
         childTrainResult.Input.Should().NotBeNull();
         childTrainResult.Output.Should().NotBeNull();

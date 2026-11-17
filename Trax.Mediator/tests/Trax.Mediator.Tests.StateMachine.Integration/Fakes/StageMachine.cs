@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
@@ -37,7 +38,9 @@ public abstract class StageMachine<TTrain, TInput, TOutput> : Machine<StepState,
         m.In(StepState.Idle).On(StepTrigger.Go).To(StepState.Running);
 
         m.In(StepState.Running)
-            .Invokes<TTrain, TInput, TOutput>(ctx => Input(ctx["source"]!.GetValue<string>()))
+            .Invokes<TTrain, TInput, TOutput>(ctx =>
+                Input(ctx["source"].NotNull().GetValue<string>())
+            )
             .OnDone(StepState.Done)
             .OnFailed(StepState.Failed)
             .OnCancelled(StepState.Cancelled)

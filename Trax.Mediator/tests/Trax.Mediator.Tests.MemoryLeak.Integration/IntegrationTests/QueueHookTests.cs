@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
@@ -25,8 +26,8 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class QueueHookTests
 {
-    private ServiceProvider _serviceProvider = null!;
-    private QueueHookProbe _probe = null!;
+    private ServiceProvider? _serviceProvider;
+    private QueueHookProbe? _probe;
 
     [SetUp]
     public void Setup()
@@ -42,19 +43,19 @@ public class QueueHookTests
         );
 
         _serviceProvider = services.BuildServiceProvider();
-        _probe = _serviceProvider.GetRequiredService<QueueHookProbe>();
+        _probe = _serviceProvider.NotNull().GetRequiredService<QueueHookProbe>();
     }
 
     [TearDown]
     public void TearDown()
     {
-        _serviceProvider.Dispose();
+        _serviceProvider?.Dispose();
         TrainBus.ClearMethodCache();
     }
 
     private async Task<long> CountWorkQueueAsync()
     {
-        var factory = _serviceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _serviceProvider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -68,40 +69,40 @@ public class QueueHookTests
     [Test]
     public async Task QueueAsync_OverridingTrain_FiresOnQueueBeforeInsert_WithInputAndExternalId()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var svc = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         (await CountWorkQueueAsync()).Should().Be(0);
 
         var result = await svc.QueueAsync(
-            typeof(IShadowQueueTrain).FullName!,
+            typeof(IShadowQueueTrain).FullName.NotNull(),
             Serialize(new ShadowInput("hi"))
         );
 
         // The hook ran exactly once, observed the input, and saw the ExternalId the
         // eventual run will execute under (the same one returned to the caller).
-        _probe.OnQueueCallCount.Should().Be(1);
-        _probe.LastInput.Should().Be("hi");
-        _probe.LastExternalId.Should().Be(result.ExternalId);
+        _probe.NotNull().OnQueueCallCount.Should().Be(1);
+        _probe.NotNull().LastInput.Should().Be("hi");
+        _probe.NotNull().LastExternalId.Should().Be(result.ExternalId);
 
         // Ordering: at hook time no row existed yet; exactly one exists after the call.
-        _probe.RowsAtHookTime.Should().Be(0);
+        _probe.NotNull().RowsAtHookTime.Should().Be(0);
         (await CountWorkQueueAsync()).Should().Be(1);
 
         // [Inject]/constructor wiring worked: the train was actually resolved.
-        _probe.Constructed.Should().Contain("Shadow");
+        _probe.NotNull().Constructed.Should().Contain("Shadow");
     }
 
     [Test]
     public async Task QueueAsync_NonOverridingTrain_InsertsRow_AndNeverResolvesTrain()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var svc = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var result = await svc.QueueAsync(
-            typeof(IPlainQueueTrain).FullName!,
+            typeof(IPlainQueueTrain).FullName.NotNull(),
             Serialize(new PlainInput("hi"))
         );
 
@@ -110,20 +111,20 @@ public class QueueHookTests
 
         // The hook never fired and — critically — the gate skipped resolution entirely,
         // so the enqueue path is as light as before the hook existed.
-        _probe.OnQueueCallCount.Should().Be(0);
-        _probe.Constructed.Should().NotContain("Plain");
+        _probe.NotNull().OnQueueCallCount.Should().Be(0);
+        _probe.NotNull().Constructed.Should().NotContain("Plain");
     }
 
     [Test]
     public async Task QueueAsync_ThrowingOnQueue_AbortsEnqueue_NoRowInserted()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var svc = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = async () =>
             await svc.QueueAsync(
-                    typeof(IRejectingQueueTrain).FullName!,
+                    typeof(IRejectingQueueTrain).FullName.NotNull(),
                     Serialize(new RejectInput("x"))
                 )
                 .ConfigureAwait(false);
@@ -136,37 +137,46 @@ public class QueueHookTests
         (await CountWorkQueueAsync())
             .Should()
             .Be(0);
-        _probe.OnQueueCallCount.Should().Be(0, "the throwing hook records nothing");
+        _probe.NotNull().OnQueueCallCount.Should().Be(0, "the throwing hook records nothing");
     }
 
     [Test]
     public async Task RunAsync_DoesNotFireOnQueue()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var svc = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var result = await svc.RunAsync(
-            typeof(IShadowQueueTrain).FullName!,
+            typeof(IShadowQueueTrain).FullName.NotNull(),
             Serialize(new ShadowInput("hi"))
         );
 
         result.MetadataId.Should().BeGreaterThan(0);
-        _probe.OnQueueCallCount.Should().Be(0, "OnQueue must not fire on the synchronous run path");
+        _probe
+            .NotNull()
+            .OnQueueCallCount.Should()
+            .Be(0, "OnQueue must not fire on the synchronous run path");
     }
 
     [Test]
     public async Task QueueAsync_OverridingTrain_CalledTwice_UsesCachedGate()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var svc = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        await svc.QueueAsync(typeof(IShadowQueueTrain).FullName!, Serialize(new ShadowInput("a")));
-        await svc.QueueAsync(typeof(IShadowQueueTrain).FullName!, Serialize(new ShadowInput("b")));
+        await svc.QueueAsync(
+            typeof(IShadowQueueTrain).FullName.NotNull(),
+            Serialize(new ShadowInput("a"))
+        );
+        await svc.QueueAsync(
+            typeof(IShadowQueueTrain).FullName.NotNull(),
+            Serialize(new ShadowInput("b"))
+        );
 
-        _probe.OnQueueCallCount.Should().Be(2);
-        _probe.LastInput.Should().Be("b");
+        _probe.NotNull().OnQueueCallCount.Should().Be(2);
+        _probe.NotNull().LastInput.Should().Be("b");
         (await CountWorkQueueAsync()).Should().Be(2);
     }
 
@@ -192,7 +202,7 @@ public class QueueHookTests
 
         using var cancel = new CancellationTokenSource();
         var enqueue = svc.QueueAsync(
-            typeof(ILateFaultQueueTrain).FullName!,
+            typeof(ILateFaultQueueTrain).FullName.NotNull(),
             Serialize(new LateFaultInput("x")),
             ct: cancel.Token
         );
@@ -289,10 +299,9 @@ public class QueueHookTests
             Task.FromResult(Extract<ShadowInput, string>().Resolve());
 
         protected override Task OnQueue(Metadata metadata, CancellationToken ct) =>
-            _probe.CaptureOnQueueAsync(
-                metadata.ExternalId,
-                metadata.GetInput<ShadowInput>()?.Value
-            );
+            _probe
+                .NotNull()
+                .CaptureOnQueueAsync(metadata.ExternalId, metadata.GetInput<ShadowInput>()?.Value);
     }
 
     public interface IPlainQueueTrain : IServiceTrain<PlainInput, string>;

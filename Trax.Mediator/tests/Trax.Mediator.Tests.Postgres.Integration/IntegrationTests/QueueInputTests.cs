@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.EnqueueContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -45,7 +46,7 @@ public class QueueInputTests : TestSetup
         // carries the original's id to the run's metadata at dispatch, where decision replay
         // reads it.
         var result = await Execution.QueueAsync(
-            typeof(IOptionalInputTrain).FullName!,
+            typeof(IOptionalInputTrain).FullName.NotNull(),
             inputJson: null,
             new QueueTrainOptions { Priority = 3, ReplayDecisionsOf = 4242 }
         );
@@ -72,7 +73,7 @@ public class QueueInputTests : TestSetup
         // than as a refusal, and named so the operator knows which registration to fix.
         var thrown = await act.Should().ThrowAsync<DecisionReplayNotSupportedException>();
         thrown.Which.ImplementationType.Should().Be(typeof(PredatesReplay));
-        thrown.Which.Message.Should().Contain(typeof(PredatesReplay).FullName!);
+        thrown.Which.Message.Should().Contain(typeof(PredatesReplay).FullName.NotNull());
     }
 
     /// <summary>An implementation written before the options overload existed.</summary>
@@ -103,7 +104,7 @@ public class QueueInputTests : TestSetup
     public async Task No_input_is_stored_as_an_empty_object_the_runner_can_use()
     {
         var result = await Execution.QueueAsync(
-            typeof(IOptionalInputTrain).FullName!,
+            typeof(IOptionalInputTrain).FullName.NotNull(),
             inputJson: null
         );
 
@@ -112,7 +113,11 @@ public class QueueInputTests : TestSetup
         stored
             .Should()
             .NotBeNull("the runner refuses an entry with no input, so null could only fail later");
-        JsonSerializer.Deserialize<OptionalInput>(stored!)!.Label.Should().Be("default");
+        JsonSerializer
+            .Deserialize<OptionalInput>(stored.NotNull())
+            .NotNull()
+            .Label.Should()
+            .Be("default");
     }
 
     [Test]
@@ -120,7 +125,7 @@ public class QueueInputTests : TestSetup
     {
         var act = async () =>
             await Execution
-                .QueueAsync(typeof(IRequiredInputTrain).FullName!, inputJson: null)
+                .QueueAsync(typeof(IRequiredInputTrain).FullName.NotNull(), inputJson: null)
                 .ConfigureAwait(false);
 
         await act.Should()
@@ -138,7 +143,7 @@ public class QueueInputTests : TestSetup
 
         var act = async () =>
             await Execution
-                .QueueAsync(typeof(IPositionalInputTrain).FullName!, inputJson: null)
+                .QueueAsync(typeof(IPositionalInputTrain).FullName.NotNull(), inputJson: null)
                 .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<JsonException>()).WithMessage(
@@ -152,13 +157,17 @@ public class QueueInputTests : TestSetup
     public async Task A_positional_record_whose_parameters_have_defaults_can_be_queued_without_input()
     {
         var result = await Execution.QueueAsync(
-            typeof(IDefaultedPositionalInputTrain).FullName!,
+            typeof(IDefaultedPositionalInputTrain).FullName.NotNull(),
             ""
         );
 
         var stored = (await EntryAsync(result.WorkQueueId)).Input;
 
-        JsonSerializer.Deserialize<DefaultedPositionalInput>(stored!)!.Label.Should().Be("default");
+        JsonSerializer
+            .Deserialize<DefaultedPositionalInput>(stored.NotNull())
+            .NotNull()
+            .Label.Should()
+            .Be("default");
     }
 
     [Test]
@@ -166,7 +175,7 @@ public class QueueInputTests : TestSetup
     {
         var act = async () =>
             await Execution
-                .QueueAsync(typeof(IUnitInputTrain).FullName!, inputJson: null)
+                .QueueAsync(typeof(IUnitInputTrain).FullName.NotNull(), inputJson: null)
                 .ConfigureAwait(false);
 
         await act.Should()
@@ -178,7 +187,10 @@ public class QueueInputTests : TestSetup
     {
         // Only a missing input is held to the stricter reading. An explicit {} is the caller's
         // own input, and is deserialized the way any other input is.
-        var result = await Execution.QueueAsync(typeof(IPositionalInputTrain).FullName!, "{}");
+        var result = await Execution.QueueAsync(
+            typeof(IPositionalInputTrain).FullName.NotNull(),
+            "{}"
+        );
 
         (await EntryAsync(result.WorkQueueId)).Input.Should().NotBeNull();
     }
@@ -188,10 +200,12 @@ public class QueueInputTests : TestSetup
     {
         var refused = async () =>
             await Execution
-                .RunAsync(typeof(IPositionalInputTrain).FullName!, "")
+                .RunAsync(typeof(IPositionalInputTrain).FullName.NotNull(), "")
                 .ConfigureAwait(false);
         var accepted = async () =>
-            await Execution.RunAsync(typeof(IUnitInputTrain).FullName!, " ").ConfigureAwait(false);
+            await Execution
+                .RunAsync(typeof(IUnitInputTrain).FullName.NotNull(), " ")
+                .ConfigureAwait(false);
 
         (await refused.Should().ThrowAsync<JsonException>()).WithMessage("No input was given*");
         await accepted.Should().NotThrowAsync();
@@ -212,7 +226,7 @@ public class QueueInputTests : TestSetup
     {
         HookProbe.Seen.Clear();
 
-        await Execution.QueueAsync(typeof(IHookedOptionalInputTrain).FullName!, "");
+        await Execution.QueueAsync(typeof(IHookedOptionalInputTrain).FullName.NotNull(), "");
 
         HookProbe.Seen.Should().ContainSingle().Which.Should().NotBeNull();
     }
@@ -220,12 +234,19 @@ public class QueueInputTests : TestSetup
     [Test]
     public async Task Whitespace_input_is_read_as_an_empty_object()
     {
-        var result = await Execution.QueueAsync(typeof(IOptionalInputTrain).FullName!, " \t\r\n ");
+        var result = await Execution.QueueAsync(
+            typeof(IOptionalInputTrain).FullName.NotNull(),
+            " \t\r\n "
+        );
 
         var stored = (await EntryAsync(result.WorkQueueId)).Input;
 
         stored.Should().NotBeNull("blank input is documented to be read as {}, the same as null");
-        JsonSerializer.Deserialize<OptionalInput>(stored!)!.Label.Should().Be("default");
+        JsonSerializer
+            .Deserialize<OptionalInput>(stored.NotNull())
+            .NotNull()
+            .Label.Should()
+            .Be("default");
     }
 
     [Test]
@@ -234,7 +255,7 @@ public class QueueInputTests : TestSetup
         var past = DateTime.UtcNow.AddHours(-3);
 
         var result = await Execution.QueueAsync(
-            typeof(IOptionalInputTrain).FullName!,
+            typeof(IOptionalInputTrain).FullName.NotNull(),
             "{}",
             scheduledAt: past
         );
@@ -272,7 +293,7 @@ public class QueueInputTests : TestSetup
             var local = DateTime.SpecifyKind(instant + offset, DateTimeKind.Local);
 
             var result = await Execution.QueueAsync(
-                typeof(IOptionalInputTrain).FullName!,
+                typeof(IOptionalInputTrain).FullName.NotNull(),
                 "{}",
                 scheduledAt: local
             );
@@ -301,7 +322,7 @@ public class QueueInputTests : TestSetup
         );
 
         var result = await Execution.QueueAsync(
-            typeof(IOptionalInputTrain).FullName!,
+            typeof(IOptionalInputTrain).FullName.NotNull(),
             "{}",
             scheduledAt: unspecified
         );
@@ -327,7 +348,7 @@ public class QueueInputTests : TestSetup
                 .Range(0, enqueues)
                 .Select(_ =>
                     Task.Run(() =>
-                        execution.QueueAsync(typeof(IConcurrentHookTrain).FullName!, "{}")
+                        execution.QueueAsync(typeof(IConcurrentHookTrain).FullName.NotNull(), "{}")
                     )
                 )
         );
@@ -357,7 +378,11 @@ public class QueueInputTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var context = await factory.CreateDbContextAsync(CancellationToken.None);
         await using var contextDisposal = context.ConfigureAwait(false);
-        (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("ConcurrentHookTrain")))
+        (
+            await context.WorkQueues.CountAsync(w =>
+                w.TrainName != null && w.TrainName.Contains("ConcurrentHookTrain")
+            )
+        )
             .Should()
             .Be(enqueues, "every enqueue committed its own row");
     }
@@ -365,12 +390,19 @@ public class QueueInputTests : TestSetup
     [Test]
     public async Task A_hook_can_enqueue_another_train()
     {
-        var result = await Execution.QueueAsync(typeof(IChainingHookTrain).FullName!, "{}");
+        var result = await Execution.QueueAsync(
+            typeof(IChainingHookTrain).FullName.NotNull(),
+            "{}"
+        );
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var context = await factory.CreateDbContextAsync(CancellationToken.None);
         await using var contextDisposal = context.ConfigureAwait(false);
-        (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("OptionalInputTrain")))
+        (
+            await context.WorkQueues.CountAsync(w =>
+                w.TrainName != null && w.TrainName.Contains("OptionalInputTrain")
+            )
+        )
             .Should()
             .Be(1, "the hook's enqueue joins the outer one rather than refusing to nest");
         (await EntryAsync(result.WorkQueueId)).Should().NotBeNull();
@@ -521,7 +553,7 @@ public class QueueInputTests : TestSetup
             IChainingHookTrain
     {
         protected override Task OnQueue(Metadata metadata, CancellationToken ct) =>
-            execution.QueueAsync(typeof(IOptionalInputTrain).FullName!, "{}", ct: ct);
+            execution.QueueAsync(typeof(IOptionalInputTrain).FullName.NotNull(), "{}", ct: ct);
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
     }

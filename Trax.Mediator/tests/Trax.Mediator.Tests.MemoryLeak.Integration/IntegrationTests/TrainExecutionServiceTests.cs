@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -17,7 +18,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class TrainExecutionServiceTests
 {
-    private IServiceProvider _serviceProvider = null!;
+    private IServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -104,7 +105,9 @@ public class TrainExecutionServiceTests
     public async Task RunAsync_TypedOutputTrain_ReturnsOutputInResult()
     {
         // Arrange
-        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var executionService = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ITrainExecutionService>();
         var input = new TypedExecInput { Name = "test-player" };
         var inputJson = JsonSerializer.Serialize(
             input,
@@ -120,7 +123,7 @@ public class TrainExecutionServiceTests
         result.Output.Should().NotBeNull();
         result.Output.Should().BeOfType<TypedExecOutput>();
 
-        var output = (TypedExecOutput)result.Output!;
+        var output = (TypedExecOutput)result.Output.NotNull();
         output.Value.Should().Be("processed:test-player");
         output.Count.Should().Be(42);
     }
@@ -129,7 +132,9 @@ public class TrainExecutionServiceTests
     public async Task RunAsync_UnitOutputTrain_ReturnsNullOutput()
     {
         // Arrange
-        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var executionService = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ITrainExecutionService>();
         var input = new UnitExecInput { Id = "abc" };
         var inputJson = JsonSerializer.Serialize(
             input,
@@ -149,7 +154,9 @@ public class TrainExecutionServiceTests
     public async Task RunAsync_TypedOutputTrain_MetadataIdIsUnique()
     {
         // Arrange
-        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var executionService = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ITrainExecutionService>();
         var input1 = new TypedExecInput { Name = "a" };
         var input2 = new TypedExecInput { Name = "b" };
 
@@ -174,7 +181,9 @@ public class TrainExecutionServiceTests
     public async Task RunAsync_TypedOutputTrain_OutputTypeIsPreserved()
     {
         // Arrange
-        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var executionService = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ITrainExecutionService>();
         var input = new TypedExecInput { Name = "check-type" };
         var inputJson = JsonSerializer.Serialize(
             input,
@@ -186,7 +195,7 @@ public class TrainExecutionServiceTests
 
         // Assert — output is the actual typed object, not a serialized/deserialized copy
         result.Output.Should().BeOfType<TypedExecOutput>();
-        result.Output!.GetType().Should().Be(typeof(TypedExecOutput));
+        result.Output.NotNull().GetType().Should().Be(typeof(TypedExecOutput));
     }
 
     #endregion
@@ -196,13 +205,18 @@ public class TrainExecutionServiceTests
     [Test]
     public async Task RunAsync_WithInterfaceFullName_Succeeds()
     {
-        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var executionService = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ITrainExecutionService>();
         var inputJson = JsonSerializer.Serialize(
             new TypedExecInput { Name = "test" },
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions
         );
 
-        var result = await executionService.RunAsync(typeof(ITypedExecTrain).FullName!, inputJson);
+        var result = await executionService.RunAsync(
+            typeof(ITypedExecTrain).FullName.NotNull(),
+            inputJson
+        );
 
         result.MetadataId.Should().BeGreaterThan(0);
         result.Output.Should().BeOfType<TypedExecOutput>();
@@ -211,7 +225,9 @@ public class TrainExecutionServiceTests
     [Test]
     public async Task RunAsync_WithShortName_Succeeds()
     {
-        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var executionService = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ITrainExecutionService>();
         var inputJson = JsonSerializer.Serialize(
             new TypedExecInput { Name = "test" },
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions
@@ -232,7 +248,9 @@ public class TrainExecutionServiceTests
     {
         // Core regression guard: metadata.Name must always be the canonical
         // (interface) FullName, never the concrete implementation FullName.
-        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var executionService = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ITrainExecutionService>();
         var inputJson = JsonSerializer.Serialize(
             new TypedExecInput { Name = "canonical-test" },
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions
@@ -241,12 +259,12 @@ public class TrainExecutionServiceTests
         var result = await executionService.RunAsync(nameof(ITypedExecTrain), inputJson);
 
         // Resolve the train directly to check its metadata
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ITypedExecTrain>() as TypedExecTrain;
 
         train.Should().NotBeNull();
-        train!.CanonicalName.Should().Be(typeof(ITypedExecTrain).FullName);
+        train.NotNull().CanonicalName.Should().Be(typeof(ITypedExecTrain).FullName);
         train.CanonicalName.Should().NotBe(typeof(TypedExecTrain).FullName);
     }
 
@@ -258,7 +276,9 @@ public class TrainExecutionServiceTests
     public async Task RunAsync_UnknownTrainName_ThrowsInvalidOperationException()
     {
         // Arrange
-        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var executionService = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ITrainExecutionService>();
 
         // Act & Assert
         var act = async () =>
@@ -275,7 +295,9 @@ public class TrainExecutionServiceTests
     public async Task RunAsync_InvalidJson_ThrowsException()
     {
         // Arrange
-        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var executionService = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ITrainExecutionService>();
 
         // Act & Assert
         var act = async () =>
@@ -305,7 +327,9 @@ public class TrainExecutionServiceTests
     public async Task RunAsync_CalledMultipleTimes_CachesReflectionMethod()
     {
         // Arrange
-        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var executionService = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ITrainExecutionService>();
         var input = new TypedExecInput { Name = "cache-test" };
         var inputJson = JsonSerializer.Serialize(
             input,
@@ -343,7 +367,9 @@ public class TrainExecutionServiceTests
         );
         _serviceProvider = services.BuildServiceProvider();
 
-        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var executionService = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ITrainExecutionService>();
         var inputJson = JsonSerializer.Serialize(
             new SlowExecInput(),
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions
@@ -395,7 +421,9 @@ public class TrainExecutionServiceTests
         );
         _serviceProvider = services.BuildServiceProvider();
 
-        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var executionService = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ITrainExecutionService>();
         var inputJson = JsonSerializer.Serialize(
             new SlowExecInput(),
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions

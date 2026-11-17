@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -34,7 +35,7 @@ public class ExecutionModeContractTests : TestSetup
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var runTask = execution.RunAsync(
-            typeof(IGatedDownstreamTrain).FullName!,
+            typeof(IGatedDownstreamTrain).FullName.NotNull(),
             "{}",
             CancellationToken.None
         );
@@ -76,7 +77,7 @@ public class ExecutionModeContractTests : TestSetup
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var runTask = execution.RunAsync(
-            typeof(IGatedDownstreamTrain).FullName!,
+            typeof(IGatedDownstreamTrain).FullName.NotNull(),
             "{}",
             CancellationToken.None
         );
@@ -123,7 +124,7 @@ public class ExecutionModeContractTests : TestSetup
         DownstreamProbe.Downstream.SetResult();
 
         var result = await execution.RunAsync(
-            typeof(IGatedDownstreamTrain).FullName!,
+            typeof(IGatedDownstreamTrain).FullName.NotNull(),
             "{}",
             CancellationToken.None
         );
@@ -152,7 +153,7 @@ public class ExecutionModeContractTests : TestSetup
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var result = await execution.QueueAsync(
-            typeof(IGatedDownstreamTrain).FullName!,
+            typeof(IGatedDownstreamTrain).FullName.NotNull(),
             "{}",
             ct: CancellationToken.None
         );

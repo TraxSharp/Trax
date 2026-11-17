@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.ClientExport;
@@ -227,7 +228,7 @@ internal sealed class TrainChainStartupValidator(
 
         try
         {
-            chain = (ChainRecorder)declaredChain.Invoke(train, parameters: null)!;
+            chain = (ChainRecorder)declaredChain.Invoke(train, parameters: null).NotNull();
         }
         catch (Exception ex) when (ex.InnerException is ChainDeclarationException declaration)
         {

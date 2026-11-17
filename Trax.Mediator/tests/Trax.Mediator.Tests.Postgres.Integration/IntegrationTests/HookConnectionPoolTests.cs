@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -29,7 +30,7 @@ namespace Trax.Mediator.Tests.Postgres.Integration.IntegrationTests;
 [Property("adr", "docs/adr/0003-a-nested-enqueue-joins-the-enqueue-it-runs-inside.md")]
 public class HookConnectionPoolTests : TestSetup
 {
-    private ServiceProvider _smallPool = null!;
+    private ServiceProvider? _smallPool;
 
     [OneTimeSetUp]
     public void BuildSmallPool()
@@ -41,7 +42,9 @@ public class HookConnectionPoolTests : TestSetup
 
         var connectionString = new NpgsqlConnectionStringBuilder(
             TestPostgres.WithPort(
-                configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+                configuration
+                    .GetRequiredSection("Configuration")["DatabaseConnectionString"]
+                    .NotNull()
             )
         )
         {
@@ -59,20 +62,24 @@ public class HookConnectionPoolTests : TestSetup
     }
 
     [OneTimeTearDown]
-    public async Task DisposeSmallPool() => await _smallPool.DisposeAsync();
+    public async Task DisposeSmallPool()
+    {
+        if (_smallPool is not null)
+            await _smallPool.DisposeAsync();
+    }
 
     [Test]
     public async Task Two_hooks_that_enqueue_and_wait_do_not_exhaust_a_pool_of_two()
     {
         GatedProbe.Reset(expected: 2);
 
-        var scope = _smallPool.CreateAsyncScope();
+        var scope = _smallPool.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var outers = Task.WhenAll(
-            Task.Run(() => execution.QueueAsync(typeof(IGatedOuterTrain).FullName!, "{}")),
-            Task.Run(() => execution.QueueAsync(typeof(IGatedOuterTrain).FullName!, "{}"))
+            Task.Run(() => execution.QueueAsync(typeof(IGatedOuterTrain).FullName.NotNull(), "{}")),
+            Task.Run(() => execution.QueueAsync(typeof(IGatedOuterTrain).FullName.NotNull(), "{}"))
         );
 
         // Both hooks have made their nested enqueue and are holding their transactions open.
@@ -83,7 +90,7 @@ public class HookConnectionPoolTests : TestSetup
         );
 
         var unrelated = Task.Run(() =>
-            execution.QueueAsync(typeof(IPoolLeafTrain).FullName!, "{}")
+            execution.QueueAsync(typeof(IPoolLeafTrain).FullName.NotNull(), "{}")
         );
 
         GatedProbe.Open();
@@ -150,7 +157,7 @@ public class HookConnectionPoolTests : TestSetup
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
             await execution
-                .QueueAsync(typeof(IPoolLeafTrain).FullName!, "{}", ct: ct)
+                .QueueAsync(typeof(IPoolLeafTrain).FullName.NotNull(), "{}", ct: ct)
                 .ConfigureAwait(false);
             await GatedProbe.ArriveAndWaitAsync(ct).ConfigureAwait(false);
         }

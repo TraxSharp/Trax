@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -38,7 +39,7 @@ public class CancellationContractTests : TestSetup
 
         var run = async () =>
             await execution
-                .RunAsync(typeof(ICooperativeTrain).FullName!, "{}", cts.Token)
+                .RunAsync(typeof(ICooperativeTrain).FullName.NotNull(), "{}", cts.Token)
                 .ConfigureAwait(false);
 
         await run.Should().ThrowAsync<OperationCanceledException>();
@@ -57,7 +58,11 @@ public class CancellationContractTests : TestSetup
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         using var cts = new CancellationTokenSource();
 
-        var runTask = execution.RunAsync(typeof(ICooperativeTrain).FullName!, "{}", cts.Token);
+        var runTask = execution.RunAsync(
+            typeof(ICooperativeTrain).FullName.NotNull(),
+            "{}",
+            cts.Token
+        );
         try
         {
             await AwaitSignalAsync(CancelProbe.Started.Task, runTask, "the train started");
@@ -90,7 +95,11 @@ public class CancellationContractTests : TestSetup
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         using var cts = new CancellationTokenSource();
 
-        var runTask = execution.RunAsync(typeof(IIndifferentTrain).FullName!, "{}", cts.Token);
+        var runTask = execution.RunAsync(
+            typeof(IIndifferentTrain).FullName.NotNull(),
+            "{}",
+            cts.Token
+        );
         try
         {
             await AwaitSignalAsync(CancelProbe.Started.Task, runTask, "the train started");

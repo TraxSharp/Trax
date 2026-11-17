@@ -27,7 +27,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class QueueHookTrainInputTests
 {
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -49,13 +49,13 @@ public class QueueHookTrainInputTests
     public void TearDown()
     {
         NestingOrderTrain.Execution = null;
-        _serviceProvider.Dispose();
+        _serviceProvider?.Dispose();
         TrainBus.ClearMethodCache();
     }
 
     private async Task<string?> SubjectKeyOfAsync(long workQueueId)
     {
-        var factory = _serviceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _serviceProvider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -70,12 +70,18 @@ public class QueueHookTrainInputTests
     [Test]
     public async Task A_key_built_from_TrainInput_differs_per_input()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var first = await execution.QueueAsync(typeof(IKeyedOrderTrain).FullName!, "{\"id\":1}");
-        var second = await execution.QueueAsync(typeof(IKeyedOrderTrain).FullName!, "{\"id\":2}");
+        var first = await execution.QueueAsync(
+            typeof(IKeyedOrderTrain).FullName.NotNull(),
+            "{\"id\":1}"
+        );
+        var second = await execution.QueueAsync(
+            typeof(IKeyedOrderTrain).FullName.NotNull(),
+            "{\"id\":2}"
+        );
 
         (await SubjectKeyOfAsync(first.WorkQueueId)).Should().Be("order:1");
         (await SubjectKeyOfAsync(second.WorkQueueId))
@@ -90,11 +96,14 @@ public class QueueHookTrainInputTests
     [Test]
     public async Task OnQueue_reads_TrainInput()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var result = await execution.QueueAsync(typeof(IKeyedOrderTrain).FullName!, "{\"id\":7}");
+        var result = await execution.QueueAsync(
+            typeof(IKeyedOrderTrain).FullName.NotNull(),
+            "{\"id\":7}"
+        );
 
         Seen.Should().ContainKey(result.ExternalId).WhoseValue.Should().Be(7);
     }
@@ -102,12 +111,12 @@ public class QueueHookTrainInputTests
     [Test]
     public async Task A_deferring_train_reads_TrainInput_in_OnQueue()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var result = await execution.QueueAsync(
-            typeof(IDeferringOrderTrain).FullName!,
+            typeof(IDeferringOrderTrain).FullName.NotNull(),
             "{\"id\":11}"
         );
 
@@ -117,12 +126,15 @@ public class QueueHookTrainInputTests
     [Test]
     public async Task A_train_enqueued_from_another_hook_reads_its_own_TrainInput()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         NestingOrderTrain.Execution = execution;
 
-        var outer = await execution.QueueAsync(typeof(INestingOrderTrain).FullName!, "{\"id\":3}");
+        var outer = await execution.QueueAsync(
+            typeof(INestingOrderTrain).FullName.NotNull(),
+            "{\"id\":3}"
+        );
 
         Seen.Should().ContainKey(outer.ExternalId).WhoseValue.Should().Be(3);
         Seen.Values.Should()
@@ -200,9 +212,10 @@ public class QueueHookTrainInputTests
         {
             Seen[metadata.ExternalId] = TrainInput.NotNull().Id;
 
-            await Execution!
+            await Execution
+                .NotNull()
                 .QueueAsync(
-                    typeof(IKeyedOrderTrain).FullName!,
+                    typeof(IKeyedOrderTrain).FullName.NotNull(),
                     string.Create(
                         CultureInfo.InvariantCulture,
                         $"{{\"id\":{1000 + TrainInput.NotNull().Id}}}"

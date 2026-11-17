@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fixtures;
@@ -16,7 +17,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class TrainBusReflectionCacheTests
 {
-    private IServiceProvider _serviceProvider = null!;
+    private IServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -55,7 +56,7 @@ public class TrainBusReflectionCacheTests
     public async Task TrainBus_ShouldCacheReflectionLookups()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput();
 
         // Warm up the cache with first execution
@@ -96,7 +97,7 @@ public class TrainBusReflectionCacheTests
     public async Task TrainBus_ShouldNotLeakMemory_WithRepeatedExecutions()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
 
         // Act & Assert
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
@@ -132,7 +133,7 @@ public class TrainBusReflectionCacheTests
     public async Task TrainBus_ShouldHandleConcurrentExecutions_WithoutMemoryLeaks()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         const int concurrentTasks = 20;
         const int executionsPerTask = 10;
 
@@ -182,7 +183,7 @@ public class TrainBusReflectionCacheTests
         // Since we can't easily disable caching, we compare cold starts vs warm executions
 
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
 
         // Act - Cold start (first execution - cache miss)
         var coldStartStopwatch = Stopwatch.StartNew();

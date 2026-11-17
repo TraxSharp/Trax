@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
@@ -22,8 +23,8 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [Property("adr", "docs/adr/0002-an-enqueue-resolves-its-train-in-a-scope-of-its-own.md")]
 public class EnqueueScopeTests
 {
-    private ServiceProvider _serviceProvider = null!;
-    private EnqueueScopeProbe _probe = null!;
+    private ServiceProvider? _serviceProvider;
+    private EnqueueScopeProbe? _probe;
 
     [SetUp]
     public void Setup()
@@ -39,13 +40,13 @@ public class EnqueueScopeTests
         );
 
         _serviceProvider = services.BuildServiceProvider();
-        _probe = _serviceProvider.GetRequiredService<EnqueueScopeProbe>();
+        _probe = _serviceProvider.NotNull().GetRequiredService<EnqueueScopeProbe>();
     }
 
     [TearDown]
     public void TearDown()
     {
-        _serviceProvider.Dispose();
+        _serviceProvider?.Dispose();
         TrainBus.ClearMethodCache();
     }
 
@@ -53,23 +54,25 @@ public class EnqueueScopeTests
     public async Task A_long_lived_scope_retains_no_train_an_enqueue_resolved()
     {
         const int enqueues = 5;
-        var circuit = _serviceProvider.CreateAsyncScope();
+        var circuit = _serviceProvider.NotNull().CreateAsyncScope();
         await using var circuitDisposal = circuit.ConfigureAwait(false);
         var execution = circuit.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         for (var i = 0; i < enqueues; i++)
-            await execution.QueueAsync(typeof(IKeyedHookedTrain).FullName!, "{}");
+            await execution.QueueAsync(typeof(IKeyedHookedTrain).FullName.NotNull(), "{}");
 
         _probe
+            .NotNull()
             .Created.Should()
             .Be(
                 enqueues,
                 "the key, the deferral flag and the hook are read from one instance per enqueue"
             );
         _probe
+            .NotNull()
             .Disposed.Should()
             .Be(
-                _probe.Created,
+                _probe.NotNull().Created,
                 "each enqueue disposes the train it resolved, instead of leaving it to a caller "
                     + "scope that may live as long as a browser tab (see "
                     + "docs/adr/0002-an-enqueue-resolves-its-train-in-a-scope-of-its-own.md)"
@@ -123,7 +126,7 @@ public class EnqueueScopeTests
         void IDisposable.Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                _probe.MarkDisposed();
+                _probe.NotNull().MarkDisposed();
 
             Dispose();
         }

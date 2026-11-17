@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.Metadata;
@@ -31,7 +32,9 @@ public class CancelledEnqueueHookTests : TestSetup
             .ConfigureAwait(false);
         await using var contextDisposal = context.ConfigureAwait(false);
         return await context
-            .WorkQueues.CountAsync(w => w.TrainName!.Contains(trainNameFragment))
+            .WorkQueues.CountAsync(w =>
+                w.TrainName != null && w.TrainName.Contains(trainNameFragment)
+            )
             .ConfigureAwait(false);
     }
 
@@ -44,7 +47,7 @@ public class CancelledEnqueueHookTests : TestSetup
 
         using var cancel = new CancellationTokenSource();
         var outer = execution.QueueAsync(
-            typeof(IOrphanedHookTrain).FullName!,
+            typeof(IOrphanedHookTrain).FullName.NotNull(),
             "{}",
             ct: cancel.Token
         );
@@ -109,9 +112,10 @@ public class CancelledEnqueueHookTests : TestSetup
             try
             {
                 Nested.TrySetResult(
-                    await Execution!
+                    await Execution
+                        .NotNull()
                         .QueueAsync(
-                            typeof(IOrphanNestedTrain).FullName!,
+                            typeof(IOrphanNestedTrain).FullName.NotNull(),
                             "{}",
                             ct: CancellationToken.None
                         )

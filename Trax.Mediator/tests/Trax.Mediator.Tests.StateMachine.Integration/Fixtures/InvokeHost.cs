@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -75,7 +76,10 @@ public sealed class InvokeHost : IDisposable
     public IServiceScope Scope() => _provider.CreateScope();
 
     public ISnapshotDraftService Service(IServiceScope scope, string machine) =>
-        scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>().Service(machine)!;
+        scope
+            .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
+            .Service(machine)
+            .NotNull();
 
     public async Task<MachineInstance> Start<TMachine>(MachineKey key)
         where TMachine : IMachine
@@ -141,9 +145,9 @@ public sealed class InvokeHost : IDisposable
                     ExternalId = entry.ExternalId,
                     Input = null,
                     InvokedBy = new InvokedBy(
-                        entry.InvokingMachine!,
+                        entry.InvokingMachine.NotNull(),
                         instance,
-                        entry.InvokingOwnerKind!.Value
+                        entry.InvokingOwnerKind.NotNull().Value
                     ),
                 }
             );

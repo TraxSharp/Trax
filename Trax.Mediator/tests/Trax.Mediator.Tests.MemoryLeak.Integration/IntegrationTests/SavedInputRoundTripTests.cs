@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -34,7 +35,7 @@ public class SavedInputRoundTripTests
 {
     private const int MaxBytes = 262_144;
 
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -65,12 +66,13 @@ public class SavedInputRoundTripTests
     [TearDown]
     public void TearDown()
     {
-        _serviceProvider.Dispose();
+        _serviceProvider?.Dispose();
         TrainBus.ClearMethodCache();
     }
 
     private TrainRegistration RegistrationOf<TTrain>() =>
         _serviceProvider
+            .NotNull()
             .GetRequiredService<ITrainDiscoveryService>()
             .DiscoverTrains()
             .Single(r => r.ServiceType == typeof(TTrain));
@@ -78,7 +80,9 @@ public class SavedInputRoundTripTests
     /// <summary>The input as the parameter effect of a host that preserves references saves it.</summary>
     private async Task<string> SaveAsync(object input)
     {
-        var factory = _serviceProvider.GetRequiredService<ParameterEffectProviderFactory>();
+        var factory = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ParameterEffectProviderFactory>();
         using var effect = factory.Create();
 
         var metadata = new Metadata { Name = "saved-input" };
@@ -86,7 +90,7 @@ public class SavedInputRoundTripTests
         await effect.Track(metadata).ConfigureAwait(false);
         await effect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
-        return metadata.Input!;
+        return metadata.Input.NotNull();
     }
 
     private object ReadSaved<TTrain>(string saved)
@@ -134,8 +138,8 @@ public class SavedInputRoundTripTests
 
         read.Counts.Should().Equal(3, 1, 4, 1, 5);
         read.Tags.Should().Equal("alpha", "beta");
-        read.Nested!.Label.Should().Be("outer");
-        read.Nested.Places.Should().BeEquivalentTo(original.Nested!.Places);
+        read.Nested.NotNull().Label.Should().Be("outer");
+        read.Nested.Places.Should().BeEquivalentTo(original.Nested.NotNull().Places);
         read.Nested.Matrix.Should().HaveCount(2);
         read.Nested.Matrix[0].Should().Equal(1, 2);
         read.Nested.Matrix[1].Should().Equal(3);
@@ -198,11 +202,11 @@ public class SavedInputRoundTripTests
         var saved = await SaveAsync(Shapes());
         var registration = RegistrationOf<IShapesTrain>();
 
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         var queued = await execution.QueueAsync(
-            typeof(IShapesTrain).FullName!,
+            typeof(IShapesTrain).FullName.NotNull(),
             TrainInputReader.ResolveSavedInput(saved, registration, MaxBytes)
         );
 
@@ -346,7 +350,7 @@ public class SavedInputRoundTripTests
         resolved.Should().Be(compact);
         var read = (ShapesInput)TrainInputReader.Read(resolved, registration, cap);
         read.Tags.Should().HaveCount(200);
-        read.Home!.City.Should().Be("Lyon");
+        read.Home.NotNull().City.Should().Be("Lyon");
     }
 
     [Test]

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -15,6 +16,7 @@ using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
+using Trax.Testing;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 
@@ -31,7 +33,7 @@ public class SharedInputTypeExecutionTests
 {
     private const string Adr = "docs/adr/0005-a-train-run-by-name-is-the-train-that-runs.md";
 
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -55,14 +57,15 @@ public class SharedInputTypeExecutionTests
     [TearDown]
     public async Task TearDown()
     {
-        await _serviceProvider.DisposeAsync();
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
         TrainBus.ClearMethodCache();
     }
 
     [Test]
     public async Task RunAsync_ByName_RunsTheNamedTrain_NotTheOneRegisteredForItsInputType()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
@@ -71,7 +74,7 @@ public class SharedInputTypeExecutionTests
             .BeOfType<GatedSharedTrain>("the fixture's input-type entry must be the other train");
 
         var result = await execution.RunAsync(
-            typeof(IOpenSharedTrain).FullName!,
+            typeof(IOpenSharedTrain).FullName.NotNull(),
             """{"value":"x"}"""
         );
 
@@ -83,12 +86,12 @@ public class SharedInputTypeExecutionTests
     [Test]
     public async Task RunAsync_ByName_TheGatedTrain_IsHeldToItsOwnRequirements()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = () =>
-            execution.RunAsync(typeof(IGatedSharedTrain).FullName!, """{"value":"x"}""");
+            execution.RunAsync(typeof(IGatedSharedTrain).FullName.NotNull(), """{"value":"x"}""");
 
         await act.Should()
             .ThrowAsync<TrainAuthorizationNotConfiguredException>(
@@ -125,26 +128,28 @@ public class SharedInputTypeExecutionTests
             )
             .Which.Message.Should()
             .Contain("2 trains are registered under")
-            .And.Contain(typeof(UnitTests.TrainServiceTypeSelectionTests.MarkedTrain).FullName!)
             .And.Contain(
-                typeof(UnitTests.TrainServiceTypeSelectionTests.SecondMarkedTrain).FullName!
+                typeof(UnitTests.TrainServiceTypeSelectionTests.MarkedTrain).FullName.NotNull()
+            )
+            .And.Contain(
+                typeof(UnitTests.TrainServiceTypeSelectionTests.SecondMarkedTrain).FullName.NotNull()
             );
     }
 
     [Test]
     public async Task LocalRunExecutor_RunsTheTrainItIsNamed()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
 
         var open = await executor.ExecuteAsync(
-            typeof(IOpenSharedTrain).FullName!,
+            typeof(IOpenSharedTrain).FullName.NotNull(),
             new SharedInput { Value = "x" },
             typeof(SharedOutput)
         );
         var gated = await executor.ExecuteAsync(
-            typeof(IGatedSharedTrain).FullName!,
+            typeof(IGatedSharedTrain).FullName.NotNull(),
             new SharedInput { Value = "x" },
             typeof(SharedOutput)
         );
@@ -156,20 +161,20 @@ public class SharedInputTypeExecutionTests
     [Test]
     public async Task TrainBus_RunByName_RunsTheNamedTrainAsThePendingMetadata()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IOpenSharedTrain).FullName!,
+                Name = typeof(IOpenSharedTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
         );
 
         var output = await bus.RunByNameAsync<SharedOutput>(
-            typeof(IOpenSharedTrain).FullName!,
+            typeof(IOpenSharedTrain).FullName.NotNull(),
             new SharedInput { Value = "x" },
             CancellationToken.None,
             metadata
@@ -182,13 +187,13 @@ public class SharedInputTypeExecutionTests
     [Test]
     public async Task TrainBus_RunByName_WithoutOutput_RunsTheNamedTrain()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
         OpenSharedTrain.Runs = 0;
 
         await bus.RunByNameAsync(
-            typeof(IOpenSharedTrain).FullName!,
+            typeof(IOpenSharedTrain).FullName.NotNull(),
             new SharedInput { Value = "x" },
             CancellationToken.None
         );
@@ -199,7 +204,7 @@ public class SharedInputTypeExecutionTests
     [Test]
     public async Task TrainBus_RunByName_UnknownName_IsRefused()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
@@ -212,13 +217,13 @@ public class SharedInputTypeExecutionTests
     [Test]
     public async Task TrainBus_RunByName_InputOfAnotherType_IsRefusedBeforeTheTrainRuns()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var act = () =>
             bus.RunByNameAsync(
-                typeof(IOpenSharedTrain).FullName!,
+                typeof(IOpenSharedTrain).FullName.NotNull(),
                 "not a SharedInput",
                 CancellationToken.None
             );
@@ -231,12 +236,16 @@ public class SharedInputTypeExecutionTests
     [Test]
     public async Task TrainBus_RunByName_NullInput_IsRefused()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var act = () =>
-            bus.RunByNameAsync(typeof(IOpenSharedTrain).FullName!, null!, CancellationToken.None);
+            bus.RunByNameAsync(
+                typeof(IOpenSharedTrain).FullName.NotNull(),
+                Null.Of<object>(),
+                CancellationToken.None
+            );
 
         await act.Should()
             .ThrowAsync<Trax.Core.Exceptions.TrainException>()
@@ -246,14 +255,14 @@ public class SharedInputTypeExecutionTests
     [Test]
     public async Task TrainBus_RunByName_MetadataThatIsNotPending_IsRefusedBeforeTheTrainRuns()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
         OpenSharedTrain.Runs = 0;
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IOpenSharedTrain).FullName!,
+                Name = typeof(IOpenSharedTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -262,7 +271,7 @@ public class SharedInputTypeExecutionTests
 
         var act = () =>
             bus.RunByNameAsync<SharedOutput>(
-                typeof(IOpenSharedTrain).FullName!,
+                typeof(IOpenSharedTrain).FullName.NotNull(),
                 new SharedInput { Value = "x" },
                 CancellationToken.None,
                 metadata
@@ -277,19 +286,19 @@ public class SharedInputTypeExecutionTests
     [Test]
     public async Task ITrainBus_RunByName_OnABusThatDoesNotImplementIt_ThrowsNotSupported()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         ITrainBus bus = new DelegatingBus(scope.ServiceProvider.GetRequiredService<ITrainBus>());
 
         var typed = () =>
             bus.RunByNameAsync<SharedOutput>(
-                typeof(IOpenSharedTrain).FullName!,
+                typeof(IOpenSharedTrain).FullName.NotNull(),
                 new SharedInput(),
                 CancellationToken.None
             );
         var untyped = () =>
             bus.RunByNameAsync(
-                typeof(IOpenSharedTrain).FullName!,
+                typeof(IOpenSharedTrain).FullName.NotNull(),
                 new SharedInput(),
                 CancellationToken.None
             );
@@ -309,7 +318,7 @@ public class SharedInputTypeExecutionTests
     [Test]
     public async Task LocalRunExecutor_WithAHostRegisteredBus_RunsByNameAsTheRecordItWrote()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var bus = new ByNameDelegatingBus(scope.ServiceProvider.GetRequiredService<ITrainBus>());
         var executor = new LocalRunExecutor(
@@ -318,7 +327,7 @@ public class SharedInputTypeExecutionTests
         );
 
         var result = await executor.ExecuteAsync(
-            typeof(IOpenSharedTrain).FullName!,
+            typeof(IOpenSharedTrain).FullName.NotNull(),
             new SharedInput { Value = "x" },
             typeof(SharedOutput)
         );
@@ -327,13 +336,15 @@ public class SharedInputTypeExecutionTests
         bus.Received.Should()
             .ContainSingle("a bus the host registered is handed the record to run as")
             .Which.Should()
-            .Be((typeof(IOpenSharedTrain).FullName!, result.MetadataId, TrainState.Pending));
+            .Be(
+                (typeof(IOpenSharedTrain).FullName.NotNull(), result.MetadataId, TrainState.Pending)
+            );
     }
 
     [Test]
     public void Discovery_ListsBothTrains_EachPairedWithItsOwnImplementation()
     {
-        var discovery = _serviceProvider.GetRequiredService<ITrainDiscoveryService>();
+        var discovery = _serviceProvider.NotNull().GetRequiredService<ITrainDiscoveryService>();
 
         var shared = discovery
             .DiscoverTrains()

@@ -3,6 +3,8 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Provider.Json.Services.JsonEffect;
@@ -24,9 +26,9 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class CrossComponentMemoryTests
 {
-    private ServiceProvider _serviceProvider = null!;
-    private JsonSerializerOptions _jsonOptions = null!;
-    private ITraxEffectConfiguration _configuration = null!;
+    private ServiceProvider? _serviceProvider;
+    private JsonSerializerOptions? _jsonOptions;
+    private ITraxEffectConfiguration? _configuration;
 
     [SetUp]
     public void SetUp()
@@ -41,12 +43,12 @@ public class CrossComponentMemoryTests
 
         var services = new ServiceCollection();
         services.AddLogging(builder => builder.AddConsole());
-        services.AddSingleton(_jsonOptions);
+        services.AddSingleton(_jsonOptions.NotNull());
         services.AddSingleton<IEffectRegistry>(new EffectRegistry());
         _serviceProvider = services.BuildServiceProvider();
 
         // Create a mock configuration for JsonEffectProvider
-        _configuration = new MockTraxEffectConfiguration(_jsonOptions);
+        _configuration = new MockTraxEffectConfiguration(_jsonOptions.NotNull());
     }
 
     [TearDown]
@@ -66,12 +68,15 @@ public class CrossComponentMemoryTests
                 {
                     // Create effect providers directly
                     using var parameterEffect = new ParameterEffect(
-                        _jsonOptions,
+                        _jsonOptions.NotNull(),
                         new ParameterEffectConfiguration()
                     );
                     using var jsonEffect = new JsonEffectProvider(
-                        _serviceProvider.GetService<ILogger<JsonEffectProvider>>()!,
-                        _configuration
+                        _serviceProvider
+                            .NotNull()
+                            .GetService<ILogger<JsonEffectProvider>>()
+                            .NotNull(),
+                        _configuration.NotNull()
                     );
 
                     // Create multiple metadata objects to test both providers
@@ -167,10 +172,12 @@ public class CrossComponentMemoryTests
                 for (int iteration = 0; iteration < 25; iteration++)
                 {
                     // Create provider factories
-                    var parameterFactory = new TestParameterEffectProviderFactory(_jsonOptions);
+                    var parameterFactory = new TestParameterEffectProviderFactory(
+                        _jsonOptions.NotNull()
+                    );
                     var jsonFactory = new TestJsonEffectProviderFactory(
-                        _jsonOptions,
-                        _configuration
+                        _jsonOptions.NotNull(),
+                        _configuration.NotNull()
                     );
 
                     var providerFactories = new List<IEffectProviderFactory>
@@ -181,8 +188,8 @@ public class CrossComponentMemoryTests
 
                     using var effectRunner = new EffectRunner(
                         providerFactories,
-                        _serviceProvider.GetRequiredService<IEffectRegistry>(),
-                        _serviceProvider.GetService<ILogger<EffectRunner>>()
+                        _serviceProvider.NotNull().GetRequiredService<IEffectRegistry>(),
+                        _serviceProvider.NotNull().GetService<ILogger<EffectRunner>>()
                     );
 
                     // Create and track multiple metadata objects
@@ -274,12 +281,15 @@ public class CrossComponentMemoryTests
                     try
                     {
                         using var parameterEffect = new ParameterEffect(
-                            _jsonOptions,
+                            _jsonOptions.NotNull(),
                             new ParameterEffectConfiguration()
                         );
                         using var jsonEffect = new JsonEffectProvider(
-                            _serviceProvider.GetService<ILogger<JsonEffectProvider>>()!,
-                            _configuration
+                            _serviceProvider
+                                .NotNull()
+                                .GetService<ILogger<JsonEffectProvider>>()
+                                .NotNull(),
+                            _configuration.NotNull()
                         );
 
                         var input = MemoryTestModelFactory.CreateFailingInput(
@@ -391,12 +401,12 @@ public class CrossComponentMemoryTests
                         for (int iteration = 0; iteration < 15; iteration++)
                         {
                             using var parameterEffect = new ParameterEffect(
-                                _jsonOptions,
+                                _jsonOptions.NotNull(),
                                 new ParameterEffectConfiguration()
                             );
                             using var jsonEffect = new JsonEffectProvider(
-                                null!, // No logger for concurrent test to reduce complexity
-                                _configuration
+                                NullLogger<JsonEffectProvider>.Instance, // No logging for the concurrent test
+                                _configuration.NotNull()
                             );
 
                             var input = MemoryTestModelFactory.CreateInput(

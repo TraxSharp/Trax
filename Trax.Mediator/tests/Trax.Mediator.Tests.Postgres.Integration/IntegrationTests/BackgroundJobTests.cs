@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.BackgroundJob;
@@ -85,7 +86,7 @@ public class BackgroundJobTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.MetadataId.Should().Be(1);
+        found.NotNull().MetadataId.Should().Be(1);
         found.Input.Should().BeNull();
         found.InputType.Should().BeNull();
         found.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
@@ -118,7 +119,7 @@ public class BackgroundJobTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.MetadataId.Should().Be(2);
+        found.NotNull().MetadataId.Should().Be(2);
         found.Input.Should().NotBeNull();
         found.InputType.Should().Be("Trax.Core.Tests.TestInput");
     }
@@ -176,7 +177,7 @@ public class BackgroundJobTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Input.Should().NotBeNull();
+        found.NotNull().Input.Should().NotBeNull();
         found.Input.Should().Contain("\"region\"");
         found.Input.Should().Contain("\"us-east\"");
         found.Input.Should().Contain("\"batchSize\"");
@@ -212,7 +213,7 @@ public class BackgroundJobTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Input.Should().NotBeNull();
+        found.NotNull().Input.Should().NotBeNull();
         // JSONB normalizes whitespace but preserves data
         found.Input.Should().Contain("\"name\"");
         found.Input.Should().Contain("\"test\"");
@@ -240,7 +241,7 @@ public class BackgroundJobTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Input.Should().BeNull();
+        found.NotNull().Input.Should().BeNull();
         found.InputType.Should().BeNull();
     }
 
@@ -267,7 +268,7 @@ public class BackgroundJobTests : TestSetup
 
         // Assert - FetchedAt should be null (available for dequeue)
         found.Should().NotBeNull();
-        found!.FetchedAt.Should().BeNull();
+        found.NotNull().FetchedAt.Should().BeNull();
     }
 
     [Test]
@@ -292,7 +293,7 @@ public class BackgroundJobTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.FetchedAt.Should().NotBeNull();
+        found.NotNull().FetchedAt.Should().NotBeNull();
         found.FetchedAt.Should().BeCloseTo(claimTime, TimeSpan.FromSeconds(5));
     }
 
@@ -346,7 +347,7 @@ public class BackgroundJobTests : TestSetup
         // Act - Simulate worker deleting the job after execution
         var toDelete = await context.BackgroundJobs.FindAsync(jobId);
         toDelete.Should().NotBeNull();
-        context.BackgroundJobs.Remove(toDelete!);
+        context.BackgroundJobs.Remove(toDelete.NotNull());
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 

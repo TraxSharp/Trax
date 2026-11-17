@@ -2,6 +2,8 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Provider.Json.Services.JsonEffect;
@@ -24,6 +26,6 @@ public class TestJsonEffectProviderFactory(
 
     public Trax.Effect.Services.EffectProvider.IEffectProvider Create()
     {
-        return new JsonEffectProvider(null!, configuration);
+        return new JsonEffectProvider(NullLogger<JsonEffectProvider>.Instance, configuration);
     }
 }

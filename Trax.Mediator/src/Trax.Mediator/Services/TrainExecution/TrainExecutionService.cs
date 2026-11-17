@@ -592,7 +592,7 @@ public class TrainExecutionService(
         var keyMetadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = registration.ServiceType.FullName!,
+                Name = registration.ServiceType.FullName.NotNull(),
                 ExternalId = externalId,
                 Input = input,
             }
@@ -926,7 +926,7 @@ public class TrainExecutionService(
         var hookMetadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = registration.ServiceType.FullName!,
+                Name = registration.ServiceType.FullName.NotNull(),
                 ExternalId = externalId,
                 Input = input,
             }
@@ -938,7 +938,9 @@ public class TrainExecutionService(
 
         try
         {
-            await ((Task)onQueue.Invoke(train.Instance, [hookMetadata, ct])!).ConfigureAwait(false);
+            await (
+                (Task)onQueue.Invoke(train.Instance, [hookMetadata, ct]).NotNull()
+            ).ConfigureAwait(false);
         }
         catch (TargetInvocationException ex)
         {
@@ -1180,7 +1182,7 @@ public class TrainExecutionService(
 
             try
             {
-                return (IDisposable)enter.Invoke(Instance, [metadata])!;
+                return (IDisposable)enter.Invoke(Instance, [metadata]).NotNull();
             }
             catch (TargetInvocationException ex)
             {

@@ -1,9 +1,11 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Testing;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;
 
@@ -152,7 +154,7 @@ public class TrainDiscoveryAuthorizationTests
             OutputTypeName = reg.OutputTypeName,
             RequiredPolicies = [],
             RequiredRoles = ["Admin"],
-            RequiredRoleSets = setToNull ? null! : [],
+            RequiredRoleSets = setToNull ? Null.Of<IReadOnlyList<IReadOnlyList<string>>>() : [],
             IsQuery = false,
             IsMutation = false,
             IsBroadcastEnabled = false,

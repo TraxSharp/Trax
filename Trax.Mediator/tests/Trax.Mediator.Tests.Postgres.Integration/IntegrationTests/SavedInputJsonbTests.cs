@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -49,7 +50,7 @@ public class SavedInputJsonbTests : TestSetup
         var row = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ISpotsTrain).FullName!,
+                Name = typeof(ISpotsTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -70,7 +71,7 @@ public class SavedInputJsonbTests : TestSetup
         {
             saved = (
                 await readContext.Metadatas.AsNoTracking().SingleAsync(m => m.Id == row.Id)
-            ).Input!;
+            ).Input.NotNull();
         }
 
         // What makes this test worth having: the column reordered the metadata away from the

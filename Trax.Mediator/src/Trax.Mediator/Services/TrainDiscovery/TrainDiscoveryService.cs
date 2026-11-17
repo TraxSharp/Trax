@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainExecution;
@@ -263,7 +264,8 @@ public class TrainDiscoveryService : ITrainDiscoveryService
     )
     {
         var genericArgs = TrainServiceType
-            .FindClosedServiceTrain(serviceType)!
+            .FindClosedServiceTrain(serviceType)
+            .NotNull()
             .GetGenericArguments();
         var inputType = genericArgs[0];
         var outputType = genericArgs[1];
@@ -356,7 +358,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         var policies = new List<string>();
         foreach (var attr in attributes.Where(a => !string.IsNullOrWhiteSpace(a.Policy)))
         {
-            var policy = attr.Policy!;
+            var policy = attr.Policy.NotNull();
             if (!policies.Contains(policy))
                 policies.Add(policy);
         }
@@ -369,7 +371,9 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             // ordinally, the way @authorize matches them, so "Admin" and "admin" are different
             // roles. Folding case here once let a claim satisfy a role it only resembled: the
             // invariant culture upper-cases the long s to S.
-            var parsed = attr.Roles!.Split(',', StringSplitOptions.TrimEntries)
+            var parsed = attr
+                .Roles.NotNull()
+                .Split(',', StringSplitOptions.TrimEntries)
                 .Where(r => r.Length > 0)
                 .Distinct(StringComparer.Ordinal)
                 .ToList();

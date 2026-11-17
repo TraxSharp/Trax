@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using AwesomeAssertions;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 using Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
 using Trax.StateMachine.Persistence;
@@ -30,13 +31,13 @@ public class SnapshotChangeOutcomeNotifyTests
     // Every wait in this class: long past any step here, short enough that a hang fails the test.
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
 
-    private InvokeHost _host = null!;
+    private InvokeHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InvokeHost.Create(StoreProvider.Postgres);
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public async Task Advance_into_invoke_notifies_once()
@@ -44,19 +45,19 @@ public class SnapshotChangeOutcomeNotifyTests
         const string user = "notify-user";
         var id = Guid.NewGuid();
         TestPrincipal.Become(user);
-        await _host.SeedIdle(user, id, GoodMachine.MachineId);
+        await _host.NotNull().SeedIdle(user, id, GoodMachine.MachineId);
 
         await using var listener = await Listener.Open();
         // A fresh LISTEN can be handed notices committed just before it; only what the act sends counts.
         _ = await listener.Drain();
 
-        using (var scope = _host.Scope())
-            (await _host.Service(scope, GoodMachine.MachineId).Advance(user, id, "Go"))
+        using (var scope = _host.NotNull().Scope())
+            (await _host.NotNull().Service(scope, GoodMachine.MachineId).Advance(user, id, "Go"))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
-        (await _host.Runs(id)).Should().ContainSingle("the advance queued its run");
+        (await _host.NotNull().Runs(id)).Should().ContainSingle("the advance queued its run");
 
-        var rowId = (await _host.Row(id, GoodMachine.MachineId))!.RowId;
+        var rowId = (await _host.NotNull().Row(id, GoodMachine.MachineId)).NotNull().RowId;
         var notices = await listener.Drain();
         notices
             .Should()

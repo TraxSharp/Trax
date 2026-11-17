@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.StateMachine.Persistence;
 
@@ -19,7 +20,7 @@ internal sealed class ObservedLauncher(IInvokedTrainLauncher inner) : IInvokedTr
     {
         var registered = services.Last(d => d.ServiceType == typeof(IInvokedTrainLauncher));
         services.Remove(registered);
-        var implementation = registered.ImplementationType!;
+        var implementation = registered.ImplementationType.NotNull();
         services.AddScoped<IInvokedTrainLauncher>(sp => new ObservedLauncher(
             (IInvokedTrainLauncher)ActivatorUtilities.CreateInstance(sp, implementation)
         ));

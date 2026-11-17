@@ -58,10 +58,9 @@ public class LocalRunExecutor : IRunExecutor
     /// </summary>
     private static readonly ConcurrentDictionary<Type, MethodInfo> RunBoxedMethodCache = new();
 
-    private static readonly MethodInfo RunBoxedDefinition = typeof(LocalRunExecutor).GetMethod(
-        nameof(RunBoxedAsync),
-        BindingFlags.NonPublic | BindingFlags.Instance
-    )!;
+    private static readonly MethodInfo RunBoxedDefinition = typeof(LocalRunExecutor)
+        .GetMethod(nameof(RunBoxedAsync), BindingFlags.NonPublic | BindingFlags.Instance)
+        .NotNull();
 
     /// <summary>
     /// Resolves the train registered under <paramref name="trainName"/>, then creates and saves a
@@ -143,15 +142,17 @@ public class LocalRunExecutor : IRunExecutor
         {
             output = await (
                 (Task<object?>)
-                    runBoxed.Invoke(
-                        this,
-                        [
-                            trainName,
-                            input,
-                            (Func<CancellationToken, Task<Metadata>>)CreatePendingAsync,
-                            ct,
-                        ]
-                    )!
+                    runBoxed
+                        .Invoke(
+                            this,
+                            [
+                                trainName,
+                                input,
+                                (Func<CancellationToken, Task<Metadata>>)CreatePendingAsync,
+                                ct,
+                            ]
+                        )
+                        .NotNull()
             ).ConfigureAwait(false);
         }
         catch (Exception ex) when (pending is not null)

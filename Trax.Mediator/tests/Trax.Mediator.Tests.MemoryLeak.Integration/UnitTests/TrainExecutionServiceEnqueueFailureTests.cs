@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Services.DataContext;
@@ -111,7 +112,7 @@ public class TrainExecutionServiceEnqueueFailureTests
 
         var enqueue = async () =>
             await service
-                .QueueAsync(registration.ServiceType.FullName!, InputJson)
+                .QueueAsync(registration.ServiceType.FullName.NotNull(), InputJson)
                 .ConfigureAwait(false);
 
         (await enqueue.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
@@ -144,7 +145,7 @@ public class TrainExecutionServiceEnqueueFailureTests
 
         var enqueue = async () =>
             await service
-                .QueueAsync(registration.ServiceType.FullName!, InputJson)
+                .QueueAsync(registration.ServiceType.FullName.NotNull(), InputJson)
                 .ConfigureAwait(false);
 
         var thrown = (await enqueue.Should().ThrowAsync<InvalidOperationException>()).Which;
@@ -182,7 +183,7 @@ public class TrainExecutionServiceEnqueueFailureTests
 
         var enqueue = async () =>
             await service
-                .QueueAsync(registration.ServiceType.FullName!, InputJson)
+                .QueueAsync(registration.ServiceType.FullName.NotNull(), InputJson)
                 .ConfigureAwait(false);
 
         await enqueue.Should().ThrowAsync<InvalidOperationException>();
@@ -213,7 +214,7 @@ public class TrainExecutionServiceEnqueueFailureTests
 
         var enqueue = async () =>
             await service
-                .QueueAsync(registration.ServiceType.FullName!, InputJson)
+                .QueueAsync(registration.ServiceType.FullName.NotNull(), InputJson)
                 .ConfigureAwait(false);
 
         await enqueue.Should().ThrowAsync<InvalidOperationException>();

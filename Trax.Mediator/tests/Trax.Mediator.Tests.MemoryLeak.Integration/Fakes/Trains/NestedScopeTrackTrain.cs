@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
@@ -22,9 +23,10 @@ public class NestedScopeTrackTrain
 
     protected override async Task<Either<Exception, NestedScopeTrackOutput>> Junctions()
     {
-        var childResult = await TrainBus!
+        var childResult = await TrainBus
+            .NotNull()
             .RunAsync<ScopeTrackOutput>(new ScopeTrackInput(), CancellationToken.None)
             .ConfigureAwait(false);
-        return new NestedScopeTrackOutput(Marker!.Id, childResult.ScopeMarkerId);
+        return new NestedScopeTrackOutput(Marker.NotNull().Id, childResult.ScopeMarkerId);
     }
 }

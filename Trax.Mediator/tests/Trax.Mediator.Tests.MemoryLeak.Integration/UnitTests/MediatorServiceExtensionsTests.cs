@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
@@ -225,7 +226,7 @@ public class MediatorServiceExtensionsTests
 
         var config = provider.GetService<MediatorConfiguration>();
         config.Should().NotBeNull();
-        config!.Assemblies.Should().HaveCount(1);
+        config.NotNull().Assemblies.Should().HaveCount(1);
         config.TrainLifetime.Should().Be(ServiceLifetime.Transient);
     }
 
@@ -385,7 +386,7 @@ public class MediatorServiceExtensionsTests
         var serviceTrain =
             train as ServiceTrain<Fakes.Models.MemoryTestInput, Fakes.Models.MemoryTestOutput>;
         serviceTrain.Should().NotBeNull();
-        serviceTrain!.CanonicalName.Should().Be(typeof(IMemoryTestTrain).FullName);
+        serviceTrain.NotNull().CanonicalName.Should().Be(typeof(IMemoryTestTrain).FullName);
     }
 
     [Test]
@@ -469,7 +470,8 @@ public class MediatorServiceExtensionsTests
 
         var serviceTrain = train as ServiceTrain<InterfacelessTestInput, InterfacelessTestOutput>;
         serviceTrain.Should().NotBeNull();
-        serviceTrain!
+        serviceTrain
+            .NotNull()
             .CanonicalName.Should()
             .Be(typeof(IServiceTrain<InterfacelessTestInput, InterfacelessTestOutput>).FullName);
     }

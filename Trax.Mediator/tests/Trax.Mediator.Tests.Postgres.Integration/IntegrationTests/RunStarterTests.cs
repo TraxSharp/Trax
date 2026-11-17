@@ -4,6 +4,7 @@ using System.Text;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Mediator.Services.Principal;
 using Trax.Mediator.Services.RunStarters;
@@ -30,7 +31,7 @@ public class RunStarterTests : TestSetup
         SHA256.HashData(Encoding.UTF8.GetBytes("p\0" + Principal))
     );
 
-    private static string Train => typeof(QueueInputTests.IOptionalInputTrain).FullName!;
+    private static string Train => typeof(QueueInputTests.IOptionalInputTrain).FullName.NotNull();
 
     private ITrainExecutionService Execution =>
         Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();

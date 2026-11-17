@@ -1,6 +1,7 @@
 using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 using Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
 using Trax.StateMachine;
@@ -17,7 +18,7 @@ namespace Trax.Mediator.Tests.StateMachine.Integration.IntegrationTests;
 [TestFixture(StoreProvider.Sqlite)]
 public class SystemInstanceStartFailureTests(StoreProvider provider)
 {
-    private InvokeHost _host = null!;
+    private InvokeHost? _host;
 
     [SetUp]
     public void SetUp()
@@ -43,7 +44,7 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
     {
         ObservedLauncher.Fault = LaunchFault.None;
         HidingStore.Hide = false;
-        _host.Dispose();
+        _host?.Dispose();
     }
 
     [Test]
@@ -53,7 +54,7 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
         var id = MachineInstanceId.For(PartitionMachine.MachineId, key);
         ObservedLauncher.Fault = LaunchFault.Forbidden;
 
-        var start = () => _host.Start<PartitionMachine>(key);
+        var start = () => _host.NotNull().Start<PartitionMachine>(key);
 
         var thrown = await start.Should().ThrowAsync<InvalidOperationException>();
         thrown
@@ -62,10 +63,10 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
                 $"The system instance {id} of '{PartitionMachine.MachineId}' could not be started"
             )
             .And.Contain(RefusalCode.InvokeForbidden.ToWire());
-        (await _host.Row(id, PartitionMachine.MachineId))
+        (await _host.NotNull().Row(id, PartitionMachine.MachineId))
             .Should()
             .BeNull("the row and its run are one write, and it was refused");
-        (await _host.Runs(id)).Should().BeEmpty();
+        (await _host.NotNull().Runs(id)).Should().BeEmpty();
     }
 
     [Test]
@@ -74,10 +75,10 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
         // The row exists, so the start's insert loses, but its reads no longer see it: what a start sees when
         // the instance that won the race is deleted between the insert and the read that follows it.
         var key = MachineKey.Of("vanished", Guid.NewGuid().ToString());
-        var id = (await _host.Start<PartitionMachine>(key)).Id;
+        var id = (await _host.NotNull().Start<PartitionMachine>(key)).Id;
         HidingStore.Hide = true;
 
-        var start = () => _host.Start<PartitionMachine>(key);
+        var start = () => _host.NotNull().Start<PartitionMachine>(key);
 
         await start
             .Should()
@@ -85,7 +86,7 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
             .WithMessage(
                 $"The system instance {id} of '{PartitionMachine.MachineId}' could not be created, and none exists."
             );
-        (await _host.Runs(id))
+        (await _host.NotNull().Runs(id))
             .Should()
             .ContainSingle("the losing start queues nothing; the one run is the winner's");
     }
@@ -98,7 +99,7 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
     {
         public static bool Hide { get; set; }
 
-        private IMachineInstanceStore _inner = null!;
+        private IMachineInstanceStore? _inner;
 
         public static void Install(IServiceCollection services)
         {
@@ -106,7 +107,7 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
             services.Remove(registered);
             services.AddScoped(sp =>
             {
-                var inner = (IMachineInstanceStore)registered.ImplementationFactory!(sp);
+                var inner = (IMachineInstanceStore)registered.ImplementationFactory.NotNull()(sp);
                 var proxy = Create<IMachineInstanceStore, HidingStore>();
                 ((HidingStore)(object)proxy)._inner = inner;
                 return proxy;
@@ -118,7 +119,7 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
             if (
                 Hide
                 && string.Equals(
-                    method!.Name,
+                    method.NotNull().Name,
                     nameof(IMachineInstanceStore.Get),
                     StringComparison.Ordinal
                 )
@@ -128,7 +129,7 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
 
             try
             {
-                return method!.Invoke(_inner, args);
+                return method.NotNull().Invoke(_inner.NotNull(), args);
             }
             catch (TargetInvocationException ex) when (ex.InnerException is not null)
             {

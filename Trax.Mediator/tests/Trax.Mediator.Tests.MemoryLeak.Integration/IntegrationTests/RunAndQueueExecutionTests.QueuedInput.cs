@@ -3,6 +3,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.ServiceTrain;
@@ -27,7 +28,7 @@ public partial class RunAndQueueExecutionTests
 
         Encoding.UTF8.GetByteCount(inputJson).Should().BeLessThan(64 * 1024);
 
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
@@ -35,7 +36,7 @@ public partial class RunAndQueueExecutionTests
 
         try
         {
-            queued = await execution.QueueAsync(typeof(IRowsTrain).FullName!, inputJson);
+            queued = await execution.QueueAsync(typeof(IRowsTrain).FullName.NotNull(), inputJson);
         }
         catch (Exception refused) when (refused is not OutOfMemoryException)
         {
@@ -51,7 +52,7 @@ public partial class RunAndQueueExecutionTests
             .SingleAsync(w => w.Id == queued.WorkQueueId);
 
         Encoding
-            .UTF8.GetByteCount(stored.Input!)
+            .UTF8.GetByteCount(stored.Input.NotNull())
             .Should()
             .BeLessThanOrEqualTo(
                 262_144,
@@ -62,13 +63,13 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task QueueAsync_ListWrittenWithReferenceMetadata_IsRefusedAsAJsonError()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = () =>
             execution.QueueAsync(
-                typeof(IRowsTrain).FullName!,
+                typeof(IRowsTrain).FullName.NotNull(),
                 """{"rows":{"$id":"1","$values":[]}}"""
             );
 
@@ -78,12 +79,12 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task QueueAsync_ReferenceToAnotherElement_IsNotFollowed()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var queued = await execution.QueueAsync(
-            typeof(IWideTrain).FullName!,
+            typeof(IWideTrain).FullName.NotNull(),
             """{"items":[{"$id":"1","first":5},{"$ref":"1"}]}"""
         );
 
@@ -95,7 +96,7 @@ public partial class RunAndQueueExecutionTests
             .SingleAsync(w => w.Id == queued.WorkQueueId);
 
         var items = System
-            .Text.Json.JsonDocument.Parse(stored.Input!)
+            .Text.Json.JsonDocument.Parse(stored.Input.NotNull())
             .RootElement.GetProperty("items");
         items[0].GetProperty("first").GetInt64().Should().Be(5);
         items[1]
@@ -114,11 +115,11 @@ public partial class RunAndQueueExecutionTests
         var inputJson = """{"items":[""" + elements + "]}";
         Encoding.UTF8.GetByteCount(inputJson).Should().BeLessThan(262_144);
 
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var act = () => execution.QueueAsync(typeof(IWideTrain).FullName!, inputJson);
+        var act = () => execution.QueueAsync(typeof(IWideTrain).FullName.NotNull(), inputJson);
 
         var refused = (await act.Should().ThrowAsync<TrainInputValidationException>()).Which;
         refused.MaxBytes.Should().Be(TrainInputReader.StoredInputGrowthFactor * 262_144);
@@ -134,12 +135,12 @@ public partial class RunAndQueueExecutionTests
         var inputJson = """{"items":[""" + elements + "]}";
         Encoding.UTF8.GetByteCount(inputJson).Should().BeLessThan(262_144);
 
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var before = GC.GetTotalAllocatedBytes(precise: true);
-        var act = () => execution.QueueAsync(typeof(IWideTrain).FullName!, inputJson);
+        var act = () => execution.QueueAsync(typeof(IWideTrain).FullName.NotNull(), inputJson);
         await act.Should().ThrowAsync<TrainInputValidationException>();
         var allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
 
@@ -155,12 +156,12 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task QueueAsync_OrdinaryInput_IsStoredAsBefore()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var queued = await execution.QueueAsync(
-            typeof(IRowsTrain).FullName!,
+            typeof(IRowsTrain).FullName.NotNull(),
             """{"rows":[["a","b"],["c"]]}"""
         );
 
@@ -177,12 +178,12 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task A_queued_input_keeps_its_dictionary_keys()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var queued = await execution.QueueAsync(
-            typeof(ITotalsTrain).FullName!,
+            typeof(ITotalsTrain).FullName.NotNull(),
             """{"totals":{"Ada":1,"bo":2}}"""
         );
 
@@ -196,9 +197,11 @@ public partial class RunAndQueueExecutionTests
         // The dispatcher reads the entry and the job submitter writes it again for the worker,
         // both with ManifestProperties; the local worker reads that copy with the same options.
         var options = TraxJsonSerializationOptions.ManifestProperties;
-        var dispatched = JsonSerializer.Deserialize<TotalsInput>(stored.Input!, options)!;
+        var dispatched = JsonSerializer
+            .Deserialize<TotalsInput>(stored.Input.NotNull(), options)
+            .NotNull();
         var jobInput = JsonSerializer.Serialize(dispatched, options);
-        var seenByTheTrain = JsonSerializer.Deserialize<TotalsInput>(jobInput, options)!;
+        var seenByTheTrain = JsonSerializer.Deserialize<TotalsInput>(jobInput, options).NotNull();
 
         seenByTheTrain
             .Totals.Keys.Should()

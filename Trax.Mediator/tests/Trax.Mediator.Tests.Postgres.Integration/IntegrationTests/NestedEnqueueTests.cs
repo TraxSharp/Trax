@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.EnqueueContext;
@@ -54,8 +55,14 @@ public class NestedEnqueueTests : TestSetup
         var act = async () =>
             await Execution
                 .QueueAsync(
-                    typeof(IOuterTrain).FullName!,
-                    Json(new OuterInput { Leaf = typeof(ILeafTrain).FullName!, ThrowAfter = true })
+                    typeof(IOuterTrain).FullName.NotNull(),
+                    Json(
+                        new OuterInput
+                        {
+                            Leaf = typeof(ILeafTrain).FullName.NotNull(),
+                            ThrowAfter = true,
+                        }
+                    )
                 )
                 .ConfigureAwait(false);
 
@@ -74,8 +81,8 @@ public class NestedEnqueueTests : TestSetup
     public async Task A_nested_enqueue_commits_with_the_outer_one()
     {
         var outer = await Execution.QueueAsync(
-            typeof(IOuterTrain).FullName!,
-            Json(new OuterInput { Leaf = typeof(ILeafTrain).FullName! })
+            typeof(IOuterTrain).FullName.NotNull(),
+            Json(new OuterInput { Leaf = typeof(ILeafTrain).FullName.NotNull() })
         );
 
         var leaf = (await RowsAsync<ILeafTrain>()).Should().ContainSingle().Subject;
@@ -95,11 +102,11 @@ public class NestedEnqueueTests : TestSetup
         var refused = async () =>
             await Execution
                 .QueueAsync(
-                    typeof(IOuterTrain).FullName!,
+                    typeof(IOuterTrain).FullName.NotNull(),
                     Json(
                         new OuterInput
                         {
-                            Leaf = typeof(IDeferringLeafTrain).FullName!,
+                            Leaf = typeof(IDeferringLeafTrain).FullName.NotNull(),
                             ThrowAfter = true,
                         }
                     )
@@ -114,8 +121,8 @@ public class NestedEnqueueTests : TestSetup
             );
 
         await Execution.QueueAsync(
-            typeof(IOuterTrain).FullName!,
-            Json(new OuterInput { Leaf = typeof(IDeferringLeafTrain).FullName! })
+            typeof(IOuterTrain).FullName.NotNull(),
+            Json(new OuterInput { Leaf = typeof(IDeferringLeafTrain).FullName.NotNull() })
         );
 
         (await RowsAsync<IDeferringLeafTrain>())
@@ -134,8 +141,13 @@ public class NestedEnqueueTests : TestSetup
         ContextRecordingDeferringLeafTrain.Reset();
 
         await Execution.QueueAsync(
-            typeof(IOuterTrain).FullName!,
-            Json(new OuterInput { Leaf = typeof(IContextRecordingDeferringLeafTrain).FullName! })
+            typeof(IOuterTrain).FullName.NotNull(),
+            Json(
+                new OuterInput
+                {
+                    Leaf = typeof(IContextRecordingDeferringLeafTrain).FullName.NotNull(),
+                }
+            )
         );
 
         ContextRecordingDeferringLeafTrain.HookRan.Should().BeTrue();
@@ -153,11 +165,11 @@ public class NestedEnqueueTests : TestSetup
         var act = async () =>
             await Execution
                 .QueueAsync(
-                    typeof(IOuterTrain).FullName!,
+                    typeof(IOuterTrain).FullName.NotNull(),
                     Json(
                         new OuterInput
                         {
-                            Leaf = typeof(IThrowingLeafTrain).FullName!,
+                            Leaf = typeof(IThrowingLeafTrain).FullName.NotNull(),
                             Swallow = true,
                         }
                     )
@@ -182,7 +194,10 @@ public class NestedEnqueueTests : TestSetup
     {
         var act = async () =>
             await Execution
-                .QueueAsync(typeof(IDeferringOuterTrain).FullName!, Json(new DeferringOuterInput()))
+                .QueueAsync(
+                    typeof(IDeferringOuterTrain).FullName.NotNull(),
+                    Json(new DeferringOuterInput())
+                )
                 .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*outer refused*");
@@ -202,8 +217,8 @@ public class NestedEnqueueTests : TestSetup
     public async Task Nested_enqueues_a_hook_runs_at_once_all_commit_with_the_outer_one()
     {
         await Execution.QueueAsync(
-            typeof(IOuterTrain).FullName!,
-            Json(new OuterInput { Leaf = typeof(ILeafTrain).FullName!, Fanout = 4 })
+            typeof(IOuterTrain).FullName.NotNull(),
+            Json(new OuterInput { Leaf = typeof(ILeafTrain).FullName.NotNull(), Fanout = 4 })
         );
 
         (await RowsAsync<ILeafTrain>())
@@ -218,7 +233,10 @@ public class NestedEnqueueTests : TestSetup
 
         var act = async () =>
             await Execution
-                .QueueAsync(typeof(IUnawaitedOuterTrain).FullName!, Json(new UnawaitedOuterInput()))
+                .QueueAsync(
+                    typeof(IUnawaitedOuterTrain).FullName.NotNull(),
+                    Json(new UnawaitedOuterInput())
+                )
                 .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
@@ -226,7 +244,7 @@ public class NestedEnqueueTests : TestSetup
         );
 
         GatedLeafTrain.Gate.TrySetResult();
-        await DrainAsync(UnawaitedOuterTrain.Started!);
+        await DrainAsync(UnawaitedOuterTrain.Started.NotNull());
 
         (await RowsAsync<IUnawaitedOuterTrain>())
             .Should()
@@ -256,7 +274,7 @@ public class NestedEnqueueTests : TestSetup
 
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            var input = metadata.GetInput<OuterInput>()!;
+            var input = metadata.GetInput<OuterInput>().NotNull();
 
             try
             {
@@ -296,7 +314,7 @@ public class NestedEnqueueTests : TestSetup
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
             await execution
-                .QueueAsync(typeof(ILeafTrain).FullName!, "{}", ct: ct)
+                .QueueAsync(typeof(ILeafTrain).FullName.NotNull(), "{}", ct: ct)
                 .ConfigureAwait(false);
             throw new InvalidOperationException("outer refused the mutation");
         }
@@ -320,7 +338,11 @@ public class NestedEnqueueTests : TestSetup
 
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            Started = execution.QueueAsync(typeof(IGatedLeafTrain).FullName!, "{}", ct: ct);
+            Started = execution.QueueAsync(
+                typeof(IGatedLeafTrain).FullName.NotNull(),
+                "{}",
+                ct: ct
+            );
             await GatedLeafTrain.Arrived.Task.WaitAsync(SignalTimeout, ct).ConfigureAwait(false);
         }
 

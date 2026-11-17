@@ -1,6 +1,7 @@
 using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Mediator.Services.TrainBus;
@@ -18,7 +19,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class MetadataDisposalTests
 {
-    private IServiceProvider _serviceProvider = null!;
+    private IServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -105,7 +106,7 @@ public class MetadataDisposalTests
             {
                 for (int i = 0; i < 20; i++)
                 {
-                    var serviceProviderScope = _serviceProvider.CreateAsyncScope();
+                    var serviceProviderScope = _serviceProvider.NotNull().CreateAsyncScope();
 
                     try
                     {
@@ -160,7 +161,7 @@ public class MetadataDisposalTests
 
         for (int i = 0; i < 30; i++)
         {
-            var serviceProviderScope = _serviceProvider.CreateAsyncScope();
+            var serviceProviderScope = _serviceProvider.NotNull().CreateAsyncScope();
 
             try
             {
@@ -217,7 +218,7 @@ public class MetadataDisposalTests
             {
                 for (int i = 0; i < 15; i++)
                 {
-                    var serviceProviderScope = _serviceProvider.CreateAsyncScope();
+                    var serviceProviderScope = _serviceProvider.NotNull().CreateAsyncScope();
 
                     try
                     {
